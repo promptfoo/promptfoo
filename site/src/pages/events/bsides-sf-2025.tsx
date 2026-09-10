@@ -217,14 +217,14 @@ export default function BSidesSF2025(): React.ReactElement {
         <section className={styles.ctaSection}>
           <div className={styles.container}>
             <div className={styles.ctaContent}>
-              <h2 className={styles.ctaTitle}>See You at BSides SF 2026</h2>
+              <h2 className={styles.ctaTitle}>We Were Back for BSides SF 2026</h2>
               <p className={styles.ctaText}>
-                We'll be back for BSides SF 2026. Join us for more community connections, AI
-                security discussions, and hallway track conversations.
+                We returned for BSides SF 2026 in March: more community connections, AI security
+                discussions, and hallway track conversations.
               </p>
               <div className={styles.ctaButtons}>
                 <Link to="/events/bsides-sf-2026" className={styles.primaryCta}>
-                  BSides SF 2026 Details
+                  BSides SF 2026 Recap
                 </Link>
                 <Link to="/contact" className={styles.secondaryCta}>
                   Get in Touch

@@ -192,6 +192,24 @@ describe('EvalOutputCell', () => {
     timers = undefined;
   });
 
+  it.each([
+    [true, 'Mark as safe', 'Mark as vulnerable', 'lucide-check', 'lucide-x'],
+    [false, 'Mark test passed', 'Mark test failed', 'lucide-thumbs-up', 'lucide-thumbs-down'],
+  ])(
+    'shows the correct grading actions when isRedteam is %s',
+    (isRedteam, passLabel, failLabel, passIcon, failIcon) => {
+      renderWithProviders(<EvalOutputCell {...defaultProps} isRedteam={isRedteam} />);
+
+      const passButton = screen.getByRole('button', { name: passLabel });
+      const failButton = screen.getByRole('button', { name: failLabel });
+
+      expect(passButton.querySelector('svg')).toHaveClass(passIcon);
+      expect(failButton.querySelector('svg')).toHaveClass(failIcon);
+      expect(passButton).not.toHaveTextContent(passLabel);
+      expect(failButton).not.toHaveTextContent(failLabel);
+    },
+  );
+
   it('handles outputs without text without throwing', () => {
     const propsWithoutText: MockEvalOutputCellProps = {
       ...defaultProps,
@@ -638,21 +656,24 @@ describe('EvalOutputCell', () => {
     );
 
     await user.hover(screen.getByRole('button', { name: /view output and test details/i }));
+    await waitFor(() => expect(prefetchEvalResultDetail).toHaveBeenCalledWith('eval-1', 'old-id'));
 
     rerender(
-      <EvalOutputCell
-        {...defaultProps}
-        evaluationId="eval-1"
-        output={{
-          ...defaultProps.output,
-          id: 'new-id',
-          prompt: '',
-          detail: {
-            available: true,
-            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
-          },
-        }}
-      />,
+      <ShiftKeyProvider>
+        <EvalOutputCell
+          {...defaultProps}
+          evaluationId="eval-1"
+          output={{
+            ...defaultProps.output,
+            id: 'new-id',
+            prompt: '',
+            detail: {
+              available: true,
+              omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+            },
+          }}
+        />
+      </ShiftKeyProvider>,
     );
 
     await act(async () => {
@@ -677,6 +698,50 @@ describe('EvalOutputCell', () => {
       'data-prompt',
       'Fresh prompt from detail',
     );
+  });
+
+  it('copies the full output when table text is omitted', async () => {
+    const user = userEvent.setup();
+    const clipboard = mockClipboardWriteText();
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: '',
+      text: 'Full copied output',
+    });
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          text: '[content omitted: 120000 characters]',
+          detail: { available: true, omittedFields: ['response'] },
+        }}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Copy output to clipboard' }));
+    await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith('Full copied output'));
+  });
+
+  it('does not copy an omission marker when loading the full output fails', async () => {
+    const user = userEvent.setup();
+    const clipboard = mockClipboardWriteText();
+    vi.mocked(fetchEvalResultDetail).mockRejectedValue(new Error('Detail unavailable'));
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          text: '[content omitted: 120000 characters]',
+          detail: { available: true, omittedFields: ['response'] },
+        }}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Copy output to clipboard' }));
+    expect(fetchEvalResultDetail).toHaveBeenCalled();
+    expect(clipboard.writeText).not.toHaveBeenCalled();
   });
 
   it('uses lazy-loaded detail in the prompt dialog', async () => {
@@ -736,6 +801,67 @@ describe('EvalOutputCell', () => {
         reason: 'Full grading reason from detail',
       },
     ]);
+  });
+
+  it('reloads detail after a rating save finishes', async () => {
+    const user = userEvent.setup();
+    let finishSave!: () => void;
+    const onRating = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    const output: MockEvalOutputCellProps['output'] = {
+      ...defaultProps.output,
+      prompt: '',
+      detail: { available: true, omittedFields: ['prompt', 'gradingResult'] },
+    };
+    const oldDetail = {
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'prompt',
+      text: 'output',
+      gradingResult: { pass: false, score: 0, reason: 'old rating' },
+    };
+    vi.mocked(fetchEvalResultDetail)
+      .mockResolvedValueOnce(oldDetail)
+      .mockResolvedValueOnce(oldDetail)
+      .mockResolvedValueOnce({
+        ...oldDetail,
+        gradingResult: { pass: true, score: 1, reason: 'saved rating' },
+      });
+    const view = renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={output}
+        onRating={onRating}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+    await waitFor(() => expect(fetchEvalResultDetail).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('button', { name: 'Mark test passed' }));
+    expect(onRating).toHaveBeenCalledOnce();
+    view.rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell
+          {...defaultProps}
+          evaluationId="eval-1"
+          output={{
+            ...output,
+            gradingResult: { pass: true, score: 1, reason: 'optimistic rating' },
+          }}
+          onRating={onRating}
+        />
+      </ShiftKeyProvider>,
+    );
+    await waitFor(() => expect(fetchEvalResultDetail).toHaveBeenCalledTimes(2));
+    await act(async () => finishSave());
+    await waitFor(() => expect(fetchEvalResultDetail).toHaveBeenCalledTimes(3));
+    expect(screen.getByTestId('dialog-component').getAttribute('data-grading-results')).toContain(
+      'saved rating',
+    );
   });
 
   it('shows an updated rating comment after an earlier detail was loaded', async () => {
@@ -2926,6 +3052,10 @@ describe('isImageProvider helper function', () => {
 
   it('should return true for Gemini 2.5 Flash image provider', () => {
     expect(isImageProvider('google:gemini-2.5-flash-image')).toBe(true);
+  });
+
+  it('should return true for Gemini 3.1 Flash-Lite image provider (Nano Banana 2 Lite)', () => {
+    expect(isImageProvider('google:gemini-3.1-flash-lite-image')).toBe(true);
   });
 
   it('should return false for text completion providers', () => {

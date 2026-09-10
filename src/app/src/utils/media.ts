@@ -79,7 +79,7 @@ function resolveInlineMediaSource(
     return undefined;
   }
 
-  return data.startsWith('data:') ? data : `data:${kind}/${format};base64,${data}`;
+  return `data:${kind}/${format};base64,${data}`;
 }
 
 /**

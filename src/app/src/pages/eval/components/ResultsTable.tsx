@@ -19,6 +19,11 @@ import { callApi, clearEvalApiResponseCache, prefetchEvalResultDetail } from '@a
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
+import {
+  getIncurredTokenAccounting,
+  getPrimaryTokenUsageLabel,
+  getTokenUsageTotal,
+} from '@app/utils/tokenUsage';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
   type EvalResultsFilterMode,
@@ -424,18 +429,42 @@ function HydratedMediaVariableCell({
 }) {
   const resultKey = `${output.evalId || evalId}/${output.id}`;
   const [media, setMedia] = React.useState<{ key: string; value: string } | null>(null);
-  useEffect(() => {
-    let active = true;
-    void prefetchEvalResultDetail(output.evalId || evalId, output.id).then((detail) => {
-      const fullValue = (detail?.testCase?.vars as Record<string, unknown> | undefined)?.[varName];
-      if (active && typeof fullValue === 'string') {
-        setMedia({ key: resultKey, value: fullValue });
-      }
-    });
-    return () => {
-      active = false;
-    };
-  }, [evalId, output.evalId, output.id, resultKey, varName]);
+  const [loading, setLoading] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
+
+  const loadMedia = async () => {
+    setLoading(true);
+    setFailed(false);
+    const detail = await prefetchEvalResultDetail(output.evalId || evalId, output.id);
+    const fullValue = (detail?.testCase?.vars as Record<string, unknown> | undefined)?.[varName];
+    if (typeof fullValue === 'string') {
+      setMedia({ key: resultKey, value: fullValue });
+    } else {
+      setFailed(true);
+    }
+    setLoading(false);
+  };
+
+  if (media?.key !== resultKey) {
+    return (
+      <div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={loading}
+          onClick={loadMedia}
+          aria-label={`Load ${varName}`}
+        >
+          {loading ? 'Loading...' : `Load ${varName}`}
+        </Button>
+        {failed && (
+          <p className="text-sm text-muted-foreground" role="alert">
+            Could not load media. Try again.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   const fullValue = media?.key === resultKey ? media.value : value;
   return (
@@ -560,6 +589,7 @@ function renderVariableCell({
   ) {
     return (
       <HydratedMediaVariableCell
+        key={`${output.evalId || evalId}/${output.id}/${varName}`}
         evalId={evalId}
         output={output}
         varName={varName}
@@ -763,31 +793,93 @@ function renderCostMetric({
 function renderTokenMetrics({
   metrics,
   filteredMetrics,
+  isRedteam,
   testCount,
 }: {
   metrics: PromptMetrics['total'];
   filteredMetrics: PromptMetrics['filtered'];
+  isRedteam: boolean;
   testCount?: PromptSummaryMetric;
 }): React.ReactNode {
-  if (!metrics?.tokenUsage?.total) {
+  const primaryTokens = getTokenUsageTotal(metrics?.tokenUsage);
+  const attackerTokens = getTokenUsageTotal(metrics?.tokenUsage?.attacker);
+  const gradingTokens = getTokenUsageTotal(metrics?.tokenUsage?.assertions);
+  const incurredAccounting = getIncurredTokenAccounting(metrics?.tokenUsage);
+
+  if (primaryTokens === 0 && attackerTokens === 0 && gradingTokens === 0) {
     return null;
   }
 
-  const totalTokens = metrics.tokenUsage.total;
-  const filteredTokens = filteredMetrics?.tokenUsage?.total;
+  const totalTokens = primaryTokens + attackerTokens + gradingTokens;
+  const filteredPrimaryTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage)
+    : undefined;
+  const filteredAttackerTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage.attacker)
+    : undefined;
+  const filteredGradingTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage.assertions)
+    : undefined;
+  const filteredTokens =
+    filteredPrimaryTokens === undefined
+      ? undefined
+      : filteredPrimaryTokens + (filteredAttackerTokens ?? 0) + (filteredGradingTokens ?? 0);
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
-    filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
+    filteredTokens !== undefined && testCount?.filtered
+      ? filteredTokens / testCount.filtered
+      : undefined;
 
   return (
     <>
       <div>
         <strong>Total Tokens:</strong> {formatMetricValue(totalTokens)}
-        {filteredTokens ? renderFilteredSuffix(formatMetricValue(filteredTokens)) : null}
+        {filteredTokens === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredTokens))}
       </div>
       <div>
+        <strong>{getPrimaryTokenUsageLabel(isRedteam)} Tokens:</strong>{' '}
+        {formatMetricValue(primaryTokens)}
+        {filteredPrimaryTokens === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredPrimaryTokens))}
+      </div>
+      {attackerTokens > 0 ? (
+        <div>
+          <strong>Attacker Tokens:</strong> {formatMetricValue(attackerTokens)}
+          {filteredAttackerTokens === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredAttackerTokens))}
+        </div>
+      ) : null}
+      {gradingTokens > 0 ? (
+        <div>
+          <strong>Grading Tokens:</strong> {formatMetricValue(gradingTokens)}
+          {filteredGradingTokens === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredGradingTokens))}
+        </div>
+      ) : null}
+      {incurredAccounting ? (
+        <>
+          <div>
+            <strong>Incurred Tokens:</strong> {formatMetricValue(incurredAccounting.incurredTokens)}
+          </div>
+          <div>
+            <strong>Cached Savings:</strong> {formatMetricValue(incurredAccounting.cachedSavings)}
+          </div>
+          <div>
+            <strong>Actual Target Requests:</strong>{' '}
+            {formatMetricValue(incurredAccounting.actualRequests)}
+          </div>
+        </>
+      ) : null}
+      <div>
         <strong>Avg Tokens:</strong> {formatMetricValue(totalAverage)}
-        {filteredAverage ? renderFilteredSuffix(formatMetricValue(filteredAverage)) : null}
+        {filteredAverage === undefined
+          ? null
+          : renderFilteredSuffix(formatMetricValue(filteredAverage))}
       </div>
     </>
   );
@@ -1096,6 +1188,7 @@ function renderPromptMetricDetails({
       {renderTokenMetrics({
         metrics,
         filteredMetrics,
+        isRedteam,
         testCount: testCounts[idx],
       })}
       {renderLatencyMetric({
@@ -1765,6 +1858,9 @@ function ResultsTable({
             gradingResult,
             table: newTable,
           });
+          if (evalId) {
+            clearEvalApiResponseCache(evalId);
+          }
         } catch (error) {
           console.error('Failed to update table:', error);
         }
@@ -2249,6 +2345,7 @@ function ResultsTable({
                     showDiffs={filterMode === 'different' && visiblePromptCount > 1}
                     searchText={debouncedSearchText}
                     showStats={showStats}
+                    isRedteam={isRedteam}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
                   />
@@ -2274,6 +2371,7 @@ function ResultsTable({
     handleRating,
     head,
     head.prompts,
+    isRedteam,
     maxTextLength,
     metricTotals,
     numAsserts,

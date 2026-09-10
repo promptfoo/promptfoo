@@ -517,6 +517,44 @@ describe('ResultsView Share Button', () => {
     expect(mockNavigate).not.toHaveBeenCalledWith('/setup', expect.anything());
   });
 
+  it('allows editing another eval while the previous config is still loading', async () => {
+    let resolveConfig!: (value: { config: { description: string } }) => void;
+    mockFetchEvalConfig.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveConfig = resolve;
+        }),
+    );
+    const store = vi.mocked(useTableStore)();
+    const element = (
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />
+    );
+    const view = renderWithRouter(element);
+    await userEvent.click(screen.getByText('Eval actions'));
+    await userEvent.click(screen.getByText('Edit and re-run'));
+    await waitFor(() => expect(mockFetchEvalConfig).toHaveBeenCalledWith('test-eval-id'));
+
+    vi.mocked(useTableStore).mockReturnValue({ ...store, evalId: 'new-eval-id' });
+    view.rerender(
+      <MemoryRouter>
+        <ResultsView
+          recentEvals={mockRecentEvals}
+          onRecentEvalSelected={mockOnRecentEvalSelected}
+          defaultEvalId="new-eval-id"
+        />
+      </MemoryRouter>,
+    );
+    await userEvent.click(screen.getByText('Eval actions'));
+    await userEvent.click(screen.getByText('Edit and re-run'));
+    await waitFor(() => expect(mockFetchEvalConfig).toHaveBeenCalledWith('new-eval-id'));
+    await act(async () => resolveConfig({ config: { description: 'old eval' } }));
+    expect(mockUpdateConfig).not.toHaveBeenCalledWith({ description: 'old eval' });
+  });
+
   it('hides eval actions while config is loading', () => {
     vi.mocked(useTableStore).mockReturnValue({
       author: 'Test Author',

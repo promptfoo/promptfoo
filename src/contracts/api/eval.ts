@@ -30,10 +30,6 @@ export const EvalResultDetailResponseSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   gradingResult: z.unknown().optional(),
   text: z.string(),
-  output: z.unknown().optional(),
-  audio: z.unknown().optional(),
-  video: z.unknown().optional(),
-  images: z.array(z.record(z.string(), z.unknown())).optional(),
 });
 
 export type EvalResultDetailParams = z.infer<typeof EvalResultDetailParamsSchema>;

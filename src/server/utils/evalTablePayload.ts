@@ -1,10 +1,13 @@
 import {
+  EVAL_CONFIG_DETAIL_FIELDS,
+  type EvalConfigDetailField,
+} from '../../types/evalDetailFields';
+import {
   DEFAULT_OVERSIZED_STRING_LIMIT,
   type OversizedStringStats,
   stripOversizedStrings,
 } from './safeJsonResponse';
 
-const EVAL_CONFIG_DETAIL_FIELDS = ['tests', 'defaultTest', 'scenarios'] as const;
 const BASE_CELL_DETAIL_OMITTED_FIELDS = [
   'prompt',
   'response',
@@ -12,8 +15,6 @@ const BASE_CELL_DETAIL_OMITTED_FIELDS = [
   'metadata',
   'gradingResult',
 ];
-
-type EvalConfigDetailField = (typeof EVAL_CONFIG_DETAIL_FIELDS)[number];
 
 type AudioLike = {
   id?: string;

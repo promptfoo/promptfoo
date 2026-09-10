@@ -128,7 +128,9 @@ function fetchJsonCached<T>({
   const request = callApi(path)
     .then((response) => parseJsonResponse<T>(response, fallbackMessage))
     .catch((error) => {
-      cache.delete(key);
+      if (cache.get(key) === request) {
+        cache.delete(key);
+      }
       throw error;
     });
   setCached(cache, key, request, maxEntries);

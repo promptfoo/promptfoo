@@ -388,6 +388,26 @@ describe('fetchEvalConfig', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  it('keeps a replacement cached request when an invalidated request fails', async () => {
+    mockFetch.mockReset();
+    let rejectFirst!: (reason: Error) => void;
+    mockFetch.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectFirst = reject;
+        }),
+    );
+    const first = fetchEvalConfig('eval-123').catch((error) => error);
+    clearEvalApiResponseCache('eval-123');
+    const body = { config: { description: 'fresh' } };
+    mockFetch.mockResolvedValueOnce(new Response(JSON.stringify(body), { status: 200 }));
+    await expect(fetchEvalConfig('eval-123')).resolves.toEqual(body);
+    rejectFirst(new Error('old request failed'));
+    await first;
+    await expect(fetchEvalConfig('eval-123')).resolves.toEqual(body);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('returns null when prefetching eval config fails', async () => {
     mockFetch.mockRejectedValue(new Error('Network error'));
 

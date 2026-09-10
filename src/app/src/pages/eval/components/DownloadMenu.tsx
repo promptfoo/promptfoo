@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/component
 import { DropdownMenuItem, DropdownMenuItemIcon } from '@app/components/ui/dropdown-menu';
 import invariant from '@promptfoo/util/invariant';
 import { removeEmpty } from '@promptfoo/util/objectUtils';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { CheckCircle, Copy, Download, Loader2 } from 'lucide-react';
 import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/useDownloadEval';
 import { useToast } from '../../../hooks/useToast';
@@ -415,7 +415,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
       downloadYamlConfig(
         configCopy,
         fileName,
-        `Downloaded config with ${failedTests.length} failed tests`,
+        `Downloaded config with ${completeTests.length} failed tests`,
         { skipInvalid: true },
       );
     });

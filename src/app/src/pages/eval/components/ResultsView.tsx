@@ -282,9 +282,11 @@ export default function ResultsView({
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();
+  const [isLoadingRerunConfig, setIsLoadingRerunConfig] = React.useState(false);
   const rerunEvalIdRef = React.useRef<string | null | undefined>(evalId);
   React.useEffect(() => {
     rerunEvalIdRef.current = evalId;
+    setIsLoadingRerunConfig(false);
     return () => {
       rerunEvalIdRef.current = undefined;
     };
@@ -388,7 +390,6 @@ export default function ResultsView({
 
   // State for download dialog
   const [downloadDialogOpen, setDownloadDialogOpen] = React.useState(false);
-  const [isLoadingRerunConfig, setIsLoadingRerunConfig] = React.useState(false);
 
   const currentEvalId = evalId || defaultEvalId || 'default';
   const validEvalId = evalId || defaultEvalId;

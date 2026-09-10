@@ -37,6 +37,7 @@ import {
   Star,
   ThumbsDown,
   ThumbsUp,
+  X,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
@@ -1062,6 +1063,7 @@ function renderOutputActions({
   copied,
   linked,
   isHighlighted,
+  isRedteam,
   activeRating,
   openPrompt,
   output,
@@ -1095,6 +1097,7 @@ function renderOutputActions({
   copied: boolean;
   linked: boolean;
   isHighlighted: boolean;
+  isRedteam: boolean;
   activeRating: boolean | null;
   openPrompt: boolean;
   output: EvaluateTableOutput;
@@ -1129,6 +1132,8 @@ function renderOutputActions({
   const detailVariables = (cellDetail?.testCase?.vars as Vars | undefined) ?? output.testCase?.vars;
   const detailGradingResult = cellDetail?.gradingResult as GradingResult | undefined;
   const gradingResult = detailGradingResult ?? output.gradingResult ?? undefined;
+  const passActionLabel = isRedteam ? 'Mark as safe' : 'Mark test passed';
+  const failActionLabel = isRedteam ? 'Mark as vulnerable' : 'Mark test failed';
 
   return (
     <div
@@ -1192,15 +1197,19 @@ function renderOutputActions({
             className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'active text-emerald-600 dark:text-emerald-400' : ''}`}
             onClick={() => handleRating(true)}
             aria-pressed={activeRating === true}
-            aria-label="Mark test passed"
+            aria-label={passActionLabel}
           >
-            <ThumbsUp
-              className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
-              fill={activeRating === true ? 'currentColor' : 'none'}
-            />
+            {isRedteam ? (
+              <Check className="size-4" />
+            ) : (
+              <ThumbsUp
+                className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
+                fill={activeRating === true ? 'currentColor' : 'none'}
+              />
+            )}
           </button>
         </TooltipTrigger>
-        <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
+        <TooltipContent>{passActionLabel} (score 1.0)</TooltipContent>
       </Tooltip>
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -1209,15 +1218,19 @@ function renderOutputActions({
             className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'active text-red-600 dark:text-red-400' : ''}`}
             onClick={() => handleRating(false)}
             aria-pressed={activeRating === false}
-            aria-label="Mark test failed"
+            aria-label={failActionLabel}
           >
-            <ThumbsDown
-              className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
-              fill={activeRating === false ? 'currentColor' : 'none'}
-            />
+            {isRedteam ? (
+              <X className="size-4" />
+            ) : (
+              <ThumbsDown
+                className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
+                fill={activeRating === false ? 'currentColor' : 'none'}
+              />
+            )}
           </button>
         </TooltipTrigger>
-        <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
+        <TooltipContent>{failActionLabel} (score 0.0)</TooltipContent>
       </Tooltip>
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -1310,7 +1323,8 @@ export interface EvalOutputCellProps {
   rowPositionIndex?: number;
   promptIndex: number;
   showStats: boolean;
-  onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
+  isRedteam?: boolean;
+  onRating: (isPass?: boolean | null, score?: number, comment?: string) => void | Promise<void>;
   evaluationId?: string;
   testCaseId?: string;
 }
@@ -1344,6 +1358,7 @@ function EvalOutputCell({
   showDiffs,
   searchText,
   showStats,
+  isRedteam = false,
   evaluationId,
   testCaseId,
 }: EvalOutputCellProps & {
@@ -1375,6 +1390,7 @@ function EvalOutputCell({
   const [cellDetail, setCellDetail] = React.useState<EvalResultDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [detailError, setDetailError] = React.useState<string | null>(null);
+  const detailRevisionRef = React.useRef(0);
   const detailRequestRef = React.useRef<AbortController | null>(null);
   const prefetchTimerRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const isMountedRef = React.useRef(true);
@@ -1388,8 +1404,8 @@ function EvalOutputCell({
     setActiveRating(humanRating ?? null);
   }, [output]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset lazy detail when the rendered result changes
-  React.useEffect(() => {
+  const resetCellDetail = useCallback(() => {
+    detailRevisionRef.current += 1;
     detailRequestRef.current?.abort();
     detailRequestRef.current = null;
     if (prefetchTimerRef.current !== null) {
@@ -1399,7 +1415,26 @@ function EvalOutputCell({
     setCellDetail(null);
     setDetailLoading(false);
     setDetailError(null);
-  }, [detailEvalId, output.id, output.gradingResult]);
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset detail when its result or rating changes
+  React.useEffect(resetCellDetail, [
+    resetCellDetail,
+    detailEvalId,
+    output.id,
+    output.gradingResult,
+  ]);
+
+  const saveRating = async (...args: Parameters<typeof onRating>) => {
+    try {
+      await onRating(...args);
+      if (isMountedRef.current) {
+        resetCellDetail();
+      }
+    } catch (error) {
+      logger.error('Failed to save rating', { error: getErrorMessage(error) });
+    }
+  };
 
   React.useEffect(() => {
     return () => {
@@ -1423,6 +1458,9 @@ function EvalOutputCell({
 
     try {
       const detail = await fetchEvalResultDetail(detailEvalId, output.id, controller.signal);
+      if (controller.signal.aborted) {
+        return null;
+      }
       setCellDetail(detail);
       return detail;
     } catch (error) {
@@ -1460,6 +1498,7 @@ function EvalOutputCell({
       return;
     }
 
+    const requestedRevision = detailRevisionRef.current;
     const requestedEvalId = detailEvalId;
     const requestedResultId = output.id;
     prefetchTimerRef.current = globalThis.setTimeout(() => {
@@ -1472,6 +1511,7 @@ function EvalOutputCell({
           if (
             detail &&
             isMountedRef.current &&
+            detailRevisionRef.current === requestedRevision &&
             detail.evalId === requestedEvalId &&
             detail.resultId === requestedResultId
           ) {
@@ -1581,7 +1621,7 @@ function EvalOutputCell({
 
   const handleCommentSave = () => {
     setCommentText(commentDraftText);
-    onRating(undefined, undefined, commentDraftText);
+    void saveRating(undefined, undefined, commentDraftText);
     setCommentDialogOpen(false);
   };
 
@@ -1589,10 +1629,10 @@ function EvalOutputCell({
     let newCommentText;
     if (commentText.startsWith('!highlight')) {
       newCommentText = commentText.slice('!highlight'.length).trim();
-      onRating(undefined, undefined, newCommentText);
+      void saveRating(undefined, undefined, newCommentText);
     } else {
       newCommentText = ('!highlight ' + commentText).trim();
-      onRating(undefined, undefined, newCommentText);
+      void saveRating(undefined, undefined, newCommentText);
     }
     setCommentText(newCommentText);
     setCommentDraftText(newCommentText);
@@ -1648,7 +1688,7 @@ function EvalOutputCell({
     setActiveRating(newRating);
     // Defer the API call to allow the UI to update first
     queueMicrotask(() => {
-      onRating(newRating, undefined, commentText);
+      void saveRating(newRating, undefined, commentText);
     });
   };
 
@@ -1659,7 +1699,7 @@ function EvalOutputCell({
   };
 
   const handleScoreSave = (score: number) => {
-    onRating(undefined, score, commentText);
+    void saveRating(undefined, score, commentText);
     setScoreDialogOpen(false);
   };
 
@@ -1736,22 +1776,25 @@ function EvalOutputCell({
       });
   };
 
-  const handleCopy = () => {
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        if (!isMountedRef.current) {
-          return;
-        }
+  const handleCopy = async () => {
+    try {
+      const detail =
+        detailAvailable && !cellDetail && text.startsWith('[content omitted:')
+          ? await fetchEvalResultDetail(detailEvalId, output.id)
+          : cellDetail;
+      if (!isMountedRef.current) {
+        return;
+      }
+      await navigator.clipboard.writeText(detail?.text ?? text);
+      if (isMountedRef.current) {
         setCopied(true);
         scheduleCopiedReset();
-      })
-      .catch((error) => {
-        if (!isMountedRef.current) {
-          return;
-        }
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
         logger.error('Failed to copy output to clipboard', { error: getErrorMessage(error) });
-      });
+      }
+    }
   };
 
   const latencyDisplay = getLatencyDisplay(output);
@@ -1836,6 +1879,7 @@ function EvalOutputCell({
         copied,
         linked,
         isHighlighted: commentIsHighlighted,
+        isRedteam,
         activeRating,
         openPrompt,
         output,

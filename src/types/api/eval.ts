@@ -1,4 +1,18 @@
 import { z } from 'zod';
+import {
+  EvalConfigParamsSchema,
+  EvalConfigResponseSchema,
+  EvalResultDetailParamsSchema,
+  EvalResultDetailResponseSchema,
+} from '../../contracts/api/eval';
+
+export {
+  EvalConfigParamsSchema,
+  EvalConfigResponseSchema,
+  EvalResultDetailParamsSchema,
+  EvalResultDetailResponseSchema,
+};
+
 import { EVAL_CONFIG_DETAIL_FIELDS } from '../evalDetailFields';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
@@ -146,33 +160,8 @@ export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
 
 // GET /api/eval/:id/config
 
-export const EvalConfigParamsSchema = EvalIdParamSchema;
-
-export const EvalConfigResponseSchema = z.object({
-  config: z.record(z.string(), z.unknown()),
-});
-
+export type EvalConfigParams = z.infer<typeof EvalConfigParamsSchema>;
 export type EvalConfigResponse = z.infer<typeof EvalConfigResponseSchema>;
-
-// GET /api/eval/:evalId/results/:resultId/detail
-
-export const EvalResultDetailParamsSchema = z.object({
-  evalId: z.string().min(1),
-  resultId: z.string().min(1),
-});
-
-export const EvalResultDetailResponseSchema = z.object({
-  evalId: z.string(),
-  resultId: z.string(),
-  prompt: z.string(),
-  providerPrompt: z.unknown().optional(),
-  response: z.unknown().optional(),
-  testCase: z.record(z.string(), z.unknown()).optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  gradingResult: z.unknown().optional(),
-  text: z.string(),
-});
-
 export type EvalResultDetailParams = z.infer<typeof EvalResultDetailParamsSchema>;
 export type EvalResultDetailResponse = z.infer<typeof EvalResultDetailResponseSchema>;
 

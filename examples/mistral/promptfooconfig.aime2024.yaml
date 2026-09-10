@@ -17,8 +17,10 @@ providers:
       temperature: 0.7
       top_p: 0.95
       max_tokens: 40960
-  - id: mistral:magistral-small-latest
-    label: Magistral Small
+  # The `magistral-small-latest` alias now resolves to Mistral Small 4, so use the
+  # canonical id. It contrasts a general hybrid model against native-reasoning Magistral.
+  - id: mistral:mistral-small-latest
+    label: Mistral Small 4
     config:
       temperature: 0.7
       top_p: 0.95
