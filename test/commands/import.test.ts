@@ -696,7 +696,22 @@ describe('importCommand', () => {
           id: evalId,
           createdAt: '2024-01-02T03:04:05.000Z',
           author: 'legacy-author',
-          config: { description: 'legacy import', redteam: {} },
+          config: {
+            description: 'legacy import',
+            redteam: {},
+            tracing: {
+              enabled: true,
+              provider: {
+                id: 'tempo',
+                endpoint: 'https://tempo.example.com',
+                auth: { token: 'imported-legacy-secret' },
+                headers: {
+                  Authorization: 'Bearer imported-header-secret',
+                  'X-Scope-OrgID': 'tenant-a',
+                },
+              },
+            },
+          },
           results: {
             version: 2,
             timestamp: '2024-01-02T03:04:05.000Z',
@@ -714,6 +729,11 @@ describe('importCommand', () => {
       const importedEval = await Eval.findById(evalId);
       expect(importedEval).toBeDefined();
       expect(importedEval!.author).toBe('legacy-author');
+      expect(JSON.stringify(importedEval!.config)).not.toContain('imported-legacy-secret');
+      expect(JSON.stringify(importedEval!.config)).not.toContain('imported-header-secret');
+      expect(importedEval!.config.tracing?.provider?.headers).toEqual({
+        'X-Scope-OrgID': 'tenant-a',
+      });
       const db = await getDb();
       const storedEval = await db
         .select({ isRedteam: evalsTable.isRedteam })

@@ -38,7 +38,7 @@ Use the `nvidia:` prefix followed by the full model id as listed on the model ca
 providers:
   - nvidia:meta/llama-3.3-70b-instruct
   - nvidia:qwen/qwen2.5-coder-32b-instruct
-  - nvidia:nvidia/llama-3.1-nemotron-70b-instruct
+  - nvidia:nvidia/nemotron-3-super-120b-a12b
 ```
 
 Standard OpenAI-compatible parameters are passed through:
@@ -67,16 +67,16 @@ providers:
 
 The full list is on [build.nvidia.com](https://build.nvidia.com). Some commonly used ids:
 
-| Model                           | Provider format                                 |
-| ------------------------------- | ----------------------------------------------- |
-| Llama 3.3 70B Instruct          | `nvidia:meta/llama-3.3-70b-instruct`            |
-| Llama 3.1 405B Instruct         | `nvidia:meta/llama-3.1-405b-instruct`           |
-| Llama 3.2 90B Vision Instruct   | `nvidia:meta/llama-3.2-90b-vision-instruct`     |
-| Llama 3.1 Nemotron 70B Instruct | `nvidia:nvidia/llama-3.1-nemotron-70b-instruct` |
-| Mistral Large 2 Instruct        | `nvidia:mistralai/mistral-large-2-instruct`     |
-| Mixtral 8x22B Instruct          | `nvidia:mistralai/mixtral-8x22b-instruct-v0.1`  |
-| Qwen 2.5 Coder 32B Instruct     | `nvidia:qwen/qwen2.5-coder-32b-instruct`        |
-| DeepSeek R1                     | `nvidia:deepseek-ai/deepseek-r1`                |
+| Model                         | Provider format                                |
+| ----------------------------- | ---------------------------------------------- |
+| Llama 3.3 70B Instruct        | `nvidia:meta/llama-3.3-70b-instruct`           |
+| Llama 3.1 405B Instruct       | `nvidia:meta/llama-3.1-405b-instruct`          |
+| Llama 3.2 90B Vision Instruct | `nvidia:meta/llama-3.2-90b-vision-instruct`    |
+| Nemotron 3 Super 120B A12B    | `nvidia:nvidia/nemotron-3-super-120b-a12b`     |
+| Mistral Large 2 Instruct      | `nvidia:mistralai/mistral-large-2-instruct`    |
+| Mixtral 8x22B Instruct        | `nvidia:mistralai/mixtral-8x22b-instruct-v0.1` |
+| Qwen 2.5 Coder 32B Instruct   | `nvidia:qwen/qwen2.5-coder-32b-instruct`       |
+| DeepSeek R1                   | `nvidia:deepseek-ai/deepseek-r1`               |
 
 ## Example
 
@@ -88,10 +88,14 @@ providers:
     config:
       temperature: 0.2
       max_tokens: 256
-  - id: nvidia:nvidia/llama-3.1-nemotron-70b-instruct
+  - id: nvidia:nvidia/nemotron-3-super-120b-a12b
     config:
-      temperature: 0.2
-      max_tokens: 256
+      temperature: 1
+      top_p: 0.95
+      max_tokens: 1024
+      passthrough:
+        chat_template_kwargs:
+          enable_thinking: false
 
 prompts:
   - 'Summarise the following in one sentence: {{passage}}'
@@ -105,6 +109,10 @@ tests:
       - type: icontains-any
         value: [light, energy, glucose]
 ```
+
+The Nemotron configuration follows its [model-specific sampling guidance](https://build.nvidia.com/nvidia/nemotron-3-super-120b-a12b/modelcard) and disables reasoning for this short summarization task. Additional request fields such as `chat_template_kwargs` go under `config.passthrough`. If you enable reasoning, increase `max_tokens` to leave room for both reasoning and the final answer; the [hosted example](https://build.nvidia.com/nvidia/nemotron-3-super-120b-a12b) uses 16384.
+
+These examples use a model in NVIDIA's [hosted chat catalog](https://docs.api.nvidia.com/nim/reference/llm-apis). Self-hosted NIM deployments can use their own served model identifiers.
 
 If you want a model-graded assertion, point `llm-rubric` at a NIM-hosted grader so the example stays self-contained:
 

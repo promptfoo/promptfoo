@@ -197,6 +197,31 @@ describe('MemoryPoisoningProvider', () => {
     expect(result.tokenUsage?.total).toBe(68); // 15+30+23
   });
 
+  it('records scenario generation as attacker usage without adding a target probe', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          memory: 'memory text',
+          followUp: 'follow up text',
+          tokenUsage: { prompt: 17, completion: 6, total: 23 },
+        }),
+    } as Response);
+    mockTargetProvider.callApi.mockResolvedValue({ output: 'target response' });
+
+    const result = await provider.callApi('attack', {
+      prompt: { raw: 'test', display: 'test', label: 'test' },
+      vars: {},
+      originalProvider: mockTargetProvider,
+      test: { metadata: { purpose: 'test purpose' } },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      numRequests: 3,
+      attacker: { prompt: 17, completion: 6, total: 23, numRequests: 1 },
+    });
+  });
+
   it('should handle errors during execution', async () => {
     mockFetch.mockRejectedValueOnce(new Error('Network error'));
 

@@ -14,10 +14,13 @@ providers:
 
 defaultTest:
   options:
-    # This overrides the default grading providers with Vertex AI models
-    providers:
-      embedding: 'google:embedding:text-embedding-005'
-      text: 'google:gemini-2.5-flash'
+    # This overrides the default grading providers with native Gemini API models
+    provider:
+      embedding: 'google:embedding:gemini-embedding-001'
+      text:
+        id: 'google:gemini-2.5-flash'
+        config:
+          tools: [] # Keep grading separate from the target's weather tool.
 
 tests:
   # Function calling tests

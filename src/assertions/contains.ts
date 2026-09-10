@@ -107,6 +107,13 @@ export function parseCommaSeparatedValues(value: string): string[] {
   return results;
 }
 
+function isContainsValue(value: unknown): value is string | number {
+  return (
+    (typeof value === 'string' && value !== '') ||
+    (typeof value === 'number' && !Number.isNaN(value))
+  );
+}
+
 export const handleContains = ({
   assertion,
   renderedValue,
@@ -115,11 +122,7 @@ export const handleContains = ({
   inverse,
 }: AssertionParams): GradingResult => {
   const value = valueFromScript ?? renderedValue;
-  invariant(value, '"contains" assertion type must have a string or number value');
-  invariant(
-    typeof value === 'string' || typeof value === 'number',
-    '"contains" assertion type must have a string or number value',
-  );
+  invariant(isContainsValue(value), '"contains" assertion type must have a string or number value');
   const pass = outputString.includes(String(value)) !== inverse;
   return {
     pass,
@@ -139,9 +142,8 @@ export const handleIContains = ({
   inverse,
 }: AssertionParams): GradingResult => {
   const value = valueFromScript ?? renderedValue;
-  invariant(value, '"icontains" assertion type must have a string or number value');
   invariant(
-    typeof value === 'string' || typeof value === 'number',
+    isContainsValue(value),
     '"icontains" assertion type must have a string or number value',
   );
   const pass = outputString.toLowerCase().includes(String(value).toLowerCase()) !== inverse;
