@@ -761,6 +761,20 @@ evalRouter.post(
         return;
       }
 
+      // Lean table rows can carry placeholders inside non-human component
+      // results. A manual rating changes only the human override, so keep the
+      // stored grader evidence instead of writing placeholders back to it.
+      if (result.gradingResult?.componentResults && gradingResult.componentResults) {
+        gradingResult.componentResults = [
+          ...result.gradingResult.componentResults.filter(
+            (component) => component.assertion?.type !== HUMAN_ASSERTION_TYPE,
+          ),
+          ...gradingResult.componentResults.filter(
+            (component) => component.assertion?.type === HUMAN_ASSERTION_TYPE,
+          ),
+        ];
+      }
+
       // Capture the current state before we change it
       const hasExistingManualOverride = Boolean(
         result.gradingResult?.componentResults?.some(

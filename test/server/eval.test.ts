@@ -188,6 +188,28 @@ describe('eval routes', () => {
       expect(res.body.gradingResult?.reason).toContain('Manual result');
     });
 
+    it('keeps stored grader evidence when a lean-table rating contains placeholders', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+      const storedComponent = result.gradingResult?.componentResults?.[0];
+      invariant(storedComponent, 'Stored grader component is required');
+
+      const payload = createManualRatingPayload(result, false);
+      payload.componentResults[0] = {
+        ...storedComponent,
+        reason: '[content omitted: 120000 characters]',
+      };
+
+      const res = await api.post(`/api/eval/${eval_.id}/results/${result.id}/rating`).send(payload);
+
+      expect(res.status).toBe(200);
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.gradingResult?.componentResults?.[0]).toEqual(storedComponent);
+      expect(updatedResult?.gradingResult?.componentResults?.[1]?.assertion?.type).toBe('human');
+    });
+
     it('persists the rated result before notifying through the eval save', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
