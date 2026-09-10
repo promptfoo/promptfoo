@@ -573,6 +573,31 @@ describe('ChatKitBrowserPool', () => {
       await expect(pendingPage2).resolves.toMatchObject({ templateKey: key2 });
     });
 
+    it('reserves reclaimed capacity while closing idle pages', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 2 });
+      for (const key of ['one', 'two', 'three', 'four']) {
+        instance.setTemplate(key, '<html></html>');
+      }
+      const page1 = await instance.acquirePage('one');
+      const page2 = await instance.acquirePage('two');
+      const pending = [instance.acquirePage('three'), instance.acquirePage('four')];
+      const releaseClose: Array<() => void> = [];
+      mockContext.close.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseClose.push(resolve);
+          }),
+      );
+
+      const releases = [instance.releasePage(page1), instance.releasePage(page2)];
+      await Promise.resolve();
+      releaseClose.splice(0).forEach((resolve) => resolve());
+      mockContext.close.mockResolvedValue(undefined);
+      await Promise.all([...releases, ...pending]);
+
+      expect(instance.getStats().total).toBeLessThanOrEqual(2);
+    });
+
     it('should not reuse pages across different templates', async () => {
       const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 4 });
       const key1 = 'wf_workflow1:default:default';

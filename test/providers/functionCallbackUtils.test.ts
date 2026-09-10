@@ -414,6 +414,22 @@ describe('FunctionCallbackHandler', () => {
       );
     });
 
+    it('prefers a requested named export on callable CommonJS modules', async () => {
+      const defaultCallback = vi.fn().mockResolvedValue('default');
+      const namedCallback = vi.fn().mockResolvedValue('named');
+      Object.assign(defaultCallback, { named: namedCallback });
+      mockImportModule.mockResolvedValue(defaultCallback);
+
+      const result = await handler.processCall(
+        { name: 'testFunction', arguments: '{}' },
+        { testFunction: 'file://callbacks.js:named' },
+      );
+
+      expect(result.output).toBe('named');
+      expect(namedCallback).toHaveBeenCalled();
+      expect(defaultCallback).not.toHaveBeenCalled();
+    });
+
     it('should handle inline function strings', async () => {
       const callbacks: FunctionCallbackConfig = {
         testFunction: '() => "inline result"',

@@ -435,8 +435,11 @@ export class ChatKitBrowserPool {
         if (!idlePage) {
           break;
         }
-        this.pages.splice(this.pages.indexOf(idlePage), 1);
+        // Reserve this slot while close awaits so a concurrent release cannot
+        // observe spare capacity and create beyond maxConcurrency.
+        idlePage.inUse = true;
         await idlePage.context.close().catch(() => {});
+        this.pages.splice(this.pages.indexOf(idlePage), 1);
       }
 
       const waiter = this.waitQueue.shift();

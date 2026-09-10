@@ -224,10 +224,10 @@ export class FunctionCallbackHandler {
 
       const mod = await importModule(resolvedPath);
       const func =
-        typeof mod === 'function'
-          ? mod
-          : functionName && mod?.[functionName]
-            ? mod[functionName]
+        functionName && mod?.[functionName]
+          ? mod[functionName]
+          : typeof mod === 'function'
+            ? mod
             : mod.default || mod;
 
       if (typeof func !== 'function') {
