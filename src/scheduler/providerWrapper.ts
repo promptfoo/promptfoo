@@ -6,6 +6,7 @@
  */
 
 import { parseRetryAfter } from './headerParser';
+import { composeResponseHeadersObservers } from './responseHeadersObserver';
 import {
   getProviderResponseHeaders,
   isProviderResponseRateLimited,
@@ -123,10 +124,10 @@ export function wrapProviderWithRateLimiting(
             onResponseHeaders
               ? {
                   ...options,
-                  onResponseHeaders: (...args) => {
-                    onResponseHeaders(...args);
-                    options?.onResponseHeaders?.(...args);
-                  },
+                  onResponseHeaders: composeResponseHeadersObservers(
+                    onResponseHeaders,
+                    options?.onResponseHeaders,
+                  ),
                 }
               : options,
           ),

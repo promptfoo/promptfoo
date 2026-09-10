@@ -4,7 +4,9 @@
 
 import { isHttpRateLimitError } from '../util/fetch/errors';
 
-import type { ProviderResponse } from '../types/providers';
+import type { CallApiOptionsParams, ProviderResponse } from '../types/providers';
+
+export type ResponseHeadersObserver = NonNullable<CallApiOptionsParams['onResponseHeaders']>;
 
 /**
  * Options for rate-limited execution.

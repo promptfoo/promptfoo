@@ -7,13 +7,11 @@ import {
 } from './adaptiveConcurrency';
 import { sleepWithAbort, throwIfAborted } from './cancellation';
 import { parseRateLimitHeaders } from './headerParser';
+import { createResponseHeadersObserver } from './responseHeadersObserver';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
 import { SlotQueue } from './slotQueue';
 
-type ResponseHeadersObserver = (
-  headers: Record<string, string>,
-  backoff?: { resetAt: number },
-) => void;
+import type { ResponseHeadersObserver } from './types';
 
 class RateLimitExhaustedError extends Error {
   constructor(message: string) {
@@ -166,19 +164,28 @@ export class ProviderRateLimitState extends EventEmitter {
         // release it, including aborts between the grant and callFn invocation.
         let ownsSlot = true;
         let observedHeaders: Record<string, string> | undefined;
-        const onResponseHeaders: ResponseHeadersObserver = (headers, backoff) => {
-          if (ownsSlot) {
-            if (backoff) {
-              // The lower target fetch selected this deadline before its wait.
-              // Replaying relative headers when a consumer joins would extend it.
-              this.updateFromHeaders(headers, false, backoff.resetAt);
-              this.handleRateLimit(undefined, backoff.resetAt);
-            } else {
-              observedHeaders = headers;
-              this.updateFromHeaders(headers, false);
+        const onResponseHeaders = createResponseHeadersObserver(
+          this,
+          ([headers, backoff], alreadyObserved) => {
+            if (ownsSlot) {
+              if (backoff) {
+                if (!alreadyObserved) {
+                  // The lower target fetch selected this deadline before its wait.
+                  // Replaying relative headers when a consumer joins would extend it.
+                  this.updateFromHeaders(headers, false, backoff.resetAt);
+                  this.handleRateLimit(undefined, backoff.resetAt);
+                }
+              } else {
+                observedHeaders = headers;
+                if (!alreadyObserved) {
+                  this.updateFromHeaders(headers, false);
+                }
+              }
+              return true;
             }
-          }
-        };
+            return alreadyObserved;
+          },
+        );
         const releaseSlot = () => {
           if (ownsSlot) {
             ownsSlot = false;
