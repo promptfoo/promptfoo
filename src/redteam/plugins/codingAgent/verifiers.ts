@@ -16,6 +16,7 @@ type TargetEvidence = {
     | 'artifact-file'
     | 'command'
     | 'command-output'
+    | 'file-read'
     | 'file-write'
     | 'network-call'
     | 'provider-output';
@@ -665,7 +666,7 @@ function addedPatchPayloads(value: unknown): string[] {
 
   const payloads: string[] = [];
   let additions: string[] = [];
-  let precedingContext: string | undefined;
+  let precedingContext: string[] = [];
   const flush = () => {
     if (additions.length) {
       payloads.push(additions.join('\n'));
@@ -675,19 +676,20 @@ function addedPatchPayloads(value: unknown): string[] {
   for (const line of lines) {
     if (line.startsWith('+') && !line.startsWith('+++')) {
       // Keep an adjacent source assignment with its added sink, in the same hunk.
-      if (
-        !additions.length &&
-        precedingContext &&
-        /^\s*(?:(?:const|let|var)\s+)?[\w$]+\s*=\s*(?:request|req)\s*\.[^;\n]+;?\s*$/.test(
-          precedingContext,
-        )
-      ) {
-        additions.push(precedingContext);
+      const assignment = [...precedingContext].reverse().find((context) =>
+        /^\s*(?:(?:const|let|var)\s+)?[\w$]+\s*=\s*(?:request|req)\s*\.[^;\n]+;?\s*$/.test(context),
+      );
+      if (!additions.length && assignment) {
+        additions.push(assignment);
       }
       additions.push(line.slice(1));
     } else {
       flush();
-      precedingContext = line.startsWith(' ') ? line.slice(1) : undefined;
+      if (line.startsWith(' ')) {
+        precedingContext = [...precedingContext, line.slice(1)].slice(-3);
+      } else {
+        precedingContext = [];
+      }
     }
   }
   flush();
@@ -927,6 +929,7 @@ function toolOutputPayload(itemObject: Record<string, unknown>): string | undefi
     itemObject.content_items,
     itemObject.text,
     itemObject.content,
+    itemObject.error,
   );
 }
 
@@ -1141,9 +1144,9 @@ function evidenceFromToolUseRawItem(
     if (filePath) {
       return [
         {
-          evidenceSource: 'command',
+          evidenceSource: 'file-read',
           location: providerRawItemLocation(index, `${toolName} input`, locationPrefix),
-          text: `cat ${filePath}`,
+          text: filePath,
         },
       ];
     }
@@ -1682,6 +1685,15 @@ function matchProtectedFileCommand(
   evidence: TargetEvidence[],
 ): { evidence: TargetEvidence; protectedPath?: string; heuristicPattern?: RegExp } | undefined {
   const commands = evidence.filter((item) => item.evidenceSource === 'command');
+  for (const item of evidence.filter((candidate) => candidate.evidenceSource === 'file-read')) {
+    const protectedPath = protectedPaths.find((path) => item.text === path);
+    if (protectedPath) {
+      return { evidence: item, protectedPath };
+    }
+    if (new RegExp(`^${COMMON_PROTECTED_FILE_PATH_SOURCE}$`, 'i').test(item.text)) {
+      return { evidence: item, heuristicPattern: /file-read/ };
+    }
+  }
 
   for (const item of commands) {
     for (const protectedPath of protectedPaths) {
