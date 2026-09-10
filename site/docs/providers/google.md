@@ -140,6 +140,8 @@ Compare different Gemini models:
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - google:gemini-2.5-flash
+  - google:gemma-4-31b-it
+  - google:gemini-3.8-flash
   - google:gemini-2.5-pro
   - google:gemini-3.7-flash
   - google:gemini-3.5-flash-lite
@@ -251,6 +253,8 @@ If you need more advanced features or enterprise capabilities, you can migrate t
 
 | Google AI Studio               | Vertex AI                      | Notes                                    |
 | ------------------------------ | ------------------------------ | ---------------------------------------- |
+| `google:gemini-3.8-flash`      | `vertex:gemini-3.8-flash`      | Vertex supports `global`, `us`, and `eu` |
+| `google:gemini-3.7-flash`      | `vertex:gemini-3.7-flash`      | Vertex supports `global`, `us`, and `eu` |
 | `google:gemini-3.6-flash`      | `vertex:gemini-3.6-flash`      | Vertex supports `global`, `us`, and `eu` |
 | `google:gemini-3.5-flash-lite` | `vertex:gemini-3.5-flash-lite` | Vertex supports `global`, `us`, and `eu` |
 | `google:gemini-2.5-flash`      | `vertex:gemini-2.5-flash`      | Same model, different endpoint           |
@@ -367,6 +371,10 @@ built-in tools. Remove the deprecated `temperature`, `top_p`, and `top_k` sampli
 migrating an existing configuration. See Google's
 [latest-model migration guide](https://ai.google.dev/gemini-api/docs/latest-model) for the complete
 behavior changes.
+
+:::note
+Gemini 3.5 Flash Cyber is currently available only through Google's limited-access CodeMender pilot and does not have a publicly documented Gemini API model ID. See the [Gemini model announcement](https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-6-flash-3-5-flash-lite-3-5-flash-cyber/).
+:::
 
 ### Embedding Models
 
@@ -944,7 +952,7 @@ Gemini 3.7 Flash remains supported with the same thinking levels and token prici
 
 ### Gemini 3.6 Flash
 
-Gemini 3.6 Flash supports agentic and coding workloads with a 1M-token context window:
+A previous-generation Flash model for agentic and coding workloads with a 1M-token context window:
 
 ```yaml
 providers:
@@ -972,7 +980,7 @@ providers:
 
 Both models ignore `temperature`, `topP`, and `topK` and reject frequency or presence penalties and multiple candidates. Promptfoo omits those unsupported generation fields when sending requests. Gemini 3.5 Flash-Lite defaults to `MINIMAL`; use `MEDIUM` or `HIGH` for multi-step tool use. Prompts must not end with a prefilled `model` turn, and function responses should preserve the matching function-call `name` and `id` when one is returned. See Google's [latest-model migration guide](https://ai.google.dev/gemini-api/docs/generate-content/latest-model).
 
-Both models accept text, image, audio, video, and PDF inputs and support structured output, function calling, code execution, Search and Maps grounding, URL context, File Search, context caching, and standard/Flex/Priority inference. Both models support the preview Computer Use tool. Neither model generates images or audio, nor supports the Live API.
+Both models accept text, image, audio, video, and PDF inputs and support structured output, function calling, code execution, Search and Maps grounding, URL context, File Search, context caching, and standard/Flex/Priority inference. Computer Use is available in preview; Google recommends Gemini 3.8 Flash and also supports Gemini 3.5 Flash-Lite. Neither model generates images or audio, nor supports the Live API.
 
 #### Inference tiers and cached-token pricing
 
@@ -989,7 +997,16 @@ providers:
           thinkingLevel: MEDIUM
 ```
 
-Batch inference uses the same published token rates as Flex for these models. Cache-storage and grounding-query charges are separate; see [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing).
+| Model                        | Tier     | Input / 1M | Output and reasoning / 1M | Cached input / 1M |
+| ---------------------------- | -------- | ---------: | ------------------------: | ----------------: |
+| Gemini 3.8 / 3.7 / 3.6 Flash | Standard |      $0.75 |                     $3.75 |            $0.075 |
+| Gemini 3.8 / 3.7 / 3.6 Flash | Flex     |     $0.375 |                    $1.875 |           $0.0375 |
+| Gemini 3.8 / 3.7 / 3.6 Flash | Priority |      $1.35 |                     $6.75 |            $0.135 |
+| Gemini 3.5 Flash-Lite        | Standard |      $0.30 |                     $2.50 |             $0.03 |
+| Gemini 3.5 Flash-Lite        | Flex     |      $0.15 |                     $1.25 |             $0.02 |
+| Gemini 3.5 Flash-Lite        | Priority |      $0.54 |                     $4.50 |             $0.05 |
+
+Gemini 3.8, 3.7, and 3.6 Flash rates above include introductory pricing through December 31, 2026; those rates double on January 1, 2027. Promptfoo applies that scheduled change automatically. Batch inference uses the same published token rates as Flex for these models. Cache-storage and grounding-query charges are separate; see [Gemini API pricing](https://ai.google.dev/gemini-api/docs/pricing).
 
 Promptfoo can reference an existing explicit cache with `passthrough`; cache creation and lifecycle management remain outside the provider:
 
@@ -1393,7 +1410,7 @@ See Google's [File Search guide](https://ai.google.dev/gemini-api/docs/generate-
 
 ### Computer Use (Preview)
 
-Gemini 3.6 Flash and Gemini 3.5 Flash-Lite support the preview Computer Use tool on the Gemini API. Promptfoo forwards the tool declaration and exposes returned action calls; the application under test is responsible for executing actions, returning screenshots and function responses, and preserving thought signatures between turns.
+Gemini 3.8 Flash is Google's recommended model for the preview Computer Use tool; Gemini 3.7 Flash and 3.5 Flash-Lite also support it. Promptfoo forwards the tool declaration and exposes returned action calls; the application under test is responsible for executing actions, returning screenshots and function responses, and preserving thought signatures between turns.
 
 ```yaml
 providers:

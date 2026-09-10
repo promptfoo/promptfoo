@@ -1864,6 +1864,71 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
   });
 
+  it.each([
+    ['standard', { service_tier: 'standard' }, null, 0.00055],
+    ['flex', { service_tier: 'flex' }, 'flex', 0.000275],
+    ['priority', { service_tier: 'priority' }, 'priority', 0.00099],
+    ['camel-case passthrough', { passthrough: { serviceTier: 'priority' } }, 'priority', 0.00099],
+    [
+      'passthrough override',
+      { service_tier: 'priority', passthrough: { service_tier: 'flex' } },
+      'flex',
+      0.000275,
+    ],
+  ] as const)(
+    'normalizes the %s tier for Vertex requests',
+    async (_label, config, expectedTier, cost) => {
+      const geminiProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
+        config: { region: 'global', ...config },
+      });
+      const mockRequest = mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+          },
+        },
+      ]);
+
+      const response = await geminiProvider.callGeminiApi('test prompt');
+
+      expect(mockRequest.mock.calls[0]?.[0]?.data.serviceTier).toBeUndefined();
+      expect(
+        new Headers(mockRequest.mock.calls[0]?.[0]?.headers).get(
+          'X-Vertex-AI-LLM-Shared-Request-Type',
+        ),
+      ).toBe(expectedTier);
+      expect(mockRequest.mock.calls[0]?.[0]?.data.service_tier).toBeUndefined();
+      expect(response.cost).toBeCloseTo(cost, 12);
+    },
+  );
+
+  it('prices downgraded Vertex priority responses at the actual standard tier', async () => {
+    const geminiProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
+      config: { region: 'global', service_tier: 'priority' },
+    });
+    mockVertexRequest(
+      [
+        {
+          candidates: [{ content: { parts: [{ text: 'response text' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+          },
+        },
+      ],
+      { 'x-gemini-service-tier': 'standard' },
+    );
+
+    const response = await geminiProvider.callGeminiApi('test prompt');
+
+    expect(response.cost).toBeCloseTo(0.00055, 12);
+    expect(response.metadata).toMatchObject({ serviceTier: 'standard' });
+  });
+
   it('should handle errors in function tool callbacks', async () => {
     const mockCachedResponse = {
       cached: true,

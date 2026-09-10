@@ -320,6 +320,13 @@ function mergeGoogleVideoRequestConfig(
     config: {
       ...providerConfig,
       ...promptConfig,
+      // Prompts may shape media generation, but provider settings own the authenticated request.
+      apiKey: providerConfig.apiKey,
+      vertexai: providerConfig.vertexai,
+      projectId: providerConfig.projectId,
+      region: providerConfig.region,
+      credentials: providerConfig.credentials,
+      storageUri: providerConfig.storageUri,
       lastFrame: lastFrameOwner?.lastFrame,
       lastImage: lastFrameOwner?.lastImage,
       sourceVideo: sourceVideoOwner?.sourceVideo,
@@ -384,7 +391,7 @@ export class GoogleVideoProvider implements ApiProvider {
   }
 
   requiresApiKey(): boolean {
-    // ADC project discovery and prompt-level overrides are resolved inside callApi.
+    // Provider-owned API key and ADC project discovery are resolved inside callApi.
     return false;
   }
 
@@ -523,6 +530,7 @@ export class GoogleVideoProvider implements ApiProvider {
       image: config.basePath,
       lastFrame: config.basePath,
       referenceImages: config.basePath,
+      sourceVideo: config.basePath,
     },
   ): { body?: Record<string, unknown>; error?: string } {
     const instance: Record<string, unknown> = { prompt };
@@ -654,7 +662,8 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error };
       }
       instance.image = {
-        inlineData: { mimeType: 'image/png', data: imageData },
+        mimeType: 'image/png',
+        bytesBase64Encoded: imageData,
       };
     }
 
@@ -667,7 +676,8 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error };
       }
       instance.lastFrame = {
-        inlineData: { mimeType: 'image/png', data: lastFrameData },
+        mimeType: 'image/png',
+        bytesBase64Encoded: lastFrameData,
       };
     }
 
@@ -684,7 +694,8 @@ export class GoogleVideoProvider implements ApiProvider {
         }
         refs.push({
           image: {
-            inlineData: { mimeType: 'image/png', data: imageData },
+            mimeType: 'image/png',
+            bytesBase64Encoded: imageData,
           },
           referenceType,
         });
@@ -740,8 +751,8 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     try {
-      const url = await this.getVertexEndpoint('predictLongRunning', model, config);
       const client = await this.getClientWithCredentials(config);
+      const url = await this.getVertexEndpoint('predictLongRunning', model, config);
       logger.debug('[Google Video] Creating video job', { url, model });
 
       const response = await client.request({
@@ -1182,7 +1193,7 @@ export class GoogleVideoProvider implements ApiProvider {
       return { error: resolutionValidation.message };
     }
 
-    // Validate duration
+    // Validate duration after resolution so unsupported resolutions report their own constraint.
     const durationValidation = validateDuration(model, durationSeconds, effectiveConfig);
     if (!durationValidation.valid) {
       return { error: durationValidation.message };
@@ -1192,13 +1203,18 @@ export class GoogleVideoProvider implements ApiProvider {
 
     // Step 1: Create video job
     logger.info(`[Google Video] Creating video job for model ${model}...`);
+    const {
+      duration: _duration,
+      durationSeconds: _durationSeconds,
+      ...requestConfig
+    } = effectiveConfig;
     const { operation: createdOp, error: createError } = await this.createVideoJob(
       prompt,
       {
-        ...effectiveConfig,
+        ...requestConfig,
         aspectRatio,
         resolution,
-        durationSeconds,
+        ...(isVideoExtension && this.isVertexMode(effectiveConfig) ? {} : { durationSeconds }),
       },
       mediaBasePaths,
     );

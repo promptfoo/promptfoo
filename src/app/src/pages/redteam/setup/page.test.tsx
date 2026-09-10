@@ -447,6 +447,8 @@ redteam:
     });
 
     it.each([
+      ['vertex:gemini-3.8-flash', undefined],
+      ['vertex:gemini-3.7-flash', undefined],
       ['vertex:gemini-3.6-flash', undefined],
       ['vertex:gemini-3.5-flash-lite', undefined],
       [{ id: 'vertex:gemini-3.6-flash', config: { region: 'eu' } }, 'eu'],

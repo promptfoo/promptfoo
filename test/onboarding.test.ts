@@ -255,6 +255,39 @@ describe('createDummyFiles', () => {
     expect(mockSelect).toHaveBeenCalledTimes(3);
     expect(mockCheckbox).toHaveBeenCalledTimes(0);
     expect(mockConfirm).toHaveBeenCalledTimes(0);
+
+    const providerPrompt = mockSelect.mock.calls[2]?.[0];
+    expect(
+      providerPrompt.choices.find((choice: { name: string }) => choice.name.startsWith('[Google]'))
+        .value,
+    ).toEqual([
+      { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
+      'vertex:gemini-3.1-pro-preview',
+      'vertex:gemini-2.5-pro',
+    ]);
+  });
+
+  it('should report Vertex provider prefixes when Google object providers are selected', async () => {
+    const googleProviders = [
+      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
+    ];
+    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce(googleProviders);
+
+    const result = await createDummyFiles(tempDir, true);
+
+    expect(result.providerPrefixes).toEqual(['vertex', 'vertex']);
+
+    const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
+      call[0].toString().endsWith('promptfooconfig.yaml'),
+    );
+    const parsedConfig = yaml.load(configCall?.[1] as string) as {
+      providers: Array<{ id: string; config: { region: string } }>;
+    };
+    expect(parsedConfig.providers).toEqual(googleProviders);
   });
 
   it('should offer current Cohere direct API models', async () => {

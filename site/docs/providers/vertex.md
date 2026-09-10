@@ -228,8 +228,8 @@ The legacy [Imagen adapter](/docs/providers/google#image-generation-models) uses
 
 Use the `vertex:video:` prefix for Veo on Vertex AI:
 
-- `vertex:video:veo-3.1-generate-001`
-- `vertex:video:veo-3.1-fast-generate-001`
+- `vertex:video:veo-3.1-generate-001` (GA)
+- `vertex:video:veo-3.1-fast-generate-001` (GA)
 - `vertex:video:veo-3.1-lite-generate-001` (Preview)
 
 Promptfoo reports successful Veo 3.1 generations using Google's video-with-audio price for the
@@ -521,6 +521,7 @@ Different models are available in different regions. Common regions include:
 
 - `global` - Default for the Gemini 3 models listed above
 - `us-central1` - Common for older Gemini models and Llama 3
+- `us`, `eu` - Multi-region endpoints supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite (10% pricing premium)
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
 - `europe-west1` - EU region, Claude models available
@@ -881,7 +882,7 @@ providers:
       tools: 'file://tools.json' # Supports variable substitution
 ```
 
-Vertex AI also supports [streaming function-call arguments](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/tools/function-calling#streaming-function-call-arguments) in preview. Enable both streaming and `streamFunctionCallArguments`; promptfoo assembles the streamed argument parts before invoking a configured callback. Callbacks execute only for native function-call response parts; JSON text remains text. Callbacks run as trusted, unsandboxed local code; isolate evals that use untrusted models or content.
+Vertex AI also supports [streaming function-call arguments](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/tools/function-calling#streaming-function-call-arguments) in preview. Enable both streaming and `streamFunctionCallArguments`; promptfoo assembles the streamed argument parts before invoking a configured callback. Callbacks, including JSON-encoded model-output calls, run as trusted, unsandboxed local code; isolate evals that use untrusted models or content.
 
 ```yaml
 providers:
@@ -1126,7 +1127,16 @@ providers:
           thinkingLevel: MINIMAL
 ```
 
-Cache-storage and grounding-query charges are separate from token pricing. See [Vertex AI pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing).
+| Model                        | Tier       | Input / 1M | Output and reasoning / 1M | Cached input / 1M |
+| ---------------------------- | ---------- | ---------: | ------------------------: | ----------------: |
+| Gemini 3.8 / 3.7 / 3.6 Flash | Standard   |      $0.75 |                     $3.75 |            $0.075 |
+| Gemini 3.8 / 3.7 / 3.6 Flash | Flex/Batch |     $0.375 |                    $1.875 |           $0.0375 |
+| Gemini 3.8 / 3.7 / 3.6 Flash | Priority   |      $1.35 |                     $6.75 |            $0.135 |
+| Gemini 3.5 Flash-Lite        | Standard   |      $0.30 |                     $2.50 |             $0.03 |
+| Gemini 3.5 Flash-Lite        | Flex/Batch |      $0.15 |                     $1.25 |            $0.015 |
+| Gemini 3.5 Flash-Lite        | Priority   |      $0.54 |                     $4.50 |            $0.054 |
+
+Gemini 3.8, 3.7, and 3.6 Flash rates above include introductory pricing through December 31, 2026; those rates double on January 1, 2027. Promptfoo applies that scheduled change automatically. All rates above are for `global`; multiply them by 1.1 for `us` or `eu`. Cache-storage and grounding-query charges are separate. See [Vertex AI pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing).
 
 Promptfoo can reference an existing explicit Vertex cache with `passthrough`; cache creation and lifecycle management remain outside the provider:
 

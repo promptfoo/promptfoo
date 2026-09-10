@@ -548,7 +548,6 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
             completionForCost,
             false,
             lastData.usageMetadata,
-            undefined,
             actualServiceTier,
           );
       const audio = normalizeGeminiAudio(output);
@@ -701,7 +700,7 @@ export class AIStudioEmbeddingProvider
   }
 }
 
-const DEFAULT_AI_STUDIO_MODEL = 'gemini-2.5-pro';
+const DEFAULT_AI_STUDIO_MODEL = 'gemini-3.8-flash';
 
 export function getGoogleAiStudioProviders(env?: EnvOverrides) {
   const gradingProvider = new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env });

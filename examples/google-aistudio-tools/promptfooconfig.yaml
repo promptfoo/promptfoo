@@ -12,6 +12,13 @@ providers:
     config:
       tools: file://tools.json
 
+  - id: 'google:gemini-3.5-flash-lite'
+    config:
+      tools: file://tools.json
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MEDIUM
+
 defaultTest:
   options:
     # This overrides the default grading providers with native Gemini API models

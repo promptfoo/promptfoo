@@ -35,11 +35,21 @@ export GOOGLE_PROJECT_ID=your-project-id
 
 ## Available Models
 
+Google AI Studio / Gemini API:
+
 | Model                           | Description                                          | Duration |
 | ------------------------------- | ---------------------------------------------------- | -------- |
 | `veo-3.1-generate-preview`      | Veo 3.1 with extension, references, and 4k           | 4, 6, 8s |
 | `veo-3.1-fast-generate-preview` | Faster Veo 3.1 with extension, references, and 4k    | 4, 6, 8s |
 | `veo-3.1-lite-generate-preview` | Veo 3.1 Lite Preview without extension or references | 4, 6, 8s |
+
+Vertex AI:
+
+| Provider ID                              | Description          | Generation duration |
+| ---------------------------------------- | -------------------- | ------------------- |
+| `vertex:video:veo-3.1-generate-001`      | Veo 3.1 GA           | 4, 6, 8s            |
+| `vertex:video:veo-3.1-fast-generate-001` | Faster Veo 3.1 GA    | 4, 6, 8s            |
+| `vertex:video:veo-3.1-lite-generate-001` | Lite Veo 3.1 Preview | 4, 6, 8s            |
 
 ## Running the Example
 
@@ -92,6 +102,8 @@ The response reports `metadata.extensionSeconds: 7` and omits `video.duration` f
 because the total source duration is unknown. `metadata.videoUri` is a compatibility alias for
 the same sanitized URI as `metadata.sourceVideoUri`. Native extension requires a 720p Veo
 source no longer than 141 seconds; arbitrary videos are outside that documented contract.
+
+Export an eval with `-o results.json` to inspect the response metadata. Veo extension adds 7 seconds; promptfoo reports `metadata.extensionSeconds` and omits the unknown total video duration.
 
 ## Notes
 

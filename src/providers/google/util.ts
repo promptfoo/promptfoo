@@ -593,8 +593,8 @@ export function calculateGoogleCost(
   cachedPromptTokens?: number,
   cachedAudioPromptTokens?: number,
   cachedImagePromptTokens?: number,
-  vertexRegion?: string,
   actualServiceTier?: GoogleServiceTier,
+  vertexRegion?: string,
   requestedServiceTier?: unknown,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
@@ -760,8 +760,8 @@ export function calculateGoogleCostFromUsage(
   completionTokens: number | undefined,
   isVertexMode: boolean,
   usageMetadata: any,
-  vertexRegion?: string,
   responseServiceTier?: unknown,
+  vertexRegion?: string,
   requestedServiceTier?: unknown,
 ): number | undefined {
   const promptDetails = usageMetadata?.promptTokensDetails ?? usageMetadata?.prompt_tokens_details;
@@ -801,12 +801,12 @@ export function calculateGoogleCostFromUsage(
     usageMetadata?.cachedContentTokenCount ?? usageMetadata?.cached_content_token_count,
     getGoogleModalityTokenCount(cacheDetails, ['AUDIO']),
     getGoogleModalityTokenCount(cacheDetails, ['IMAGE', 'VIDEO', 'DOCUMENT']),
-    vertexRegion,
     getGoogleResponseServiceTier(
       responseServiceTier ? { 'x-gemini-service-tier': responseServiceTier } : undefined,
       usageMetadata,
       isVertexMode,
     ),
+    vertexRegion,
     requestedServiceTier,
   );
 }

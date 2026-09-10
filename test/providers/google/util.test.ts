@@ -4181,7 +4181,6 @@ describe('util', () => {
         100,
         true,
         { serviceTier: 'SERVICE_TIER_PRIORITY' },
-        undefined,
         'standard',
       );
 
@@ -4204,8 +4203,8 @@ describe('util', () => {
             0,
             vertexai,
             { cachedContentTokenCount: 1_000_000, serviceTier: 'SERVICE_TIER_PRIORITY' },
-            effectiveRegion,
             'SERVICE_TIER_FLEX',
+            effectiveRegion,
           ),
         ).toBeCloseTo(expected, 12);
         expect(
@@ -4222,8 +4221,8 @@ describe('util', () => {
             1_000_000,
             undefined,
             undefined,
-            effectiveRegion,
             'flex',
+            effectiveRegion,
           ),
         ).toBeCloseTo(expected, 12);
       },
@@ -4811,6 +4810,7 @@ describe('util', () => {
         undefined,
         undefined,
         1_000_000,
+        undefined,
         undefined,
         undefined,
         'us-central1',

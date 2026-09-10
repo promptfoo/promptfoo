@@ -390,7 +390,7 @@ export async function createDummyFiles(
   }
 
   const prompts: string[] = [];
-  const providers: (string | object)[] = [];
+  const providers: (string | ProviderOptions)[] = [];
   let action: string;
   let language: string;
 
@@ -713,7 +713,10 @@ export async function createDummyFiles(
 
   return {
     numPrompts: prompts.length,
-    providerPrefixes: providers.map((p) => (typeof p === 'string' ? p.split(':')[0] : 'unknown')),
+    providerPrefixes: providers.map((provider) => {
+      const providerId = typeof provider === 'string' ? provider : provider.id;
+      return providerId?.split(':')[0] ?? 'unknown';
+    }),
     action,
     language,
     outDirectory,

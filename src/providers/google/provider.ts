@@ -735,8 +735,8 @@ export class GoogleProvider extends GoogleGenericProvider {
             completionForCost,
             this.isVertexMode,
             lastData.usageMetadata,
-            this.isVertexMode ? this.getRegion() : undefined,
             actualServiceTier,
+            this.isVertexMode ? this.getRegion() : undefined,
             requestedServiceTier,
           );
       const audio = normalizeGeminiAudio(output);
