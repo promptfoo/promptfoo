@@ -136,6 +136,44 @@ describe('handleToolCallF1', () => {
       expect(result.score).toBe(1);
     });
 
+    it('should handle JSON stringified OpenAI Responses function_call output', () => {
+      const output = JSON.stringify({
+        type: 'function_call',
+        id: 'fc_1',
+        call_id: 'call_1',
+        name: 'get_weather',
+        arguments: '{"city":"NYC"}',
+      });
+      const params = createParams(output, ['get_weather']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should handle newline-separated OpenAI Responses function_call output', () => {
+      const output = `Thinking about the request.
+{"type":"function_call","id":"fc_1","call_id":"call_1","name":"get_weather","arguments":"{\\"city\\":\\"NYC\\"}"}
+{"type":"function_call","id":"fc_2","call_id":"call_2","name":"book_flight","arguments":"{\\"destination\\":\\"LA\\"}"}`;
+      const params = createParams(output, ['get_weather', 'book_flight']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should not treat unrelated named objects as tool calls', () => {
+      const output = JSON.stringify({ type: 'response_metadata', name: 'get_weather' });
+      const params = createParams(output, ['get_weather']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+    });
+
     it('should handle direct array of tool calls', () => {
       const output = [
         { function: { name: 'get_weather', arguments: '{}' } },
@@ -305,6 +343,35 @@ describe('handleToolCallF1', () => {
       expect(result.score).toBe(1);
     });
 
+    it('extracts complete pretty-printed JSON blocks after text', () => {
+      const output = [
+        'Let me check that. Braces in prose {not JSON} are ignored.',
+        JSON.stringify(
+          { type: 'tool_use', name: 'get_weather', input: { query: 'a } b' } },
+          null,
+          2,
+        ),
+        'And then book the flight.',
+        JSON.stringify(
+          [{ type: 'tool_use', name: 'book_flight', input: { destination: 'LA' } }],
+          null,
+          2,
+        ),
+      ].join('\n\n');
+
+      const result = handleToolCallF1(createParams(output, ['get_weather', 'book_flight']));
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('does not count an incomplete JSON tool block', () => {
+      const output = 'Here is a partial call: {"type":"tool_use","name":"get_weather"';
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result.score).toBe(0);
+    });
+
     it('should handle Anthropic output with only one tool call in string', () => {
       const output = `I'll help you with that.
 
@@ -439,6 +506,15 @@ describe('handleToolCallF1', () => {
       );
     });
 
+    it.each(['', '  ', ' , , ', [' ', '']])(
+      'rejects empty expected tool names from %j',
+      (expectedTools) => {
+        expect(() => handleToolCallF1(createParams({}, expectedTools))).toThrow(
+          '"tool-call-f1" assertion requires at least one expected tool name',
+        );
+      },
+    );
+
     it('should throw error when value is undefined', () => {
       const output = { tool_calls: [{ function: { name: 'get_weather', arguments: '{}' } }] };
       const params: AssertionParams = {
@@ -477,6 +553,34 @@ describe('handleToolCallF1', () => {
 
       expect(result.pass).toBe(true);
       expect(result.score).toBe(1);
+    });
+  });
+
+  describe('OpenAI Responses API function_call items', () => {
+    const singleCall = {
+      type: 'function_call',
+      id: 'fc_1',
+      call_id: 'call_1',
+      name: 'get_weather',
+      arguments: '{"city":"NYC"}',
+    };
+
+    it('recognizes a single function_call object', () => {
+      const result = handleToolCallF1(createParams(singleCall, ['get_weather']));
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('recognizes a JSON-stringified single function_call (Responses providers serialize calls)', () => {
+      const result = handleToolCallF1(createParams(JSON.stringify(singleCall), ['get_weather']));
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('still scores zero when the function_call name does not match', () => {
+      const result = handleToolCallF1(createParams(singleCall, ['book_flight']));
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
     });
   });
 });

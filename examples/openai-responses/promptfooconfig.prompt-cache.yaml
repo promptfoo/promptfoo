@@ -6,11 +6,15 @@ prompts:
     Include a cited source.
 
 providers:
-  - id: openai:responses:gpt-5.5
+  - id: openai:responses:gpt-5.6-sol
     config:
+      reasoning:
+        effort: none
       max_output_tokens: 300
       prompt_cache_key: recent-topic-update
-      prompt_cache_retention: 24h
+      prompt_cache_options:
+        mode: implicit
+        ttl: 30m
       include:
         - web_search_call.results
       tools:
