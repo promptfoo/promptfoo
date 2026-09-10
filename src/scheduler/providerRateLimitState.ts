@@ -128,6 +128,7 @@ export class ProviderRateLimitState extends EventEmitter {
     requestId: string,
     callFn: () => Promise<T>,
     options: {
+      abortSignal?: AbortSignal;
       getHeaders?: (result: T) => Record<string, string> | undefined;
       isRateLimited?: (result: T | undefined, error?: Error) => boolean;
       getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
@@ -151,7 +152,7 @@ export class ProviderRateLimitState extends EventEmitter {
       // Acquire slot (may wait for rate limit window via queue)
       // Queue timeout failures are counted as failed requests
       try {
-        await this.slotQueue.acquire(`${requestId}-${attempt}`);
+        await this.slotQueue.acquire(`${requestId}-${attempt}`, options.abortSignal);
       } catch (acquireError) {
         // Queue timeout or other acquire failures
         this.failedRequests++;
@@ -199,7 +200,7 @@ export class ProviderRateLimitState extends EventEmitter {
               reason: 'ratelimit',
             });
 
-            await this.sleep(delay);
+            await this.sleep(delay, options.abortSignal);
             continue;
           }
 
@@ -260,7 +261,7 @@ export class ProviderRateLimitState extends EventEmitter {
             reason: isRateLimited ? 'ratelimit' : 'error',
           });
 
-          await this.sleep(delay);
+          await this.sleep(delay, options.abortSignal);
           continue;
         }
 
@@ -376,8 +377,24 @@ export class ProviderRateLimitState extends EventEmitter {
     );
   }
 
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const done = () => {
+        signal?.removeEventListener('abort', abort);
+        resolve();
+      };
+      const timeout = setTimeout(done, ms);
+      const abort = () => {
+        clearTimeout(timeout);
+        signal?.removeEventListener('abort', abort);
+        reject(signal?.reason);
+      };
+      if (signal?.aborted) {
+        abort();
+      } else {
+        signal?.addEventListener('abort', abort, { once: true });
+      }
+    });
   }
 
   /**

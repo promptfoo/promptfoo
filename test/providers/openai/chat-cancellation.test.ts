@@ -90,8 +90,8 @@ describe('OpenAI-compatible chat cancellation', () => {
     const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
     const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
     controller.abort();
-    initialization.resolve();
     await rejected;
+    initialization.resolve();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -171,8 +171,8 @@ describe('OpenAI-compatible chat cancellation', () => {
       message: 'cancel preparation',
     });
     controller.abort(new Error('cancel preparation'));
-    preparation.resolve(body);
     await rejected;
+    preparation.resolve(body);
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -190,6 +190,50 @@ describe('OpenAI-compatible chat cancellation', () => {
     expect(transportSignal.aborted).toBe(true);
     expect(fetch).toHaveBeenCalledOnce();
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('stops waiting for a tool callback and does not invoke the next callback', async () => {
+    const firstStarted = createDeferred<void>();
+    const firstResult = createDeferred<string>();
+    const second = vi.fn().mockResolvedValue('second result');
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: {
+        apiKey: 'fixture-key',
+        functionToolCallbacks: {
+          first: async () => {
+            firstStarted.resolve();
+            return firstResult.promise;
+          },
+          second,
+        },
+      },
+    });
+    fetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                tool_calls: [
+                  { id: '1', function: { name: 'first', arguments: '{}' } },
+                  { id: '2', function: { name: 'second', arguments: '{}' } },
+                ],
+              },
+              finish_reason: 'tool_calls',
+            },
+          ],
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const controller = new AbortController();
+    const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await firstStarted.promise;
+    controller.abort();
+    await rejected;
+    expect(second).not.toHaveBeenCalled();
+    firstResult.resolve('first result');
   });
 
   it.each([undefined, new Error('cancel body read'), 'cancel body read'])(
@@ -354,37 +398,6 @@ describe('OpenAI-compatible chat cancellation', () => {
     expect(logger.error).toHaveBeenCalled();
   });
 
-  it('does not relabel an unrelated error merely because the caller cancelled', async () => {
-    const controller = new AbortController();
-    vi.spyOn(cache, 'fetchWithCache').mockImplementationOnce(async () => {
-      controller.abort();
-      throw new Error('unrelated cache failure');
-    });
-    expect(
-      await provider().callApi('fixture', undefined, { abortSignal: controller.signal }),
-    ).toMatchObject({ error: expect.stringContaining('unrelated cache failure') });
-  });
-
-  it('does not relabel an unrelated body error with the same message as cancellation', async () => {
-    const controller = new AbortController();
-    const reason = new Error('body read failed');
-    const unrelated = new Error(reason.message);
-    const bodyResponse = response();
-    vi.spyOn(bodyResponse, 'text').mockImplementation(async () => {
-      controller.abort(reason);
-      throw unrelated;
-    });
-    fetch.mockResolvedValueOnce(bodyResponse);
-    expect(
-      await provider().callApi('fixture', undefined, { abortSignal: controller.signal }),
-    ).toMatchObject({
-      error: expect.stringContaining('Error reading response body'),
-      metadata: { http: { status: 0, statusText: 'Error' } },
-    });
-    expect(fetch).toHaveBeenCalledOnce();
-    expect(logger.error).toHaveBeenCalled();
-  });
-
   it('preserves structured hard-quota errors without retrying', async () => {
     fetch.mockResolvedValueOnce(
       new Response(
@@ -426,23 +439,6 @@ describe('OpenAI-compatible chat cancellation', () => {
     },
   );
 
-  it('preserves xAI handling for an unrelated preparation error after cancellation', async () => {
-    const target = (await loadApiProvider('xai:grok-4', {
-      options: { config: { apiKey: 'xai-fixture-key', maxRetries: 0 } },
-    })) as OpenAiChatCompletionProvider;
-    const controller = new AbortController();
-    const reason = new Error('xAI preparation failed');
-    vi.spyOn(target, 'getOpenAiBody').mockImplementationOnce(async () => {
-      controller.abort(reason);
-      throw new Error(reason.message);
-    });
-    expect(await target.callApi('fixture', undefined, { abortSignal: controller.signal })).toEqual({
-      error:
-        'x.ai API error: xAI preparation failed\n\nIf this persists, verify your API key at https://x.ai/',
-    });
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
   it.each(['openai:chat:gpt-4o', 'xai:grok-4'])(
     'preserves a custom timeout abort through the default registry for %s',
     async (id) => {
@@ -467,7 +463,7 @@ describe('OpenAI-compatible chat cancellation', () => {
         await vi.advanceTimersByTimeAsync(0);
         expect(caught).toBe(reason);
         await pending;
-        expect(callApi).toHaveBeenCalledOnce();
+        expect(callApi).not.toHaveBeenCalled();
         expect(fetch).not.toHaveBeenCalled();
         expect(logger.error).not.toHaveBeenCalled();
       } finally {

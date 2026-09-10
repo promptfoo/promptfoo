@@ -55,19 +55,30 @@ export class SlotQueue {
    * Acquire a slot. All requests go through the queue to prevent race conditions.
    * Returns when a slot is available and quota is not exhausted.
    */
-  async acquire(requestId: string): Promise<void> {
+  async acquire(requestId: string, signal?: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
       const queuedAt = Date.now();
 
       // Set up timeout for queued request
       let timeoutId: NodeJS.Timeout | null = null;
+      const abort = () => {
+        const idx = this.waiting.findIndex((request) => request.id === requestId);
+        if (idx !== -1) {
+          this.waiting.splice(idx, 1);
+        }
+        wrappedReject(
+          signal?.reason instanceof Error
+            ? signal.reason
+            : Object.assign(new Error('Request was aborted'), { name: 'AbortError' }),
+        );
+      };
       if (this.queueTimeoutMs > 0) {
         timeoutId = setTimeout(() => {
           // Remove from queue
           const idx = this.waiting.findIndex((r) => r.id === requestId);
           if (idx !== -1) {
             this.waiting.splice(idx, 1);
-            reject(
+            wrappedReject(
               new Error(`Request ${requestId} timed out after ${this.queueTimeoutMs}ms in queue`),
             );
           }
@@ -75,6 +86,7 @@ export class SlotQueue {
       }
 
       const wrappedResolve = () => {
+        signal?.removeEventListener('abort', abort);
         if (timeoutId) {
           clearTimeout(timeoutId);
         }
@@ -84,6 +96,7 @@ export class SlotQueue {
       };
 
       const wrappedReject = (error: Error) => {
+        signal?.removeEventListener('abort', abort);
         if (timeoutId) {
           clearTimeout(timeoutId);
         }
@@ -97,6 +110,11 @@ export class SlotQueue {
         reject: wrappedReject,
         queuedAt,
       });
+      if (signal?.aborted) {
+        abort();
+        return;
+      }
+      signal?.addEventListener('abort', abort, { once: true });
 
       // Immediately try to process queue (synchronous, no race)
       this.processQueue();

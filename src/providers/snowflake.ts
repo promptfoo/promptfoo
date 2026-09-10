@@ -94,8 +94,10 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    callApiOptions?.abortSignal?.throwIfAborted();
     // Get the request body and config from parent class
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    callApiOptions?.abortSignal?.throwIfAborted();
 
     // Make the API call to Snowflake Cortex endpoint
     logger.debug('[Snowflake Cortex] Calling API', {
@@ -136,18 +138,23 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
               ...config.headers,
             },
             body: JSON.stringify(body),
+            ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
           },
           getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
         ));
 
+      callApiOptions?.abortSignal?.throwIfAborted();
       if (status < 200 || status >= 300) {
         return {
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
         };
       }
     } catch (err) {
+      if (callApiOptions?.abortSignal?.aborted) {
+        callApiOptions.abortSignal.throwIfAborted();
+      }
       logger.error(`[Snowflake Cortex] API call error: ${String(err)}`);
       return {
         error: `API call error: ${String(err)}`,

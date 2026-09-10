@@ -69,7 +69,32 @@ function throwIfAborted(signal?: AbortSignal): void {
     signal.reason instanceof Error ? signal.reason.message : 'Request was aborted',
   );
   error.name = 'AbortError';
+  (error as SystemError).cause = signal.reason;
   throw error;
+}
+
+async function waitWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  throwIfAborted(signal);
+  if (!signal) {
+    return promise;
+  }
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([promise, aborted]);
+  } catch (error) {
+    if (signal.aborted && error === signal.reason) {
+      throwIfAborted(signal);
+    }
+    throw error;
+  } finally {
+    if (onAbort) {
+      signal.removeEventListener('abort', onAbort);
+    }
+  }
 }
 
 function getChatSearchCitations(
@@ -399,7 +424,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     throwIfAborted(callApiOptions?.abortSignal);
     if (this.initializationPromise != null) {
-      await this.initializationPromise;
+      await waitWithAbort(this.initializationPromise, callApiOptions?.abortSignal);
     }
     throwIfAborted(callApiOptions?.abortSignal);
     if (this.requiresApiKey() && !this.getApiKey()) {
@@ -445,7 +470,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await waitWithAbort(
+      this.getOpenAiBody(prompt, context, callApiOptions),
+      callApiOptions?.abortSignal,
+    );
     throwIfAborted(callApiOptions?.abortSignal);
 
     type OpenAIChatCompletionResponse = OpenAI.ChatCompletion & {
@@ -490,22 +518,25 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         latencyMs,
         deleteFromCache,
         headers: responseHeaders,
-      } = await fetchWithCache<OpenAIChatCompletionResponse>(
-        appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
-            ...this.getOpenAiRequestHeaders(config.headers),
+      } = await waitWithAbort(
+        fetchWithCache<OpenAIChatCompletionResponse>(
+          appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
+              ...this.getOpenAiRequestHeaders(config.headers),
+            },
+            body: JSON.stringify(body),
+            ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
           },
-          body: JSON.stringify(body),
-          ...(callApiOptions?.abortSignal ? { signal: callApiOptions.abortSignal } : {}),
-        },
-        getRequestTimeoutMs(),
-        'json',
-        this.shouldBustCache(context),
-        this.config.maxRetries,
+          getRequestTimeoutMs(),
+          'json',
+          this.shouldBustCache(context),
+          this.config.maxRetries,
+        ),
+        callApiOptions?.abortSignal,
       ));
       throwIfAborted(callApiOptions?.abortSignal);
 
@@ -549,9 +580,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         };
       }
     } catch (err) {
-      if (isAbortError(err)) {
-        throw err;
-      }
       const signal = callApiOptions?.abortSignal;
       if (
         signal?.aborted &&
@@ -695,6 +723,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         const results = [];
         let hasSuccessfulCallback = false;
         for (const functionCall of functionCalls) {
+          throwIfAborted(callApiOptions?.abortSignal);
           const functionName = functionCall.name || functionCall.function?.name;
 
           // Try MCP first if available
@@ -710,7 +739,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               let parsedArgs: any;
               try {
                 parsedArgs = typeof rawArgs === 'string' ? JSON.parse(rawArgs) : rawArgs;
-                const mcpResult = await this.mcpClient.callTool(functionName, parsedArgs);
+                const mcpResult = await waitWithAbort(
+                  this.mcpClient.callTool(functionName, parsedArgs),
+                  callApiOptions?.abortSignal,
+                );
 
                 if (isMcpErrorResult(mcpResult)) {
                   const errorMessage = getMcpErrorMessage(mcpResult);
@@ -769,6 +801,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 hasSuccessfulCallback = true;
                 continue; // Skip to next function call
               } catch (error) {
+                throwIfAborted(callApiOptions?.abortSignal);
                 logger.debug(`MCP tool execution failed for ${functionName}: ${error}`);
                 results.push(`MCP Tool Error (${functionName}): ${error}`);
                 mcpToolCalls.push({
@@ -789,15 +822,19 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           // Fall back to regular function callbacks
           if (config.functionToolCallbacks && config.functionToolCallbacks[functionName]) {
             try {
-              const functionResult = await this.executeFunctionCallback(
-                functionName,
-                functionCall.arguments || functionCall.function?.arguments,
-                config,
-                functionCall.call_id ?? functionCall.id,
+              const functionResult = await waitWithAbort(
+                this.executeFunctionCallback(
+                  functionName,
+                  functionCall.arguments || functionCall.function?.arguments,
+                  config,
+                  functionCall.call_id ?? functionCall.id,
+                ),
+                callApiOptions?.abortSignal,
               );
               results.push(functionResult);
               hasSuccessfulCallback = true;
             } catch (error) {
+              throwIfAborted(callApiOptions?.abortSignal);
               // If callback fails, fall back to original behavior (return the function call)
               logger.debug(
                 `Function callback failed for ${functionName} with error ${error}, falling back to original output`,
@@ -895,6 +932,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         },
       };
     } catch (err) {
+      throwIfAborted(callApiOptions?.abortSignal);
       await deleteFromCache?.();
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,

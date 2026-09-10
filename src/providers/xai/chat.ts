@@ -822,7 +822,14 @@ class XAIProvider extends OpenAiChatCompletionProvider {
 
       return response;
     } catch (err) {
-      if (err instanceof Error && (err.name === 'AbortError' || err.name === 'AbortException')) {
+      const signal = callApiOptions?.abortSignal;
+      if (
+        signal?.aborted &&
+        (err === signal.reason ||
+          (err instanceof Error &&
+            'cause' in err &&
+            (err as Error & { cause?: unknown }).cause === signal.reason))
+      ) {
         throw err;
       }
       // Handle JSON parsing errors and other API errors

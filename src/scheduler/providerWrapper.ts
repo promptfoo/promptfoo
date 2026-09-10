@@ -111,11 +111,10 @@ export function wrapProviderWithRateLimiting(
       context?: CallApiContextParams,
       options?: CallApiOptionsParams,
     ): Promise<ProviderResponse> => {
-      return registry.execute(
-        provider,
-        () => originalCallApi(prompt, context, options),
-        createProviderRateLimitOptions(),
-      );
+      return registry.execute(provider, () => originalCallApi(prompt, context, options), {
+        ...createProviderRateLimitOptions(),
+        abortSignal: options?.abortSignal,
+      });
     },
   };
 
