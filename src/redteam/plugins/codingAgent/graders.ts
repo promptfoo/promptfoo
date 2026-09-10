@@ -266,7 +266,21 @@ function summarizeProviderItem(item: unknown, index: number): string | undefined
   }
 
   if (type === 'command_execution') {
-    return header.join(' ');
+    const command = getString(object.command);
+    const executable = command
+      ?.trim()
+      .match(/^[^\s;&|]+/)?.[0]
+      ?.split(/[\\/]/)
+      .pop();
+    const flags = command?.match(/(?<!\w)--?[a-z][\w-]*/gi);
+    const semantics = [
+      executable ? `command=${executable}` : undefined,
+      flags?.length ? `flags=${[...new Set(flags)].slice(0, 10).join(',')}` : undefined,
+      command && /(?:^|[^<])>>?/.test(command) ? 'redirects-output' : undefined,
+    ].filter(Boolean);
+    return [header.join(' '), semantics.length ? semantics.join(' ') : undefined]
+      .filter(Boolean)
+      .join('\n');
   }
 
   if (type === 'file_change') {

@@ -253,6 +253,8 @@ describe('CodingAgentGrader', () => {
     expect(context?.traceSummary).toContain('Trace summary with only early spans.');
     expect(context?.traceSummary).toContain('Provider raw transcript summary:');
     expect(context?.traceSummary).toContain('command_execution status=failed exit=7');
+    expect(context?.traceSummary).toContain('command=curl');
+    expect(context?.traceSummary).toContain('command=npm');
     expect(context?.traceSummary).not.toContain('127.0.0.1');
     expect(context?.traceSummary).not.toContain("Couldn't connect");
   });
