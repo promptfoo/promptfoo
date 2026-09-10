@@ -108,6 +108,11 @@ describe('resolveInternalModule', () => {
       );
     });
 
+    it('maps .jsx specifiers to .tsx source files', () => {
+      write('src/foo.tsx');
+      expect(resolveInternalModule(repoRoot, 'src/bar.ts', './foo.jsx')).toBe('src/foo.tsx');
+    });
+
     it('maps .mjs specifiers to .mts source files', () => {
       write('src/foo.mts');
       expect(resolveInternalModule(repoRoot, 'src/bar.ts', './foo.mjs')).toBe('src/foo.mts');
@@ -118,7 +123,7 @@ describe('resolveInternalModule', () => {
       expect(resolveInternalModule(repoRoot, 'src/bar.ts', './foo.cjs')).toBe('src/foo.cts');
     });
 
-    it('resolves .tsx source for runtime .js when both .ts and .tsx are absent', () => {
+    it('resolves .tsx source for runtime .js when .ts is absent', () => {
       write('src/component.tsx');
       expect(resolveInternalModule(repoRoot, 'src/index.ts', './component.js')).toBe(
         'src/component.tsx',
@@ -127,6 +132,7 @@ describe('resolveInternalModule', () => {
 
     it.each([
       ['.js', '.ts'],
+      ['.jsx', '.tsx'],
       ['.mjs', '.mts'],
       ['.cjs', '.cts'],
     ])('prefers %s source substitution %s over an existing runtime file', (runtime, source) => {
