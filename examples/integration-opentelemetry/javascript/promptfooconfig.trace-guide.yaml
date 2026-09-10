@@ -52,13 +52,6 @@ tests:
       - type: not-trajectory:tool-used
         value: issue_refund
 
-      - type: trajectory:tool-args-match
-        value:
-          name: search_corpus
-          args:
-            query: quantum computing classical computing
-          mode: partial
-
       - type: trajectory:tool-sequence
         value:
           mode: in_order
@@ -78,9 +71,12 @@ tests:
 
 tracing:
   enabled: true
+  failOnReceiverStartFailure: true
   otlp:
     http:
       enabled: true
       host: '127.0.0.1'
       port: 4318
       acceptFormats: ['json']
+      redactAttributes:
+        - tool.arguments

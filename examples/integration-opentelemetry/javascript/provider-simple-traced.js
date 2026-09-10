@@ -130,7 +130,6 @@ class SimpleTracedProvider {
       {
         'promptfoo.evaluation_id': promptfooContext.evaluationId,
         'promptfoo.test_case_id': promptfooContext.testCaseId,
-        'prompt.text': prompt,
         'prompt.length': prompt.length,
         'agent.type': 'rag_assistant',
         'agent.version': '2.0',
@@ -191,12 +190,8 @@ class SimpleTracedProvider {
                 `retrieve_document_${i}`,
                 {
                   'document.index': i,
-                  'search.query': userIntent.entities.join(' '),
+                  'search.query.length': userIntent.entities.join(' ').length,
                   'tool.name': 'search_corpus',
-                  'tool.arguments': JSON.stringify({
-                    query: userIntent.entities.join(' '),
-                    document_index: i,
-                  }),
                 },
                 async () => {
                   const docSpan = trace.getSpan(context.active());
@@ -317,10 +312,7 @@ class SimpleTracedProvider {
             'generation.type': 'augmented_response',
             'model.name': 'gpt-4',
             'tool.name': 'compose_answer',
-            'tool.arguments': JSON.stringify({
-              citation_count: documents.length,
-              tone: 'explanatory',
-            }),
+            'document.count': documents.length,
           },
           async () => {
             const span = trace.getSpan(context.active());
