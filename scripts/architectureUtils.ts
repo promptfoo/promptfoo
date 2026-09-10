@@ -369,14 +369,6 @@ export function resolveInternalModule(
     : undefined;
 
   const sourceRoots = [...DEFAULT_SOURCE_ROOTS, ...additionalRoots];
-  if (
-    !specifier.startsWith('.') &&
-    !sourceRoots.some((root) => isWithinRoot(specifier, root)) &&
-    !aliasedPath
-  ) {
-    return undefined;
-  }
-
   let unresolvedPath: string;
   if (aliasedPath) {
     unresolvedPath = path.resolve(repoRoot, aliasedPath);

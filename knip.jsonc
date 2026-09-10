@@ -78,12 +78,9 @@
       "ignoreFiles": ["docs/_shared/**/*.{js,ts,tsx}", "static/js/scripts.js"],
       "ignoreDependencies": [
         // Docusaurus aliasing/preset conventions resolved at build time.
-        "@docusaurus/types",
-        "@docusaurus/theme-common",
         "@theme/*",
         "@mui/*",
         "@generated/*",
-        "@docusaurus/plugin-content-blog",
         "@swc/core",
         // Transitive pins for the Docusaurus build; never imported directly.
         "dompurify",
