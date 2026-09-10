@@ -320,15 +320,14 @@ export async function importModule(modulePath: string, functionName?: string) {
     // their original diagnostics. Comparing against the reported target rather than
     // re-stat'ing the path also avoids mistaking EACCES for absence.
     //
-    // Both spellings are required: Node names the missing entry by filesystem path
-    // ("Cannot find module '/abs/config.ts'"), while Vite's module runner names it by
-    // file URL ("Cannot find module 'file:///abs/config.ts'"). Nested failures report the
-    // dependency instead (its resolved path under Node, its raw specifier under Vite), so
-    // they match neither spelling and fall through.
-    const nodeError = err as NodeJS.ErrnoException;
+    // Prefer Node's target URL: quotes in a path make the text diagnostic ambiguous.
+    // Vite can report either a filesystem path or file URL in its message.
+    const nodeError = err as NodeJS.ErrnoException & { url?: string };
     if (nodeError.code === 'ERR_MODULE_NOT_FOUND') {
       const resolvedModulePath = safeResolve(loadPath);
-      const missingTarget = nodeError.message.match(/Cannot find module ['"]([^'"]+)['"]/)?.[1];
+      const missingTarget =
+        nodeError.url ??
+        nodeError.message.match(/^Cannot find module (['"])(.*?)\1(?: imported from|$)/)?.[2];
       if (
         missingTarget === resolvedModulePath ||
         missingTarget === pathToFileURL(resolvedModulePath).href
