@@ -61,7 +61,11 @@ function* jsonDelimiters(text: string): Generator<JsonDelimiter | null> {
     const container = containers[containers.length - 1] ?? 0;
     const fenceText = list ? content.slice(list[0].length) : content;
     const marker = /^[ \t]*(`{3,}|~{3,})/.exec(fenceText);
-    if (marker && (list || indent <= container + 3)) {
+    if (
+      marker &&
+      (list || indent <= container + 3) &&
+      (marker[1][0] !== '`' || !fenceText.slice(marker[0].length).includes('`'))
+    ) {
       fence = marker[1];
       fenceContainer = container;
       yield null;
@@ -105,6 +109,8 @@ function* jsonDelimiters(text: string): Generator<JsonDelimiter | null> {
 
 class ToolCallParseError extends Error {}
 
+const MAX_UNMATCHED_DELIMITERS = 65_536;
+
 function* jsonBlocks(text: string, skipRoot = false): Generator<string> {
   // Pop complete pairs so independent blocks do not accumulate in memory.
   const unmatched: number[] = [];
@@ -123,6 +129,11 @@ function* jsonBlocks(text: string, skipRoot = false): Generator<string> {
       unmatched.push(token.index);
       stackStart = unmatched.length;
     }
+    if (unmatched.length > MAX_UNMATCHED_DELIMITERS) {
+      throw new ToolCallParseError(
+        'Tool Call F1 could not finish parsing malformed output within its delimiter limit',
+      );
+    }
   }
 
   // Yield disjoint blocks; nested recovery skips the enclosing root.
@@ -139,7 +150,7 @@ function* jsonBlocks(text: string, skipRoot = false): Generator<string> {
       continue;
     }
     if (token.char === '{' || token.char === '[') {
-      if (start < 0 && token.startsLine && (!skipRoot || token.index > 0)) {
+      if (start < 0 && token.startsLine && depth === (skipRoot ? 1 : 0)) {
         start = token.index;
         startDepth = depth;
       }
