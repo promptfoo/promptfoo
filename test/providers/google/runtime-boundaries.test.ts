@@ -52,7 +52,7 @@ describe('Google public request boundaries', () => {
     const client = new OAuth2Client({ transporterOptions: { fetchImplementation: fetchMock } });
     client.setCredentials({ access_token: 'test-access-token', expiry_date: 4_102_444_800_000 });
     vi.spyOn(GoogleAuth.prototype, 'getClient').mockResolvedValue(client);
-    vi.spyOn(GoogleAuth.prototype, 'getProjectId').mockResolvedValue('test-project');
+    vi.spyOn(GoogleAuth.prototype, 'getProjectId').mockImplementation(async () => 'test-project');
   });
 
   afterEach(() => {
