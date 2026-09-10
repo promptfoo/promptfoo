@@ -1408,6 +1408,30 @@ export default class Eval {
     this._resultsLoaded = true;
   }
 
+  async appendResults(results: EvalResult[]) {
+    if (results.length === 0) {
+      return;
+    }
+    if (this.persisted) {
+      const db = await getDb();
+      await db
+        .insert(evalResultsTable)
+        .values(
+          results.map((r) => ({
+            ...r,
+            metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+            evalId: this.id,
+          })),
+        )
+        .run();
+      notifyEvaluationChanged(this.id);
+      this._resultsLoaded = false;
+    } else {
+      this.results.push(...results);
+      this._resultsLoaded = true;
+    }
+  }
+
   async loadResults() {
     if (this.persisted) {
       this.results = await EvalResult.findManyByEvalId(this.id);

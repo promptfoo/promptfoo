@@ -877,7 +877,12 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
       return JSON.stringify(sanitized);
     }
     if (typeof parsed === 'string') {
-      return JSON.stringify(sanitizeJsonString(parsed, depth, maxDepth));
+      // JSON string layers do not increase object depth. Stop unwrapping before
+      // hitting the configured limit or exhausting the stack with maxDepth=Infinity.
+      if (depth >= maxDepth || depth >= 64) {
+        return JSON.stringify(REDACTED);
+      }
+      return JSON.stringify(sanitizeJsonString(parsed, depth + 1, maxDepth));
     }
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {

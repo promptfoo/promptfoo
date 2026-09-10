@@ -375,6 +375,16 @@ describe('sanitizeObject', () => {
       expect(sanitizeObject(JSON.stringify(secret))).toBe('"[REDACTED]"');
     });
 
+    it('bounds nested JSON-encoded string sanitization', () => {
+      const nested = Array.from({ length: 10 }, () => '"').reduce(
+        (value) => JSON.stringify(value),
+        'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890',
+      );
+      const sanitized = sanitizeObject(nested, { maxDepth: 3 });
+      expect(sanitized).not.toContain('sk-proj-');
+      expect(sanitized).toContain('[REDACTED]');
+    });
+
     it('should return invalid JSON strings unchanged', () => {
       const invalidJson = '{invalid json}';
       expect(sanitizeObject(invalidJson)).toBe(invalidJson);
