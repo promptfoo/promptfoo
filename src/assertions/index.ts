@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -406,6 +407,76 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see runAssertions for batch assertion execution
  * @see evaluate for full evaluation pipeline
  */
+/** Files already scanned, so a shared assertion file is read once rather than once per test case. */
+const scannedTemplateFiles = new Set<string>();
+
+const NUNJUCKS_TAGS = [
+  { open: '{{', close: '}}', label: '{{ ... }}' },
+  { open: '{%', close: '%}', label: '{% ... %}' },
+  { open: '{#', close: '#}', label: '{# ... #}' },
+];
+
+/**
+ * Linear delimiter scan rather than a regex. A lazy regex body rescans the
+ * rest of the file from every unmatched opener, and capping the body to bound
+ * that would silently stop matching valid long tags.
+ */
+function templateTypeIn(text: string): string | undefined {
+  for (const { open, close, label } of NUNJUCKS_TAGS) {
+    const opened = text.indexOf(open);
+    if (opened !== -1 && text.indexOf(close, opened + open.length) !== -1) {
+      return label;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Assertion values loaded from a file are not passed through Nunjucks, so a
+ * template in one reaches the assertion as literal text. That is easy to miss
+ * with model-graded assertions, where the grader still returns a confident
+ * verdict on whatever prose surrounds the placeholder.
+ *
+ * Warn rather than render: some assertions legitimately compare against text
+ * that contains braces.
+ *
+ * Scans the file's raw text, before it is parsed, for three reasons. A
+ * templated JSON or YAML file is usually not valid JSON or YAML, so parsing
+ * throws and the author sees a parser error instead of this warning. Raw text
+ * also covers a template used as a mapping key. And a flat string scan cannot
+ * overflow the stack or loop forever on a YAML alias cycle, which walking the
+ * parsed object graph can.
+ *
+ * The tag's contents are deliberately not logged. A tag can hold a literal
+ * value, and the file path is what makes the warning actionable anyway.
+ */
+function warnIfTemplateWillNotBeRendered(source: string): void {
+  if (scannedTemplateFiles.has(source)) {
+    return;
+  }
+  scannedTemplateFiles.add(source);
+
+  // Not guarded: an unreadable file throws here exactly as it would one line
+  // later inside processFileReference, and swallowing it would hide real bugs.
+  const templateType = templateTypeIn(readFileSync(source, 'utf8'));
+  if (!templateType) {
+    return;
+  }
+
+  // Only string and array-of-string values are ever rendered. The scan runs
+  // before the parse, so the shape is not known yet for a structured file:
+  // say what holds for both shapes rather than guessing from the extension.
+  const structured = ['.json', '.yaml', '.yml'].includes(path.extname(source));
+  const remedy = structured
+    ? 'Inline the value if it is a string or a list of strings. Object values are not interpolated even when inlined, so a template in one has to be resolved before the file is loaded.'
+    : 'Inline the value in your config if you need variables substituted.';
+
+  logger.warn(
+    `Assertion value loaded from a file contains a Nunjucks template, but values loaded from a file are not interpolated. ${remedy}`,
+    { file: source, templateType },
+  );
+}
+
 async function runAssertionInternal({
   prompt,
   provider,
@@ -531,6 +602,8 @@ async function runAssertionInternal({
           };
         }
       } else {
+        // Before the load: a templated JSON or YAML file usually fails to parse.
+        warnIfTemplateWillNotBeRendered(path.resolve(basePath, fileRef));
         renderedValue = processFileReference(renderedValue);
       }
     } else if (isPackagePath(renderedValue)) {
@@ -552,6 +625,9 @@ async function runAssertionInternal({
     renderedValue = renderedValue.map((v) => {
       if (typeof v === 'string') {
         if (v.startsWith('file://')) {
+          warnIfTemplateWillNotBeRendered(
+            path.resolve(cliState.basePath || '', v.slice('file://'.length)),
+          );
           return processFileReference(v);
         }
         return nunjucks.renderString(v, resolvedVars);
