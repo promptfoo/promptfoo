@@ -906,7 +906,13 @@ describe('fetchWithCache', () => {
       expect(firstResult.cached).toBe(false);
       expect(secondResult.cached).toBe(true);
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
-      expect(mockFetchWithRetries).toHaveBeenCalledWith(url, firstOptions, 1000, undefined);
+      expect(mockFetchWithRetries).toHaveBeenCalledWith(
+        url,
+        firstOptions,
+        1000,
+        undefined,
+        expect.any(Function),
+      );
     });
 
     it('should keep authorization and team isolation when trace contexts change', async () => {

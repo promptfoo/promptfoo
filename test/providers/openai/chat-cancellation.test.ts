@@ -246,14 +246,17 @@ export async function get_tools() {
 `,
     );
     const fixture = await importModule(file);
-    const target = new OpenAiChatCompletionProvider('fixture', {
-      config: {
-        apiBaseUrl: 'https://chat.fixture.test/v1',
-        apiKey: 'fixture-key',
-        maxRetries: 0,
-        tools: `file://${file}:get_tools`,
+    const target = await loadApiProvider('openai:chat:fixture', {
+      options: {
+        config: {
+          apiBaseUrl: 'https://chat.fixture.test/v1',
+          apiKey: 'fixture-key',
+          maxRetries: 0,
+          tools: `file://${file}:get_tools`,
+        },
       },
     });
+    expect(target).toBeInstanceOf(OpenAiChatCompletionProvider);
     const controller = new AbortController();
     const reason = new Error('cancel preparation');
     const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
@@ -272,7 +275,7 @@ export async function get_tools() {
       fixture.held.resolve([]);
       await pending.catch(() => undefined);
       await vi.waitFor(() => expect(fixture.finished).toBe(true));
-      await target.cleanup();
+      await target.cleanup?.();
       await rm(directory, { recursive: true, force: true });
     }
     expect(fetch).not.toHaveBeenCalled();
