@@ -33,22 +33,33 @@ import {
 import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
-function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
+function sanitizeProviderConfig(config: ProviderConfig, throwOnError = false): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
     context: 'provider config',
+    throwOnError,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as ProviderConfig;
 }
 
 function projectProviderResponse(
   response: ProviderResponse | undefined,
-  options: { stripMetadata: boolean; stripOutput: boolean; stripPrompt: boolean },
+  options: {
+    stripMetadata: boolean;
+    stripOutput: boolean;
+    stripPrompt: boolean;
+    stripVars: boolean;
+  },
 ): ProviderResponse | undefined {
   if (!response) {
     return response;
   }
 
-  if (!options.stripMetadata && !options.stripOutput && !options.stripPrompt) {
+  if (
+    !options.stripMetadata &&
+    !options.stripOutput &&
+    !options.stripPrompt &&
+    !options.stripVars
+  ) {
     return response;
   }
 
@@ -61,6 +72,8 @@ function projectProviderResponse(
     delete projectedResponse.audio;
     delete projectedResponse.images;
     delete projectedResponse.video;
+    delete projectedResponse.raw;
+    delete projectedResponse.providerTransformedOutput;
     if (projectedResponse.metadata) {
       const { blobUris: _blobUris, ...metadata } = projectedResponse.metadata;
       projectedResponse.metadata = metadata;
@@ -69,9 +82,26 @@ function projectProviderResponse(
 
   if (options.stripPrompt) {
     projectedResponse.prompt = '[prompt stripped]';
+    if (projectedResponse.metadata) {
+      projectedResponse.metadata = projectPromptMetadata(projectedResponse.metadata, true);
+    }
+  }
+
+  if (options.stripVars) {
+    delete projectedResponse.materializedVars;
+    delete projectedResponse.inputMaterialization;
   }
 
   return projectedResponse;
+}
+
+function projectPromptMetadata<T>(metadata: T, stripPromptText: boolean): T {
+  const record = asRecord(metadata);
+  if (!stripPromptText || !record || !('redteamFinalPrompt' in record)) {
+    return metadata;
+  }
+  const { redteamFinalPrompt: _redteamFinalPrompt, ...rest } = record;
+  return rest as T;
 }
 
 function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
@@ -80,6 +110,7 @@ function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T
       ? {
           ...prompt,
           ...('display' in prompt ? { display: '[prompt stripped]' } : {}),
+          ...('template' in prompt ? { template: '[prompt stripped]' } : {}),
           label: '[prompt stripped]',
           raw: '[prompt stripped]',
         }
@@ -91,8 +122,13 @@ export function sanitizePromptForArtifact<T extends Prompt>(
   prompt: T,
   stripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
 ): T {
-  const sanitized = sanitizeForDbWithSecrets(prompt);
-  if ('id' in prompt) {
+  if (!asRecord(prompt)) {
+    return prompt;
+  }
+  const sanitized = sanitizeForDbWithSecrets(prompt, true);
+  // Generated prompt identities are SHA-256 hashes, which otherwise match the
+  // generic secret-value heuristic. Other IDs still undergo normal redaction.
+  if (typeof prompt.id === 'string' && /^[a-f0-9]{64}$/i.test(prompt.id)) {
     sanitized.id = prompt.id;
   }
   return projectPrompt(sanitized, stripPromptText);
@@ -120,6 +156,7 @@ function projectTestCase(
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(
   provider: ApiProvider | ProviderOptions | string,
+  throwOnError = false,
 ): ProviderOptions {
   try {
     if (isApiProvider(provider)) {
@@ -127,7 +164,7 @@ export function sanitizeProvider(
         id: provider.id(),
         label: provider.label,
         ...(provider.config && {
-          config: sanitizeProviderConfig(provider.config),
+          config: sanitizeProviderConfig(provider.config, throwOnError),
         }),
       };
     }
@@ -136,7 +173,7 @@ export function sanitizeProvider(
         id: provider.id,
         label: provider.label,
         ...(provider.config && {
-          config: sanitizeProviderConfig(provider.config),
+          config: sanitizeProviderConfig(provider.config, throwOnError),
         }),
       };
     }
@@ -150,11 +187,15 @@ export function sanitizeProvider(
         id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
         label: providerObj.label,
         ...(providerObj.config && {
-          config: sanitizeProviderConfig(providerObj.config),
+          config: sanitizeProviderConfig(providerObj.config, throwOnError),
         }),
       };
     }
-  } catch {}
+  } catch (error) {
+    if (throwOnError) {
+      throw error;
+    }
+  }
   return JSON.parse(safeJsonStringify(provider) as string);
 }
 
@@ -202,12 +243,13 @@ function sanitizeForDb<T>(obj: T): T {
  * the judge provider end up in the Eval results both in the DB and in the
  * polling response served by `/api/eval/job/:id`.
  */
-function sanitizeForDbWithSecrets<T>(obj: T): T {
+function sanitizeForDbWithSecrets<T>(obj: T, throwOnError = false): T {
   if (obj === null || obj === undefined) {
     return obj;
   }
   return sanitizeObject(obj, {
     context: 'evalResult field',
+    throwOnError,
     // Nested provider configs can be deeper than the default maxDepth (4);
     // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
     maxDepth: Number.POSITIVE_INFINITY,
@@ -250,16 +292,10 @@ const SENSITIVE_RESPONSE_HEADER_PREFIXES = ['x-ratelimit-'];
 
 function isSensitiveResponseHeader(headerName: string): boolean {
   const normalized = headerName.toLowerCase();
-  if (SENSITIVE_RESPONSE_HEADER_NAMES.has(normalized)) {
+  if (isSecretField(headerName) || SENSITIVE_RESPONSE_HEADER_NAMES.has(normalized)) {
     return true;
   }
   return SENSITIVE_RESPONSE_HEADER_PREFIXES.some((prefix) => normalized.startsWith(prefix));
-}
-
-// Request headers can carry credentials the response-header list doesn't enumerate
-// (api-key / x-api-key / x-auth-token / bearer …); fold in the shared secret-field matcher.
-function isSensitiveRequestHeader(headerName: string): boolean {
-  return isSensitiveResponseHeader(headerName) || isSecretField(headerName);
 }
 
 // Redact sensitive headers, but only when the value originates from `sourceHeaders` (the
@@ -274,11 +310,14 @@ function redactSensitiveHeaders(
 ): Record<string, unknown> | null {
   let mutated = false;
   const next: Record<string, unknown> = {};
+  const sourceEntries = Object.entries(sourceHeaders);
   for (const [key, value] of Object.entries(headers)) {
     if (
-      Object.prototype.hasOwnProperty.call(sourceHeaders, key) &&
-      isDeepStrictEqual(sourceHeaders[key], value) &&
-      isSensitiveHeader(key)
+      isSensitiveHeader(key) &&
+      sourceEntries.some(
+        ([sourceKey, sourceValue]) =>
+          sourceKey.toLowerCase() === key.toLowerCase() && isDeepStrictEqual(sourceValue, value),
+      )
     ) {
       next[key] = REDACTED;
       mutated = true;
@@ -321,13 +360,9 @@ function redactHttpHeadersOnMetadata<T>(
     typeof legacyHeadersSource === 'object' &&
     !Array.isArray(legacyHeadersSource)
   ) {
-    // The legacy slot mirrors transport request/response headers, so use the request-header
-    // matcher (a strict superset) — otherwise api-key / x-auth-token / bearer would be redacted
-    // in metadata.http.requestHeaders but leak in cleartext here.
     const redacted = redactSensitiveHeaders(
       legacyHeaders as Record<string, unknown>,
       legacyHeadersSource as Record<string, unknown>,
-      isSensitiveRequestHeader,
     );
     if (redacted) {
       nextMetadata = { ...m, headers: redacted };
@@ -345,14 +380,7 @@ function redactHttpHeadersOnMetadata<T>(
   for (const slot of ['headers', 'requestHeaders'] as const) {
     const slotValue = httpRecord[slot];
     if (slotValue && typeof slotValue === 'object' && !Array.isArray(slotValue)) {
-      const redacted =
-        slot === 'requestHeaders'
-          ? redactSensitiveHeaders(
-              slotValue as Record<string, unknown>,
-              slotValue as Record<string, unknown>,
-              isSensitiveRequestHeader,
-            )
-          : redactSensitiveHeaders(slotValue as Record<string, unknown>);
+      const redacted = redactSensitiveHeaders(slotValue as Record<string, unknown>);
       if (redacted) {
         nextHttp ??= { ...httpRecord };
         nextHttp[slot] = redacted;
@@ -596,6 +624,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     stripMetadata: shouldStripMetadata,
     stripOutput: shouldStripResponseOutput,
     stripPrompt: shouldStripPromptText,
+    stripVars: shouldStripTestVars,
   });
 
   return {
@@ -603,7 +632,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     ...(artifactResult.testCase
       ? {
           testCase: projectTestCase(
-            sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase),
+            sanitizeForDbWithSecrets(artifactResult.testCase as AtomicTestCase, true),
             {
               stripMetadata: shouldStripMetadata,
               stripVars: shouldStripTestVars,
@@ -614,7 +643,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     ...(artifactResult.vars === undefined
       ? {}
       : {
-          vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(artifactResult.vars),
+          vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(artifactResult.vars, true),
         }),
     ...(artifactResult.prompt
       ? {
@@ -625,13 +654,16 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
       ? {
           provider: sanitizeProvider(
             artifactResult.provider as ApiProvider | ProviderOptions | string,
+            true,
           ),
         }
       : {}),
     response,
     gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
     namedScores: sanitizeForDb(artifactResult.namedScores),
-    metadata: shouldStripMetadata ? {} : redacted.metadata,
+    metadata: shouldStripMetadata
+      ? {}
+      : projectPromptMetadata(redacted.metadata, shouldStripPromptText),
   } as T;
 }
 
@@ -667,7 +699,7 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
 
   const sanitizeTestCase = (testCase: AtomicTestCase | undefined) =>
     testCase
-      ? projectTestCase(sanitizeForDbWithSecrets(testCase), {
+      ? projectTestCase(sanitizeForDbWithSecrets(testCase, true), {
           stripMetadata: shouldStripMetadata,
           stripVars: shouldStripTestVars,
         })
@@ -683,23 +715,23 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
     return vars.map((value, index) => {
       const varName = headVars[index];
       if (varName === undefined) {
-        return sanitizeForDbWithSecrets(value);
+        return sanitizeForDbWithSecrets(value, true);
       }
       const rawValue = testCase?.vars?.[varName];
       if (rawValue !== undefined) {
-        const sanitizedRawValue = sanitizeForDbWithSecrets({ [varName]: rawValue })[varName];
+        const sanitizedRawValue = sanitizeForDbWithSecrets({ [varName]: rawValue }, true)[varName];
         if (!isDeepStrictEqual(rawValue, sanitizedRawValue)) {
           return stringifyDisplayVar(sanitizedRawValue);
         }
       }
-      return sanitizeForDbWithSecrets({ [varName]: value })[varName];
+      return sanitizeForDbWithSecrets({ [varName]: value }, true)[varName];
     });
   };
 
   const sanitizeOutput = (
     output: EvaluateTableOutput | null | undefined,
   ): EvaluateTableOutput | null | undefined => {
-    if (output == null) {
+    if (output == null || !asRecord(output)) {
       return output;
     }
 
@@ -720,7 +752,7 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
       ...(artifactOutput.vars === undefined
         ? {}
         : {
-            vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(artifactOutput.vars),
+            vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(artifactOutput.vars, true),
           }),
       prompt: shouldStripPromptText ? '[prompt stripped]' : output.prompt,
       text: shouldStripResponseOutput ? '[output stripped]' : output.text,
@@ -728,9 +760,12 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
         stripMetadata: shouldStripMetadata,
         stripOutput: shouldStripResponseOutput,
         stripPrompt: shouldStripPromptText,
+        stripVars: shouldStripTestVars,
       }),
       gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
-      metadata: shouldStripMetadata ? {} : redacted.metadata,
+      metadata: shouldStripMetadata
+        ? {}
+        : projectPromptMetadata(redacted.metadata, shouldStripPromptText),
       testCase: sanitizeTestCase(output.testCase) as AtomicTestCase,
     } as EvaluateTableOutput;
   };
@@ -751,14 +786,18 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
           },
         }
       : {}),
-    body: table.body.map((row) => ({
-      ...row,
-      vars: Array.isArray(row.vars) ? sanitizeDisplayVars(row.vars, row.test) : row.vars,
-      test: sanitizeTestCase(row.test) as AtomicTestCase,
-      outputs: Array.isArray(row.outputs)
-        ? (row.outputs.map(sanitizeOutput) as EvaluateTableOutput[])
-        : row.outputs,
-    })),
+    body: table.body.map((row) =>
+      asRecord(row)
+        ? {
+            ...row,
+            vars: Array.isArray(row.vars) ? sanitizeDisplayVars(row.vars, row.test) : row.vars,
+            test: sanitizeTestCase(row.test) as AtomicTestCase,
+            outputs: Array.isArray(row.outputs)
+              ? (row.outputs.map(sanitizeOutput) as EvaluateTableOutput[])
+              : row.outputs,
+          }
+        : row,
+    ),
   } as EvaluateTable;
 }
 
@@ -1129,6 +1168,7 @@ export default class EvalResult {
       stripMetadata: shouldStripMetadata,
       stripOutput: shouldStripResponseOutput,
       stripPrompt: shouldStripPromptText,
+      stripVars: shouldStripTestVars,
     });
 
     const prompt = projectPrompt(this.prompt, shouldStripPromptText);
@@ -1174,7 +1214,9 @@ export default class EvalResult {
       testIdx: this.testIdx,
       tokenUsage,
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
-      metadata: shouldStripMetadata ? {} : this.metadata,
+      metadata: shouldStripMetadata
+        ? {}
+        : projectPromptMetadata(this.metadata, shouldStripPromptText),
       failureReason: this.failureReason,
     };
   }

@@ -397,14 +397,21 @@ function stripConfigPrompt(prompt: unknown): unknown {
   );
 }
 
-function stripConfigTestVars(test: unknown): unknown {
+function projectConfigTest(
+  test: unknown,
+  options: { stripVars: boolean; stripPrompt: boolean },
+): unknown {
   if (Array.isArray(test)) {
-    return test.map(stripConfigTestVars);
+    return test.map((entry) => projectConfigTest(entry, options));
   }
   if (!isRecord(test)) {
     return test;
   }
-  return 'vars' in test ? { ...test, vars: undefined } : test;
+  return {
+    ...test,
+    ...(options.stripVars && 'vars' in test && { vars: undefined }),
+    ...(options.stripPrompt && 'prompts' in test && { prompts: stripConfigPrompt(test.prompts) }),
+  };
 }
 
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
@@ -414,16 +421,34 @@ function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
     maxDepth: Number.POSITIVE_INFINITY,
   }) as OutputFile['config'];
   const projected = sanitized as Record<string, unknown>;
+  const stripPrompt = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+  const stripVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
 
-  if (getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false) && 'prompts' in projected) {
-    projected.prompts = stripConfigPrompt(projected.prompts);
+  if (stripPrompt) {
+    if ('prompts' in projected) {
+      projected.prompts = stripConfigPrompt(projected.prompts);
+    }
+    if ('providers' in projected) {
+      projected.providers = projectConfigTest(projected.providers, {
+        stripPrompt,
+        stripVars: false,
+      });
+    }
+    if (isRecord(projected.providerPromptMap)) {
+      projected.providerPromptMap = Object.fromEntries(
+        Object.entries(projected.providerPromptMap).map(([provider, prompts]) => [
+          provider,
+          stripConfigPrompt(prompts),
+        ]),
+      );
+    }
   }
-  if (getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false)) {
+  if (stripVars || stripPrompt) {
     if ('tests' in projected) {
-      projected.tests = stripConfigTestVars(projected.tests);
+      projected.tests = projectConfigTest(projected.tests, { stripPrompt, stripVars });
     }
     if ('defaultTest' in projected) {
-      projected.defaultTest = stripConfigTestVars(projected.defaultTest);
+      projected.defaultTest = projectConfigTest(projected.defaultTest, { stripPrompt, stripVars });
     }
     if (Array.isArray(projected.scenarios)) {
       projected.scenarios = projected.scenarios.map((scenario) => {
@@ -432,8 +457,12 @@ function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
         }
         return {
           ...scenario,
-          ...('config' in scenario && { config: stripConfigTestVars(scenario.config) }),
-          ...('tests' in scenario && { tests: stripConfigTestVars(scenario.tests) }),
+          ...('config' in scenario && {
+            config: projectConfigTest(scenario.config, { stripPrompt, stripVars }),
+          }),
+          ...('tests' in scenario && {
+            tests: projectConfigTest(scenario.tests, { stripPrompt, stripVars }),
+          }),
         };
       });
     }
@@ -688,7 +717,6 @@ async function writeJsonOutputSafely(
 async function writeHtmlOutput(outputPath: string, evalRecord: Eval): Promise<void> {
   const table = sanitizeTableForArtifact(await evalRecord.getTable());
   invariant(table, 'Table is required');
-  const summary = sanitizeSummaryForArtifact(await evalRecord.toEvaluateSummary());
   const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
   const metadata = createOutputMetadata(evalRecord);
   const template = await fsPromises.readFile(
@@ -726,7 +754,6 @@ async function writeHtmlOutput(outputPath: string, evalRecord: Eval): Promise<vo
   const htmlOutput = getNunjucksEngine().renderString(template, {
     config: redactedConfig,
     table: htmlTable,
-    results: summary,
     metadata,
     report: {
       totalResults,

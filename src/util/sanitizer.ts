@@ -842,12 +842,9 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
     return redactedAzureBlobUri;
   }
 
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(str);
-    if (parsed && typeof parsed === 'object') {
-      const sanitized = recursiveSanitize(parsed, depth, maxDepth);
-      return JSON.stringify(sanitized);
-    }
+    parsed = JSON.parse(str);
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {
       const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
@@ -860,6 +857,10 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
     if (looksLikeSecret(str)) {
       return REDACTED;
     }
+  }
+  if (parsed && typeof parsed === 'object') {
+    const sanitized = recursiveSanitize(parsed, depth, maxDepth);
+    return JSON.stringify(sanitized);
   }
   return str;
 }

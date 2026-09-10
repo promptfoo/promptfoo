@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as blobs from '../../src/blobs';
 import { getTraceStore } from '../../src/tracing/store';
 import { writeOutput } from '../../src/util/index';
+import { sanitizeObject } from '../../src/util/sanitizer';
 import { createTempDir, mockProcessEnv, removeTempDir } from './utils';
 
 // Mock dependencies
@@ -244,6 +245,135 @@ describe('JSON export with improved error handling', () => {
       expect(parsed.metadata).toHaveProperty('platform');
       expect(parsed.metadata).toHaveProperty('exportedAt');
       expect(parsed.metadata).toHaveProperty('author', 'test-author');
+    });
+  });
+
+  describe('deep credential sanitation failures', () => {
+    it('retains the explicit non-throwing sanitizer policy outside artifact exports', () => {
+      const input = '{"child":'.repeat(4000) + '{"apiKey":"fixture credential"}' + '}'.repeat(4000);
+      const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        expect(sanitizeObject(input, { maxDepth: Infinity, throwOnError: false })).toBe(input);
+        expect(errorLog).toHaveBeenCalledWith(
+          expect.stringContaining('Error sanitizing'),
+          expect.any(RangeError),
+        );
+      } finally {
+        errorLog.mockRestore();
+      }
+    });
+
+    it.each([
+      [
+        'object JSON',
+        '{"apiKey":"fixture credential","value":"public"}',
+        '{"apiKey":"[REDACTED]","value":"public"}',
+      ],
+      [
+        'array JSON',
+        '[{"apiKey":"fixture credential"},{"value":"public"}]',
+        '[{"apiKey":"[REDACTED]"},{"value":"public"}]',
+      ],
+      ['number JSON', ' 42 ', ' 42 '],
+      ['boolean JSON', 'true', 'true'],
+      ['null JSON', 'null', 'null'],
+      ['string JSON', '"public text"', '"public text"'],
+      ['invalid JSON', '{invalid public JSON', '{invalid public JSON'],
+      ['ordinary text', 'ordinary public text', 'ordinary public text'],
+      [
+        'form text',
+        'apiKey=fixture%20credential&value=public',
+        'apiKey=%5BREDACTED%5D&value=public',
+      ],
+    ])(
+      'preserves %s parsing and redaction semantics during export',
+      async (_label, input, expected) => {
+        const vars = { payload: input };
+        mockEval.toEvaluateSummary.mockResolvedValue({
+          version: 3,
+          prompts: [],
+          results: [{ success: true, score: 1, vars }],
+          stats: { successes: 1, failures: 0, errors: 0, tokenUsage: {} },
+        });
+        await writeOutput(tempFilePath, mockEval, null);
+        const output = JSON.parse(fs.readFileSync(tempFilePath, 'utf8'));
+        expect(output.results.results[0].vars.payload).toBe(expected);
+        expect(vars.payload).toBe(input);
+      },
+    );
+
+    it.each([
+      'vars',
+      'JSON-string vars',
+      'prompt config',
+      'aggregate prompt config',
+      'provider config',
+    ])('never writes unsanitized serializable %s when recursive sanitation fails', async (slot) => {
+      let nested: Record<string, unknown> = { apiKey: 'deep-credential-must-not-be-exported' };
+      for (let i = 0; i < 4000; i++) {
+        nested = { child: nested };
+      }
+      // This is serializable input, not a mocked sanitizer failure or a cyclic object.
+      const original = JSON.stringify(nested);
+      expect(original).toContain('deep-credential-must-not-be-exported');
+      const row: Record<string, unknown> = { success: true, score: 1 };
+      const prompts: unknown[] = [];
+      if (slot === 'vars') {
+        row.vars = nested;
+      } else if (slot === 'JSON-string vars') {
+        row.vars = { payload: original };
+      } else if (slot === 'prompt config') {
+        row.prompt = { raw: 'hello', label: 'hello', config: nested };
+      } else if (slot === 'provider config') {
+        row.provider = { id: 'echo', config: nested };
+      } else {
+        prompts.push({ raw: 'hello', label: 'hello', config: nested });
+      }
+      mockEval.toEvaluateSummary.mockResolvedValue({
+        version: 3,
+        timestamp: '2025-01-01T00:00:00.000Z',
+        prompts,
+        results: [row],
+        stats: { successes: 1, failures: 0, errors: 0, tokenUsage: {} },
+      });
+      let writeError: unknown;
+      try {
+        await writeOutput(tempFilePath, mockEval, null);
+      } catch (error) {
+        writeError = error;
+      }
+      if (writeError) {
+        expect(fs.existsSync(tempFilePath)).toBe(false);
+      } else {
+        const content = fs.readFileSync(tempFilePath, 'utf8');
+        expect(content.includes('deep-credential-must-not-be-exported')).toBe(false);
+      }
+      expect(JSON.stringify(nested)).toBe(original);
+    });
+
+    it('redacts deep aggregate configuration and preserves its safe sibling and source object', async () => {
+      const config = {
+        options: { provider: { config: { apiKey: 'aggregate credential', temperature: 0.2 } } },
+      };
+      const prompt = { id: 'a'.repeat(64), raw: 'hello', label: 'friendly label', config };
+      const original = structuredClone(prompt);
+      mockEval.toEvaluateSummary.mockResolvedValue({
+        version: 3,
+        prompts: [prompt],
+        results: [],
+        stats: { successes: 0, failures: 0, errors: 0, tokenUsage: {} },
+      });
+      await writeOutput(tempFilePath, mockEval, null);
+      const content = fs.readFileSync(tempFilePath, 'utf8');
+      const output = JSON.parse(content).results.prompts[0];
+      expect(output.config.options.provider.config).toEqual({
+        apiKey: '[REDACTED]',
+        temperature: 0.2,
+      });
+      expect(output.id).toBe(prompt.id);
+      expect(output.raw).toBe('hello');
+      expect(content).not.toContain('aggregate credential');
+      expect(prompt).toEqual(original);
     });
   });
 
