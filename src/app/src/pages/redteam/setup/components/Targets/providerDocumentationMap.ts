@@ -25,6 +25,7 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
 
   // Agent Frameworks
   'claude-agent-sdk': `${BASE_DOCS_URL}/claude-agent-sdk`,
+  'codex-security': `${BASE_DOCS_URL}/openai-codex-security`,
   openinterpreter: `${BASE_DOCS_URL}/openinterpreter`,
   'openai-agents-sdk': `${BASE_DOCS_URL}/openai-agents`,
   'bedrock-agent': `${BASE_DOCS_URL}/bedrock-agents`,
@@ -61,7 +62,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
 
   // Third-Party Providers
   openrouter: `${BASE_DOCS_URL}/openrouter`,
-  github: `${BASE_DOCS_URL}/github`,
   ai21: `${BASE_DOCS_URL}/ai21`,
   aimlapi: `${BASE_DOCS_URL}/aimlapi`,
   hyperbolic: `${BASE_DOCS_URL}/hyperbolic`,
@@ -108,7 +108,12 @@ export function getProviderDocumentationUrl(providerType?: string): string {
   }
 
   // Handle provider formats like 'openrouter:openai/gpt-5.4' or 'azure:chat:'
-  const normalizedType = providerType.includes(':') ? providerType.split(':')[0] : providerType;
+  const normalizedType =
+    providerType === 'openai:codex-security' || providerType.startsWith('openai:codex-security:')
+      ? 'codex-security'
+      : providerType.includes(':')
+        ? providerType.split(':')[0]
+        : providerType;
 
   return PROVIDER_DOCUMENTATION_MAP[normalizedType] || BASE_DOCS_URL;
 }

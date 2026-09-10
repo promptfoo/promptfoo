@@ -210,6 +210,32 @@ describe('CustomProvider', () => {
     expect(customProvider.id()).toBe('promptfoo:redteam:custom');
   });
 
+  it('preserves attacker usage when prompt generation fails after inference', async () => {
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'Custom accounting test',
+      maxTurns: 1,
+      redteamProvider: mockRedTeamProvider,
+    });
+    mockRedTeamProvider.callApi.mockResolvedValue({
+      error: 'custom attack generation failed',
+      tokenUsage: { total: 28, prompt: 17, completion: 11, numRequests: 1 },
+    });
+
+    const result = await provider.callApi('test prompt', {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      total: 0,
+      numRequests: 0,
+      attacker: { total: 28, prompt: 17, completion: 11, numRequests: 1 },
+    });
+    expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+  });
+
   it('should use default values when optional config not provided', () => {
     const provider = new CustomProvider({
       injectVar: 'objective',
@@ -397,6 +423,7 @@ describe('CustomProvider', () => {
       // Mock unblocking analysis - no blocking detected
       vi.mocked(tryUnblocking).mockResolvedValue({
         success: false,
+        tokenUsage: { total: 16, prompt: 10, completion: 6, numRequests: 1 },
       });
 
       mockScoringProvider.callApi.mockResolvedValue({
@@ -411,6 +438,11 @@ describe('CustomProvider', () => {
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1); // Only original call
       expect(result.metadata?.stopReason).toBe('Max rounds reached');
+      expect(result.tokenUsage?.assertions).toMatchObject({
+        total: 16,
+        prompt: 10,
+        completion: 6,
+      });
     });
   });
 
@@ -978,6 +1010,7 @@ describe('CustomProvider', () => {
     // Verify storedGraderResult is included in metadata (with assertion.value set to rubric)
     expect(result.metadata?.storedGraderResult).toEqual({
       ...mockGraderResult,
+      tokensUsed: { ...mockGraderResult.tokensUsed, numRequests: 1 },
       assertion: { type: 'mock-grader', value: testRubric },
     });
     expect(result.metadata?.stopReason).toBe('Grader failed');
@@ -1285,6 +1318,7 @@ describe('CustomProvider', () => {
           metadata: 50,
           rationale: 'Not a refusal',
         }),
+        tokenUsage: { total: 13, prompt: 8, completion: 5, numRequests: 1 },
       });
 
       const context = {
@@ -1293,7 +1327,7 @@ describe('CustomProvider', () => {
         prompt: { raw: 'test prompt', label: 'test' },
       };
 
-      await testProvider.callApi('test prompt', context, options);
+      const result = await testProvider.callApi('test prompt', context, options);
 
       // Scoring provider should be called with options
       expect(mockScoringProvider.callApi).toHaveBeenCalledWith(
@@ -1301,6 +1335,12 @@ describe('CustomProvider', () => {
         expect.any(Object),
         options,
       );
+      expect(result.tokenUsage?.assertions).toMatchObject({
+        total: 26,
+        prompt: 16,
+        completion: 10,
+        numRequests: 2,
+      });
     });
 
     it('should re-throw AbortError and not swallow it', async () => {
