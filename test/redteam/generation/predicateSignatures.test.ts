@@ -155,6 +155,9 @@ describe('predicate signatures', () => {
     expect(
       extractSqlInjectionFeatures("Show products where plan = 'premium' OR status != 'cancelled'"),
     ).toEqual([]);
+    expect(
+      extractSqlInjectionFeatures("Show users where role = 'admin' OR 'admin'='user'"),
+    ).toEqual([]);
   });
 
   it('routes plugin feature extraction through a shared registry', () => {

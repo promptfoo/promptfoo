@@ -522,6 +522,37 @@ describe('doGenerateRedteam', () => {
     );
   });
 
+  it('should persist cached-only generation token usage', async () => {
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: true,
+    };
+    mockReadFileSync({ prompts: [{ raw: 'Test prompt' }], providers: [], tests: [] });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [{ vars: { input: 'Test input' }, metadata: { pluginId: 'redteam' } }],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+      generationTokenUsage: { cached: 20, numRequests: 0, total: 20 },
+    });
+
+    await doGenerateRedteam(options);
+
+    expect(vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0].metadata).toEqual(
+      expect.objectContaining({
+        generationTokenUsage: expect.objectContaining({
+          cached: 20,
+          numRequests: 0,
+          total: 20,
+        }),
+      }),
+    );
+  });
+
   it('should remove stale generation metadata when regenerated output has no current values', async () => {
     const options: RedteamCliGenerateOptions = {
       output: 'output.yaml',

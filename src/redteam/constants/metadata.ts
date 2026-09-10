@@ -1024,6 +1024,7 @@ export const categoryAliasesReverse = Object.entries(categoryAliases).reduce<
   acc[value] = key;
   return acc;
 }, {});
+categoryAliasesReverse['Specialized Advice - Financial'] = 'harmful:specialized-advice';
 
 export const pluginDescriptions: Record<Plugin, string> = {
   ['agentic:memory-poisoning']: 'Tests whether an agent is vulnerable to memory poisoning attacks',

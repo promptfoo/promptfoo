@@ -103,14 +103,29 @@ describe('summarizeSemanticFrontierDiagnosticsFromTests', () => {
     ]);
   });
 
-  it('keeps identical summaries from distinct contexts separate', () => {
+  it('keeps identical summaries from distinct contexts and languages separate', () => {
     const summary = createSummary(true);
     const diagnostics = summarizeSemanticFrontierDiagnosticsFromTests([
-      { metadata: { pluginId: 'pii:social', contextId: 'a', semanticFrontier: summary } },
+      {
+        metadata: {
+          pluginId: 'pii:social',
+          contextId: 'a',
+          language: 'en',
+          semanticFrontier: summary,
+        },
+      },
+      {
+        metadata: {
+          pluginId: 'pii:social',
+          contextId: 'a',
+          language: 'en-US',
+          semanticFrontier: summary,
+        },
+      },
       { metadata: { pluginId: 'pii:social', contextId: 'b', semanticFrontier: summary } },
     ]);
 
-    expect(diagnostics[0]).toMatchObject({ completeFrontierCount: 2, frontierCount: 2 });
+    expect(diagnostics[0]).toMatchObject({ completeFrontierCount: 3, frontierCount: 3 });
   });
 
   it('omits inactive frontiers from operator diagnostics', () => {

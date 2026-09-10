@@ -807,12 +807,13 @@ async function doGenerateRedteamInternal(
       ...(contexts && contexts.length > 0 ? { contexts } : {}),
     };
     const generationRequestCount = generationTokenUsage.numRequests ?? 0;
-    if (generationRequestCount > 0) {
-      const hasReportedGenerationTokens =
-        (generationTokenUsage.total ?? 0) > 0 ||
-        (generationTokenUsage.prompt ?? 0) > 0 ||
-        (generationTokenUsage.completion ?? 0) > 0 ||
-        (generationTokenUsage.cached ?? 0) > 0;
+    const hasReportedGenerationTokens =
+      (generationTokenUsage.total ?? 0) > 0 ||
+      (generationTokenUsage.prompt ?? 0) > 0 ||
+      (generationTokenUsage.completion ?? 0) > 0 ||
+      (generationTokenUsage.cached ?? 0) > 0;
+    const hasGenerationUsage = generationRequestCount > 0 || hasReportedGenerationTokens;
+    if (hasGenerationUsage) {
       logger.info(
         hasReportedGenerationTokens
           ? `Generation token usage: ${(generationTokenUsage.total ?? 0).toLocaleString()} total ` +
@@ -871,7 +872,7 @@ async function doGenerateRedteamInternal(
           ...(configPath && redteamTests.length > 0
             ? { configHash: await getConfigHash(configPath) }
             : { configHash: 'force-regenerate' }),
-          ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+          ...(hasGenerationUsage && { generationTokenUsage }),
           ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
           ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
         },
@@ -943,7 +944,7 @@ async function doGenerateRedteamInternal(
       existingConfig.metadata = {
         ...existingMetadata,
         configHash: await getConfigHash(configPath),
-        ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+        ...(hasGenerationUsage && { generationTokenUsage }),
         ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
       };
       const author = getAuthor();
@@ -987,10 +988,10 @@ async function doGenerateRedteamInternal(
       ret = writePromptfooConfig(
         {
           ...(options.description ? { description: options.description } : {}),
-          ...((generationTokenUsage.numRequests ?? 0) > 0 || semanticFrontierDiagnostics.length > 0
+          ...(hasGenerationUsage || semanticFrontierDiagnostics.length > 0
             ? {
                 metadata: {
-                  ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
+                  ...(hasGenerationUsage && { generationTokenUsage }),
                   ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
                 },
               }

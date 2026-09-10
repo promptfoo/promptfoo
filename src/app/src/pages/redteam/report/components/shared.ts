@@ -182,7 +182,10 @@ export function summarizeSemanticFrontierDiagnosticsFromResults(
     }
 
     const pluginFrontiers = frontiersByPlugin.get(pluginId) ?? new Map();
-    pluginFrontiers.set(getSemanticFrontierKey(semanticFrontier), semanticFrontier);
+    pluginFrontiers.set(
+      `${String(result.testCase.metadata?.contextId ?? '')}:${String(result.testCase.metadata?.language ?? '')}:${getSemanticFrontierKey(semanticFrontier)}`,
+      semanticFrontier,
+    );
     frontiersByPlugin.set(pluginId, pluginFrontiers);
   }
 

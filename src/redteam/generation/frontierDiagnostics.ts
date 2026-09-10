@@ -106,7 +106,7 @@ export function summarizeSemanticFrontierDiagnosticsFromTests(
 
     const pluginFrontiers = frontiersByPlugin.get(pluginId) ?? new Map();
     pluginFrontiers.set(
-      `${String(testCase.metadata?.contextId ?? '')}:${getSemanticFrontierKey(semanticFrontier)}`,
+      `${String(testCase.metadata?.contextId ?? '')}:${String(testCase.metadata?.language ?? '')}:${getSemanticFrontierKey(semanticFrontier)}`,
       semanticFrontier,
     );
     frontiersByPlugin.set(pluginId, pluginFrontiers);
