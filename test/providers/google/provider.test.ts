@@ -806,6 +806,23 @@ describe('GoogleProvider', () => {
       expect(result.error).toContain('No output found in response');
     });
 
+    it('rejects MAX_TOKENS responses that contain only an empty text part', async () => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'MAX_TOKENS' }],
+          usageMetadata: { promptTokenCount: 7, totalTokenCount: 19, thoughtsTokenCount: 12 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toContain('No output found in response');
+      expect(result.output).toBeUndefined();
+    });
+
     it('should return an error for safety finish reasons outside scorable evaluations', async () => {
       const responseData = {
         candidates: [{ content: { parts: [{ text: '' }] }, finishReason: 'SAFETY' }],
@@ -1051,6 +1068,251 @@ describe('GoogleProvider', () => {
       expect(result.cost).toBeCloseTo(0.00045, 10);
     });
 
+    it('should apply Gemini 3.5 Flash-Lite regional pricing in Vertex mode', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: { vertexai: true, apiKey: 'test-vertex-key', region: 'us' },
+      });
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+          },
+        }),
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result.cost).toBeCloseTo(0.000605, 12);
+    });
+
+    it('normalizes Vertex service tiers and respects the returned processing tier', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: {
+          vertexai: true,
+          apiKey: 'test-vertex-key',
+          region: 'global',
+          service_tier: 'priority',
+        },
+      });
+      vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'x-gemini-service-tier': 'standard' }),
+        json: vi.fn().mockResolvedValue({
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+          },
+        }),
+      } as any);
+
+      const result = await provider.callApi('test prompt');
+      const request = vi.mocked(fetchUtil.fetchWithProxy).mock.calls.at(-1)?.[1];
+      const body = JSON.parse(request?.body as string);
+
+      expect(body.serviceTier).toBe('SERVICE_TIER_PRIORITY');
+      expect(result.cost).toBeCloseTo(0.00055, 12);
+      expect(result.metadata).toMatchObject({ serviceTier: 'standard' });
+    });
+
+    it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+      'should omit deprecated sampling parameters for %s',
+      async (modelId) => {
+        const provider = new GoogleProvider(modelId, {
+          config: {
+            apiKey: 'test-key',
+            temperature: 0.2,
+            topP: 0.3,
+            topK: 10,
+            generationConfig: { temperature: 0.4, topP: 0.5, topK: 20 },
+            passthrough: {
+              generationConfig: {
+                temperature: 0.6,
+                topP: 0.7,
+                topK: 30,
+                top_p: 0.8,
+                top_k: 40,
+                candidateCount: 2,
+                candidate_count: 3,
+                presencePenalty: 0.5,
+                presence_penalty: 0.5,
+                frequencyPenalty: 0.5,
+                frequency_penalty: 0.5,
+                maxOutputTokens: 200,
+              },
+            },
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 10,
+              candidatesTokenCount: 10,
+              totalTokenCount: 20,
+            },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        await provider.callApi('test prompt');
+
+        const requestBody = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(requestBody.generationConfig).toEqual({ maxOutputTokens: 200 });
+      },
+    );
+
+    it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
+      'should forward Maps retrieval config for %s',
+      async (modelId) => {
+        const provider = new GoogleProvider(modelId, {
+          config: {
+            apiKey: 'test-key',
+            tools: [{ googleMaps: { enableWidget: true } }],
+            toolConfig: {
+              retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+              includeServerSideToolInvocations: true,
+            },
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [{ content: { parts: [{ text: 'response' }] } }],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        await provider.callApi('test prompt');
+
+        const body = JSON.parse(
+          vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
+        );
+        expect(body.tools).toEqual([{ googleMaps: { enableWidget: true } }]);
+        expect(body.toolConfig).toEqual({
+          retrievalConfig: { latLng: { latitude: 42.36, longitude: -71.06 } },
+          includeServerSideToolInvocations: true,
+        });
+      },
+    );
+
+    it.each([false, true])(
+      'preserves response accounting when a callback fails (cached=%s)',
+      async (cached) => {
+        const succeed = vi.fn().mockResolvedValue('completed');
+        const fail = vi.fn().mockRejectedValue(new Error('callback failed'));
+        const provider = new GoogleProvider('gemini-3.8-flash', {
+          config: { apiKey: 'test-key', functionToolCallbacks: { succeed, fail } },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    { functionCall: { name: 'succeed', args: {} }, thoughtSignature: 'signature' },
+                    { functionCall: { name: 'fail', args: {} } },
+                  ],
+                },
+              },
+            ],
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          },
+          cached,
+          status: 200,
+          statusText: 'OK',
+        });
+        vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+          contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+          coerced: false,
+          systemInstruction: undefined,
+        });
+
+        const response = await provider.callApi('test prompt');
+
+        expect(response.error).toContain(
+          "Function callback 'fail' failed after 1 completed callback(s)",
+        );
+        expect(response.error).toContain('Check for side effects before retrying');
+        expect(response.output).toBeUndefined();
+        expect(response.cached).toBe(cached);
+        expect(response.tokenUsage).toMatchObject({
+          total: 15,
+          ...(cached ? { cached: 15 } : { prompt: 10, completion: 5 }),
+        });
+        expect(response.cost).toEqual(cached ? undefined : expect.any(Number));
+        expect(response.metadata?.thoughtSignatures).toEqual(['signature']);
+        expect(response.raw).toMatchObject({ usageMetadata: { totalTokenCount: 15 } });
+        expect(succeed).toHaveBeenCalledExactlyOnceWith('{}');
+        expect(fail).toHaveBeenCalledExactlyOnceWith('{}');
+      },
+    );
+
+    it('should execute callbacks from a fresh Gemini function-call response', async () => {
+      const callback = vi.fn().mockResolvedValue('Sunny, 25°C');
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'get_weather',
+                  parameters: {
+                    type: 'OBJECT',
+                    properties: { location: { type: 'STRING' } },
+                    required: ['location'],
+                  },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: {
+                      id: 'call-1',
+                      name: 'get_weather',
+                      args: { location: 'Boston' },
+                    },
+                    thoughtSignature: 'signed-thought',
+                  },
+                ],
+              },
+            },
+          ],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(callback).toHaveBeenCalledWith('{"location":"Boston"}');
+      expect(response.output).toBe('Sunny, 25°C');
+      expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
+    });
+
     it('should return undefined cost for cached responses', async () => {
       const provider = new GoogleProvider('gemini-pro', {
         config: { apiKey: 'test-key' },
@@ -1204,14 +1466,39 @@ describe('GoogleProvider', () => {
 
       expect(result.tokenUsage).toMatchObject({ prompt: 1_000, completion: 500, cached: 500 });
       expect(result.cost).toBeCloseTo(
-        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1 + 300 * 0.15 + 500 * 9)) / 1e6,
+        (1.8 * (400 * 1.5 + 200 * 0.15 + 100 * 1.5 + 300 * 0.15 + 500 * 9)) / 1e6,
         12,
       );
       const requestBody = JSON.parse(
         vi.mocked(cache.fetchWithCache).mock.calls.at(-1)?.[1]?.body as string,
       );
-      expect(requestBody.serviceTier).toBe('priority');
-      expect(requestBody.service_tier).toBeUndefined();
+      expect(requestBody.service_tier).toBe('priority');
+      expect(requestBody.serviceTier).toBeUndefined();
+    });
+
+    it('prices downgraded priority responses at the actual standard tier', async () => {
+      const provider = new GoogleProvider('gemini-3.5-flash-lite', {
+        config: { apiKey: 'test-key', service_tier: 'priority' },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [{ content: { parts: [{ text: 'response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+          },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: { 'x-gemini-service-tier': 'standard' },
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.cost).toBeCloseTo(0.00055, 12);
+      expect(response.metadata).toMatchObject({ serviceTier: 'standard' });
     });
 
     it('should not double-count tool-use prompt tokens when pricing a standard Gemini response', async () => {
