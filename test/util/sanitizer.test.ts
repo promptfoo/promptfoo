@@ -289,6 +289,15 @@ describe('sanitizeObject', () => {
     });
   });
 
+  it.each(['SNOWFLAKE_PRIVATE_KEY_FILE_PWD', 'FILE_ENCRYPTION_KEY', 'DIRECTORY_BIND_PASSWORD'])(
+    'redacts a credential whose name also contains a locator word: %s',
+    (name) => {
+      expect(sanitizeObject({ env: { [name]: 'synthetic-passphrase' } })).toEqual({
+        env: { [name]: '[REDACTED]' },
+      });
+    },
+  );
+
   it('redacts webhook credentials while preserving ordinary URL path IDs', () => {
     const env = {
       SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/T000/B000/short-webhook-token',
