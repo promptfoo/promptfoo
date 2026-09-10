@@ -2,13 +2,33 @@ import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-function findJsonEnd(text: string, start: number): number {
-  const closing: string[] = [text[start] === '{' ? '}' : ']'];
+function extractJsonBlocks(text: string): unknown[] {
+  const parsed: unknown[] = [];
+  let start = -1;
+  let closing: string[] = [];
   let inString = false;
   let escaped = false;
+  let lineHasContent = false;
 
-  for (let end = start + 1; end < text.length; end++) {
-    const char = text[end];
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index];
+    if (start < 0) {
+      if (char === '\n') {
+        lineHasContent = false;
+        continue;
+      }
+      if (!lineHasContent && /\s/.test(char)) {
+        continue;
+      }
+      if ((char === '{' || char === '[') && !lineHasContent) {
+        start = index;
+        closing = [char === '{' ? '}' : ']'];
+      } else {
+        lineHasContent = true;
+      }
+      continue;
+    }
+
     if (inString) {
       if (escaped) {
         escaped = false;
@@ -26,14 +46,23 @@ function findJsonEnd(text: string, start: number): number {
       closing.push(char === '{' ? '}' : ']');
     } else if (char === '}' || char === ']') {
       if (closing.pop() !== char) {
-        return -1;
+        start = -1;
+        closing = [];
+        lineHasContent = true;
+        continue;
       }
       if (closing.length === 0) {
-        return end;
+        try {
+          parsed.push(JSON.parse(text.slice(start, index + 1)));
+        } catch {
+          // A balanced line-delimited fragment may still be invalid JSON.
+        }
+        start = -1;
+        lineHasContent = true;
       }
     }
   }
-  return -1;
+  return parsed;
 }
 
 /**
@@ -70,24 +99,12 @@ function extractToolNames(output: unknown): Set<string> {
       // Not valid JSON as a whole; look for embedded JSON values.
     }
 
-    // Mixed text and JSON may include pretty-printed blocks and nested values.
-    // Balance delimiters outside strings before parsing each complete candidate.
-    for (let start = 0; start < output.length; start++) {
-      const opening = output[start];
-      if (opening !== '{' && opening !== '[') {
-        continue;
-      }
-
-      const end = findJsonEnd(output, start);
-      if (end >= 0) {
-        try {
-          for (const name of extractToolNames(JSON.parse(output.slice(start, end + 1)))) {
-            names.add(name);
-          }
-          start = end;
-        } catch {
-          // A balanced fragment may still be invalid JSON.
-        }
+    // Provider text joins serialized blocks at line boundaries. Scan once so
+    // malformed braces cannot repeatedly rescan the remaining output, and
+    // prose that merely mentions inline JSON is not mistaken for a tool call.
+    for (const block of extractJsonBlocks(output)) {
+      for (const name of extractToolNames(block)) {
+        names.add(name);
       }
     }
     return names;

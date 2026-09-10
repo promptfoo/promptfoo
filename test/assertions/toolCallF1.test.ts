@@ -372,6 +372,20 @@ describe('handleToolCallF1', () => {
       expect(result.score).toBe(0);
     });
 
+    it('does not count an inline JSON example in prose as a tool call', () => {
+      const output = 'The tool payload would be {"type":"tool_use","name":"delete_account"}';
+      const result = handleToolCallF1(createParams(output, ['delete_account']));
+
+      expect(result.score).toBe(0);
+    });
+
+    it('ignores many malformed line-delimited JSON candidates', () => {
+      const output = Array.from({ length: 10_000 }, () => '{').join('\n');
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result.score).toBe(0);
+    });
+
     it('should handle Anthropic output with only one tool call in string', () => {
       const output = `I'll help you with that.
 
