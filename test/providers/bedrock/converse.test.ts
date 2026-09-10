@@ -2590,9 +2590,9 @@ Third line`;
 
       const result = await provider.callApi('Test');
 
-      // Llama 3.3 70B: $0.99/MTok both
-      // (10000/1M * 0.99) + (5000/1M * 0.99) = 0.0099 + 0.00495 = 0.01485
-      expect(result.cost).toBeCloseTo(0.01485, 4);
+      // Llama 3.3 70B: $0.72/MTok both (AWS Price List, us-east-1 on-demand)
+      // (10000/1M * 0.72) + (5000/1M * 0.72) = 0.0072 + 0.0036 = 0.0108
+      expect(result.cost).toBeCloseTo(0.0108, 4);
     });
 
     it('should return undefined cost for unknown models', async () => {

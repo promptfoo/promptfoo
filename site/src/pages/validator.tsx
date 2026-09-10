@@ -17,7 +17,7 @@ const DEFAULT_INPUT = `prompts:
 
 providers:
   - openai:chat:gpt-4.1-mini
-  - anthropic:messages:claude-3-5-sonnet-20241022
+  - anthropic:messages:claude-sonnet-4-6
 
 tests:
   - vars:

@@ -125,7 +125,7 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
- * - gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-6-astra / gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
  * - gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max'
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'
@@ -134,16 +134,14 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
- * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
+ * - gpt-5.2: 'low', 'medium', 'high', 'xhigh'
  *
  * Values:
  * - 'minimal': Minimal reasoning overhead
  * - 'low': Light reasoning, faster responses
  * - 'medium': Balanced (default for GPT-5.6 Terra and Luna)
  * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
+ * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2)
  * - 'max': Deepest single-agent reasoning for GPT-5.6
  * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol and Terra
  */
@@ -280,7 +278,9 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini').
+   * Model to use (e.g., 'gpt-5.6-terra' or 'gpt-5.6-luna').
+   * Availability depends on authentication mode and account access; omitted models
+   * use the installed Codex SDK's default.
    * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
    * provider's model id instead (e.g., 'openai.gpt-5.6-sol' for Amazon Bedrock).
    */
@@ -310,7 +310,7 @@ export interface OpenAICodexSDKConfig {
    * - 'low': Light reasoning, faster responses
    * - 'medium': Balanced (default)
    * - 'high': Thorough reasoning for complex tasks
-   * - 'xhigh': Maximum depth (gpt-5.2, gpt-5.1-codex-max only)
+   * - 'xhigh': Maximum depth (model-dependent)
    */
   model_reasoning_effort?: ReasoningEffort;
 
@@ -651,6 +651,7 @@ async function loadCodexSDK(): Promise<any> {
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    'gpt-6-astra',
     // GPT-5.6 models (requires Codex 0.144.0 or later)
     'gpt-5.6-sol',
     'gpt-5.6-terra',
@@ -667,13 +668,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // GPT-5.2 models
     // Note: gpt-5.2-pro is not currently supported via Codex SDK.
     'gpt-5.2',
-    'gpt-5.2-codex',
-    // GPT-5.1 Codex models
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
     // GPT-5 Codex models
-    'gpt-5-codex',
     'gpt-5-codex-mini',
     // GPT-5 base
     'gpt-5',
@@ -1381,6 +1376,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       const inputTokens = usage.input_tokens ?? usage.inputTokens;
       const outputTokens = usage.output_tokens ?? usage.outputTokens;
       const cachedTokens = usage.cached_input_tokens ?? usage.cachedInputTokens;
+      const cacheWriteTokens = usage.cache_write_input_tokens ?? usage.cacheWriteInputTokens;
       const reasoningTokens = usage.reasoning_output_tokens ?? usage.reasoningOutputTokens;
       if (typeof inputTokens === 'number') {
         attributes['gen_ai.usage.input_tokens'] = inputTokens;
@@ -1390,6 +1386,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
       if (typeof cachedTokens === 'number') {
         attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = cachedTokens;
+      }
+      if (typeof cacheWriteTokens === 'number') {
+        attributes[GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS] = cacheWriteTokens;
       }
       if (typeof reasoningTokens === 'number') {
         attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = reasoningTokens;
@@ -2429,8 +2428,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       completion: turnUsage.output_tokens,
       total: turnUsage.input_tokens + turnUsage.output_tokens,
       cached: turnUsage.cached_input_tokens || 0,
-      ...(typeof turnUsage.reasoning_output_tokens === 'number'
-        ? { completionDetails: { reasoning: turnUsage.reasoning_output_tokens } }
+      ...(typeof turnUsage.reasoning_output_tokens === 'number' ||
+      typeof turnUsage.cache_write_input_tokens === 'number'
+        ? {
+            completionDetails: {
+              ...(typeof turnUsage.reasoning_output_tokens === 'number'
+                ? { reasoning: turnUsage.reasoning_output_tokens }
+                : {}),
+              ...(typeof turnUsage.cache_write_input_tokens === 'number'
+                ? { cacheCreationInputTokens: turnUsage.cache_write_input_tokens }
+                : {}),
+            },
+          }
         : {}),
     };
   }

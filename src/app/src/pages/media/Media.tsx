@@ -81,7 +81,6 @@ export default function Media() {
     total: 0,
     currentFile: '',
   });
-  const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
   const [deepLinkErrorCode, setDeepLinkErrorCode] = useState<FetchMediaItemResult['error']>(null);
   const [isDeepLinkLoading, setIsDeepLinkLoading] = useState(false);
   const [showBulkDownloadConfirm, setShowBulkDownloadConfirm] = useState(false);
@@ -121,7 +120,6 @@ export default function Media() {
     const isCancelled = () =>
       requestGeneration !== deepLinkRequestGenerationRef.current || !isMountedRef.current;
 
-    setDeepLinkError(null);
     setDeepLinkErrorCode(null);
     setIsDeepLinkLoading(true);
 
@@ -142,14 +140,12 @@ export default function Media() {
       }
 
       setDeepLinkErrorCode(result.error);
-      setDeepLinkError(result.error ? DEEP_LINK_ERROR_MESSAGES[result.error] : null);
     } catch {
       if (isCancelled()) {
         return;
       }
 
       setDeepLinkErrorCode('network_error');
-      setDeepLinkError(DEEP_LINK_ERROR_MESSAGES.network_error);
     } finally {
       if (!isCancelled()) {
         setIsDeepLinkLoading(false);
@@ -290,7 +286,6 @@ export default function Media() {
     if (!hashParam) {
       lastResolvedDeepLinkRef.current = null;
       lastInternalSelectionRef.current = null;
-      setDeepLinkError(null);
       setDeepLinkErrorCode(null);
       // When the hash is removed from the URL (e.g. browser Back), close the modal
       // so UI state stays in sync with the URL.
@@ -323,7 +318,6 @@ export default function Media() {
     if (item) {
       lastResolvedDeepLinkRef.current = hashParam;
       setSelectedItem(item);
-      setDeepLinkError(null);
       setDeepLinkErrorCode(null);
       return;
     }
@@ -683,11 +677,11 @@ export default function Media() {
           )}
 
           {/* Deep Link Error */}
-          {deepLinkError && (
+          {deepLinkErrorCode && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <span className="min-w-0">{deepLinkError}</span>
+                <span className="min-w-0">{DEEP_LINK_ERROR_MESSAGES[deepLinkErrorCode]}</span>
                 <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
                   {/* Retry button for transient errors (not "not found") */}
                   {deepLinkErrorCode !== 'not_found' && (
@@ -709,7 +703,6 @@ export default function Media() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      setDeepLinkError(null);
                       setDeepLinkErrorCode(null);
                       lastInternalSelectionRef.current = 'cleared';
                       // Clear the hash from URL
