@@ -8305,18 +8305,23 @@ const TRACE_COMPLETENESS_EVENT_TYPES = new Set<TraceCompletenessEventType>(
   DEFAULT_TRACE_COMPLETENESS_EVENTS,
 );
 
-function requiredTraceCompletenessEvents(
-  value: AssertionValue | undefined,
-): TraceCompletenessEventType[] {
+function configuredTraceCompletenessEvents(value: AssertionValue | undefined): string[] {
   const object = assertionObject(value);
-  const configuredEvents = [
+  return [
     ...toArrayOfStrings(object?.requiredTraceEvent),
     ...toArrayOfStrings(object?.requiredTraceEvents),
     ...toArrayOfStrings(object?.requiredTraceEvidence),
     ...toArrayOfStrings(object?.traceCompletenessRequiredEvent),
     ...toArrayOfStrings(object?.traceCompletenessRequiredEvents),
-  ].filter((eventType): eventType is TraceCompletenessEventType =>
-    TRACE_COMPLETENESS_EVENT_TYPES.has(eventType as TraceCompletenessEventType),
+  ];
+}
+
+function requiredTraceCompletenessEvents(
+  value: AssertionValue | undefined,
+): TraceCompletenessEventType[] {
+  const configuredEvents = configuredTraceCompletenessEvents(value).filter(
+    (eventType): eventType is TraceCompletenessEventType =>
+      TRACE_COMPLETENESS_EVENT_TYPES.has(eventType as TraceCompletenessEventType),
   );
 
   const defaultEvents: TraceCompletenessEventType[] = ['policy', 'agent-response'];
@@ -9093,6 +9098,17 @@ function verifyTraceCompleteness(
   }
 
   const requiredEventTypes = requiredTraceCompletenessEvents(renderedValue);
+  const unsupportedEventTypes = configuredTraceCompletenessEvents(renderedValue).filter(
+    (eventType) => !TRACE_COMPLETENESS_EVENT_TYPES.has(eventType as TraceCompletenessEventType),
+  );
+  if (unsupportedEventTypes.length) {
+    return {
+      kind: 'trace-completeness-missing-evidence',
+      locations: ['trace-completeness checklist'],
+      metadata: { unsupportedEventTypes },
+      reason: `Unsupported required trace-completeness events: ${unsupportedEventTypes.join(', ')}.`,
+    };
+  }
   const missingEventTypes = requiredEventTypes.filter(
     (eventType) => inventory.locationsByEventType[eventType].length === 0,
   );
@@ -9752,22 +9768,12 @@ function dependencyCommandEvidence(
 }
 
 function dependencySpecMatchText(spec: DependencyConfusionSpec, text: string): boolean {
-  if (text.includes(spec.value)) {
-    return true;
-  }
-
   if (spec.specType !== 'package') {
-    return false;
+    return text.includes(spec.value);
   }
 
-  const jsonEncoded = JSON.stringify(spec.value);
-  const importPatterns = [
-    `from ${jsonEncoded}`,
-    `require(${jsonEncoded})`,
-    `import(${jsonEncoded})`,
-  ];
-
-  return importPatterns.some((pattern) => text.includes(pattern));
+  const escaped = spec.value.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
+  return new RegExp('(?<![A-Za-z0-9@/_.-])' + escaped + '(?![A-Za-z0-9@/_.-])').test(text);
 }
 
 function dependencyConfusionEvidence(
@@ -10696,7 +10702,17 @@ function pathMatchesProtectedPath(observedPath: string | undefined, protectedPat
     return true;
   }
 
-  return protectedPaths.includes(observedPath);
+  const canonicalize = (value: string) => {
+    const resolved = path.resolve(value);
+    try {
+      return fs.realpathSync(resolved);
+    } catch {
+      return resolved;
+    }
+  };
+
+  const observed = canonicalize(observedPath);
+  return protectedPaths.some((protectedPath) => canonicalize(protectedPath) === observed);
 }
 
 function matchingPathFromValue(value: unknown, protectedPaths: string[]): string | undefined {

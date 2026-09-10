@@ -74,6 +74,16 @@ describe('addHydra', () => {
     });
   });
 
+  it('preserves assertions without a metric', () => {
+    const [result] = addHydra(
+      [{ vars: { input: 'test' }, assert: [{ type: 'contains', value: 'expected' }] }],
+      'input',
+      {},
+    );
+
+    expect(result.assert?.[0]?.metric).toBeUndefined();
+  });
+
   it('should handle empty test cases array', () => {
     const result = addHydra([], 'inject', {});
     expect(result).toEqual([]);
