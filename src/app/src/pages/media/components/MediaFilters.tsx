@@ -327,6 +327,7 @@ export function MediaFilters({
               id={evalFilterListboxId}
               role="listbox"
               aria-label="Evaluations"
+              aria-busy={evalsLoading}
               className="max-h-[300px] overflow-y-auto p-1"
             >
               {evalOptions.map((option, optionIndex) => {
@@ -364,17 +365,23 @@ export function MediaFilters({
               })}
 
               {evalsLoading ? (
-                <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                <div
+                  role="status"
+                  className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
+                >
                   <Spinner className="h-4 w-4" />
                   Loading evaluations...
                 </div>
               ) : evalsError ? (
-                <div className="flex items-center justify-center gap-2 py-6 text-sm text-destructive">
+                <div
+                  role="alert"
+                  className="flex items-center justify-center gap-2 py-6 text-sm text-destructive"
+                >
                   <AlertCircle className="h-4 w-4" />
                   Failed to load evaluations
                 </div>
               ) : evals.length === 0 ? (
-                <div className="py-6 text-center text-sm text-muted-foreground">
+                <div role="status" className="py-6 text-center text-sm text-muted-foreground">
                   No evaluations found
                 </div>
               ) : null}

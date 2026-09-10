@@ -30,7 +30,7 @@ const Wrapper = ({ children }: { children: ReactNode }) => (
 
 const renderWithProviders = (ui: ReactNode) => render(ui, { wrapper: Wrapper });
 
-const getPrimaryAction = (name: string | RegExp = 'Image: Test Evaluation') =>
+const getPrimaryAction = (name: string | RegExp = /^Image: Test Evaluation/) =>
   screen.getByRole('button', { name });
 
 const getCardContainer = (name?: string | RegExp) => {
@@ -228,7 +228,7 @@ describe('MediaCard', () => {
       const item = createMockMediaItem();
       renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
-      expect(screen.getByRole('button', { name: 'Download Test Evaluation' })).toHaveClass(
+      expect(screen.getByRole('button', { name: /^Download Test Evaluation/ })).toHaveClass(
         '[@media(hover:none)]:h-11',
         '[@media(hover:none)]:w-11',
       );
@@ -274,7 +274,7 @@ describe('MediaCard', () => {
         />,
       );
 
-      expect(screen.getByLabelText('Select Test Evaluation')).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Select Test Evaluation/)).toBeInTheDocument();
     });
 
     it('shows selected state when isSelected is true', () => {
@@ -289,7 +289,7 @@ describe('MediaCard', () => {
         />,
       );
 
-      expect(screen.getByLabelText('Deselect Test Evaluation')).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Deselect Test Evaluation/)).toBeInTheDocument();
     });
 
     it('calls onToggleSelection when checkbox is clicked', async () => {
@@ -306,7 +306,7 @@ describe('MediaCard', () => {
         />,
       );
 
-      await user.click(screen.getByLabelText('Select Test Evaluation'));
+      await user.click(screen.getByLabelText(/^Select Test Evaluation/));
 
       expect(onToggleSelection).toHaveBeenCalledWith('abc123');
     });
@@ -326,7 +326,7 @@ describe('MediaCard', () => {
         />,
       );
 
-      await user.click(getPrimaryAction('Image: Test Evaluation (not selected)'));
+      await user.click(getPrimaryAction(/^Image: Test Evaluation.*\(not selected\)$/));
 
       expect(onToggleSelection).toHaveBeenCalledWith('abc123');
       expect(onClick).not.toHaveBeenCalled();
@@ -344,7 +344,7 @@ describe('MediaCard', () => {
         />,
       );
 
-      expect(screen.queryByLabelText('Download Test Evaluation')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/^Download Test Evaluation/)).not.toBeInTheDocument();
     });
   });
 
@@ -353,7 +353,7 @@ describe('MediaCard', () => {
       const item = createMockMediaItem();
       renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
-      expect(screen.getByLabelText('Download Test Evaluation')).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Download Test Evaluation/)).toBeInTheDocument();
     });
 
     it('calls downloadMediaItem when download button is clicked', async () => {
@@ -362,7 +362,7 @@ describe('MediaCard', () => {
       const item = createMockMediaItem();
       renderWithProviders(<MediaCard item={item} onClick={vi.fn()} />);
 
-      await user.click(screen.getByLabelText('Download Test Evaluation'));
+      await user.click(screen.getByLabelText(/^Download Test Evaluation/));
 
       expect(downloadMediaItem).toHaveBeenCalledWith(
         'http://localhost:3000/blobs/abc123',
@@ -377,7 +377,7 @@ describe('MediaCard', () => {
       const item = createMockMediaItem();
       renderWithProviders(<MediaCard item={item} onClick={onClick} />);
 
-      await user.click(screen.getByLabelText('Download Test Evaluation'));
+      await user.click(screen.getByLabelText(/^Download Test Evaluation/));
 
       expect(onClick).not.toHaveBeenCalled();
     });
@@ -388,7 +388,7 @@ describe('MediaCard', () => {
       const item = createMockMediaItem();
       renderWithProviders(<MediaCard item={item} onClick={vi.fn()} isViewing={true} />);
 
-      expect(getCardContainer('Image: Test Evaluation (currently viewing)')).toHaveClass(
+      expect(getCardContainer(/^Image: Test Evaluation.*\(currently viewing\)$/)).toHaveClass(
         'border-primary',
         'ring-2',
       );
@@ -406,7 +406,9 @@ describe('MediaCard', () => {
         />,
       );
 
-      expect(getCardContainer('Image: Test Evaluation (selected)')).toHaveClass('border-primary');
+      expect(getCardContainer(/^Image: Test Evaluation.*\(selected\)$/)).toHaveClass(
+        'border-primary',
+      );
     });
 
     it('applies focused styles when isFocused is true', () => {
@@ -426,11 +428,22 @@ describe('MediaCard', () => {
       expect(card).toHaveAttribute('aria-label', expect.stringContaining('Image'));
     });
 
+    it('includes per-item context in action labels', () => {
+      renderWithProviders(<MediaCard item={createMockMediaItem()} onClick={vi.fn()} />);
+
+      expect(getPrimaryAction()).toHaveAccessibleName(
+        'Image: Test Evaluation, openai/dall-e-3, test 1, prompt 1, abc123',
+      );
+      expect(screen.getByLabelText(/^Download Test Evaluation/)).toHaveAccessibleName(
+        'Download Test Evaluation, openai/dall-e-3, test 1, prompt 1, abc123',
+      );
+    });
+
     it('includes viewing state in aria-label', () => {
       const item = createMockMediaItem();
       renderWithProviders(<MediaCard item={item} onClick={vi.fn()} isViewing={true} />);
 
-      const card = getPrimaryAction('Image: Test Evaluation (currently viewing)');
+      const card = getPrimaryAction(/^Image: Test Evaluation.*\(currently viewing\)$/);
       expect(card).toHaveAttribute('aria-label', expect.stringContaining('currently viewing'));
     });
 
@@ -446,7 +459,7 @@ describe('MediaCard', () => {
         />,
       );
 
-      const card = getPrimaryAction('Image: Test Evaluation (selected)');
+      const card = getPrimaryAction(/^Image: Test Evaluation.*\(selected\)$/);
       expect(card).toHaveAttribute('aria-label', expect.stringContaining('selected'));
     });
 

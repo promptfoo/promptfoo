@@ -388,11 +388,14 @@ function ScatterChart({ table }: ChartProps) {
     // Include the actual plotted (x, y) score pairs so plots with identical
     // direction counts but different coordinates (e.g. [(0, 1), (1, 0)] vs
     // [(0.49, 0.51), (0.51, 0.49)]) produce distinct non-visual summaries.
+    const summaryPairs = pairs.slice(0, 20);
     const pairSummary =
-      pairs.length > 0
-        ? ` Plotted score pairs as (${promptXLabel}, ${promptYLabel}): ${pairs
+      summaryPairs.length > 0
+        ? ` Plotted score pairs as (${promptXLabel}, ${promptYLabel}): ${summaryPairs
             .map((point) => `(${formatSummaryScore(point.x)}, ${formatSummaryScore(point.y)})`)
-            .join('; ')}.`
+            .join(
+              '; ',
+            )}${pairs.length > summaryPairs.length ? `; and ${pairs.length - summaryPairs.length} more` : ''}.`
         : '';
 
     return `Comparing ${promptXLabel} with ${promptYLabel} across ${pairs.length} paired scores. ${promptYLabel} is higher in ${yHigher} rows, ${promptXLabel} is higher in ${xHigher} rows, and ${ties} rows tie.${pairSummary}`;

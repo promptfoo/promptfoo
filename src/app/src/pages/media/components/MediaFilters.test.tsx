@@ -281,7 +281,9 @@ describe('MediaFilters', () => {
 
       await user.click(screen.getByText('All Evaluations'));
 
-      expect(await screen.findByText('No evaluations found')).toBeInTheDocument();
+      expect(await screen.findByRole('status', { name: '' })).toHaveTextContent(
+        'No evaluations found',
+      );
     });
 
     it('calls onEvalFilterChange when an evaluation is selected', async () => {
@@ -334,7 +336,11 @@ describe('MediaFilters', () => {
 
       await user.click(screen.getByText('All Evaluations'));
 
-      expect(await screen.findByText('Loading evaluations...')).toBeInTheDocument();
+      expect(await screen.findByRole('status')).toHaveTextContent('Loading evaluations...');
+      expect(screen.getByRole('listbox', { name: 'Evaluations' })).toHaveAttribute(
+        'aria-busy',
+        'true',
+      );
     });
 
     it('shows error state when evalsError is set', async () => {
@@ -343,7 +349,7 @@ describe('MediaFilters', () => {
 
       await user.click(screen.getByText('All Evaluations'));
 
-      expect(await screen.findByText('Failed to load evaluations')).toBeInTheDocument();
+      expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load evaluations');
     });
 
     it('clears search query when clear button is clicked', async () => {

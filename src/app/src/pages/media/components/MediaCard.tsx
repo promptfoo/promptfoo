@@ -82,6 +82,15 @@ export function MediaCard({
   const isDownloadOnly = item.kind === 'other';
   const itemLabel =
     item.context.evalDescription || `Eval ${item.context.evalId?.slice(0, 8) || 'Unknown'}`;
+  const actionLabel = [
+    itemLabel,
+    item.context.provider,
+    item.context.testIdx === undefined ? undefined : `test ${item.context.testIdx + 1}`,
+    item.context.promptIdx === undefined ? undefined : `prompt ${item.context.promptIdx + 1}`,
+    item.hash.slice(0, 8),
+  ]
+    .filter(Boolean)
+    .join(', ');
 
   const handlePrimaryAction = () => {
     if (isSelectionMode && onToggleSelection) {
@@ -131,7 +140,7 @@ export function MediaCard({
         onClick={handlePrimaryAction}
         onFocus={onFocus}
         tabIndex={tabIndex}
-        aria-label={`${getKindLabel(item.kind)}: ${itemLabel}${isViewing ? ' (currently viewing)' : ''}${isSelectionMode ? (isSelected ? ' (selected)' : ' (not selected)') : ''}`}
+        aria-label={`${getKindLabel(item.kind)}: ${actionLabel}${isViewing ? ' (currently viewing)' : ''}${isSelectionMode ? (isSelected ? ' (selected)' : ' (not selected)') : ''}`}
       />
 
       {/* Media Preview Area */}
@@ -178,7 +187,7 @@ export function MediaCard({
                   'opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100',
                   'hover:bg-black/80',
                 )}
-                aria-label={`Download ${itemLabel}`}
+                aria-label={`Download ${actionLabel}`}
               >
                 <Download className="h-3.5 w-3.5 text-white" />
               </button>
@@ -198,7 +207,7 @@ export function MediaCard({
                 ? 'border-primary bg-primary text-primary-foreground'
                 : 'border-muted-foreground/50 bg-white/90 dark:bg-zinc-800/90 hover:border-primary',
             )}
-            aria-label={isSelected ? `Deselect ${itemLabel}` : `Select ${itemLabel}`}
+            aria-label={isSelected ? `Deselect ${actionLabel}` : `Select ${actionLabel}`}
           >
             {isSelected && <Check className="h-4 w-4" />}
           </button>
