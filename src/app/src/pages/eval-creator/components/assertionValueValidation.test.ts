@@ -23,13 +23,9 @@ describe('getRunnableAssertionValueError', () => {
       );
     });
 
-    it('rejects numeric 0 because runtime treats it as an absent contains value', () => {
-      expect(getRunnableAssertionValueError(make({ type: 'contains', value: 0 }))).toMatch(
-        /Enter an expected value/,
-      );
-      expect(getRunnableAssertionValueError(make({ type: 'icontains', value: 0 }))).toMatch(
-        /Enter an expected value/,
-      );
+    it('accepts numeric 0 because runtime supports it as a contains value', () => {
+      expect(getRunnableAssertionValueError(make({ type: 'contains', value: 0 }))).toBeUndefined();
+      expect(getRunnableAssertionValueError(make({ type: 'icontains', value: 0 }))).toBeUndefined();
     });
 
     it('accepts non-blank strings and finite numbers', () => {
@@ -175,6 +171,26 @@ describe('getAssertionValueError', () => {
 });
 
 describe('structured value assertions', () => {
+  it.each([
+    ['tokens-used', 'file://budget.js'],
+    ['tokens-used', 'package:@scope/assertions:tokenBudget'],
+    ['trajectory:tool-set', 'file://tools.js'],
+    ['trajectory:tool-set', 'package:@scope/assertions:toolSet'],
+  ] as const)('defers runtime-resolved %s values', (type, value) => {
+    expect(getRunnableAssertionValueError(make({ type, value }))).toBeUndefined();
+  });
+
+  it('still validates thresholds for runtime-resolved values', () => {
+    expect(
+      getRunnableAssertionValueError(make({ type: 'latency', value: 'file://expected.js' })),
+    ).toMatch(/maximum latency/);
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'similar', value: 'package:expected', threshold: -0.1 }),
+      ),
+    ).toMatch(/score threshold/);
+  });
+
   it('rejects optional SQL config that is not an object', () => {
     expect(
       getRunnableAssertionValueError(make({ type: 'is-sql', value: 'not-json' as any })),
@@ -214,6 +230,24 @@ describe('structured value assertions', () => {
         }),
       ),
     ).toMatch(/partial.*exact/);
+  });
+
+  it('rejects malformed trajectory matcher fields and types', () => {
+    for (const value of [
+      { name: 'find', pattern: '   ', args: {} },
+      { name: 'find', type: 'bogus', args: {} },
+    ]) {
+      expect(
+        getRunnableAssertionValueError(
+          make({ type: 'trajectory:tool-args-match', value: value as any }),
+        ),
+      ).toBeDefined();
+    }
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:step-count', value: { type: 'bogus', min: 1 } as any }),
+      ),
+    ).toBeDefined();
   });
 
   it('rejects trajectory:step-count without min or max', () => {
@@ -259,6 +293,14 @@ describe('structured value assertions', () => {
         make({ type: 'trajectory:tool-sequence', value: { steps: [{ pattern: 'search.*' }] } }),
       ),
     ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:tool-sequence',
+          value: { steps: [{ name: 'search', pattern: '   ' }] },
+        }),
+      ),
+    ).toBeDefined();
   });
 
   it('validates tokens-used budgets', () => {
@@ -278,6 +320,14 @@ describe('structured value assertions', () => {
     expect(
       getRunnableAssertionValueError(
         make({ type: 'tokens-used', value: { max: '{{ token_budget }}' } as any }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'tokens-used',
+          value: { max: 100, source: '{{ usage_source }}' } as any,
+        }),
       ),
     ).toBeUndefined();
     expect(
@@ -309,6 +359,14 @@ describe('structured value assertions', () => {
         make({
           type: 'trajectory:tool-set',
           value: { tools: ['find', { pattern: 'fetch.*' }], mode: 'exact' } as any,
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:tool-set',
+          value: { tools: ['find'], mode: '{{ match_mode }}' } as any,
         }),
       ),
     ).toBeUndefined();
@@ -459,6 +517,11 @@ describe('shared trace/trajectory hardening parity', () => {
         make({ type: 'trace-error-spans', value: { max_count: 2, pattern: 'db.*' } as any }),
       ),
     ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trace-error-spans', value: { max_count: 0, pattern: '   ' } as any }),
+      ),
+    ).toMatch(/pattern must be a non-empty string/);
   });
 
   it('rejects trajectory:step-count and trajectory:tool-used bad bounds', () => {
@@ -550,6 +613,25 @@ describe('shared trace/trajectory hardening parity', () => {
         make({ type: 'trajectory:goal-success', value: 'finish the task' }),
       ),
     ).toBeUndefined();
+  });
+
+  it("rejects trajectory:goal-success timeoutMs above Node's timer ceiling", () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:goal-success',
+          value: { goal: 'finish', timeoutMs: 2_147_483_647 } as any,
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:goal-success',
+          value: { goal: 'finish', timeoutMs: 2_147_483_648 } as any,
+        }),
+      ),
+    ).toMatch(/timeoutMs must be at most 2147483647/);
   });
 });
 
@@ -735,6 +817,22 @@ describe('named matcher assertions', () => {
         make({ type: 'trajectory:tool-used', value: { name: 'search' } as any }),
       ),
     ).toBeUndefined();
+  });
+
+  it('rejects malformed tool-used object matchers', () => {
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'not-trajectory:tool-used',
+          value: { name: 'search', pattern: '   ' } as any,
+        }),
+      ),
+    ).toBeDefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'not-trajectory:tool-used', value: { name: 'search', type: [] } as any }),
+      ),
+    ).toBeDefined();
   });
 
   it('uses the skill wording for skill-used', () => {

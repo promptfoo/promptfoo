@@ -27,29 +27,27 @@ keywords:
 
 # Deterministic metrics
 
-These metrics are created by logical tests that are run on LLM output.
+These assertions can check LLM output or provider metadata directly. Configured scripts, webhooks, and grouped assertions may still depend on external services.
 
 | Assertion Type                                                  | Returns true if...                                                 |
 | --------------------------------------------------------------- | ------------------------------------------------------------------ |
 | [assert-set](#assert-set)                                       | A configurable threshold of grouped assertions pass                |
-| [classifier](#classifier)                                       | HuggingFace classifier returns expected class above threshold      |
 | [contains](#contains)                                           | output contains substring                                          |
 | [contains-all](#contains-all)                                   | output contains all list of substrings                             |
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
 | [contains-html](#contains-html)                                 | output contains HTML content                                       |
-| [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
+| [contains-sql](#contains-sql)                                   | output is valid SQL or contains a valid SQL code block             |
 | [contains-xml](#contains-xml)                                   | output contains valid xml fragment(s)                              |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
 | [equals](#equality)                                             | output matches exactly                                             |
-| [f-score](#f-score)                                             | F-score is above a threshold                                       |
 | [finish-reason](#finish-reason)                                 | model stopped for the expected reason                              |
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
 | [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive           |
 | [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
 | [is-html](#is-html)                                             | output is valid HTML                                               |
 | [is-json](#is-json)                                             | output is valid json (optional json schema validation)             |
-| [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation) |
+| [is-sql](#is-sql)                                               | output is non-empty valid SQL (optional authority list validation) |
 | [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
@@ -60,18 +58,15 @@ These metrics are created by logical tests that are run on LLM output.
 | [trajectory:tool-args-match](#trajectorytool-args-match)        | Ensure traced tool calls include expected argument payloads        |
 | [trajectory:tool-sequence](#trajectorytool-sequence)            | Ensure traced tool usage appears in the expected order             |
 | [trajectory:step-count](#trajectorystep-count)                  | Count normalized trajectory steps by type or pattern               |
-| [is-xml](#is-xml)                                               | output is valid xml                                                |
+| [is-xml](#is-xml)                                               | output is a supported well-formed XML document                     |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
 | [levenshtein](#levenshtein-distance)                            | Levenshtein distance is below a threshold                          |
 | [perplexity-score](#perplexity-score)                           | Normalized perplexity                                              |
 | [perplexity](#perplexity)                                       | Perplexity is below a threshold                                    |
-| [pi](#pi)                                                       | Pi Labs scorer returns score above threshold                       |
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
 | [regex](#regex)                                                 | output matches regex                                               |
 | [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
-| [select-best](#select-best)                                     | Output is selected as best among multiple outputs                  |
-| [similar](#similar)                                             | Embedding similarity is above threshold                            |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
 | [trace-span-count](#trace-span-count)                           | Count spans matching patterns with min/max thresholds              |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
@@ -79,6 +74,17 @@ These metrics are created by logical tests that are run on LLM output.
 | [tokens-used](#tokens-used)                                     | Check traced or response token usage against min/max budgets       |
 | [webhook](#webhook)                                             | provided webhook returns \{pass: true\}                            |
 | [word-count](#word-count)                                       | output has a specific number of words or falls within a range      |
+
+The [F-score](#f-score) section describes a derived metric built from named JavaScript assertions, not an assertion type.
+
+These checks use an additional model or external inference service. Their sections remain here for existing links:
+
+| Check                       | Requires                           |
+| --------------------------- | ---------------------------------- |
+| [classifier](#classifier)   | A HuggingFace classifier           |
+| [pi](#pi)                   | A Pi Labs scorer                   |
+| [select-best](#select-best) | A grading model to compare outputs |
+| [similar](#similar)         | An embedding model                 |
 
 :::tip
 Every test type can be negated by prepending `not-`. For example, `not-equals` or `not-regex`.
@@ -105,6 +111,9 @@ assert:
   - type: icontains
     value: 'The expected substring'
 ```
+
+Both assertions accept string or number values. Numbers are converted to strings, so `value: 0`
+matches output containing `0`.
 
 ### Contains-All
 
@@ -137,6 +146,20 @@ assert:
 ```
 
 For case insensitive matching, use `icontains-any`.
+
+Use the structured assertion form in YAML configs:
+
+```yaml
+assert:
+  - type: contains-all
+    value:
+      - '1,000'
+      - in stock
+```
+
+This checks for the two values `1,000` and `in stock`.
+
+Compact assertion strings in CSV, XLSX, and Google Sheets `__expected` columns use comma-separated values. Quote values containing commas; see [CSV test cases](/docs/configuration/test-cases#csv-with-assertions) for escaping details.
 
 ### Regex
 
@@ -259,20 +282,22 @@ It will fail for:
 
 ### Contains-Sql
 
-This assertion ensure that the output is either valid SQL, or contains a code block with valid SQL.
+This assertion ensures that the output is either valid SQL or contains a code block with valid SQL.
 
 ```yaml
 assert:
   - type: contains-sql
 ```
 
+Fenced SQL can use an optional `sql` language tag. MySQL backtick-quoted identifiers, such as ``SELECT `id` FROM `users`;``, are supported inside the fence.
+
 See [`is-sql`](#is-sql) for advanced usage, including specific database types and allowlists for tables and columns.
 
 ### Cost
 
-The `cost` assertion checks if the cost of the LLM call is below a specified threshold.
+The `cost` assertion checks whether the cost reported by the selected provider is at or below a specified threshold.
 
-This requires LLM providers to return cost information. Currently this is only supported by OpenAI GPT models and custom providers.
+This requires the provider to return cost information; an unknown cost cannot be checked. Use `--no-cache` when comparing fresh inference costs, because response-cache cost reporting depends on the provider.
 
 Example:
 
@@ -373,7 +398,7 @@ assert:
 
 ### Is-XML
 
-The `is-xml` assertion checks if the entire LLM output is a valid XML string. It can also verify the presence of specific elements within the XML structure.
+The `is-xml` assertion checks if the entire LLM output is a supported well-formed XML document. It can also verify the presence of specific elements within the XML structure.
 
 Example:
 
@@ -382,7 +407,7 @@ assert:
   - type: is-xml
 ```
 
-This basic usage checks if the output is valid XML.
+This basic usage checks if the output is a supported well-formed XML document.
 
 You can also specify required elements:
 
@@ -395,12 +420,12 @@ assert:
         - root.sibling
 ```
 
-This checks if the XML is valid and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
+This checks if the XML is a supported well-formed document and contains the specified elements. The elements are specified as dot-separated paths, allowing for nested element checking.
 
 #### How it works
 
-1. The assertion first attempts to parse the entire output as XML using a parser (fast-xml-parser).
-2. If parsing succeeds, it's considered valid XML.
+1. The assertion validates that the entire output is one supported well-formed XML document, then parses it with fast-xml-parser.
+2. If validation and parsing succeed, it's considered valid XML for `is-xml`.
 3. If `value` is specified:
    - It checks for a requiredElements key with an array of required elements.
    - Each element path (e.g., "root.child") is split by dots.
@@ -448,16 +473,18 @@ Fails for: `<root><parent><child></child></parent></root>` (missing grandchild e
 
 #### Inverse assertion
 
-You can use the `not-is-xml` assertion to check if the output is not valid XML:
+You can use the `not-is-xml` assertion to check if the output is not a supported well-formed XML document:
 
 ```yaml
 assert:
   - type: not-is-xml
 ```
 
-This will pass for non-XML content and fail for valid XML content.
+This will pass for non-XML content and XML outside Promptfoo's supported `is-xml` subset, and fail for supported well-formed XML content.
 
-Note: The `is-xml` assertion requires the entire output to be valid XML. For checking XML content within a larger text, use the `contains-xml` assertion.
+Note: The `is-xml` assertion requires the entire output to be a supported well-formed XML document. For checking XML content within a larger text, use the `contains-xml` assertion.
+
+`is-xml` rejects documents with a DTD internal subset because Promptfoo cannot safely validate the subset's declarations and entity replacement text. External resources are not loaded during validation.
 
 ### Contains-XML
 
@@ -473,7 +500,7 @@ For example, `contains-xml` with `root.child` passes for `Text <root><child>Cont
 
 ### Is-SQL
 
-The `is-sql` assertion checks if the LLM output is a valid SQL statement.
+The `is-sql` assertion checks if the LLM output is a non-empty valid SQL statement. For simple column lists, it treats `SELECT a b FROM t` as a likely missing comma rather than implicit aliasing. This check also applies after leading modifiers such as `DISTINCT`.
 
 Example:
 
@@ -586,7 +613,25 @@ tests:
 
 The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
 
-This assertion supports multiple provider formats including OpenAI, Anthropic, and Google/Vertex.
+This assertion supports OpenAI Chat Completions tool calls, OpenAI Responses `function_call` items, Anthropic tool-use blocks, and Google/Vertex function calls. It accepts supported objects and arrays directly or as JSON strings, including newline-separated JSON calls mixed with text.
+
+In mixed text, JSON calls must start and end on their own lines and may span multiple lines. Inline JSON examples and Markdown code fences are ignored. Complete calls after an unfinished JSON fragment can still be scored.
+
+Complete calls inside malformed JSON blocks can also be recovered. If malformed output exceeds limits on parsing work or unmatched JSON delimiters, the assertion fails with an explanation instead of reporting a partial F1 score. This failure also applies to `not-tool-call-f1`.
+
+For example, this OpenAI Responses item matches `value: [get_weather]`:
+
+```json
+{
+  "type": "function_call",
+  "id": "fc_1",
+  "call_id": "call_1",
+  "name": "get_weather",
+  "arguments": "{\"city\":\"NYC\"}"
+}
+```
+
+Responses providers serialize calls this way when `functionToolCallbacks` is not configured, so no output transform is needed. The assertion compares tool names only; it does not validate arguments.
 
 The F1 score is the harmonic mean of precision and recall, originally introduced by [van Rijsbergen (1979)](http://www.dcs.gla.ac.uk/Keith/Preface.html) for information retrieval evaluation:
 
@@ -660,6 +705,7 @@ Promptfoo currently populates `metadata.skillCalls` for:
 
 - Claude Agent SDK, by normalizing `Skill` tool calls.
 - OpenAI Codex SDK, by inferring skill usage from command text that directly references a local `SKILL.md` path.
+- OpenAI Codex Security, by recording the selected native scan or finding-validation operation.
 - OpenCode SDK, by normalizing native `skill` tool parts.
 
 Example:
@@ -805,7 +851,7 @@ With the configuration above:
 | `{ status: 'Q', page: 2 }`               | fail    | `page: 2` does not equal the declared default (1), so it stays in the payload; `exact` mode then rejects the unexpected extra |
 | `{ status: 'Q', delete_database: true }` | fail    | `delete_database` is not in `args` or `defaults`                                                                              |
 
-`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped.
+`defaults` are compared with deep equality, so structured default values (objects, arrays) are supported. Only top-level keys are stripped; a nested default value is compared as a whole and is not partially stripped. A `defaults` entry always requires the observed value to equal the declared default — even a default of `"*"` is matched literally. To tolerate an argument regardless of its value, such as a pagination cursor or other agent-generated token, list it under [`ignore`](#trajectory-tool-args-match-ignore) instead.
 
 :::note
 
@@ -815,7 +861,7 @@ Stripping runs before matching in both modes, but `partial` mode already ignores
 
 #### Ignoring arguments {#trajectory-tool-args-match-ignore}
 
-Use `ignore` when an argument should be left out of the comparison entirely, regardless of its value — for example a volatile `request_id` or `idempotency_key` that changes on every call. Where `defaults` tolerates a key only when it equals a specific value, `ignore` removes the named key unconditionally. The named keys are dropped from both the observed and expected payloads before matching.
+Use `ignore` when an argument should be left out of the comparison entirely, regardless of its value — for example a pagination `cursor`, a volatile `request_id`, or an `idempotency_key` that changes on every call. Where `defaults` tolerates a key only when it equals a specific value, `ignore` removes the named key unconditionally. The named keys are dropped from both the observed and expected payloads before matching.
 
 ```yaml
 tests:
@@ -843,6 +889,32 @@ With the configuration above:
 `ignore` accepts a single string or a list of strings, applies only to top-level keys, and composes with `defaults`. Because the key is removed from both sides, it does not matter whether the agent emits the argument or omits it.
 
 An entry that contains the glob characters `*` or `?` is treated as a key pattern rather than an exact name, so `ignore: ['*_id']` drops every top-level key ending in `_id` (such as `request_id` and `order_id`). Plain entries without glob characters stay exact, case-sensitive matches.
+
+Combine `defaults` with `ignore` when a tool mixes arguments that should be pinned to a known default with arguments the agent chooses freely:
+
+```yaml
+tests:
+  - assert:
+      - type: trajectory:tool-args-match
+        value:
+          name: search_orders
+          mode: exact
+          args:
+            status: Q
+          defaults:
+            page: 1
+            page_size: 5
+          ignore:
+            - cursor
+```
+
+| Observed tool arguments                  | Outcome | Reason                                                       |
+| ---------------------------------------- | ------- | ------------------------------------------------------------ |
+| `{ status: 'Q' }`                        | pass    | matches expected exactly                                     |
+| `{ status: 'Q', page: 1, page_size: 5 }` | pass    | both values equal their declared defaults                    |
+| `{ status: 'Q', cursor: 'abc123' }`      | pass    | `cursor` is ignored regardless of value                      |
+| `{ status: 'Q', page: 2 }`               | fail    | `page: 2` does not equal the declared default (1)            |
+| `{ status: 'Q', delete_database: true }` | fail    | hallucinated extra is not in `args`, `defaults`, or `ignore` |
 
 Promptfoo looks for tool arguments in span attributes such as `tool.arguments`, `tool.args`, `tool.input`, `function.arguments`, `args`, `arguments`, `input`, and Vercel AI SDK telemetry's `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. String values are parsed as JSON when possible.
 
@@ -1090,7 +1162,7 @@ Provide at least one of `min` or `max`. Count bounds must be finite non-negative
 
 ### Tokens-Used {#tokens-used}
 
-The `tokens-used` assertion checks token usage against a minimum and/or maximum budget. By default, it uses traced token attributes when an unfiltered trace reports token usage, and otherwise falls back to provider response usage. Use `source: trace` when a trace without token attributes should intentionally count as zero.
+The `tokens-used` assertion checks token usage against a minimum and/or maximum budget. By default, an unfiltered assertion uses the larger available total from traced token attributes and provider response usage. If only one source reports usage, it uses that source. Use `source: trace` when a trace without token attributes should intentionally count as zero.
 
 ```yaml
 assert:
@@ -1112,6 +1184,11 @@ Configuration options:
 - `pattern`: Non-empty span-name filter when reading from traces. Defaults to `*`
 - `source`: `auto` (default), `trace`, or `response`
 
+An explicit `pattern` with `source: auto` is trace-scoped because provider response usage cannot
+honor a span-name filter. It throws when no matching span reports recognized token usage instead of
+silently passing a budget at zero. Set `source: trace` when a missing match should intentionally count
+as zero.
+
 Row variables render inside the structured value. Numeric `min` and `max` template results
 are coerced after rendering, so a budget such as `max: '{{ token_budget }}'` can vary by test.
 The resolved value must still be a finite non-negative number. Quoted literal numbers such as
@@ -1120,12 +1197,11 @@ The resolved value must still be a finite non-negative number. Quoted literal nu
 If `tokens-used` needs provider response usage and the provider does not return token
 usage metadata, the assertion throws instead of assuming zero tokens.
 
-For traced usage, matching token-bearing spans are deduplicated by hierarchy. When a
-matched parent and matched descendants both report token totals, Promptfoo uses the
-larger covered total for that span subtree so nested aggregate spans do not double-count
-usage or discard a parent aggregate that covers more work than its children.
-Within each span, Promptfoo also uses the largest available aggregate or component total
-so incomplete or inconsistent token attributes do not undercount the budget.
+For traced usage, Promptfoo sums every matching token-bearing operation span. Span parentage does
+not establish that one operation aggregates another, so nested operations are counted separately.
+Use `pattern` to select the instrumentation spans that belong in a budget. Within each span,
+Promptfoo uses the largest available aggregate or component total so incomplete or inconsistent
+token attributes do not undercount the budget.
 
 ### Trace-Span-Duration
 
@@ -1162,8 +1238,8 @@ Key features:
 
 - `pattern` (optional): Filter spans by name pattern. Defaults to `*` (all spans)
 - `max`: Maximum allowed duration in milliseconds (a finite non-negative number)
-- `percentile` (optional): Check a percentile across matching spans instead of every span (e.g., 95 for the 95th percentile)
-- `method` (optional): Percentile method, either `nearest` (default, nearest-rank) or `linear` (interpolated). The default `nearest` returns an actual observed duration; use `linear` for an interpolated value — e.g. the true median when `percentile: 50` on an even number of spans
+- `percentile` (optional): Check a percentile across matching spans instead of every span (e.g., 95 for the 95th percentile). It uses the 0–100 scale; `0.95` means the 0.95th percentile, not p95.
+- `method` (optional): Percentile method, either `nearest` (default, nearest-rank) or `linear` (interpolated). The default `nearest` returns an observed duration; use `linear` for interpolation, such as the median of an even number of spans.
 - `requirePresence` (optional): Fail when no matching spans with complete timing data are present
 
 The assertion will show the slowest spans when a threshold is exceeded, making it easy to identify performance bottlenecks.
@@ -1282,6 +1358,10 @@ ROUGE-N is a **recall-oriented** metric that measures how much of the reference 
 
 ROUGE stands for **Recall-Oriented Understudy for Gisting Evaluation**. [Learn more on Wikipedia](<https://en.wikipedia.org/wiki/ROUGE_(metric)>).
 
+:::note
+ROUGE is scored case-insensitively (inputs are lowercased before comparison), consistent with the other text-overlap metrics (BLEU, GLEU, METEOR). A difference in capitalization — for example `The Cat Sat` vs `the cat sat` — does not lower the score.
+:::
+
 Example:
 
 ```yaml
@@ -1372,6 +1452,8 @@ GLEU (Google-BLEU) is designed specifically for evaluating **individual sentence
 - Records all n-grams (1-4 word sequences) from both texts
 - Calculates both precision (like BLEU) AND recall (like ROUGE)
 - Final score = minimum(precision, recall)
+
+Output that is empty after GLEU normalization (including empty, whitespace-only, or period-only text) contains no n-grams and receives a score of `0` rather than causing the evaluation to error. Tokenless reference strings likewise score `0`.
 
 **When to use GLEU:**
 
@@ -1595,7 +1677,7 @@ The F-score will be calculated automatically after the eval completes. A score c
 
 This is particularly useful for evaluating classification tasks like sentiment analysis, where you want to measure both the precision (accuracy of positive predictions) and recall (ability to find all positive cases).
 
-See [Github](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-f-score) for a complete example.
+See [GitHub](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-f-score) for a complete example.
 
 ### Finish Reason
 
@@ -1684,7 +1766,7 @@ tests:
 The assertion automatically normalizes provider-specific values:
 
 - **OpenAI**: `stop`, `length`, `content_filter`, `tool_calls`, `function_call` (legacy)
-- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`
+- **Anthropic**: `end_turn` → `stop`, `max_tokens` → `length`, `tool_use` → `tool_calls`, `stop_sequence` → `stop`, `refusal` → `content_filter`
 
 :::note
 Support for additional providers (Google Vertex AI, AWS Bedrock, etc.) is planned for future releases.
@@ -1845,7 +1927,7 @@ tests:
 
 ### Classifier
 
-The `classifier` assertion runs the LLM output through any HuggingFace text classification model. This is useful for:
+The `classifier` assertion runs the LLM output through a compatible HuggingFace text-classification or token-classification endpoint. A model on the Hub must also be hosted for the required task, or deployed to your own endpoint. This is useful for:
 
 - Sentiment analysis
 - Toxicity detection
@@ -1863,12 +1945,15 @@ assert:
     threshold: 0.5
 ```
 
-Example for PII detection (using negation):
+Example for PII detection (using negation). The gated `bigcode/starpii` model currently has no Inference Provider deployment; set `HF_STARPII_ENDPOINT` to a compatible token-classification endpoint you have deployed. See [classifier setup](./classifier.md#pii-detection-example).
 
 ```yaml
 assert:
   - type: not-classifier
-    provider: huggingface:token-classification:bigcode/starpii
+    provider:
+      id: huggingface:token-classification:bigcode/starpii
+      config:
+        apiEndpoint: '{{env.HF_STARPII_ENDPOINT}}'
     threshold: 0.75
 ```
 
@@ -1985,4 +2070,4 @@ assert:
 - [Python Assertions](/docs/configuration/expected-outputs/python.md) - Using custom Python functions for validation
 - [Model-Graded Metrics](/docs/configuration/expected-outputs/model-graded/index.md) - Using LLMs to evaluate other LLMs
 - [Configuration Reference](/docs/configuration/reference.md) - Complete configuration options
-- [Guardrails](/docs/configuration/expected-outputs/guardrails.md) - Setting up safety guardrails for LLM outputs
+- [Guardrails](/docs/configuration/expected-outputs/guardrails) - Evaluating target-reported guardrail decisions

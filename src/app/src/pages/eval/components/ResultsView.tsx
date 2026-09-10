@@ -276,7 +276,7 @@ export default function ResultsView({
     setHiddenVarNamesForSchema,
   } = useResultsViewSettingsStore();
 
-  const { updateConfig } = useMainStore();
+  const { setConfig: setRerunConfig } = useMainStore();
 
   const { showToast } = useToast();
   const initialSearchText = searchParams.get('search') || '';
@@ -782,7 +782,7 @@ export default function ResultsView({
           if (!config) {
             return;
           }
-          updateConfig(config);
+          setRerunConfig(config, validEvalId || undefined);
           navigate(
             validEvalId
               ? `${ROUTES.SETUP}?${new URLSearchParams({ sourceEvalId: validEvalId })}`

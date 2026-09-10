@@ -4,6 +4,7 @@ import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { getRemoteGenerationHeaders, getRemoteGenerationUrl } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 
 import type { TestCase, TestCaseWithPlugin } from '../../types/index';
 import type {
@@ -79,19 +80,6 @@ function cleanupExpiredPageState(): void {
       remainingCount: pageStateMap.size,
     });
   }
-}
-
-/**
- * Get the page state for a test case (for use by grader).
- * @param testCaseId - The test case ID
- * @param evalId - The evaluation ID (optional, for namespacing)
- */
-export function getPageStateForTestCase(
-  testCaseId: string,
-  evalId?: string,
-): PageState | undefined {
-  const stateKey = evalId ? `${evalId}:${testCaseId}` : testCaseId;
-  return pageStateMap.get(stateKey);
 }
 
 /**
@@ -219,6 +207,7 @@ async function createWebPage(
   purpose?: string,
   useLlm?: boolean,
   preferSmallModel?: boolean,
+  targetId?: string,
 ): Promise<CreateWebPageResponse> {
   const url = getRemoteGenerationUrl();
   logger.debug('[IndirectWebPwn] Creating web page via task API', {
@@ -247,6 +236,7 @@ async function createWebPage(
         email: getUserEmail(),
         useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
+        ...remoteGenerationContextPayload(targetId),
       }),
     },
     60000, // 60s timeout for LLM generation
@@ -274,6 +264,7 @@ async function updateWebPage(
   evalId?: string,
   useLlm?: boolean,
   preferSmallModel?: boolean,
+  targetId?: string,
 ): Promise<UpdateWebPageResponse> {
   const url = getRemoteGenerationUrl();
   logger.debug('[IndirectWebPwn] Updating web page via task API', {
@@ -299,6 +290,7 @@ async function updateWebPage(
         email: getUserEmail(),
         useLlm: useLlm ?? true,
         preferSmallModel: preferSmallModel ?? true,
+        ...remoteGenerationContextPayload(targetId),
       }),
     },
     60000,
@@ -386,7 +378,7 @@ function transformForStandaloneMode(
       },
       assert: testCase.assert?.map((assertion) => ({
         ...assertion,
-        metric: `${assertion.metric}/${metricSuffix}`,
+        metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
       })),
       metadata: {
         ...testCase.metadata,
@@ -416,6 +408,7 @@ async function transformForPerTurnLayer(
   const useLlmCreate = (config.useLlm as boolean) ?? true;
   const useLlmUpdate = (config.useLlm as boolean) ?? true;
   const preferSmallModel = (config.preferSmallModel as boolean) ?? true;
+  const targetId = typeof config.targetId === 'string' ? config.targetId : undefined;
 
   const results: TestCase[] = [];
 
@@ -452,6 +445,7 @@ async function transformForPerTurnLayer(
 
     let pageState = pageStateMap.get(stateKey);
     let turnNumber: number;
+    let runtimeTokenUsage: CreateWebPageResponse['tokenUsage'];
 
     if (pageState) {
       // Subsequent turn: Update the existing page
@@ -471,7 +465,9 @@ async function transformForPerTurnLayer(
           evalId,
           useLlmUpdate,
           preferSmallModel,
+          targetId,
         );
+        runtimeTokenUsage = response.tokenUsage;
 
         // Update state with new embedding location and fetch prompt
         const previousLocation = pageState.embeddingLocation;
@@ -519,7 +515,9 @@ async function transformForPerTurnLayer(
           purpose,
           useLlmCreate,
           preferSmallModel,
+          targetId,
         );
+        runtimeTokenUsage = response.tokenUsage;
 
         // Clean up expired entries before adding new ones
         cleanupExpiredPageState();
@@ -584,16 +582,10 @@ async function transformForPerTurnLayer(
         embeddedPrompt: attackPrompt, // The prompt embedded in the page (URLs replaced)
         indirectWebPwnTurn: turnNumber,
         fetchPrompt, // The "Please visit URL..." prompt sent to the AI
+        ...(runtimeTokenUsage ? { runtimeTokenUsage } : {}),
       },
     });
   }
 
   return results;
-}
-
-/**
- * Clear page state (useful for testing).
- */
-export function clearPageState(): void {
-  pageStateMap.clear();
 }

@@ -92,6 +92,7 @@ const PodcastCard = ({ podcast }: { podcast: Podcast }) => (
       </Typography>
       <Typography
         variant="subtitle2"
+        component="p"
         gutterBottom
         sx={{
           color: 'text.secondary',
@@ -125,6 +126,7 @@ const EducationalResourceCard = ({ resource }: { resource: EducationalResource }
       </Typography>
       <Typography
         variant="subtitle2"
+        component="p"
         gutterBottom
         sx={{
           color: 'text.secondary',
@@ -166,6 +168,7 @@ const TechnicalContentCard = ({ content }: { content: TechnicalContent }) => (
       </Typography>
       <Typography
         variant="subtitle2"
+        component="p"
         gutterBottom
         sx={{
           color: 'text.secondary',
@@ -300,6 +303,7 @@ const PressContent = () => {
                 </Typography>
                 <Typography
                   variant="subtitle2"
+                  component="p"
                   gutterBottom
                   sx={{
                     color: 'text.secondary',
@@ -400,6 +404,7 @@ const PressContent = () => {
                 <LogoPanda style={{ maxWidth: '200px', height: 'auto' }} />
                 <Typography
                   variant="subtitle1"
+                  component="p"
                   sx={{
                     mt: 2,
                   }}

@@ -12,7 +12,7 @@ import {
   type MockedFunction,
   vi,
 } from 'vitest';
-import { doEval } from '../../src/commands/eval';
+import { doEval } from '../../src/node/doEval';
 import { setupEnv } from '../../src/util/index';
 
 vi.mock('../../src/cache');

@@ -239,7 +239,7 @@ This example uses OpenTelemetry v2.x packages:
 | Package                                   | Version  | Purpose                  |
 | ----------------------------------------- | -------- | ------------------------ |
 | `@opentelemetry/api`                      | ^1.9.0   | Core tracing API         |
-| `@opentelemetry/sdk-trace-node`           | ^2.0.0   | Node.js tracer provider  |
-| `@opentelemetry/exporter-trace-otlp-http` | ^0.200.0 | OTLP HTTP exporter       |
-| `@opentelemetry/resources`                | ^2.0.0   | Resource attributes      |
-| `@opentelemetry/semantic-conventions`     | ^1.28.0  | Standard attribute names |
+| `@opentelemetry/sdk-trace-node`           | ^2.5.0   | Node.js tracer provider  |
+| `@opentelemetry/exporter-trace-otlp-http` | ^0.222.0 | OTLP HTTP exporter       |
+| `@opentelemetry/resources`                | ^2.5.0   | Resource attributes      |
+| `@opentelemetry/semantic-conventions`     | ^1.39.0  | Standard attribute names |

@@ -10,8 +10,7 @@ const GROQ_REASONING_MODEL_PATTERNS = ['gpt-oss', 'qwen'] as const;
 
 /**
  * Check if a model name corresponds to a Groq reasoning model.
- * Groq's reasoning models include GPT-OSS and current Qwen variants, including
- * the still-supported DeepSeek-R1-Distill-Qwen model.
+ * Groq's reasoning models include GPT-OSS and current Qwen variants.
  */
 export function isGroqReasoningModel(modelName: string): boolean {
   return GROQ_REASONING_MODEL_PATTERNS.some((pattern) => modelName.includes(pattern));

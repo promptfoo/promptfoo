@@ -440,6 +440,77 @@ describe('handleTraceSpanDuration', () => {
     );
   });
 
+  it('should throw error for a percentile above 100', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 1000, percentile: 150 } },
+      renderedValue: { max: 1000, percentile: 150 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    // Regression: an out-of-range percentile indexed past the sorted durations
+    // array and returned `undefined`, which compared false against `max` and
+    // silently PASSED with an "undefinedms" reason. It must be rejected instead.
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be between 0 and 100',
+    );
+  });
+
+  it('should throw error for a negative percentile', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 1000, percentile: -5 } },
+      renderedValue: { max: 1000, percentile: -5 },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be between 0 and 100',
+    );
+  });
+
+  it('should throw error for a non-finite percentile', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 1000, percentile: Number.NaN } },
+      renderedValue: { max: 1000, percentile: Number.NaN },
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be between 0 and 100',
+    );
+  });
+
+  it('should throw error for a non-numeric percentile', () => {
+    // YAML configs are cast to the value type without runtime type checking, so a
+    // string percentile can reach the guard. `Number.isFinite` does not coerce, so
+    // it rejects non-numbers without a separate `typeof` check.
+    const value = { max: 1000, percentile: '95' as unknown as number };
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value },
+      renderedValue: value,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
+        trace: mockTraceData,
+      },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion percentile must be between 0 and 100',
+    );
+  });
+
   it('should handle edge case with single span for percentile', () => {
     const params: AssertionParams = {
       ...defaultParams,
@@ -485,22 +556,21 @@ describe('handleTraceSpanDuration', () => {
     );
   });
 
-  it.each([
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    -1,
-  ])('should reject invalid max values (%s)', (max) => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'trace-span-duration', value: { max } },
-      renderedValue: { max },
-      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
-    };
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1])(
+    'should reject invalid max values (%s)',
+    (max) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'trace-span-duration', value: { max } },
+        renderedValue: { max },
+        assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+      };
 
-    expect(() => handleTraceSpanDuration(params)).toThrow(
-      'trace-span-duration assertion max must be a finite non-negative number',
-    );
-  });
+      expect(() => handleTraceSpanDuration(params)).toThrow(
+        'trace-span-duration assertion max must be a finite non-negative number',
+      );
+    },
+  );
 
   it('should invert the result for not-trace-span-duration when latency budget is met', () => {
     const params: AssertionParams = {
@@ -522,7 +592,7 @@ describe('handleTraceSpanDuration', () => {
     expect(result.reason).toContain('latency budget for pattern "cache.*" was satisfied');
   });
 
-  it('clamps clock-skewed (endTime < startTime) durations to 0 instead of reporting negative ms', () => {
+  it('rejects clock-skewed spans instead of treating them as successful zero-duration evidence', () => {
     const params: AssertionParams = {
       ...defaultParams,
       assertion: { type: 'trace-span-duration', value: { max: 100, percentile: 0 } },
@@ -542,10 +612,9 @@ describe('handleTraceSpanDuration', () => {
       },
     };
 
-    const result = handleTraceSpanDuration(params);
-    expect(result.pass).toBe(true); // clamped 0ms is within the 100ms budget
-    expect(result.reason).toContain('0.00ms');
-    expect(result.reason).not.toContain('-400');
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion encountered a span with invalid timing data',
+    );
   });
 
   it('handles percentile boundary values 0 (min) and 100 (max)', () => {
@@ -582,6 +651,19 @@ describe('handleTraceSpanDuration', () => {
       ...defaultParams,
       assertion: { type: 'trace-span-duration', value: { max: 100, pattern: 123 as any } },
       renderedValue: { max: 100, pattern: 123 as any },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanDuration(params)).toThrow(
+      'trace-span-duration assertion pattern must be a non-empty string',
+    );
+  });
+
+  it('throws for a whitespace-only pattern', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-duration', value: { max: 0, pattern: '   ' } },
+      renderedValue: { max: 0, pattern: '   ' },
       assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
     };
 

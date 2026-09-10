@@ -5,24 +5,42 @@ import path from 'path';
 import { type Attributes, type Span, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import dedent from 'dedent';
 import { z } from 'zod';
-import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
-import logger from '../../logger';
 import {
+  addActiveSpanRoleAttribute,
   closeTurnSpan,
+  GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
   getTraceparent,
   openTurnSpan,
+  PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
+  PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
-import { renderVarsInObject } from '../../util/render';
 import { normalizeFieldName, REDACTED, sanitizeObject } from '../../util/sanitizer';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
 import { calculateOpenAIUsageCostFromTokenUsage } from './billing';
+import {
+  cliState,
+  getDirectory,
+  importModule,
+  logger,
+  renderVarsInObject,
+  resolvePackageEntryPoint,
+} from './codex-runtime';
+import {
+  getCodexTraceEndpoint,
+  getCodexTraceProtocol,
+  withCodexTraceExporter,
+} from './codex-tracing';
+import {
+  applyApiKeyToCliEnv,
+  shouldInjectApiKey,
+  usesCustomModelProvider,
+} from './codexApiKeyGating';
 import {
   buildCodexSkillMetadata,
   extractCodexSkillPathCandidates,
@@ -30,13 +48,48 @@ import {
   getCodexSkillRootPrefixes,
 } from './codexSkillMetadata';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  EnvOverrides,
   ProviderResponse,
 } from '../../types/index';
+
+function appendPromptfooResourceAttrs(
+  existing: string | undefined,
+  traceId: string,
+  parentSpanId: string,
+): string {
+  const traceKey = PROMPTFOO_RESOURCE_ATTR_TRACE_ID;
+  const parentSpanKey = PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID;
+  const incoming = `${traceKey}=${traceId},${parentSpanKey}=${parentSpanId}`;
+  if (!existing) {
+    return incoming;
+  }
+  const cleaned = existing
+    .split(',')
+    .map((pair) => pair.trim())
+    .filter(
+      (pair) =>
+        pair.length > 0 &&
+        !pair.startsWith(`${traceKey}=`) &&
+        !pair.startsWith(`${parentSpanKey}=`),
+    )
+    .join(',');
+  return cleaned.length > 0 ? `${cleaned},${incoming}` : incoming;
+}
+
+const ZERO_TRACE_ID = '00000000000000000000000000000000';
+const ZERO_SPAN_ID = '0000000000000000';
+
+function isValidTraceparent(traceparent: string | undefined): traceparent is string {
+  if (!traceparent) {
+    return false;
+  }
+  const [, traceId, spanId] = traceparent.split('-');
+  return Boolean(traceId && spanId && traceId !== ZERO_TRACE_ID && spanId !== ZERO_SPAN_ID);
+}
 
 /**
  * OpenAI Codex SDK Provider
@@ -72,6 +125,8 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * Reasoning effort levels for model reasoning intensity.
  *
  * Model support varies:
+ * - gpt-6-astra / gpt-5.6-sol / gpt-5.6-terra: 'low', 'medium', 'high', 'xhigh', 'max', and 'ultra'
+ * - gpt-5.6-luna: 'low', 'medium', 'high', 'xhigh', and 'max'
  * - gpt-5.5: 'minimal', 'low', 'medium', 'high', 'xhigh' in the Codex SDK;
  *   the OpenAI API uses 'none' instead of 'minimal'
  * - gpt-5.5-pro: 'medium', 'high', 'xhigh'
@@ -79,18 +134,18 @@ export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted'
  * - gpt-5.4-pro: 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex: 'low', 'medium', 'high', 'xhigh'
  * - gpt-5.3-codex-spark: 'low', 'medium', 'high'
- * - gpt-5.2 / gpt-5.2-codex: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex-max: 'low', 'medium', 'high', 'xhigh'
- * - gpt-5.1-codex/mini: 'low', 'medium', 'high'
+ * - gpt-5.2: 'low', 'medium', 'high', 'xhigh'
  *
  * Values:
  * - 'minimal': Minimal reasoning overhead
  * - 'low': Light reasoning, faster responses
- * - 'medium': Balanced (default)
+ * - 'medium': Balanced (default for GPT-5.6 Terra and Luna)
  * - 'high': Thorough reasoning for complex tasks
- * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2, gpt-5.1-codex-max)
+ * - 'xhigh': Maximum reasoning depth (gpt-5.5, gpt-5.4, gpt-5.2)
+ * - 'max': Deepest single-agent reasoning for GPT-5.6
+ * - 'ultra': Proactive multi-agent reasoning for GPT-5.6 Sol and Terra
  */
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max' | 'ultra';
 
 /**
  * Web search modes controlling how the agent accesses the web.
@@ -223,9 +278,23 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-mini')
+   * Model to use (e.g., 'gpt-5.6-terra' or 'gpt-5.6-luna').
+   * Availability depends on authentication mode and account access; omitted models
+   * use the installed Codex SDK's default.
+   * When routing through a non-OpenAI `model_provider` (such as `amazon-bedrock`), use that
+   * provider's model id instead (e.g., 'openai.gpt-5.6-sol' for Amazon Bedrock).
    */
   model?: string;
+
+  /**
+   * Codex model provider to route through, mapped to the CLI's `model_provider` config.
+   * Defaults to OpenAI. Set to `amazon-bedrock` to run inference against OpenAI models hosted
+   * on Amazon Bedrock (combine with `model: 'openai.gpt-5.6-sol'` and AWS credentials in `cli_env`).
+   * Equivalent to setting `cli_config: { model_provider: '<value>' }`.
+   *
+   * @see https://www.promptfoo.dev/docs/providers/aws-bedrock/
+   */
+  model_provider?: string;
 
   /**
    * Sandbox access level controlling filesystem permissions
@@ -241,7 +310,7 @@ export interface OpenAICodexSDKConfig {
    * - 'low': Light reasoning, faster responses
    * - 'medium': Balanced (default)
    * - 'high': Thorough reasoning for complex tasks
-   * - 'xhigh': Maximum depth (gpt-5.2, gpt-5.1-codex-max only)
+   * - 'xhigh': Maximum depth (model-dependent)
    */
   model_reasoning_effort?: ReasoningEffort;
 
@@ -352,8 +421,11 @@ const OpenAICodexSDKConfigShape = {
   skip_git_repo_check: z.boolean().optional(),
   codex_path_override: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
+  model_provider: z.string().min(1).optional(),
   sandbox_mode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).optional(),
-  model_reasoning_effort: z.enum(['minimal', 'low', 'medium', 'high', 'xhigh']).optional(),
+  model_reasoning_effort: z
+    .enum(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
+    .optional(),
   network_access_enabled: z.boolean().optional(),
   web_search_enabled: z.boolean().optional(),
   web_search_mode: z.enum(['disabled', 'cached', 'live']).optional(),
@@ -549,7 +621,7 @@ async function loadCodexSDK(): Promise<any> {
       To use the OpenAI Codex SDK provider, install it with:
         npm install @openai/codex-sdk
 
-      Requires Node.js ^20.20.0 or >=22.22.0.
+      Requires Node.js >=22.22.0.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
@@ -566,7 +638,7 @@ async function loadCodexSDK(): Promise<any> {
       dedent`Failed to load @openai/codex-sdk.
 
       The package was found but could not be loaded. This may be due to:
-      - Incompatible Node.js version (requires Node.js ^20.20.0 or >=22.22.0)
+      - Incompatible Node.js version (requires Node.js >=22.22.0)
       - Corrupted installation
 
       Try reinstalling:
@@ -579,6 +651,11 @@ async function loadCodexSDK(): Promise<any> {
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    'gpt-6-astra',
+    // GPT-5.6 models (requires Codex 0.144.0 or later)
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
     // GPT-5.5 models
     'gpt-5.5',
     'gpt-5.5-pro',
@@ -591,13 +668,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // GPT-5.2 models
     // Note: gpt-5.2-pro is not currently supported via Codex SDK.
     'gpt-5.2',
-    'gpt-5.2-codex',
-    // GPT-5.1 Codex models
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-codex-mini',
     // GPT-5 Codex models
-    'gpt-5-codex',
     'gpt-5-codex-mini',
     // GPT-5 base
     'gpt-5',
@@ -630,7 +701,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     this.providerId = id ?? this.providerId;
     providerRegistry.register(this);
 
-    if (this.config.model && !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)) {
+    if (
+      this.config.model &&
+      !usesCustomModelProvider(this.config) &&
+      !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)
+    ) {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
     }
   }
@@ -746,13 +821,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    // Inject only the resolved Codex/OpenAI API key from provider env/config.
-    // Other promptfoo env overrides should be passed explicitly via cli_env so
-    // unrelated secrets are not exposed to shell commands.
-    if (apiKey) {
-      sortedEnv.OPENAI_API_KEY = apiKey;
-      sortedEnv.CODEX_API_KEY = apiKey;
-    }
+    applyApiKeyToCliEnv(sortedEnv, config, apiKey);
 
     // Inject OpenTelemetry configuration for deep tracing
     // This allows the Codex CLI to export its internal traces to our OTLP receiver
@@ -761,10 +830,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (config.deep_tracing) {
       // Standard OTEL environment variables - use defaults only if not already set
       if (!sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT) {
-        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://127.0.0.1:4318';
+        sortedEnv.OTEL_EXPORTER_OTLP_ENDPOINT = getCodexTraceEndpoint();
       }
       if (!sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL) {
-        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = 'http/json';
+        sortedEnv.OTEL_EXPORTER_OTLP_PROTOCOL = getCodexTraceProtocol();
       }
       if (!sortedEnv.OTEL_SERVICE_NAME) {
         sortedEnv.OTEL_SERVICE_NAME = 'codex-cli';
@@ -775,6 +844,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // W3C Trace Context - only set if we have a traceparent for proper parent-child linking
       if (traceparent) {
         sortedEnv.TRACEPARENT = traceparent;
+        const [, tpTraceId, tpSpanId] = traceparent.split('-');
+        if (tpTraceId && tpSpanId) {
+          sortedEnv.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
+            sortedEnv.OTEL_RESOURCE_ATTRIBUTES,
+            tpTraceId,
+            tpSpanId,
+          );
+        }
       }
       logger.debug('[CodexSDK] Injecting OTEL config for deep tracing', {
         traceparent: traceparent || '(none - CLI will start own trace)',
@@ -811,15 +888,28 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     );
   }
 
-  private getResolvedCliConfig(config: OpenAICodexSDKConfig): Record<string, unknown> | undefined {
-    if (!config.cli_config && !config.collaboration_mode) {
+  private getResolvedCliConfig(
+    config: OpenAICodexSDKConfig,
+    env: Record<string, string> = {},
+  ): Record<string, unknown> | undefined {
+    if (
+      !config.cli_config &&
+      !config.collaboration_mode &&
+      !config.model_provider &&
+      !config.deep_tracing
+    ) {
       return undefined;
     }
 
-    return {
+    const cliConfig = {
       ...(config.cli_config ?? {}),
+      // The first-class `model_provider` option takes precedence over any value
+      // supplied through raw `cli_config`.
+      ...(config.model_provider ? { model_provider: config.model_provider } : {}),
       ...(config.collaboration_mode ? { collaboration_mode: config.collaboration_mode } : {}),
     };
+
+    return withCodexTraceExporter(cliConfig, env, config.deep_tracing === true);
   }
 
   private getSkillRootPrefixes(env: Record<string, string>, workingDir?: string): string[] {
@@ -919,11 +1009,15 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     config: OpenAICodexSDKConfig,
     apiKey: string | undefined = this.getApiKey(config),
   ): Record<string, any> {
-    const cliConfig = this.getResolvedCliConfig(config);
+    const cliConfig = this.getResolvedCliConfig(config, env);
 
+    // The Codex SDK forwards a constructor `apiKey` into the spawned CLI process as
+    // CODEX_API_KEY. Gate it with the same predicate as the env injection so an ambient
+    // OPENAI_API_KEY / CODEX_API_KEY isn't leaked to the agent shell when routing through a
+    // non-OpenAI model_provider (Bedrock authenticates via AWS credentials in cli_env).
     return {
       env,
-      ...(apiKey ? { apiKey } : {}),
+      ...(shouldInjectApiKey(config, apiKey) ? { apiKey } : {}),
       ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
       ...(config.base_url ? { baseUrl: config.base_url } : {}),
       ...(cliConfig ? { config: cliConfig } : {}),
@@ -969,7 +1063,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Resume specific thread
     if (config.thread_id) {
-      const threadIdCacheKey = `${instanceKey}:${config.thread_id}`;
+      const threadIdCacheKey = this.getExplicitThreadCacheKey(config, instanceKey);
       const cached = this.threads.get(threadIdCacheKey);
       if (cached) {
         return cached;
@@ -977,6 +1071,12 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
       const thread = instance.resumeThread(config.thread_id, threadOptions);
       if (config.persist_threads) {
+        const explicitThreadCachePrefix = this.getExplicitThreadCachePrefix(config);
+        for (const cacheKey of this.threads.keys()) {
+          if (cacheKey !== threadIdCacheKey && cacheKey.startsWith(explicitThreadCachePrefix)) {
+            this.threads.delete(cacheKey);
+          }
+        }
         this.threads.set(threadIdCacheKey, thread);
       }
       return thread;
@@ -1247,13 +1347,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     return tracer.startSpan(this.getSpanNameForItem(item), {
       kind: SpanKind.INTERNAL,
       ...(startTime === undefined ? {} : { startTime }),
-      attributes: {
+      attributes: addActiveSpanRoleAttribute({
         'codex.item.id': itemId,
         'codex.item.type': item.type,
         ...(startTime === undefined ? {} : { 'codex.timing.estimated': true }),
         ...(typeof turnIndex === 'number' ? { 'gen_ai.turn.index': turnIndex } : {}),
         ...this.getAttributesForItem(item),
-      },
+      }),
     });
   }
 
@@ -1276,6 +1376,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       const inputTokens = usage.input_tokens ?? usage.inputTokens;
       const outputTokens = usage.output_tokens ?? usage.outputTokens;
       const cachedTokens = usage.cached_input_tokens ?? usage.cachedInputTokens;
+      const cacheWriteTokens = usage.cache_write_input_tokens ?? usage.cacheWriteInputTokens;
       const reasoningTokens = usage.reasoning_output_tokens ?? usage.reasoningOutputTokens;
       if (typeof inputTokens === 'number') {
         attributes['gen_ai.usage.input_tokens'] = inputTokens;
@@ -1284,10 +1385,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         attributes['gen_ai.usage.output_tokens'] = outputTokens;
       }
       if (typeof cachedTokens === 'number') {
-        attributes['gen_ai.usage.cached_tokens'] = cachedTokens;
+        attributes[GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS] = cachedTokens;
+      }
+      if (typeof cacheWriteTokens === 'number') {
+        attributes[GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS] = cacheWriteTokens;
       }
       if (typeof reasoningTokens === 'number') {
-        attributes['gen_ai.usage.reasoning_tokens'] = reasoningTokens;
+        attributes[GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS] = reasoningTokens;
       }
     }
     closeTurnSpan(state, { eventTime, attributes, errorMessage, logLabel: 'CodexSDK' });
@@ -1592,6 +1696,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
           attrs['codex.mcp.server'] = item.server;
         }
         if (typeof item.tool === 'string') {
+          attrs['gen_ai.operation.name'] = 'execute_tool';
+          attrs['gen_ai.tool.name'] = item.tool;
           attrs['codex.mcp.tool'] = item.tool;
         }
         {
@@ -1610,6 +1716,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // Collaboration mode attributes
       case 'collaboration_tool_call':
         if (typeof item.tool === 'string') {
+          attrs['gen_ai.operation.name'] = 'execute_tool';
+          attrs['gen_ai.tool.name'] = item.tool;
           attrs['codex.collab.tool'] = item.tool;
         }
         if (typeof item.target_thread_id === 'string') {
@@ -1797,7 +1905,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const keyData = {
       env,
       base_url: config.base_url,
-      cli_config: this.getResolvedCliConfig(config),
+      cli_config: this.getResolvedCliConfig(config, env),
       codex_path_override: config.codex_path_override,
     };
 
@@ -1832,14 +1940,13 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   private getThreadRunQueueKey(
     config: OpenAICodexSDKConfig,
     cacheKey: string | undefined,
-    instanceKey: string,
   ): string | undefined {
     if (config.deep_tracing) {
       return undefined;
     }
 
     if (config.thread_id) {
-      return `${instanceKey}:${config.thread_id}`;
+      return `explicit:${this.getExplicitThreadIdentity(config)}`;
     }
 
     if (config.persist_threads && cacheKey) {
@@ -1847,6 +1954,25 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     }
 
     return undefined;
+  }
+
+  private getExplicitThreadCacheKey(config: OpenAICodexSDKConfig, instanceKey: string): string {
+    const variant = crypto
+      .createHash('sha256')
+      .update(JSON.stringify({ instanceKey, threadOptions: this.buildThreadOptions(config) }))
+      .digest('hex');
+    return `${this.getExplicitThreadCachePrefix(config)}${variant}`;
+  }
+
+  private getExplicitThreadCachePrefix(config: OpenAICodexSDKConfig): string {
+    return `explicit:${this.getExplicitThreadIdentity(config)}:`;
+  }
+
+  private getExplicitThreadIdentity(config: OpenAICodexSDKConfig): string {
+    return crypto
+      .createHash('sha256')
+      .update(config.thread_id ?? '')
+      .digest('hex');
   }
 
   private async runSerializedThreadTurn<T>(
@@ -1925,6 +2051,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...this.config,
       ...context?.prompt?.config,
     };
+    // Promptfoo may attach the live target provider object to prompt config for
+    // generic provider workflows. Codex accepts this key for loader compatibility,
+    // but runtime variable rendering must not recurse into provider methods.
+    delete mergedConfig.provider;
     const config = renderVarsInObject(mergedConfig, context?.vars) as OpenAICodexSDKConfig;
 
     const requestedModel =
@@ -1946,8 +2076,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
   ): GenAISpanContext {
     return {
       system: 'openai',
-      operationName: 'chat',
-      model: requestedModel ?? 'codex',
+      operationName: 'invoke_agent',
+      model: requestedModel ?? 'Codex',
+      agentName: 'Codex',
       providerId: this.id(),
       evalId: context?.evaluationId || context?.test?.metadata?.evaluationId,
       testIndex:
@@ -2059,7 +2190,10 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     // Get current trace context for deep tracing
     // This allows the Codex CLI to export its internal spans as children of our span
-    const currentTraceparent = getTraceparent();
+    const activeTraceparent = getTraceparent();
+    const currentTraceparent = isValidTraceparent(activeTraceparent)
+      ? activeTraceparent
+      : context?.traceparent;
     const apiKey = this.getApiKey(config);
     const workingDirectory =
       resolveAgenticWorkingDir(config.working_dir, cliState.basePath) ?? process.cwd();
@@ -2230,7 +2364,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     callOptions: CallApiOptionsParams | undefined,
     skillRootPrefixes: readonly string[],
   ): Promise<{ turn: any; sessionId: string }> {
-    const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey, instanceKey);
+    const queueKey = this.getThreadRunQueueKey(resolvedConfig, cacheKey);
     const runOptions = this.buildCodexRunOptions(resolvedConfig, callOptions);
 
     return this.runSerializedThreadTurn(queueKey, callOptions?.abortSignal, async () => {
@@ -2294,8 +2428,18 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       completion: turnUsage.output_tokens,
       total: turnUsage.input_tokens + turnUsage.output_tokens,
       cached: turnUsage.cached_input_tokens || 0,
-      ...(typeof turnUsage.reasoning_output_tokens === 'number'
-        ? { completionDetails: { reasoning: turnUsage.reasoning_output_tokens } }
+      ...(typeof turnUsage.reasoning_output_tokens === 'number' ||
+      typeof turnUsage.cache_write_input_tokens === 'number'
+        ? {
+            completionDetails: {
+              ...(typeof turnUsage.reasoning_output_tokens === 'number'
+                ? { reasoning: turnUsage.reasoning_output_tokens }
+                : {}),
+              ...(typeof turnUsage.cache_write_input_tokens === 'number'
+                ? { cacheCreationInputTokens: turnUsage.cache_write_input_tokens }
+                : {}),
+            },
+          }
         : {}),
     };
   }

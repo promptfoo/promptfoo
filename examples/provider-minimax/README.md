@@ -19,4 +19,4 @@ cd provider-minimax
 promptfoo eval
 ```
 
-The included config compares the standard and high-speed MiniMax M2.7 routes on a simple factual prompt.
+The included config compares the flagship M3 model with the previous-generation M2.7 on a simple factual prompt.

@@ -16,7 +16,7 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import yaml from 'js-yaml';
+import { loadYaml } from '@promptfoo/util/yamlLoad';
 import { Check, Upload } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';
@@ -86,7 +86,7 @@ const EvaluateTestSuiteCreator = () => {
   const [resetKey, setResetKey] = useState(0);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  const { config, updateConfig, reset } = useStore();
+  const { config, setConfig, updateConfig, reset } = useStore();
   const { providers = [], prompts = [] } = config;
 
   const normalizedProviders = React.useMemo(() => normalizeProviders(providers), [providers]);
@@ -197,9 +197,12 @@ const EvaluateTestSuiteCreator = () => {
           );
         } else {
           try {
-            const parsedConfig = yaml.load(content) as Record<string, unknown>;
+            const parsedConfig = loadYaml(content) as Record<string, unknown>;
             if (parsedConfig && typeof parsedConfig === 'object') {
-              updateConfig(parsedConfig as Partial<UnifiedConfig>);
+              setConfig({
+                ...useStore.getState().config,
+                ...(parsedConfig as Partial<UnifiedConfig>),
+              });
               setResetKey((k) => k + 1);
               showToast('Configuration loaded successfully', 'success');
             } else {

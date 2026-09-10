@@ -1,5 +1,8 @@
+import {
+  isNunjucksOutputExpression,
+  tokensUsedConfigError,
+} from '../contracts/validators/traceAssertionConfig';
 import { renderVarsInObject } from '../util/render';
-import { isNunjucksOutputExpression, tokensUsedConfigError } from '../util/traceAssertionConfig';
 import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -85,71 +88,61 @@ function hasTokenUsageAttributes(attributes: Record<string, unknown> | undefined
   );
 }
 
-function tokensFromTrace(spans: TraceSpan[], pattern: string): TraceTokenUsage {
-  const spansById = new Map(spans.map((span) => [span.spanId, span]));
-  const matchedSpans = spans.filter((span) => matchesPattern(span.name, pattern));
-  const matchedTokenSpans = matchedSpans
-    .map((span) => ({ span, total: sumTokenAttributes(span.attributes) }))
-    .filter(({ total }) => total > 0);
-  const matchedTokenSpansById = new Map(
-    matchedTokenSpans.map((tokenSpan) => [tokenSpan.span.spanId, tokenSpan]),
-  );
-  const descendantTokenSpanIdsById = new Map<string, string[]>();
-  const rootTokenSpanIds: string[] = [];
-
-  for (const { span } of matchedTokenSpans) {
-    let parentSpanId = span.parentSpanId;
-    const visited = new Set<string>();
-    let matchedParentSpanId: string | undefined;
-    while (parentSpanId && !visited.has(parentSpanId)) {
-      visited.add(parentSpanId);
-      if (matchedTokenSpansById.has(parentSpanId)) {
-        matchedParentSpanId = parentSpanId;
-        break;
-      }
-      parentSpanId = spansById.get(parentSpanId)?.parentSpanId;
-    }
-
-    if (!matchedParentSpanId) {
-      rootTokenSpanIds.push(span.spanId);
-      continue;
-    }
-
-    const descendants = descendantTokenSpanIdsById.get(matchedParentSpanId) ?? [];
-    descendants.push(span.spanId);
-    descendantTokenSpanIdsById.set(matchedParentSpanId, descendants);
+function invalidTokenUsageAttribute(
+  attributes: Record<string, unknown> | undefined,
+): string | null {
+  if (!attributes) {
+    return null;
   }
-
-  const coveredTokens = (spanId: string, visited: Set<string>): number => {
-    if (visited.has(spanId)) {
-      return 0;
+  for (const attributeName of TOKEN_USAGE_ATTRIBUTE_KEYS) {
+    const value = attributes[attributeName];
+    if (value !== undefined && value !== null && nonNegativeTokenValue(value) === undefined) {
+      return attributeName;
     }
+  }
+  return null;
+}
 
-    const tokenSpan = matchedTokenSpansById.get(spanId);
-    if (!tokenSpan) {
-      return 0;
-    }
-
-    const nextVisited = new Set(visited).add(spanId);
-    const descendantTotal = (descendantTokenSpanIdsById.get(spanId) ?? []).reduce(
-      (sum, descendantSpanId) => sum + coveredTokens(descendantSpanId, nextVisited),
-      0,
+function tokensFromTrace(spans: TraceSpan[], pattern: string): TraceTokenUsage {
+  const matchedSpans = spans.filter((span) => matchesPattern(span.name, pattern));
+  const invalidAttribute = matchedSpans
+    .map((span) => invalidTokenUsageAttribute(span.attributes))
+    .find((attributeName) => attributeName !== null);
+  if (invalidAttribute) {
+    throw new Error(
+      `Invalid trace token usage attribute "${invalidAttribute}": expected a finite non-negative number`,
     );
-    return Math.max(tokenSpan.total, descendantTotal);
-  };
+  }
 
   return {
     hasUsage: matchedSpans.some((span) => hasTokenUsageAttributes(span.attributes)),
-    total: rootTokenSpanIds.reduce((sum, spanId) => sum + coveredTokens(spanId, new Set()), 0),
+    // OpenTelemetry usage belongs to the individual GenAI operation span. Parentage alone
+    // does not establish that one span aggregates another, so summing is the only safe budget.
+    total: matchedSpans.reduce((sum, span) => sum + sumTokenAttributes(span.attributes), 0),
   };
 }
 
-function tokensFromProviderResponse(params: AssertionParams): number {
+function tokensFromProviderResponse(params: AssertionParams): number | undefined {
   const usage = params.providerResponse?.tokenUsage;
   if (!usage) {
-    throw new Error(
-      'No token usage data available for tokens-used assertion from provider response',
-    );
+    return undefined;
+  }
+  if (
+    usage.numRequests === 0 &&
+    usage.prompt === 0 &&
+    usage.completion === 0 &&
+    usage.total === 0
+  ) {
+    return undefined;
+  }
+
+  for (const field of ['prompt', 'completion', 'total'] as const) {
+    const value = usage[field];
+    if (value !== undefined && value !== null && nonNegativeTokenValue(value) === undefined) {
+      throw new Error(
+        `Invalid provider token usage field "${field}": expected a finite non-negative number`,
+      );
+    }
   }
 
   const prompt = nonNegativeTokenValue(usage.prompt);
@@ -171,7 +164,7 @@ function tokensFromProviderResponse(params: AssertionParams): number {
     return componentTotal;
   }
 
-  throw new Error('No token usage data available for tokens-used assertion from provider response');
+  return undefined;
 }
 
 function resolveTokenUsage(
@@ -182,7 +175,13 @@ function resolveTokenUsage(
   const trace = params.assertionValueContext.trace;
 
   if (source === 'response') {
-    return { total: tokensFromProviderResponse(params), usedSource: 'response' };
+    const responseTotal = tokensFromProviderResponse(params);
+    if (responseTotal === undefined) {
+      throw new Error(
+        'No token usage data available for tokens-used assertion from provider response',
+      );
+    }
+    return { total: responseTotal, usedSource: 'response' };
   }
 
   if (source === 'trace') {
@@ -195,14 +194,37 @@ function resolveTokenUsage(
     };
   }
 
+  if (pattern !== '*') {
+    if (!trace?.spans || trace.spans.length === 0) {
+      throw new Error(
+        `No trace token usage available for tokens-used assertion matching pattern "${pattern}"`,
+      );
+    }
+    const traceUsage = tokensFromTrace(trace.spans as TraceSpan[], pattern);
+    if (!traceUsage.hasUsage) {
+      throw new Error(
+        `No trace token usage available for tokens-used assertion matching pattern "${pattern}"`,
+      );
+    }
+    return { total: traceUsage.total, usedSource: 'trace' };
+  }
+
+  const responseTotal = tokensFromProviderResponse(params);
+
   if (trace?.spans && trace.spans.length > 0) {
     const traceUsage = tokensFromTrace(trace.spans as TraceSpan[], pattern);
-    if (traceUsage.hasUsage || pattern !== '*') {
-      return { total: traceUsage.total, usedSource: 'trace' };
+    if (traceUsage.hasUsage) {
+      return responseTotal !== undefined && responseTotal > traceUsage.total
+        ? { total: responseTotal, usedSource: 'response' }
+        : { total: traceUsage.total, usedSource: 'trace' };
     }
   }
 
-  return { total: tokensFromProviderResponse(params), usedSource: 'response' };
+  if (responseTotal !== undefined) {
+    return { total: responseTotal, usedSource: 'response' };
+  }
+
+  throw new Error('No token usage data available for tokens-used assertion from provider response');
 }
 
 function coerceRenderedBudgetBound(rawValue: unknown, renderedValue: unknown): unknown {
@@ -219,18 +241,18 @@ function coerceRenderedBudgetBound(rawValue: unknown, renderedValue: unknown): u
 }
 
 export const handleTokensUsed = (params: AssertionParams): GradingResult => {
-  const rawValue = params.assertion.value;
-  const renderedValue = renderVarsInObject(
-    params.renderedValue ?? params.assertion.value,
-    params.assertionValueContext.vars,
-  );
+  const unrenderedValue = params.renderedValue ?? params.assertion.value;
+  const renderedValue =
+    params.valueFromScript === undefined
+      ? renderVarsInObject(unrenderedValue, params.assertionValueContext.vars)
+      : unrenderedValue;
   if (!renderedValue || typeof renderedValue !== 'object' || Array.isArray(renderedValue)) {
     throw new Error('tokens-used assertion must have an object value');
   }
 
   const rawObject =
-    rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)
-      ? (rawValue as Record<string, unknown>)
+    unrenderedValue && typeof unrenderedValue === 'object' && !Array.isArray(unrenderedValue)
+      ? (unrenderedValue as Record<string, unknown>)
       : {};
   const value = {
     ...(renderedValue as Record<string, unknown>),

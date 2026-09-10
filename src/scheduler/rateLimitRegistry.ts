@@ -3,11 +3,12 @@ import { EventEmitter } from 'events';
 import { getEnvBool, getEnvInt } from '../envars';
 import logger from '../logger';
 import { withFetchRetryContext } from '../util/fetch/retryContext';
-import { sanitizeUrl } from '../util/sanitizer';
+import { sanitizeProviderIdForLog } from '../util/provider';
 import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimitState';
 import { getRateLimitKey } from './rateLimitKey';
 
 import type { ApiProvider } from '../types/providers';
+import type { RateLimitExecuteOptions } from './types';
 
 export interface RateLimitRegistryOptions {
   maxConcurrency: number;
@@ -45,11 +46,7 @@ export class RateLimitRegistry extends EventEmitter {
   async execute<T>(
     provider: ApiProvider,
     callFn: () => Promise<T>,
-    options?: {
-      getHeaders?: (result: T) => Record<string, string> | undefined;
-      isRateLimited?: (result: T | undefined, error?: Error) => boolean;
-      getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
-    },
+    options?: RateLimitExecuteOptions<T>,
   ): Promise<T> {
     const providerMaxRetries = getProviderMaxRetries(provider);
 
@@ -74,6 +71,7 @@ export class RateLimitRegistry extends EventEmitter {
 
     const run = () =>
       state.executeWithRetry(requestId, callFn, {
+        abortSignal: options?.abortSignal,
         getHeaders: options?.getHeaders,
         isRateLimited: options?.isRateLimited,
         getRetryAfter: options?.getRetryAfter,
@@ -197,10 +195,4 @@ function getProviderMaxRetries(provider: ApiProvider): number | undefined {
     },
   );
   return undefined;
-}
-
-function sanitizeProviderIdForLog(providerId: string): string {
-  return providerId.includes('://') || providerId.startsWith('/')
-    ? sanitizeUrl(providerId)
-    : providerId;
 }

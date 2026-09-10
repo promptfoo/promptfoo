@@ -287,6 +287,28 @@ describe('Eval Routes - Sharing behavior', () => {
     ]);
   });
 
+  it('does not graft a stored SAS token into a different submitted field', async () => {
+    const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+    mockedEvalFindById.mockResolvedValueOnce({
+      config: {
+        tests: ['az://account/container/tests.yaml?sp=r&sig=source-secret'],
+      },
+    } as never);
+
+    await postJob({
+      ...minimalTestSuite,
+      tests: [{ vars: { leak: redactedUri } }],
+      sourceEvalId: 'source-eval-id',
+    });
+
+    await vi.waitFor(() => {
+      expect(mockedEvaluateWithSource).toHaveBeenCalled();
+    });
+
+    const evaluateArg = mockedEvaluateWithSource.mock.calls[0][0] as any;
+    expect(evaluateArg.tests).toEqual([{ vars: { leak: redactedUri } }]);
+  });
+
   it('should not log the raw save body on database failure', async () => {
     mockedEvalCreate.mockRejectedValueOnce(new Error('db down'));
 

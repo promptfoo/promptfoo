@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getEnvString } from '../../envars';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
+import { testProviderConnectivity, testProviderSession } from '../../node/testProvider';
 import { createTransformRequest, createTransformResponse } from '../../providers/httpTransforms';
 import { loadApiProvider } from '../../providers/index';
 import {
@@ -12,7 +13,6 @@ import {
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { testProviderConnectivity, testProviderSession } from '../../validators/testProvider';
 import { getAvailableProviders } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
@@ -154,9 +154,10 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
       : getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app')
   ).replace(/\/+$/, '');
 
-  // The global fetch auth-injection only adds the bearer token for the public cloud
-  // origin, so send it explicitly to authenticate against on-prem cloud hosts.
-  const apiKey = cloudConfig.isEnabled() ? cloudConfig.getApiKey() : undefined;
+  // The fetch layer injects the cloud auth header for the configured cloud origin
+  // (incl. on-prem) and won't override a header we set here, so attaching it
+  // explicitly keeps this request authenticated regardless of fetch-layer changes.
+  const authHeaders = cloudConfig.isEnabled() ? cloudConfig.getAuthHeaders() : undefined;
 
   try {
     logger.debug('[POST /providers/http-generator] Calling HTTP provider generator API', {
@@ -168,7 +169,7 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...(authHeaders ?? {}),
       },
       body: JSON.stringify({
         requestExample,

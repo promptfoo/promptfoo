@@ -15,7 +15,7 @@ describe('Groq utility functions', () => {
     });
 
     it('should identify qwen models as reasoning', () => {
-      expect(isGroqReasoningModel('qwen/qwen3-32b')).toBe(true);
+      expect(isGroqReasoningModel('qwen/qwen3.6-27b')).toBe(true);
       expect(isGroqReasoningModel('qwen-2.5')).toBe(true);
       expect(isGroqReasoningModel('deepseek-r1-distill-qwen-32b')).toBe(true);
     });
@@ -30,7 +30,7 @@ describe('Groq utility functions', () => {
   describe('groqSupportsTemperature', () => {
     it('should return true for groq reasoning models', () => {
       expect(groqSupportsTemperature('openai/gpt-oss-120b')).toBe(true);
-      expect(groqSupportsTemperature('qwen/qwen3-32b')).toBe(true);
+      expect(groqSupportsTemperature('qwen/qwen3.6-27b')).toBe(true);
     });
 
     it('should return false for non-reasoning models', () => {

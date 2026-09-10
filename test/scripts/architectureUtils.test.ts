@@ -34,6 +34,29 @@ describe('extractModuleSpecifiers', () => {
       'cjs-resolve',
     ]);
   });
+
+  it('collects TypeScript-specific module specifiers without reading strings or comments', () => {
+    const source = `
+      import legacy = require('legacy-module');
+      type Imported = import('type-module').Imported;
+      export * from 'exported-module';
+      import(\`./dynamic-template.js\`);
+      require(\`template-package\`);
+      require.resolve(\`resolved-template-package\`);
+      import(\`./\${name}.js\`);
+      const text = "require('ignored-module')";
+      // import('ignored-comment')
+    `;
+
+    expect(extractModuleSpecifiers(source, 'fixture.ts')).toEqual([
+      'legacy-module',
+      'type-module',
+      'exported-module',
+      './dynamic-template.js',
+      'template-package',
+      'resolved-template-package',
+    ]);
+  });
 });
 
 describe('resolveInternalModule', () => {
@@ -362,6 +385,32 @@ describe('getExternalModuleName', () => {
 describe('production layer config', () => {
   it('classifies the public contracts entrypoint as leaf-safe', () => {
     expect(getLayerForFile('src/contracts.ts', readLayerConfig(process.cwd()))).toBe('contracts');
+  });
+
+  it('allows core logic to consume leaf-safe contracts', () => {
+    const config = readLayerConfig(process.cwd());
+    const coreLayer = config.layers.find((layer) => layer.name === 'core');
+
+    expect(coreLayer?.allowedDependencies).toContain('contracts');
+  });
+
+  it('allows transitional runtime shims to consume leaf-safe contracts', () => {
+    const config = readLayerConfig(process.cwd());
+    const legacyRuntimeLayer = config.layers.find((layer) => layer.name === 'legacy-runtime');
+
+    expect(legacyRuntimeLayer?.allowedDependencies).toContain('contracts');
+  });
+
+  it('classifies evaluator runtime ports as transitional runtime modules', () => {
+    expect(getLayerForFile('src/evaluator/runtime.ts', readLayerConfig(process.cwd()))).toBe(
+      'legacy-runtime',
+    );
+  });
+
+  it('classifies the evaluator runtime adapter as a node module', () => {
+    expect(getLayerForFile('src/node/evaluatorRuntime.ts', readLayerConfig(process.cwd()))).toBe(
+      'node',
+    );
   });
 
   it('keeps the contracts leaf layer free of disallowed external dependencies', () => {

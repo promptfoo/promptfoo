@@ -383,6 +383,19 @@ describe('handleTraceSpanCount', () => {
     );
   });
 
+  it('should reject a whitespace-only pattern', () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'trace-span-count', value: { pattern: '   ', max: 0 } },
+      renderedValue: { pattern: '   ', max: 0 },
+      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+    };
+
+    expect(() => handleTraceSpanCount(params)).toThrow(
+      'trace-span-count assertion must have a value object with pattern property',
+    );
+  });
+
   it('should throw error when no count bounds are provided', () => {
     const params: AssertionParams = {
       ...defaultParams,
@@ -396,23 +409,21 @@ describe('handleTraceSpanCount', () => {
     );
   });
 
-  it.each([
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-    -1,
-    1.5,
-  ])('should reject invalid count bounds (%s)', (min) => {
-    const params: AssertionParams = {
-      ...defaultParams,
-      assertion: { type: 'trace-span-count', value: { pattern: '*', min } },
-      renderedValue: { pattern: '*', min },
-      assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
-    };
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5])(
+    'should reject invalid count bounds (%s)',
+    (min) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'trace-span-count', value: { pattern: '*', min } },
+        renderedValue: { pattern: '*', min },
+        assertionValueContext: { ...defaultParams.assertionValueContext, trace: mockTraceData },
+      };
 
-    expect(() => handleTraceSpanCount(params)).toThrow(
-      'trace-span-count assertion min must be a finite non-negative integer',
-    );
-  });
+      expect(() => handleTraceSpanCount(params)).toThrow(
+        'trace-span-count assertion min must be a finite non-negative integer',
+      );
+    },
+  );
 
   it('should reject max bounds below min bounds', () => {
     const params: AssertionParams = {

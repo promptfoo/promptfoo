@@ -6,6 +6,7 @@
  */
 
 import { parseRetryAfter } from './headerParser';
+import { getProviderCallExecutionContext } from './providerCallExecutionContext';
 import {
   getProviderResponseHeaders,
   isProviderResponseRateLimited,
@@ -43,8 +44,11 @@ export function isRateLimitWrapped(provider: ApiProvider): boolean {
  * Create rate limit detection options for ProviderResponse.
  * Shared between providerWrapper and evaluator for consistency.
  */
-export function createProviderRateLimitOptions(): RateLimitExecuteOptions<ProviderResponse> {
+export function createProviderRateLimitOptions(
+  abortSignal?: AbortSignal,
+): RateLimitExecuteOptions<ProviderResponse> {
   return {
+    abortSignal,
     getHeaders: getProviderResponseHeaders,
     isRateLimited: isProviderResponseRateLimited,
     getRetryAfter: (result: ProviderResponse | undefined, error: Error | undefined) => {
@@ -57,8 +61,8 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
         }
         // Check retry-after-ms first (milliseconds)
         if (headers['retry-after-ms']) {
-          const ms = parseInt(headers['retry-after-ms'], 10);
-          if (!isNaN(ms) && ms >= 0) {
+          const ms = Number.parseInt(headers['retry-after-ms'], 10);
+          if (Number.isFinite(ms) && ms >= 0) {
             return ms;
           }
         }
@@ -73,7 +77,8 @@ export function createProviderRateLimitOptions(): RateLimitExecuteOptions<Provid
       // Try to extract from error message (some providers include it)
       const match = error?.message?.match(/\bretry after (\d+)\b/i);
       if (match) {
-        return parseInt(match[1], 10) * 1000;
+        const retryAfterMs = Number.parseInt(match[1], 10) * 1000;
+        return Number.isFinite(retryAfterMs) ? retryAfterMs : undefined;
       }
       return undefined;
     },
@@ -110,10 +115,14 @@ export function wrapProviderWithRateLimiting(
       context?: CallApiContextParams,
       options?: CallApiOptionsParams,
     ): Promise<ProviderResponse> => {
+      const queuedCallAbortSignal = getProviderCallExecutionContext()?.queuedCallAbortSignal;
       return registry.execute(
         provider,
-        () => originalCallApi(prompt, context, options),
-        createProviderRateLimitOptions(),
+        () => {
+          queuedCallAbortSignal?.throwIfAborted();
+          return originalCallApi(prompt, context, options);
+        },
+        createProviderRateLimitOptions(queuedCallAbortSignal),
       );
     },
   };

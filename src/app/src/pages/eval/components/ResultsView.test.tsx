@@ -10,10 +10,10 @@ import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 // Mock all the required modules - use vi.hoisted to ensure these are available in vi.mock factories
-const { mockShowToast, mockNavigate, mockUpdateConfig } = vi.hoisted(() => ({
+const { mockShowToast, mockNavigate, mockSetRerunConfig } = vi.hoisted(() => ({
   mockShowToast: vi.fn(),
   mockNavigate: vi.fn(),
-  mockUpdateConfig: vi.fn(),
+  mockSetRerunConfig: vi.fn(),
 }));
 
 vi.mock('@app/hooks/useToast', () => ({
@@ -24,7 +24,7 @@ vi.mock('@app/hooks/useToast', () => ({
 
 vi.mock('@app/stores/evalConfig', () => ({
   useStore: () => ({
-    updateConfig: mockUpdateConfig,
+    setConfig: mockSetRerunConfig,
   }),
 }));
 
@@ -240,7 +240,7 @@ function createCopyEvalResponse(): Response {
 
 beforeEach(() => {
   mockNavigate.mockReset();
-  mockUpdateConfig.mockReset();
+  mockSetRerunConfig.mockReset();
   mockUseFilterMode.mockReturnValue({
     filterMode: 'all',
     setFilterMode: vi.fn(),
@@ -426,8 +426,9 @@ describe('ResultsView Share Button', () => {
     await userEvent.click(screen.getByText('Eval actions'));
     await userEvent.click(screen.getByText('Edit and re-run'));
 
-    expect(mockUpdateConfig).toHaveBeenCalledWith(
+    expect(mockSetRerunConfig).toHaveBeenCalledWith(
       expect.objectContaining({ description: 'Test Evaluation' }),
+      'test-eval-id',
     );
     expect(mockNavigate).toHaveBeenCalledWith('/setup?sourceEvalId=test-eval-id', {
       state: { sourceEvalId: 'test-eval-id' },
@@ -452,6 +453,7 @@ describe('ResultsView Share Button', () => {
     await userEvent.click(screen.getByText('Eval actions'));
     await userEvent.click(screen.getByText('Edit and re-run'));
 
+    expect(mockSetRerunConfig).toHaveBeenCalledWith(expect.any(Object), 'fallback-eval-id');
     expect(mockNavigate).toHaveBeenCalledWith('/setup?sourceEvalId=fallback-eval-id', {
       state: { sourceEvalId: 'fallback-eval-id' },
     });

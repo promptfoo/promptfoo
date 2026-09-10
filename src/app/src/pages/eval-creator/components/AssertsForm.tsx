@@ -66,6 +66,7 @@ const assertTypes: AssertionType[] = [
   'trajectory:tool-args-match',
   'trajectory:tool-used',
   'trajectory:tool-sequence',
+  'trajectory:tool-set',
   'trajectory:step-count',
 
   // Metrics
@@ -76,6 +77,7 @@ const assertTypes: AssertionType[] = [
   'perplexity',
   'perplexity-score',
   'rouge-n',
+  'tokens-used',
   'webhook',
 
   // Negations
