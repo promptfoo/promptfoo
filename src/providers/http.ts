@@ -346,8 +346,7 @@ function isBase64(str: string): boolean {
  * Returns `undefined` when the material is structurally sound -- crypto then reports anything
  * subtler (wrong curve for the algorithm, unsupported key size) with a real diagnostic.
  *
- * Uses plain string matching rather than regexes so no user-controlled input reaches a
- * backtracking matcher, and never echoes key material -- only which marker was found or
+ * Never echoes key material -- only which marker was found or
  * missing, so pointing this at the wrong file cannot leak that file's contents.
  */
 export function diagnosePrivateKeyMaterial(material: unknown): string | undefined {
@@ -364,13 +363,11 @@ export function diagnosePrivateKeyMaterial(material: unknown): string | undefine
   if (text.includes('ENCRYPTED PRIVATE KEY') || text.includes('Proc-Type: 4,ENCRYPTED')) {
     return 'it is passphrase-protected; decrypt it first or supply an unencrypted key';
   }
-  if (!text.includes('PRIVATE KEY-----')) {
+  const keyType = text.match(/-----BEGIN ([A-Z ]*PRIVATE KEY)-----/)?.[1];
+  if (!keyType) {
     return 'it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)';
   }
-  if (
-    !text.includes('-----END PRIVATE KEY-----') &&
-    !text.includes('-----END ENCRYPTED PRIVATE KEY-----')
-  ) {
+  if (!text.includes(`-----END ${keyType}-----`)) {
     return 'it is truncated (no "-----END ... PRIVATE KEY-----" line)';
   }
   return undefined;

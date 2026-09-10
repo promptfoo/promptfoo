@@ -44,6 +44,11 @@ describe('isPathWithinDir', () => {
     await expect(isPathWithinDir('../../external.txt', workspace)).resolves.toBe(false);
   });
 
+  it('allows filenames beginning with two dots inside the directory', async () => {
+    await fs.writeFile(path.join(workspace, '..notes.txt'), 'test');
+    await expect(isPathWithinDir('..notes.txt', workspace)).resolves.toBe(true);
+  });
+
   it('should block files outside directory using absolute paths', async () => {
     await expect(isPathWithinDir('/etc/hosts', workspace)).resolves.toBe(false);
     await expect(isPathWithinDir(path.join(outsideDir, 'external.txt'), workspace)).resolves.toBe(

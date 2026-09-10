@@ -42,7 +42,7 @@ export async function isPathWithinDir(filePath: string, dir: string): Promise<bo
 
     // Containment check via relative() — avoids prefix gotchas like /foo/bar vs /foo/barista
     const rel = path.relative(realDir, realTarget);
-    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+    return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
   } catch (error: any) {
     // If target doesn't exist (ENOENT), validate parent directory instead.
     // This allows writes to create new files in valid directories.

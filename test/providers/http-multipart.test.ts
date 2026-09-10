@@ -221,6 +221,7 @@ describe('HttpProvider structured multipart requests', () => {
         expect.objectContaining({
           filename: 'sample-image.png',
           contentType: 'image/png',
+          prefix: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString('utf8'),
         }),
       ],
     });
@@ -326,6 +327,55 @@ describe('HttpProvider structured multipart requests', () => {
       cliState.basePath = previousBasePath;
     }
   });
+
+  it.each([false, true])(
+    'checks a linked file target against the base directory (outside: %s)',
+    async (outside) => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-links-'));
+      tempDirs.push(tempDir);
+      const baseDir = path.join(tempDir, 'workspace');
+      const targetDir = path.join(outside ? tempDir : baseDir, 'documents');
+      fs.mkdirSync(baseDir);
+      fs.mkdirSync(targetDir);
+      fs.writeFileSync(path.join(targetDir, 'report.txt'), 'fixture contents');
+      fs.symlinkSync(targetDir, path.join(baseDir, 'linked'), 'junction');
+      const previousBasePath = cliState.basePath;
+      cliState.basePath = baseDir;
+      try {
+        const mockServer = await createMultipartDocumentSummarizerServer();
+        const provider = new HttpProvider('http', {
+          config: {
+            url: mockServer.url,
+            headers: { 'X-API-Key': 'test-api-key' },
+            multipart: {
+              parts: [
+                {
+                  kind: 'file',
+                  name: 'files',
+                  source: { type: 'path', path: 'linked/report.txt' },
+                },
+                { kind: 'field', name: 'documentQuery', value: '{{prompt}}' },
+              ],
+            },
+          },
+        });
+        if (outside) {
+          await expect(provider.callApi('test')).rejects.toThrow(
+            'File path escapes allowed base directory',
+          );
+          expect(mockServer.getLastRequest()).toBeUndefined();
+        } else {
+          await provider.callApi('test');
+          expect(mockServer.getLastRequest()?.files[0]).toMatchObject({
+            filename: 'report.txt',
+            sizeBytes: Buffer.byteLength('fixture contents'),
+          });
+        }
+      } finally {
+        cliState.basePath = previousBasePath;
+      }
+    },
+  );
 
   it('redacts secret-like multipart text fields from debug metadata', async () => {
     const mockServer = await createMultipartDocumentSummarizerServer();

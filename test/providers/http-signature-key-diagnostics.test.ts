@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { diagnosePrivateKeyMaterial, generateSignature } from '../../src/providers/http';
 
 /**
@@ -47,6 +47,10 @@ beforeAll(async () => {
   }).privateKey;
 
   dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sig-key-diag-'));
+});
+
+afterAll(async () => {
+  await fs.rm(dir, { recursive: true, force: true });
 });
 
 const baseAuth = {
@@ -172,10 +176,21 @@ describe('generateSignature key diagnostics', () => {
     );
   });
 
-  it('still signs successfully with a valid key', async () => {
-    const signature = await generateSignature({ ...baseAuth, privateKey: rsaPrivate }, 1);
-    expect(signature).toEqual(expect.any(String));
-    expect(Buffer.from(signature, 'base64').byteLength).toBeGreaterThan(0);
+  it.each([
+    ['PKCS#8', () => rsaPrivate],
+    ['PKCS#1', () => crypto.createPrivateKey(rsaPrivate).export({ type: 'pkcs1', format: 'pem' })],
+    ['SEC1', () => crypto.createPrivateKey(ecPrivate).export({ type: 'sec1', format: 'pem' })],
+  ])('signs with a valid %s key', async (_label, getKey) => {
+    const privateKey = String(getKey());
+    const signature = await generateSignature({ ...baseAuth, privateKey }, 1);
+    expect(
+      crypto.verify(
+        'SHA256',
+        Buffer.from('1'),
+        crypto.createPublicKey(privateKey),
+        Buffer.from(signature, 'base64'),
+      ),
+    ).toBe(true);
   });
 
   it('does not double-prefix the wrapped message, and keeps the original as cause', async () => {
