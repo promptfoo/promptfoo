@@ -3,7 +3,6 @@ import path from 'path';
 
 import dedent from 'dedent';
 import semverSatisfies from 'semver/functions/satisfies.js';
-import semverValid from 'semver/functions/valid.js';
 import { z } from 'zod';
 import { resolveAgenticWorkingDir } from '../agentic-utils';
 import { providerRegistry } from '../providerRegistry';
@@ -164,11 +163,7 @@ async function loadCodexSecurity(): Promise<CodexSecurityModule> {
     try {
       const module = (await importModule(entryPoint)) as CodexSecurityModule;
       const version = typeof module.VERSION === 'string' ? module.VERSION : 'unknown';
-      const validVersion = semverValid(version);
-      if (
-        !validVersion ||
-        !semverSatisfies(validVersion, `>=${MINIMUM_CODEX_SECURITY_SDK_VERSION}`)
-      ) {
+      if (!semverSatisfies(version, `>=${MINIMUM_CODEX_SECURITY_SDK_VERSION}`)) {
         incompatibleVersions.add(version);
         logger.warn(
           `[CodexSecurity] Ignoring @openai/codex-security ${version}; version ${MINIMUM_CODEX_SECURITY_SDK_VERSION} or newer is required for complete security operations and deep-scan usage accounting.`,
@@ -223,7 +218,7 @@ function resolveConfigPath(value: string | undefined, configBasePath?: string): 
 }
 
 function getTokenUsage(result?: ScanResult, observedCost?: ScanCost): TokenUsage | undefined {
-  const usage = result?.turnResult.usage;
+  const usage = result?.turnResult?.usage;
   const values = usage && typeof usage === 'object' ? (usage as Record<string, unknown>) : {};
   const cost = result?.cost ?? observedCost;
   const inputTokens =
@@ -542,13 +537,13 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     const cost = result.cost ?? observers.cost;
     const tokenUsage = getTokenUsage(result, observers.cost);
     const findings = Array.isArray(result.findings?.findings) ? result.findings.findings : [];
-    const model = result.turnResult.model ?? cost?.model ?? config.model;
-    const serializedResult = result.toJSON();
+    const model = result.turnResult?.model ?? cost?.model ?? config.model;
+    const raw = result.toJSON();
 
     return {
-      output: JSON.stringify(serializedResult),
+      output: JSON.stringify(raw),
       format: 'json',
-      raw: serializedResult,
+      raw,
       cached: false,
       sessionId: result.threadId,
       ...(cost ? { cost: cost.estimatedUsd } : {}),
@@ -593,6 +588,8 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         !Array.isArray(findingVariable))
         ? findingVariable
         : undefined;
+    // Finding precedence is config.finding, then context.vars.finding, then prompt.
+    // finding_file overrides all three when it is configured.
     let finding: string | object = config.finding ?? contextualFinding ?? prompt;
     if (config.finding_file) {
       const findingContents = await fs.readFile(

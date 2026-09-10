@@ -185,7 +185,7 @@ export class GolangProvider implements ApiProvider {
         return result;
       } catch (error) {
         logger.error(`Error running Golang script: ${(error as Error).message}`);
-        logger.error(`Full error object: ${JSON.stringify(error)}`);
+        logger.error('Full error object', { error });
         throw new Error(`Error running Golang script: ${(error as Error).message}`);
       } finally {
         // Clean up temporary directory

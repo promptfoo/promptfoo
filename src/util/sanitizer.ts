@@ -150,6 +150,15 @@ export const SECRET_FIELD_NAMES = new Set([
   'xauth', // x-auth
   'xsecret', // x-secret
   'xcsrftoken', // x-csrf-token
+  // Portkey gateway credential headers. The provider derives these from `portkey*` config
+  // keys, so the vendor prefix keeps them out of the generic 'apikey' match.
+  'portkeyapikey', // portkeyApiKey config field
+  'portkeyvirtualkey', // portkeyVirtualKey config field
+  'xportkeyapikey', // x-portkey-api-key
+  'xportkeyvirtualkey', // x-portkey-virtual-key
+  'xportkeyawsaccesskeyid', // x-portkey-aws-access-key-id
+  'xportkeyawssecretaccesskey', // x-portkey-aws-secret-access-key
+  'xportkeyawssessiontoken', // x-portkey-aws-session-token
   'xsessiondata', // x-session-data
   'csrftoken', // csrf-token
   'sessionid', // session-id
@@ -191,6 +200,85 @@ export function normalizeFieldName(fieldName: string): string {
  */
 export function isSecretField(fieldName: string): boolean {
   return SECRET_FIELD_NAMES.has(normalizeFieldName(fieldName));
+}
+
+/**
+ * Matched as a whole `_`-delimited word only. `KEY` is short enough to sit inside ordinary
+ * words — `PORTKEY_API_BASE_URL` is a documented endpoint, `MONKEY` is a word — so the
+ * credential compounds that end in it are listed explicitly below instead.
+ */
+const ENV_SECRET_WHOLE_WORDS = new Set(['KEY']);
+
+/**
+ * Matched as a whole word *or* a suffix, so fused vendor spellings are caught:
+ * `PGPASSWORD`, `GCP_PRIVATEKEY`, `DBPWD`, `DATABASEDSN`. Each is either long enough that a
+ * suffix match is unambiguous, or (like `PWD`/`DSN`) has no ordinary-word collisions.
+ *
+ * Singular on purpose: `MAX_TOKENS` ends with `TOKENS`, which does not end with `TOKEN`.
+ */
+const ENV_SECRET_SUFFIX_WORDS = [
+  'PASSWORD',
+  'PASSWD',
+  'PASSPHRASE',
+  'CREDENTIALS',
+  'CREDENTIAL',
+  'SECRET',
+  'TOKEN',
+  'PWD',
+  'DSN',
+  // Every credential name in SECRET_FIELD_NAMES that ends in `key`, so a prefixed spelling
+  // (`APP_ENCRYPTIONKEY`, `VENDOR_CERTKEY`) is still caught even though the exact-name match
+  // cannot see past the prefix. Derived rather than hand-listed so the two stay in sync; all
+  // are at least six characters, so none of them matches `PORTKEY` or `MONKEY`.
+  ...[...SECRET_FIELD_NAMES].filter((name) => name.endsWith('key') && name.length > 3),
+  // Not in SECRET_FIELD_NAMES on its own — that set carries `accesskeyid` — but the bare
+  // compound shows up in env vars.
+  'accesskey',
+].map((word) => word.toUpperCase());
+
+/**
+ * Secret only as the final `_`-delimited word. `MLFLOW_BASIC_AUTH` and `NPM_CONFIG__AUTH`
+ * hold a credential; `WATSONX_AI_AUTH_TYPE` names a method and `OAUTH_SCOPE` is not an
+ * `AUTH` word at all.
+ */
+const ENV_SECRET_TERMINAL_WORDS = new Set(['AUTH']);
+
+/**
+ * An environment-variable-shaped name. Leading underscores are legal and used in practice
+ * (`_GITHUB_TOKEN`), so they must not be a way around the check. Case is normalized before
+ * this is applied.
+ */
+const ENV_VAR_NAME_RE = /^[A-Z_][A-Z0-9_]*$/;
+
+/**
+ * Check whether an environment-variable name looks credential-bearing.
+ *
+ * `SECRET_FIELD_NAMES` matches exact names, which can never cover the project-specific
+ * names real environments use — `GITHUB_TOKEN`, `STRIPE_SECRET_KEY`, `PGPASSWORD` all
+ * slip through it. An `env` map is passed straight to a subprocess, so it is the one
+ * place a config is *expected* to hold credentials; treat a credential-worded key there
+ * as secret.
+ *
+ * Case is normalized first: nothing requires an env var to be uppercase, and a lowercase
+ * `github_token` reaches the subprocess exactly like `GITHUB_TOKEN` does.
+ */
+export function isSecretEnvVarName(name: string): boolean {
+  if (isSecretField(name)) {
+    return true;
+  }
+  const normalized = name.toUpperCase();
+  if (!ENV_VAR_NAME_RE.test(normalized)) {
+    return false;
+  }
+  const words = normalized.split('_');
+  if (ENV_SECRET_TERMINAL_WORDS.has(words[words.length - 1])) {
+    return true;
+  }
+  return words.some(
+    (word) =>
+      ENV_SECRET_WHOLE_WORDS.has(word) ||
+      ENV_SECRET_SUFFIX_WORDS.some((secret) => word.endsWith(secret)),
+  );
 }
 
 /**
@@ -928,18 +1016,21 @@ export function sanitizeUrlEncodedString(value: string): string {
 /**
  * Sanitize plain object fields
  */
-function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
+function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap = false): any {
   const sanitized: any = {};
+  const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
     if (key === 'url' && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(value);
-    } else if (isSecretField(key)) {
+    } else if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact values that look like secrets (API keys, tokens, etc.)
       sanitized[key] = REDACTED;
     } else {
-      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth);
+      // An `env` map is handed verbatim to a subprocess, so its keys are environment
+      // variable names and get the broader credential-word match one level down.
+      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth, key === 'env');
     }
   }
   return sanitized;
@@ -948,7 +1039,7 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
 /**
  * Recursively sanitize an object, redacting secret fields at any depth
  */
-function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH): any {
+function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap = false): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
@@ -980,7 +1071,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH): any {
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth);
+  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap);
 }
 
 /**

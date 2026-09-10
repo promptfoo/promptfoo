@@ -403,10 +403,25 @@ describe('ClaudeCodeSDKProvider', () => {
       warnSpy.mockRestore();
     });
 
+    it.each(['best', 'fable', 'fable[1m]', 'opus[1m]', 'opusplan[1m]'])(
+      'recognizes the documented Claude Code %s model selector',
+      (model) => {
+        const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
+
+        new ClaudeCodeSDKProvider({ config: { model } });
+        new ClaudeCodeSDKProvider({ config: { fallback_model: `sonnet,${model}` } });
+
+        expect(warnSpy).not.toHaveBeenCalled();
+        warnSpy.mockRestore();
+      },
+    );
+
     it('should not warn about known Anthropic models', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(function () {});
 
       new ClaudeCodeSDKProvider({ config: { model: 'claude-3-5-sonnet-20241022' } });
+      new ClaudeCodeSDKProvider({ config: { model: 'claude-fable-5-1' } });
+      new ClaudeCodeSDKProvider({ config: { model: 'claude-mythos-5-1' } });
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'claude-3-5-haiku-20241022' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
@@ -1635,8 +1650,8 @@ describe('ClaudeCodeSDKProvider', () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
         const { loadApiProvider } = await import('../../src/providers/index');
 
-        // Expected env precedence: suite-level env < options.env < options.config.env.
-        // The conflicting suite-level base URL below proves the provider-level pin wins.
+        // Expected env precedence for this regression: suite-level env < options.env < options.config.env.
+        // We intentionally set a conflicting suite-level base URL and assert the provider-level pin wins.
         const provider = await loadApiProvider('anthropic:claude-agent-sdk', {
           options: {
             config: {
@@ -2736,6 +2751,59 @@ describe('ClaudeCodeSDKProvider', () => {
         });
       });
 
+      it('should transform MCP config with env', async () => {
+        mockQuery.mockReturnValue(createMockResponse('Response'));
+        mockTransformMCPConfigToClaudeCode.mockResolvedValue({
+          'test-server': {
+            type: 'stdio',
+            command: 'test-command',
+            args: ['arg1'],
+            env: { CUSTOM_VAR: 'custom_value' },
+          },
+        });
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: {
+            mcp: {
+              enabled: true,
+              server: {
+                name: 'test-server',
+                command: 'test-command',
+                args: ['arg1'],
+                env: { CUSTOM_VAR: 'custom_value' },
+              },
+            },
+          },
+          env: { ANTHROPIC_API_KEY: 'test-api-key' },
+        });
+        await provider.callApi('Test prompt');
+
+        expect(mockTransformMCPConfigToClaudeCode).toHaveBeenCalledWith({
+          enabled: true,
+          server: {
+            name: 'test-server',
+            command: 'test-command',
+            args: ['arg1'],
+            env: { CUSTOM_VAR: 'custom_value' },
+          },
+        });
+
+        expect(mockQuery).toHaveBeenCalledWith({
+          prompt: 'Test prompt',
+          options: expect.objectContaining({
+            mcpServers: {
+              'test-server': {
+                type: 'stdio',
+                command: 'test-command',
+                args: ['arg1'],
+                env: { CUSTOM_VAR: 'custom_value' },
+              },
+            },
+            strictMcpConfig: true,
+          }),
+        });
+      });
+
       it('should handle strict_mcp_config false', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
 
@@ -3628,6 +3696,19 @@ describe('ClaudeCodeSDKProvider', () => {
             expect(mockQuery).not.toHaveBeenCalled();
           },
         );
+
+        it('defaults empty ask_user_question config to first_option', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+          const provider = new ClaudeCodeSDKProvider({
+            config: { ask_user_question: {} },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+
+          await expect(provider.callApi('Test prompt')).resolves.toMatchObject({
+            output: 'Response',
+          });
+          expect(mockQuery.mock.calls[0][0].options.canUseTool).toEqual(expect.any(Function));
+        });
 
         it('denies malformed AskUserQuestion tool input', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
@@ -5030,6 +5111,7 @@ describe('ClaudeCodeSDKProvider', () => {
         },
         { url: 'https://mcp.example.test/tools?signature=secret-value' },
         { command: 'mcp-server', args: ['postgres://user:password@db.example.test/app'] },
+        { command: 'mcp-server', env: { API_KEY: 'secret-token' } },
       ])('should not cache credential-bearing MCP configurations %#', async (server) => {
         mockQuery.mockReturnValue(createMockResponse('Sensitive MCP response'));
         const provider = new ClaudeCodeSDKProvider({
