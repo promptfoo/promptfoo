@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { Alert, AlertContent, AlertDescription } from '@app/components/ui/alert';
 import deepEqual from 'fast-deep-equal';
+import { AlertTriangle } from 'lucide-react';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import A2AEndpointConfiguration from './A2AEndpointConfiguration';
@@ -703,10 +705,31 @@ function ProviderConfigEditor({
         />
       )}
 
+      {/* Retired providers - no configuration can make them run again */}
+      {providerType === 'github' && (
+        <Alert variant="warning">
+          <AlertTriangle className="size-4" />
+          <AlertContent>
+            <AlertDescription>
+              GitHub retired GitHub Models, including its inference API, on July 30, 2026, so{' '}
+              <code>github:</code> targets no longer run. Pick another provider and configure its
+              own endpoint and credentials — see the{' '}
+              <a
+                href="https://www.promptfoo.dev/docs/providers/github"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                GitHub Models documentation
+              </a>
+              .
+            </AlertDescription>
+          </AlertContent>
+        </Alert>
+      )}
+
       {/* Specialized providers - use custom config for now */}
-      {['github', 'xai', 'ai21', 'aimlapi', 'hyperbolic', 'fal', 'voyage'].includes(
-        providerType || '',
-      ) && (
+      {['xai', 'ai21', 'aimlapi', 'hyperbolic', 'fal', 'voyage'].includes(providerType || '') && (
         <CustomTargetConfiguration
           selectedTarget={provider}
           updateCustomTarget={updateCustomTarget}

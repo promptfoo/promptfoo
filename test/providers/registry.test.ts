@@ -5,6 +5,7 @@ import { isFoundationModelProvider } from '../../src/providers/constants';
 import { LlamaApiProvider } from '../../src/providers/llamaApi';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
 
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
@@ -298,6 +299,16 @@ describe('Provider Registry', () => {
     });
 
     describe('OpenAI endpoint defaults', () => {
+      it.each([
+        ['chat', OpenAiChatCompletionProvider],
+        ['responses', OpenAiResponsesProvider],
+      ])('uses Terra when openai:%s omits a model', async (endpoint, Provider) => {
+        const provider = await registry.create(`openai:${endpoint}`);
+
+        expect(provider).toBeInstanceOf(Provider);
+        expect(provider).toHaveProperty('modelName', 'gpt-5.6-terra');
+      });
+
       it.each([
         'gpt-5.6',
         'gpt-5.6-sol',
@@ -1242,41 +1253,25 @@ describe('Provider Registry', () => {
     });
 
     it('should resolve relative paths correctly for file-based providers', async () => {
-      // We'll test the path resolution by looking at the provider IDs, which contain the path
-
-      // Test Golang provider
-      const golangFactory = providerMap.find((f) => f.test('golang:script.go'));
-      expect(golangFactory).toBeDefined();
-
-      // These variables would be used in actual implementation tests
-      // Adding underscore prefix to mark as intentionally unused
-      const _customContext = {
-        basePath: '/custom/path',
-      };
-
-      // For relative paths, they should be joined with basePath
-      const _relativePath = 'script.go';
-      const _expectedRelativePath = path.join('/custom/path', _relativePath);
-
-      // For absolute paths, they should remain unchanged
-      const _absolutePath = path.resolve('/absolute/path/script.go');
-
-      // Test Python provider with file:// URL
       const pythonFactory = providerMap.find((f) => f.test('file://script.py'));
       expect(pythonFactory).toBeDefined();
+      const customContext = { ...mockContext, basePath: '/custom/path' };
 
-      // Test exec provider
-      const execFactory = providerMap.find((f) => f.test('exec:script.sh'));
-      expect(execFactory).toBeDefined();
+      // Local script paths remain relative; the config loader has already resolved its base path.
+      await pythonFactory!.create('file://script.py', mockProviderOptions, customContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith('script.py', mockProviderOptions);
 
-      // Instead of testing the exact path resolution logic (which involves mocking),
-      // we'll verify that the registry factories exist and are configured correctly.
-      // The actual path resolution logic is now identical in all three providers,
-      // so testing one provider's implementation would effectively test all of them.
+      // Cloud configs resolve script paths from the process working directory.
+      const cloudOptions = { ...mockProviderOptions, config: { isCloudConfig: true } };
+      await pythonFactory!.create('file://script.py', cloudOptions, customContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(
+        path.join(process.cwd(), 'script.py'),
+        cloudOptions,
+      );
 
-      // For actual end-to-end tests of the path resolution, integration tests would be more
-      // appropriate than these unit tests, especially if we need to mock or spy on
-      // the provider constructors.
+      const absolutePath = path.resolve('/absolute/path/script.py');
+      await pythonFactory!.create(`file://${absolutePath}`, cloudOptions, customContext);
+      expect(PythonProvider).toHaveBeenLastCalledWith(absolutePath, cloudOptions);
     });
 
     it('should preserve absolute paths in file-based providers', async () => {
@@ -1635,6 +1630,14 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
       [
+        'google:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-3.5-flash-lite',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
         'palm:chat-bison',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
@@ -1656,6 +1659,14 @@ describe('Provider Registry', () => {
       ],
       [
         'vertex:chat:gemini-2.5-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.5-flash-lite',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
       [
@@ -1694,7 +1705,7 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/vertex')).VertexEmbeddingProvider,
       ],
       [
-        'vertex:video:veo-3.1-generate-preview',
+        'vertex:video:veo-3.1-generate-001',
         async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
       ],
     ] as const)(
@@ -1711,7 +1722,7 @@ describe('Provider Registry', () => {
     );
 
     it('applies vertexai config and provider id for vertex:video routes', async () => {
-      const providerPath = 'vertex:video:veo-3.1-generate-preview';
+      const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);
