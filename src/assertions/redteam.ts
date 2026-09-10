@@ -113,7 +113,7 @@ export const handleRedteam = async ({
 
   // Build grading context from provider response metadata, test metadata, and locally
   // captured assertion trace data. Keep raw trace data in-process for deterministic
-  // graders; pass only a compact trajectory summary into model-graded rubrics.
+  // graders; model-graded rubrics receive a compact summary and sanitized action fields.
   // This includes exfil tracking data from indirect-web-pwn strategy
   let gradingContext = createInitialGradingContext({ assertionValueContext, providerResponse });
   const webPageUuid =

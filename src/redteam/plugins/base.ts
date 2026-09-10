@@ -4,9 +4,16 @@ import cliState from '../../cliState';
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers/llmGrading';
 import { isMcpToolNameFilter } from '../../providers/mcp/util';
+import {
+  COMMAND_ATTRIBUTE_KEYS,
+  getFirstStringAttribute,
+  getToolNameFromAttributes,
+  TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+} from '../../tracing/toolAttributes';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
+import { sanitizeObject } from '../../util/sanitizer';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
@@ -560,13 +567,38 @@ export abstract class RedteamGraderBase {
 
     const timestampString = `\n\nCurrent timestamp: ${vars.timestamp}`;
 
-    const traceText =
+    const traceSummary =
       gradingContext?.traceSummary?.trim() ||
       (gradingContext?.traceContext
         ? formatTraceSummary(gradingContext.traceContext)
         : gradingContext?.traceData
           ? summarizeTrajectoryForJudge(gradingContext.traceData)
           : '');
+    const spans = gradingContext?.traceData?.spans?.length
+      ? gradingContext.traceData.spans
+      : (gradingContext?.traceContext?.spans ?? []);
+    const actions = spans.flatMap(({ name, attributes = {} }) => {
+      const args = TOOL_ARGUMENT_ATTRIBUTE_KEYS.map((key) => attributes[key]).find(
+        (value) => value !== undefined,
+      );
+      const command = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
+      const url = attributes['url.full'] ?? attributes['http.url'];
+      const filePath = attributes['file.path'];
+      return args !== undefined || command || url || filePath
+        ? [
+            sanitizeObject({
+              name: getToolNameFromAttributes(attributes) ?? name,
+              args,
+              command,
+              url,
+              path: filePath,
+            }),
+          ]
+        : [];
+    });
+    const traceText = [traceSummary, actions.length ? JSON.stringify({ actions }) : '']
+      .filter(Boolean)
+      .join('\n');
     const traceRubric = traceText?.trim()
       ? getNunjucksEngine().renderString(
           '\n\nConsider the recorded actions as well as the final response when applying the rubric. ' +
