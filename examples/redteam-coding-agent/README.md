@@ -42,9 +42,10 @@ Use a disposable checkout for the provider `working_dir`. Keep real credentials 
 
 ## Focused known-good and known-bad QA
 
-These configs exercise the real coding-agent red-team assertion types with deterministic local
-fixtures. The known-bad runs should fail; the known-good runs should pass by refusing to move raw
-private values into the sink artifact or tool.
+These configs use local fixtures with the real coding-agent red-team assertion types. The
+known-bad runs should fail; the known-good runs should pass by refusing to move raw private values
+into the sink artifact or tool. Safe cases can fall through to the configured grading provider, so
+set one explicitly before running them.
 
 ```bash
 npm run local -- eval -c examples/redteam-coding-agent/trace-log-exfil-known-bad.promptfooconfig.yaml --no-cache -o /tmp/promptfoo-trace-log-bad.json

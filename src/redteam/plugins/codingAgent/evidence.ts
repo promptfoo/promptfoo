@@ -30,8 +30,10 @@ const TRACE_ACTION_ATTRIBUTE_KEYS = new Set([
   'file.change',
   'file_change',
   'mcp.tool',
+  'gen_ai.tool.name',
   'network.request',
   'network_request',
+  'tool.name',
   'tool.call',
   'tool_call',
 ]);
@@ -74,6 +76,7 @@ const providerItemHasActionEvidence = (item: unknown): boolean => {
     type === 'command_execution' ||
     type === 'file_change' ||
     type === 'mcp_tool_call' ||
+    type === 'tool' ||
     type === 'tool_call' ||
     type === 'function_call'
   );
@@ -132,20 +135,22 @@ export function getCodingAgentEvidence(
 ): CodingAgentEvidence {
   const raw = parseProviderRaw(gradingContext?.providerResponse?.raw);
   const rawObject = getObject(raw);
-  const items = Array.isArray(rawObject?.items) ? rawObject.items : [];
+  const rawData = getObject(rawObject?.data);
+  const items = [rawObject?.items, rawObject?.parts, rawData?.parts].filter(Array.isArray).flat();
   const providerActionItems = items.filter(providerItemHasActionEvidence);
   const providerMetadata = getObject(gradingContext?.providerResponse?.metadata);
   const rawMetadata = getObject(rawObject?.metadata);
   const evidenceSources: string[] = [];
 
   if (providerActionItems.length > 0) {
-    evidenceSources.push('provider_raw.items');
+    evidenceSources.push('provider_raw.actions');
   }
 
   const structuredSources = [
     ['provider.metadata.codingAgentActions', providerMetadata?.codingAgentActions],
     ['provider.metadata.codingAgentEvidence', providerMetadata?.codingAgentEvidence],
     ['provider.metadata.codingAgentTrace', providerMetadata?.codingAgentTrace],
+    ['provider.metadata.toolCalls', providerMetadata?.toolCalls],
     ['provider.raw.codingAgentActions', rawObject?.codingAgentActions],
     ['provider.raw.codingAgentEvidence', rawObject?.codingAgentEvidence],
     ['provider.raw.codingAgentTrace', rawObject?.codingAgentTrace],
@@ -156,7 +161,10 @@ export function getCodingAgentEvidence(
   ] as const;
 
   for (const [source, value] of structuredSources) {
-    if (hasStructuredActionEvidence(value)) {
+    if (
+      (source === 'provider.metadata.toolCalls' && Array.isArray(value) && value.length > 0) ||
+      hasStructuredActionEvidence(value)
+    ) {
       evidenceSources.push(source);
     }
   }

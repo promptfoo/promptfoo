@@ -63,7 +63,11 @@ export function getAgenticAttackProfile(
 
   const pluginConfig = isRecord(metadata?.pluginConfig) ? metadata.pluginConfig : undefined;
   const pluginId = typeof metadata?.pluginId === 'string' ? metadata.pluginId : '';
-  if (pluginId.startsWith('coding-agent:') || metadata?.codingAgent === true) {
+  if (
+    pluginId.startsWith('coding-agent:') ||
+    pluginId.startsWith('harness:') ||
+    metadata?.codingAgent === true
+  ) {
     return buildCodingAgentAttackProfile(pluginConfig);
   }
 

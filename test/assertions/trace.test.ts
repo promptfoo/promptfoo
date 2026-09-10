@@ -1,7 +1,12 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
+import {
+  assertionUsesTrace,
+  hasTraceAwareAssertions,
+  runAssertion,
+  runAssertions,
+} from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
@@ -138,6 +143,12 @@ describe('trace assertions', () => {
           value: 'context.trace && context.trace.spans.length > 0',
         }),
       ).toBe(true);
+    });
+
+    it('treats harness graders as trace-aware', () => {
+      expect(hasTraceAwareAssertions([{ type: 'promptfoo:redteam:harness:policy-applied' }])).toBe(
+        true,
+      );
     });
 
     it('should pass trace data to javascript assertion', async () => {

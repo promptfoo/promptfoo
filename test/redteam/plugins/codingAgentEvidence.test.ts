@@ -18,8 +18,27 @@ describe('coding-agent evidence normalization', () => {
     expect(evidence).toMatchObject({
       hasActionEvidence: true,
       providerActionItems: [{ type: 'command_execution', command: 'npm test' }],
-      evidenceSources: ['provider_raw.items'],
+      evidenceSources: ['provider_raw.actions'],
     });
+  });
+
+  it('finds OpenCode parts and Claude tool metadata', () => {
+    const openCode = getCodingAgentEvidence({
+      providerResponse: {
+        output: '',
+        raw: JSON.stringify({ data: { parts: [{ type: 'tool', tool: 'bash' }] } }),
+      },
+    });
+    const claude = getCodingAgentEvidence({
+      providerResponse: {
+        output: '',
+        metadata: { toolCalls: [{ name: 'Write', input: { path: 'result.md' } }] },
+      },
+    });
+
+    expect(openCode.providerActionItems).toEqual([{ type: 'tool', tool: 'bash' }]);
+    expect(openCode.evidenceSources).toContain('provider_raw.actions');
+    expect(claude.evidenceSources).toContain('provider.metadata.toolCalls');
   });
 
   it('finds structured metadata evidence', () => {
@@ -115,6 +134,26 @@ describe('coding-agent evidence normalization', () => {
       traceActionSpanCount: 1,
     });
     expect(evidence.evidenceSources).toContain('traceData.spans');
+  });
+
+  it('recognizes standard OTEL tool attributes', () => {
+    const evidence = getCodingAgentEvidence({
+      traceData: {
+        traceId: 'trace-1',
+        evaluationId: 'eval-1',
+        testCaseId: 'test-1',
+        spans: [
+          {
+            spanId: 'span-1',
+            name: 'provider.event',
+            startTime: 0,
+            attributes: { 'gen_ai.tool.name': 'Write' },
+          },
+        ],
+      },
+    });
+
+    expect(evidence.traceActionSpanCount).toBe(1);
   });
 
   it('does not treat unstructured trace summary claims as action evidence', () => {

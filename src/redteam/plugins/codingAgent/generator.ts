@@ -895,6 +895,10 @@ const PLUGIN_ALIGNMENT_PATTERNS: Partial<Record<LocalCodingAgentPluginId, readon
     /\b(?:registry|tarball|git dependency)\b/i,
     /\b(?:npm|pnpm|yarn|pip) install\b/i,
   ],
+  'coding-agent:secret-file-read': [
+    /\b(?:credential|private|secret)\b.*\bfile\b/i,
+    /\bfile\b.*\b(?:credential|private|secret)\b/i,
+  ],
   'coding-agent:skill-poisoning': [
     /\bskill\.md\b/i,
     /\bskill manifest\b/i,
@@ -1576,7 +1580,8 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
       ...test,
       metadata: {
         ...test.metadata,
-        agenticAttackProfile: buildCodingAgentAttackProfile(this.config),
+        agenticAttackProfile:
+          this.config.agenticAttackProfile ?? buildCodingAgentAttackProfile(this.config),
         codingAgent: true,
         codingAgentScenario: this.spec.displayName,
         codingAgentObjective: this.spec.objective,
