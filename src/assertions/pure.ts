@@ -38,32 +38,12 @@ function getBaseType(type: string): string {
   return baseType;
 }
 
-function hasTemplateSyntax(value: unknown, visited = new WeakSet<object>()): boolean {
-  if (typeof value === 'string') {
-    return value.includes('{{') || value.includes('{%') || value.includes('{#');
-  }
-  if (!value || typeof value !== 'object' || visited.has(value)) {
-    return false;
-  }
-
-  visited.add(value);
-  return Reflect.ownKeys(value)
-    .filter((key) => Object.getOwnPropertyDescriptor(value, key)?.enumerable)
-    .some((key) => hasTemplateSyntax(Reflect.get(value, key), visited));
-}
-
 export async function runPureAssertion({
   assertion,
   providerResponse,
   latencyMs,
   prompt,
 }: RunPureAssertionOptions): Promise<PureGradingResult> {
-  if (hasTemplateSyntax(assertion.value)) {
-    throw new Error(
-      'Pure assertion values must be fully rendered. Use runAssertion() for templated values.',
-    );
-  }
-
   const outputString =
     typeof providerResponse.output === 'string'
       ? providerResponse.output
