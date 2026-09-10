@@ -1,13 +1,23 @@
-import { describe, expect, it } from 'vitest';
-import { z } from 'zod';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registerGetEvaluationDetailsTool } from '../../../../src/commands/mcp/tools/getEvaluationDetails';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { z } from 'zod';
 
-// Schema from getEvaluationDetails.ts
-const evalIdSchema = z
-  .string()
-  .min(1, 'Eval ID cannot be empty')
-  .regex(/^[a-zA-Z0-9_:-]+$/, 'Invalid eval ID format');
+vi.mock('../../../../src/util/database', () => ({ readResult: vi.fn() }));
 
 describe('getEvaluationDetails eval ID validation', () => {
+  let evalIdSchema: z.ZodString;
+
+  beforeEach(() => {
+    const server = { tool: vi.fn() };
+    registerGetEvaluationDetailsTool(server as unknown as McpServer);
+    evalIdSchema = server.tool.mock.calls[0][1].id;
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   describe('valid eval IDs', () => {
     it('should accept new format eval IDs with random sequence', () => {
       const validIds = [
