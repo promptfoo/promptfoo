@@ -145,6 +145,81 @@ describe('OTLPTracingExporter', () => {
     expect(attributes).not.toHaveProperty('trace.metadata.promptfoo.request_model');
   });
 
+  it.each([{ format: 'json' }, { format: 'protobuf' }] as const)(
+    'redacts structured and quoted credential forms in $format exports',
+    async ({ format }) => {
+      const exporter = new OTLPTracingExporter();
+      const input =
+        '{"jwt":"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature_value",' +
+        '"authorization_endpoint":"https://issuer.example/authorize",' +
+        '"callback":"https://host/?access_token=secret\\\"suffix",' +
+        '"url":"postgres://alice:s3cr3t@db.example/app",' +
+        '"headers":[["Authorization","Bearer opaque/value"]]}';
+      await exporter.export([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: { type: 'function', name: 'lookup', input },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: new Error(
+            'apiKey: "tiny"; access_token = \'opaque/value\'; https://blob.example/x?sig=opaque%2Fsignature',
+          ),
+        } as any,
+      ]);
+
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      const exportedSpan = payload.resourceSpans[0].scopeSpans[0].spans[0];
+      const attributes = getAttributes(exportedSpan);
+      const arguments_ = JSON.parse(attributes['tool.arguments'] as string);
+      expect(arguments_).toMatchObject({
+        jwt: '<redacted>',
+        authorization_endpoint: 'https://issuer.example/authorize',
+        callback: 'https://host/?access_token=<redacted>"suffix',
+        url: 'postgres://alice:<redacted>@db.example/app',
+        headers: [['Authorization', '<redacted>']],
+      });
+      expect(exportedSpan.status.message).not.toContain('tiny');
+      expect(exportedSpan.status.message).not.toContain('opaque/value');
+      expect(exportedSpan.status.message).not.toContain('opaque%2Fsignature');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'preserves scientific notation while redacting $format tool arguments',
+    async (format) => {
+      const exporter = new OTLPTracingExporter();
+      await exporter.export([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: {
+            type: 'function',
+            name: 'lookup',
+            input: '{"access_token":"tiny","amount":1e400,"underflow":1e-4000}',
+          },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: null,
+        } as any,
+      ]);
+
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
+      expect(attributes['tool.arguments']).toBe(
+        '{"access_token":"<redacted>","amount":1e400,"underflow":1e-4000}',
+      );
+    },
+  );
+
   it.each([
     {
       description: 'explicit custom provider metadata',

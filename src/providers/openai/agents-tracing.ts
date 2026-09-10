@@ -1,7 +1,8 @@
 import logger from '../../logger';
+import { sanitizeBody } from '../../tracing/genaiTracer';
 import { encodeExportTraceServiceRequest } from '../../tracing/protobuf';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getTracingServiceName, sanitizeBody } from '../tracing';
+import { getTracingServiceName } from '../tracing';
 import type { Span, SpanData, Trace, TracingExporter } from '@openai/agents';
 
 import type { TracingExportFormat } from '../tracing';
@@ -580,9 +581,7 @@ function sanitizeSerializedAttribute(value: string): string {
       if (isRecord(parsed) || Array.isArray(parsed)) {
         const state = { changed: false };
         const sanitized = sanitizeStructuredAttribute(parsed, state);
-        return state.changed
-          ? sanitizeCredentialText(JSON.stringify(sanitized))
-          : sanitizeCredentialText(value);
+        return state.changed ? JSON.stringify(sanitized) : sanitizeCredentialText(value);
       }
     } catch {
       // Non-JSON strings still need the existing free-text credential redaction.
@@ -593,7 +592,7 @@ function sanitizeSerializedAttribute(value: string): string {
 }
 
 function parseStructuredJson(value: string): unknown {
-  if (!/-?\d{16,}/.test(value) || typeof losslessJson.rawJSON !== 'function') {
+  if (typeof losslessJson.rawJSON !== 'function') {
     return JSON.parse(value);
   }
 
@@ -601,7 +600,7 @@ function parseStructuredJson(value: string): unknown {
     return JSON.parse(value, (_key, parsed: unknown, context?: { source?: string }) => {
       if (
         typeof parsed === 'number' &&
-        !Number.isSafeInteger(parsed) &&
+        (!Number.isSafeInteger(parsed) || (parsed === 0 && /[eE]-/.test(context?.source ?? ''))) &&
         typeof context?.source === 'string'
       ) {
         return losslessJson.rawJSON!(context.source);
@@ -619,6 +618,10 @@ function parseStructuredJson(value: string): unknown {
 function sanitizeCredentialText(value: string): string {
   return sanitizeBody(value)
     .replace(
+      /\b([a-z][a-z\d+.-]*:\/\/[^\s/:@]+:)([^\s@]+)(@)/gi,
+      (_match, prefix: string, _password: string, suffix: string) => `${prefix}<redacted>${suffix}`,
+    )
+    .replace(
       /(\bAuthorization\s*[:=]\s*)(?!\s*<redacted>(?=\s*(?:[;\r\n&#"'\\]|$)))(?:(?!;\s*(?:Authorization\s*[:=]|Cookie\s*:)|[\r\n&#]).)+/gi,
       (_match, prefix: string) => `${prefix}<redacted>`,
     )
@@ -634,20 +637,29 @@ function sanitizeCredentialText(value: string): string {
           : match,
     )
     .replace(
+      /(^|[\s;,])([A-Za-z][A-Za-z\d_.-]*)(\s*[:=]\s*)(["'])([^"']*)\4/gi,
+      (match, prefix: string, key: string, separator: string, quote: string) =>
+        isCredentialAttributeKey(key)
+          ? `${prefix}${key}${separator}${quote}<redacted>${quote}`
+          : match,
+    )
+    .replace(
       /(^|[\s;,])([A-Za-z][A-Za-z\d_.-]*)(\s*:\s*)((?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?[^\s;,"'{}\]]+)/gi,
       (match, prefix: string, key: string, separator: string) =>
         isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
     )
     .replace(
-      /(^|[?&#;\s])((?:[A-Za-z]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*)=((?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?[^&#;\s"',}\]]+)/gi,
-      (match, prefix: string, key: string) => {
+      /(^|[?&#;\s])((?:[A-Za-z]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
+      (match, prefix: string, key: string, separator: string, quote: string) => {
         let decodedKey = key;
         try {
           decodedKey = decodeURIComponent(key);
         } catch {
           // Preserve malformed query parameters while still checking their literal key.
         }
-        return isCredentialAttributeKey(decodedKey) ? `${prefix}${key}=<redacted>` : match;
+        return isCredentialAttributeKey(decodedKey)
+          ? `${prefix}${key}${separator}${quote}<redacted>${quote}`
+          : match;
       },
     );
 }
@@ -711,8 +723,15 @@ function isCredentialAttributeKey(key: string): boolean {
         'credential',
         'credentials',
         'apikey',
+        'auth',
+        'jwt',
+        'sig',
+        'signature',
       ].includes(part)
     ) {
+      if (part === 'authorization' && ['endpoint', 'url', 'uri'].includes(parts[index + 1])) {
+        return false;
+      }
       return true;
     }
     return part === 'key' && ['api', 'access', 'private'].includes(parts[index - 1]);
@@ -749,7 +768,16 @@ function sanitizeStructuredAttribute(
       }
 
       let sanitized: unknown;
-      if (isCredentialAttributeKey(key)) {
+      if (
+        Array.isArray(source) &&
+        key === '1' &&
+        source.length === 2 &&
+        typeof source[0] === 'string' &&
+        isCredentialAttributeKey(source[0])
+      ) {
+        sanitized = '<redacted>';
+        state.changed = true;
+      } else if (isCredentialAttributeKey(key)) {
         sanitized = '<redacted>';
         state.changed = true;
       } else if (losslessJson.isRawJSON?.(entry)) {
