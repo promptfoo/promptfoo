@@ -17,6 +17,7 @@ export const REDTEAM_PROVIDER_PATHS = {
   iterativeTree: 'promptfoo:redteam:iterative:tree',
   memoryPoisoning: 'agentic:memory-poisoning',
   mischievousUser: 'promptfoo:redteam:mischievous-user',
+  voiceCrescendo: 'promptfoo:redteam:voice-crescendo',
 } as const;
 
 const EXACT_REDTEAM_PROVIDER_PATHS = new Set<string>(Object.values(REDTEAM_PROVIDER_PATHS));

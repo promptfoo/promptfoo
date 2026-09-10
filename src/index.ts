@@ -15,6 +15,12 @@ import { Strategies } from './redteam/strategies/index';
 
 import type { RedteamRunOptions } from './redteam/types';
 
+export {
+  createPureAssertionRegistry,
+  pureAssertionRegistry,
+  runPureAssertion,
+} from './assertions/pure';
+export { AssertionRegistry } from './assertions/registry';
 export { PromptSuggestionsRejectedError } from './evaluator';
 export { EmailValidationError } from './globalConfig/accounts';
 export { EvalRunError } from './node/doEval';
@@ -27,6 +33,12 @@ export * from './types/index';
 export { isTransformFunction } from './types/transform';
 export { ConfigResolutionError } from './util/config/load';
 
+export type {
+  PureAssertion,
+  PureProviderResponse,
+  RunPureAssertionOptions,
+} from './assertions/pure';
+export type { AssertionCapabilityPack, AssertionHandler } from './assertions/registryTypes';
 // Extension hook context types for users writing custom extensions
 export type {
   AfterAllExtensionHookContext,

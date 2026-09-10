@@ -244,17 +244,13 @@ describe('pure assertion registry', () => {
     ).resolves.toMatchObject({ pass: true, score: 1 });
   });
 
-  it('rejects templated values that require host rendering', async () => {
-    for (const value of ['{{ expected }}', ['{{ expected }}'], { answer: '{{ expected }}' }]) {
-      await expect(
-        runPureAssertion({
-          assertion: { type: 'equals', value },
-          providerResponse: { output: 'expected' },
-        }),
-      ).rejects.toThrow(
-        'Pure assertion values must be fully rendered. Use runAssertion() for templated values.',
-      );
-    }
+  it('treats template syntax as literal content after host rendering', async () => {
+    await expect(
+      runPureAssertion({
+        assertion: { type: 'contains', value: '{{ expected }}' },
+        providerResponse: { output: 'literal {{ expected }}' },
+      }),
+    ).resolves.toMatchObject({ pass: true, score: 1 });
   });
 
   it('rejects unsupported assertion types at compile time', () => {

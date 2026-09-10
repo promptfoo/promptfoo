@@ -204,25 +204,23 @@ describe('ProviderRegistry', () => {
     expect(laterCleanup).toHaveBeenCalledOnce();
   });
 
-  it('queues reentrant shutdown requests behind the active cleanup batch', async () => {
+  it('allows cleanup callbacks to await reentrant shutdown', async () => {
     const registry = createRegistry();
     const order: string[] = [];
-    let reentrantShutdown: Promise<void> | undefined;
     const laterCleanup = vi.fn(() => {
       order.push('later');
     });
-    const firstCleanup = vi.fn(() => {
+    const firstCleanup = vi.fn(async () => {
       order.push('first:start');
       registry.register({ cleanup: laterCleanup });
-      reentrantShutdown = registry.shutdownAll();
+      await registry.shutdownAll();
       order.push('first:end');
     });
     registry.register({ cleanup: firstCleanup });
 
     await registry.shutdownAll();
-    await reentrantShutdown;
 
-    expect(order).toEqual(['first:start', 'first:end', 'later']);
+    expect(order).toEqual(['first:start', 'later', 'first:end']);
     expect(laterCleanup).toHaveBeenCalledOnce();
   });
 });

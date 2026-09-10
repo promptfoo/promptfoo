@@ -19,7 +19,8 @@ import {
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
-import { getProviderFactories } from './registry';
+import { providerRegistry } from './providerRegistry';
+import { getProviderFactory } from './registry';
 
 import type { EnvOverrides } from '../types/env';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
@@ -197,15 +198,17 @@ export async function loadApiProvider(
     });
   }
 
-  for (const factory of await getProviderFactories(renderedProviderPath)) {
-    if (factory.test(renderedProviderPath)) {
-      const ret = await factory.create(renderedProviderPath, providerOptions, context);
-      ret.transform = options.transform;
-      ret.delay = options.delay;
-      ret.inputs = options.inputs;
-      ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
-      return ret;
+  const factory = await getProviderFactory(renderedProviderPath);
+  if (factory) {
+    const ret = await factory.create(renderedProviderPath, providerOptions, context);
+    ret.transform = options.transform;
+    ret.delay = options.delay;
+    ret.inputs = options.inputs;
+    ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
+    if (ret.cleanup) {
+      providerRegistry.register(ret as ApiProvider & { cleanup: () => void | Promise<void> });
     }
+    return ret;
   }
 
   const errorMessage = dedent`

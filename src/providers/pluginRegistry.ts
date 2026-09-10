@@ -180,8 +180,10 @@ export class ProviderPluginRegistry {
     }
 
     const pluginFactories = await this.loadPlugin(matchingPlugin, providerPath);
+    let matchingFactory: ProviderFactory | undefined;
     try {
-      if (!pluginFactories.some((factory) => factory.test(providerPath))) {
+      matchingFactory = pluginFactories.find((factory) => factory.test(providerPath));
+      if (!matchingFactory) {
         throw new TypeError(
           `Provider plugin '${matchingPlugin.manifest.name}' claimed '${providerPath}' but returned no matching factory`,
         );
@@ -189,7 +191,11 @@ export class ProviderPluginRegistry {
     } catch (error) {
       throw new ProviderPluginLoadError(matchingPlugin.manifest.name, providerPath, error);
     }
-    return [...pluginFactories, ...fallbackFactories];
+    return [
+      matchingFactory,
+      ...pluginFactories.filter((factory) => factory !== matchingFactory),
+      ...fallbackFactories,
+    ];
   }
 
   private async loadPlugin(
@@ -202,9 +208,8 @@ export class ProviderPluginRegistry {
       const factories = await plugin.loadPromise;
       if (
         !Array.isArray(factories) ||
-        !Array.from({ length: factories.length }, (_, index) =>
-          isProviderFactory(factories[index]),
-        ).every(Boolean)
+        factories.length !== Object.keys(factories).length ||
+        !factories.every(isProviderFactory)
       ) {
         throw new TypeError(`Provider plugin '${plugin.manifest.name}' returned invalid factories`);
       }

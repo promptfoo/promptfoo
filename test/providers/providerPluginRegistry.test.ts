@@ -8,6 +8,7 @@ import {
 } from '../../src/provider-plugin';
 import { builtinProviderPlugins } from '../../src/providers/builtinProviderPlugins';
 import { loadApiProvider } from '../../src/providers/index';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import { isRedteamProviderPath } from '../../src/providers/registryTypes';
 
 import type { ProviderFactory, ProviderPluginManifest } from '../../src/provider-plugin';
@@ -120,6 +121,52 @@ describe('ProviderPluginRegistry', () => {
         },
       });
       expect(load).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('enrolls cleanup-capable external providers in host shutdown', async () => {
+    const cleanup = vi.fn();
+    const dispose = registerProviderPlugin(
+      createManifest(
+        'cleanup',
+        (providerPath) => providerPath === 'cleanup:model',
+        async () => [
+          {
+            test: () => true,
+            create: async () => ({
+              id: () => 'cleanup:model',
+              callApi: async () => ({ output: 'ok' }),
+              cleanup,
+            }),
+          },
+        ],
+      ),
+    );
+
+    try {
+      await loadApiProvider('cleanup:model');
+      await providerRegistry.shutdownAll();
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('evaluates a winning plugin predicate once while loading', async () => {
+    const test = vi.fn(() => true);
+    const dispose = registerProviderPlugin(
+      createManifest(
+        'stateful',
+        (providerPath) => providerPath === 'stateful:model',
+        async () => [createFactory('stateful', test)],
+      ),
+    );
+
+    try {
+      await loadApiProvider('stateful:model');
+      expect(test).toHaveBeenCalledOnce();
     } finally {
       dispose();
     }
