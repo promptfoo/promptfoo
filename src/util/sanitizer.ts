@@ -1035,7 +1035,7 @@ function sanitizePlainObject(
   const sanitized: any = {};
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
-    if (redactStringValues && key === 'url' && typeof value === 'string') {
+    if (key === 'url' && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(value);
     } else if (isSecretKey(key)) {
       sanitized[key] = REDACTED;

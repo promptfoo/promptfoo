@@ -77,6 +77,7 @@ describe('EvalResult', () => {
               assertion: {
                 type: 'contains',
                 value: opaqueInput,
+                rubricPrompt: opaqueInput,
                 config: { clientState: 'sk-abcdefghijklmnopqrstuvwxyz' },
               },
             },
@@ -97,6 +98,7 @@ describe('EvalResult', () => {
                 {
                   type: 'llm-rubric',
                   value: opaqueInput,
+                  rubricPrompt: opaqueInput,
                   config: { clientState: 'sk-abcdefghijklmnopqrstuvwxyz' },
                   provider: { id: 'fixture', config: { opaque: opaqueInput } },
                 },
@@ -125,6 +127,7 @@ describe('EvalResult', () => {
       expect(sanitized.gradingResult?.componentResults?.[0].assertion).toEqual({
         type: 'contains',
         value: opaqueInput,
+        rubricPrompt: opaqueInput,
         config: { clientState: '[REDACTED]' },
       });
       expect(sanitized.testCase.assert).toEqual([
@@ -134,6 +137,7 @@ describe('EvalResult', () => {
             {
               type: 'llm-rubric',
               value: opaqueInput,
+              rubricPrompt: opaqueInput,
               config: { clientState: '[REDACTED]' },
               provider: { id: 'fixture', config: { opaque: '[REDACTED]' } },
             },
@@ -1224,6 +1228,32 @@ describe('EvalResult', () => {
         expect(JSON.stringify(result.testCase)).not.toContain('sk-ant-api03-THROWING-GETTER');
         expect(result.testCase.options).toBeUndefined();
         expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(errorSecret);
+      });
+
+      it('captures prompt config before sanitizing it', async () => {
+        let reads = 0;
+        const prompt = { raw: 'fixture prompt', label: 'fixture prompt' } as Prompt;
+        Object.defineProperty(prompt, 'config', {
+          enumerable: true,
+          get() {
+            reads++;
+            if (reads > 1) {
+              throw new Error('config read twice');
+            }
+            return { temperature: 0 };
+          },
+        });
+
+        const result = await EvalResult.createFromEvaluateResult(
+          'test-eval-prompt-getter',
+          { ...mockEvaluateResult, prompt },
+          { persist: true },
+        );
+
+        expect(result.prompt).toMatchObject({
+          raw: 'fixture prompt',
+          config: { temperature: 0 },
+        });
       });
     });
 

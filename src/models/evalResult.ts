@@ -192,6 +192,9 @@ function sanitizeAssertionForDb(assertion: Assertion | AssertionSet): Assertion 
   return {
     ...sanitizeForDbWithSecrets(assertion),
     value: sanitizeForDbWithSecrets(assertion.value, false),
+    ...(assertion.rubricPrompt !== undefined && {
+      rubricPrompt: sanitizeForDbWithSecrets(assertion.rubricPrompt, false),
+    }),
   };
 }
 
@@ -238,9 +241,14 @@ function sanitizePromptForDb(prompt: Prompt): Prompt {
     return prompt;
   }
   try {
-    const sanitized = sanitizeForDbWithSecrets(prompt, false);
-    if (prompt.config) {
-      sanitized.config = sanitizeForDbWithSecrets(prompt.config);
+    const captured = { ...prompt };
+    const config = captured.config && { ...captured.config };
+    if (config) {
+      captured.config = config;
+    }
+    const sanitized = sanitizeForDbWithSecrets(captured, false);
+    if (config) {
+      sanitized.config = sanitizeForDbWithSecrets(config);
     }
     return sanitized;
   } catch {
@@ -730,6 +738,9 @@ export default class EvalResult {
       testIdx: result.testIdx,
       promptIdx: result.promptIdx,
     });
+    const sanitizedFields = persist
+      ? sanitizeResultFieldsForDb({ ...result, response: processedResponse })
+      : undefined;
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under
@@ -741,27 +752,26 @@ export default class EvalResult {
     const args = {
       id: crypto.randomUUID(),
       evalId,
-      testCase: sanitizeTestCaseForDb(testCase),
+      testCase: sanitizedFields?.testCase ?? sanitizeTestCaseForDb(testCase),
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
-      prompt: sanitizePromptForDb(prompt),
+      prompt: sanitizedFields?.prompt ?? sanitizePromptForDb(prompt),
       promptId: hashPrompt(prompt),
       error: error?.toString(),
       success,
       score: score == null ? 0 : score,
-      response: sanitizeForDb(processedResponse || null),
-      gradingResult: sanitizeForDb(gradingResult || null),
-      namedScores: sanitizeForDb(namedScores),
-      provider: sanitizeProvider(provider),
+      response: sanitizedFields?.response ?? sanitizeForDb(processedResponse || null),
+      gradingResult: sanitizedFields?.gradingResult ?? sanitizeForDb(gradingResult || null),
+      namedScores: sanitizedFields?.namedScores ?? sanitizeForDb(namedScores),
+      provider: sanitizedFields?.provider ?? sanitizeProvider(provider),
       latencyMs,
       cost,
-      metadata: sanitizeForDb(persistedMetadata),
+      metadata: sanitizedFields?.metadata ?? sanitizeForDb(persistedMetadata),
       failureReason,
     };
     if (persist) {
       const db = await getDb();
 
-      Object.assign(args, sanitizeResultFieldsForDb({ ...args, metadata, traceId, evaluationId }));
       const dbResult = await db.insert(evalResultsTable).values(args).returning();
       clearCountCache(evalId);
       return new EvalResult({ ...dbResult[0], persisted: true });

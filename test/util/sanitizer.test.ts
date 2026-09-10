@@ -283,6 +283,20 @@ describe('sanitizeObject', () => {
       expect(result.config.mcp.servers[0].env.GITHUB_TOKEN).toBe('[REDACTED]');
     });
 
+    it('sanitizes URL fields while preserving opaque string values', () => {
+      const result = sanitizeObject(
+        {
+          url: 'https://user:pass@example.test/path?token=secret',
+          value: 'abcdef0123456789'.repeat(8),
+        },
+        { redactStringValues: false },
+      );
+
+      expect(result.url).not.toContain('pass');
+      expect(result.url).not.toContain('secret');
+      expect(result.value).toBe('abcdef0123456789'.repeat(8));
+    });
+
     it('does not widen redaction outside env maps', () => {
       const result = sanitizeObject({
         maxTokens: 4096,
