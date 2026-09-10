@@ -337,18 +337,27 @@ describe('handleContextRecall', () => {
         prompt: 'test prompt',
         vars: { context: 'test context' },
         test: { vars: { context: 'incomplete context' }, options: {} },
-        logProbs: undefined, provider: mockProvider, providerResponse: undefined,
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: undefined,
       },
       inverse: true,
-      output: 'test output', outputString: 'test output',
-      provider: mockProvider, providerResponse: {} as ProviderResponse,
+      output: 'test output',
+      outputString: 'test output',
+      provider: mockProvider,
+      providerResponse: {} as ProviderResponse,
     });
 
     expect(result.pass).toBe(true);
     expect(result.score).toBeCloseTo(0.7);
     expect(result.reason).toBe('Assertion passed');
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
-      'test context', 'Missing fact', 0.7, {}, { context: 'incomplete context' }, undefined,
+      'test context',
+      'Missing fact',
+      0.7,
+      {},
+      { context: 'incomplete context' },
+      undefined,
     );
   });
 
@@ -369,11 +378,15 @@ describe('handleContextRecall', () => {
         prompt: 'test prompt',
         vars: { context: 'test context' },
         test: { vars: { context: 'test context' }, options: {} },
-        logProbs: undefined, provider: mockProvider, providerResponse: undefined,
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: undefined,
       },
       inverse: true,
-      output: 'test output', outputString: 'test output',
-      provider: mockProvider, providerResponse: {} as ProviderResponse,
+      output: 'test output',
+      outputString: 'test output',
+      provider: mockProvider,
+      providerResponse: {} as ProviderResponse,
     });
 
     expect(result.pass).toBe(false);
@@ -383,7 +396,9 @@ describe('handleContextRecall', () => {
 
   it('should not invert grader errors for not-context-recall', async () => {
     const mockResult = {
-      pass: false, score: 0, reason: 'grading provider failed',
+      pass: false,
+      score: 0,
+      reason: 'grading provider failed',
       metadata: { graderError: true as const },
     };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
@@ -398,13 +413,18 @@ describe('handleContextRecall', () => {
       test: { vars: { context: 'ctx' }, options: {} },
       baseType: 'context-recall',
       assertionValueContext: {
-        prompt: 'p', vars: { context: 'ctx' },
+        prompt: 'p',
+        vars: { context: 'ctx' },
         test: { vars: { context: 'ctx' }, options: {} },
-        logProbs: undefined, provider: mockProvider, providerResponse: undefined,
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: undefined,
       },
       inverse: true,
-      output: 'out', outputString: 'out',
-      provider: mockProvider, providerResponse: {} as ProviderResponse,
+      output: 'out',
+      outputString: 'out',
+      provider: mockProvider,
+      providerResponse: {} as ProviderResponse,
     });
 
     expect(result.pass).toBe(false);

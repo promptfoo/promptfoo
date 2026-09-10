@@ -309,16 +309,26 @@ describe('handleContextRelevance', () => {
 
     const result = await handleContextRelevance({
       assertion: { type: 'not-context-relevance' },
-      test: { vars: { query: 'What is the capital of France?', context: 'irrelevant context' }, options: {} },
-      output: 'test output', prompt: 'test prompt', baseType: 'context-relevance',
+      test: {
+        vars: { query: 'What is the capital of France?', context: 'irrelevant context' },
+        options: {},
+      },
+      output: 'test output',
+      prompt: 'test prompt',
+      baseType: 'context-relevance',
       assertionValueContext: {
         prompt: 'test prompt',
         vars: { query: 'What is the capital of France?', context: 'irrelevant context' },
-        test: { vars: { query: 'What is the capital of France?', context: 'irrelevant context' }, options: {} },
-        logProbs: undefined, provider: createMockProvider({ id: 'id', config: {} }),
+        test: {
+          vars: { query: 'What is the capital of France?', context: 'irrelevant context' },
+          options: {},
+        },
+        logProbs: undefined,
+        provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
       },
-      inverse: true, outputString: 'test output',
+      inverse: true,
+      outputString: 'test output',
       providerResponse: { output: 'out', tokenUsage: {} },
     } as any);
 
@@ -326,7 +336,11 @@ describe('handleContextRelevance', () => {
     expect(result.score).toBeCloseTo(0.7);
     expect(result.reason).toBe('Assertion passed');
     expect(matchesContextRelevance).toHaveBeenCalledWith(
-      'What is the capital of France?', 'irrelevant context', 0.7, {}, undefined,
+      'What is the capital of France?',
+      'irrelevant context',
+      0.7,
+      {},
+      undefined,
     );
   });
 
@@ -337,16 +351,26 @@ describe('handleContextRelevance', () => {
 
     const result = await handleContextRelevance({
       assertion: { type: 'not-context-relevance' },
-      test: { vars: { query: 'What is the capital of France?', context: 'test context' }, options: {} },
-      output: 'test output', prompt: 'test prompt', baseType: 'context-relevance',
+      test: {
+        vars: { query: 'What is the capital of France?', context: 'test context' },
+        options: {},
+      },
+      output: 'test output',
+      prompt: 'test prompt',
+      baseType: 'context-relevance',
       assertionValueContext: {
         prompt: 'test prompt',
         vars: { query: 'What is the capital of France?', context: 'test context' },
-        test: { vars: { query: 'What is the capital of France?', context: 'test context' }, options: {} },
-        logProbs: undefined, provider: createMockProvider({ id: 'id', config: {} }),
+        test: {
+          vars: { query: 'What is the capital of France?', context: 'test context' },
+          options: {},
+        },
+        logProbs: undefined,
+        provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
       },
-      inverse: true, outputString: 'test output',
+      inverse: true,
+      outputString: 'test output',
       providerResponse: { output: 'out', tokenUsage: {} },
     } as any);
 
@@ -357,7 +381,9 @@ describe('handleContextRelevance', () => {
 
   it('should not invert grader errors for not-context-relevance', async () => {
     const mockResult = {
-      pass: false, score: 0, reason: 'grading provider failed',
+      pass: false,
+      score: 0,
+      reason: 'grading provider failed',
       metadata: { graderError: true as const },
     };
     vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
@@ -366,14 +392,19 @@ describe('handleContextRelevance', () => {
     const result = await handleContextRelevance({
       assertion: { type: 'not-context-relevance' },
       test: { vars: { query: 'q', context: 'c' }, options: {} },
-      output: 'out', prompt: 'p', baseType: 'context-relevance',
+      output: 'out',
+      prompt: 'p',
+      baseType: 'context-relevance',
       assertionValueContext: {
-        prompt: 'p', vars: { query: 'q', context: 'c' },
+        prompt: 'p',
+        vars: { query: 'q', context: 'c' },
         test: { vars: { query: 'q', context: 'c' }, options: {} },
-        logProbs: undefined, provider: createMockProvider({ id: 'id', config: {} }),
+        logProbs: undefined,
+        provider: createMockProvider({ id: 'id', config: {} }),
         providerResponse: { output: 'out', tokenUsage: {} },
       },
-      inverse: true, outputString: 'out',
+      inverse: true,
+      outputString: 'out',
       providerResponse: { output: 'out', tokenUsage: {} },
     } as any);
 
