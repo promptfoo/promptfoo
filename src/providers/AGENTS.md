@@ -123,7 +123,7 @@ The eligibility bar in `site/docs/contributing.md` ("Provider eligibility") appl
 **All seven items are required** before a provider is complete:
 
 1. Implement `ApiProvider` interface
-2. Add env vars to `ProviderEnvOverridesSchema` in `src/contracts/env.ts` (re-exported via `src/types/env.ts`)
+2. Add env vars to `ProviderEnvOverridesSchema` in `packages/contracts/src/env.ts` (re-exported via `src/contracts/env.ts` and `src/types/env.ts`)
 3. Add env vars to `src/envars.ts` (if documenting in CLI help)
 4. Add tests in `test/providers/`
 5. Add docs in `site/docs/providers/<provider>.md`
@@ -137,7 +137,7 @@ After updating env schema, regenerate JSON schema: `npm run jsonSchema:generate`
 ```bash
 # Check all pieces exist
 ls src/providers/myprovider.ts
-grep -q "MYPROVIDER_API_KEY" src/contracts/env.ts && echo "env schema updated"
+grep -q "MYPROVIDER_API_KEY" packages/contracts/src/env.ts && echo "env schema updated"
 ls test/providers/myprovider.test.ts
 ls site/docs/providers/myprovider.md
 grep -q "myprovider" site/docs/providers/index.md && echo "index.md updated"

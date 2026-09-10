@@ -5,7 +5,7 @@
     "@app": "src/app/src",
     "@promptfoo": "src"
   },
-  "ignoredRoots": ["src/__mocks__"],
+  "ignoredRoots": ["src/__mocks__", "packages/contracts/tsdown.config.ts"],
   "tierOrder": [
     "contracts",
     "legacy-contracts",
@@ -140,7 +140,7 @@
     },
     {
       "name": "contracts",
-      "roots": ["src/contracts", "src/contracts.ts"],
+      "roots": ["src/contracts", "src/contracts.ts", "packages/contracts/src"],
       "allowedDependencies": [],
       "allowedExternal": ["zod"]
     },

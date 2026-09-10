@@ -8,7 +8,7 @@ model the internal boundaries that would support a future multi-package split.
 | Layer              | Current roots                                                    | Intended role                                   |
 | ------------------ | ---------------------------------------------------------------- | ----------------------------------------------- |
 | `facade`           | `src/index.ts`                                                   | Public compatibility surface                    |
-| `contracts`        | `src/contracts`, `src/contracts.ts`                              | Leaf-safe shared contracts and schemas          |
+| `contracts`        | `packages/contracts/src`, `src/contracts`, `src/contracts.ts`    | Leaf-safe shared contracts and schemas          |
 | `legacy-contracts` | `src/types`, `src/validators`                                    | Transitional mixed runtime types and validators |
 | `core`             | assertions, matchers, prompts, scheduler, test-case logic        | Evaluation domain logic                         |
 | `node`             | database, models, config, storage, `src/evaluate.ts`, `src/node` | Node runtime adapters                           |
@@ -38,9 +38,11 @@ npm run architecture:check
 
 ## First Leaf Layer
 
-`src/contracts` and its `src/contracts.ts` public entrypoint are the first intentionally
-leaf-safe surface. They currently own the dependency-free-or-`zod` subset that can plausibly become a future
-`@promptfoo/schema` package:
+`packages/contracts/src` owns the implementation, with compatibility re-exports in
+`src/contracts` and the `src/contracts.ts` public entrypoint. They are the first intentionally
+leaf-safe surface. The private `@promptfoo-internal/contracts` workspace builds
+independently with Zod as its only runtime dependency. The published `promptfoo`
+facade bundles its implementation and declarations. It owns this portable subset:
 
 - shared token/input contracts
 - browser-safe common and user API DTOs

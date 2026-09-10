@@ -1,6 +1,8 @@
 # Public Contracts
 
-Portable Zod schemas and types exported through the published `promptfoo/contracts` subpath.
+Compatibility paths for portable Zod schemas and types exported through the published
+`promptfoo/contracts` subpath. Implementations live in `packages/contracts/src`; keep
+these relative `.js` re-exports so existing source consumers keep working.
 
 ## Rules
 

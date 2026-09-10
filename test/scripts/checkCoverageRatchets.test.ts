@@ -76,32 +76,79 @@ describe('coverage ratchets', () => {
     throw new Error('Expected backend and frontend coverage ratchet reports');
   }
 
-  it('enforces coverage floors for added backend source files', () => {
-    const file = 'src/newFeature.ts';
+  it.each(['src/newFeature.ts', 'packages/contracts/src/newFeature.ts'])(
+    'enforces coverage floors for added backend source file %s',
+    (file) => {
+      const result = evaluateCoverageRatchets({
+        changedFiles: [{ path: file, status: 'A' }],
+        coverageMap: {
+          [file]: coverageFile(file, {
+            branches: { covered: 1, total: 2 },
+            functions: { covered: 1, total: 2 },
+            statements: { covered: 1, total: 2 },
+          }),
+        },
+        repoRoot,
+        report: backendReport,
+      });
+
+      expect(result.checkedFiles).toHaveLength(1);
+      expect(result.failures).toEqual([
+        {
+          file,
+          reason: 'new source file',
+          message: expect.stringContaining(`lines 50.00% < ${DEFAULT_COVERAGE_THRESHOLDS.lines}%`),
+        },
+      ]);
+      expect(result.failures[0].message).toContain(
+        `branches 50.00% < ${DEFAULT_COVERAGE_THRESHOLDS.branches}%`,
+      );
+    },
+  );
+
+  it('fails added contracts source files missing from backend coverage', () => {
+    const file = 'packages/contracts/src/newFeature.ts';
+    const result = evaluateCoverageRatchets({
+      changedFiles: [{ path: file, status: 'A' }],
+      coverageMap: {},
+      repoRoot,
+      report: backendReport,
+    });
+
+    expect(result.failures).toEqual([
+      {
+        file,
+        reason: 'new source file',
+        message: `No coverage entry found for ${file}`,
+      },
+    ]);
+  });
+
+  it('accepts fully covered contracts source files in backend coverage', () => {
+    const file = 'packages/contracts/src/newFeature.ts';
     const result = evaluateCoverageRatchets({
       changedFiles: [{ path: file, status: 'A' }],
       coverageMap: {
-        [file]: coverageFile(file, {
-          branches: { covered: 1, total: 2 },
-          functions: { covered: 1, total: 2 },
-          statements: { covered: 1, total: 2 },
-        }),
+        [path.join(repoRoot, file)]: coverageFile(path.join(repoRoot, file)),
       },
       repoRoot,
       report: backendReport,
     });
 
+    expect(result.failures).toEqual([]);
     expect(result.checkedFiles).toHaveLength(1);
-    expect(result.failures).toEqual([
-      {
-        file,
-        reason: 'new source file',
-        message: expect.stringContaining(`lines 50.00% < ${DEFAULT_COVERAGE_THRESHOLDS.lines}%`),
-      },
-    ]);
-    expect(result.failures[0].message).toContain(
-      `branches 50.00% < ${DEFAULT_COVERAGE_THRESHOLDS.branches}%`,
-    );
+    expect(result.checkedFiles[0].file).toBe(file);
+  });
+
+  it('keeps contracts source files outside the frontend report', () => {
+    const result = evaluateCoverageRatchets({
+      changedFiles: [{ path: 'packages/contracts/src/newFeature.ts', status: 'A' }],
+      coverageMap: {},
+      repoRoot,
+      report: frontendReport,
+    });
+
+    expect(result).toEqual({ checkedFiles: [], failures: [], skippedFiles: [] });
   });
 
   it('does not gate ordinary modified legacy source files', () => {
