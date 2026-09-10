@@ -155,8 +155,9 @@ npm run tsc
 
 ## Dependency Ownership Report
 
-The dependency report groups direct runtime imports by the private layer that
-currently uses them:
+The dependency report groups root runtime dependencies by the private layer that
+currently uses them. Source files beneath a separate `package.json` belong to
+that package and are excluded from the root report:
 
 ```bash
 npm run deps:ownership

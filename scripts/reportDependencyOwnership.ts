@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,6 +13,7 @@ import {
   getPackageName,
   normalizePath,
   readLayerConfig,
+  resolveInternalModule,
 } from './architectureUtils';
 
 import type { LayerConfig } from './architectureUtils';
@@ -119,7 +121,15 @@ function discoverManifests(repoRoot: string): string[] {
     )
     .map((directory) => normalizePath(path.join(directory, 'package.json')))
     .filter((manifest) => fs.existsSync(path.join(repoRoot, manifest)));
-  return [...new Set(['package.json', ...manifests])].sort();
+  return [
+    ...new Set([
+      'package.json',
+      ...manifests,
+      ...(fs.existsSync(path.join(repoRoot, 'code-scan-action/package.json'))
+        ? ['code-scan-action/package.json']
+        : []),
+    ]),
+  ].sort();
 }
 
 function manifestFor(file: string, manifests: string[]): string {
@@ -131,13 +141,29 @@ function manifestFor(file: string, manifests: string[]): string {
   );
 }
 
+function nearestManifest(repoRoot: string, file: string): string {
+  let directory = path.posix.dirname(file);
+  while (directory !== '.' && path.posix.dirname(directory) !== directory) {
+    const manifest = `${directory}/package.json`;
+    if (fs.existsSync(path.join(repoRoot, manifest))) {
+      return manifest;
+    }
+    directory = path.posix.dirname(directory);
+  }
+  return 'package.json';
+}
+
+function isTestFile(file: string): boolean {
+  return /(?:^|\/)(?:__tests__|test|tests)\/|\.(?:test|spec|stories)(?:\.d)?\.[^.]+$/.test(file);
+}
+
 function scopeFor(file: string, manifest: string, configuredRoots: string[]): Scope {
   const relative =
     manifest === 'package.json' ? file : path.posix.relative(path.posix.dirname(manifest), file);
   if (/\.d\.(?:ts|mts|cts)$/.test(relative)) {
     return 'declaration';
   }
-  if (/(?:^|\/)(?:__tests__|test|tests)\/|\.(?:test|spec|stories)\.[^.]+$/.test(relative)) {
+  if (isTestFile(relative)) {
     return 'test';
   }
   const workspaceRoot = manifest === 'package.json' ? '' : path.posix.dirname(manifest);
@@ -202,6 +228,9 @@ function discoverFiles(
       nodir: true,
       ignore: ['**/node_modules/**', '**/dist/test/**', ...configuredIgnores],
     }).map(normalizePath)) {
+      if (manifestFor(file, manifests) !== manifest || isTestFile(file)) {
+        continue;
+      }
       files.add(file);
       declarationFiles.add(file);
     }
@@ -223,14 +252,16 @@ function discoverFiles(
     }
   }
 
+  for (const file of files) {
+    if (!manifests.includes(nearestManifest(repoRoot, file))) {
+      files.delete(file);
+      declarationFiles.delete(file);
+    }
+  }
   return { files, declarationFiles };
 }
 
-function leadingTypeReferences(
-  comments: Comment[],
-  firstStatement: number,
-  packages: Map<string, PackageJson>,
-) {
+function leadingTypeReferences(comments: Comment[], firstStatement: number, file: string) {
   const references: Array<{ start: number; specifier: string; dependency: string }> = [];
   // TypeScript directives are leading line comments, not AST imports. Ignore
   // lookalikes in strings/block comments and comments after the first statement.
@@ -239,7 +270,7 @@ function leadingTypeReferences(
       continue;
     }
     const directive = comment.value.match(
-      /^\/\s*<reference\s+((?:[\w-]+\s*=\s*(?:"[^"]*"|'[^']*')\s*)+)\/>\s*$/,
+      /^\/\s*<reference\s+((?:[\w-]+\s*=\s*(?:"[^"]*"|'[^']*')\s*)+)\/>/,
     );
     const typeAttribute =
       directive &&
@@ -255,13 +286,24 @@ function leadingTypeReferences(
       continue;
     }
     const typesPackage = `@types/${name.startsWith('@') ? name.slice(1).replace('/', '__') : name}`;
-    const hasTypesDeclaration = [...packages.values()].some((pkg) =>
-      sections.some((section) => Object.hasOwn(pkg[section] ?? {}, typesPackage)),
+    const typesSpecifier = typesPackage + specifier.slice(name.length);
+    const hasInstalledTypes = (createRequire(file).resolve.paths(typesSpecifier) ?? []).some(
+      (directory) => {
+        const candidate = path.join(directory, typesSpecifier);
+        if (fs.existsSync(`${candidate}.d.ts`)) {
+          return true;
+        }
+        const manifest = path.join(candidate, 'package.json');
+        const pkg = fs.existsSync(manifest)
+          ? (JSON.parse(fs.readFileSync(manifest, 'utf8')) as { types?: string; typings?: string })
+          : {};
+        return fs.existsSync(path.join(candidate, pkg.types ?? pkg.typings ?? 'index.d.ts'));
+      },
     );
     references.push({
       start: comment.start,
       specifier,
-      dependency: name === 'node' || hasTypesDeclaration ? typesPackage : name,
+      dependency: name === 'node' || hasInstalledTypes ? typesPackage : name,
     });
   }
   return references;
@@ -303,9 +345,10 @@ export function reportDependencyOwnership(
     fileAnnotations: string[];
   }> = [];
   const annotationErrors: string[] = [];
-  for (const manifest of [
-    ...new Set([...Object.keys(ledger.manifestOwners), ...Object.keys(ledger.aliases)]),
-  ]) {
+  for (const manifest of new Set([
+    ...Object.keys(ledger.manifestOwners),
+    ...Object.keys(ledger.aliases),
+  ])) {
     if (!packages.has(manifest)) {
       annotationErrors.push(`Unknown manifest owner: ${manifest}`);
     }
@@ -325,16 +368,21 @@ export function reportDependencyOwnership(
     for (const evidence of annotation.evidence) {
       if (!fs.existsSync(path.join(repoRoot, evidence))) {
         annotationErrors.push(`Missing annotation evidence: ${evidence}`);
-      } else if (
-        pkg &&
-        annotation.disposition === 'computed-loader' &&
-        manifestFor(evidence, manifests) !== annotation.manifest
-      ) {
-        annotationErrors.push(`Cross-manifest annotation evidence: ${evidence}`);
+      }
+      const owner = nearestManifest(repoRoot, path.posix.normalize(normalizePath(evidence)));
+      if (pkg && annotation.disposition === 'computed-loader' && owner !== annotation.manifest) {
+        annotationErrors.push(
+          `Computed-loader evidence belongs to ${owner}, not ${annotation.manifest}: ${evidence}`,
+        );
       }
     }
     if (annotationErrors.length === errorCount) {
-      validAnnotations.push(annotation);
+      validAnnotations.push({
+        ...annotation,
+        evidence: annotation.evidence.map((evidence) =>
+          path.posix.normalize(normalizePath(evidence)),
+        ),
+      });
     }
   }
 
@@ -344,6 +392,8 @@ export function reportDependencyOwnership(
     refs.push(reference);
     usages.set(key, refs);
   }
+
+  const packageNames = [...packages.values()].map((pkg) => pkg.name).filter(Boolean);
 
   for (const file of [...files].sort()) {
     const manifest = manifestFor(file, manifests);
@@ -356,28 +406,31 @@ export function reportDependencyOwnership(
     }
     const scope = scopeFor(file, manifest, configuredRoots);
     const layer = getLayerForFile(file, sourceConfig);
-    const aliases = [...Object.keys(config.aliases ?? {}), ...(ledger.aliases[manifest] ?? [])];
-    const packageNames = [...packages.values()].map((pkg) => pkg.name).filter(Boolean);
-    const declaredDependencies = new Set(
-      sections.flatMap((section) => Object.keys(packages.get(manifest)?.[section] ?? {})),
-    );
+    const aliases = ledger.aliases[manifest] ?? [];
     const add = (
       node: Pick<Node, 'start'>,
       specifier: string,
       kind: Reference['kind'],
       dependency = getPackageName(specifier),
     ) => {
+      const alias = Object.entries(config.aliases ?? {})
+        .sort(([left], [right]) => right.length - left.length)
+        .find(([prefix]) => specifier === prefix || specifier.startsWith(`${prefix}/`));
+      const aliasedFile = alias
+        ? path.resolve(repoRoot, alias[1] + specifier.slice(alias[0].length))
+        : undefined;
       // Workspace names remain dependencies and need declarations, even when a broad
       // source alias shares their scope (for example @promptfoo/*).
       if (
         !dependency ||
         dependency === packages.get(manifest)?.name ||
-        (aliases.some((alias) => specifier === alias || specifier.startsWith(`${alias}/`)) &&
-          !packageNames.includes(dependency) &&
-          !declaredDependencies.has(dependency)) ||
+        ((aliases.some((alias) => specifier === alias || specifier.startsWith(`${alias}/`)) ||
+          (aliasedFile && fs.existsSync(aliasedFile) && fs.statSync(aliasedFile).isFile()) ||
+          resolveInternalModule(repoRoot, file, specifier, config.aliases)) &&
+          !packageNames.includes(dependency)) ||
         specifier === 'src' ||
         specifier.startsWith('src/') ||
-        specifier.includes(':')
+        /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(specifier)
       ) {
         return;
       }
@@ -400,7 +453,9 @@ export function reportDependencyOwnership(
           fileAnnotations: validAnnotations
             .filter(
               (annotation) =>
-                annotation.disposition === 'computed-loader' && annotation.evidence.includes(file),
+                annotation.disposition === 'computed-loader' &&
+                annotation.evidence.includes(file) &&
+                manifestFor(file, manifests) === annotation.manifest,
             )
             .map((annotation) => annotation.dependency),
         });
@@ -411,9 +466,66 @@ export function reportDependencyOwnership(
     for (const reference of leadingTypeReferences(
       result.comments,
       result.program.body[0]?.start ?? source.length,
-      packages,
+      path.resolve(repoRoot, file),
     )) {
       add(reference, reference.specifier, 'type', reference.dependency);
+    }
+    for (const comment of result.comments) {
+      if (comment.type !== 'Block' || !comment.value.startsWith('*')) {
+        continue;
+      }
+      // Keep offsets intact while removing JSDoc line prefixes.
+      const body = comment.value.replace(
+        /(^|[\r\n\u2028\u2029])([ \t]*\*[ \t]?)/g,
+        (_, newline: string, prefix: string) => newline + ' '.repeat(prefix.length),
+      );
+      for (const tag of body.matchAll(
+        /(?:^|[\r\n\u2028\u2029])[ \t]*@import\s+[\s\S]*?\s+from\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g,
+      )) {
+        const start = tag.index + tag[0].indexOf('@');
+        const parsed = parseSync('jsdoc.ts', body.slice(start + 1, tag.index + tag[0].length));
+        const declaration = parsed.program.body[0];
+        if (
+          parsed.errors.length === 0 &&
+          parsed.program.body.length === 1 &&
+          declaration?.type === 'ImportDeclaration'
+        ) {
+          add({ start: comment.start + 2 + start }, declaration.source.value, 'type');
+        }
+      }
+      for (const tag of body.matchAll(
+        /(?:^|[\r\n\u2028\u2029])[ \t]*@(?:type|param|returns?|typedef|property|prop|this|extends|implements|satisfies|throws|enum)\s*\{/g,
+      )) {
+        const start = tag.index + tag[0].length;
+        let depth = 1;
+        // Quoted braces belong to string/template types, not the enclosing type tag.
+        for (const token of body
+          .slice(start)
+          .matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|[{}]/g)) {
+          if (token[0] === '{') {
+            depth++;
+          } else if (token[0] === '}') {
+            depth--;
+          }
+          if (depth !== 0) {
+            continue;
+          }
+          const prefix = 'type Dependency = ';
+          const type = parseSync('jsdoc.ts', prefix + body.slice(start, start + token.index));
+          if (type.errors.length === 0 && type.program.body.length === 1) {
+            new Visitor({
+              TSImportType(node) {
+                add(
+                  { start: comment.start + 2 + start + node.start - prefix.length },
+                  node.source.value,
+                  'type',
+                );
+              },
+            }).visit(type.program);
+          }
+          break;
+        }
+      }
     }
     new Visitor({
       ImportDeclaration(node) {
@@ -485,7 +597,9 @@ export function reportDependencyOwnership(
   for (const annotation of validAnnotations.filter(
     (entry) => entry.disposition === 'computed-loader',
   )) {
-    for (const file of annotation.evidence.filter((evidence) => files.has(evidence))) {
+    for (const file of annotation.evidence.filter(
+      (evidence) => files.has(evidence) && manifestFor(evidence, manifests) === annotation.manifest,
+    )) {
       record(annotation.manifest, annotation.dependency, {
         file,
         line: 0,

@@ -284,10 +284,7 @@ function hasPersistedScannerSelection(metadata: ModelAudit['metadata']): boolean
  * Parse CLI options through Zod, logging validation errors to the CLI.
  * Returns null when validation fails (and sets process.exitCode to 1).
  */
-function buildCliArgs(
-  paths: string[],
-  cliOptions: Record<string, unknown>,
-): { args: string[]; unsupportedOptions: string[] } | null {
+function buildCliArgs(paths: string[], cliOptions: Record<string, unknown>): string[] | null {
   try {
     return parseModelAuditArgs(paths, cliOptions);
   } catch (error) {
@@ -925,16 +922,16 @@ export function modelScanCommand(program: Command): void {
       };
 
       if (options.listScanners) {
-        const parsed = buildCliArgs(paths || [], {
+        const args = buildCliArgs(paths || [], {
           ...options,
           format: options.format || 'text',
           output: options.output,
           timeout: undefined,
         });
-        if (!parsed) {
+        if (!args) {
           return;
         }
-        await runPassthroughModelAudit(parsed.args, delegationEnv);
+        await runPassthroughModelAudit(args, delegationEnv);
         return;
       }
 
@@ -960,16 +957,15 @@ export function modelScanCommand(program: Command): void {
 
       // Parse CLI arguments
       const outputFormat = saveToDatabase ? 'json' : options.format || 'text';
-      const parsed = buildCliArgs(paths, {
+      const args = buildCliArgs(paths, {
         ...options,
         format: outputFormat,
         output: options.output && !saveToDatabase ? options.output : undefined,
         timeout: options.timeout ? parseInt(options.timeout, 10) : undefined,
       });
-      if (!parsed) {
+      if (!args) {
         return;
       }
-      const args = parsed.args;
 
       if (saveToDatabase || outputFormat === 'text') {
         logger.info(`Running model scan on: ${paths.join(', ')}`);

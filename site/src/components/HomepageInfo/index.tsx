@@ -26,7 +26,7 @@ prompts:
 # And models...
 providers:
   - openai:gpt-5
-  - anthropic:claude-3.5-sonnet
+  - anthropic:messages:claude-sonnet-4-6
 
 # ... using these tests
 tests:
