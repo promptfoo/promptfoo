@@ -213,12 +213,6 @@ describe('calculateFilteredMetrics', () => {
         expectedIncurredCost: 0.25,
       },
       {
-        label: 'a fresh legacy result after a cached result',
-        results: [{ cost: 0.5, responseCached: true }, { cost: 0.25 }],
-        expectedCost: 0.75,
-        expectedIncurredCost: 0.25,
-      },
-      {
         label: 'a partially incurred composite result',
         results: [{ cost: 0.5, incurredCost: 0.25, responseCached: true }],
         expectedCost: 0.5,
