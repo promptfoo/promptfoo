@@ -765,6 +765,47 @@ describe('OTLPTracingExporter', () => {
     },
   );
 
+  it.each(['json', 'protobuf'] as const)(
+    'redacts password aliases and embedded encoded credentials in %s',
+    async (format) => {
+      const exporter = new OTLPTracingExporter();
+      const password = 'tiny/db-password';
+      const encodedPassword = 'opaque/db-password';
+      const note = `Response: ${JSON.stringify({ body: JSON.stringify({ accountId: '123' }) })}`;
+      await exporter.export([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: {
+            type: 'function',
+            name: 'lookup',
+            input: JSON.stringify({ pwd: password, accountId: '123', note }),
+            output: `Connection failed; PWD=${password}`,
+          },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: new Error(
+            `Request failed: ${JSON.stringify({ body: JSON.stringify({ password: encodedPassword }) })}`,
+          ),
+        } as any,
+      ]);
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      expect.soft(JSON.stringify(payload)).not.toContain(password);
+      expect.soft(JSON.stringify(payload)).not.toContain(encodedPassword);
+      const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(span.status.message).toBe('<redacted>');
+      expect(JSON.parse(getAttributes(span)['tool.arguments'] as string)).toEqual({
+        pwd: '<redacted>',
+        accountId: '123',
+        note,
+      });
+    },
+  );
+
   it.each([
     { format: 'json', includesCredential: false },
     { format: 'protobuf', includesCredential: false },

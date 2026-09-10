@@ -614,6 +614,13 @@ function parseStructuredJson(value: string): unknown {
 }
 
 function sanitizeCredentialText(value: string): string {
+  // Embedded encoded JSON cannot be traversed safely as an ordinary text value.
+  for (const [, key] of value.matchAll(/\\+"([A-Za-z][A-Za-z\d_.-]*)\\+"\s*:/g)) {
+    if (isCredentialAttributeKey(key)) {
+      return '<redacted>';
+    }
+  }
+
   const options =
     /(^|\s)(--?[A-Za-z][A-Za-z\d_.-]*)([ \t]+|=)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s;]+)/g;
   let match: RegExpExecArray | null;
@@ -731,6 +738,7 @@ function isCredentialAttributeKey(key: string): boolean {
         'cookie',
         'password',
         'passwd',
+        'pwd',
         'passphrase',
         'passphrases',
         'secret',
