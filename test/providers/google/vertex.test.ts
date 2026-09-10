@@ -744,51 +744,55 @@ describe('VertexChatProvider.callGeminiApi', () => {
     );
   });
 
-  it('should not invoke functionToolCallbacks when tools are disabled', async () => {
-    // Use a cached response so executeFunctionCallback would normally fire if not gated.
-    mockIsCacheEnabled.mockReturnValue(true);
-    mockCacheGet.mockResolvedValue(
-      JSON.stringify({
-        cached: true,
-        output: JSON.stringify({
-          functionCall: { name: 'should_not_run', args: '{}' },
+  it.each(['native', 'JSON object', 'JSON array'])(
+    'does not execute cached %s callbacks when tools are disabled',
+    async (form) => {
+      // Use a cached response so executeFunctionCallback would normally fire if not gated.
+      mockIsCacheEnabled.mockReturnValue(true);
+      const call = { functionCall: { name: 'should_not_run', args: '{}' } };
+      const output =
+        form === 'native' ? [call] : JSON.stringify(form === 'JSON array' ? [call] : call);
+      mockCacheGet.mockResolvedValue(
+        JSON.stringify({
+          cached: true,
+          output,
+          tokenUsage: { total: 5, prompt: 3, completion: 2 },
         }),
-        tokenUsage: { total: 5, prompt: 3, completion: 2 },
-      }),
-    );
+      );
 
-    const callback = vi.fn().mockResolvedValue('should not be called');
+      const callback = vi.fn().mockResolvedValue('should not be called');
 
-    const provider = new VertexChatProvider('gemini-pro', {
-      config: {
-        tool_choice: 'none',
-        tools: [
-          {
-            functionDeclarations: [
-              {
-                name: 'should_not_run',
-                description: 'Test',
-                parameters: { type: 'OBJECT', properties: {} },
-              },
-            ],
-          },
-        ],
-        functionToolCallbacks: { should_not_run: callback },
-      },
-    });
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: {
+          tool_choice: 'none',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'should_not_run',
+                  description: 'Test',
+                  parameters: { type: 'OBJECT', properties: {} },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: { should_not_run: callback },
+        },
+      });
 
-    const result = await provider.callApi('test');
+      const result = await provider.callApi('test');
 
-    expect(callback).not.toHaveBeenCalled();
-    // Output remains the original functionCall envelope when callbacks are gated.
-    expect(result.output).toBe(
-      JSON.stringify({ functionCall: { name: 'should_not_run', args: '{}' } }),
-    );
+      expect(callback).not.toHaveBeenCalled();
+      // Output remains the original functionCall envelope when callbacks are gated.
+      expect(result.output).toEqual(output);
+      expect(result.cached).toBe(true);
+      expect(fetchWithProxy).not.toHaveBeenCalled();
 
-    // Reset cache state so other tests aren't affected.
-    mockIsCacheEnabled.mockReturnValue(false);
-    mockCacheGet.mockReset();
-  });
+      // Reset cache state so other tests aren't affected.
+      mockIsCacheEnabled.mockReturnValue(false);
+      mockCacheGet.mockReset();
+    },
+  );
 
   it('should strip snake_case functions from a single passthrough tool when disabled', async () => {
     provider = new VertexChatProvider('gemini-pro', {
@@ -1039,18 +1043,53 @@ describe('VertexChatProvider.callGeminiApi', () => {
     ]);
   });
 
-  it('preserves legacy cached JSON text without executing a callback', async () => {
-    const callback = vi.fn().mockResolvedValue('should not run');
-    const output = JSON.stringify({ functionCall: { name: 'get_weather', args: {} } });
+  it.each(['JSON object', 'JSON array'])(
+    'executes configured cached %s callbacks',
+    async (form) => {
+      const callback = vi.fn().mockResolvedValue('cached callback result');
+      const call = { functionCall: { name: 'get_weather', args: { location: 'Boston' } } };
+      const output = JSON.stringify(form === 'JSON array' ? [call] : call);
+      mockCacheGet.mockResolvedValue(JSON.stringify({ output }));
+      const provider = new VertexChatProvider('gemini', {
+        config: { functionToolCallbacks: { get_weather: callback } },
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.output).toBe('cached callback result');
+      expect(response.cached).toBe(true);
+      expect(callback).toHaveBeenCalledExactlyOnceWith('{"location":"Boston"}');
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['unknown name', JSON.stringify({ functionCall: { name: 'unknown', args: {} } }), true],
+    ['non-string name', JSON.stringify({ functionCall: { name: 7, args: {} } }), true],
+    ['malformed JSON', '{"functionCall":', true],
+    [
+      'malformed arguments',
+      JSON.stringify({ functionCall: { name: 'get_weather', args: '{' } }),
+      true,
+    ],
+    [
+      'unconfigured name',
+      JSON.stringify({ functionCall: { name: 'get_weather', args: {} } }),
+      false,
+    ],
+  ])('preserves cached %s without executing a callback', async (_name, output, configured) => {
+    const callback = vi.fn();
     mockCacheGet.mockResolvedValue(JSON.stringify({ output }));
     const provider = new VertexChatProvider('gemini', {
-      config: { functionToolCallbacks: { get_weather: callback } },
+      config: { functionToolCallbacks: configured ? { get_weather: callback } : {} },
     });
 
     const response = await provider.callApi('test prompt');
 
     expect(response.output).toBe(output);
+    expect(response.cached).toBe(true);
     expect(callback).not.toHaveBeenCalled();
+    expect(fetchWithProxy).not.toHaveBeenCalled();
   });
 
   it('should handle function tool callbacks correctly', async () => {

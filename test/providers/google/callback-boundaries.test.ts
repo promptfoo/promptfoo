@@ -3,10 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { withCacheEnabled } from '../../../src/cache';
+import { withCacheEnabled, withCacheNamespace } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { loadApiProvider } from '../../../src/providers';
 import { GoogleProvider } from '../../../src/providers/google/provider';
+import telemetry from '../../../src/telemetry';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { GoogleProviderConfig } from '../../../src/providers/google/types';
@@ -78,6 +79,7 @@ export function getWeather(args) {
         "export default () => 'default must not replace a missing named export';\n",
       );
     }
+    vi.spyOn(telemetry, 'record').mockImplementation(() => {});
     fetchMock.mockReset();
     // Only the HTTP response is replaced. Provider routing, serialization, path
     // guards, importModule, and the callback module all execute normally.
@@ -96,12 +98,18 @@ export function getWeather(args) {
     await rm(root, { recursive: true, force: true });
   });
 
-  function call(provider: ApiProvider, config?: Partial<GoogleProviderConfig>) {
-    return withCacheEnabled(false, () =>
-      provider.callApi('Weather in Boston', {
-        vars: {},
-        prompt: { raw: 'Weather in Boston', label: 'weather', config },
-      }),
+  function call(
+    provider: ApiProvider,
+    config?: Partial<GoogleProviderConfig>,
+    cacheEnabled = false,
+  ) {
+    return withCacheNamespace(cacheEnabled ? root : undefined, () =>
+      withCacheEnabled(cacheEnabled, () =>
+        provider.callApi('Weather in Boston', {
+          vars: {},
+          prompt: { raw: 'Weather in Boston', label: 'weather', config },
+        }),
+      ),
     );
   }
 
@@ -175,6 +183,52 @@ export function getWeather(args) {
           (await call(provider, { basePath: promptDir, functionToolCallbacks: callbacks })).output,
         ).toBe('prompt:Boston:2');
         expect((await call(provider)).output).toBe('provider:Boston:2');
+      },
+    );
+
+    it.each(['native', 'JSON object', 'JSON array'])(
+      'replays cached %s with the current callback mapping and owning directory',
+      async (form) => {
+        // This explicit cache-replay control uses an isolated in-memory namespace.
+        useResponseForm(form);
+        const provider = await load({ basePath: providerDir });
+        const first = await call(provider, undefined, true);
+        expect(first.output).toBe('provider:Boston:1');
+        expect(first.cached).not.toBe(true);
+
+        const fromPrompt = await call(
+          provider,
+          { basePath: promptDir, functionToolCallbacks: callbacks },
+          true,
+        );
+        expect(fromPrompt.output).toBe('prompt:Boston:1');
+        expect(fromPrompt.cached).toBe(true);
+
+        const unconfigured = await call(provider, { functionToolCallbacks: {} }, true);
+        const original =
+          form === 'native'
+            ? [functionCall]
+            : JSON.stringify(form === 'JSON array' ? [functionCall] : functionCall);
+        expect(unconfigured.output).toEqual(original);
+        expect(unconfigured.cached).toBe(true);
+
+        const replacement = vi.fn(
+          async (args: string) => `replacement:${JSON.parse(args).location}`,
+        );
+        const replaced = await call(
+          provider,
+          { functionToolCallbacks: { get_weather: replacement } },
+          true,
+        );
+        expect(replaced.output).toBe('replacement:Boston');
+        expect(replaced.cached).toBe(true);
+        expect(replacement).toHaveBeenCalledExactlyOnceWith('{"location":"Boston"}');
+
+        const fromProvider = await call(provider, undefined, true);
+        expect(fromProvider.output).toBe('provider:Boston:2');
+        expect(fromProvider.cached).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        expectRequest(route);
       },
     );
 

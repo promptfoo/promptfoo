@@ -67,7 +67,11 @@ describe('Cerebras provider', () => {
             cost: 9 / 1e6,
             inputCost: 1 / 1e6,
             outputCost: 2 / 1e6,
+            apiKey: 'catalog-fixture-key',
+            apiBaseUrl: 'https://cerebras.example.invalid/v1',
+            headers: { 'x-catalog-fixture': 'local-options' },
             temperature: 0.8,
+            passthrough: { top_p: 0.6 },
           },
         },
       });
@@ -85,11 +89,12 @@ describe('Cerebras provider', () => {
       expect(body).not.toHaveProperty('inputCost');
       expect(body).not.toHaveProperty('outputCost');
       expect(body.temperature).toBe(0.8);
-      expect(config.passthrough).toMatchObject({
+      expect(config).toMatchObject({
         cost: 9 / 1e6,
         inputCost: 1 / 1e6,
         outputCost: 2 / 1e6,
       });
+      expect(config.passthrough).toEqual({ temperature: 0.8, top_p: 0.6 });
       expect(
         cerebras.calculateResponseCost(
           { usage: { prompt_tokens: 1_000_000, completion_tokens: 1_000_000 } },
@@ -97,6 +102,34 @@ describe('Cerebras provider', () => {
           false,
         ),
       ).toBeCloseTo(3, 10);
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'fixture response' } }],
+          usage: { prompt_tokens: 1_000_000, completion_tokens: 1_000_000 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const result = await provider.callApi('test prompt');
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://cerebras.example.invalid/v1/chat/completions');
+      expect(request?.headers).toMatchObject({
+        Authorization: 'Bearer catalog-fixture-key',
+        'x-catalog-fixture': 'local-options',
+      });
+      const requestBody = JSON.parse(request?.body as string);
+      expect(requestBody).toMatchObject({
+        model: 'gpt-oss-120b',
+        temperature: 0.8,
+        top_p: 0.6,
+      });
+      for (const field of ['apiKey', 'apiBaseUrl', 'headers', 'cost', 'inputCost', 'outputCost']) {
+        expect(requestBody).not.toHaveProperty(field);
+      }
+      expect(result.output).toBe('fixture response');
+      expect(result.cost).toBeCloseTo(3, 10);
     });
 
     it('should handle max_tokens correctly', async () => {
