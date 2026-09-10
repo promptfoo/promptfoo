@@ -1,16 +1,17 @@
 import { createHmac } from 'crypto';
-import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import cliState from '../../cliState';
-import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
   extractRateLimitErrorCode,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
 } from '../../util/fetch/errors';
-import { parseFileUrl } from '../../util/functions/loadFunction';
+import {
+  CallbackPathTraversalError,
+  loadCallbackFromFileUrl,
+  wrapError,
+} from '../../util/functions/loadFunction';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
@@ -39,7 +40,6 @@ import type { Agent, AIProjectClient as AzureAIProjectClient } from '@azure/ai-p
 import type { Span } from '@opentelemetry/api';
 import type {
   Response as OpenAIResponse,
-  ResponseCreateParamsNonStreaming,
   ResponseFunctionToolCall,
   ResponseFunctionToolCallOutputItem,
 } from 'openai/resources/responses/responses';
@@ -53,6 +53,9 @@ import type { CallbackContext, ReasoningEffort } from '../openai/types';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
 type FoundryAgent = Agent;
+type FoundryResponseCreateParams = Parameters<
+  ReturnType<AzureAIProjectClient['getOpenAIClient']>['responses']['create']
+>[0] & { stream?: false };
 type CachedFoundryAgentResponse = ProviderResponse & {
   __promptfooFoundryAgent?: Pick<FoundryAgent, 'id' | 'name'>;
 };
@@ -239,37 +242,13 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   }
 
   private async loadExternalFunction(fileRef: string): Promise<Function> {
-    const { filePath, functionName } = parseFileUrl(fileRef);
-
     try {
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
-      const requiredModule = await importModule(resolvedPath, functionName);
-
-      if (typeof requiredModule === 'function') {
-        return requiredModule;
+      return await loadCallbackFromFileUrl(fileRef);
+    } catch (error) {
+      if (error instanceof CallbackPathTraversalError) {
+        throw error;
       }
-
-      if (
-        requiredModule &&
-        typeof requiredModule === 'object' &&
-        functionName &&
-        functionName in requiredModule
-      ) {
-        const fn = requiredModule[functionName];
-        if (typeof fn === 'function') {
-          return fn;
-        }
-      }
-
-      throw new Error(
-        `Function callback malformed: ${filePath} must export ${
-          functionName
-            ? `a named function '${functionName}'`
-            : 'a function or have a default export as a function'
-        }`,
-      );
-    } catch (error: any) {
-      throw new Error(`Error loading function from ${filePath}: ${error.message || String(error)}`);
+      throw wrapError(`Error loading function from ${fileRef}: ${(error as Error).message}`, error);
     }
   }
 
@@ -672,7 +651,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       let response;
       try {
         response = await openAIClient.responses.create(
-          body as ResponseCreateParamsNonStreaming,
+          body as FoundryResponseCreateParams,
           responseOptions,
         );
         emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));
@@ -704,7 +683,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
             {
               input: outputs as ResponseFunctionToolCallOutputItem[],
               previous_response_id: response.id,
-            } as ResponseCreateParamsNonStreaming,
+            } as FoundryResponseCreateParams,
             responseOptions,
           );
           emitTurnSpan(turnStartedAt, Date.now(), responseFailureMessage(response));

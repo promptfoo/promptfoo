@@ -13,7 +13,7 @@ cd openai-responses
 
 ### Basic Responses API (`promptfooconfig.yaml`)
 
-Basic example showing how to use the Responses API with GPT-5.5, the GPT-5.4 family (`gpt-5.4-mini`, `gpt-5.4-nano`), and a GPT-4.1 comparison model.
+Basic example showing how to use the Responses API with GPT-5.6 Sol, Terra, and Luna, plus a GPT-4.1 comparison model.
 
 ### External Response Format (`promptfooconfig.external-format.yaml`)
 
@@ -48,7 +48,7 @@ Key differences from regular function calling:
 
 ### Reasoning Models (`promptfooconfig.reasoning.yaml`)
 
-Example showing how to use reasoning models (o1, o3, etc.) with specific configurations.
+Compare GPT-5.6 Sol, Terra, and Luna with GPT-6 Astra using explicit reasoning budgets.
 
 ### GPT-5.1 (`promptfooconfig.gpt-5.1.yaml`)
 
@@ -75,6 +75,10 @@ Example comparing GPT-5.5 standard and pro models with different Responses API r
 
 Example comparing the Sol, Terra, and Luna tiers. The `gpt-5.6` alias routes to Sol. All tiers support `max` reasoning; Codex `ultra` is available for Sol and Terra rather than as a Responses API reasoning value.
 
+### GPT-6 Astra (`promptfooconfig.gpt-6-astra.yaml`)
+
+Example using Astra with Responses, `high` reasoning, and structured output. Requires an OpenAI account with Astra access. Astra supports `low`, `medium`, `high`, `xhigh`, and `max` reasoning; tool calling requires Responses. See the [provider documentation](https://www.promptfoo.dev/docs/providers/openai/#gpt-6-astra) for pricing and hosting availability.
+
 ### Image Processing (`promptfooconfig.image.yaml`)
 
 Example demonstrating image input capabilities with vision models.
@@ -85,7 +89,7 @@ Example showing web search capabilities.
 
 ### Prompt Caching (`promptfooconfig.prompt-cache.yaml`)
 
-Example combining `prompt_cache_key`, `prompt_cache_retention`, and included
+Example combining `prompt_cache_key`, `prompt_cache_options`, and included
 `web_search_call.results` payloads in a Responses request.
 
 ### Codex Models (`promptfooconfig.codex.yaml`)
@@ -137,6 +141,9 @@ npx promptfoo eval -c promptfooconfig.gpt-5.5.yaml
 
 # GPT-5.6 example
 npx promptfoo eval -c promptfooconfig.gpt-5.6.yaml
+
+# GPT-6 Astra example
+npx promptfoo eval -c promptfooconfig.gpt-6-astra.yaml --no-cache
 
 # Prompt caching example
 npx promptfoo eval -c promptfooconfig.prompt-cache.yaml

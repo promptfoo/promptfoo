@@ -21,10 +21,6 @@
   --dc-line: rgba(0, 255, 65, 0.22);
   --dc-line-soft: rgba(0, 255, 65, 0.1);
   --dc-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  /* Top clearance for the fixed ambient layer. Docusaurus only resolves the
-     announcement bar to a real height at >=997px; the narrow-viewport value is
-     set in the responsive block. */
-  --dc-bar-offset: var(--docusaurus-announcement-bar-height, 30px);
 
   position: relative;
   z-index: 0; /* bounds the fixed ambient layer below the navbar */
@@ -44,20 +40,12 @@
 }
 
 /* ============================================================
-   Ambient layer (fixed, behind content, never over the navbar or
-   the announcement bar)
+   Ambient layer (fixed, behind content and the navbar)
    ============================================================ */
 
-/* `.defconPage` is a z-index:0 stacking context, so this fixed layer would
-   paint above the announcement bar, which Docusaurus deliberately ships
-   unpositioned. Start it below the bar; the uncovered strip that leaves at the
-   top of the viewport sits behind the sticky navbar. */
 .phosphorGlow {
   position: fixed;
-  top: var(--dc-bar-offset);
-  right: 0;
-  bottom: 0;
-  left: 0;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
   background:
@@ -347,43 +335,6 @@
   font-size: 1rem;
   line-height: 1.7;
   color: var(--dc-text);
-}
-
-.boothHours {
-  margin: 0 0 1rem;
-  padding: 0;
-  font-size: 0.9rem;
-  list-style: none;
-}
-
-.boothHours li {
-  display: flex;
-  gap: 0.6rem;
-  padding: 0.4rem 0;
-  border-bottom: 1px solid var(--dc-line-soft);
-}
-
-.boothHours li:last-child {
-  border-bottom: 0;
-}
-
-.boothHoursDay {
-  flex: 0 0 5.5rem;
-  font-family: var(--dc-mono);
-  font-size: 0.75rem;
-  color: var(--dc-green);
-}
-
-.boothHoursTime {
-  color: var(--dc-text);
-}
-
-.hoursNote {
-  flex: 1;
-  margin: 0 0 1.5rem;
-  font-size: 0.85rem;
-  line-height: 1.65;
-  color: var(--dc-muted);
 }
 
 .cardTag {
@@ -795,12 +746,6 @@
    ============================================================ */
 
 @media (max-width: 996px) {
-  /* Below 997px the announcement bar height is `auto` and its text wraps, so
-     clear it with a fixed value that still tucks under the sticky navbar. */
-  .defconPage {
-    --dc-bar-offset: 3.5rem;
-  }
-
   .hero {
     padding: 4.5rem 0 3.5rem;
   }

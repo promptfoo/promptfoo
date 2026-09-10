@@ -188,6 +188,9 @@
         "ANTHROPIC_BASE_URL": {
           "type": "string"
         },
+        "ANTHROPIC_CUSTOM_HEADERS": {
+          "type": "string"
+        },
         "ATLASCLOUD_API_KEY": {
           "type": "string"
         },
@@ -507,6 +510,12 @@
           "type": "string"
         },
         "SHAREPOINT_TENANT_ID": {
+          "type": "string"
+        },
+        "SLACK_BOT_TOKEN": {
+          "type": "string"
+        },
+        "TOGETHER_API_KEY": {
           "type": "string"
         },
         "VERCEL_AI_GATEWAY_API_KEY": {
@@ -1238,17 +1247,7 @@
               {
                 "type": "array",
                 "items": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "boolean"
-                    }
-                  ]
+                  "type": ["string", "number", "boolean"]
                 }
               },
               {
@@ -1473,17 +1472,7 @@
             "type": "string"
           },
           "additionalProperties": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "number"
-              },
-              {
-                "type": "boolean"
-              }
-            ]
+            "type": ["string", "number", "boolean"]
           }
         }
       ]
@@ -1660,6 +1649,9 @@
                       "type": "string"
                     },
                     "ANTHROPIC_BASE_URL": {
+                      "type": "string"
+                    },
+                    "ANTHROPIC_CUSTOM_HEADERS": {
                       "type": "string"
                     },
                     "ATLASCLOUD_API_KEY": {
@@ -1981,6 +1973,12 @@
                       "type": "string"
                     },
                     "SHAREPOINT_TENANT_ID": {
+                      "type": "string"
+                    },
+                    "SLACK_BOT_TOKEN": {
+                      "type": "string"
+                    },
+                    "TOGETHER_API_KEY": {
                       "type": "string"
                     },
                     "VERCEL_AI_GATEWAY_API_KEY": {
@@ -3273,6 +3271,52 @@
                 }
               },
               "required": ["id", "endpoint", "projectId", "auth"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "const": "langfuse"
+                },
+                "endpoint": {
+                  "$ref": "#/definitions/__schema41"
+                },
+                "auth": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "password": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "token": {
+                      "not": {}
+                    }
+                  },
+                  "required": ["username", "password"],
+                  "additionalProperties": false
+                },
+                "headers": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "timeout": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 300000
+                }
+              },
+              "required": ["id", "endpoint", "auth"],
               "additionalProperties": false
             }
           ]

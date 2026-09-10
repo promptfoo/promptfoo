@@ -373,7 +373,7 @@ export class OTLPTracingExporter implements TracingExporter {
     return Object.entries(attributes)
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => ({
-        key,
+        key: sanitizeCredentialText(key),
         value: this.valueToOTLP(
           sanitizeAttributeByKey(key, value),
           TRACE_LINKAGE_ATTRIBUTE_KEYS.has(key),
@@ -618,8 +618,8 @@ function parseStructuredJson(value: string): unknown {
 function sanitizeCredentialText(value: string): string {
   return sanitizeBody(value)
     .replace(
-      /\b([a-z][a-z\d+.-]*:\/\/[^\s/:@]+:)([^\s@]+)(@)/gi,
-      (_match, prefix: string, _password: string, suffix: string) => `${prefix}<redacted>${suffix}`,
+      /\b([a-z][a-z\d+.-]*:\/\/)[^\s/?#@]+@/gi,
+      (_match, prefix: string) => `${prefix}<redacted>@`,
     )
     .replace(
       /(\bAuthorization\s*[:=]\s*)(?!\s*<redacted>(?=\s*(?:[;\r\n&#"'\\]|$)))(?:(?!;\s*(?:Authorization\s*[:=]|Cookie\s*:)|[\r\n&#]).)+/gi,
@@ -729,6 +729,13 @@ function isCredentialAttributeKey(key: string): boolean {
         'signature',
       ].includes(part)
     ) {
+      if (
+        part === 'signature' &&
+        (parts[index - 1] === 'function' ||
+          ['algorithm', 'method', 'type', 'version'].includes(parts[index + 1]))
+      ) {
+        return false;
+      }
       if (part === 'authorization' && ['endpoint', 'url', 'uri'].includes(parts[index + 1])) {
         return false;
       }
@@ -748,33 +755,21 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
   return value;
 }
 
-function isCredentialTupleValue(source: Record<string, unknown> | unknown[], key: string) {
-  return (
-    Array.isArray(source) &&
-    key === '1' &&
-    source.length === 2 &&
-    typeof source[0] === 'string' &&
-    isCredentialAttributeKey(source[0])
-  );
-}
-
-function sanitizeStructuredChild(
-  entry: Record<string, unknown> | unknown[],
-  depth: number,
-  stack: Array<{
-    source: Record<string, unknown> | unknown[];
-    target: Record<string, unknown> | unknown[];
-    depth: number;
-  }>,
-  state: { changed: boolean },
-) {
-  if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {
-    state.changed = true;
-    return '<redacted>';
+function isCredentialPairValue(source: Record<string, unknown> | unknown[], key: string) {
+  if (Array.isArray(source)) {
+    return (
+      key === '1' &&
+      source.length === 2 &&
+      typeof source[0] === 'string' &&
+      isCredentialAttributeKey(source[0])
+    );
   }
-  const child: Record<string, unknown> | unknown[] = Array.isArray(entry) ? [] : {};
-  stack.push({ source: entry, target: child, depth: depth + 1 });
-  return child;
+  return (
+    key === 'value' &&
+    [source.name, source.key].some(
+      (name) => typeof name === 'string' && isCredentialAttributeKey(name),
+    )
+  );
 }
 
 function sanitizeStructuredAttribute(
@@ -797,22 +792,28 @@ function sanitizeStructuredAttribute(
       }
 
       let sanitized: unknown;
-      if (isCredentialTupleValue(source, key)) {
-        sanitized = '<redacted>';
-        state.changed = true;
-      } else if (isCredentialAttributeKey(key)) {
+      if (isCredentialPairValue(source, key) || isCredentialAttributeKey(key)) {
         sanitized = '<redacted>';
         state.changed = true;
       } else if (losslessJson.isRawJSON?.(entry)) {
         sanitized = entry;
-      } else if (isStructuredContainer(entry)) {
-        sanitized = sanitizeStructuredChild(entry, depth, stack, state);
+      } else if (isRecord(entry) || Array.isArray(entry)) {
+        if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {
+          sanitized = '<redacted>';
+          state.changed = true;
+        } else {
+          const child: StructuredValue = Array.isArray(entry) ? [] : {};
+          stack.push({ source: entry, target: child, depth: depth + 1 });
+          sanitized = child;
+        }
       } else {
         sanitized = typeof entry === 'string' ? sanitizeCredentialText(entry) : entry;
         state.changed ||= sanitized !== entry;
       }
 
-      Object.defineProperty(target, key, {
+      const sanitizedKey = sanitizeCredentialText(key);
+      state.changed ||= sanitizedKey !== key;
+      Object.defineProperty(target, sanitizedKey, {
         configurable: true,
         enumerable: true,
         value: sanitized,
@@ -822,10 +823,6 @@ function sanitizeStructuredAttribute(
   }
 
   return root;
-}
-
-function isStructuredContainer(value: unknown): value is Record<string, unknown> | unknown[] {
-  return isRecord(value) || Array.isArray(value);
 }
 
 function* structuredAttributeEntries(

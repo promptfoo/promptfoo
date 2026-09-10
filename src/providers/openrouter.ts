@@ -3,7 +3,7 @@ import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
+import { appendOpenAiApiPath, formatOpenAiError, getTokenUsage } from './openai/util';
 import { getRequestTimeoutMs } from './shared';
 import type OpenAI from 'openai';
 
@@ -14,6 +14,18 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
+import type { OpenAiChatCompletionCostData } from './openai/chat';
+import type { OpenAiCompletionOptions } from './openai/types';
+
+type OpenRouterUsage = NonNullable<OpenAiChatCompletionCostData['usage']> & {
+  cost?: unknown;
+  is_byok?: unknown;
+  cost_details?: unknown;
+};
+
+function isNonNegativeFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
 
 /**
  * OpenRouter provider extends OpenAI chat completion provider with special handling
@@ -63,6 +75,81 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         ...(this.config.apiKey && { apiKey: undefined }),
       },
     };
+  }
+
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData,
+    config: OpenAiCompletionOptions,
+  ): number | undefined {
+    // Preserve logical cost on cache replay; the evaluator tracks incurred spending separately.
+    if (
+      config.cost !== undefined ||
+      config.inputCost !== undefined ||
+      config.outputCost !== undefined
+    ) {
+      // Explicit user rates override provider billing. Require both rates and
+      // counts; a missing rate must not come from a native OpenAI price table.
+      const inputCost = config.inputCost ?? config.cost;
+      const outputCost = config.outputCost ?? config.cost;
+      const promptTokens = data.usage?.prompt_tokens;
+      const completionTokens = data.usage?.completion_tokens;
+      if (
+        !isNonNegativeFiniteNumber(inputCost) ||
+        !isNonNegativeFiniteNumber(outputCost) ||
+        !isNonNegativeFiniteNumber(promptTokens) ||
+        !isNonNegativeFiniteNumber(completionTokens)
+      ) {
+        return undefined;
+      }
+      const cost = promptTokens * inputCost + completionTokens * outputCost;
+      return Number.isFinite(cost) ? cost : undefined;
+    }
+
+    const usage = data.usage as OpenRouterUsage | undefined;
+    // BYOK inference is billed separately by the upstream provider. A waived
+    // charge or gateway fee cannot represent its total cost.
+    if (usage?.is_byok === true) {
+      return undefined;
+    }
+
+    // Without an explicit BYOK flag, retain the reported OpenRouter account
+    // charge. Upstream components and native vendor rates cannot substitute.
+    // https://openrouter.ai/docs/cookbook/administration/usage-accounting
+    const cost = usage?.cost;
+    return isNonNegativeFiniteNumber(cost) ? cost : undefined;
+  }
+
+  private getBillingMetadata(data: OpenAiChatCompletionCostData): ProviderResponse['metadata'] {
+    const usage = data.usage as OpenRouterUsage | undefined;
+    if (!usage || typeof usage !== 'object' || Array.isArray(usage)) {
+      return undefined;
+    }
+    const details =
+      usage.cost_details &&
+      typeof usage.cost_details === 'object' &&
+      !Array.isArray(usage.cost_details)
+        ? (usage.cost_details as Record<string, unknown>)
+        : undefined;
+
+    // These are independent reported facts, regardless of whether generic cost
+    // is a configured estimate, the account charge, or unavailable.
+    const billing: Record<string, unknown> = {};
+    const amounts = {
+      accountCharge: usage.cost,
+      reportedUpstreamInferenceCost: details?.upstream_inference_cost,
+      reportedUpstreamPromptCost: details?.upstream_inference_prompt_cost,
+      reportedUpstreamCompletionCost: details?.upstream_inference_completions_cost,
+      reportedServerToolCost: details?.server_tool_cost,
+    };
+    for (const [name, amount] of Object.entries(amounts)) {
+      if (isNonNegativeFiniteNumber(amount)) {
+        billing[name] = amount;
+      }
+    }
+    if (typeof usage.is_byok === 'boolean') {
+      billing.isByok = usage.is_byok;
+    }
+    return Object.keys(billing).length > 0 ? { openrouter: billing } : undefined;
   }
 
   async callApi(
@@ -146,7 +233,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     try {
       ({ data, cached, status, statusText } =
         await fetchWithCache<OpenRouterChatCompletionResponse>(
-          `${this.getApiUrl()}/chat/completions`,
+          appendOpenAiApiPath(this.getApiUrl(), 'chat/completions'),
           {
             method: 'POST',
             headers: {
@@ -177,6 +264,17 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     if (data.error) {
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
+      };
+    }
+
+    // Guard against a 200 response with an empty or missing `choices` array
+    // (soft moderation block, upstream hiccup, or n>1 edge cases). Without this,
+    // `data.choices[0]` is undefined and `.message` throws an opaque TypeError.
+    // Mirrors the sibling OpenAI-compatible providers (mistral.ts, ai21.ts).
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
+        cached,
       };
     }
 
@@ -224,12 +322,8 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       output,
       tokenUsage: getTokenUsage(data, cached),
       cached,
-      cost: calculateOpenAICost(
-        this.modelName,
-        config,
-        data.usage?.prompt_tokens,
-        data.usage?.completion_tokens,
-      ),
+      cost: this.calculateResponseCost(data, config),
+      metadata: this.getBillingMetadata(data),
       ...(finishReason && { finishReason }),
     };
   }

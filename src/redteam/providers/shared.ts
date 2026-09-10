@@ -19,16 +19,22 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type CallApiOptionsParams,
+  type GradingResult,
   isApiProvider,
   isProviderOptions,
   type ProviderResponse,
   type RedteamFileConfig,
+  type TokenUsage,
   type VarValue,
 } from '../../types/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
+import {
+  accumulateGradingResponseTokenUsage,
+  accumulateTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -40,6 +46,21 @@ import type { TransformContext, TransformFunction } from '../../types/transform'
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
+
+/** Count a blocking-analysis task as grading without treating it as a target or attacker call. */
+export function accumulateUnblockingTokenUsage(
+  totalTokenUsage: TokenUsage,
+  result: { attempted?: boolean; cached?: boolean; tokenUsage?: TokenUsage },
+): void {
+  if (!result.attempted && !result.tokenUsage) {
+    return;
+  }
+
+  accumulateGradingResponseTokenUsage(totalTokenUsage, {
+    cached: result.cached,
+    tokenUsage: result.tokenUsage?.assertions ?? result.tokenUsage,
+  });
+}
 
 /**
  * The subset of `loadApiProviders` inputs the redteam code actually supplies
@@ -641,6 +662,78 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   );
 }
 
+/** Preserve the latest verdict while retaining usage from every strategy grading turn. */
+export function accumulateGraderResult(
+  previous: GradingResult | undefined,
+  current: GradingResult,
+): GradingResult {
+  const normalizeGradingTaskUsage = (result: GradingResult): TokenUsage | undefined => {
+    if (!result.tokensUsed) {
+      return undefined;
+    }
+
+    const reportedTotal =
+      result.tokensUsed.total ??
+      (result.tokensUsed.prompt ?? 0) + (result.tokensUsed.completion ?? 0);
+    const cachedTokens = result.tokensUsed.cached ?? 0;
+    const cachedResponse =
+      result.metadata?.cachedResponse === true ||
+      (result.tokensUsed.numRequests === 0 && reportedTotal <= cachedTokens);
+
+    if (cachedResponse) {
+      return {
+        total: 0,
+        prompt: 0,
+        completion: 0,
+        cached: cachedTokens || reportedTotal,
+        numRequests: 0,
+      };
+    }
+
+    return {
+      ...result.tokensUsed,
+      numRequests: 1,
+    };
+  };
+
+  if (!previous?.tokensUsed) {
+    const tokensUsed = normalizeGradingTaskUsage(current);
+    if (!tokensUsed) {
+      return current;
+    }
+
+    return {
+      ...current,
+      tokensUsed,
+    };
+  }
+
+  // The latest verdict can be cached even when the accumulated usage already
+  // contains fresh grading tasks from earlier turns.
+  const previousTokensUsed =
+    previous.metadata?.cachedResponse === true && (previous.tokensUsed.numRequests ?? 0) > 0
+      ? previous.tokensUsed
+      : normalizeGradingTaskUsage(previous);
+  if (!previousTokensUsed) {
+    return current;
+  }
+
+  const tokensUsed = {
+    ...previousTokensUsed,
+    numRequests: previous.tokensUsed.numRequests || previousTokensUsed.numRequests,
+    ...(previous.tokensUsed.completionDetails
+      ? { completionDetails: { ...previous.tokensUsed.completionDetails } }
+      : {}),
+  };
+
+  const currentTokensUsed = normalizeGradingTaskUsage(current);
+  if (currentTokensUsed) {
+    accumulateTokenUsage(tokensUsed, currentTokensUsed);
+  }
+
+  return { ...current, tokensUsed };
+}
+
 export interface Message {
   role: 'user' | 'assistant' | 'system' | 'developer';
   content: string;
@@ -834,7 +927,10 @@ export async function tryUnblocking({
   purpose?: string;
   targetId?: string;
 }): Promise<{
+  attempted?: boolean;
+  cached?: boolean;
   success: boolean;
+  tokenUsage?: TokenUsage;
   unblockingPrompt?: string;
 }> {
   try {
@@ -891,11 +987,16 @@ export async function tryUnblocking({
       vars: {},
     });
 
-    TokenUsageTracker.getInstance().trackUsage(unblockingProvider.id(), response.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(unblockingProvider.id(), response);
 
     if (response.error) {
       logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);
-      return { success: false };
+      return {
+        attempted: true,
+        cached: response.cached,
+        success: false,
+        tokenUsage: response.tokenUsage,
+      };
     }
 
     const parsed = response.output as any;
@@ -906,13 +1007,19 @@ export async function tryUnblocking({
         `[Unblocking] Blocking question detected, unblocking answer: ${parsed.unblockingAnswer}`,
       );
       return {
+        attempted: true,
+        cached: response.cached,
         success: true,
+        tokenUsage: response.tokenUsage,
         unblockingPrompt: parsed.unblockingAnswer,
       };
     } else {
       logger.debug('[Unblocking] No blocking question detected');
       return {
+        attempted: true,
+        cached: response.cached,
         success: false,
+        tokenUsage: response.tokenUsage,
       };
     }
   } catch (error) {

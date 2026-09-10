@@ -1,34 +1,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isVegasBannerLive, VEGAS_BANNER_EXPIRY } from '../../data/announcementBar';
 import { events, formatEventDate, getEventBySlug } from '../../data/events';
-import { BLACK_HAT_BOOTH_HOURS, DEF_CON_BOOTH_HOURS } from '../../data/vegas-booth-hours';
 import BlackHat2026 from './blackhat-2026';
 import Defcon2026 from './defcon-2026';
 
 const SITE_ROOT = path.resolve(__dirname, '../../..');
 
-/**
- * These assertions cover *facts and promises*, not design devices. Booth numbers, dates,
- * and the OpenAI/Promptfoo relationship are the things that send a real person walking
- * across a convention centre or that misstate a corporate relationship, so they get
- * asserted. Headings, section names, and ASCII art are free to change without a test
- * edit.
- */
+// Preserve historical dates, booth identity, and public promises as the pages become recaps.
 const BLACKHAT_BOOTH = 'Booth #2967';
 const DEFCON_BOOTH = 'Booth #1412';
 const EVENT_REFERENCE_CASES = events.map((event) => [event.id, event] as const);
+const LIVE_EVENT_INVITE =
+  /\b(?:find (?:us|the team|promptfoo)|where to find us|visit (?:us|openai booth)|see promptfoo test|stop by|attending black hat|our booth (?:opens|is open)|what we're demoing|wait for the conference|register now|rsvp)\b/i;
 
-/**
- * Promptfoo is part of OpenAI and demos at OpenAI's booth — OpenAI is the exhibitor of
- * record in the Black Hat directory. Every one of these framings inverts or muddies that
- * hierarchy, so none of them may appear in rendered copy, `<Head>` metadata, alt text, or
- * aria labels. (`@docusaurus/Head` is stubbed as a fragment in `vitest.config.ts`, so its
- * children land in the container and `innerHTML` sees meta/alt/aria values too.)
- */
+// OpenAI was the exhibitor. Promptfoo is part of OpenAI, not a second company sharing a stand.
 const BANNED_BRAND_STRINGS = [
   /with OpenAI/i,
   /OpenAI presence/i,
@@ -85,52 +73,13 @@ describe('Vegas 2026 event data', () => {
     expect(getEventBySlug('defcon-2026')?.booth).toBe(DEFCON_BOOTH);
   });
 
-  it('preserves the confirmed Black Hat public booth hours', () => {
-    expect(BLACK_HAT_BOOTH_HOURS).toEqual([
-      {
-        date: '2026-08-04',
-        day: 'Tue Aug 4',
-        opensAt: '4:00pm',
-        closesAt: '7:00pm',
-        note: 'Business Hall Welcome Reception',
-      },
-      {
-        date: '2026-08-05',
-        day: 'Wed Aug 5',
-        opensAt: '9:00am',
-        closesAt: '6:00pm',
-        note: 'Hall-wide Booth Crawl, 4:00pm to 5:00pm',
-      },
-      {
-        date: '2026-08-06',
-        day: 'Thu Aug 6',
-        opensAt: '9:00am',
-        closesAt: '4:00pm',
-      },
-    ]);
-  });
+  it.each(['blackhat-2026', 'defcon-2026'])('%s card reads as a recap', (slug) => {
+    const event = getEventBySlug(slug);
+    expect(event).toBeDefined();
 
-  it('preserves the confirmed DEF CON public booth hours', () => {
-    expect(DEF_CON_BOOTH_HOURS).toEqual([
-      {
-        date: '2026-08-07',
-        day: 'Fri Aug 7',
-        opensAt: '10:00am',
-        closesAt: '6:00pm',
-      },
-      {
-        date: '2026-08-08',
-        day: 'Sat Aug 8',
-        opensAt: '10:00am',
-        closesAt: '6:00pm',
-      },
-      {
-        date: '2026-08-09',
-        day: 'Sun Aug 9',
-        opensAt: '10:00am',
-        closesAt: '4:00pm',
-      },
-    ]);
+    const copy = `${event!.description} ${event!.fullDescription ?? ''}`;
+    expect(copy).not.toMatch(LIVE_EVENT_INVITE);
+    expect(copy).not.toMatch(/\b(?:runs Aug|is open)\b/i);
   });
 
   it.each(['blackhat-2026', 'defcon-2026'])('%s card copy names the OpenAI booth', (slug) => {
@@ -216,10 +165,8 @@ describe.each([
     dates: /August 1\s*[–-]\s*6, 2026/,
     venue: /Mandalay Bay/,
     crossLink: /DEF CON 34/,
-    hoursLabel: /Black Hat booth hours in Pacific time/i,
-    boothHours: BLACK_HAT_BOOTH_HOURS,
     boothDates: /Business Hall and booth:\s*Aug 4-6/i,
-    findUsLabel: /where to find us/i,
+    metadataDates: 'August 4-6, 2026',
   },
   {
     name: 'DEF CON 34',
@@ -228,23 +175,11 @@ describe.each([
     dates: /August 6\s*[–-]\s*9, 2026/,
     venue: /West Hall/,
     crossLink: /Black Hat/,
-    hoursLabel: /DEF CON booth hours in Pacific time/i,
-    boothHours: DEF_CON_BOOTH_HOURS,
     boothDates: /Booth #1412:\s*Aug 7-9/i,
-    findUsLabel: /find OpenAI booth #1412/i,
+    metadataDates: 'August 7-9, 2026',
   },
 ])('$name page', (page) => {
-  const {
-    Component,
-    boothNumber,
-    dates,
-    venue,
-    crossLink,
-    hoursLabel,
-    boothHours,
-    boothDates,
-    findUsLabel,
-  } = page;
+  const { Component, boothNumber, dates, venue, crossLink, boothDates, metadataDates } = page;
 
   it('shows the booth number, dates, and venue', () => {
     const { container } = render(<Component />);
@@ -278,8 +213,7 @@ describe.each([
 
   it.each(BANNED_BRAND_STRINGS)('never says %s', (banned) => {
     const { container } = render(<Component />);
-    // innerHTML rather than textContent so meta descriptions, alt text, and aria labels
-    // are covered too.
+    // Include alt text and aria labels. Social metadata is checked separately below.
     expect(container.innerHTML).not.toMatch(banned);
   });
 
@@ -288,23 +222,32 @@ describe.each([
     expect(screen.getAllByText(crossLink).length).toBeGreaterThan(0);
   });
 
-  it('shows the confirmed public booth hours in Pacific time', () => {
+  it('marks the event as finished and removes expired booth invitations', () => {
     const { container } = render(<Component />);
-    const hours = screen.getByRole('list', { name: hoursLabel });
-    const rows = within(hours).getAllByRole('listitem');
+    const text = container.textContent ?? '';
 
-    expect(rows).toHaveLength(boothHours.length);
-    expect(container.textContent ?? '').toMatch(/Pacific time|PDT/i);
+    expect(text).toMatch(/past event/i);
+    expect(text).toMatch(/has ended/i);
+    expect(text).toMatch(/request a demo/i);
+    expect(container.innerHTML).not.toMatch(LIVE_EVENT_INVITE);
+    expect(screen.queryByRole('list', { name: /booth hours/i })).not.toBeInTheDocument();
+  });
 
-    for (const day of boothHours) {
-      expect(
-        rows.some(
-          (row) =>
-            row.textContent?.includes(day.day) &&
-            row.textContent?.includes(`${day.opensAt} to ${day.closesAt}`),
-        ),
-        `Missing ${day.day} ${day.opensAt} to ${day.closesAt}`,
-      ).toBe(true);
+  it('renders consistent archival social descriptions', () => {
+    render(<Component />);
+    const ogDescription = document
+      .querySelector('meta[property="og:description"]')
+      ?.getAttribute('content');
+    const twitterDescription = document
+      .querySelector('meta[name="twitter:description"]')
+      ?.getAttribute('content');
+
+    expect(ogDescription).toContain(`OpenAI booth #${boothNumber}`);
+    expect(ogDescription).toContain(metadataDates);
+    expect(ogDescription).not.toMatch(LIVE_EVENT_INVITE);
+    expect(twitterDescription).toBe(ogDescription);
+    for (const banned of BANNED_BRAND_STRINGS) {
+      expect(ogDescription).not.toMatch(banned);
     }
   });
 
@@ -329,7 +272,7 @@ describe.each([
     expect(container.textContent ?? '').not.toMatch(/\b(?:shifts?|staffing|handoffs?)\b/i);
   });
 
-  it('scrolls to the booth when matchMedia is unavailable', () => {
+  it('preserves the old section anchor and scrolls to the recap without matchMedia', () => {
     const mediaWindow: { matchMedia: typeof window.matchMedia | undefined } = window;
     const originalMatchMedia = mediaWindow.matchMedia;
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
@@ -338,7 +281,8 @@ describe.each([
 
     try {
       render(<Component />);
-      fireEvent.click(screen.getByRole('link', { name: findUsLabel }));
+      expect(document.getElementById('find-us')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('link', { name: /event recap/i }));
 
       expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
     } finally {
@@ -390,30 +334,6 @@ describe('Black Hat USA 2026 page specifics', () => {
     expect(text).toMatch(/Aug(?:ust)?\.?\s*4\s*(?:[–-]|through(?:\s+\w+)?)\s*(?:August\s*)?6/i);
     expect(text).not.toMatch(/Business Hall,?\s*Aug(?:ust)?\.?\s*5\s*[–-]\s*6/i);
   });
-
-  it('does not list booth hours before the Business Hall opens', () => {
-    render(<BlackHat2026 />);
-
-    const visitorHours = screen.getByRole('list', {
-      name: /Black Hat booth hours in Pacific time/i,
-    });
-    const tuesday = within(visitorHours).getByText('Tue Aug 4').closest('li');
-
-    expect(tuesday).toHaveTextContent('4:00pm to 7:00pm');
-    expect(tuesday).not.toHaveTextContent('3:00pm');
-  });
-
-  it('identifies the Welcome Reception and Booth Crawl as Business Hall events', () => {
-    render(<BlackHat2026 />);
-
-    const visitorHours = screen.getByRole('list', {
-      name: /Black Hat booth hours in Pacific time/i,
-    });
-
-    expect(visitorHours).toHaveTextContent('Business Hall Welcome Reception');
-    expect(visitorHours).toHaveTextContent('Hall-wide Booth Crawl, 4:00pm to 5:00pm');
-    expect(visitorHours).not.toHaveTextContent(/Booth Crawl sponsor/i);
-  });
 });
 
 describe('DEF CON 34 page specifics', () => {
@@ -448,39 +368,10 @@ describe('DEF CON 34 page specifics', () => {
 });
 
 describe('announcement bar', () => {
-  // The banner is the highest-traffic copy surface on the site and it is plain config, so
-  // the brand-hierarchy rules are checked against the file itself.
   const configSource = fs.readFileSync(path.join(SITE_ROOT, 'docusaurus.config.ts'), 'utf-8');
 
-  it.each(BANNED_BRAND_STRINGS)('never says %s', (banned) => {
-    expect(configSource).not.toMatch(banned);
-  });
-
-  // Aug 1-9 spans both conference windows and implies a continuous booth presence across
-  // a week we do not staff continuously.
-  it('does not advertise a continuous Aug 1-9 presence', () => {
-    expect(configSource).not.toMatch(/Aug(?:ust)?\.?\s*1\s*[–-]\s*9/i);
-  });
-
-  it('shows each public booth number and its actual open dates', () => {
-    expect(configSource).toMatch(/Black Hat #2967, Aug 4-6/);
-    expect(configSource).toMatch(/DEF CON 34 #1412, Aug 7-9/);
-  });
-
-  // The expiry date itself no longer lives in the config: `src/data/announcementBar.ts`
-  // owns it, so the Node-side build decision and the client-side `src/theme/AnnouncementBar`
-  // wrapper (which retires the bar on the visitor's clock, since nothing rebuilds this site
-  // on a schedule) cannot drift apart. Assert the config still consults it, and that the
-  // date it consults matches the final public booth closing time.
-  it('is closeable and expires when the final public booth closes', () => {
-    expect(configSource).toMatch(/isCloseable:\s*true/);
-    expect(configSource).toMatch(/isVegasBannerLive\(/);
-
-    const defcon = getEventBySlug('defcon-2026');
-    expect(defcon).toBeDefined();
-    expect(Date.parse(defcon?.endDate ?? '')).toBe(VEGAS_BANNER_EXPIRY);
-
-    expect(isVegasBannerLive(VEGAS_BANNER_EXPIRY - 1)).toBe(true);
-    expect(isVegasBannerLive(VEGAS_BANNER_EXPIRY)).toBe(false);
+  it('does not configure the retired Vegas announcements', () => {
+    expect(configSource).not.toMatch(/vegas-2026|events-evergreen|isVegasBannerLive/);
+    expect(configSource).not.toMatch(/\/events\/(?:blackhat|defcon)-2026/);
   });
 });

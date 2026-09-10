@@ -356,6 +356,14 @@ describe('Protobuf decoding', () => {
       );
     });
 
+    it('rejects a nested message whose declared length crosses its parent boundary', async () => {
+      // resourceSpans has one byte of payload, but its nested scopeSpans
+      // field declares an empty message after that boundary.
+      const malformed = Uint8Array.from([0x0a, 0x01, 0x12, 0x00]);
+
+      await expect(decodeExportTraceServiceRequest(malformed)).rejects.toThrow(/invalid protobuf/i);
+    });
+
     it('should handle empty resourceSpans', async () => {
       const testData = {
         resourceSpans: [],

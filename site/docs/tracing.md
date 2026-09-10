@@ -479,6 +479,23 @@ tracing:
 
 Braintrust's native trace identifiers are not necessarily the same as OpenTelemetry trace IDs. Your application must copy the trace ID from Promptfoo's `traceparent` into Braintrust span metadata as `trace_id`, `promptfoo_trace_id`, or `promptfoo.trace_id`. Promptfoo then queries the Braintrust project's recent traces and imports all spans belonging to the matching trace.
 
+#### Langfuse
+
+Use the `langfuse` trace provider to pull observations from Langfuse Cloud or a self-hosted Langfuse v4 instance:
+
+```yaml
+tracing:
+  enabled: true
+  provider:
+    id: langfuse
+    endpoint: 'https://cloud.langfuse.com'
+    auth:
+      username: '{{ env.LANGFUSE_PUBLIC_KEY }}'
+      password: '{{ env.LANGFUSE_SECRET_KEY }}'
+```
+
+Promptfoo queries Langfuse's v2 Observations API using the OpenTelemetry trace ID propagated in `traceparent`. It preserves original OpenTelemetry span and resource attributes, normalizes generation, embedding, tool, agent, workflow, and retrieval observations to GenAI semantic conventions, and imports parent-child relationships, inputs, outputs, models, token usage, and costs. Langfuse Python SDK 4.7.0+, JavaScript SDK 5.4.0+, or an OpenTelemetry exporter configured with the `x-langfuse-ingestion-version: 4` header makes new observations available in real time; older ingestion paths can delay visibility by up to ten minutes. This delay makes earlier versions of Langfuse unusable for fetching traces during an evaluation.
+
 ## Provider Implementation Guide
 
 ### JavaScript/TypeScript

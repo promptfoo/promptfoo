@@ -180,7 +180,7 @@ describe('OTLPTracingExporter', () => {
         jwt: '<redacted>',
         authorization_endpoint: 'https://issuer.example/authorize',
         callback: 'https://host/?access_token=<redacted>"suffix',
-        url: 'postgres://alice:<redacted>@db.example/app',
+        url: 'postgres://<redacted>@db.example/app',
         headers: [['Authorization', '<redacted>']],
       });
       expect(exportedSpan.status.message).not.toContain('tiny');
@@ -188,6 +188,75 @@ describe('OTLPTracingExporter', () => {
       expect(exportedSpan.status.message).not.toContain('opaque%2Fsignature');
     },
   );
+
+  it.each(
+    [
+      {
+        name: 'URI authority credentials',
+        input: {
+          cache_url: 'redis://:opaque-password@cache.example/0',
+          request_url: 'https://opaque-token@host/',
+        },
+        expected: {
+          cache_url: 'redis://<redacted>@cache.example/0',
+          request_url: 'https://<redacted>@host/',
+        },
+      },
+      {
+        name: 'named header records',
+        input: {
+          headers: [
+            { name: 'Authorization', value: 'Bearer opaque/value' },
+            { key: 'X-Api-Key', value: 'tiny' },
+            { name: 'Content-Type', value: 'application/json' },
+          ],
+        },
+        expected: {
+          headers: [
+            { name: 'Authorization', value: '<redacted>' },
+            { key: 'X-Api-Key', value: '<redacted>' },
+            { name: 'Content-Type', value: 'application/json' },
+          ],
+        },
+      },
+      {
+        name: 'signature metadata',
+        input: {
+          signature_algorithm: 'HMAC-SHA256',
+          function_signature: 'lookup(id: string)',
+          signature: 'opaque/value',
+        },
+        expected: {
+          signature_algorithm: 'HMAC-SHA256',
+          function_signature: 'lookup(id: string)',
+          signature: '<redacted>',
+        },
+      },
+      {
+        name: 'credential map keys',
+        input: { api_key: 'tiny', sessions: { 'sk-abcdefghijklmnopqrstuvwxyz': true } },
+        expected: { api_key: '<redacted>', sessions: { '<REDACTED_API_KEY>': true } },
+      },
+    ].flatMap((testCase) => ['json', 'protobuf'].map((format) => ({ ...testCase, format }))),
+  )('sanitizes $name in $format exports', async ({ input, expected, format }) => {
+    await new OTLPTracingExporter().export([
+      {
+        type: 'trace.span',
+        traceId: 'trace_0123456789abcdef0123456789abcdef',
+        spanId: 'span_0123456789abcdef',
+        spanData: { type: 'function', name: 'lookup', input: JSON.stringify(input) },
+        traceMetadata: { 'promptfoo.otlp_format': format },
+        error: null,
+      } as any,
+    ]);
+    const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+    const payload =
+      format === 'protobuf'
+        ? await decodeExportTraceServiceRequest(body as Uint8Array)
+        : JSON.parse(body as string);
+    const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
+    expect(JSON.parse(attributes['tool.arguments'] as string)).toEqual(expected);
+  });
 
   it.each(['json', 'protobuf'] as const)(
     'preserves scientific notation while redacting $format tool arguments',
@@ -525,6 +594,7 @@ describe('OTLPTracingExporter', () => {
           }),
         },
         traceMetadata: {
+          [apiKey]: 'metadata-key',
           customerApiKey: metadataSecret,
           clientCredentials,
           'evaluation.id': evaluationId,

@@ -133,6 +133,86 @@ describe('evaluateOptions behavior', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  describe('generation accounting provenance', () => {
+    function generationConfig(metadata: Record<string, unknown>) {
+      return {
+        metadata,
+        providers: [{ id: 'echo' }],
+        prompts: ['Hello'],
+        tests: [{ vars: {} }],
+      };
+    }
+
+    it('removes copied generation charges from a newly created evaluation', async () => {
+      const configFile = writeTempConfig(
+        tmpDir,
+        'test-stale-generation-accounting.yaml',
+        generationConfig({
+          owner: 'preserved metadata',
+          generationAccounting: {
+            id: 'previous-generation',
+            tokenUsage: { total: 40, numRequests: 4 },
+          },
+        }),
+      );
+
+      await doEval({ table: false, write: false, config: [configFile] }, {}, undefined, {});
+
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      expect(evalRecord.config.metadata).toEqual({ owner: 'preserved metadata' });
+      expect(evalRecord.getStats().tokenUsage.generation).toBeUndefined();
+    });
+
+    it('replaces copied generation charges with accounting from the current run', async () => {
+      const configFile = writeTempConfig(
+        tmpDir,
+        'test-current-generation-accounting.yaml',
+        generationConfig({
+          generationAccounting: {
+            id: 'previous-generation',
+            tokenUsage: { total: 40, numRequests: 4 },
+          },
+        }),
+      );
+      const currentUsage = { total: 12, prompt: 8, completion: 4, numRequests: 1 };
+
+      await doEval({ table: false, write: false, config: [configFile] }, {}, undefined, {
+        generationEventId: 'current-generation',
+        generationTokenUsage: currentUsage,
+      });
+
+      const evalRecord = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      expect(evalRecord.config.metadata?.generationAccounting).toEqual({
+        id: 'current-generation',
+        tokenUsage: currentUsage,
+      });
+      expect(evalRecord.getStats().tokenUsage.generation).toMatchObject(currentUsage);
+    });
+
+    it('preserves existing generation charges when resuming the same evaluation', async () => {
+      const generationAccounting = {
+        id: 'original-generation',
+        tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+      };
+      const resumeEval = new Eval(generationConfig({ generationAccounting }), {
+        id: 'eval-resume-generation-accounting',
+        persisted: true,
+      });
+      const findByIdSpy = vi.spyOn(Eval, 'findById').mockResolvedValue(resumeEval);
+
+      try {
+        await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {});
+
+        expect(resumeEval.config.metadata?.generationAccounting).toEqual(generationAccounting);
+        expect(resumeEval.getStats().tokenUsage.generation).toMatchObject(
+          generationAccounting.tokenUsage,
+        );
+      } finally {
+        findByIdSpy.mockRestore();
+      }
+    });
+  });
+
   describe('Reading values from config file', () => {
     it('should read evaluateOptions.maxConcurrency', async () => {
       const options = await runEvalAndGetOptions({

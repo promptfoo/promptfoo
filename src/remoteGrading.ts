@@ -54,7 +54,7 @@ export async function doRemoteGrading(
     const body = JSON.stringify(payload);
     const traceparent = getActiveTraceparent();
     logger.debug('Performing remote grading', { body: redactImagePayloads(payload) });
-    const { data, status, statusText } = await fetchWithCache(
+    const { cached, data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),
       {
         method: 'POST',
@@ -83,8 +83,22 @@ export async function doRemoteGrading(
       pass: result.pass,
       score: result.score,
       reason: result.reason,
-      tokensUsed: result.tokensUsed,
-      metadata: result.metadata,
+      tokensUsed: cached
+        ? {
+            total: 0,
+            cached:
+              result.tokensUsed?.total ??
+              (result.tokensUsed?.prompt ?? 0) + (result.tokensUsed?.completion ?? 0),
+            numRequests: 0,
+          }
+        : result.tokensUsed
+          ? {
+              ...result.tokensUsed,
+              // This endpoint represents one grading task even when the task uses multiple models.
+              numRequests: 1,
+            }
+          : undefined,
+      metadata: cached ? { ...(result.metadata ?? {}), cachedResponse: true } : result.metadata,
     };
   } catch (error) {
     throw new Error(`Could not perform remote grading: ${error}`);
