@@ -65,11 +65,14 @@ interface PendingFunctionCall {
   argsText: string;
 }
 
-const MAX_STREAMED_FUNCTION_ARG_ARRAY_INDEX = 10_000;
+const MAX_STREAMED_FUNCTION_ARG_DEPTH = 64;
+const MAX_STREAMED_FUNCTION_ARG_INDEX = 10_000;
+const MAX_STREAMED_FUNCTION_ARG_ARRAY_SLOTS = MAX_STREAMED_FUNCTION_ARG_INDEX + 1;
 
 function setPartialFunctionArg(
   args: Record<string, unknown>,
   partialArg: StreamedPartialArg,
+  budget: { arraySlots: number },
 ): boolean {
   const path = partialArg.jsonPath;
   if (!path || !/^\$(?:\.[\w$ -]+|\[\d+\]|\['[^'\\\]]*'\]|\["[^"\\\]]*"\])+$/.test(path)) {
@@ -81,11 +84,12 @@ function setPartialFunctionArg(
     (match) => (match[2] === undefined ? (match[1] ?? match[3] ?? match[4]) : Number(match[2])),
   );
   if (
+    segments.length > MAX_STREAMED_FUNCTION_ARG_DEPTH ||
     segments.some(
       (segment) =>
         ['__proto__', 'prototype', 'constructor'].includes(String(segment)) ||
         (typeof segment === 'number' &&
-          (!Number.isSafeInteger(segment) || segment > MAX_STREAMED_FUNCTION_ARG_ARRAY_INDEX)),
+          (!Number.isSafeInteger(segment) || segment > MAX_STREAMED_FUNCTION_ARG_INDEX)),
     )
   ) {
     return false;
@@ -107,13 +111,24 @@ function setPartialFunctionArg(
   let current: Record<string | number, unknown> = args;
   for (let index = 0; index < segments.length; index++) {
     const segment = segments[index];
-    if (
-      Array.isArray(current) &&
-      (!/^\d+$/.test(String(segment)) ||
-        !Number.isSafeInteger(Number(segment)) ||
-        Number(segment) > MAX_STREAMED_FUNCTION_ARG_ARRAY_INDEX)
-    ) {
-      return false;
+    if (Array.isArray(current)) {
+      // Quoted digit keys are supported; special properties such as length are not.
+      const arrayIndex = Number(segment);
+      if (
+        !/^\d+$/.test(String(segment)) ||
+        !Number.isSafeInteger(arrayIndex) ||
+        arrayIndex > MAX_STREAMED_FUNCTION_ARG_INDEX
+      ) {
+        return false;
+      }
+      // JSON.stringify materializes sparse holes. Bound expansion across the entire response.
+      // Noncanonical digit keys such as "01" remain ordinary properties and do not grow the array.
+      const addedSlots =
+        String(arrayIndex) === String(segment) ? Math.max(0, arrayIndex + 1 - current.length) : 0;
+      if (budget.arraySlots + addedSlots > MAX_STREAMED_FUNCTION_ARG_ARRAY_SLOTS) {
+        return false;
+      }
+      budget.arraySlots += addedSlots;
     }
     const existing = current[segment];
     if (index === segments.length - 1) {
@@ -121,14 +136,13 @@ function setPartialFunctionArg(
         typeof value === 'string' && typeof existing === 'string' ? existing + value : value;
       return true;
     }
-    const nextSegment = segments[index + 1];
     if (!existing || typeof existing !== 'object') {
-      current[segment] = typeof nextSegment === 'number' ? [] : {};
+      current[segment] = typeof segments[index + 1] === 'number' ? [] : {};
     }
     current = current[segment] as Record<string | number, unknown>;
   }
 
-  return false;
+  return true;
 }
 
 function mergeStreamedFunctionArgs(pending: PendingFunctionCall, args: unknown): void {
@@ -175,9 +189,14 @@ function finalizeStreamedFunctionCall(
   return pending.name ? { id: pending.id, name: pending.name, args: pending.args } : undefined;
 }
 
+function isAnonymousFunctionCallFragment(functionCall: StreamedFunctionCall): boolean {
+  return functionCall.id === undefined && functionCall.name === undefined;
+}
+
 function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | undefined {
   const completed: StreamedFunctionCall[] = [];
   const pendingById = new Map<string, PendingFunctionCall>();
+  const budget = { arraySlots: 0 };
   let pendingUnnamed: PendingFunctionCall | undefined;
 
   for (const part of parts) {
@@ -188,6 +207,13 @@ function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | u
 
     const id = functionCall.id;
     let pending = id ? pendingById.get(id) : pendingUnnamed;
+    if (!pending && isAnonymousFunctionCallFragment(functionCall) && pendingById.size > 0) {
+      // Vertex can omit the ID after the first chunk. Only associate an unambiguous continuation.
+      if (pendingById.size !== 1) {
+        return undefined;
+      }
+      pending = pendingById.values().next().value;
+    }
     if (!pending) {
       pending = { id, name: functionCall.name, args: {}, argsText: '' };
       if (id) {
@@ -206,7 +232,7 @@ function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | u
       mergeStreamedFunctionArgs(pending, functionCall.args);
     }
     for (const partialArg of functionCall.partialArgs ?? []) {
-      if (!setPartialFunctionArg(pending.args, partialArg)) {
+      if (!setPartialFunctionArg(pending.args, partialArg, budget)) {
         return undefined;
       }
     }
@@ -220,8 +246,8 @@ function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | u
       return undefined;
     }
     completed.push(complete);
-    if (id) {
-      pendingById.delete(id);
+    if (pending.id) {
+      pendingById.delete(pending.id);
     } else {
       pendingUnnamed = undefined;
     }
@@ -271,6 +297,17 @@ function restoreStreamedFunctionCallParts(
         activeCallIds.add(fragment.id);
       }
       return [{ ...part, functionCall }];
+    }
+
+    if (
+      isAnonymousFunctionCallFragment(fragment) &&
+      !unnamedCallInProgress &&
+      activeCallIds.size === 1
+    ) {
+      if (fragment.willContinue !== true) {
+        activeCallIds.clear();
+      }
+      return [];
     }
 
     if (unnamedCallInProgress) {
@@ -365,6 +402,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
 
   validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
     validateFunctionCall(output, this.config.tools, vars);
+  }
+
+  getAudioInputFormat(): 'google' | undefined {
+    return this.modelName.startsWith('gemini') ? 'google' : undefined;
   }
 
   /**

@@ -73,8 +73,14 @@ describe('Google media and tool-policy input boundaries', () => {
     await rm(temporaryDirectory, { recursive: true, force: true });
   });
 
-  async function load(route: Route, config: GoogleProviderConfig = {}) {
+  async function load(
+    route: Route,
+    config: GoogleProviderConfig = {},
+    id?: string,
+    providerPrefix?: 'palm',
+  ) {
     const options = {
+      id,
       config: {
         apiKey: 'test-input-key',
         ...(route === 'Vertex Express'
@@ -85,7 +91,10 @@ describe('Google media and tool-policy input boundaries', () => {
     };
     return route === 'standalone'
       ? new GoogleProvider(model, options)
-      : loadApiProvider(`${route === 'Studio' ? 'google' : 'vertex'}:${model}`, { options });
+      : loadApiProvider(
+          `${providerPrefix ?? (route === 'Studio' ? 'google' : 'vertex')}:${model}`,
+          { options },
+        );
   }
 
   function requestBody(route: Route, streaming = false) {
@@ -136,6 +145,45 @@ describe('Google media and tool-policy input boundaries', () => {
       const parts = mimeType ? [{ inlineData: { mimeType, data: encoded } }] : [{ text: encoded }];
       expect(requestBody(route)).toEqual({
         contents: [{ role: 'user', parts }],
+        generationConfig: {},
+      });
+    });
+
+    it.each(
+      route === 'Studio'
+        ? (['default', 'custom', 'palm'] as const)
+        : (['default', 'custom'] as const),
+    )('keeps M4A file provenance with %s provider identification', async (identification) => {
+      // A bounded BMFF identification fixture tests MIME provenance, not audio decoding.
+      const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
+      const file = path.join(temporaryDirectory, 'recording.M4A');
+      await writeFile(file, bytes);
+      const encoded = bytes.toString('base64');
+      const provider = await load(
+        route,
+        {},
+        identification === 'custom' ? 'My Gemini' : undefined,
+        identification === 'palm' ? 'palm' : undefined,
+      );
+      const actualRoute = identification === 'palm' ? 'Studio' : route;
+      const originalVars = { media: `file://${file}` };
+      const vars = { ...originalVars };
+      const prompt = { raw: '{{media}}', label: 'm4a' };
+      const rendered = await renderPrompt(prompt, vars, {}, provider);
+      expect(rendered).toBe(encoded);
+      expect(vars.media).toBe(encoded);
+      if (identification === 'custom') {
+        expect(provider.id()).toBe('My Gemini');
+      }
+      const response = await withCacheEnabled(false, () =>
+        provider.callApi(rendered, { vars, prompt, test: { vars: originalVars } }),
+      );
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('ok');
+      expect(requestBody(actualRoute)).toEqual({
+        contents: [
+          { role: 'user', parts: [{ inlineData: { mimeType: 'audio/mp4', data: encoded } }] },
+        ],
         generationConfig: {},
       });
     });

@@ -59,9 +59,9 @@ npx promptfoo@latest eval
 | `image`            | string | Source image for image-to-video                                                                                                 |
 | `lastImage`        | string | End frame for interpolation                                                                                                     |
 | `extendVideoId`    | string | Deprecated alias for `sourceVideo`                                                                                              |
-| `sourceVideo`      | string | Prior Veo video's Gemini URI, `file://` MP4 path, or raw base64 bytes; use a `gs://` URI for Vertex AI                          |
+| `sourceVideo`      | string | Prior Veo video's Gemini URI, `file://` MP4 path, or raw base64 bytes; Vertex also accepts a `gs://` URI                        |
 | `storageUri`       | string | Vertex-only output destination such as `gs://bucket/veo-output/`; the returned `gcsUri` is exposed as `metadata.sourceVideoUri` |
-| `referenceImages`  | array  | Up to 3 style reference images (file paths or objects)                                                                          |
+| `referenceImages`  | array  | Up to 3 asset reference images (file paths or objects)                                                                          |
 
 ## Features
 
@@ -86,6 +86,12 @@ also shows how to extend a saved video's base64 data.
 For Vertex AI, configure `storageUri: gs://bucket/prefix/` on the source generation. Promptfoo
 downloads the output to its blob store and preserves the returned `gs://` object URI in
 `metadata.sourceVideoUri`; pass that value as `sourceVideo` in the next Vertex generation.
+Vertex also accepts saved MP4 files through `file://` or raw base64 bytes. Operation IDs are not video inputs.
+
+The response reports `metadata.extensionSeconds: 7` and omits `video.duration` for extension
+because the total source duration is unknown. `metadata.videoUri` is a compatibility alias for
+the same sanitized URI as `metadata.sourceVideoUri`. Native extension requires a 720p Veo
+source no longer than 141 seconds; arbitrary videos are outside that documented contract.
 
 ## Notes
 

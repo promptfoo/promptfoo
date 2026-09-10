@@ -8,21 +8,24 @@ providers:
   - id: google:video:veo-3.1-generate-preview
     config:
       vertexai: false
-      sourceVideo: file://YOUR_SOURCE_VIDEO.mp4
+      sourceVideo: https://generativelanguage.googleapis.com/v1beta/files/YOUR_VIDEO_ID:download?alt=media
       resolution: '720p'
       durationSeconds: 8 # Gemini request setting; Veo adds 7 seconds
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        const video = context.providerResponse?.video?.blobRef;
+        return video?.mimeType === 'video/mp4' && video.sizeBytes > 0;
 
 tests:
   - vars:
       continuation: The camera pans to reveal a beautiful sunset on the horizon
-    assert:
-      - type: is-valid-video
   - vars:
       continuation: The scene transitions smoothly to a night sky with stars appearing
-    assert:
-      - type: is-valid-video
 
 # To use this:
-# 1. First generate a video using promptfooconfig.yaml
-# 2. Copy metadata.sourceVideoUri from the generation response above
-# 3. Run this config within two days of the original generation
+# 1. Generate a video with promptfooconfig.yaml and export results with -o results.json.
+# 2. Copy response.metadata.sourceVideoUri into sourceVideo (or use file:// for a saved Veo MP4).
+# 3. Set GOOGLE_API_KEY or GEMINI_API_KEY and run within two days of the source generation.

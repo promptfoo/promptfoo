@@ -12,6 +12,7 @@ import {
   runExtensionHook,
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
+import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -1894,6 +1895,17 @@ describe('evaluatorHelpers', () => {
         expect(rendered).toBe('dGVzdC1hdWRpby1jb250ZW50');
       },
     );
+
+    it('keeps M4A variables as raw base64 for non-Gemini Google models', async () => {
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
+      const rendered = await renderPrompt(
+        toPrompt('{{audio}}'),
+        { audio: 'file://test-audio.m4a' },
+        undefined,
+        new AIStudioChatProvider('chat-bison'),
+      );
+      expect(rendered).toBe('dGVzdC1hdWRpby1jb250ZW50');
+    });
 
     it('should handle Azure Vision prompt structure correctly', async () => {
       const azureVisionPrompt = toPrompt(`[

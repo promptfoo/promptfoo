@@ -662,9 +662,9 @@ export interface GoogleVideoOptions {
   referenceImages?: (string | GoogleVideoReferenceImage)[];
 
   // Video extension (Veo 3.1 only)
-  /** @deprecated Use sourceVideo with a prior Gemini URI or a Vertex gs:// URI. */
+  /** @deprecated Use sourceVideo. This remains an alias for the same supported video inputs. */
   extendVideoId?: string;
-  sourceVideo?: string; // Prior Gemini URI for AI Studio, or gs:// URI for Vertex AI
+  sourceVideo?: string; // Veo video bytes/file://; native generated-file URI or Vertex gs:// URI
 
   // Person generation control
   personGeneration?: GoogleVideoPersonGeneration;

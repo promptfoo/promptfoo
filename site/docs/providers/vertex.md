@@ -249,7 +249,7 @@ providers:
 
 #### Video Extension
 
-The Vertex AI Veo 3.1 models listed above support extending an existing video. Set `sourceVideo` to a Cloud Storage URI (`gs://`) for an MP4 video:
+The Vertex AI Veo 3.1 models listed above support extending an existing video. Set `sourceVideo` to an MP4 file (`file://`), base64 video bytes, or a Cloud Storage URI (`gs://`). For example:
 
 ```yaml
 providers:
@@ -263,7 +263,7 @@ prompts:
   - 'Continue the camera movement toward the mountains'
 ```
 
-Vertex video extensions add a fixed 7 seconds to the source video. Promptfoo omits `durationSeconds` from extension requests, including when configured. Local paths, base64 data, Gemini video URIs, and operation IDs are unsupported.
+Vertex video extension adds 7 seconds to the source video. Promptfoo omits `durationSeconds` from extension requests and warns when a configured duration differs from 8; the configured duration does not change the extension length. For Cloud Storage input, promptfoo sends `video.gcsUri`. For base64 and `file://` input, it sends `video.bytesBase64Encoded`. Operation names such as `projects/.../operations/...` are not video inputs; promptfoo rejects them with instructions to supply the actual video.
 
 ## Model Capabilities
 

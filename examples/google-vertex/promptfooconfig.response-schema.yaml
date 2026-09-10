@@ -21,8 +21,8 @@ tests:
   - vars:
       topic: artificial intelligence
     assert:
-      - type: contains
-        value: 'AI'
+      - type: regex
+        value: '\b(?:AI|[Aa]rtificial [Ii]ntelligence)\b'
         transform: JSON.parse(output).tweet
 
   - vars:
