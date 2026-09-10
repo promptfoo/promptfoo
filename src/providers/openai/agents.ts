@@ -138,25 +138,15 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       });
 
       this.executionModelSettings = resolveModelSettings(this.agentConfig.modelSettings);
-      const overriddenAgent = applyExecutionOverrides(
-        configuredAgent,
-        {
-          model: this.agentConfig.model || undefined,
-          modelSettings: this.executionModelSettings,
-        },
-        this.agentConfig.executeTools !== false && this.agentConfig.executeTools !== 'mock',
-      );
-      const mockAwareAgent = this.wrapToolsIfNeeded(overriddenAgent);
-
       logger.debug('[AgentsProvider] Agent initialized successfully', {
-        name: mockAwareAgent.name,
-        toolCount: mockAwareAgent.tools.length,
-        handoffCount: mockAwareAgent.handoffs.length,
-        inputGuardrailCount: mockAwareAgent.inputGuardrails.length,
-        outputGuardrailCount: mockAwareAgent.outputGuardrails.length,
+        name: configuredAgent.name,
+        toolCount: configuredAgent.tools.length,
+        handoffCount: configuredAgent.handoffs.length,
+        inputGuardrailCount: configuredAgent.inputGuardrails.length,
+        outputGuardrailCount: configuredAgent.outputGuardrails.length,
       });
 
-      return mockAwareAgent;
+      return configuredAgent;
     } catch (error) {
       logger.error('[AgentsProvider] Failed to initialize agent', { error });
       throw new Error(`Failed to initialize agent: ${error}`);
@@ -216,7 +206,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         signal: callApiOptions?.abortSignal,
       };
 
-      // Keep Runner defaults for SDK-created agents while the cloned graph above enforces the
+      // Keep Runner defaults for SDK-created agents while the per-run graph below enforces the
       // provider overrides on explicit initial and handoff agents.
       const runner = new Runner({
         ...(this.agentConfig.model ? { model: this.agentConfig.model } : {}),
@@ -229,7 +219,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
       const traceContext = parseTraceparent(context?.traceparent);
       const configuredExport = getConfiguredTracingExport();
-      const explicitModel = runOptions.model ?? this.agent?.model;
+      const explicitModel = runOptions.model ?? (this.agentConfig.model || this.agent?.model);
       const traceMetadata = buildTraceMetadata(
         context,
         this.agentConfig.otlpEndpoint ?? configuredExport?.endpoint,
@@ -244,7 +234,16 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       const executeRun = () =>
         getOrCreateTrace(
           async () => {
-            return await runner.run(this.agent!, this.parsePromptInput(prompt), runOptions);
+            const overriddenAgent = applyExecutionOverrides(
+              this.agent!,
+              {
+                model: this.agentConfig.model || undefined,
+                modelSettings: this.executionModelSettings,
+              },
+              this.agentConfig.executeTools !== false && this.agentConfig.executeTools !== 'mock',
+            );
+            const runtimeAgent = this.wrapToolsIfNeeded(overriddenAgent);
+            return await runner.run(runtimeAgent, this.parsePromptInput(prompt), runOptions);
           },
           {
             ...(traceContext ? { traceId: `trace_${traceContext.traceId}` } : {}),
@@ -569,44 +568,51 @@ function applyExecutionOverrides(
 
   const clonedAgents = new WeakMap<Agent<any, any>, Agent<any, any>>();
 
-  const cloneAgent = (source: Agent<any, any>): Agent<any, any> => {
+  const refreshAgent = (
+    source: Agent<any, any>,
+    visited: WeakSet<Agent<any, any>>,
+  ): Agent<any, any> => {
     const existing = clonedAgents.get(source);
-    if (existing) {
+    if (existing && visited.has(source)) {
       return existing;
     }
 
-    const cloned = cloneAgentPreservingHooks(source, {
+    const snapshot = cloneAgentPreservingHooks(source, {
       ...(overrides.model === undefined ? {} : { model: overrides.model }),
       ...(overrides.modelSettings === undefined ? {} : { modelSettings: overrides.modelSettings }),
       handoffs: [],
       // clone() spreads the source, so undefined must explicitly preserve unconfigured tools.
       tools: source.tools.length > 0 || source.hasExplicitToolConfig() ? source.tools : undefined,
     });
+    // The SDK tracks tool use by Agent identity. Refresh configuration without replacing the
+    // runtime object when a handoff revisits the same source during this run.
+    const cloned = existing ? Object.assign(existing, snapshot) : snapshot;
     clonedAgents.set(source, cloned);
+    visited.add(source);
     cloned.handoffs = source.handoffs.map((candidate) => {
       const explicitHandoff = 'clone' in candidate && 'agent' in candidate;
       if (!explicitHandoff && !refreshPlainHandoffs) {
         // Mock mode needs plain Agent entries for recursive tool wrapping, and cannot run
         // the tool callbacks that update their targets during execution.
-        return cloneAgent(candidate as Agent<any, any>);
+        return refreshAgent(candidate as Agent<any, any>, visited);
       }
 
       const agentHandoff = explicitHandoff
         ? (candidate as Handoff<any, any>)
         : handoff(candidate as Agent<any, any>);
       return agentHandoff.clone({
-        agent: cloneAgent(agentHandoff.agent),
+        agent: refreshAgent(agentHandoff.agent, visited),
         // Tool and handoff callbacks can update an already-cloned target or its descendants.
-        // Use a fresh cycle-safe graph at transfer time so execution sees those updates.
+        // Refresh that graph per transfer while retaining this run's source-to-runtime identities.
         onInvokeHandoff: async (context, args) =>
-          applyExecutionOverrides(await agentHandoff.onInvokeHandoff(context, args), overrides),
+          refreshAgent(await agentHandoff.onInvokeHandoff(context, args), new WeakSet()),
       });
     });
 
     return cloned;
   };
 
-  return cloneAgent(agent);
+  return refreshAgent(agent, new WeakSet());
 }
 
 let tracingProcessorRegistration: Promise<void> | undefined;
