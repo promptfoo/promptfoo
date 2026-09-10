@@ -65,10 +65,28 @@ describe('EvalResult', () => {
       const opaqueInput = 'abcdef0123456789'.repeat(8);
       const result = createEvaluateResult({
         prompt: { raw: opaqueInput, label: 'fixture', config: { opaque: opaqueInput } },
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Fixture',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'Fixture',
+              assertion: {
+                type: 'contains',
+                value: opaqueInput,
+                config: { clientState: 'sk-abcdefghijklmnopqrstuvwxyz' },
+              },
+            },
+          ],
+        },
         testCase: {
           vars: { image: opaqueInput, apiKey: 'vars-fixture' },
           options: {
             provider: { id: 'fixture', config: { opaque: opaqueInput } },
+            clientState: 'sk-abcdefghijklmnopqrstuvwxyz',
           },
           assert: [
             {
@@ -77,6 +95,7 @@ describe('EvalResult', () => {
                 {
                   type: 'llm-rubric',
                   value: opaqueInput,
+                  config: { clientState: 'sk-abcdefghijklmnopqrstuvwxyz' },
                   provider: { id: 'fixture', config: { opaque: opaqueInput } },
                 },
               ],
@@ -98,6 +117,12 @@ describe('EvalResult', () => {
         id: 'fixture',
         config: { opaque: '[REDACTED]' },
       });
+      expect(sanitized.testCase.options?.clientState).toBe('[REDACTED]');
+      expect(sanitized.gradingResult?.componentResults?.[0].assertion).toEqual({
+        type: 'contains',
+        value: opaqueInput,
+        config: { clientState: '[REDACTED]' },
+      });
       expect(sanitized.testCase.assert).toEqual([
         {
           type: 'assert-set',
@@ -105,6 +130,7 @@ describe('EvalResult', () => {
             {
               type: 'llm-rubric',
               value: opaqueInput,
+              config: { clientState: '[REDACTED]' },
               provider: { id: 'fixture', config: { opaque: '[REDACTED]' } },
             },
           ],
@@ -1173,7 +1199,7 @@ describe('EvalResult', () => {
         );
 
         expect(JSON.stringify(result.testCase)).not.toContain('sk-ant-api03-THROWING-GETTER');
-        expect(result.testCase).toEqual({});
+        expect(result.testCase.options).toBeUndefined();
         expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(errorSecret);
       });
     });

@@ -184,30 +184,33 @@ function sanitizeForDbWithSecrets<T>(obj: T, redactStringValues = true): T {
 
 function sanitizeAssertionForDb(assertion: Assertion | AssertionSet): Assertion | AssertionSet {
   if ('assert' in assertion) {
-    return { ...assertion, assert: assertion.assert.map(sanitizeAssertionForDb) as Assertion[] };
+    return {
+      ...sanitizeForDbWithSecrets(assertion),
+      assert: assertion.assert.map(sanitizeAssertionForDb) as Assertion[],
+    };
   }
-  return { ...assertion, provider: sanitizeForDbWithSecrets(assertion.provider) };
+  return {
+    ...sanitizeForDbWithSecrets(assertion),
+    value: sanitizeForDbWithSecrets(assertion.value, false),
+  };
 }
 
 // Prompt text and test inputs can contain legitimate hashes, base64, or JSON.
-// Apply value-based credential detection only to their provider-bearing fields.
+// Preserve those data fields while keeping value-based redaction on configuration.
 function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
   if (!testCase) {
     return testCase;
   }
   try {
-    const sanitized = sanitizeForDbWithSecrets(testCase, false);
+    const sanitized = sanitizeForDbWithSecrets(testCase);
+    if (testCase.vars) {
+      sanitized.vars = sanitizeForDbWithSecrets(testCase.vars, false);
+    }
     if (testCase.provider) {
       sanitized.provider = sanitizeProvider(testCase.provider);
     }
-    if (testCase.options?.provider) {
-      sanitized.options!.provider = sanitizeForDbWithSecrets(testCase.options.provider);
-    }
     if (testCase.assert) {
-      sanitized.assert = sanitizeForDbWithSecrets(
-        testCase.assert.map(sanitizeAssertionForDb),
-        false,
-      );
+      sanitized.assert = testCase.assert.map(sanitizeAssertionForDb);
     }
     return sanitized;
   } catch {
@@ -386,10 +389,8 @@ function redactHttpHeadersOnMetadata<T>(
   return nextMetadata as T;
 }
 
-// Walk a `GradingResult`-shaped value and redact `metadata.http` on the result and
-// every nested `componentResults[]`. Limits recursion to the documented schema
-// (`componentResults` only) — does not descend into arbitrary subtrees.
-function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
+// Redact transport headers and assertion configs on each grading component.
+function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
     return gradingResult;
   }
@@ -406,10 +407,15 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
     }
   }
 
+  if (asRecord(gr.assertion)) {
+    next.assertion = sanitizeAssertionForDb(gr.assertion as Assertion | AssertionSet);
+    mutated = true;
+  }
+
   if (Array.isArray(gr.componentResults)) {
     let componentMutated = false;
     const nextComponents = gr.componentResults.map((component) => {
-      const redacted = redactHttpHeadersOnGradingResult(component);
+      const redacted = sanitizeGradingResultForDb(component);
       if (redacted !== component) {
         componentMutated = true;
       }
@@ -445,10 +451,6 @@ function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
   return redactHttpHeadersOnMetadata(metadata, {
     legacyHeadersSource: sanitizeForDb(responseMetadata),
   });
-}
-
-function sanitizeGradingResultForDb<T>(gradingResult: T): T {
-  return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
 // `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
