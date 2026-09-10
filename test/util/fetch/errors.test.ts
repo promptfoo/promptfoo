@@ -351,6 +351,15 @@ describe('HttpRateLimitError: quota classification via type', () => {
     expect(err.code).toBe('some_new_billing_code');
   });
 
+  it('lets a recognized transient code win over a hard-quota type without recovery headers', () => {
+    for (const code of ['rate_limit_exceeded', 'rate_limit_error', 'tokens_per_min']) {
+      const err = new HttpRateLimitError({ status: 429, code, type: 'insufficient_quota' });
+      expect(err.kind, code).toBe('rate_limit');
+      expect(err.code, code).toBe(code);
+      expect(err.type, code).toBe('insufficient_quota');
+    }
+  });
+
   it('keeps rate_limit when neither code nor type is a hard quota', () => {
     const err = new HttpRateLimitError({
       status: 429,

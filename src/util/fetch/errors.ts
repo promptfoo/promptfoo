@@ -48,6 +48,28 @@ export const DEFINITIVE_BILLING_ERROR_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Body codes that name a per-window throttle outright (OpenAI / Azure OpenAI
+ * `rate_limit_exceeded`, Anthropic `rate_limit_error` / `overloaded_error`,
+ * per-minute token / request buckets). A hard-quota `type` is only a fallback
+ * for an unrecognized `code`; next to one of these it never promotes the error
+ * to `quota`, whether or not the server sent a `Retry-After` / reset header.
+ */
+export const TRANSIENT_RATE_LIMIT_ERROR_CODES: ReadonlySet<string> = new Set([
+  'rate_limit_exceeded',
+  'rate_limit_error',
+  'rate_limit',
+  'rate_limited',
+  'overloaded_error',
+  'too_many_requests',
+  'tokens',
+  'requests',
+  'tokens_per_min',
+  'requests_per_min',
+  'tokens_per_day',
+  'requests_per_day',
+]);
+
+/**
  * Upper bound for the "server hinted a recovery time, so this isn't billing"
  * heuristic. A server that says "retry in &lt;= 1 hour" (via `Retry-After`
  * or a reset timestamp) is signalling a per-window throttle, not a billing
@@ -152,15 +174,17 @@ export class HttpRateLimitError extends Error {
     const resetAt = normalizeNonNegativeMs(init.resetAt);
 
     // A hard-quota body code (or a hard-quota `type` next to an unrecognized
-    // code) normally implies `kind: 'quota'`. But Azure OpenAI is known to
+    // code — a recognized transient code such as `rate_limit_exceeded` wins
+    // over the type) normally implies `kind: 'quota'`. But Azure OpenAI is known to
     // return `insufficient_quota` for per-minute deployment saturation too; in
     // that case the server hints at recovery via `Retry-After` or a reset
     // timestamp. Trust that hint: if the wait is short, this is recoverable
     // rate_limit, not billing exhaustion. A billing state named outright
     // (`credit_balance_exhausted`, ...) in either `code` or `type` is never
     // downgraded — some gateways attach a Retry-After to every 429.
+    const typeImpliesQuota = isHardQuotaCode(init.type) && !isTransientRateLimitCode(init.code);
     let kind: RateLimitKind =
-      isHardQuotaCode(init.code) || isHardQuotaCode(init.type) ? 'quota' : 'rate_limit';
+      isHardQuotaCode(init.code) || typeImpliesQuota ? 'quota' : 'rate_limit';
     if (
       kind === 'quota' &&
       !isDefinitiveBillingCode(init.code) &&
@@ -194,6 +218,10 @@ export function isHardQuotaCode(code: string | undefined): boolean {
 
 export function isDefinitiveBillingCode(code: string | undefined): boolean {
   return code !== undefined && DEFINITIVE_BILLING_ERROR_CODES.has(code);
+}
+
+export function isTransientRateLimitCode(code: string | undefined): boolean {
+  return code !== undefined && TRANSIENT_RATE_LIMIT_ERROR_CODES.has(code);
 }
 
 /**
