@@ -333,8 +333,8 @@ describe('Google example provider contracts', () => {
       expect(textRequests[1].body.tools ?? []).toEqual([]);
       expect(textRequests[1].url).toBe(
         vertex
-          ? 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.5-flash:generateContent'
-          : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
+          ? 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.8-flash:generateContent'
+          : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent',
       );
       expect(requests.every(({ auth }) => auth === (vertex ? 'oauth' : 'native'))).toBe(true);
     },
