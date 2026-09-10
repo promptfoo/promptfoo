@@ -31,17 +31,13 @@ export async function isPathWithinDir(filePath: string, dir: string): Promise<bo
     const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
     const realTargetRaw = await fs.realpath(absoluteTarget);
 
-    // Windows: compare case-insensitive
-    const realDir = process.platform === 'win32' ? realDirRaw.toLowerCase() : realDirRaw;
-    const realTarget = process.platform === 'win32' ? realTargetRaw.toLowerCase() : realTargetRaw;
-
     // Equal means the dir itself
-    if (realTarget === realDir) {
+    if (realTargetRaw === realDirRaw) {
       return true;
     }
 
     // Containment check via relative() — avoids prefix gotchas like /foo/bar vs /foo/barista
-    const rel = path.relative(realDir, realTarget);
+    const rel = path.relative(realDirRaw, realTargetRaw);
     return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
   } catch (error: any) {
     // If target doesn't exist (ENOENT), validate parent directory instead.

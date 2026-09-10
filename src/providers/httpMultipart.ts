@@ -255,8 +255,12 @@ async function loadFilePart(
   if (!(await isPathWithinDir(resolvedPath, cliState.basePath || process.cwd()))) {
     throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
   }
+  const canonicalPath = await fs.realpath(resolvedPath);
+  if (!(await isPathWithinDir(canonicalPath, cliState.basePath || process.cwd()))) {
+    throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
+  }
 
-  const buffer = await fs.readFile(resolvedPath, { signal: abortSignal });
+  const buffer = await fs.readFile(canonicalPath, { signal: abortSignal });
   return {
     buffer,
     filename: path.basename(resolvedPath),
