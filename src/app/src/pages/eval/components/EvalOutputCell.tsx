@@ -239,18 +239,21 @@ function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): stri
   return undefined;
 }
 
-function getFailAndPassReasons(output: EvaluateTableOutput): {
+function getFailAndPassReasons(
+  output: EvaluateTableOutput,
+  gradingResult = output.gradingResult,
+): {
   failReasons: string[];
   passReasons: string[];
 } {
   const failReasons =
-    output.gradingResult?.componentResults
+    gradingResult?.componentResults
       ?.filter((result) => (result ? !result.pass : false))
       .map((result) => result.reason)
       .filter((reason) => reason) ?? [];
 
   const passReasons =
-    output.gradingResult?.componentResults
+    gradingResult?.componentResults
       ?.filter((result) => (result ? result.pass : false))
       .map((result) => result.reason)
       .filter((reason) => reason) ?? [];
@@ -1655,7 +1658,7 @@ function EvalOutputCell({
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
   const outputAudioSource = resolveAudioSource(renderedOutput.audio);
-  const { failReasons, passReasons } = getFailAndPassReasons(output);
+  const { failReasons, passReasons } = getFailAndPassReasons(output, hydratedGradingResult);
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
   const detailMetadata = cellDetail?.metadata as EvaluateTableOutput['metadata'] | undefined;

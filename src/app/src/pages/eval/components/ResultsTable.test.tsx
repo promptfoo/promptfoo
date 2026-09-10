@@ -913,6 +913,7 @@ describe('ResultsTable Metrics Display', () => {
               ...mockTableWithMedia.body[0],
               vars: ['[content omitted: 120000 characters]'],
               outputs: [
+                null,
                 {
                   id: 'result-1',
                   pass: true,

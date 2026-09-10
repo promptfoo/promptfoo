@@ -650,7 +650,7 @@ function renderVariableCell({
     fallbackValue: info.getValue(),
   });
 
-  const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
+  const output = row.outputs?.find((output) => output) ?? null;
   const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
     | Record<string, { path: string; type: string; format?: string }>
     | undefined;
@@ -2328,7 +2328,7 @@ function ResultsTable({
           columnHelper.accessor(
             (row: EvaluateTableRow) => {
               // Get the value from the first output's transformDisplayVars
-              const output = row.outputs?.[0];
+              const output = row.outputs?.find((output) => output);
               const transformVars = output?.metadata?.transformDisplayVars as
                 | Record<string, string>
                 | undefined;
@@ -2345,7 +2345,7 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 const value = info.getValue();
-                const output = info.row.original.outputs?.[0];
+                const output = info.row.original.outputs?.find((output) => output);
                 if (isOmittedText(value) && output?.id) {
                   return (
                     <HydratedText

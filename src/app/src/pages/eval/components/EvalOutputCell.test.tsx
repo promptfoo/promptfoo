@@ -784,6 +784,13 @@ describe('EvalOutputCell', () => {
         pass: false,
         score: 0,
         reason: 'Full grading reason from detail',
+        componentResults: [
+          {
+            pass: false,
+            score: 0,
+            reason: 'Full component reason from detail',
+          },
+        ],
       },
     });
 
@@ -794,6 +801,18 @@ describe('EvalOutputCell', () => {
         output={{
           ...defaultProps.output,
           prompt: '',
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: '[content omitted: 120000 characters]',
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: '[content omitted: 120000 characters]',
+              },
+            ],
+          },
           detail: {
             available: true,
             omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
@@ -822,12 +841,10 @@ describe('EvalOutputCell', () => {
       topic: 'metadata',
     });
     expect(JSON.parse(dialogComponent.getAttribute('data-grading-results') || '[]')).toEqual([
-      {
-        pass: false,
-        score: 0,
-        reason: 'Full grading reason from detail',
-      },
+      { pass: false, score: 0, reason: 'Full component reason from detail' },
     ]);
+    expect(screen.getByText('Full component reason from detail')).toBeInTheDocument();
+    expect(screen.queryByText('[content omitted: 120000 characters]')).not.toBeInTheDocument();
   });
 
   it('reloads detail after a rating save finishes', async () => {
