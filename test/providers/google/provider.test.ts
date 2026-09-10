@@ -1194,6 +1194,46 @@ describe('GoogleProvider', () => {
       },
     );
 
+    it('reports partial callback failure without returning executable calls', async () => {
+      const succeed = vi.fn().mockResolvedValue('completed');
+      const fail = vi.fn().mockRejectedValue(new Error('callback failed'));
+      const provider = new GoogleProvider('gemini-3.8-flash', {
+        config: { apiKey: 'test-key', functionToolCallbacks: { succeed, fail } },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { functionCall: { name: 'succeed', args: {} } },
+                  { functionCall: { name: 'fail', args: {} } },
+                ],
+              },
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      vi.mocked(util.maybeCoerceToGeminiFormat).mockReturnValue({
+        contents: [{ role: 'user', parts: [{ text: 'test prompt' }] }],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.error).toContain(
+        "Function callback 'fail' failed after 1 completed callback(s)",
+      );
+      expect(response.error).toContain('Check for side effects before retrying');
+      expect(response.output).toBeUndefined();
+      expect(succeed).toHaveBeenCalledExactlyOnceWith('{}');
+      expect(fail).toHaveBeenCalledExactlyOnceWith('{}');
+    });
+
     it('should execute callbacks from a fresh Gemini function-call response', async () => {
       const callback = vi.fn().mockResolvedValue('Sunny, 25°C');
       const provider = new GoogleProvider('gemini-3.5-flash-lite', {

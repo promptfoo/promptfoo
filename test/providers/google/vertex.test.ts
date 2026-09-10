@@ -1348,7 +1348,10 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     const result = await provider.callApi('Call the error function');
 
-    expect(result.output).toBe('{"functionCall":{"name":"errorFunction","args":"{}"}}');
+    expect(result.output).toBeUndefined();
+    expect(result.error).toContain(
+      "Function callback 'errorFunction' failed after 0 completed callback(s)",
+    );
     expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
   });
 
@@ -1525,10 +1528,11 @@ describe('VertexChatProvider.callGeminiApi', () => {
         path.resolve('/test/base/path', 'nonexistent/module.js'),
         'errorFunction',
       );
-      // Should fall back to original function call object when loading fails
-      expect(result.output).toBe(
-        '{"functionCall":{"name":"error_function","args":"{\\"test\\":\\"data\\"}"}}',
+      expect(result.output).toBeUndefined();
+      expect(result.error).toContain(
+        "Function callback 'error_function' failed after 0 completed callback(s)",
       );
+      expect(result.error).toContain('Module not found');
     });
 
     it('should handle mixed inline and external function callbacks', async () => {

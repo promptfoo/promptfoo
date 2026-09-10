@@ -659,7 +659,7 @@ describe('GoogleGenericProvider', () => {
       expect(result).toEqual({ status: 'ok', values: [1, 2] });
     });
 
-    it('should preserve output when a single callback returns no value', async () => {
+    it('does not return an executed call when a single callback returns no value', async () => {
       const output = [{ functionCall: { name: 'test_function', args: {} } }];
       const provider = new TestGoogleProvider('gemini-3.6-flash');
 
@@ -669,7 +669,7 @@ describe('GoogleGenericProvider', () => {
         false,
       );
 
-      expect(result).toBe(output);
+      expect(result).toBe('');
     });
 
     it('should serialize multiple structured callback results predictably', async () => {
@@ -990,7 +990,7 @@ describe('GoogleGenericProvider', () => {
     });
 
     it.each(['returns no value', 'throws'])(
-      'preserves assembled calls when a callback %s',
+      'does not return an executed streamed call when a callback %s',
       async (outcome) => {
         const callback = vi.fn().mockImplementation(() => {
           if (outcome === 'throws') {
@@ -998,7 +998,7 @@ describe('GoogleGenericProvider', () => {
           }
         });
         const provider = new TestGoogleProvider('gemini-3.8-flash');
-        const result = await provider['executeFunctionToolCallbacks'](
+        const result = provider['executeFunctionToolCallbacks'](
           [
             { functionCall: { name: 'weather', willContinue: true } },
             { functionCall: { partialArgs: [{ jsonPath: '$.city', stringValue: 'Boston' }] } },
@@ -1011,10 +1011,85 @@ describe('GoogleGenericProvider', () => {
           false,
         );
 
-        expect(result).toEqual([{ functionCall: { name: 'weather', args: { city: 'Boston' } } }]);
+        if (outcome === 'throws') {
+          await expect(result).rejects.toThrow(
+            "Function callback 'weather' failed after 0 completed callback(s)",
+          );
+        } else {
+          await expect(result).resolves.toBe('');
+        }
         expect(callback).toHaveBeenCalledExactlyOnceWith('{"city":"Boston"}');
       },
     );
+
+    it.each([
+      ['same ID', 'call-1', 'call-1'],
+      ['omitted continuation ID', 'call-1', undefined],
+      ['no IDs', undefined, undefined],
+    ])('preserves metadata from later fragments with %s', async (_label, firstId, lastId) => {
+      const provider = new TestGoogleProvider('gemini-3.8-flash');
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          { functionCall: { id: firstId, name: 'weather', willContinue: true }, thought: true },
+          { text: 'Between fragments' },
+          {
+            functionCall: { id: lastId, args: { city: 'Boston' }, willContinue: false },
+            thoughtSignature: 'late-signature',
+          },
+        ],
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+        },
+        false,
+      );
+
+      expect(result).toEqual([
+        {
+          functionCall: { id: firstId, name: 'weather', args: { city: 'Boston' } },
+          thought: true,
+          thoughtSignature: 'late-signature',
+        },
+        { text: 'Between fragments' },
+      ]);
+    });
+
+    it('associates late signatures with their parallel calls for a partial callback map', async () => {
+      const callback = vi.fn();
+      const provider = new TestGoogleProvider('gemini-3.8-flash');
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          { functionCall: { id: 'first', name: 'configured', willContinue: true } },
+          { functionCall: { id: 'second', name: 'missing', willContinue: true } },
+          {
+            functionCall: { id: 'second', args: { city: 'Seattle' } },
+            thoughtSignature: 'second-signature',
+          },
+          {
+            functionCall: { id: 'first', args: { city: 'Boston' } },
+            thoughtSignature: 'first-signature',
+          },
+        ],
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+          functionToolCallbacks: { configured: callback },
+        },
+        false,
+      );
+
+      expect(result).toEqual([
+        {
+          functionCall: { id: 'first', name: 'configured', args: { city: 'Boston' } },
+          thoughtSignature: 'first-signature',
+        },
+        {
+          functionCall: { id: 'second', name: 'missing', args: { city: 'Seattle' } },
+          thoughtSignature: 'second-signature',
+        },
+      ]);
+      expect(callback).not.toHaveBeenCalled();
+    });
 
     it('should preserve buffered fragments when a later fragment is valid JSON on its own', async () => {
       const callback = vi.fn().mockResolvedValue('streamed');
@@ -1290,25 +1365,31 @@ describe('GoogleGenericProvider', () => {
       expect(callback).toHaveBeenCalledOnce();
     });
 
-    it('should preserve all original calls when a parallel callback fails', async () => {
+    it('reports partial callback failure and does not execute later calls', async () => {
       const originalCalls = [
         { functionCall: { name: 'succeed', args: { city: 'Boston' } } },
         { functionCall: { name: 'fail', args: { city: 'Seattle' } } },
+        { functionCall: { name: 'later', args: {} } },
       ];
       const provider = new TestGoogleProvider('gemini-3.6-flash');
+      const succeed = vi.fn().mockResolvedValue('success');
+      const fail = vi.fn().mockRejectedValue(new Error('callback failed'));
+      const later = vi.fn();
 
-      const result = await provider['executeFunctionToolCallbacks'](
+      const result = provider['executeFunctionToolCallbacks'](
         originalCalls,
         {
-          functionToolCallbacks: {
-            succeed: vi.fn().mockResolvedValue('success'),
-            fail: vi.fn().mockRejectedValue(new Error('callback failed')),
-          },
+          functionToolCallbacks: { succeed, fail, later },
         },
         false,
       );
 
-      expect(result).toBe(originalCalls);
+      await expect(result).rejects.toThrow(
+        "Function callback 'fail' failed after 1 completed callback(s)",
+      );
+      expect(succeed).toHaveBeenCalledExactlyOnceWith('{"city":"Boston"}');
+      expect(fail).toHaveBeenCalledExactlyOnceWith('{"city":"Seattle"}');
+      expect(later).not.toHaveBeenCalled();
     });
 
     it('does not execute callbacks when a later parallel call is not configured', async () => {

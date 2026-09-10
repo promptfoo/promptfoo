@@ -943,11 +943,15 @@ export class VertexChatProvider extends GoogleGenericProvider {
         };
       }
     }
-    response.output = await this.executeFunctionToolCallbacks(
-      response.output,
-      config,
-      toolsDisabled,
-    );
+    try {
+      response.output = await this.executeFunctionToolCallbacks(
+        response.output,
+        config,
+        toolsDisabled,
+      );
+    } catch (error) {
+      return { ...response, output: undefined, error: String(error) };
+    }
     return response;
   }
 
