@@ -31,6 +31,21 @@ function getAttributes(span: any): Record<string, unknown> {
   );
 }
 
+function createJwe() {
+  const header = Buffer.from(JSON.stringify({ alg: 'dir', enc: 'A256GCM' })).toString('base64url');
+  const iv = Buffer.alloc(12, 1);
+  const cipher = createCipheriv('aes-256-gcm', Buffer.alloc(32, 2), iv);
+  cipher.setAAD(Buffer.from(header));
+  const encrypted = Buffer.concat([cipher.update('fixture credential'), cipher.final()]);
+  return {
+    protected: header,
+    encrypted_key: '',
+    iv: iv.toString('base64url'),
+    ciphertext: encrypted.toString('base64url'),
+    tag: cipher.getAuthTag().toString('base64url'),
+  };
+}
+
 describe('OTLPTracingExporter', () => {
   beforeEach(() => {
     mockFetchWithProxy.mockReset();
@@ -82,26 +97,54 @@ describe('OTLPTracingExporter', () => {
   it.each(['json', 'protobuf'] as const)(
     'redacts direct-encryption compact JWE credentials in %s',
     async (format) => {
-      const header = Buffer.from(JSON.stringify({ alg: 'dir', enc: 'A256GCM' })).toString(
-        'base64url',
-      );
-      const iv = Buffer.alloc(12, 1);
-      const cipher = createCipheriv('aes-256-gcm', Buffer.alloc(32, 2), iv);
-      cipher.setAAD(Buffer.from(header));
-      const encrypted = Buffer.concat([cipher.update('fixture credential'), cipher.final()]);
-      const token = [
-        header,
-        '',
-        iv.toString('base64url'),
-        encrypted.toString('base64url'),
-        cipher.getAuthTag().toString('base64url'),
-      ].join('.');
+      const token = Object.values(createJwe()).join('.');
       const { attributes } = await exportCustomData(
         { result: token, module: 'package.module.method' },
         format,
       );
       expect(attributes.result).toBe('<redacted>');
       expect(attributes.module).toBe('package.module.method');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts JWE JSON objects while preserving ordinary ciphertext metadata in %s',
+    async (format) => {
+      const flattened = createJwe();
+      const { encrypted_key, ...envelope } = flattened;
+      const general = { ...envelope, recipients: [{ encrypted_key }] };
+      const ordinary = { ciphertext: 'public data', tag: 'version-1' };
+      const input = { flattened, general, ordinary };
+      const { attributes, payload } = await exportCustomData(
+        { native: input, result: JSON.stringify(input), root: JSON.stringify(flattened) },
+        format,
+      );
+      for (const key of ['native', 'result']) {
+        expect(JSON.parse(attributes[key] as string)).toEqual({
+          flattened: '<redacted>',
+          general: '<redacted>',
+          ordinary,
+        });
+      }
+      expect(JSON.parse(attributes.root as string)).toBe('<redacted>');
+      expect(JSON.stringify(payload)).not.toContain(flattened.ciphertext);
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts complete plain YAML credential scalars in %s',
+    async (format) => {
+      const { attributes } = await exportCustomData(
+        {
+          inline: 'passphrase: correct horse battery staple\nname: fixture',
+          continued: 'config:\n  password:\n    correct horse\n    battery staple',
+          ordinary: 'description: correct horse battery staple',
+        },
+        format,
+      );
+      expect(attributes.inline).toBe('<redacted>');
+      expect(attributes.continued).toBe('<redacted>');
+      expect(attributes.ordinary).toBe('description: correct horse battery staple');
     },
   );
 
@@ -447,11 +490,17 @@ describe('OTLPTracingExporter', () => {
         name: 'signature metadata',
         input: {
           signature_algorithm: 'HMAC-SHA256',
+          signature_format: 'DER',
+          signature_scheme: 'RSA-PSS',
+          signature_encoding: 'base64',
           function_signature: 'lookup(id: string)',
           signature: 'opaque/value',
         },
         expected: {
           signature_algorithm: 'HMAC-SHA256',
+          signature_format: 'DER',
+          signature_scheme: 'RSA-PSS',
+          signature_encoding: 'base64',
           function_signature: 'lookup(id: string)',
           signature: '<redacted>',
         },
@@ -784,15 +833,6 @@ describe('OTLPTracingExporter', () => {
         `Authorization=Negotiate ${negotiateCredential}`,
         `Authorization: AWS4-HMAC-SHA256 Credential=account, SignedHeaders=host;x-amz-date, Signature=${awsCredential}`,
       ].join('\n');
-      const expectedLogDetails = [
-        'access_token: <redacted>',
-        'Cookie: <redacted>',
-        'Authorization: <redacted>',
-        'Authorization=<redacted>',
-        'Authorization: <redacted>',
-        'Authorization=<redacted>',
-        'Authorization: <redacted>',
-      ].join('\n');
       const evaluationId = 'a'.repeat(64);
       const testCaseId = 'b'.repeat(64);
       const span = {
@@ -891,7 +931,7 @@ describe('OTLPTracingExporter', () => {
         token_endpoint: 'https://issuer.example.com/oauth/token',
         token_url: 'https://issuer.example.com/token',
         secretary: 'Alice',
-        logDetails: expectedLogDetails,
+        logDetails: '<redacted>',
         nested: [{ refreshToken: '<redacted>' }],
       });
       expect(JSON.parse(attributes['tool.output'] as string)).toEqual({
@@ -905,12 +945,7 @@ describe('OTLPTracingExporter', () => {
       expect(attributes['trace.metadata.clientCredentials']).toBe('<redacted>');
       expect(attributes['evaluation.id']).toBe(evaluationId);
       expect(attributes['test.case.id']).toBe(testCaseId);
-      expect(exportedSpan.status.message).toBe(
-        'Authentication failed for <REDACTED_API_KEY>: ' +
-          '{"client_secret":"<redacted>","access_token":"<redacted>"}; ' +
-          'https://host/callback?access_token=<redacted>&token_count=12; ' +
-          expectedLogDetails,
-      );
+      expect(exportedSpan.status.message).toBe('<redacted>');
     },
   );
 

@@ -622,11 +622,11 @@ function sanitizeCredentialText(value: string): string {
     return '<redacted>';
   }
 
-  // Multiline credential values cannot be redacted safely as independent lines.
-  for (const [, , key] of value.matchAll(
-    /(?:^|[\r\n])[ \t]*(?:-[ \t]+)?(["']?)([A-Za-z_][A-Za-z\d_.-]*)\1[ \t]*:[ \t]*[|>](?:[1-9][+-]?|[+-][1-9]?)?[ \t]*(?:#[^\r\n]*)?(?:[\r\n]|$)/g,
+  // Plain and block YAML scalars can continue on later lines.
+  for (const [, , key, scalar] of value.matchAll(
+    /(?:^|[\r\n])[ \t]*(?:-[ \t]+)?(["']?)([A-Za-z_][A-Za-z\d_.-]*)\1[ \t]*:[ \t]*([^\r\n]*)/g,
   )) {
-    if (isCredentialAttributeKey(key)) {
+    if (isCredentialAttributeKey(key) && !/^[ \t]*["'[{]/.test(scalar)) {
       return '<redacted>';
     }
   }
@@ -797,7 +797,9 @@ function isCredentialAttributeKey(key: string): boolean {
       if (
         part === 'signature' &&
         (parts[index - 1] === 'function' ||
-          ['algorithm', 'method', 'type', 'version'].includes(parts[index + 1]))
+          ['algorithm', 'method', 'type', 'version', 'format', 'scheme', 'encoding'].includes(
+            parts[index + 1],
+          ))
       ) {
         return false;
       }
@@ -852,11 +854,33 @@ function isPrivateJwkParameter(source: Record<string, unknown> | unknown[], key:
     : source.kty === 'oct' && key === 'k';
 }
 
+function isJwe(value: unknown): boolean {
+  if (
+    !isRecord(value) ||
+    typeof value.protected !== 'string' ||
+    value.protected.length > MAX_STRUCTURED_ATTRIBUTE_BYTES ||
+    typeof value.ciphertext !== 'string' ||
+    typeof value.tag !== 'string'
+  ) {
+    return false;
+  }
+  try {
+    const header = JSON.parse(Buffer.from(value.protected, 'base64url').toString('utf8'));
+    return isRecord(header) && typeof header.alg === 'string' && typeof header.enc === 'string';
+  } catch {
+    return false;
+  }
+}
+
 function sanitizeStructuredAttribute(
   value: Record<string, unknown> | unknown[],
   state: { changed: boolean } = { changed: false },
   normalizeScalars = false,
 ): Record<string, unknown> | unknown[] | string {
+  if (isJwe(value)) {
+    state.changed = true;
+    return '<redacted>';
+  }
   type StructuredValue = Record<string, unknown> | unknown[];
   const root: StructuredValue = Array.isArray(value) ? [] : {};
   const stack: Array<{ source: StructuredValue; target: StructuredValue; depth: number }> = [
@@ -876,7 +900,8 @@ function sanitizeStructuredAttribute(
       if (
         isCredentialPairValue(source, key) ||
         isCredentialAttributeKey(key) ||
-        isPrivateJwkParameter(source, key)
+        isPrivateJwkParameter(source, key) ||
+        isJwe(entry)
       ) {
         sanitized = '<redacted>';
         state.changed = true;
