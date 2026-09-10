@@ -1,6 +1,7 @@
 import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
+import { resolveTracingOptions } from '../redteam/providers/tracingOptions';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import invariant from '../util/invariant';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
@@ -60,8 +61,7 @@ function createInitialGradingContext({
 
   if (
     assertionValueContext.trace &&
-    (test.metadata?.tracing as { includeInGrading?: boolean } | undefined)?.includeInGrading !==
-      false
+    resolveTracingOptions({ strategyId: test.metadata?.strategyId ?? '', test }).includeInGrading
   ) {
     gradingContext.traceData = assertionValueContext.trace;
     gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace);

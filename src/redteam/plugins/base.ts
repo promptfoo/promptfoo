@@ -13,7 +13,12 @@ import {
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
-import { sanitizeObject } from '../../util/sanitizer';
+import {
+  isSecretEnvVarName,
+  isSecretField,
+  sanitizeObject,
+  sanitizeUrl,
+} from '../../util/sanitizer';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
@@ -384,21 +389,28 @@ export abstract class RedteamPluginBase {
 function redactTraceEvidence(text: string): string {
   if (/^\s*[\[{]/.test(text)) {
     try {
-      return JSON.stringify(JSON.parse(text), (_key, value) =>
-        typeof value === 'string' ? redactTraceEvidence(value) : value,
+      return JSON.stringify(JSON.parse(text), (key, value) =>
+        isSecretField(key)
+          ? '[REDACTED]'
+          : typeof value === 'string'
+            ? redactTraceEvidence(value)
+            : value,
       );
     } catch {
       // Trace summaries may be prose rather than serialized trajectory steps.
     }
   }
   return text
+    .replace(/\bhttps?:\/\/[^\s"'`\\]+/gi, (url) => sanitizeUrl(url))
+    .replace(/\b((?:set-)?cookie\s*:\s*)(?:"[^"]*"|'[^']*'|[^"'`\r\n\\]*)/gi, '$1[REDACTED]')
     .replace(
-      /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|gh[opusr]_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|(?:Bearer|Basic)\s+[^\s"'`\\]+)/gi,
+      /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|(?:Bearer|Basic)\s+[^\s"'`\\]+)/gi,
       '[REDACTED]',
     )
     .replace(
-      /\b(api[_-]?key|token|password|secret|authorization|auth)\s*([=:])\s*(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
-      '$1$2[REDACTED]',
+      /\b([A-Za-z_][A-Za-z0-9_-]*)\s*([=:])\s*(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/g,
+      (match, key, separator) =>
+        isSecretField(key) || isSecretEnvVarName(key) ? `${key}${separator}[REDACTED]` : match,
     );
 }
 
@@ -410,7 +422,19 @@ function truncateTraceEvidence(text: string, limit: number): string {
   return `${text.slice(0, kept)}\n[${text.length - kept * 2} characters omitted]\n${text.slice(-kept)}`;
 }
 
+function hasTraceEvidence(context?: RedteamGradingContext): boolean {
+  return Boolean(
+    context?.traceData?.spans?.length ||
+      context?.traceContext?.spans?.length ||
+      context?.traceContext?.insights?.length ||
+      (!context?.traceData && !context?.traceContext && context?.traceSummary?.trim()),
+  );
+}
+
 function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
+  if (!hasTraceEvidence(gradingContext)) {
+    return '';
+  }
   const traceSummary =
     gradingContext?.traceSummary?.trim() ||
     (gradingContext?.traceContext
@@ -445,6 +469,19 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
       command,
       args,
     });
+    // Form-data sanitization can consume an entire shell command after an env assignment.
+    // Keep command strings for the credential-aware trace redactor below.
+    action.command = command;
+    if (typeof args === 'string') {
+      action.args = args;
+    } else if (args && typeof args === 'object' && action.args && typeof action.args === 'object') {
+      for (const key of ['command', 'cmd']) {
+        const value = (args as Record<string, unknown>)[key];
+        if (typeof value === 'string') {
+          (action.args as Record<string, unknown>)[key] = value;
+        }
+      }
+    }
     const serialized = JSON.stringify(action, (_key, value) =>
       typeof value === 'string' ? redactTraceEvidence(value) : value,
     );
@@ -455,7 +492,7 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
     truncateTraceEvidence(redactTraceEvidence(traceSummary), 4_000),
     ...selected,
     ...(actions.length > selected.length
-      ? [`[${actions.length - selected.length} actions omitted]`]
+      ? [`[${actions.length - selected.length} tool actions omitted]`]
       : []),
   ]
     .filter(Boolean)
@@ -529,9 +566,7 @@ export abstract class RedteamGraderBase {
     return Boolean(
       context?.imageOutputs?.length ||
         context?.providerResponse?.images?.length ||
-        context?.traceSummary?.trim() ||
-        context?.traceContext ||
-        context?.traceData ||
+        hasTraceEvidence(context) ||
         context?.wasExfiltrated ||
         context?.exfilCount ||
         context?.exfilRecords?.length,
@@ -716,9 +751,7 @@ export abstract class RedteamGraderBase {
       logger.debug('[Redteam] No configured grading provider detected, preferring remote grading');
     }
     const gradingOutput =
-      imagesForGrading?.length && typeof llmOutput !== 'string'
-        ? (JSON.stringify(llmOutput) ?? '')
-        : llmOutput;
+      typeof llmOutput === 'string' ? llmOutput : (JSON.stringify(llmOutput) ?? '');
     const grade = (
       imagesForGrading?.length
         ? await matchesLlmRubric(finalRubric, gradingOutput, grading, undefined, undefined, {

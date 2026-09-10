@@ -1,19 +1,42 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/index';
 import { handleRedteam } from '../../src/assertions/redteam';
+import cliState from '../../src/cliState';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import * as exfilTracking from '../../src/redteam/strategies/indirectWebPwn';
 
 describe('handleRedteam', () => {
+  const originalConfig = cliState.config;
   afterEach(() => {
+    cliState.config = originalConfig;
     vi.resetAllMocks();
     vi.restoreAllMocks();
   });
 
-  it('passes local trace evidence to the grader alongside a refusal', async () => {
+  it.each([
+    { tracing: {}, metadata: {}, include: true },
+    { tracing: { includeInGrading: false }, metadata: {}, include: false },
+    { tracing: {}, metadata: { tracing: { includeInGrading: false } }, include: false },
+    {
+      tracing: { strategies: { goat: { includeInGrading: false } } },
+      metadata: { strategyId: 'goat' },
+      include: false,
+    },
+    {
+      tracing: {},
+      metadata: { strategyConfig: { tracing: { includeInGrading: false } } },
+      include: false,
+    },
+  ])('honors the effective trace grading setting: %j', async ({ tracing, metadata, include }) => {
+    cliState.config = { ...originalConfig, redteam: { tracing } };
     const assertion = { type: 'promptfoo:redteam:rbac' as const };
-    const test = { vars: {}, options: {}, assert: [], metadata: { purpose: 'Document assistant' } };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: { purpose: 'Document assistant', ...metadata },
+    };
     const providerResponse = {
       output: "I can't do that.",
       metadata: {
@@ -67,24 +90,17 @@ describe('handleRedteam', () => {
     };
     const result = await handleRedteam(params);
     const context = getResult.mock.calls[0][7];
-    expect(context?.traceData).toBe(trace);
-    expect(context?.traceSummary).toContain('read_private_document');
+    if (include) {
+      expect(context?.traceData).toBe(trace);
+      expect(context?.traceSummary).toContain('read_private_document');
+    } else {
+      expect(context).not.toHaveProperty('traceData');
+      expect(context).not.toHaveProperty('traceSummary');
+    }
     expect(context?.providerResponse).toBe(providerResponse);
     expect(context).toMatchObject(tracking);
     expect(checkTracking).toHaveBeenCalledWith('fixture-page', 'fixture-eval');
     expect(result.pass).toBe(false);
-
-    const optOutTest = {
-      ...test,
-      metadata: { ...test.metadata, tracing: { includeInGrading: false } },
-    };
-    await handleRedteam({
-      ...params,
-      test: optOutTest,
-      assertionValueContext: { ...params.assertionValueContext, test: optOutTest },
-    });
-    expect(getResult.mock.calls[1][7]).not.toHaveProperty('traceData');
-    expect(getResult.mock.calls[1][7]).not.toHaveProperty('traceSummary');
   });
 
   it('returns pass with explanation when iterative strategy has SOME grader errors and re-grading fails', async () => {
