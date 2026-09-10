@@ -85,6 +85,18 @@ describe('handleIsJson', () => {
     expect(result.pass).toBe(true);
   });
 
+  it('evaluates a false schema exported by a file', () => {
+    const result = handleIsJson(
+      makeParams({
+        assertion: { type: 'is-json', value: 'file://schema.json' },
+        renderedValue: 'file://schema.json',
+        valueFromScript: false,
+        outputString: '{"a": 1}',
+      }),
+    );
+    expect(result.pass).toBe(false);
+  });
+
   it('throws when a file:// reference does not export a schema', () => {
     expect(() =>
       handleIsJson(
@@ -98,16 +110,61 @@ describe('handleIsJson', () => {
     ).toThrow('is-json references a file that does not export a JSON schema');
   });
 
-  it('throws for a non-string, non-object schema value', () => {
+  it.each([0, null, 42])('throws for unsupported schema value %j', (renderedValue) => {
     expect(() =>
       handleIsJson(
         makeParams({
           assertion: { type: 'is-json' },
-          renderedValue: 42 as unknown as AssertionValue,
+          renderedValue: renderedValue as unknown as AssertionValue,
           outputString: '{"a": 1}',
         }),
       ),
-    ).toThrow('is-json assertion must have a string or object value');
+    ).toThrow('is-json assertion must have a string, object, or boolean value');
+  });
+
+  it.each([0, null])(
+    'rejects unsupported schema value %j even when the output is not JSON',
+    (renderedValue) => {
+      expect(() =>
+        handleIsJson(
+          makeParams({
+            assertion: { type: 'is-json' },
+            renderedValue: renderedValue as unknown as AssertionValue,
+            inverse: true,
+            outputString: 'not json at all',
+          }),
+        ),
+      ).toThrow('is-json assertion must have a string, object, or boolean value');
+    },
+  );
+
+  it.each([
+    ['empty string', ''],
+    ['whitespace only', '   '],
+    ['comment only', '# no schema yet'],
+  ])('treats a %s schema document as no schema', (_label, value) => {
+    const result = handleIsJson(
+      makeParams({
+        assertion: { type: 'is-json', value },
+        renderedValue: value as AssertionValue,
+        outputString: '{"a": 1}',
+      }),
+    );
+    expect(result.pass).toBe(true);
+  });
+
+  it.each([
+    { schema: true, expectedPass: true },
+    { schema: false, expectedPass: false },
+  ])('evaluates boolean schema $schema', ({ schema, expectedPass }) => {
+    const result = handleIsJson(
+      makeParams({
+        assertion: { type: 'is-json', value: schema },
+        renderedValue: schema,
+        outputString: '{"a": 1}',
+      }),
+    );
+    expect(result.pass).toBe(expectedPass);
   });
 });
 
@@ -159,6 +216,18 @@ describe('handleContainsJson', () => {
     expect(result.pass).toBe(true);
   });
 
+  it('evaluates a false schema exported by a file', () => {
+    const result = handleContainsJson(
+      makeParams({
+        assertion: { type: 'contains-json', value: 'file://schema.json' },
+        renderedValue: 'file://schema.json',
+        valueFromScript: false,
+        outputString: '{"a": 1}',
+      }),
+    );
+    expect(result.pass).toBe(false);
+  });
+
   it('throws when a file:// reference does not export a schema', () => {
     expect(() =>
       handleContainsJson(
@@ -172,15 +241,60 @@ describe('handleContainsJson', () => {
     ).toThrow('contains-json references a file that does not export a JSON schema');
   });
 
-  it('throws for a non-string, non-object schema value', () => {
+  it.each([0, null, 42])('throws for unsupported schema value %j', (renderedValue) => {
     expect(() =>
       handleContainsJson(
         makeParams({
           assertion: { type: 'contains-json' },
-          renderedValue: 42 as unknown as AssertionValue,
+          renderedValue: renderedValue as unknown as AssertionValue,
           outputString: '{"a": 1}',
         }),
       ),
-    ).toThrow('contains-json assertion must have a string or object value');
+    ).toThrow('contains-json assertion must have a string, object, or boolean value');
+  });
+
+  it.each([0, null])(
+    'rejects unsupported schema value %j even when no JSON is extracted',
+    (renderedValue) => {
+      expect(() =>
+        handleContainsJson(
+          makeParams({
+            assertion: { type: 'contains-json' },
+            renderedValue: renderedValue as unknown as AssertionValue,
+            inverse: true,
+            outputString: 'no json here at all',
+          }),
+        ),
+      ).toThrow('contains-json assertion must have a string, object, or boolean value');
+    },
+  );
+
+  it.each([
+    ['empty string', ''],
+    ['whitespace only', '   '],
+    ['comment only', '# no schema yet'],
+  ])('treats a %s schema document as no schema', (_label, value) => {
+    const result = handleContainsJson(
+      makeParams({
+        assertion: { type: 'contains-json', value },
+        renderedValue: value as AssertionValue,
+        outputString: 'result: {"a": 1}',
+      }),
+    );
+    expect(result.pass).toBe(true);
+  });
+
+  it.each([
+    { schema: true, expectedPass: true },
+    { schema: false, expectedPass: false },
+  ])('evaluates boolean schema $schema', ({ schema, expectedPass }) => {
+    const result = handleContainsJson(
+      makeParams({
+        assertion: { type: 'contains-json', value: schema },
+        renderedValue: schema,
+        outputString: '{"a": 1}',
+      }),
+    );
+    expect(result.pass).toBe(expectedPass);
   });
 });
