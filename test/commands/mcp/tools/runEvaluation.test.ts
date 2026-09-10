@@ -74,15 +74,19 @@ describe('runEvaluation tool', () => {
     vi.spyOn(process, 'cwd').mockReturnValue(workspace);
     await writeFile(path.join(workspace, 'test.yaml'), '{}');
     const { resolveConfigs } = await import('../../../../src/util/config/load');
-    vi.mocked(resolveConfigs).mockReset().mockResolvedValue({
-      basePath: workspace,
-      config: {},
-      testSuite: {
-        prompts: [{ label: 'test-prompt', raw: 'What is 2+2?' }],
-        providers: [{ id: () => 'test-provider', callApi: vi.fn(async () => ({ output: 'fixture' })) }],
-        tests: [{ vars: { input: 'test' } }],
-      },
-    });
+    vi.mocked(resolveConfigs)
+      .mockReset()
+      .mockResolvedValue({
+        basePath: workspace,
+        config: {},
+        testSuite: {
+          prompts: [{ label: 'test-prompt', raw: 'What is 2+2?' }],
+          providers: [
+            { id: () => 'test-provider', callApi: vi.fn(async () => ({ output: 'fixture' })) },
+          ],
+          tests: [{ vars: { input: 'test' } }],
+        },
+      });
   });
 
   afterEach(async () => {

@@ -128,13 +128,15 @@ const expressMocks = vi.hoisted(() => {
 
 const transportMocks = vi.hoisted(() => {
   const instances: Array<{ handleRequest: ReturnType<typeof vi.fn> }> = [];
-  const WebStandardStreamableHTTPServerTransport = vi.fn(function MockWebStandardStreamableHTTPServerTransport(
-    this: { handleRequest: ReturnType<typeof vi.fn> },
-    _options?: { sessionIdGenerator?: () => string },
-  ) {
-    this.handleRequest = vi.fn().mockResolvedValue(undefined);
-    instances.push(this);
-  });
+  const WebStandardStreamableHTTPServerTransport = vi.fn(
+    function MockWebStandardStreamableHTTPServerTransport(
+      this: { handleRequest: ReturnType<typeof vi.fn> },
+      _options?: { sessionIdGenerator?: () => string },
+    ) {
+      this.handleRequest = vi.fn().mockResolvedValue(undefined);
+      instances.push(this);
+    },
+  );
 
   return { instances, WebStandardStreamableHTTPServerTransport };
 });
@@ -152,8 +154,8 @@ vi.mock('@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js', () => (
 }));
 
 const nodeAdapterMocks = vi.hoisted(() => ({
-  getRequestListener: vi.fn((handler) => async (request: any, _response: any) =>
-    handler(request, { incoming: request }),
+  getRequestListener: vi.fn(
+    (handler) => async (request: any, _response: any) => handler(request, { incoming: request }),
   ),
 }));
 
@@ -419,10 +421,9 @@ describe('MCP Server', () => {
 
       await mcpHandler(request, response);
 
-      expect(transportMocks.instances[0].handleRequest).toHaveBeenCalledWith(
-        request,
-        { parsedBody: request.body },
-      );
+      expect(transportMocks.instances[0].handleRequest).toHaveBeenCalledWith(request, {
+        parsedBody: request.body,
+      });
 
       process.emit('SIGINT');
       await serverPromise;
@@ -447,7 +448,8 @@ describe('MCP Server', () => {
           expect(transportMocks.WebStandardStreamableHTTPServerTransport).toHaveBeenCalledOnce();
         });
 
-        const transportOptions = transportMocks.WebStandardStreamableHTTPServerTransport.mock.calls[0][0] as {
+        const transportOptions = transportMocks.WebStandardStreamableHTTPServerTransport.mock
+          .calls[0][0] as {
           sessionIdGenerator: () => string;
         };
         expect(transportOptions.sessionIdGenerator()).toBe('secure-mcp-session-id');

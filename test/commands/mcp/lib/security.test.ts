@@ -2,10 +2,9 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfigurationError } from '../../../../src/commands/mcp/lib/errors';
 import {
-  validateFilePath,
   validateMcpConfigFile,
   validateMcpFilePath,
   validateProviderId,
@@ -14,70 +13,101 @@ import {
 import { escapeRegExp } from '../../../../src/util/text';
 
 describe('MCP Security', () => {
-  describe('validateFilePath', () => {
-    it('should allow simple relative paths', () => {
-      expect(() => validateFilePath('output.yaml')).not.toThrow();
-      expect(() => validateFilePath('data/results.json')).not.toThrow();
-      expect(() => validateFilePath('my-file.txt')).not.toThrow();
+  describe('execution boundaries', () => {
+    let root: string;
+    let workspace: string;
+    beforeEach(() => {
+      root = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-execution-'));
+      workspace = path.join(root, 'workspace');
+      fs.mkdirSync(path.join(workspace, 'sub'), { recursive: true });
+      fs.writeFileSync(path.join(workspace, 'script.js'), 'console.log("fixture")');
+      vi.spyOn(process, 'cwd').mockReturnValue(workspace);
+    });
+    afterEach(() => {
+      vi.restoreAllMocks();
+      fs.rmSync(root, { recursive: true, force: true });
     });
 
-    it('should reject paths containing ".."', () => {
-      expect(() => validateFilePath('../etc/passwd')).toThrow(ConfigurationError);
-      expect(() => validateFilePath('foo/../bar')).toThrow(ConfigurationError);
-      expect(() => validateFilePath('/tmp/../etc/passwd')).toThrow(ConfigurationError);
-    });
-
-    it('should reject paths containing "~"', () => {
-      expect(() => validateFilePath('~/.ssh/id_rsa')).toThrow(ConfigurationError);
-      expect(() => validateFilePath('~/Documents/file.txt')).toThrow(ConfigurationError);
-    });
-
-    it.skipIf(process.platform === 'win32')('should reject paths to system directories', () => {
-      // Unix paths are only recognized as absolute on Unix systems
-      expect(() => validateFilePath('/etc/passwd')).toThrow(ConfigurationError);
-      expect(() => validateFilePath('/sys/kernel')).toThrow(ConfigurationError);
-      expect(() => validateFilePath('/proc/self/environ')).toThrow(ConfigurationError);
-      expect(() => validateFilePath('/dev/null')).toThrow(ConfigurationError);
-      expect(() => validateFilePath('/var/run/docker.sock')).toThrow(ConfigurationError);
-    });
-
-    it.skipIf(process.platform !== 'win32')('should reject Windows system directories', () => {
-      // Windows paths are only recognized as absolute on Windows
-      expect(() => validateFilePath('C:\\Windows\\System32\\config')).toThrow(ConfigurationError);
-      expect(() => validateFilePath('C:\\Program Files\\app')).toThrow(ConfigurationError);
-      expect(() => validateFilePath('C:\\ProgramData\\secret')).toThrow(ConfigurationError);
-    });
-
-    it.skipIf(process.platform === 'win32')(
-      'should allow absolute paths to non-system directories',
-      () => {
-        // Unix paths are only recognized as absolute on Unix systems
-        expect(() => validateFilePath('/tmp/output.yaml')).not.toThrow();
-        expect(() => validateFilePath('/home/user/data.json')).not.toThrow();
-        expect(() => validateFilePath('/Users/test/file.txt')).not.toThrow();
+    it.each(['javascript', 'python', 'ruby'])(
+      'rejects inline %s assertions before configuration loading',
+      (type) => {
+        fs.writeFileSync(
+          path.join(workspace, 'config.json'),
+          JSON.stringify({
+            prompts: ['hello'],
+            providers: ['echo'],
+            tests: [{ assert: [{ type: 'assert-set', assert: [{ type, value: 'return true' }] }] }],
+          }),
+        );
+        expect(() => validateMcpConfigFile('config.json')).toThrow(ConfigurationError);
       },
     );
 
-    describe('with basePath', () => {
-      it('should allow paths within the base directory', () => {
-        expect(() => validateFilePath('output.yaml', '/tmp/workdir')).not.toThrow();
-        expect(() => validateFilePath('subdir/file.txt', '/tmp/workdir')).not.toThrow();
-      });
-
-      it('should reject paths that escape the base directory', () => {
-        // Note: ".." is caught by the pre-normalization check
-        expect(() => validateFilePath('../escape.txt', '/tmp/workdir')).toThrow(ConfigurationError);
-      });
+    it.each([
+      ['ws://localhost:1234', 'transformResponse'],
+      ['ws://localhost:1234', 'responseParser'],
+      ['a2a:http://localhost:1234', 'transformResponse'],
+      ['mcp', 'transformResponse'],
+      ['browser', 'responseParser'],
+      ['n8n:http://localhost:1234', 'transformResponse'],
+      ['n8n:http://localhost:1234', 'sessionParser'],
+    ])('rejects inline %s %s code', (id, key) => {
+      expect(() => validateProviderReference({ id, config: { [key]: 'process.cwd()' } })).toThrow(
+        ConfigurationError,
+      );
     });
 
-    it('should include the original path in the error details', () => {
-      try {
-        validateFilePath('../etc/passwd');
-        expect.fail('Expected error to be thrown');
-      } catch (error) {
-        expect(error).toBeInstanceOf(ConfigurationError);
-        expect((error as ConfigurationError).details).toEqual({ configPath: '../etc/passwd' });
-      }
+    it('rejects inline transforms on provider options', () => {
+      expect(() => validateProviderReference({ id: 'echo', transform: 'process.cwd()' })).toThrow(
+        ConfigurationError,
+      );
+    });
+
+    it('keeps the runtime provider base when following a nested schema reference', () => {
+      fs.writeFileSync(path.join(workspace, 'sub', 'provider.yaml'), 'id: python:../outside.py\n');
+      fs.writeFileSync(
+        path.join(workspace, 'config.yaml'),
+        'prompts: [hello]\nproviders:\n  - $ref: ./sub/provider.yaml\n',
+      );
+      expect(() => validateMcpConfigFile('config.yaml')).toThrow(ConfigurationError);
+    });
+
+    it('resolves nested schema reference paths relative to the containing file', () => {
+      fs.writeFileSync(path.join(workspace, 'sub', 'provider.yaml'), '$ref: ./nested.yaml\n');
+      fs.writeFileSync(path.join(workspace, 'sub', 'nested.yaml'), 'id: echo\n');
+      fs.writeFileSync(
+        path.join(workspace, 'config.yaml'),
+        'prompts: [hello]\nproviders:\n  - $ref: ./sub/provider.yaml\n',
+      );
+      expect(() => validateMcpConfigFile('config.yaml')).not.toThrow();
+    });
+
+    it('rejects browser screenshot paths outside the workspace', () => {
+      expect(() =>
+        validateProviderReference({
+          id: 'browser',
+          config: {
+            actions: [{ action: 'screenshot', args: { path: path.join(root, 'outside.png') } }],
+          },
+        }),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('rejects cloud provider references that bypass local config validation', () => {
+      expect(() =>
+        validateProviderId('promptfoo://provider/12345678-1234-1234-1234-123456789abc'),
+      ).toThrow(ConfigurationError);
+    });
+
+    it.each(['-lc', '-xc'])('rejects bundled shell execution flag %s', (flag) => {
+      expect(() => validateProviderId(`exec:bash ${flag} 'echo ./script.js' ./script.js`)).toThrow(
+        ConfigurationError,
+      );
+    });
+
+    it('requires an existing workspace script rather than a path-shaped argument', () => {
+      expect(() => validateProviderId('exec:node missing.js')).toThrow(ConfigurationError);
+      expect(() => validateProviderId('exec:node ./script.js')).not.toThrow();
     });
   });
 
@@ -212,9 +242,6 @@ describe('MCP Security', () => {
       ).not.toThrow();
       expect(() =>
         validateProviderId('cloudflare-ai:chat:@cf/meta/llama-3.1-8b-instruct'),
-      ).not.toThrow();
-      expect(() =>
-        validateProviderId('promptfoo://provider/12345678-1234-1234-1234-123456789abc'),
       ).not.toThrow();
     });
 
@@ -381,7 +408,9 @@ describe('MCP Security', () => {
     });
 
     it('should allow exec providers with in-workspace script arguments', () => {
-      expect(() => validateProviderId('exec:node scripts/provider.js --format json')).not.toThrow();
+      expect(() =>
+        validateProviderId('exec:node src/providers/scriptCompletion.ts --format json'),
+      ).not.toThrow();
       expect(() =>
         validateProviderId(`exec:node ${path.join(path.dirname(process.cwd()), 'evil.js')}`),
       ).toThrow(ConfigurationError);
@@ -411,16 +440,22 @@ describe('MCP Security', () => {
       const outsideModule = path.join(path.dirname(process.cwd()), 'evil.js');
 
       expect(() =>
-        validateProviderId(`exec:node --require=${outsideModule} scripts/provider.js`),
+        validateProviderId(
+          `exec:node --require=${outsideModule} src/providers/scriptCompletion.ts`,
+        ),
       ).toThrow(ConfigurationError);
-      expect(() => validateProviderId(`exec:node -r${outsideModule} scripts/provider.js`)).toThrow(
-        ConfigurationError,
-      );
       expect(() =>
-        validateProviderId('exec:node --require=scripts/bootstrap.js scripts/provider.js'),
+        validateProviderId(`exec:node -r${outsideModule} src/providers/scriptCompletion.ts`),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderId(
+          'exec:node --require=src/constants.ts src/providers/scriptCompletion.ts',
+        ),
       ).not.toThrow();
       expect(() =>
-        validateProviderId('exec:node --require scripts/bootstrap.js scripts/provider.js'),
+        validateProviderId(
+          'exec:node --require src/constants.ts src/providers/scriptCompletion.ts',
+        ),
       ).not.toThrow();
     });
 

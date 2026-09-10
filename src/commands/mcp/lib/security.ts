@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { globSync } from 'glob';
+import { parseScriptParts } from '../../../providers/scriptCompletion';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../../../util/config/extensions';
 import { isProviderConfigFileReference, normalizeProviderRef } from '../../../util/providerRef';
 import { renderEnvOnlyInObject } from '../../../util/render';
@@ -68,54 +69,6 @@ const PRELOAD_EXECUTION_FLAGS = new Set([
   '--loader',
   '--experimental-loader',
 ]);
-
-/**
- * Validates that a file path is safe and within allowed boundaries.
- *
- * @param filePath - The file path to validate
- * @param basePath - Optional base directory to constrain paths within
- */
-export function validateFilePath(filePath: string, basePath?: string): void {
-  // Check for path traversal attempts BEFORE normalization
-  // This prevents bypasses like "/tmp/../etc/passwd" which normalizes to "/etc/passwd"
-  if (filePath.includes('..') || filePath.includes('~')) {
-    throw new ConfigurationError(
-      'Path traversal detected. Paths cannot contain ".." or "~"',
-      filePath,
-    );
-  }
-
-  // Normalize the path after traversal check
-  const normalizedPath = path.normalize(filePath);
-
-  // If a base path is provided, ensure the resolved path stays within it
-  if (basePath) {
-    const resolvedBase = path.resolve(basePath);
-    const resolvedPath = path.resolve(basePath, filePath);
-    if (!resolvedPath.startsWith(resolvedBase + path.sep) && resolvedPath !== resolvedBase) {
-      throw new ConfigurationError(`Path must be within base directory: ${basePath}`, filePath);
-    }
-  }
-
-  // Check absolute paths - only allow if they don't target system directories
-  const isAbsolute = path.isAbsolute(normalizedPath);
-
-  // Check for suspicious system directory patterns
-  const suspiciousPatterns = [
-    /^\/etc\//,
-    /^\/sys\//,
-    /^\/proc\//,
-    /^\/var\/run\//,
-    /^\/dev\//,
-    /^C:\\Windows\\/i,
-    /^C:\\Program Files\\/i,
-    /^C:\\ProgramData\\/i,
-  ];
-
-  if (isAbsolute && suspiciousPatterns.some((pattern) => pattern.test(normalizedPath))) {
-    throw new ConfigurationError('Access to system directories is not allowed', filePath);
-  }
-}
 
 /**
  * Validates a caller-supplied MCP file path against the current working directory.
@@ -248,6 +201,7 @@ function renderProviderIdForValidation(providerId: string, env?: EnvOverrides): 
 
 interface ProviderValidationState {
   basePath: string;
+  refBasePath?: string;
   env?: EnvOverrides;
   validatedConfigFiles: Set<string>;
 }
@@ -327,8 +281,30 @@ function validateJsonSchemaRef(value: unknown, state: ProviderValidationState): 
     throw new ConfigurationError('External $ref URLs are not allowed in MCP configs', refPath);
   }
 
-  const resolvedRefPath = resolveConfigFileReference(refPath, state);
-  validateStaticConfigFile(resolvedRefPath, state);
+  const resolvedRefPath = resolveConfigFileReference(refPath, {
+    ...state,
+    basePath: state.refBasePath ?? state.basePath,
+  });
+  validateStaticConfigFile(resolvedRefPath, state, true);
+}
+
+function validateCodeReference(
+  value: unknown,
+  label: string,
+  state: ProviderValidationState,
+): void {
+  if (value === undefined) {
+    return;
+  }
+  if (
+    typeof value !== 'string' ||
+    !renderEnvOnlyInObject(value, state.env).startsWith(FILE_PROVIDER_PREFIX)
+  ) {
+    throw new ConfigurationError(
+      `Inline ${label} is not allowed through MCP tools; use a workspace file`,
+    );
+  }
+  validateConfigFileReference(value, state);
 }
 
 function validateFileReferencesInValue(value: unknown, state: ProviderValidationState): void {
@@ -336,6 +312,8 @@ function validateFileReferencesInValue(value: unknown, state: ProviderValidation
     const rendered = renderEnvOnlyInObject(value, state.env);
     if (rendered.startsWith(FILE_PROVIDER_PREFIX)) {
       validateConfigFileReference(rendered, state);
+    } else if (LOCAL_PROVIDER_PREFIXES.some((prefix) => rendered.startsWith(prefix))) {
+      validateProviderIdWithState(rendered, state);
     }
     return;
   }
@@ -347,6 +325,19 @@ function validateFileReferencesInValue(value: unknown, state: ProviderValidation
 
   const object = getObject(value);
   if (object) {
+    if (typeof object.type === 'string') {
+      validateCodeReference(object.transform, 'assertion transform', state);
+    }
+    if (
+      typeof object.type === 'string' &&
+      ['javascript', 'python', 'ruby'].includes(object.type.replace(/^not-/, ''))
+    ) {
+      validateCodeReference(object.value, `${object.type} assertion`, state);
+    }
+    if (object.provider !== undefined) {
+      validateProviderReferenceWithState(object.provider, state);
+    }
+    validateCodeReference(getObject(object.options)?.transform, 'test transform', state);
     if (object.type === 'file' && typeof object.path === 'string') {
       validateConfigFileReference(object.path, state);
     }
@@ -508,31 +499,28 @@ function validateProviderReferenceWithState(
     validateMcpConfigObject(descriptor.loadOptions.config, providerState);
   }
   const configObject = getObject(descriptor.loadOptions.config);
-  if (/^https?:\/\//i.test(renderedProviderId) || renderedProviderId === 'http') {
-    for (const key of [
-      'transformRequest',
-      'transformResponse',
-      'responseParser',
-      'validateStatus',
-    ]) {
-      const value = configObject?.[key];
-      if (
-        value !== undefined &&
-        (typeof value !== 'string' ||
-          !renderEnvOnlyInObject(value, env).startsWith(FILE_PROVIDER_PREFIX))
-      ) {
-        throw new ConfigurationError(`Inline HTTP ${key} is not allowed through MCP tools`);
+  validateCodeReference(descriptor.loadOptions.transform, 'provider transform', providerState);
+  for (const key of [
+    'transformRequest',
+    'transformResponse',
+    'responseParser',
+    'validateStatus',
+    'sessionParser',
+  ]) {
+    validateCodeReference(configObject?.[key], key, providerState);
+  }
+  validateCodeReference(
+    getObject(configObject?.session)?.responseParser,
+    'session responseParser',
+    providerState,
+  );
+  if (renderedProviderId === 'browser' || renderedProviderId.startsWith('browser:')) {
+    for (const action of Array.isArray(configObject?.actions) ? configObject.actions : []) {
+      const entry = getObject(action);
+      const screenshotPath = getObject(entry?.args)?.path;
+      if (entry?.action === 'screenshot' && typeof screenshotPath === 'string') {
+        validateConfigFileReference(screenshotPath, providerState);
       }
-    }
-    const sessionParser = getObject(configObject?.session)?.responseParser;
-    if (
-      sessionParser !== undefined &&
-      (typeof sessionParser !== 'string' ||
-        !renderEnvOnlyInObject(sessionParser, env).startsWith(FILE_PROVIDER_PREFIX))
-    ) {
-      throw new ConfigurationError(
-        'Inline HTTP session responseParser is not allowed through MCP tools',
-      );
     }
   }
   validateMcpConfigObject(configObject?.mcp, providerState);
@@ -563,15 +551,10 @@ function validateProviderConfigFile(providerPath: string, state: ProviderValidat
   }
 }
 
-function parseCommandParts(command: string): string[] {
-  return [...command.matchAll(/[^\s"']+|"([^"]*)"|'([^']*)'/g)].map(
-    (match) => match[1] ?? match[2] ?? match[0],
-  );
-}
-
 function isInlineExecutionFlag(part: string): boolean {
   return (
-    INLINE_EXECUTION_FLAGS.has(part.split('=', 1)[0].toLowerCase()) || /^-[cemp].+/i.test(part)
+    INLINE_EXECUTION_FLAGS.has(part.split('=', 1)[0].toLowerCase()) ||
+    /^-[a-z]*[cemp][a-z]*$/i.test(part)
   );
 }
 
@@ -580,7 +563,7 @@ function validateExecReference(
   state: ProviderValidationState,
   configPrompt: boolean,
 ): void {
-  const parts = parseCommandParts(value.slice('exec:'.length));
+  const parts = parseScriptParts(value.slice('exec:'.length));
   const looksLikePath = (part: string) =>
     path.isAbsolute(part) ||
     part.includes('/') ||
@@ -594,7 +577,7 @@ function validateExecReference(
   let hasScript = false;
   for (let index = 0; index < parts.length; index++) {
     const part = parts[index];
-    if (isInlineExecutionFlag(part)) {
+    if (!hasScript && isInlineExecutionFlag(part)) {
       throw new ConfigurationError(
         'MCP exec commands must use a workspace script, not inline code',
       );
@@ -617,7 +600,8 @@ function validateExecReference(
     }
     if (looksLikePath(part)) {
       validatePath(part);
-      hasScript = true;
+      const scriptPath = path.resolve(state.basePath, stripProviderFileExport(part));
+      hasScript ||= fs.existsSync(scriptPath) && fs.statSync(scriptPath).isFile();
     }
   }
   if (!parts.length || !hasScript) {
@@ -649,7 +633,11 @@ function validateStaticConfigContents(value: unknown, state: ProviderValidationS
   }
 }
 
-function validateStaticConfigFile(configPath: string, state: ProviderValidationState): void {
+function validateStaticConfigFile(
+  configPath: string,
+  state: ProviderValidationState,
+  preserveBasePath = false,
+): void {
   const extension = path.extname(configPath).toLowerCase();
   if (!STATIC_CONFIG_EXTENSIONS.has(extension) || !fs.existsSync(configPath)) {
     return;
@@ -659,10 +647,11 @@ function validateStaticConfigFile(configPath: string, state: ProviderValidationS
   const rawConfig = loadYaml(fs.readFileSync(realConfigPath, 'utf8'));
   const configState = {
     ...state,
-    basePath: path.dirname(realConfigPath),
+    basePath: preserveBasePath ? state.basePath : path.dirname(realConfigPath),
+    refBasePath: path.dirname(realConfigPath),
     env: mergeProviderEnv(getObject(rawConfig)?.env, state.env),
   };
-  const cacheKey = JSON.stringify([realConfigPath, configState.env]);
+  const cacheKey = JSON.stringify([realConfigPath, configState.basePath, configState.env]);
   if (state.validatedConfigFiles.has(cacheKey)) {
     return;
   }
@@ -677,6 +666,11 @@ function validateProviderIdWithState(providerId: string, state: ProviderValidati
   }
 
   const renderedProviderId = renderProviderIdForValidation(providerId, state.env);
+  if (renderedProviderId.startsWith('promptfoo://')) {
+    throw new ConfigurationError(
+      'Cloud provider references cannot be validated through MCP tools; use a local provider config',
+    );
+  }
   if (renderedProviderId.startsWith('exec:')) {
     validateExecReference(renderedProviderId, state, false);
     return;
@@ -728,6 +722,23 @@ function validateProviderIdWithState(providerId: string, state: ProviderValidati
   }
   if (renderedProviderId.includes('..') || renderedProviderId.includes('~')) {
     throw new ConfigurationError('Invalid provider ID format: unexpected traversal', providerId);
+  }
+}
+
+export function validateMcpAssertion(assertion: unknown): void {
+  validateFileReferencesInValue(assertion, {
+    basePath: process.cwd(),
+    validatedConfigFiles: new Set(),
+  });
+}
+
+export function validateMcpProviderPrompt(
+  provider: { id: string | (() => string) },
+  prompt: string,
+): void {
+  const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
+  if (providerId.startsWith('openai:transcription:')) {
+    validateMcpFilePath(prompt.trim());
   }
 }
 

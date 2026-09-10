@@ -12,7 +12,12 @@ const securityGuardMocks = vi.hoisted(() => ({
   loadApiProviders: vi.fn(),
   loadDefaultConfig: vi.fn(),
   resolveConfigs: vi.fn(),
+  runAssertions: vi.fn(),
   synthesizeFromTestSuite: vi.fn(),
+}));
+
+vi.mock('../../../../src/assertions/index', () => ({
+  runAssertions: securityGuardMocks.runAssertions,
 }));
 
 vi.mock('../../../../src/node/doEval', () => ({
@@ -151,6 +156,52 @@ describe('MCP tool security guards', () => {
     vi.restoreAllMocks();
     fs.rmSync(workspace, { recursive: true, force: true });
   });
+
+  it('rejects inline code through run_assertion before starting the assertion runner', async () => {
+    securityGuardMocks.runAssertions.mockResolvedValue({ pass: true, score: 1, reason: 'fixture' });
+    const { registerRunAssertionTool } = await import(
+      '../../../../src/commands/mcp/tools/runAssertion'
+    );
+    const handler = captureToolHandler(registerRunAssertionTool);
+    const result = await handler({
+      output: 'fixture',
+      assertion: { type: 'javascript', value: 'true' },
+    });
+    expect(result.isError).toBe(true);
+    expect(securityGuardMocks.runAssertions).not.toHaveBeenCalled();
+
+    fs.writeFileSync(path.join(workspace, 'assertion.js'), 'module.exports = () => true;');
+    const allowed = await handler({
+      output: 'fixture',
+      assertion: { type: 'javascript', value: 'file://assertion.js' },
+    });
+    expect(allowed.isError).toBe(false);
+    expect(securityGuardMocks.runAssertions).toHaveBeenCalledOnce();
+  });
+
+  it.each(['test_provider', 'compare_providers'])(
+    'validates transcription file prompts before %s invokes the provider',
+    async (tool) => {
+      const callApi = vi.fn().mockResolvedValue({ output: 'fixture' });
+      const provider = { id: () => 'openai:transcription:gpt-transcribe', callApi };
+      securityGuardMocks.loadApiProvider.mockResolvedValue(provider);
+      securityGuardMocks.loadApiProviders.mockResolvedValue([provider, provider]);
+      const register =
+        tool === 'test_provider'
+          ? (await import('../../../../src/commands/mcp/tools/testProvider'))
+              .registerTestProviderTool
+          : (await import('../../../../src/commands/mcp/tools/compareProviders'))
+              .registerCompareProvidersTool;
+      const handler = captureToolHandler(register);
+      const result = await handler({
+        provider: 'openai:transcription:gpt-transcribe',
+        providers: ['openai:transcription:gpt-transcribe', 'openai:transcription:whisper-1'],
+        testPrompt: outsideWorkspacePath('audio-fixture.wav'),
+      });
+      expect(result.isError).toBe(true);
+      expect(callApi).not.toHaveBeenCalled();
+    },
+  );
 
   it('should reject generate_test_cases output paths outside the workspace', async () => {
     const { synthesizeFromTestSuite } = await import('../../../../src/testCase/synthesis');

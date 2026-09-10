@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { loadApiProvider, loadApiProviders } from '../../../providers/index';
-import { validateProviderReference } from '../lib/security';
+import { validateMcpProviderPrompt, validateProviderReference } from '../lib/security';
 import { createToolResponse, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -106,6 +106,7 @@ export function registerTestProviderTool(server: McpServer) {
 
         // Load the provider
         const apiProvider = await loadProvider(provider);
+        validateMcpProviderPrompt(apiProvider, defaultPrompt);
 
         // Test the provider with timeout and detailed metrics
         const startTime = Date.now();

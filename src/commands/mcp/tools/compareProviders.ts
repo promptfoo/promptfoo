@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { loadApiProviders } from '../../../providers/index';
-import { validateProviderId } from '../lib/security';
+import { validateMcpProviderPrompt, validateProviderId } from '../lib/security';
 import { createToolResponse, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -63,6 +63,8 @@ export function registerCompareProvidersTool(server: McpServer) {
             `Failed to load all providers. Loaded ${apiProviders.length} out of ${providers.length}`,
           );
         }
+
+        apiProviders.forEach((provider) => validateMcpProviderPrompt(provider, testPrompt));
 
         // Test each provider in parallel
         const startTime = Date.now();
