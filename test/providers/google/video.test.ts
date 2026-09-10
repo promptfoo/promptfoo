@@ -32,7 +32,7 @@ const mockResolveProjectId = vi.fn().mockResolvedValue('test-project');
 const mockGetGoogleApiKey = vi.fn();
 const mockDetermineGoogleVertexMode = vi.fn();
 vi.mock('../../../src/providers/google/util', () => ({
-  getGoogleClient: () => mockGetGoogleClient(),
+  getGoogleClient: (...args: unknown[]) => mockGetGoogleClient(...args),
   loadCredentials: vi.fn((creds) => creds),
   resolveProjectId: (...args: unknown[]) => mockResolveProjectId(...args),
   getGoogleApiKey: (...args: unknown[]) => mockGetGoogleApiKey(...args),
@@ -243,16 +243,35 @@ describe('GoogleVideoProvider', () => {
   });
 
   describe('callApi', () => {
-    it('allows a prompt-level Vertex override through key preflight', async () => {
+    it('uses prompt-level Vertex settings for creation, polling, and download', async () => {
       mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
-      const operation = {
-        name: 'test-operation',
-        done: true,
-        response: { videos: [{ bytesBase64Encoded: Buffer.from('video').toString('base64') }] },
+      const videoUri = 'https://storage.googleapis.com/prompt-project/video.mp4';
+      const promptConfig = {
+        vertexai: true,
+        projectId: 'prompt-project',
+        region: 'europe-west4',
+        credentials: '/prompt-credentials.json',
       };
-      mockRequest.mockResolvedValue({ data: operation });
+      mockResolveProjectId.mockImplementation((config) => config.projectId);
+      mockRequest
+        .mockResolvedValueOnce({ data: { name: 'prompt-operation' } })
+        .mockResolvedValueOnce({
+          data: {
+            name: 'prompt-operation',
+            done: true,
+            response: {
+              generateVideoResponse: { generatedSamples: [{ video: { uri: videoUri } }] },
+            },
+          },
+        })
+        .mockResolvedValueOnce({ data: Buffer.from('video') });
       const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
-        config: { vertexai: false },
+        config: {
+          vertexai: false,
+          projectId: 'base-project',
+          region: 'us-central1',
+          credentials: '/base-credentials.json',
+        },
       });
 
       expect(checkProviderApiKeys([provider]).size).toBe(0);
@@ -260,14 +279,58 @@ describe('GoogleVideoProvider', () => {
         prompt: {
           raw: 'A landscape',
           label: 'landscape',
-          config: { vertexai: true, projectId: 'test-project' },
+          config: promptConfig,
         },
         vars: {},
       });
 
       expect(result.error).toBeUndefined();
-      expect(mockRequest).toHaveBeenCalled();
+      const endpoint =
+        'https://europe-west4-aiplatform.googleapis.com/v1/projects/prompt-project/locations/europe-west4/publishers/google/models/veo-3.1-generate-001';
+      expect(mockRequest).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ url: `${endpoint}:predictLongRunning`, method: 'POST' }),
+      );
+      expect(mockRequest).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ url: `${endpoint}:fetchPredictOperation`, method: 'POST' }),
+      );
+      expect(mockRequest).toHaveBeenNthCalledWith(
+        3,
+        expect.objectContaining({ url: videoUri, method: 'GET' }),
+      );
+      expect(mockGetGoogleClient).toHaveBeenCalledTimes(3);
+      for (const [config] of mockGetGoogleClient.mock.calls) {
+        expect(config).toEqual({ credentials: promptConfig.credentials });
+      }
+      expect(provider.config).toEqual({
+        vertexai: false,
+        projectId: 'base-project',
+        region: 'us-central1',
+        credentials: '/base-credentials.json',
+      });
       expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    });
+
+    it('returns prompt-level credential failures without falling back to the base account', async () => {
+      mockGetGoogleClient.mockRejectedValueOnce(new Error('Invalid prompt credentials'));
+      const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
+        config: { vertexai: true, credentials: '/base-credentials.json' },
+      });
+      const result = await provider.callApi('A landscape', {
+        prompt: {
+          raw: 'A landscape',
+          label: 'landscape',
+          config: { credentials: '/prompt-credentials.json' },
+        },
+        vars: {},
+      });
+
+      expect(result.error).toBe('Failed to create video job: Invalid prompt credentials');
+      expect(mockGetGoogleClient).toHaveBeenCalledExactlyOnceWith({
+        credentials: '/prompt-credentials.json',
+      });
+      expect(mockRequest).not.toHaveBeenCalled();
     });
 
     it.each([true, false, undefined])(

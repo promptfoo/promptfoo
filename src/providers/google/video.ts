@@ -184,17 +184,13 @@ export class GoogleVideoProvider implements ApiProvider {
     return `[Google Video Provider ${this.modelName}]`;
   }
 
-  private getLocation(): string {
+  private getLocation(config: GoogleVideoOptions): string {
     return (
-      this.config.region ||
+      config.region ||
       getEnvString('GOOGLE_LOCATION') ||
       this.env?.GOOGLE_LOCATION ||
       DEFAULT_LOCATION
     );
-  }
-
-  private async getProjectId(): Promise<string> {
-    return await resolveProjectId(this.config, this.env);
   }
 
   private isVertexMode(config: GoogleVideoOptions = this.config): boolean {
@@ -218,15 +214,15 @@ export class GoogleVideoProvider implements ApiProvider {
     return apiKey;
   }
 
-  private async getClientWithCredentials() {
-    const credentials = loadCredentials(this.config.credentials);
+  private async getClientWithCredentials(config: GoogleVideoOptions) {
+    const credentials = loadCredentials(config.credentials);
     const { client } = await getGoogleClient({ credentials });
     return client;
   }
 
-  private async getVertexEndpoint(action: string = 'predictLongRunning'): Promise<string> {
-    const location = this.getLocation();
-    const projectId = await this.getProjectId();
+  private async getVertexEndpoint(config: GoogleVideoOptions, action: string): Promise<string> {
+    const location = this.getLocation(config);
+    const projectId = config.projectId || (await resolveProjectId(config, this.env));
     return `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:${action}`;
   }
 
@@ -502,14 +498,14 @@ export class GoogleVideoProvider implements ApiProvider {
     prompt: string,
     config: GoogleVideoOptions,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
-    const url = await this.getVertexEndpoint('predictLongRunning');
     const { body, error: bodyError } = this.buildVertexRequestBody(prompt, config);
     if (bodyError || !body) {
       return { error: bodyError || 'Failed to build Vertex Veo request' };
     }
 
     try {
-      const client = await this.getClientWithCredentials();
+      const url = await this.getVertexEndpoint(config, 'predictLongRunning');
+      const client = await this.getClientWithCredentials(config);
       logger.debug('[Google Video] Creating video job', { url, model: this.modelName });
 
       const response = await client.request({
@@ -592,7 +588,7 @@ export class GoogleVideoProvider implements ApiProvider {
     config: GoogleVideoOptions,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
     if (this.isVertexMode(config)) {
-      return this.pollVertexOperationStatus(operationName, pollIntervalMs, maxPollTimeMs);
+      return this.pollVertexOperationStatus(operationName, pollIntervalMs, maxPollTimeMs, config);
     }
 
     return this.pollAiStudioOperationStatus(operationName, pollIntervalMs, maxPollTimeMs, config);
@@ -602,18 +598,17 @@ export class GoogleVideoProvider implements ApiProvider {
     operationName: string,
     pollIntervalMs: number,
     maxPollTimeMs: number,
+    config: GoogleVideoOptions,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
     const startTime = Date.now();
-    const location = this.getLocation();
-    const projectId = await this.getProjectId();
 
     // Veo uses fetchPredictOperation endpoint for polling (POST request)
     // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation
-    const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:fetchPredictOperation`;
+    const url = await this.getVertexEndpoint(config, 'fetchPredictOperation');
 
     logger.debug(`[Google Video] Polling operation via fetchPredictOperation: ${url}`);
 
-    const client = await this.getClientWithCredentials();
+    const client = await this.getClientWithCredentials(config);
 
     while (Date.now() - startTime < maxPollTimeMs) {
       try {
@@ -730,7 +725,7 @@ export class GoogleVideoProvider implements ApiProvider {
     context?: CallApiContextParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     if (this.isVertexMode(config)) {
-      return this.downloadVertexVideoToBlob(videoUri, context);
+      return this.downloadVertexVideoToBlob(videoUri, config, context);
     }
 
     return this.downloadAiStudioVideoToBlob(videoUri, config, context);
@@ -738,10 +733,11 @@ export class GoogleVideoProvider implements ApiProvider {
 
   private async downloadVertexVideoToBlob(
     videoUri: string,
+    config: GoogleVideoOptions,
     context?: CallApiContextParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
-      const client = await this.getClientWithCredentials();
+      const client = await this.getClientWithCredentials(config);
 
       // Use authenticated request to download video
       const response = await client.request({
