@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import * as ts from 'typescript';
+import JSON5 from 'json5';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 
@@ -175,14 +175,10 @@ describe('legacy Docker backfill patch (embedded in docker.yml)', () => {
       );
 
       expect(result.ok).toBe(true);
-      const parsed = ts.parseConfigFileTextToJson('tsconfig.app.json', result.tsconfig);
-      expect(
-        parsed.error,
-        `tsconfig must stay valid JSONC for include ${JSON.stringify(include)}`,
-      ).toBeUndefined();
-      expect(parsed.config.exclude).toEqual(['**/*.test.ts', '**/*.test.tsx']);
+      const parsed = JSON5.parse(result.tsconfig);
+      expect(parsed.exclude).toEqual(['**/*.test.ts', '**/*.test.tsx']);
       // The original include is preserved so production sources still compile.
-      expect(parsed.config.include).toEqual(include);
+      expect(parsed.include).toEqual(include);
     }
   });
 
