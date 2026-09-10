@@ -758,6 +758,25 @@ function isCredentialTupleValue(source: Record<string, unknown> | unknown[], key
   );
 }
 
+function sanitizeStructuredChild(
+  entry: Record<string, unknown> | unknown[],
+  depth: number,
+  stack: Array<{
+    source: Record<string, unknown> | unknown[];
+    target: Record<string, unknown> | unknown[];
+    depth: number;
+  }>,
+  state: { changed: boolean },
+) {
+  if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {
+    state.changed = true;
+    return '<redacted>';
+  }
+  const child: Record<string, unknown> | unknown[] = Array.isArray(entry) ? [] : {};
+  stack.push({ source: entry, target: child, depth: depth + 1 });
+  return child;
+}
+
 function sanitizeStructuredAttribute(
   value: Record<string, unknown> | unknown[],
   state: { changed: boolean } = { changed: false },
@@ -787,14 +806,7 @@ function sanitizeStructuredAttribute(
       } else if (losslessJson.isRawJSON?.(entry)) {
         sanitized = entry;
       } else if (isStructuredContainer(entry)) {
-        if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {
-          sanitized = '<redacted>';
-          state.changed = true;
-        } else {
-          const child: StructuredValue = Array.isArray(entry) ? [] : {};
-          stack.push({ source: entry, target: child, depth: depth + 1 });
-          sanitized = child;
-        }
+        sanitized = sanitizeStructuredChild(entry, depth, stack, state);
       } else {
         sanitized = typeof entry === 'string' ? sanitizeCredentialText(entry) : entry;
         state.changed ||= sanitized !== entry;
