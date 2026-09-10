@@ -291,6 +291,23 @@ describe('dependency ownership report', () => {
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
 
+  it('reports an undeclared @types package for a referenced runtime dependency', () => {
+    json('package.json', { dependencies: { foo: '1' } });
+    write('src/env.d.ts', '/// <reference types="foo" />');
+
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: '@types/foo' }),
+    ]);
+  });
+
+  it('reads JSDoc @import declarations as type usage', () => {
+    write('src/index.js', "/** @import { Foo } from 'jsdoc-types' */");
+
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'jsdoc-types' }),
+    ]);
+  });
+
   it('preserves exact computed expressions after long Unicode prefixes', () => {
     write(
       'src/index.ts',
@@ -477,6 +494,25 @@ describe('dependency ownership report', () => {
     expect(report.undeclaredUsages.map((entry) => entry.dependency)).toEqual(['missing']);
   });
 
+  it('honors reviewed build annotations for source-located build imports', () => {
+    json('package.json', { devDependencies: { buildOnly: '1' } });
+    write('src/index.ts', "import 'buildOnly';");
+    json('architecture/dependency-ownership.json', {
+      manifestOwners: { 'package.json': 'root/runtime' },
+      annotations: [
+        {
+          manifest: 'package.json',
+          dependency: 'buildOnly',
+          disposition: 'build',
+          reason: 'Loaded only by a build entrypoint.',
+          evidence: ['src/index.ts'],
+        },
+      ],
+    });
+
+    expect(reportDependencyOwnership(root, config).runtimeDeclarationGaps).toEqual([]);
+  });
+
   it('supports JSX in workspace JavaScript files', () => {
     write(
       'src/app/src/component.js',
@@ -611,6 +647,30 @@ describe('dependency ownership report', () => {
     ]);
     expect(report.computedImports[0].fileAnnotations).toEqual(['shared']);
     expect(report.rows[0].owner).toBe('unreferenced');
+  });
+
+  it('does not apply computed annotations across workspace manifests', () => {
+    json('package.json', { workspaces: ['src/app'], dependencies: { shared: '1' } });
+    json('src/app/package.json', { dependencies: {} });
+    write('src/app/src/index.ts', 'import(candidate);');
+    json('architecture/dependency-ownership.json', {
+      manifestOwners: { 'package.json': 'root/runtime', 'src/app/package.json': 'app/browser' },
+      annotations: [
+        {
+          manifest: 'package.json',
+          dependency: 'shared',
+          disposition: 'computed-loader',
+          reason: 'Root-only computed loader.',
+          evidence: ['src/app/src/index.ts'],
+        },
+      ],
+    });
+
+    const report = reportDependencyOwnership(root, config);
+    expect(report.computedImports[0].fileAnnotations).toEqual([]);
+    expect(report.declarations.find((entry) => entry.dependency === 'shared')?.references).toEqual(
+      [],
+    );
   });
 
   it('reports stale annotations, missing evidence, and unassigned workspace ownership', () => {

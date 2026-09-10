@@ -273,10 +273,16 @@ function leadingTypeReferences(
     const hasTypesDeclaration = [...packages.values()].some((pkg) =>
       sections.some((section) => Object.hasOwn(pkg[section] ?? {}, typesPackage)),
     );
+    const hasRuntimeDeclaration = [...packages.values()].some((pkg) =>
+      ['dependencies', 'optionalDependencies', 'peerDependencies'].some((section) =>
+        Object.hasOwn(pkg[section as Section] ?? {}, name),
+      ),
+    );
     references.push({
       start: comment.start,
       specifier,
-      dependency: name === 'node' || hasTypesDeclaration ? typesPackage : name,
+      dependency:
+        name === 'node' || hasTypesDeclaration || hasRuntimeDeclaration ? typesPackage : name,
     });
   }
   return references;
@@ -408,7 +414,9 @@ export function reportDependencyOwnership(
           fileAnnotations: validAnnotations
             .filter(
               (annotation) =>
-                annotation.disposition === 'computed-loader' && annotation.evidence.includes(file),
+                annotation.disposition === 'computed-loader' &&
+                annotation.evidence.includes(file) &&
+                manifestFor(file, manifests) === annotation.manifest,
             )
             .map((annotation) => annotation.dependency),
         });
@@ -432,6 +440,11 @@ export function reportDependencyOwnership(
         /(^|[\r\n\u2028\u2029])([ \t]*\*[ \t]?)/g,
         (_, newline: string, prefix: string) => newline + ' '.repeat(prefix.length),
       );
+      for (const tag of body.matchAll(
+        /(?:^|[\r\n\u2028\u2029])[ \t]*@import\s+(?:\{[^}]*\}\s+from\s+)?['"]([^'"]+)['"]/g,
+      )) {
+        add({ start: comment.start + (tag.index ?? 0) }, tag[1], 'type');
+      }
       for (const tag of body.matchAll(
         /(?:^|[\r\n\u2028\u2029])[ \t]*@(?:type|param|returns?|typedef|property|prop|this|extends|implements|satisfies|throws|enum)\s*\{/g,
       )) {
@@ -536,7 +549,9 @@ export function reportDependencyOwnership(
   for (const annotation of validAnnotations.filter(
     (entry) => entry.disposition === 'computed-loader',
   )) {
-    for (const file of annotation.evidence.filter((evidence) => files.has(evidence))) {
+    for (const file of annotation.evidence.filter(
+      (evidence) => files.has(evidence) && manifestFor(evidence, manifests) === annotation.manifest,
+    )) {
       record(annotation.manifest, annotation.dependency, {
         file,
         line: 0,
@@ -602,8 +617,18 @@ export function reportDependencyOwnership(
       ) {
         return [];
       }
+      const buildEvidence = new Set(
+        validAnnotations
+          .filter(
+            (entry) =>
+              entry.manifest === manifest &&
+              entry.dependency === dependency &&
+              entry.disposition === 'build',
+          )
+          .flatMap((entry) => entry.evidence),
+      );
       const runtimeReferences = references.filter(
-        (ref) => ref.scope === 'source' && ref.kind !== 'type',
+        (ref) => ref.scope === 'source' && ref.kind !== 'type' && !buildEvidence.has(ref.file),
       );
       return runtimeReferences.length > 0 ? [{ dependency, references: runtimeReferences }] : [];
     })
