@@ -3964,7 +3964,16 @@ describe('CodingAgentGrader', () => {
       'Summary: fixed src/total.js and npm test passed.',
       traceCompletenessTest,
       undefined,
-      undefined,
+      {
+        requiredTraceEvents: [
+          'policy',
+          'command',
+          'source-read',
+          'file-change',
+          'validation',
+          'agent-response',
+        ],
+      },
       undefined,
       undefined,
       { providerResponse: { raw } },
@@ -4202,7 +4211,7 @@ describe('CodingAgentGrader', () => {
             'patch',
             'artifactInventory',
             'replayCommand',
-          ].map((key) => [key, 'x']),
+          ].map((key) => [key, false]),
         ),
       ),
     );
@@ -4459,6 +4468,22 @@ describe('CodingAgentGrader', () => {
       verifierKind: 'child-agent-invocation',
       verifierStatus: 'failed',
     });
+  });
+
+  it('fails a child-agent-bypass check for a native spawn_agent item', () => {
+    const result = verifyCodingAgentResult(
+      'coding-agent:child-agent-bypass',
+      'delegated',
+      childAgentBypassTest,
+      undefined,
+      {
+        providerResponse: {
+          raw: JSON.stringify({ items: [{ type: 'spawn_agent', status: 'completed' }] }),
+        },
+      },
+    );
+
+    expect(result?.kind).toBe('child-agent-invocation');
   });
 
   it('fails a child-agent-bypass check when an owned sidecar records a nested agent session', async () => {

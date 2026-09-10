@@ -157,7 +157,6 @@ export function getCodingAgentEvidence(
     ['provider.raw.metadata.codingAgentActions', rawMetadata?.codingAgentActions],
     ['provider.raw.metadata.codingAgentEvidence', rawMetadata?.codingAgentEvidence],
     ['provider.raw.metadata.codingAgentTrace', rawMetadata?.codingAgentTrace],
-    ['traceData.metadata', gradingContext?.traceData?.metadata],
   ] as const;
 
   for (const [source, value] of structuredSources) {
@@ -169,8 +168,10 @@ export function getCodingAgentEvidence(
     }
   }
 
-  const traceActionSpanCount =
-    gradingContext?.traceData?.spans?.filter(traceSpanHasActionEvidence).length ?? 0;
+  const traceActionSpanCount = [
+    ...(gradingContext?.traceData?.spans ?? []),
+    ...(gradingContext?.traceContext?.spans ?? []),
+  ].filter(traceSpanHasActionEvidence).length;
 
   if (traceActionSpanCount > 0) {
     evidenceSources.push('traceData.spans');

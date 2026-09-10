@@ -1444,11 +1444,12 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
   postprocessRemoteTests(tests: TestCase[]): TestCase[] {
     const minScore = minimumPromptScore(this.spec);
     return tests.map((test) => {
-      const prompt = test.vars?.[this.injectVar];
-      const score = typeof prompt === 'string' ? scorePrompt(this.spec, this.config, prompt) : -100;
-      if (score < minScore) {
+      const prompt = extractValidPrompt(test, this.injectVar);
+      const score = prompt ? scorePrompt(this.spec, this.config, prompt) : -100;
+      if (!prompt || score < minScore) {
         throw buildAdaptiveGenerationError(this.spec, tests.length, [], minScore);
       }
+      test.vars![this.injectVar] = prompt;
       return this.withCodingAgentMetadata(test, score);
     });
   }

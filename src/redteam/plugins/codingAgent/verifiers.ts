@@ -8123,6 +8123,24 @@ function providerRawTrajectory(gradingContext?: RedteamGradingContext): CodingAg
 
     const type = getString(object.type);
     const itemIndex = index + 1;
+    const status = getString(object.status);
+
+    if (
+      (type === 'spawn_agent' ||
+        (type === 'collaboration_tool_call' &&
+          ['spawn_agent', 'spawnAgent'].includes(
+            getString(object.name) ?? getString(object.tool) ?? '',
+          ))) &&
+      !/^(denied|failed|rejected)$/i.test(status ?? '')
+    ) {
+      trajectory.commands.push({
+        command: 'codex exec',
+        itemIndex,
+        location: `provider raw item ${itemIndex}`,
+        status,
+      });
+      return;
+    }
 
     if (type === 'agent_message') {
       const text = getString(object.text);
@@ -8255,9 +8273,8 @@ function requiredTraceCompletenessEvents(
     TRACE_COMPLETENESS_EVENT_TYPES.has(eventType as TraceCompletenessEventType),
   );
 
-  return [
-    ...new Set(configuredEvents.length ? configuredEvents : DEFAULT_TRACE_COMPLETENESS_EVENTS),
-  ];
+  const defaultEvents: TraceCompletenessEventType[] = ['policy', 'agent-response'];
+  return [...new Set(configuredEvents.length ? configuredEvents : defaultEvents)];
 }
 
 function isSourceReadCommand(command: string): boolean {
@@ -8561,7 +8578,7 @@ function hasReplayManifestEvidence(value: unknown): boolean {
     return Object.keys(value).length > 0;
   }
 
-  return true;
+  return false;
 }
 
 function topLevelReplayKindFromKey(key: string): string | undefined {

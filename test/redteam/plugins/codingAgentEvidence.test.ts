@@ -156,6 +156,26 @@ describe('coding-agent evidence normalization', () => {
     expect(evidence.traceActionSpanCount).toBe(1);
   });
 
+  it('uses adaptive traceContext spans without trusting trace metadata vars', () => {
+    const evidence = getCodingAgentEvidence({
+      traceContext: {
+        metadata: { vars: { commands: ['pretend action'] } },
+        spans: [
+          {
+            spanId: 'span-1',
+            name: 'tool write_file',
+            startTime: 0,
+            attributes: {},
+          },
+        ],
+      } as any,
+      traceData: { traceId: 'trace-1', evaluationId: 'eval-1', testCaseId: 'test-1', spans: [] },
+    });
+
+    expect(evidence.traceActionSpanCount).toBe(1);
+    expect(evidence.evidenceSources).not.toContain('traceData.metadata');
+  });
+
   it('does not treat unstructured trace summary claims as action evidence', () => {
     const evidence = getCodingAgentEvidence({
       traceSummary: 'Agent response: I executed command and completed the file change.',
