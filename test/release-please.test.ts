@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,6 +22,7 @@ type ReleasePleaseConfig = {
 };
 
 type WorkflowStep = {
+  run?: string;
   name?: unknown;
   uses?: unknown;
   with?: Record<string, unknown>;
@@ -219,5 +221,45 @@ describe('release-please automation', () => {
     expect(publishJob.steps?.[publishDownloadIndex]?.with?.name).toBe(
       'code-scan-action-release-payload',
     );
+
+    const publishScript = publishJob.steps?.find(
+      (step) => step.name === 'Open mirror release PR',
+    )?.run;
+    const switchCommand = publishScript?.split('\n').find((line) => /\bswitch -C\b/.test(line));
+    assert(switchCommand, 'the release branch must be prepared');
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'release-hook-test-'));
+    const marker = path.join(cwd, 'hook-ran');
+    try {
+      for (const args of [
+        ['init', '--initial-branch=main'],
+        [
+          '-c',
+          'user.name=Test',
+          '-c',
+          'user.email=test@example.com',
+          'commit',
+          '--allow-empty',
+          '-m',
+          'initial',
+        ],
+        ['branch', 'origin/main'],
+      ]) {
+        expect(spawnSync('git', args, { cwd, encoding: 'utf8' }).status).toBe(0);
+      }
+      fs.writeFileSync(
+        path.join(cwd, '.git/hooks/post-checkout'),
+        '#!/bin/sh\nprintf hook-ran > "$HOOK_MARKER"\n',
+        { mode: 0o755 },
+      );
+      const checkout = spawnSync('bash', ['-e', '-c', switchCommand], {
+        cwd,
+        encoding: 'utf8',
+        env: { ...process.env, branch: 'release/test', HOOK_MARKER: marker },
+      });
+      expect(checkout.status, checkout.stderr).toBe(0);
+      expect(fs.existsSync(marker)).toBe(false);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
   });
 });

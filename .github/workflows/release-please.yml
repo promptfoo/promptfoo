@@ -395,7 +395,7 @@ jobs:
             "https://github.com/promptfoo/code-scan-action.git" "$mirror_dir"
           cd "$mirror_dir"
 
-          git switch -C "$branch" origin/main
+          git -c core.hooksPath=/dev/null switch -C "$branch" origin/main
 
           # Replace only the generated release-artifact paths. The mirror repo
           # owns every other path (.github/, renovate.json, AGENTS.md, ...);
