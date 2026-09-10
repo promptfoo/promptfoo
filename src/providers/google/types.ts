@@ -644,7 +644,7 @@ export interface GoogleVideoOptions {
   // Video extension (Veo 3.1 only)
   /** @deprecated Use sourceVideo with a Vertex operation name, gs:// URI, base64 data, or file:// path. */
   extendVideoId?: string;
-  sourceVideo?: string; // Base64/file:// video, or a gs:// URI/operation name for Vertex AI
+  sourceVideo?: string; // AI Studio generated video URI; Vertex: base64/file://, gs://, or operation name
 
   // Person generation control
   personGeneration?: GoogleVideoPersonGeneration;

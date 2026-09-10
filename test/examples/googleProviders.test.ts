@@ -182,6 +182,43 @@ describe('Google example provider contracts', () => {
   }
 
   describe.each([
+    'promptfooconfig.yaml',
+    'promptfooconfig-image.yaml',
+    'promptfooconfig-extension.yaml',
+  ])('Google video example %s', (filename) => {
+    it.each(['video', 'text-only', 'empty', 'wrong-type'])(
+      'grades a %s response with a supported assertion',
+      async (outcome) => {
+        const { test, provider, prompt } = await loadExample('google-video', filename);
+        const grading = await runAssertions({
+          test,
+          provider,
+          prompt,
+          providerResponse: {
+            output: '[Video](promptfoo://blob/example)',
+            ...(outcome === 'text-only'
+              ? {}
+              : {
+                  video: {
+                    id: 'test-operation',
+                    format: 'mp4',
+                    blobRef: {
+                      uri: 'promptfoo://blob/example',
+                      hash: 'example',
+                      provider: 'local',
+                      mimeType: outcome === 'wrong-type' ? 'text/plain' : 'video/mp4',
+                      sizeBytes: outcome === 'empty' ? 0 : 1024,
+                    },
+                  },
+                }),
+          },
+        });
+        expect(grading.pass).toBe(outcome === 'video');
+      },
+    );
+  });
+
+  describe.each([
     { filename: 'promptfooconfig.yaml', vertex: false, imageSize: '1K', grounded: false },
     { filename: 'promptfooconfig-advanced.yaml', vertex: true, imageSize: '2K', grounded: false },
     {

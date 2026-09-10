@@ -204,6 +204,10 @@ export class GoogleVideoProvider implements ApiProvider {
     );
   }
 
+  requiresApiKey(): boolean {
+    return !this.isVertexMode();
+  }
+
   private getApiKey(config: GoogleVideoOptions = this.config): string | undefined {
     const { apiKey } = getGoogleApiKey(
       config as CompletionOptions,
@@ -325,24 +329,25 @@ export class GoogleVideoProvider implements ApiProvider {
     config: GoogleVideoOptions,
   ): { body?: Record<string, unknown>; error?: string } {
     const instance: Record<string, unknown> = { prompt };
+    const parameters: Record<string, unknown> = {};
 
     if (config.aspectRatio) {
-      instance.aspectRatio = config.aspectRatio;
+      parameters.aspectRatio = config.aspectRatio;
     }
     if (config.resolution) {
-      instance.resolution = config.resolution;
+      parameters.resolution = config.resolution;
     }
     if (config.durationSeconds) {
-      instance.durationSeconds = String(config.durationSeconds);
+      parameters.durationSeconds = config.durationSeconds;
     }
     if (config.negativePrompt) {
-      instance.negativePrompt = config.negativePrompt;
+      parameters.negativePrompt = config.negativePrompt;
     }
     if (config.personGeneration) {
-      instance.personGeneration = config.personGeneration;
+      parameters.personGeneration = config.personGeneration;
     }
     if (config.seed !== undefined) {
-      instance.seed = config.seed;
+      parameters.seed = config.seed;
     }
 
     if (config.image) {
@@ -351,7 +356,7 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error };
       }
       instance.image = {
-        imageBytes: imageData,
+        bytesBase64Encoded: imageData,
         mimeType: 'image/png',
       };
     }
@@ -363,7 +368,7 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error };
       }
       instance.lastFrame = {
-        imageBytes: lastFrameData,
+        bytesBase64Encoded: lastFrameData,
         mimeType: 'image/png',
       };
     }
@@ -379,7 +384,7 @@ export class GoogleVideoProvider implements ApiProvider {
           return { error };
         }
         refs.push({
-          image: { imageBytes: imageData, mimeType: 'image/png' },
+          image: { bytesBase64Encoded: imageData, mimeType: 'image/png' },
           referenceType,
         });
       }
@@ -394,6 +399,7 @@ export class GoogleVideoProvider implements ApiProvider {
     return {
       body: {
         instances: [instance],
+        parameters,
       },
     };
   }
@@ -430,10 +436,8 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error };
       }
       instance.image = {
-        inlineData: {
-          mimeType: 'image/png',
-          data: imageData,
-        },
+        mimeType: 'image/png',
+        bytesBase64Encoded: imageData,
       };
     }
 
@@ -444,10 +448,8 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error };
       }
       instance.lastFrame = {
-        inlineData: {
-          mimeType: 'image/png',
-          data: lastFrameData,
-        },
+        mimeType: 'image/png',
+        bytesBase64Encoded: lastFrameData,
       };
     }
 
@@ -462,10 +464,8 @@ export class GoogleVideoProvider implements ApiProvider {
         }
         refs.push({
           image: {
-            inlineData: {
-              mimeType: 'image/png',
-              data: imageData,
-            },
+            mimeType: 'image/png',
+            bytesBase64Encoded: imageData,
           },
           referenceType,
         });
@@ -475,21 +475,14 @@ export class GoogleVideoProvider implements ApiProvider {
 
     const sourceVideo = config.extendVideoId || config.sourceVideo;
     if (sourceVideo) {
-      if (sourceVideo.includes('/operations/')) {
+      if (!sourceVideo.startsWith('https://') || sourceVideo.includes('/operations/')) {
         return {
           error:
-            'Google AI Studio Veo does not accept operation IDs for video extension. Provide base64 or a file:// video via `sourceVideo`. For Vertex AI, use `sourceVideo` with a gs:// URI, base64 data, or a file:// path.',
+            'Google AI Studio Veo extension requires the original generated video URI from metadata.videoUri as `sourceVideo`. Local files, base64 data, and operation IDs are not supported. For Vertex AI, use a gs:// URI, base64 data, or a file:// path.',
         };
       }
-      const { data: videoData, error } = this.loadVideoData(sourceVideo);
-      if (error) {
-        return { error };
-      }
       instance.video = {
-        inlineData: {
-          mimeType: 'video/mp4',
-          data: videoData,
-        },
+        uri: sourceVideo,
       };
     }
 
@@ -984,6 +977,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     // Step 3: Store video to blob storage
     let blobRef: BlobRef | undefined;
+    const videoUri = completedOp.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
 
     // Check for base64 encoded video (new format)
     const base64Video = completedOp.response?.videos?.[0]?.bytesBase64Encoded;
@@ -996,8 +990,6 @@ export class GoogleVideoProvider implements ApiProvider {
       blobRef = ref;
     } else {
       // Fallback to URI format (legacy)
-      const videoUri =
-        completedOp.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
       if (!videoUri) {
         logger.debug(`[Google Video] Response: ${JSON.stringify(completedOp.response)}`);
         return { error: 'No video data in response' };
@@ -1038,17 +1030,18 @@ export class GoogleVideoProvider implements ApiProvider {
         url: blobRef.uri, // Expose URI directly for consistent API surface with Sora
         format: 'mp4',
         size: resolution,
-        duration: durationSeconds,
+        ...(isVideoExtension ? {} : { duration: durationSeconds }),
         model,
         aspectRatio,
         resolution,
       },
       metadata: {
         operationName,
+        ...(videoUri ? { videoUri } : {}),
         model,
         aspectRatio,
         resolution,
-        durationSeconds,
+        ...(isVideoExtension ? { extensionSeconds: 7 } : { durationSeconds }),
         blobHash: blobRef.hash,
       },
     };

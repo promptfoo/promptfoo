@@ -12,15 +12,18 @@ providers:
       aspectRatio: '16:9'
       durationSeconds: 6
 
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        const video = context.providerResponse?.video?.blobRef;
+        return video?.mimeType === 'video/mp4' && video.sizeBytes > 0;
+
 tests:
   - vars:
       animation: The camera slowly zooms in while the scene comes to life
-    assert:
-      - type: is-valid-video
   - vars:
       animation: Gentle motion with leaves rustling and clouds drifting
-    assert:
-      - type: is-valid-video
 
 # Note: You need to create an assets/ directory with your images
 # mkdir assets

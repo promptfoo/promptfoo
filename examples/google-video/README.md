@@ -59,17 +59,17 @@ npx promptfoo@latest eval
 
 ## Configuration Options
 
-| Option             | Type   | Description                                             |
-| ------------------ | ------ | ------------------------------------------------------- |
-| `aspectRatio`      | string | `16:9` (default) or `9:16`                              |
-| `resolution`       | string | `720p` (default) or `1080p`                             |
-| `durationSeconds`  | number | 4, 6, or 8 seconds for generation; extension requires 8 |
-| `personGeneration` | string | `allow_adult` or `dont_allow`                           |
-| `negativePrompt`   | string | Concepts to avoid                                       |
-| `image`            | string | Source image for image-to-video                         |
-| `lastImage`        | string | End frame for interpolation                             |
-| `sourceVideo`      | string | Base64/`file://`, plus `gs://` for Vertex AI            |
-| `referenceImages`  | array  | Up to 3 style reference images (file paths or objects)  |
+| Option             | Type   | Description                                                               |
+| ------------------ | ------ | ------------------------------------------------------------------------- |
+| `aspectRatio`      | string | `16:9` (default) or `9:16`                                                |
+| `resolution`       | string | `720p` (default) or `1080p`                                               |
+| `durationSeconds`  | number | 4, 6, or 8 seconds for generation; extension requires 8                   |
+| `personGeneration` | string | `allow_adult` or `dont_allow`                                             |
+| `negativePrompt`   | string | Concepts to avoid                                                         |
+| `image`            | string | Source image for image-to-video                                           |
+| `lastImage`        | string | End frame for interpolation                                               |
+| `sourceVideo`      | string | Generated video URI for AI Studio; base64/`file://`/`gs://` for Vertex AI |
+| `referenceImages`  | array  | Up to 3 asset reference images (file paths or objects)                    |
 
 ## Features
 
@@ -83,7 +83,7 @@ Generate videos from a starting image (see `promptfooconfig-image.yaml`).
 
 ### Video Extension (Veo 3.1)
 
-Extend a video with Google AI Studio by passing a base64 or `file://` source video and setting `durationSeconds: 8`; Veo adds 7 seconds to the source video (see `promptfooconfig-extension.yaml`).
+Extend a Veo-generated video with Google AI Studio by copying `response.metadata.videoUri` from an exported eval into `sourceVideo` and setting `durationSeconds: 8`. Veo adds 7 seconds to the source video (see `promptfooconfig-extension.yaml`). The original generated file must finish processing in Google; downloaded files and base64 input are not accepted for AI Studio extension.
 
 ## Notes
 

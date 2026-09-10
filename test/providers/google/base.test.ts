@@ -490,6 +490,97 @@ describe('GoogleGenericProvider', () => {
   });
 
   describe('executeFunctionToolCallbacks()', () => {
+    it('assembles Vertex continuation chunks that omit the initial function-call ID', async () => {
+      const callback = vi.fn().mockImplementation((args) => {
+        const { a, b } = JSON.parse(args);
+        return String(a + b);
+      });
+      const span = vi.spyOn(tracing, 'withGenAIToolSpan');
+      const provider = new TestGoogleProvider('gemini-3.8-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          { functionCall: { name: 'addNumbers', id: 'call-1', willContinue: true } },
+          {
+            functionCall: {
+              partialArgs: [
+                { jsonPath: '$.a', numberValue: 10 },
+                { jsonPath: '$.b', numberValue: 20 },
+              ],
+            },
+          },
+          { text: '' },
+        ],
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+          functionToolCallbacks: { addNumbers: callback },
+        },
+        false,
+      );
+
+      expect(result).toBe('30');
+      expect(callback).toHaveBeenCalledExactlyOnceWith('{"a":10,"b":20}');
+      expect(span).toHaveBeenCalledWith(
+        { name: 'addNumbers', arguments: '{"a":10,"b":20}', callId: 'call-1' },
+        expect.any(Function),
+      );
+    });
+
+    it('preserves part order when restoring calls whose continuation omits the ID', async () => {
+      const provider = new TestGoogleProvider('gemini-3.8-flash');
+      const result = await provider['executeFunctionToolCallbacks'](
+        [
+          {
+            functionCall: { name: 'first', id: 'call-1', willContinue: true },
+            thoughtSignature: 'first-signature',
+          },
+          { text: 'between fragments' },
+          { functionCall: { partialArgs: [{ jsonPath: '$.value', numberValue: 10 }] } },
+          { text: 'after first call' },
+          { functionCall: { name: 'second', args: {} }, thoughtSignature: 'second-signature' },
+        ],
+        {
+          streaming: true,
+          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+        },
+        false,
+      );
+
+      expect(result).toEqual([
+        {
+          functionCall: { name: 'first', id: 'call-1', args: { value: 10 } },
+          thoughtSignature: 'first-signature',
+        },
+        { text: 'between fragments' },
+        { text: 'after first call' },
+        { functionCall: { name: 'second', args: {} }, thoughtSignature: 'second-signature' },
+      ]);
+    });
+
+    it('does not guess which parallel call an ID-less continuation belongs to', async () => {
+      const callback = vi.fn();
+      const provider = new TestGoogleProvider('gemini-3.8-flash');
+      const originalCalls = [
+        { functionCall: { name: 'test_function', id: 'call-1', willContinue: true } },
+        { functionCall: { name: 'test_function', id: 'call-2', willContinue: true } },
+        { functionCall: { partialArgs: [{ jsonPath: '$.value', numberValue: 10 }] } },
+      ];
+
+      expect(
+        await provider['executeFunctionToolCallbacks'](
+          originalCalls,
+          {
+            streaming: true,
+            toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+            functionToolCallbacks: { test_function: callback },
+          },
+          false,
+        ),
+      ).toBe(originalCalls);
+      expect(callback).not.toHaveBeenCalled();
+    });
+
     it.each([false, true])(
       'preserves callback span call IDs when streaming is %s',
       async (streaming) => {

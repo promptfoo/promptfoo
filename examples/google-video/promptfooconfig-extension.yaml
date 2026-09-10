@@ -7,20 +7,23 @@ prompts:
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
-      sourceVideo: file://YOUR_SOURCE_VIDEO.mp4
+      sourceVideo: https://generativelanguage.googleapis.com/v1beta/files/YOUR_VIDEO_ID:download?alt=media
       durationSeconds: 8 # Required by AI Studio; Veo adds 7 seconds to the source.
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        const video = context.providerResponse?.video?.blobRef;
+        return video?.mimeType === 'video/mp4' && video.sizeBytes > 0;
 
 tests:
   - vars:
       continuation: The camera pans to reveal a beautiful sunset on the horizon
-    assert:
-      - type: is-valid-video
   - vars:
       continuation: The scene transitions smoothly to a night sky with stars appearing
-    assert:
-      - type: is-valid-video
 
 # To use this:
-# 1. Save a source video locally.
-# 2. Replace YOUR_SOURCE_VIDEO.mp4 with its path.
+# 1. Generate a video and export the eval results with -o results.json.
+# 2. Copy response.metadata.videoUri into sourceVideo above.
 # 3. Set GOOGLE_API_KEY or GEMINI_API_KEY.

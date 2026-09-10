@@ -188,6 +188,13 @@ function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | u
 
     const id = functionCall.id;
     let pending = id ? pendingById.get(id) : pendingUnnamed;
+    if (!id && pendingById.size > 0) {
+      // Vertex can omit the ID after the first chunk. Only associate an unambiguous continuation.
+      if (pendingUnnamed || pendingById.size !== 1) {
+        return undefined;
+      }
+      pending = pendingById.values().next().value;
+    }
     if (!pending) {
       pending = { id, name: functionCall.name, args: {}, argsText: '' };
       if (id) {
@@ -220,8 +227,8 @@ function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | u
       return undefined;
     }
     completed.push(complete);
-    if (id) {
-      pendingById.delete(id);
+    if (pending.id) {
+      pendingById.delete(pending.id);
     } else {
       pendingUnnamed = undefined;
     }
@@ -271,6 +278,13 @@ function restoreStreamedFunctionCallParts(
         activeCallIds.add(fragment.id);
       }
       return [{ ...part, functionCall }];
+    }
+
+    if (!unnamedCallInProgress && activeCallIds.size === 1) {
+      if (fragment.willContinue !== true) {
+        activeCallIds.clear();
+      }
+      return [];
     }
 
     if (unnamedCallInProgress) {
