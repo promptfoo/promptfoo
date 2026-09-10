@@ -409,8 +409,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    throwIfAborted(callApiOptions?.abortSignal);
-    if (this.initializationPromise != null) {
+    if (this.initializationPromise == null) {
+      throwIfAborted(callApiOptions?.abortSignal);
+    } else {
       this.initializationWaiters++;
       let cancelled = false;
       try {

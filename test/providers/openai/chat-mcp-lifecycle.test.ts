@@ -296,9 +296,14 @@ describe('Chat MCP caller lifetime', () => {
     },
   );
 
-  it.each(['success', 'failure'] as const)(
-    'finishes cancelled startup cleanup before its late %s and closes registered resources',
-    async (outcome) => {
+  it.each([
+    { timing: 'cancelled wrapped', outcome: 'success', preAborted: false },
+    { timing: 'cancelled wrapped', outcome: 'failure', preAborted: false },
+    { timing: 'pre-aborted raw', outcome: 'success', preAborted: true },
+    { timing: 'pre-aborted raw', outcome: 'failure', preAborted: true },
+  ])(
+    'finishes $timing startup cleanup before its late $outcome and closes registered resources',
+    async ({ outcome, preAborted }) => {
       const connection = createDeferred<void>();
       const connecting = createDeferred<void>();
       const closed = createDeferred<void>();
@@ -339,11 +344,19 @@ describe('Chat MCP caller lifetime', () => {
       const wrapped = wrapProviderWithRateLimiting(target, registry);
       const controller = new AbortController();
       const reason = new Error('stop waiting for MCP startup');
+      if (preAborted) {
+        await connecting.promise;
+        controller.abort(reason);
+      }
       const caller = observe(
-        wrapped.callApi('fixture', undefined, { abortSignal: controller.signal }),
+        (preAborted ? target : wrapped).callApi('fixture', undefined, {
+          abortSignal: controller.signal,
+        }),
       );
-      await connecting.promise;
-      controller.abort(reason);
+      if (!preAborted) {
+        await connecting.promise;
+        controller.abort(reason);
+      }
       await caller.done;
       let cleanupSettled = false;
       let cleanupError: unknown;
@@ -364,9 +377,9 @@ describe('Chat MCP caller lifetime', () => {
           message: reason.message,
           cause: reason,
         });
-        expect(Object.values(registry.getMetrics())).toEqual([
-          expect.objectContaining({ activeRequests: 0, failedRequests: 1 }),
-        ]);
+        expect(Object.values(registry.getMetrics())).toEqual(
+          preAborted ? [] : [expect.objectContaining({ activeRequests: 0, failedRequests: 1 })],
+        );
         expect(cleanupSettled).toBe(true);
         expect(cleanupError).toBeUndefined();
         expect(Client.prototype.close).not.toHaveBeenCalled();
