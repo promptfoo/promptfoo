@@ -347,16 +347,15 @@ export async function renderPrompt(
             }
 
             vars[varName] = `data:${mimeType};base64,${base64Data}`;
-          } else if (
-            fileType === 'audio' &&
-            fileExtension?.toLowerCase() === 'm4a' &&
-            provider &&
-            /^(?:google:|vertex:(?:chat:)?gemini)/i.test(provider.id())
-          ) {
+          } else if (fileType === 'audio' && fileExtension?.toLowerCase() === 'm4a' && provider) {
             // Generic ISO-BMFF brands such as `isom` and `mp42` do not reveal
             // whether a file contains audio or video. Preserve the known M4A
             // provenance so providers receive the correct modality.
-            vars[varName] = `data:audio/mp4;base64,${base64Data}`;
+            const { GoogleGenericProvider } = await import('./providers/google/base');
+            vars[varName] =
+              provider instanceof GoogleGenericProvider && provider.modelName.startsWith('gemini')
+                ? `data:audio/mp4;base64,${base64Data}`
+                : base64Data;
           } else {
             // Keep existing behavior for video/audio files (raw base64)
             vars[varName] = base64Data;

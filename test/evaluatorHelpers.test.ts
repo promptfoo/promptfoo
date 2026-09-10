@@ -12,6 +12,8 @@ import {
   runExtensionHook,
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
+import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
+import { VertexChatProvider } from '../src/providers/google/vertex';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -1858,12 +1860,18 @@ describe('evaluatorHelpers', () => {
       'preserves M4A MIME type for Google providers with .%s inputs',
       async (extension) => {
         vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
-        for (const id of ['google:gemini-3.8-flash', 'vertex:gemini-3.8-flash']) {
+        for (const provider of [
+          new AIStudioChatProvider('gemini-3.8-flash'),
+          new VertexChatProvider('gemini-3.8-flash'),
+          new AIStudioChatProvider('gemini-3.8-flash', { id: 'custom-google-id' }),
+          new VertexChatProvider('gemini-3.8-flash', { id: 'custom-vertex-id' }),
+          new AIStudioChatProvider('gemini-3.8-flash', { id: 'palm:gemini-3.8-flash' }),
+        ]) {
           const rendered = await renderPrompt(
             toPrompt('{{audio}}'),
             { audio: `file://test-audio.${extension}` },
             undefined,
-            createMockProvider({ id }),
+            provider,
           );
           expect(rendered).toBe('data:audio/mp4;base64,dGVzdC1hdWRpby1jb250ZW50');
         }

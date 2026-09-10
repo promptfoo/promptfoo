@@ -205,7 +205,8 @@ export class GoogleVideoProvider implements ApiProvider {
   }
 
   requiresApiKey(): boolean {
-    return !this.isVertexMode();
+    // ADC project discovery and prompt-level overrides are resolved inside callApi.
+    return false;
   }
 
   private getApiKey(config: GoogleVideoOptions = this.config): string | undefined {
@@ -295,7 +296,9 @@ export class GoogleVideoProvider implements ApiProvider {
   ): string | undefined {
     if (
       (!config.sourceVideo && config.extendVideoId) ||
-      config.sourceVideo?.includes('/operations/')
+      /^projects\/[^/]+\/locations\/[^/]+\/(?:publishers\/[^/]+\/models\/[^/]+\/)?operations\/[^/]+$/.test(
+        config.sourceVideo ?? '',
+      )
     ) {
       return 'Vertex AI Veo does not accept operation IDs for video extension. Set `sourceVideo` to a gs:// URI, base64 video data, or a file:// path.';
     }
