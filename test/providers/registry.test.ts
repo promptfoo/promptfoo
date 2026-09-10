@@ -2093,6 +2093,14 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
       [
+        'google:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-3.5-flash-lite',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
         'palm:chat-bison',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
@@ -2114,6 +2122,14 @@ describe('Provider Registry', () => {
       ],
       [
         'vertex:chat:gemini-2.5-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.5-flash-lite',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
       [
@@ -2165,6 +2181,27 @@ describe('Provider Registry', () => {
         const provider = await factory!.create(providerPath, bareOptions, bareContext);
         const ExpectedProvider = await loadExpectedProvider();
         expect(provider).toBeInstanceOf(ExpectedProvider);
+      },
+    );
+
+    it.each(['google:gemini-omni-1.1-flash', 'palm:gemini-omni-1.1-flash'])(
+      'preserves explicit provider options for %s',
+      async (providerPath) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        const options = {
+          id: 'custom-omni-id',
+          config: { apiKey: 'test-key', aspectRatio: '9:16', vertexai: true },
+          env: { GOOGLE_API_KEY: 'env-test-key', PALM_API_HOST: 'scoped-palm.example' },
+        };
+        const provider = await factory!.create(providerPath, options, bareContext);
+        expect(provider.id()).toBe('custom-omni-id');
+        expect(provider).toMatchObject({
+          modelName: 'gemini-omni-1.1-flash',
+          config: { ...options.config, vertexai: false },
+          env: options.env,
+        });
       },
     );
 

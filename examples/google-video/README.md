@@ -35,11 +35,21 @@ export GOOGLE_PROJECT_ID=your-project-id
 
 ## Available Models
 
+Google AI Studio / Gemini API:
+
 | Model                           | Description                                          | Duration |
 | ------------------------------- | ---------------------------------------------------- | -------- |
 | `veo-3.1-generate-preview`      | Veo 3.1 with extension, references, and 4k           | 4, 6, 8s |
 | `veo-3.1-fast-generate-preview` | Faster Veo 3.1 with extension, references, and 4k    | 4, 6, 8s |
 | `veo-3.1-lite-generate-preview` | Veo 3.1 Lite Preview without extension or references | 4, 6, 8s |
+
+Vertex AI:
+
+| Provider ID                              | Description          | Generation duration |
+| ---------------------------------------- | -------------------- | ------------------- |
+| `vertex:video:veo-3.1-generate-001`      | Veo 3.1 GA           | 4, 6, 8s            |
+| `vertex:video:veo-3.1-fast-generate-001` | Faster Veo 3.1 GA    | 4, 6, 8s            |
+| `vertex:video:veo-3.1-lite-generate-001` | Lite Veo 3.1 Preview | 4, 6, 8s            |
 
 ## Running the Example
 
@@ -59,7 +69,7 @@ npx promptfoo@latest eval
 | `image`            | string | Source image for image-to-video                                                                                                 |
 | `lastImage`        | string | End frame for interpolation                                                                                                     |
 | `extendVideoId`    | string | Deprecated alias for `sourceVideo`                                                                                              |
-| `sourceVideo`      | string | Prior Veo video's Gemini URI, `file://` MP4 path, or raw base64 bytes; use a `gs://` URI for Vertex AI                          |
+| `sourceVideo`      | string | Prior Veo video's Gemini URI, `file://` MP4 path, or raw base64 bytes; Vertex AI also accepts `gs://`, `file://`, or base64     |
 | `storageUri`       | string | Vertex-only output destination such as `gs://bucket/veo-output/`; the returned `gcsUri` is exposed as `metadata.sourceVideoUri` |
 | `referenceImages`  | array  | Up to 3 style reference images (file paths or objects)                                                                          |
 
@@ -87,6 +97,8 @@ For Vertex AI, configure `storageUri: gs://bucket/prefix/` on the source generat
 downloads the output to its blob store and preserves the returned `gs://` object URI in
 `metadata.sourceVideoUri`; pass that value as `sourceVideo` in the next Vertex generation.
 
+Export an eval with `-o results.json` to inspect the response metadata. Veo extension adds 7 seconds; promptfoo reports `metadata.extensionSeconds` and omits the unknown total video duration.
+
 ## Notes
 
 - Generated videos are stored in promptfoo's blob storage system
@@ -96,4 +108,6 @@ downloads the output to its blob store and preserves the returned `gs://` object
 - Veo models use long-running operations with polling for completion
 - `google:video:*` uses Google AI Studio by default and auto-detects Vertex AI when project-based auth is configured
 - Existing project-based `google:video:*` configs remain compatible; use `vertex:video:*` for explicit Vertex AI routing
-- Video extension uses 720p output and requires `durationSeconds: 8`
+- Native video extension uses 720p output and requires `durationSeconds: 8`
+- Google AI Studio does not accept Vertex operation IDs for extension
+- Current Vertex AI Veo 3.1 models support extension through `sourceVideo`; use a `gs://` URI, base64 data, or a `file://` path. Operation IDs are not valid video inputs. Vertex extension requests omit `durationSeconds`; configured durations are ignored with a warning. Veo adds 7 seconds to the source video.

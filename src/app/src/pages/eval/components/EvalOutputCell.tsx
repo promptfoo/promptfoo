@@ -108,6 +108,7 @@ export function isImageProvider(provider: string | undefined): boolean {
  * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
  * - 'google:video:veo-3.1-generate-preview' (Google Veo)
  * - 'vertex:video:veo-3.1-generate-001' (Google Veo on Vertex AI)
+ * - 'google:video:veo-3.1-fast-generate-preview' (Google Veo Fast)
  * Used to skip truncation for video content.
  */
 export function isVideoProvider(provider: string | undefined): boolean {

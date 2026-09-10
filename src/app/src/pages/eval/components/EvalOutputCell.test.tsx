@@ -2419,6 +2419,10 @@ describe('isVideoProvider helper function', () => {
     expect(isVideoProvider('vertex:video:veo-3.1-generate-001')).toBe(true);
   });
 
+  it('should return true for Google Veo 3.1 Fast provider', () => {
+    expect(isVideoProvider('google:video:veo-3.1-fast-generate-preview')).toBe(true);
+  });
+
   it('should return true for any provider with :video: in the name', () => {
     expect(isVideoProvider('some-provider:video:model')).toBe(true);
   });

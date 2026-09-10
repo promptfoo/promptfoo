@@ -1507,6 +1507,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
             usage?.total_cached_tokens,
             cachedAudioTokens,
             cachedImageTokens,
+            undefined,
             config.vertexai ? getVertexInteractionsRegion(config, this.env) : undefined,
           )
         : calculateExplicitInteractionCost(
