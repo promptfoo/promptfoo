@@ -1604,7 +1604,7 @@ describe('RedteamGoatProvider', () => {
       expect(result.tokenUsage?.numRequests).toBe(2);
     });
 
-    it('counts unblocking analysis as attacker usage when no blocking question is found', async () => {
+    it('counts unblocking analysis as grading usage when no blocking question is found', async () => {
       const unblocking = vi.spyOn(redteamProviderShared, 'tryUnblocking').mockResolvedValue({
         success: false,
         tokenUsage: { total: 21, prompt: 13, completion: 8, numRequests: 1 },
@@ -1629,7 +1629,7 @@ describe('RedteamGoatProvider', () => {
         expect(result.tokenUsage).toMatchObject({
           total: 70,
           numRequests: 2,
-          attacker: { total: 21, prompt: 13, completion: 8 },
+          assertions: { total: 21, prompt: 13, completion: 8 },
         });
         expect(unblocking).toHaveBeenCalledTimes(1);
       } finally {

@@ -1,46 +1,32 @@
 ---
 sidebar_label: OpenLLM
-description: "Deploy and serve open-source LLMs efficiently using BentoML's OpenLLM framework for production-ready model inference"
+description: "Serve open-source models with BentoML OpenLLM and configure promptfoo's OpenAI provider using your server URL, API key, and deployed model name for evals."
 ---
 
 # OpenLLM
 
-To use [OpenLLM](https://github.com/bentoml/OpenLLM) with promptfoo, we take advantage of OpenLLM's support for [OpenAI-compatible endpoint](https://colab.research.google.com/github/bentoml/OpenLLM/blob/main/examples/openllm-llama2-demo/openllm_llama2_demo.ipynb#scrollTo=0G5clTYV_M8J&line=3&uniqifier=1).
+[OpenLLM](https://github.com/bentoml/OpenLLM) serves models through an OpenAI-compatible endpoint. Use promptfoo's [OpenAI provider](/docs/providers/openai) with the model name exposed by your server.
 
-1. Start the server using the `openllm start` command.
+## Start a server
 
-2. Set environment variables:
-   - Set `OPENAI_BASE_URL` to `http://localhost:8001/v1`
-   - Set `OPENAI_API_KEY` to a dummy value `foo`.
+The OpenLLM quickstart uses:
 
-3. Depending on your use case, use the `chat` or `completion` model types.
+```sh
+openllm serve llama3.2:1b
+```
 
-   **Chat format example**:
-   To run a Llama2 eval using chat-formatted prompts, first start the model:
+This starts the API at `http://localhost:3000/v1`. Model access and hardware requirements depend on the selected model; follow the OpenLLM setup instructions before serving it.
 
-   ```sh
-   openllm start llama --model-id meta-llama/Llama-2-7b-chat-hf
-   ```
+## Configure promptfoo
 
-   Then set the promptfoo configuration:
+```yaml
+providers:
+  - id: openai:chat:meta-llama/Llama-3.2-1B-Instruct
+    config:
+      apiBaseUrl: http://localhost:3000/v1
+      apiKey: local-placeholder # Use your server key if authentication is enabled
+```
 
-   ```yaml
-   providers:
-     - openai:chat:llama2
-   ```
+Keep the model name aligned with your server's `/v1/models` response. A name configured by your deployment may differ from the upstream Hugging Face repository name.
 
-   **Completion format example**:
-   To run a Flan eval using completion-formatted prompts, first start the model:
-
-   ```sh
-   openllm start flan-t5 --model-id google/flan-t5-large
-   ```
-
-   Then set the promptfoo configuration:
-
-   ```yaml
-   providers:
-     - openai:completion:flan-t5
-   ```
-
-4. See [OpenAI provider documentation](/docs/providers/openai) for more details.
+Older OpenLLM releases used `openllm start` and port `8001`. If you run one of those deployments, use its matching startup command, URL, and served model name. Use `openai:completion:<served-model>` only when that deployment supports the completions endpoint and the model accepts completion prompts.

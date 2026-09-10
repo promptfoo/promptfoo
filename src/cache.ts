@@ -14,6 +14,7 @@ import { sha256 } from './util/createHash';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import {
+  getCloudAuthHeaderName,
   getCloudBearerToken,
   getCloudTaskTeamId,
   getRequestUrlString,
@@ -27,6 +28,7 @@ import type { CacheOptions } from './types/cache';
 
 let cacheInstance: Cache | undefined;
 const namespacedCacheInstances = new Map<string, Cache>();
+let cacheClearGeneration = 0;
 
 const cacheNamespaceStorage = new AsyncLocalStorage<{ namespace: string }>();
 const cacheEnabledStorage = new AsyncLocalStorage<{ enabled: boolean }>();
@@ -43,7 +45,7 @@ const DEFAULT_CACHE_TTL_SECONDS = 60 * 60 * 24 * 14;
  * Get the cache TTL in milliseconds.
  * Reads from PROMPTFOO_CACHE_TTL environment variable (in seconds) or uses default.
  */
-function getCacheTtlMs(): number {
+export function getCacheTtlMs(): number {
   return getEnvInt('PROMPTFOO_CACHE_TTL', DEFAULT_CACHE_TTL_SECONDS) * 1000;
 }
 
@@ -110,6 +112,12 @@ function getCacheInstance() {
       ttl: getCacheTtlMs(),
       refreshThreshold: 0, // Disable background refresh
     });
+    const clear = cacheInstance.clear.bind(cacheInstance);
+    cacheInstance.clear = async () => {
+      const result = await clear();
+      cacheClearGeneration += 1;
+      return result;
+    };
   }
   return cacheInstance;
 }
@@ -179,6 +187,10 @@ export function getScopedCacheKey(cacheKey: string, namespace = getCurrentCacheN
   return namespace ? `${namespace}:${cacheKey}` : cacheKey;
 }
 
+export function getCacheClearGeneration() {
+  return cacheClearGeneration;
+}
+
 function getUnscopedCacheKey(cacheKey: string, namespace: string) {
   const namespacePrefix = `${namespace}:`;
   return cacheKey.startsWith(namespacePrefix) ? cacheKey.slice(namespacePrefix.length) : cacheKey;
@@ -218,6 +230,7 @@ async function clearNamespacedCache(cache: Cache, namespace: string) {
     }
   }
 
+  cacheClearGeneration += 1;
   return true;
 }
 
@@ -275,6 +288,8 @@ function getEffectiveCacheEnabled() {
 export type FetchWithCacheResult<T> = {
   data: T;
   cached: boolean;
+  /** Another concurrent caller owns the upstream request that produced this response. */
+  coalesced?: boolean;
   status: number;
   statusText: string;
   headers?: Record<string, string>;
@@ -414,15 +429,28 @@ function getUrlForFetchCacheKey(url: RequestInfo) {
   }
 }
 
-function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
+export function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
   const headers = new Headers(getFetchWithProxyHeaders(url, options));
 
-  // Mirror monkeyPatchFetch so the cache key reflects the Authorization header that
-  // will actually be sent: fold in the cloud bearer token for cloud-bound requests,
-  // without overriding a caller-supplied Authorization.
+  // Mirror monkeyPatchFetch so the cache key reflects the auth header that will
+  // actually be sent: fold in the cloud bearer token for cloud-bound requests, under
+  // whatever header name is configured, without overriding a caller-supplied header.
   const cloudAuth = getCloudBearerToken(url);
-  if (cloudAuth && !headers.has('Authorization')) {
-    headers.set('Authorization', cloudAuth);
+  // Whenever a cloud credential resolves for this request, its header name is
+  // sensitive and must be fingerprinted below — whether this function injects it
+  // (headers.set) or a caller already set it explicitly beforehand (e.g.
+  // resolveGuardrailsApi via cloudConfig.getAuthHeaders()). A custom header name
+  // and/or a short on-prem token can both evade the generic
+  // isSecretField/looksLikeSecret heuristics used for ordinary headers, so this
+  // must not depend on whether headers.set() actually ran here. Lowercased once
+  // at capture because Headers.entries() below always yields lowercase names.
+  let cloudAuthHeaderNameForFingerprint: string | undefined;
+  if (cloudAuth) {
+    const cloudAuthHeaderName = getCloudAuthHeaderName();
+    cloudAuthHeaderNameForFingerprint = cloudAuthHeaderName.toLowerCase();
+    if (!headers.has(cloudAuthHeaderName)) {
+      headers.set(cloudAuthHeaderName, cloudAuth);
+    }
   }
 
   const cloudTaskTeamId = getCloudTaskTeamId(url);
@@ -436,7 +464,12 @@ function getHeadersForCacheKey(url: RequestInfo, options: RequestInit) {
       const nameComparison = nameA.localeCompare(nameB);
       return nameComparison === 0 ? valueA.localeCompare(valueB) : nameComparison;
     })
-    .map(([name, value]) => [name, getStringForFetchCacheKey(value, name)]);
+    .map(([name, value]) => [
+      name,
+      name === cloudAuthHeaderNameForFingerprint
+        ? fingerprintFetchCacheSecret(value)
+        : getStringForFetchCacheKey(value, name),
+    ]);
 }
 
 function hashFetchCacheKey(identity: unknown) {
@@ -871,6 +904,7 @@ export async function fetchWithCache<T = unknown>(
 
   const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, options);
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
+  const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
     inflightResponse = (async () => {
       const preparedResponse = await prepareFetchResponse(
@@ -892,7 +926,8 @@ export async function fetchWithCache<T = unknown>(
   }
 
   const response = await inflightResponse;
-  return deserializeFetchResponse<T>(response, false, cache, cacheKey);
+  const result = deserializeFetchResponse<T>(response, false, cache, cacheKey);
+  return coalesced ? { ...result, coalesced: true } : result;
 }
 
 /**

@@ -202,8 +202,8 @@ describe('createDummyFiles', () => {
     const config = validationResult.data!;
     expect(config.prompts).toHaveLength(2);
     expect(config.providers).toHaveLength(2);
-    expect(config.providers).toContain('openai:gpt-5-mini');
-    expect(config.providers).toContain('openai:gpt-5');
+    expect(config.providers).toContain('openai:gpt-5.6-luna');
+    expect(config.providers).toContain('openai:gpt-5.6-terra');
   });
 
   it('should generate valid YAML configuration for RAG setup', async () => {
@@ -255,6 +255,39 @@ describe('createDummyFiles', () => {
     expect(mockSelect).toHaveBeenCalledTimes(3);
     expect(mockCheckbox).toHaveBeenCalledTimes(0);
     expect(mockConfirm).toHaveBeenCalledTimes(0);
+  });
+
+  it('offers current Gemini Flash models during interactive onboarding', async () => {
+    const googleModels = [
+      { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
+      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
+      'vertex:gemini-3.1-pro-preview',
+      'vertex:gemini-2.5-pro',
+    ];
+    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce(googleModels);
+
+    await createDummyFiles(tempDir, true);
+
+    expect(mockSelect).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        choices: expect.arrayContaining([
+          expect.objectContaining({
+            name: '[Google] Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
+            value: googleModels,
+          }),
+        ]),
+      }),
+    );
+
+    const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
+      call[0].toString().endsWith('promptfooconfig.yaml'),
+    );
+    const config = yaml.load(configCall?.[1] as string) as { providers: typeof googleModels };
+
+    expect(config.providers).toEqual(googleModels);
   });
 
   it('offers supported Anthropic models instead of retired Opus 4.1', async () => {

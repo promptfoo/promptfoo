@@ -93,9 +93,9 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'citation',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding Citation to ${testCases.length} test cases`);
-      const newTestCases = await addCitationTestCases(testCases, injectVar, config);
+      const newTestCases = await addCitationTestCases(testCases, injectVar, config, runtimeContext);
       logger.debug(`Added ${newTestCases.length} Citation test cases`);
       return newTestCases;
     },
@@ -131,9 +131,9 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'gcg',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding GCG test cases to ${testCases.length} test cases`);
-      const newTestCases = await addGcgTestCases(testCases, injectVar, config);
+      const newTestCases = await addGcgTestCases(testCases, injectVar, config, runtimeContext);
       logger.debug(`Added ${newTestCases.length} GCG test cases`);
       return newTestCases;
     },
@@ -206,18 +206,23 @@ export const Strategies: Strategy[] = [
   },
   {
     id: 'jailbreak:composite',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding composite jailbreak test cases to ${testCases.length} test cases`);
-      const newTestCases = await addCompositeTestCases(testCases, injectVar, config);
+      const newTestCases = await addCompositeTestCases(
+        testCases,
+        injectVar,
+        config,
+        runtimeContext,
+      );
       logger.debug(`Added ${newTestCases.length} composite jailbreak test cases`);
       return newTestCases;
     },
   },
   {
     id: 'jailbreak:likert',
-    action: async (testCases, injectVar, config) => {
+    action: async (testCases, injectVar, config, _strategyId, runtimeContext) => {
       logger.debug(`Adding Likert scale jailbreaks to ${testCases.length} test cases`);
-      const newTestCases = await addLikertTestCases(testCases, injectVar, config);
+      const newTestCases = await addLikertTestCases(testCases, injectVar, config, runtimeContext);
       logger.debug(`Added ${newTestCases.length} Likert scale jailbreak test cases`);
       return newTestCases;
     },
