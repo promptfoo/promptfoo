@@ -5,7 +5,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 
 const execFileAsync = promisify(execFile);
@@ -2766,41 +2766,39 @@ describe('promptfoo-evals skill', () => {
       ],
       extraFile: 'grader.mjs',
     },
-  ])('ships a runnable/validatable $dir eval fixture', ({
-    dir,
-    snippets,
-    extraFile,
-    providerFile,
-  }) => {
-    const config = readText(path.join(fixtureRoot, dir, 'promptfooconfig.yaml'));
-    const provider = readText(path.join(fixtureRoot, dir, providerFile));
+  ])(
+    'ships a runnable/validatable $dir eval fixture',
+    ({ dir, snippets, extraFile, providerFile }) => {
+      const config = readText(path.join(fixtureRoot, dir, 'promptfooconfig.yaml'));
+      const provider = readText(path.join(fixtureRoot, dir, providerFile));
 
-    expect(config).toContain(
-      '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json',
-    );
-    expect(config).toContain('prompts:');
-    expect(config).toContain('providers:');
-    expect(config).toContain('tests:');
-    if (providerFile.endsWith('.py')) {
-      expect(provider).toContain('def call_api(prompt: str, options: dict, context: dict)');
-    } else {
-      expect(provider).toContain('export default class');
-      expect(provider).toContain('async callApi');
-    }
+      expect(config).toContain(
+        '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json',
+      );
+      expect(config).toContain('prompts:');
+      expect(config).toContain('providers:');
+      expect(config).toContain('tests:');
+      if (providerFile.endsWith('.py')) {
+        expect(provider).toContain('def call_api(prompt: str, options: dict, context: dict)');
+      } else {
+        expect(provider).toContain('export default class');
+        expect(provider).toContain('async callApi');
+      }
 
-    if (extraFile) {
-      const grader = readText(path.join(fixtureRoot, dir, extraFile));
-      expect(grader).toContain('export default class');
-      expect(grader).toContain('JSON.stringify');
-      expect(grader).toContain('pass');
-      expect(grader).toContain('score');
-      expect(grader).toContain('reason');
-    }
+      if (extraFile) {
+        const grader = readText(path.join(fixtureRoot, dir, extraFile));
+        expect(grader).toContain('export default class');
+        expect(grader).toContain('JSON.stringify');
+        expect(grader).toContain('pass');
+        expect(grader).toContain('score');
+        expect(grader).toContain('reason');
+      }
 
-    for (const snippet of snippets) {
-      expect(config).toContain(snippet);
-    }
-  });
+      for (const snippet of snippets) {
+        expect(config).toContain(snippet);
+      }
+    },
+  );
 });
 
 describe('promptfoo-provider-setup skill', () => {

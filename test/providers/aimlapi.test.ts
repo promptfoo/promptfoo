@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
   clearAimlApiModelsCache,
@@ -10,7 +10,15 @@ import { OpenAiCompletionProvider } from '../../src/providers/openai/completion'
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
 vi.mock('../../src/providers/openai');
-vi.mock('../../src/cache');
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithCache: vi.fn(),
+}));
+
+afterEach(() => {
+  vi.resetAllMocks();
+  clearAimlApiModelsCache();
+});
 
 describe('createAimlApiProvider', () => {
   beforeEach(() => {
@@ -59,9 +67,12 @@ describe('fetchAimlApiModels', () => {
     const models = await fetchAimlApiModels();
 
     expect(fetchWithCache).toHaveBeenCalledWith(
-      'https://api.aimlapi.com/models',
+      'https://api.aimlapi.com/v1/models',
       { headers: {} },
       expect.any(Number),
+      'json',
+      true,
+      2,
     );
     expect(models).toEqual([{ id: 'model-a' }, { id: 'model-b' }]);
   });

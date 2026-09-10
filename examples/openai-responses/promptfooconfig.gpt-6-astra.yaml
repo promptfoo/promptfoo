@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: GPT-6 Astra structured reasoning
+
+prompts:
+  - |
+    Choose the cheaper shipping option for an order weighing {{weight}} kg.
+    Parcel A charges $5 plus $2 per kg. Parcel B charges $12 flat.
+    Return the carrier and total cost as JSON.
+
+providers:
+  - id: openai:responses:gpt-6-astra
+    config:
+      reasoning:
+        effort: high
+      max_output_tokens: 4096
+      response_format:
+        type: json_schema
+        json_schema:
+          name: shipping_quote
+          strict: true
+          schema:
+            type: object
+            properties:
+              carrier:
+                type: string
+                enum: [Parcel A, Parcel B]
+              cost:
+                type: number
+            required: [carrier, cost]
+            additionalProperties: false
+
+tests:
+  - vars:
+      weight: 2
+    assert:
+      - type: javascript
+        value: output.carrier === 'Parcel A' && output.cost === 9
+  - vars:
+      weight: 5
+    assert:
+      - type: javascript
+        value: output.carrier === 'Parcel B' && output.cost === 12

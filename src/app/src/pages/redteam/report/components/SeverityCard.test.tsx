@@ -57,25 +57,26 @@ describe('SeverityCard', () => {
       { severity: Severity.Medium, displayName: 'Medium' },
       { severity: Severity.Low, displayName: 'Low' },
       { severity: Severity.Informational, displayName: 'Informational' },
-    ])('should call navigateToIssues when clicked with navigateOnClick enabled for $displayName', async ({
-      severity,
-    }) => {
-      const user = userEvent.setup();
-      renderWithProviders(
-        <SeverityCard
-          severity={severity}
-          issueCount={5}
-          navigateOnClick={true}
-          navigateToIssues={mockNavigateToIssues}
-        />,
-      );
+    ])(
+      'should call navigateToIssues when clicked with navigateOnClick enabled for $displayName',
+      async ({ severity }) => {
+        const user = userEvent.setup();
+        renderWithProviders(
+          <SeverityCard
+            severity={severity}
+            issueCount={5}
+            navigateOnClick={true}
+            navigateToIssues={mockNavigateToIssues}
+          />,
+        );
 
-      const cardButton = screen.getByRole('button');
-      await user.click(cardButton);
+        const cardButton = screen.getByRole('button');
+        await user.click(cardButton);
 
-      expect(mockNavigateToIssues).toHaveBeenCalledTimes(1);
-      expect(mockNavigateToIssues).toHaveBeenCalledWith({ severity });
-    });
+        expect(mockNavigateToIssues).toHaveBeenCalledTimes(1);
+        expect(mockNavigateToIssues).toHaveBeenCalledWith({ severity });
+      },
+    );
 
     it('should not render button when navigateOnClick is false', () => {
       renderWithProviders(
@@ -111,24 +112,27 @@ describe('SeverityCard', () => {
       { severity: Severity.Medium, displayName: 'Medium' },
       { severity: Severity.Low, displayName: 'Low' },
       { severity: Severity.Informational, displayName: 'Informational' },
-    ])('should render button with correct accessibility props for $displayName', ({
-      severity,
-      displayName,
-    }) => {
-      renderWithProviders(
-        <SeverityCard
-          severity={severity}
-          issueCount={3}
-          navigateOnClick={true}
-          navigateToIssues={mockNavigateToIssues}
-        />,
-      );
+    ])(
+      'should render button with correct accessibility props for $displayName',
+      ({ severity, displayName }) => {
+        renderWithProviders(
+          <SeverityCard
+            severity={severity}
+            issueCount={3}
+            navigateOnClick={true}
+            navigateToIssues={mockNavigateToIssues}
+          />,
+        );
 
-      const cardButton = screen.getByRole('button');
+        const cardButton = screen.getByRole('button');
 
-      expect(cardButton).toHaveAttribute('tabIndex', '0');
-      expect(cardButton).toHaveAttribute('aria-label', `Filter by ${displayName} vulnerabilities`);
-    });
+        expect(cardButton).toHaveAttribute('tabIndex', '0');
+        expect(cardButton).toHaveAttribute(
+          'aria-label',
+          `Filter by ${displayName} vulnerabilities`,
+        );
+      },
+    );
 
     it('should not render button when navigateOnClick is false', () => {
       renderWithProviders(
