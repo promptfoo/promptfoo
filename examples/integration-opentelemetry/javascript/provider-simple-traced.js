@@ -11,10 +11,13 @@ const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/sema
 
 // Configure OTLP exporter. The generic endpoint is a base URL; the trace-specific
 // endpoint is already the full export URL.
+const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/+$/, '');
 const exporterUrl =
   process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ||
-  (process.env.OTEL_EXPORTER_OTLP_ENDPOINT
-    ? `${process.env.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/+$/, '')}/v1/traces`
+  (otlpEndpoint
+    ? otlpEndpoint.endsWith('/v1/traces')
+      ? otlpEndpoint
+      : `${otlpEndpoint}/v1/traces`
     : 'http://127.0.0.1:4318/v1/traces');
 console.log('[Provider] Configuring OTLP exporter with URL:', exporterUrl);
 const exporter = new OTLPTraceExporter({

@@ -414,6 +414,7 @@ export OTEL_EXPORTER_OTLP_HEADERS="api-key=your-key"
 ### External Collectors
 
 Promptfoo's OTLP receiver stores traces for evals. If you also need traces in Jaeger, Tempo, Honeycomb, or another OTLP-compatible backend, configure your provider SDK or collector pipeline to export there as well.
+Promptfoo does not forward received spans to another collector.
 
 ### Pulling Traces From Another Service
 

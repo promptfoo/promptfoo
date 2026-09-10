@@ -67,7 +67,7 @@ For a required trace, pair duration or error budgets with a presence check. Dura
 
 ```yaml
 - type: trace-span-count
-  value: { pattern: rag_agent_workflow, min: 1 }
+  value: { pattern: retrieve_document_*, min: 1 }
 - type: trace-span-duration
   value: { pattern: retrieve_document_*, max: 350, percentile: 95 }
 - type: trace-error-spans
@@ -111,7 +111,7 @@ A trace proves retrieval ran; it does not prove the retrieved context was releva
 ```yaml
 tests:
   - vars:
-      context: file://retrieved-context.txt
+      context: Quantum computing uses qubits, superposition, and entanglement.
       query: What evidence supports the answer?
     assert:
       - type: context-faithfulness
