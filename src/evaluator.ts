@@ -3617,7 +3617,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       // namedScores tracking here, move afterEach above this call.
       this.trackCompletedRow(evalStep, row, context);
       context.numComplete++;
-      const promptEvalCount = reservePromptEvalCount(context, row.promptIdx);
 
       // Apply afterEach hook mutations before persisting. Pass a shallow copy
       // so in-place mutations don't corrupt the row on hook failure.
@@ -3671,7 +3670,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         evalStep,
         mathjsModule: context.mathjsModule,
         metrics,
-        promptEvalCount,
+        promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
         row,
       });
 
