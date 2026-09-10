@@ -137,7 +137,9 @@ export function getCodingAgentEvidence(
   const raw = parseProviderRaw(gradingContext?.providerResponse?.raw);
   const rawObject = getObject(raw);
   const rawData = getObject(rawObject?.data);
-  const items = [rawObject?.items, rawObject?.parts, rawData?.parts].filter(Array.isArray).flat();
+  const items = [rawObject?.items, rawObject?.output, rawObject?.parts, rawData?.parts]
+    .filter(Array.isArray)
+    .flat();
   const providerActionItems = items.filter(providerItemHasActionEvidence);
   const providerMetadata = getObject(gradingContext?.providerResponse?.metadata);
   const rawMetadata = getObject(rawObject?.metadata);

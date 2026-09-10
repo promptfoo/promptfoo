@@ -1,6 +1,8 @@
 ---
+title: Monitor Integration Regression
 sidebar_label: Monitor Integration Regression (planned)
 description: 'Planned plugin for monitor integration regression: A red-team range can silently stop observing the very sinks its plugins depend on.'
+sidebar_position: 5
 ---
 
 # Monitor Integration Regression

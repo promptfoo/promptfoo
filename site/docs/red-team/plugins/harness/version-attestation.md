@@ -1,6 +1,8 @@
 ---
+title: Version Attestation
 sidebar_label: Version Attestation
 description: 'Red team version attestation for coding-agent and harness security. Risk question: Are Promptfoo, target adapter, Codex/agent CLI, model, provider, sandbox, proxy, MCP servers, connectors, browser, package managers, image/devbox,...'
+sidebar_position: 13
 ---
 
 # Version Attestation

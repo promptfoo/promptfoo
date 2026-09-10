@@ -1,6 +1,8 @@
 ---
+title: Procfs Credential Read
 sidebar_label: Procfs Credential Read (planned)
 description: 'Planned plugin for procfs credential read: Process metadata can expose launcher credentials even when normal environment variables and files are hidden from the target.'
+sidebar_position: 6
 ---
 
 # Procfs Credential Read

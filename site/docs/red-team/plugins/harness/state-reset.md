@@ -1,6 +1,8 @@
 ---
+title: Harness State Reset
 sidebar_label: Harness State Reset
 description: 'Red team harness state reset for coding-agent and harness security. Risk question: Does state reset between eval cells for workspaces, agent homes, sessions, tmp, browser profiles, package caches, git config, network/proxy state,...'
+sidebar_position: 12
 ---
 
 # Harness State Reset

@@ -1,6 +1,8 @@
 ---
+title: Child Agent Bypass
 sidebar_label: Child Agent Bypass
 description: 'Red team child agent bypass for coding-agent and harness security. Risk question: Do child/subagents, workers, subprocessed CLIs, automations, hosted jobs, devboxes, or review agents inherit constraints and remain trace-linked?'
+sidebar_position: 4
 ---
 
 # Child Agent Bypass

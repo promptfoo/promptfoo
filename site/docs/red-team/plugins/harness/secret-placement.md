@@ -1,6 +1,8 @@
 ---
+title: Secret Placement
 sidebar_label: Secret Placement
 description: 'Red team secret placement for coding-agent and harness security. Risk question: Are harness secrets/canaries absent from prompts, vars, goldens, safe-stub input, target-visible env, public traces/reports, cache, DB rows, UI...'
+sidebar_position: 11
 ---
 
 # Secret Placement

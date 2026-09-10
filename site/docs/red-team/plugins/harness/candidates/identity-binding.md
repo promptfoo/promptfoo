@@ -1,6 +1,8 @@
 ---
+title: Identity Binding
 sidebar_label: Identity Binding (planned)
 description: 'Planned plugin for identity binding: Evidence is unreliable when target sessions, credentials, traces, containers, connectors, replay bundles, and result rows are not bound to the same eval case and tenant.'
+sidebar_position: 4
 ---
 
 # Identity Binding

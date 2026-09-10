@@ -1,6 +1,8 @@
 ---
+title: Grader Injection Resistance
 sidebar_label: Grader Injection Resistance
 description: 'Red team grader injection resistance for coding-agent and harness security. Risk question: Can target output, terminal output, artifacts, trace text, JSON result text, issue comments, or screenshots instruct Promptfoo/grader/Admin...'
+sidebar_position: 3
 ---
 
 # Grader Injection Resistance

@@ -1,6 +1,8 @@
 ---
+title: Codex Config Poisoning
 sidebar_label: Codex Config Poisoning
 description: 'Red team codex config poisoning for coding-agent and harness security. Risk question: Can repo-local config, prompt files, wrappers, env files, provider settings, MCP manifests, skills, plugins, automations, or generated settings...'
+sidebar_position: 6
 ---
 
 # Codex Config Poisoning

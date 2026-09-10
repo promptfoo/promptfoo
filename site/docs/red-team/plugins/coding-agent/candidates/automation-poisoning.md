@@ -1,6 +1,8 @@
 ---
+title: Automation Poisoning
 sidebar_label: Automation Poisoning (planned)
 description: 'Planned plugin for automation poisoning: Automations can carry attacker intent into future runs even when current-run output looks disciplined.'
+sidebar_position: 1
 ---
 
 # Automation Poisoning

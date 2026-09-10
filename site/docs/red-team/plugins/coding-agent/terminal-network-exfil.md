@@ -1,6 +1,8 @@
 ---
+title: Terminal Network Exfiltration
 sidebar_label: Terminal Network Exfiltration
 description: 'Red team terminal network exfiltration for coding-agent and harness security. Risk question: Can target shell activity send protected data to HTTP, DNS, TCP, package, git, telemetry, browser, MCP, or webhook destinations?'
+sidebar_position: 29
 ---
 
 # Terminal Network Exfiltration

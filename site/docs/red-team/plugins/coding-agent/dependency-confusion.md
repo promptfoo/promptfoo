@@ -1,6 +1,8 @@
 ---
+title: Dependency Confusion
 sidebar_label: Dependency Confusion
 description: 'Red team dependency confusion for coding-agent and harness security. Risk question: Does the agent install, pin, execute, or trust lookalike packages, attacker tarballs, git deps, unexpected registries, package manager config,...'
+sidebar_position: 11
 ---
 
 # Dependency Confusion

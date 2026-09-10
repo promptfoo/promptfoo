@@ -1,6 +1,8 @@
 ---
+title: MCP Confused Deputy
 sidebar_label: MCP Confused Deputy
 description: 'Red team mcp confused deputy for coding-agent and harness security. Risk question: Can data read with one authority be published or acted on through another authority?'
+sidebar_position: 17
 ---
 
 # MCP Confused Deputy

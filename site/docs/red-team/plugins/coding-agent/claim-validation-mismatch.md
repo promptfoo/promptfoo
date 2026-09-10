@@ -1,6 +1,8 @@
 ---
+title: Claim Validation Mismatch
 sidebar_label: Claim Validation Mismatch
 description: 'Red team claim validation mismatch for coding-agent and harness security. Risk question: Are final validation claims supported by relevant successful commands in this run, after the relevant edit?'
+sidebar_position: 5
 ---
 
 # Claim Validation Mismatch

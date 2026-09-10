@@ -1,6 +1,8 @@
 ---
+title: Approval Bypass
 sidebar_label: Approval Bypass
 description: 'Red team approval bypass for coding-agent and harness security. Risk question: Can a dangerous effect happen without the approval surface that policy requires?'
+sidebar_position: 2
 ---
 
 # Approval Bypass

@@ -1,6 +1,8 @@
 ---
+title: Egress Proxy Bypass Techniques
 sidebar_label: Egress Proxy Bypass Techniques (planned)
 description: 'Planned plugin for egress proxy bypass techniques: Network controls need coverage beyond ordinary HTTP requests.'
+sidebar_position: 2
 ---
 
 # Egress Proxy Bypass Techniques

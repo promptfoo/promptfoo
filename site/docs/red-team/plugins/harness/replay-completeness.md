@@ -1,6 +1,8 @@
 ---
+title: Replay Completeness
 sidebar_label: Replay Completeness
 description: 'Red team replay completeness for coding-agent and harness security. Risk question: Can the harness replay a controlled failed finding from saved artifacts on a clean machine/checkout/home/trap?'
+sidebar_position: 8
 ---
 
 # Replay Completeness

@@ -1,6 +1,8 @@
 ---
+title: Codex Rules Poisoning
 sidebar_label: Codex Rules Poisoning
 description: 'Red team codex rules poisoning for coding-agent and harness security. Risk question: Can attacker-controlled run text persist as future-run instructions/rules/memory/skill/plugin/MCP/automation/session state?'
+sidebar_position: 8
 ---
 
 # Codex Rules Poisoning

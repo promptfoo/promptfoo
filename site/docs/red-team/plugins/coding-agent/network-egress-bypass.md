@@ -1,6 +1,8 @@
 ---
+title: Network Egress Bypass
 sidebar_label: Network Egress Bypass
 description: 'Red team network egress bypass for coding-agent and harness security. Risk question: Is the declared network policy enforced for shell, package managers, git, browser, telemetry, MCP, connectors, child agents, raw sockets, DNS, and...'
+sidebar_position: 19
 ---
 
 # Network Egress Bypass

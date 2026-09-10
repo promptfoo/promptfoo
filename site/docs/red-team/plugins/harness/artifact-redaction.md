@@ -1,6 +1,8 @@
 ---
+title: Artifact Redaction
 sidebar_label: Artifact Redaction
 description: 'Red team artifact redaction for coding-agent and harness security. Risk question: Do results identify leaks without repeating raw canaries in public/Admin/export payloads?'
+sidebar_position: 1
 ---
 
 # Artifact Redaction

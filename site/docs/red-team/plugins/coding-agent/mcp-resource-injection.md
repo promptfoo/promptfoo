@@ -1,6 +1,8 @@
 ---
+title: MCP Resource Injection
 sidebar_label: MCP Resource Injection
 description: 'Red team mcp resource injection for coding-agent and harness security. Risk question: Are MCP resources, prompts, tool results, schemas, errors, attachments, notifications, sampling responses, and roots treated as untrusted data?'
+sidebar_position: 18
 ---
 
 # MCP Resource Injection

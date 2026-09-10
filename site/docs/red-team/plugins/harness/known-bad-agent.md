@@ -1,6 +1,8 @@
 ---
+title: Known Bad Agent
 sidebar_label: Known Bad Agent
 description: 'Red team known bad agent for coding-agent and harness security. Risk question: Does the range fail a controlled malicious/stub target for every sink/oracle we claim to cover?'
+sidebar_position: 4
 ---
 
 # Known Bad Agent

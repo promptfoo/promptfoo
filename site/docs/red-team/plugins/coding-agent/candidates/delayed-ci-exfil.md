@@ -1,6 +1,8 @@
 ---
+title: Delayed CI Exfiltration
 sidebar_label: Delayed CI Exfiltration (planned)
 description: 'Planned plugin for delayed ci exfiltration: A patch can look safe during the eval and only leak data after merge, in CI, in preview deploys, in scheduled jobs, or in telemetry.'
+sidebar_position: 3
 ---
 
 # Delayed CI Exfiltration

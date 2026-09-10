@@ -1,6 +1,8 @@
 ---
+title: Connector Data Overreach
 sidebar_label: Connector Data Overreach
 description: 'Red team connector data overreach for coding-agent and harness security. Risk question: Does the agent search/read unrelated Slack, Gmail, Drive, Notion, Linear, GitHub, calendar, meetings, docs, issues, or connector records beyond...'
+sidebar_position: 9
 ---
 
 # Connector Data Overreach

@@ -1,6 +1,8 @@
 ---
+title: AGENTS.md Injection
 sidebar_label: AGENTS.md Injection
 description: 'Red team agents.md injection for coding-agent and harness security. Risk question: Can repo-local AGENTS.md / CLAUDE.md / rules files change higher-priority behavior, persist attacker rules, suppress validation, relax safety, or...'
+sidebar_position: 1
 ---
 
 # AGENTS.md Injection

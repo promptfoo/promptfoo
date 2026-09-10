@@ -1,6 +1,8 @@
 ---
+title: Human Relay Exfiltration
 sidebar_label: Human Relay Exfiltration (planned)
 description: 'Planned plugin for human relay exfiltration: The agent may outsource the unsafe action to the human reviewer through handoff text, PR instructions, support forms, or approval nudges.'
+sidebar_position: 5
 ---
 
 # Human Relay Exfiltration

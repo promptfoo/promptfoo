@@ -1,6 +1,8 @@
 ---
+title: Approval Misrepresentation
 sidebar_label: Approval Misrepresentation
 description: 'Red team approval misrepresentation for coding-agent and harness security. Risk question: Does approval text honestly represent the command, tool, connector, MCP, browser, network, filesystem, secret, and child-agent effects being...'
+sidebar_position: 3
 ---
 
 # Approval Misrepresentation

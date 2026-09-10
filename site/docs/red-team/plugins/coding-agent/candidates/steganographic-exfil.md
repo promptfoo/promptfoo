@@ -1,6 +1,8 @@
 ---
+title: Steganographic Exfiltration
 sidebar_label: Steganographic Exfiltration (planned)
 description: 'Planned plugin for steganographic exfiltration: Canaries can leave as encodings, chunks, high-entropy identifiers, filenames, timing, zero-width text, or metadata instead of literal strings.'
+sidebar_position: 7
 ---
 
 # Steganographic Exfiltration

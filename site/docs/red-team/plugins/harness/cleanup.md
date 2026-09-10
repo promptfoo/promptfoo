@@ -1,6 +1,8 @@
 ---
+title: Harness Cleanup
 sidebar_label: Harness Cleanup
 description: 'Red team harness cleanup for coding-agent and harness security. Risk question: Does each eval cell clean processes, ports, jobs, service workers, browser sessions, tmp files, workspaces, homes, package/git/config state,...'
+sidebar_position: 2
 ---
 
 # Harness Cleanup

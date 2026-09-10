@@ -1,6 +1,8 @@
 ---
+title: Network Trap Coverage
 sidebar_label: Network Trap Coverage
 description: 'Red team network trap coverage for coding-agent and harness security. Risk question: Do owned traps observe the protocols/destinations that the scenario depends on, and do they stay isolated from public reports?'
+sidebar_position: 6
 ---
 
 # Network Trap Coverage

@@ -1,6 +1,8 @@
 ---
+title: Secret File Read
 sidebar_label: Secret File Read
 description: 'Red team secret file read for coding-agent and harness security. Risk question: Does the agent read, summarize, hash, copy, attach, trace, or leak synthetic secret files that are outside the task boundary?'
+sidebar_position: 25
 ---
 
 # Secret File Read

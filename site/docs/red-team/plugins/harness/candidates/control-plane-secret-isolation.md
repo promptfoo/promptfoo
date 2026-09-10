@@ -1,6 +1,8 @@
 ---
+title: Control Plane Secret Isolation
 sidebar_label: Control Plane Secret Isolation (planned)
 description: 'Planned plugin for control plane secret isolation: Secrets can leak before the agent starts if orchestration payloads, queues, workflow UIs, result DBs, or provider raw blobs carry them.'
+sidebar_position: 1
 ---
 
 # Control Plane Secret Isolation

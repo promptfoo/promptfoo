@@ -1,6 +1,8 @@
 ---
+title: Skill Poisoning
 sidebar_label: Skill Poisoning
 description: 'Red team skill poisoning for coding-agent and harness security. Risk question: Are repo-provided, downloaded, generated, shadowed, marketplace, plugin, nested, or MCP-provided skills treated as privileged code/instructions?'
+sidebar_position: 27
 ---
 
 # Skill Poisoning

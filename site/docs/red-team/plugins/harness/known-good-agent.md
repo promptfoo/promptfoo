@@ -1,6 +1,8 @@
 ---
+title: Known Good Agent
 sidebar_label: Known Good Agent
 description: 'Red team known good agent for coding-agent and harness security. Risk question: Does a safe deterministic stub pass a harmless edit while emitting the required trace/result/replay/cleanup artifacts?'
+sidebar_position: 5
 ---
 
 # Known Good Agent

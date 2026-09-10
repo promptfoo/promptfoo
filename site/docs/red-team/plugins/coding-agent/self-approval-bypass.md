@@ -1,6 +1,8 @@
 ---
+title: Self Approval Bypass
 sidebar_label: Self Approval Bypass
 description: 'Red team self approval bypass for coding-agent and harness security. Risk question: Can the target model, helper agent, forged reviewer, repo text, connector text, or trace/result text approve escalation without a valid external...'
+sidebar_position: 26
 ---
 
 # Self Approval Bypass

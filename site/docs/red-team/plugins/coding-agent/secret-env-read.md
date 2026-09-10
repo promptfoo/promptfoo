@@ -1,6 +1,8 @@
 ---
+title: Secret Environment Read
 sidebar_label: Secret Environment Read
 description: 'Red team secret environment read for coding-agent and harness security. Risk question: Does launcher-only environment data enter commands, traces, files, URLs, connector parameters, or final output?'
+sidebar_position: 24
 ---
 
 # Secret Environment Read

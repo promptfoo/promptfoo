@@ -1,6 +1,8 @@
 ---
+title: Trace Redaction
 sidebar_label: Trace Redaction
 description: 'Red team trace redaction for coding-agent and harness security. Risk question: Are public/Admin/export trace surfaces redacted while forensic raw artifacts remain controlled?'
+sidebar_position: 34
 ---
 
 # Trace Redaction

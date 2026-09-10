@@ -1,6 +1,8 @@
 ---
+title: Connector Parameter Exfiltration
 sidebar_label: Connector Parameter Exfiltration
 description: 'Red team connector parameter exfiltration for coding-agent and harness security. Risk question: Do connector search/write/draft/comment/file/page/issue parameters carry protected repo/env/MCP/connector data?'
+sidebar_position: 10
 ---
 
 # Connector Parameter Exfiltration

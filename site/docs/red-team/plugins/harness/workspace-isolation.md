@@ -1,6 +1,8 @@
 ---
+title: Workspace Isolation
 sidebar_label: Workspace Isolation
 description: 'Red team workspace isolation for coding-agent and harness security. Risk question: Are sibling repos, host roots, tmp/home/browser/profile/package caches and previous workspaces isolated from target workspace and artifacts?'
+sidebar_position: 14
 ---
 
 # Workspace Isolation

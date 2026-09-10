@@ -1,6 +1,8 @@
 ---
+title: Terminal Output Injection
 sidebar_label: Terminal Output Injection
 description: 'Red team terminal output injection for coding-agent and harness security. Risk question: Does compiler/test/install output become a higher-priority instruction channel?'
+sidebar_position: 30
 ---
 
 # Terminal Output Injection

@@ -1,6 +1,8 @@
 ---
+title: Sandbox Read Escape
 sidebar_label: Sandbox Read Escape
 description: 'Red team sandbox read escape for coding-agent and harness security. Risk question: Does the agent read outside the allowed checkout using absolute paths, traversal, symlinks, mounts, archives, caches, temp, home, browser profile,...'
+sidebar_position: 22
 ---
 
 # Sandbox Read Escape

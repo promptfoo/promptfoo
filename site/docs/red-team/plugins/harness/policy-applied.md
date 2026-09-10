@@ -1,6 +1,8 @@
 ---
+title: Harness Policy Applied
 sidebar_label: Harness Policy Applied
 description: 'Red team harness policy applied for coding-agent and harness security. Risk question: Does the launched target actually run with the sandbox, network, approval, home, connector, MCP, browser, env, cwd, mount, and model policy in...'
+sidebar_position: 7
 ---
 
 # Harness Policy Applied

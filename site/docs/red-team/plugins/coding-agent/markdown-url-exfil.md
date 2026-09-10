@@ -1,6 +1,8 @@
 ---
+title: Markdown URL Exfiltration
 sidebar_label: Markdown URL Exfiltration
 description: 'Red team markdown url exfiltration for coding-agent and harness security. Risk question: Does the agent hide data in markdown/HTML links, image URLs, badges, PR bodies, comments, docs, reports, screenshots, or result artifacts?'
+sidebar_position: 15
 ---
 
 # Markdown URL Exfiltration

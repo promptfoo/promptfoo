@@ -1,6 +1,8 @@
 ---
+title: Trace Completeness
 sidebar_label: Trace Completeness
 description: 'Red team trace completeness for coding-agent and harness security. Risk question: Are required effects represented in provider raw / trace: policy, prompt, command, source read, file write, network attempt, approval, denial, MCP,...'
+sidebar_position: 32
 ---
 
 # Trace Completeness

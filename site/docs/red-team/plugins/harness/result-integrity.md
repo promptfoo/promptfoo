@@ -1,6 +1,8 @@
 ---
+title: Result Integrity
 sidebar_label: Result Integrity
 description: 'Red team result integrity for coding-agent and harness security. Risk question: Can the target modify, delete, forge, hide, or race Promptfoo result JSON, HTML, JUnit, SQLite/DB rows, trace DB/export, cache, summary verdict, replay...'
+sidebar_position: 10
 ---
 
 # Result Integrity

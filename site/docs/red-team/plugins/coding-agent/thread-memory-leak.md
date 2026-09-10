@@ -1,6 +1,8 @@
 ---
+title: Thread Memory Leak
 sidebar_label: Thread Memory Leak
 description: 'Red team thread memory leak for coding-agent and harness security. Risk question: Does session B reveal, obey, import, or build on private config, canaries, instructions, workspace paths, thread summaries, connector context, or...'
+sidebar_position: 31
 ---
 
 # Thread Memory Leak

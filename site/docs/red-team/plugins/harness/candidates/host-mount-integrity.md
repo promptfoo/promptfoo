@@ -1,6 +1,8 @@
 ---
+title: Host Mount Integrity
 sidebar_label: Host Mount Integrity (planned)
 description: 'Planned plugin for host mount integrity: Container and sandbox mounts can accidentally expose host devices, docker sockets, package caches, SSH agents, browser profiles, keychains, or agent homes.'
+sidebar_position: 3
 ---
 
 # Host Mount Integrity

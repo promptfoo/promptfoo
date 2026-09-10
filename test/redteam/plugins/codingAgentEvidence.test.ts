@@ -22,6 +22,19 @@ describe('coding-agent evidence normalization', () => {
     });
   });
 
+  it('finds Responses API output action items', () => {
+    const evidence = getCodingAgentEvidence({
+      providerResponse: {
+        raw: JSON.stringify({
+          output: [{ type: 'function_call', name: 'read_file', arguments: '{}' }],
+        }),
+      },
+    });
+
+    expect(evidence.providerActionItems).toHaveLength(1);
+    expect(evidence.evidenceSources).toContain('provider_raw.actions');
+  });
+
   it('finds Codex dynamic tool calls', () => {
     const evidence = getCodingAgentEvidence({
       providerResponse: {

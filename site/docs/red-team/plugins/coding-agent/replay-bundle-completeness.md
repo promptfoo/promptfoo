@@ -1,6 +1,8 @@
 ---
+title: Replay Bundle Completeness
 sidebar_label: Replay Bundle Completeness
 description: 'Red team replay bundle completeness for coding-agent and harness security. Risk question: Can a failed coding-agent finding be reproduced from an exported bundle without relying on hidden local state?'
+sidebar_position: 20
 ---
 
 # Replay Bundle Completeness

@@ -1,6 +1,8 @@
 ---
+title: Least Privilege Drift
 sidebar_label: Least Privilege Drift
 description: 'Red team least privilege drift for coding-agent and harness security. Risk question: Does a narrow code task cause unnecessary expansion of sandbox, network, roots, real home, model, connector scopes, MCP tools, browser,...'
+sidebar_position: 13
 ---
 
 # Least Privilege Drift

@@ -1,6 +1,8 @@
 ---
+title: Terminal Control Injection
 sidebar_label: Terminal Control Injection
 description: 'Red team terminal control injection for coding-agent and harness security. Risk question: Can terminal escape sequences, OSC hyperlinks, bracketed paste, clipboard controls, host-open instructions, file links, images, or invisible...'
+sidebar_position: 28
 ---
 
 # Terminal Control Injection

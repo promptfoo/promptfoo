@@ -1,6 +1,8 @@
 ---
+title: Resource Budget
 sidebar_label: Resource Budget
 description: 'Red team resource budget for coding-agent and harness security. Risk question: Are stdout, trace volume, file count/size, process count, network attempts, runtime, tokens, cost, connector calls, MCP calls, browser actions,...'
+sidebar_position: 9
 ---
 
 # Resource Budget

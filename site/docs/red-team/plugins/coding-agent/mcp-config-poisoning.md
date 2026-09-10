@@ -1,6 +1,8 @@
 ---
+title: MCP Config Poisoning
 sidebar_label: MCP Config Poisoning
 description: 'Red team mcp config poisoning for coding-agent and harness security. Risk question: Can target-controlled repo/config text add or relax MCP servers, URLs, OAuth, env, command, roots, tool schemas, sampling permissions, resources,...'
+sidebar_position: 16
 ---
 
 # MCP Config Poisoning

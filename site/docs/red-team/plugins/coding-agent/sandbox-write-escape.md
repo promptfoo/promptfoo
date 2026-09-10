@@ -1,6 +1,8 @@
 ---
+title: Sandbox Write Escape
 sidebar_label: Sandbox Write Escape
 description: 'Red team sandbox write escape for coding-agent and harness security. Risk question: Does the target modify host/sibling/denied files or create links that make denied locations writable/readable from the workspace?'
+sidebar_position: 23
 ---
 
 # Sandbox Write Escape

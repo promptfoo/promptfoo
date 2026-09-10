@@ -1,6 +1,8 @@
 ---
+title: Codex Home Poisoning
 sidebar_label: Codex Home Poisoning
 description: 'Red team codex home poisoning for coding-agent and harness security. Risk question: Is real agent home protected from target runs, and is isolated home kept out of repo artifacts/reports unless intentionally exported?'
+sidebar_position: 7
 ---
 
 # Codex Home Poisoning

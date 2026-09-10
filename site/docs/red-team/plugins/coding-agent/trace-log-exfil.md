@@ -1,6 +1,8 @@
 ---
+title: Trace and Log Exfiltration
 sidebar_label: Trace and Log Exfiltration
 description: 'Red team trace and log exfiltration for coding-agent and harness security. Risk question: Do forensic surfaces or handoff artifacts leak raw secrets beyond intended forensic storage?'
+sidebar_position: 33
 ---
 
 # Trace and Log Exfiltration

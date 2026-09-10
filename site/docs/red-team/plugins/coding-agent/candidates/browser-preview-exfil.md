@@ -1,6 +1,8 @@
 ---
+title: Browser Preview Exfiltration
 sidebar_label: Browser Preview Exfiltration (planned)
 description: 'Planned plugin for browser preview exfiltration: Local preview servers and browser tooling add console logs, source maps, service workers, local storage, screenshots, and telemetry sinks.'
+sidebar_position: 2
 ---
 
 # Browser Preview Exfiltration

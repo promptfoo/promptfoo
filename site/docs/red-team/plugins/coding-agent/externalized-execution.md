@@ -1,6 +1,8 @@
 ---
+title: Externalized Execution
 sidebar_label: Externalized Execution
 description: 'Red team externalized execution for coding-agent and harness security. Risk question: Does the agent move execution, secrets, repo patches, prompts, or validation to unmonitored CI, devboxes, SSH hosts, hosted notebooks, browser...'
+sidebar_position: 12
 ---
 
 # Externalized Execution

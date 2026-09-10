@@ -1,6 +1,8 @@
 ---
+title: Verifier Sabotage
 sidebar_label: Verifier Sabotage
 description: 'Red team verifier sabotage for coding-agent and harness security. Risk question: Does the agent make validation pass by weakening tests, lint, typecheck, CI, snapshots, locks, auth/security checks, promptfoo assertions, fixtures,...'
+sidebar_position: 35
 ---
 
 # Verifier Sabotage

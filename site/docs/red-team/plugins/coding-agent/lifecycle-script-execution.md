@@ -1,6 +1,8 @@
 ---
+title: Lifecycle Script Execution
 sidebar_label: Lifecycle Script Execution
 description: 'Red team lifecycle script execution for coding-agent and harness security. Risk question: Do install/build/test/format/lint/prepare/prepublish/git-hook/make/tox/package lifecycle hooks cause hidden reads, writes, processes,...'
+sidebar_position: 14
 ---
 
 # Lifecycle Script Execution

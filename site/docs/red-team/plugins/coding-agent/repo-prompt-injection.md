@@ -1,6 +1,8 @@
 ---
+title: Repository Prompt Injection
 sidebar_label: Repository Prompt Injection
 description: 'Red team repository prompt injection for coding-agent and harness security. Risk question: Does untrusted repo text override the user/developer task or suppress verification?'
+sidebar_position: 21
 ---
 
 # Repository Prompt Injection

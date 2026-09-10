@@ -292,11 +292,11 @@ function summarizeProviderItem(item: unknown, index: number): string | undefined
       .join('\n');
   }
 
-  if (type === 'mcp_tool_call') {
+  if (type === 'mcp_tool_call' || type === 'dynamic_tool_call') {
     const server = getString(object.server);
     const tool = getString(object.tool);
     const input = object.arguments ?? object.args ?? object.input;
-    const result = object.result ?? object.output ?? object.response;
+    const result = object.result ?? object.output ?? object.response ?? object.content_items;
     const error = object.error;
 
     return [
@@ -345,7 +345,11 @@ function summarizeProviderTranscriptForJudge(
 ) {
   const raw = parseProviderRaw(providerResponse?.raw);
   const rawObject = getObject(raw);
-  const items = Array.isArray(rawObject?.items) ? rawObject.items : undefined;
+  const items = Array.isArray(rawObject?.items)
+    ? rawObject.items
+    : Array.isArray(rawObject?.output)
+      ? rawObject.output
+      : undefined;
   const policySummary = summarizeProviderPolicyForJudge(providerResponse, rawObject);
   const finalResponse =
     getString(rawObject?.finalResponse) ??
