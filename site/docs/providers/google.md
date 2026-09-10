@@ -524,17 +524,17 @@ tests:
 
 #### Configuration Options
 
-| Option             | Type   | Description                                                                          |
-| ------------------ | ------ | ------------------------------------------------------------------------------------ |
-| `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                       |
-| `resolution`       | string | Video resolution: `720p` (default) or `1080p`                                        |
-| `durationSeconds`  | number | 4, 6, or 8 seconds for generation; extension requires 8                              |
-| `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow`                                |
-| `negativePrompt`   | string | Concepts to avoid in the generated video                                             |
-| `referenceImages`  | array  | Up to 3 reference images (file paths or objects, Veo 3.1 only)                       |
-| `image`            | string | Source image for image-to-video generation                                           |
-| `lastImage`        | string | End frame for interpolation (requires `image`)                                       |
-| `sourceVideo`      | string | Extension input as base64/`file://`; Vertex also accepts `gs://` and operation names |
+| Option             | Type   | Description                                                                                  |
+| ------------------ | ------ | -------------------------------------------------------------------------------------------- |
+| `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`                                               |
+| `resolution`       | string | Video resolution: `720p` (default) or `1080p`                                                |
+| `durationSeconds`  | number | 4, 6, or 8 seconds for generation; extension requires 8                                      |
+| `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow`                                        |
+| `negativePrompt`   | string | Concepts to avoid in the generated video                                                     |
+| `referenceImages`  | array  | Up to 3 reference images (file paths or objects, Veo 3.1 only)                               |
+| `image`            | string | Source image for image-to-video generation                                                   |
+| `lastImage`        | string | End frame for interpolation (requires `image`)                                               |
+| `sourceVideo`      | string | AI Studio generated video URI; Vertex accepts base64/`file://`, `gs://`, and operation names |
 
 #### Image-to-Video Generation
 
@@ -574,13 +574,13 @@ prompts:
 
 #### Video Extension (Veo 3.1 Only)
 
-Extend a previously generated Veo video by passing the video data to Google AI Studio:
+Extend a previously generated Veo video using its original Google URI. Export the first eval with `-o results.json` and copy `response.metadata.videoUri` into `sourceVideo`:
 
 ```yaml
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
-      sourceVideo: file://assets/source-video.mp4
+      sourceVideo: https://generativelanguage.googleapis.com/v1beta/files/YOUR_VIDEO_ID:download?alt=media
       durationSeconds: 8
 
 prompts:
@@ -592,7 +592,7 @@ tests:
 ```
 
 :::note
-Video extension requires `durationSeconds: 8`; promptfoo uses 8 by default when `sourceVideo` is set and rejects other values. Veo adds 7 seconds to the source video. Google AI Studio accepts base64 data or a `file://` path through `sourceVideo`, but it does not accept Vertex operation IDs. Vertex AI also supports `gs://` URIs and legacy operation names through `sourceVideo`; see the [Vertex AI provider documentation](/docs/providers/vertex#video-extension).
+Video extension requires `durationSeconds: 8`; promptfoo uses 8 by default when `sourceVideo` is set and rejects other values. Veo adds 7 seconds to the source video; the response reports `metadata.extensionSeconds` and omits `video.duration` because the total source duration is unknown. Google AI Studio requires the original generated video URI after the file finishes processing. It does not accept local files, base64 data, or Vertex operation IDs. Vertex AI also supports `gs://` URIs and legacy operation names through `sourceVideo`; see the [Vertex AI provider documentation](/docs/providers/vertex#video-extension).
 :::
 
 #### Reference Images
