@@ -38,10 +38,12 @@ export const handleContextRelevance = async ({
     providerResponse,
   );
 
+  const threshold = (assertion.threshold as number) ?? 0.7;
+
   const result = await matchesContextRelevance(
     test.vars.query,
     context,
-    (assertion.threshold as number) ?? 0.7,
+    threshold,
     test.options,
     providerCallContext,
   );
@@ -60,7 +62,7 @@ export const handleContextRelevance = async ({
     reason: inverse
       ? pass
         ? 'Assertion passed'
-        : `Relevance ${result.score.toFixed(2)} is >= 0.7`
+        : `Relevance ${result.score.toFixed(2)} is >= ${threshold}`
       : result.reason,
     metadata: {
       ...(typeof result.metadata === 'object' ? result.metadata : {}),

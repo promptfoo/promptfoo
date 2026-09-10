@@ -13,6 +13,19 @@ describe('matchesContextRelevance (RAGAS Context Relevance)', () => {
     vi.restoreAllMocks();
   });
 
+  it('should tag provider failures as grader errors rather than a plain failure', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      error: 'grading provider unavailable',
+    } as any);
+
+    const result = await matchesContextRelevance('What is X?', 'Some context', 0.7);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('grading provider unavailable');
+    expect(result.metadata).toEqual({ graderError: true });
+  });
+
   it('should calculate relevance using line-based sentence splitting', async () => {
     const input = 'What is the capital of France?';
     const context =

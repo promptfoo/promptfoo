@@ -18,6 +18,19 @@ describe('matchesContextRecall', () => {
     vi.restoreAllMocks();
   });
 
+  it('should tag provider failures as grader errors rather than a plain failure', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+      error: 'grading provider unavailable',
+    } as any);
+
+    const result = await matchesContextRecall('Context text', 'Ground truth text', 0.7);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('grading provider unavailable');
+    expect(result.metadata).toEqual({ graderError: true });
+  });
+
   it('should pass when the recall score is above the threshold', async () => {
     const context = 'Context text';
     const groundTruth = 'Ground truth text';

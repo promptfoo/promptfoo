@@ -394,6 +394,46 @@ describe('handleContextRecall', () => {
     expect(result.reason).toBe('Recall 0.90 is >= 0.7');
   });
 
+  it('should use the configured threshold in the not-context-recall failure reason', async () => {
+    const mockResult = { pass: true, score: 0.3, reason: 'Context contains expected information' };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const mockProvider = createMockProvider({ response: {} });
+
+    const result = await handleContextRecall({
+      assertion: { type: 'not-context-recall', threshold: 0.2 },
+      renderedValue: 'Expected fact',
+      prompt: 'test prompt',
+      test: { vars: { context: 'test context' }, options: {} },
+      baseType: 'context-recall',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { context: 'test context' },
+        test: { vars: { context: 'test context' }, options: {} },
+        logProbs: undefined,
+        provider: mockProvider,
+        providerResponse: undefined,
+      },
+      inverse: true,
+      output: 'test output',
+      outputString: 'test output',
+      provider: mockProvider,
+      providerResponse: {} as ProviderResponse,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('Recall 0.30 is >= 0.2');
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'test context',
+      'Expected fact',
+      0.2,
+      {},
+      { context: 'test context' },
+      undefined,
+    );
+  });
+
   it('should not invert grader errors for not-context-recall', async () => {
     const mockResult = {
       pass: false,

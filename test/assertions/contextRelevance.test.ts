@@ -379,6 +379,47 @@ describe('handleContextRelevance', () => {
     expect(result.reason).toBe('Relevance 0.90 is >= 0.7');
   });
 
+  it('should use the configured threshold in the not-context-relevance failure reason', async () => {
+    const mockResult = { pass: true, score: 0.3, reason: 'Context is highly relevant' };
+    vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextRelevance({
+      assertion: { type: 'not-context-relevance', threshold: 0.2 },
+      test: {
+        vars: { query: 'What is the capital of France?', context: 'test context' },
+        options: {},
+      },
+      output: 'test output',
+      prompt: 'test prompt',
+      baseType: 'context-relevance',
+      assertionValueContext: {
+        prompt: 'test prompt',
+        vars: { query: 'What is the capital of France?', context: 'test context' },
+        test: {
+          vars: { query: 'What is the capital of France?', context: 'test context' },
+          options: {},
+        },
+        logProbs: undefined,
+        provider: createMockProvider({ id: 'id', config: {} }),
+        providerResponse: { output: 'out', tokenUsage: {} },
+      },
+      inverse: true,
+      outputString: 'test output',
+      providerResponse: { output: 'out', tokenUsage: {} },
+    } as any);
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toBe('Relevance 0.30 is >= 0.2');
+    expect(matchesContextRelevance).toHaveBeenCalledWith(
+      'What is the capital of France?',
+      'test context',
+      0.2,
+      {},
+      undefined,
+    );
+  });
+
   it('should not invert grader errors for not-context-relevance', async () => {
     const mockResult = {
       pass: false,
