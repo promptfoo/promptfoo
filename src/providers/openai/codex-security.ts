@@ -537,7 +537,7 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
     const cost = result.cost ?? observers.cost;
     const tokenUsage = getTokenUsage(result, observers.cost);
     const findings = Array.isArray(result.findings?.findings) ? result.findings.findings : [];
-    const model = result.turnResult.model ?? cost?.model ?? config.model;
+    const model = result.turnResult?.model ?? cost?.model ?? config.model;
     const raw = result.toJSON();
 
     return {
