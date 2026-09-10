@@ -613,6 +613,8 @@ The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wi
 
 This assertion supports OpenAI Chat Completions tool calls, OpenAI Responses `function_call` items, Anthropic tool-use blocks, and Google/Vertex function calls. It accepts supported objects and arrays directly or as JSON strings, including newline-separated JSON calls mixed with text.
 
+In mixed text, JSON calls must start and end on their own lines and may span multiple lines. Inline JSON examples and Markdown code fences are ignored. Complete calls after an unfinished JSON fragment can still be scored.
+
 For example, this OpenAI Responses item matches `value: [get_weather]`:
 
 ```json
