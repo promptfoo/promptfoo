@@ -194,7 +194,7 @@ const allProviderOptions = [
   {
     value: 'openai',
     label: 'OpenAI',
-    description: 'GPT-5.5, GPT-5.4, GPT-5.4 Mini and older models',
+    description: 'GPT-5.6 Luna, Terra, Sol and GPT-6 Astra',
     tag: 'providers',
     recommended: true,
   },
@@ -321,12 +321,6 @@ const allProviderOptions = [
     value: 'huggingface',
     label: 'Hugging Face',
     description: 'Inference API for thousands of models',
-    tag: 'providers',
-  },
-  {
-    value: 'github',
-    label: 'GitHub Models',
-    description: 'AI models via GitHub',
     tag: 'providers',
   },
   {
@@ -820,15 +814,6 @@ export default function ProviderTypeSelector({
           label: currentLabel,
         },
         'fal',
-      );
-    } else if (value === 'github') {
-      setProvider(
-        {
-          id: 'github:gpt-4o',
-          config: {},
-          label: currentLabel,
-        },
-        'github',
       );
     } else if (value === 'hyperbolic') {
       setProvider(

@@ -40,6 +40,7 @@ describe('ProviderTypeSelector', () => {
     // Provider list is always expanded
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
     expect(screen.getByText('Python')).toBeVisible();
+    expect(screen.queryByText('GitHub Models')).not.toBeInTheDocument();
 
     // Select Python provider
     const pythonProviderCard = screen.getByText('Python').closest('[role="button"]');
@@ -454,7 +455,7 @@ describe('ProviderTypeSelector', () => {
     );
 
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('GPT-5.5, GPT-5.4, GPT-5.4 Mini and older models')).toBeVisible();
+    expect(screen.getByText('GPT-5.6 Luna, Terra, Sol and GPT-6 Astra')).toBeVisible();
   });
 
   it('should correctly update provider configuration when switching from Go provider to HTTP provider', async () => {

@@ -63,7 +63,7 @@ function buildRateTable<T>(groups: RateGroup<T>[]): Record<string, T> {
 
 const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-6-astra'], rates: perMillion(1) },
-  { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.5) },
+  { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.4) },
   { models: ['gpt-5.6-terra'], rates: perMillion(0.2) },
   { models: ['gpt-5.6-luna'], rates: perMillion(0.02) },
   { models: ['chat-latest'], rates: perMillion(0.5) },
@@ -187,7 +187,7 @@ const FINE_TUNED_BATCH_OVERRIDES = buildRateTable<OpenAITextRates>([
 
 const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
   { models: ['gpt-6-astra'], rates: perMillion(2) },
-  { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(1) },
+  { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.8) },
   { models: ['gpt-5.6-terra'], rates: perMillion(0.4) },
   { models: ['gpt-5.6-luna'], rates: perMillion(0.04) },
   { models: ['gpt-5.5', 'gpt-5.5-2026-04-23'], rates: perMillion(1) },
@@ -246,10 +246,10 @@ const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
   {
     models: ['gpt-5.6', 'gpt-5.6-sol'],
     rates: {
-      input: perMillion(10),
-      cachedInput: perMillion(1),
-      cacheWriteInput: perMillion(12.5),
-      output: perMillion(60),
+      input: perMillion(8),
+      cachedInput: perMillion(0.8),
+      cacheWriteInput: perMillion(10),
+      output: perMillion(40),
     },
   },
   {
@@ -334,7 +334,14 @@ const PRIORITY_TEXT_RATES = buildRateTable<OpenAITextRates>([
 
 const IMAGE_MODEL_RATES = buildRateTable<OpenAIModelRates>([
   {
-    models: ['gpt-image-2', 'gpt-image-2-2026-04-21'],
+    models: [
+      'gpt-image-2',
+      'gpt-image-2-2026-04-21',
+      'gpt-image-2.5-sunburst',
+      'gpt-image-2.5-sunburst-2026-09-08',
+      'gpt-image-2.5-flare',
+      'gpt-image-2.5-flare-2026-09-08',
+    ],
     rates: {
       text: { input: perMillion(5), cachedInput: perMillion(1.25) },
       image: {
