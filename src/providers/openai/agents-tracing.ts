@@ -379,7 +379,8 @@ export class OTLPTracingExporter implements TracingExporter {
         key: sanitizeCredentialText(key),
         value: this.valueToOTLP(
           sanitizeAttributeByKey(key, value),
-          TRACE_LINKAGE_ATTRIBUTE_KEYS.has(key) && Object.hasOwn(span.traceMetadata ?? {}, key),
+          TRACE_LINKAGE_ATTRIBUTE_KEYS.has(key) &&
+            Object.prototype.hasOwnProperty.call(span.traceMetadata ?? {}, key),
         ),
       }));
   }
@@ -643,28 +644,15 @@ function sanitizeCredentialText(value: string): string {
   }
   value = sanitized + value.slice(copied);
 
-  return sanitizeBody(value)
+  // Preserve escapes before the generic masker can shorten quoted credentials.
+  return redactQuotedCredentials(sanitizeBody(redactQuotedCredentials(value)))
     .replace(
-      /\b([a-z][a-z\d+.-]*:\/\/)[^\s/?#@]+@/gi,
+      /\b([a-z][a-z\d+.-]*:\/\/)[^\s/?#]+@/gi,
       (_match, prefix: string) => `${prefix}<redacted>@`,
     )
     .replace(
       /(\b(?:Authorization\s*[:=]|Cookie\s*:)[ \t]*)[^\r\n]*/gi,
       (_match, prefix: string) => `${prefix}<redacted>`,
-    )
-    .replace(
-      /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])([^"']*)\4/g,
-      (match, keyQuote: string, key: string, separator: string, valueQuote: string) =>
-        isCredentialAttributeKey(key)
-          ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}<redacted>${valueQuote}`
-          : match,
-    )
-    .replace(
-      /(^|[\s;,])([A-Za-z][A-Za-z\d_.-]*)(\s*[:=]\s*)(["'])([^"']*)\4/gi,
-      (match, prefix: string, key: string, separator: string, quote: string) =>
-        isCredentialAttributeKey(key)
-          ? `${prefix}${key}${separator}${quote}<redacted>${quote}`
-          : match,
     )
     .replace(
       /(^|[\s;,])([A-Za-z][A-Za-z\d_.-]*)(\s*:\s*)((?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?[^\s;,"'{}\]]+)/gi,
@@ -687,6 +675,24 @@ function sanitizeCredentialText(value: string): string {
     );
 }
 
+function redactQuotedCredentials(value: string): string {
+  return value
+    .replace(
+      /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])(?:\\(?:[\s\S]|$)|(?!\4)[^\\])*(?:\4|$)/g,
+      (match, keyQuote: string, key: string, separator: string, valueQuote: string) =>
+        isCredentialAttributeKey(key)
+          ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}<redacted>${valueQuote}`
+          : match,
+    )
+    .replace(
+      /(^|[\s;,])([A-Za-z][A-Za-z\d_.-]*)(\s*[:=]\s*)(["'])(?:\\(?:[\s\S]|$)|(?!\4)[^\\])*(?:\4|$)/gi,
+      (match, prefix: string, key: string, separator: string, quote: string) =>
+        isCredentialAttributeKey(key)
+          ? `${prefix}${key}${separator}${quote}<redacted>${quote}`
+          : match,
+    );
+}
+
 function isCredentialAttributeKey(key: string): boolean {
   const parts = key
     .replace(/([a-z\d])([A-Z])/g, '$1_$2')
@@ -698,6 +704,7 @@ function isCredentialAttributeKey(key: string): boolean {
     if (part === 'token' || part === 'tokens') {
       return (
         ![
+          'used',
           'count',
           'counts',
           'usage',
@@ -718,6 +725,9 @@ function isCredentialAttributeKey(key: string): boolean {
           'uri',
         ].includes(parts[index + 1]) &&
         ![
+          'num',
+          'estimated',
+          'used',
           'usage',
           'input',
           'output',
@@ -753,6 +763,12 @@ function isCredentialAttributeKey(key: string): boolean {
         'signature',
       ].includes(part)
     ) {
+      if (
+        part === 'auth' &&
+        ['type', 'method', 'methods', 'supported'].includes(parts[index + 1])
+      ) {
+        return false;
+      }
       if (
         part === 'signature' &&
         (parts[index - 1] === 'function' ||

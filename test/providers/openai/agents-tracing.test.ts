@@ -766,6 +766,66 @@ describe('OTLPTracingExporter', () => {
   );
 
   it.each(['json', 'protobuf'] as const)(
+    'redacts escaped credentials while preserving descriptive authentication and usage fields in %s',
+    async (format) => {
+      const exporter = new OTLPTracingExporter();
+      await exporter.export([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: {
+            type: 'custom',
+            name: 'lookup',
+            data: {
+              url: 'https://user:opaque@part@host.example/path',
+              quotedUrl: 'https://user:opaque"part@host.example/path',
+              quoted: String.raw`Request: {"password":"opaque\"suffix"}`,
+              assignment: String.raw`Request: password='opaque\'suffix' done`,
+              apostrophe: `Request: password="opaque'suffix"`,
+              truncated: String.raw`Request: password="opaque\"suffix`,
+              auth_type: 'Bearer',
+              auth_method: 'client_secret_post',
+              token_endpoint_auth_methods_supported: ['client_secret_post'],
+              num_tokens: 12,
+              tokens_used: 3,
+              estimated_tokens: 15,
+              access_token: 'opaque-access-token',
+              auth: 'opaque-auth',
+            },
+          },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: null,
+        } as any,
+      ]);
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
+      expect(attributes).toMatchObject({
+        url: 'https://<redacted>@host.example/path',
+        quotedUrl: 'https://<redacted>@host.example/path',
+        quoted: 'Request: {"password":"<redacted>"}',
+        assignment: "Request: password='<redacted>' done",
+        apostrophe: 'Request: password="<redacted>"',
+        truncated: 'Request: password="<redacted>"',
+        auth_type: 'Bearer',
+        auth_method: 'client_secret_post',
+        token_endpoint_auth_methods_supported: {
+          arrayValue: { values: [{ stringValue: 'client_secret_post' }] },
+        },
+        num_tokens: 12,
+        tokens_used: 3,
+        estimated_tokens: 15,
+        access_token: '<redacted>',
+        auth: '<redacted>',
+      });
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
     'sanitizes custom linkage and bounds native arrays without consuming trailing code in %s',
     async (format) => {
       const exporter = new OTLPTracingExporter();
