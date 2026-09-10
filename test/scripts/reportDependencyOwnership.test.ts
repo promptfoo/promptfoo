@@ -864,11 +864,14 @@ describe('dependency ownership report', () => {
     ]);
   });
 
-  it.each(['arg', 'argument'])('records JSDoc @%s parameter types', (tag) => {
-    write(
-      'src/index.js',
-      `/** @${tag} {import('schema').Node} value */\nexport function identity(value) { return value; }`,
-    );
+  it.each([
+    "arg {import('schema').Node} value",
+    "argument {import('schema').Node} value",
+    "param value {import('schema').Node}",
+    "arg value {import('schema').Node}",
+    "argument [value] {import('schema').Node}",
+  ])('records JSDoc @%s parameter types', (tag) => {
+    write('src/index.js', `/** @${tag} */\nexport function identity(value) { return value; }`);
     const report = reportDependencyOwnership(root, config);
     expect(report.undeclaredUsages).toEqual([
       expect.objectContaining({
@@ -876,6 +879,56 @@ describe('dependency ownership report', () => {
         dependency: 'schema',
         references: [expect.objectContaining({ kind: 'type', line: 1 })],
       }),
+    ]);
+  });
+
+  it.each(['throws', 'exception'])('records JSDoc @%s types', (tag) => {
+    write('src/index.js', `/** @${tag} {import('schema').Problem} */\nexport function run() {}`);
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({
+        dependency: 'schema',
+        references: [expect.objectContaining({ kind: 'type', line: 1 })],
+      }),
+    ]);
+  });
+
+  it.each(['', " Description: import('example')", "\n * Example: import('example')"])(
+    'records a brace-less JSDoc type without its description: %s',
+    (description) => {
+      write(
+        'src/index.js',
+        `/** @type import('schema').Node${description} */\nexport const value = {};`,
+      );
+      expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+        expect.objectContaining({
+          dependency: 'schema',
+          references: [expect.objectContaining({ kind: 'type', line: 1 })],
+        }),
+      ]);
+    },
+  );
+
+  it('reads multiline brace-less types up to the next JSDoc tag', () => {
+    write(
+      'src/index.js',
+      [
+        '/** @type',
+        " * import('schema').Node |",
+        " * import('shared').Thing",
+        " * @example import('example')",
+        ' */',
+        'export const value = {};',
+      ].join('\n'),
+    );
+    const report = reportDependencyOwnership(root, config);
+    expect(report.undeclaredUsages).toEqual([
+      expect.objectContaining({
+        dependency: 'schema',
+        references: [expect.objectContaining({ kind: 'type', line: 2 })],
+      }),
+    ]);
+    expect(report.declarations.find((entry) => entry.dependency === 'shared')?.references).toEqual([
+      expect.objectContaining({ kind: 'type', line: 3 }),
     ]);
   });
 

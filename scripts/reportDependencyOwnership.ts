@@ -504,36 +504,37 @@ export function reportDependencyOwnership(
         }
       }
       for (const tag of body.matchAll(
-        /(?:^|[\r\n\u2028\u2029])[ \t]*@(?:type|param|arg(?:ument)?|returns?|typedef|property|prop|this|extends|implements|satisfies|throws|enum|template)\s*\{/g,
+        /(?:^|[\r\n\u2028\u2029])[ \t]*@(type|param|arg(?:ument)?|returns?|typedef|property|prop|this|extends|implements|satisfies|throws|exception|enum|template)\b\s*/g,
       )) {
-        const start = tag.index + tag[0].length;
-        let depth = 1;
-        // Quoted braces belong to string/template types, not the enclosing type tag.
-        for (const token of body
-          .slice(start)
-          .matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|[{}]/g)) {
-          if (token[0] === '{') {
-            depth++;
-          } else if (token[0] === '}') {
-            depth--;
-          }
-          if (depth !== 0) {
-            continue;
-          }
-          const prefix = 'type Dependency = ';
-          const type = parseSync('jsdoc.ts', prefix + body.slice(start, start + token.index));
-          if (type.errors.length === 0 && type.program.body.length === 1) {
-            new Visitor({
-              TSImportType(node) {
-                add(
-                  { start: comment.start + 2 + start + node.start - prefix.length },
-                  node.source.value,
-                  'type',
-                );
-              },
-            }).visit(type.program);
-          }
-          break;
+        let start = tag.index + tag[0].length;
+        if (['param', 'arg', 'argument', 'property', 'prop'].includes(tag[1])) {
+          const name = body.slice(start).match(/^(?:\[[^\]\r\n]*\]|[\w.$]+)[ \t]+(?=\{)/);
+          start += name?.[0].length ?? 0;
+        }
+        if (body[start] === '{') {
+          start++;
+        } else if (tag[1] !== 'type') {
+          continue;
+        }
+        const prefix = 'type Dependency = ';
+        const source = prefix + body.slice(start).split(/[\r\n\u2028\u2029][ \t]*@/, 1)[0];
+        let type = parseSync('jsdoc.ts', source);
+        // Let the type parser locate the closing brace or trailing JSDoc description.
+        const end = type.errors[0]?.labels[0]?.start;
+        if (end !== undefined) {
+          type = parseSync('jsdoc.ts', source.slice(0, end));
+        }
+        const declaration = type.program.body[0];
+        if (type.errors.length === 0 && declaration?.type === 'TSTypeAliasDeclaration') {
+          new Visitor({
+            TSImportType(node) {
+              add(
+                { start: comment.start + 2 + start + node.start - prefix.length },
+                node.source.value,
+                'type',
+              );
+            },
+          }).visit({ ...type.program, body: [declaration] });
         }
       }
     }
