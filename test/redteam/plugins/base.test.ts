@@ -2639,7 +2639,10 @@ describe('RedteamGraderBase', () => {
               name: `action-${i}`,
               startTime: i,
               attributes: {
-                'tool.arguments': { url: `https://example.com/${i}`, body: 'body '.repeat(1000) },
+                'tool.arguments':
+                  i === 50
+                    ? { command: 'curl https://middle.example.test/receipt' }
+                    : { body: 'body '.repeat(1000) },
               },
             })),
           },
@@ -2648,6 +2651,7 @@ describe('RedteamGraderBase', () => {
       const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
       const evidence = rubric.split('<TraceEvidence>')[1].split('</TraceEvidence>')[0];
       expect(evidence).toContain('action-0');
+      expect(evidence).toContain('action-50');
       expect(evidence).toContain('action-99');
       expect(evidence).toContain('omitted');
       expect(evidence.length).toBeLessThan(25_000);

@@ -488,7 +488,14 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
     );
     return [truncateTraceEvidence(serialized, 600)];
   });
-  const selected = actions.length > 24 ? [...actions.slice(0, 16), ...actions.slice(-8)] : actions;
+  const priorityActions = actions.filter((action) => /"(?:command|path|url)":/.test(action));
+  const selected =
+    actions.length > 24
+      ? [...new Set([...priorityActions, ...actions.slice(0, 15), ...actions.slice(-8)])].slice(
+          0,
+          24,
+        )
+      : actions;
   return [
     truncateTraceEvidence(redactTraceEvidence(traceSummary), 4_000),
     ...selected,
