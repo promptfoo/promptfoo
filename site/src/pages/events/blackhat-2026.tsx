@@ -5,10 +5,11 @@ import Link from '@docusaurus/Link';
 import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
-import { BLACK_HAT_BOOTH_HOURS } from '../../data/vegas-booth-hours';
 import styles from './blackhat-2026.module.css';
 
 const BOOTH = 'Booth #2967';
+const DESCRIPTION =
+  'Promptfoo demonstrated AI agent red teaming at OpenAI booth #2967 in the Black Hat Business Hall, August 4-6, 2026. Explore the demos and request a follow-up.';
 
 /**
  * A single line of a rendered product artifact (transcript, grader output, CI
@@ -228,16 +229,10 @@ export default function BlackHat2026(): React.ReactElement {
   };
 
   return (
-    <Layout
-      title="Promptfoo at Black Hat USA 2026"
-      description="Promptfoo is part of OpenAI. Find the team at OpenAI booth #2967 in the Black Hat USA 2026 Business Hall, August 4-6 at Mandalay Bay."
-    >
+    <Layout title="Promptfoo at Black Hat USA 2026" description={DESCRIPTION}>
       <Head>
         <meta property="og:title" content="Promptfoo at Black Hat USA 2026 | AI Security" />
-        <meta
-          property="og:description"
-          content="Find Promptfoo at OpenAI booth #2967 in the Black Hat Business Hall, August 4-6. See live AI agent attacks and the transcripts they leave behind."
-        />
+        <meta property="og:description" content={DESCRIPTION} />
         <meta
           property="og:image"
           content="https://www.promptfoo.dev/img/events/blackhat-2026.jpg"
@@ -250,10 +245,7 @@ export default function BlackHat2026(): React.ReactElement {
 
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Promptfoo at Black Hat USA 2026 | AI Security" />
-        <meta
-          name="twitter:description"
-          content="See Promptfoo test real AI agents at OpenAI booth #2967 in the Black Hat Business Hall, August 4-6 at Mandalay Bay."
-        />
+        <meta name="twitter:description" content={DESCRIPTION} />
         <meta
           name="twitter:image"
           content="https://www.promptfoo.dev/img/events/blackhat-2026.jpg"
@@ -277,7 +269,7 @@ export default function BlackHat2026(): React.ReactElement {
             <div className={styles.heroContent}>
               <p className={styles.eyebrow}>
                 <span className={styles.eyebrowDot} aria-hidden="true" />
-                Black Hat USA 2026 // Business Hall
+                Black Hat USA 2026 // Past event
               </p>
               <p className={styles.identity}>Promptfoo at OpenAI booth #2967</p>
               <h1 className={styles.heroTitle}>
@@ -286,9 +278,9 @@ export default function BlackHat2026(): React.ReactElement {
                 <span className={styles.titleAccent}>Keep the evidence.</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                Promptfoo is part of OpenAI. Visit OpenAI booth #2967 to see us test real AI
-                applications for prompt injection, jailbreaks, data leaks, and unsafe agent actions.
-                When an attack works, you get the transcript.
+                Black Hat USA 2026 has ended. Promptfoo is part of OpenAI, and we demonstrated
+                attacks against real AI applications at OpenAI booth #2967. Explore the demos below,
+                or get in touch to test your own application.
               </p>
               <div className={styles.heroButtons}>
                 <a
@@ -296,10 +288,10 @@ export default function BlackHat2026(): React.ReactElement {
                   className={styles.primaryButton}
                   onClick={(e) => handleSmoothScroll(e, '#find-us')}
                 >
-                  Where to find us
+                  Event recap
                 </a>
                 <Link to="/contact/" className={styles.secondaryButton}>
-                  Request a meeting
+                  Request a demo
                 </Link>
               </div>
               <ul className={styles.eventDetails}>
@@ -324,56 +316,42 @@ export default function BlackHat2026(): React.ReactElement {
           </div>
         </section>
 
-        {/* Where to find us */}
+        {/* Keep the original fragment for links to the conference page. */}
         <section className={styles.findSection} id="find-us">
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
-              <p className={styles.sectionEyebrow}>// Logistics</p>
-              <h2 className={styles.sectionTitle}>Where to find us</h2>
+              <p className={styles.sectionEyebrow}>// Black Hat 2026</p>
+              <h2 className={styles.sectionTitle}>Event recap</h2>
               <p className={styles.sectionSubtitle}>
-                Mandalay Bay is large and the show floor is loud. Here's the short version.
+                Thanks to everyone who visited us in Las Vegas. The conference ended on August 6.
               </p>
             </div>
             <div className={styles.findGrid}>
               <div className={`${styles.findCard} ${styles.findCardBooth}`}>
-                <p className={styles.findLabel}>01 / The booth</p>
+                <p className={styles.findLabel}>01 / At the booth</p>
                 <h3 className={styles.boothNumber}>{BOOTH}</h3>
                 <p className={styles.findBody}>
-                  Find us at OpenAI booth #2967 in Bayside halls A-D at Mandalay Bay. Bring an
-                  architecture diagram or a sanitized test case, and we'll show you where we'd start
-                  testing.
+                  We demonstrated prompt injection, jailbreaks, and unsafe agent actions at OpenAI
+                  booth #2967 in Bayside halls A-D at Mandalay Bay.
                 </p>
               </div>
               <div className={styles.findCard}>
-                <p className={styles.findLabel}>02 / When</p>
+                <p className={styles.findLabel}>02 / Conference dates</p>
                 <h3 className={styles.findTitle}>Business Hall, Aug 4-6</h3>
-                <ul className={styles.hours} aria-label="Black Hat booth hours in Pacific time">
-                  {BLACK_HAT_BOOTH_HOURS.map(({ date, day, opensAt, closesAt, note }) => (
-                    <li key={date}>
-                      <time className={styles.hoursDay} dateTime={date}>
-                        {day}
-                      </time>
-                      <span>
-                        {opensAt} to {closesAt}
-                        {note ? `, ${note}` : ''}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
                 <p className={styles.findBody}>
-                  Trainings run August 1-4; Briefings are August 5-6. All times are Pacific time
-                  (PDT).
+                  Black Hat USA 2026 ran August 1-6. The Business Hall was open August 4-6,
+                  alongside trainings and briefings throughout the week.
                 </p>
               </div>
               <div className={styles.findCard}>
-                <p className={styles.findLabel}>03 / Request a meeting</p>
+                <p className={styles.findLabel}>03 / Follow up</p>
                 <h3 className={styles.findTitle}>Want to talk through your stack?</h3>
                 <p className={styles.findBody}>
-                  Request time to discuss your application and threat model away from the show
-                  floor.
+                  Request a demo to discuss your application, threat model, and where to start
+                  testing.
                 </p>
                 <Link to="/contact/" className={styles.findLink}>
-                  Request a meeting
+                  Request a demo
                   <span className={styles.findLinkArrow} aria-hidden="true">
                     →
                   </span>
@@ -383,12 +361,12 @@ export default function BlackHat2026(): React.ReactElement {
           </div>
         </section>
 
-        {/* What we're demoing */}
+        {/* Conference demos */}
         <section className={styles.demoSection}>
           <div className={styles.container}>
             <div className={styles.sectionHeader}>
               <p className={styles.sectionEyebrow}>// Demos</p>
-              <h2 className={styles.sectionTitle}>What we're demoing</h2>
+              <h2 className={styles.sectionTitle}>What we demoed</h2>
               <p className={styles.sectionSubtitle}>
                 See what an attack does, then inspect the evidence it leaves behind.
               </p>
@@ -505,13 +483,13 @@ export default function BlackHat2026(): React.ReactElement {
                 <p className={styles.sectionEyebrow}>// Black Hat + DEF CON</p>
                 <h2 className={styles.runTitle}>The Vegas run</h2>
                 <p className={styles.runIntro}>
-                  Find us at OpenAI booth #2967 at Black Hat, Aug 4-6, then at OpenAI booth #1412 at
-                  DEF CON, Aug 7-9.
+                  We were at OpenAI booth #2967 at Black Hat, Aug 4-6, and OpenAI booth #1412 at DEF
+                  CON, Aug 7-9.
                 </p>
               </div>
               <div className={styles.runLegs}>
                 <div className={styles.runLeg}>
-                  <p className={styles.runLegTag}>You are here</p>
+                  <p className={styles.runLegTag}>This event</p>
                   <p className={styles.runLegDates}>Aug 1-6</p>
                   <h3 className={styles.runLegName}>Black Hat USA 2026</h3>
                   <p className={styles.runLegVenue}>Mandalay Bay Convention Center</p>
@@ -520,7 +498,7 @@ export default function BlackHat2026(): React.ReactElement {
                   →
                 </div>
                 <Link to="/events/defcon-2026/" className={styles.runLegLink}>
-                  <span className={styles.runLegTag}>Next</span>
+                  <span className={styles.runLegTag}>Also in Vegas</span>
                   <span className={styles.runLegDates}>Aug 6-9</span>
                   <span className={styles.runLegName}>DEF CON 34</span>
                   <span className={styles.runLegVenue}>LVCC West Hall</span>
@@ -539,14 +517,14 @@ export default function BlackHat2026(): React.ReactElement {
         {/* Final CTA */}
         <section className={styles.finalCta}>
           <div className={styles.container}>
-            <h2 className={styles.finalTitle}>Attending Black Hat?</h2>
+            <h2 className={styles.finalTitle}>Missed us at Black Hat?</h2>
             <p className={styles.finalCopy}>
-              Stop by OpenAI booth #2967 during Business Hall hours, or request a meeting to talk
-              through your application.
+              The conference is over, but you can still see Promptfoo in action. Request a demo to
+              talk through your application.
             </p>
             <div className={styles.ctaButtons}>
               <Link to="/contact/" className={styles.primaryButton}>
-                Request a meeting
+                Request a demo
               </Link>
               <Link to="https://discord.gg/promptfoo" className={styles.secondaryButton}>
                 Join our Discord

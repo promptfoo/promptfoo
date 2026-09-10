@@ -10,7 +10,7 @@ This example shows how to collect human feedback via Slack for evaluating AI res
    npm install @slack/web-api@^8
    ```
 
-   Slack Web API v8 requires Node.js 20 or newer and supports `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` through Promptfoo's Slack provider.
+   Slack Web API v8 supports `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` through Promptfoo's Slack provider.
 
 2. **Create a Slack App**:
    - Go to https://api.slack.com/apps

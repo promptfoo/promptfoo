@@ -148,38 +148,40 @@ export function getDbSignalPath() {
   return path.resolve(getConfigDirectoryPath(true /* createIfNotExists */), 'evalLastWritten');
 }
 
-async function configureDatabase(client: Client, skipWalMode: boolean): Promise<void> {
-  // Enable foreign key constraints (required for referential integrity)
-  await client.execute('PRAGMA foreign_keys = ON');
+async function configureConnection(
+  execute: Client['execute'],
+  busyTimeoutMs: number,
+  walMode: 'enable' | 'preserve' | 'skip',
+): Promise<void> {
+  await execute('PRAGMA foreign_keys = ON');
+  await execute(`PRAGMA busy_timeout = ${busyTimeoutMs}`);
 
-  // Wait briefly when a writer contends with another process or connection for
-  // the lock instead of failing immediately with SQLITE_BUSY.
-  await client.execute('PRAGMA busy_timeout = 5000');
-
-  // Configure WAL mode unless explicitly disabled or using in-memory database
-  if (!skipWalMode && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
+  if (walMode !== 'skip' && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
     try {
-      // Enable WAL mode for better concurrency
-      await client.execute('PRAGMA journal_mode = WAL');
-
-      // Verify WAL mode was actually enabled
-      const result = await client.execute('PRAGMA journal_mode');
+      if (walMode === 'enable') {
+        await execute('PRAGMA journal_mode = WAL');
+      }
+      const result = await execute('PRAGMA journal_mode');
       const journalMode = String(result.rows[0]?.journal_mode ?? '');
 
       if (journalMode.toLowerCase() === 'wal') {
-        logger.debug('Successfully enabled SQLite WAL mode');
-      } else {
+        await execute('PRAGMA wal_autocheckpoint = 1000');
+        await execute('PRAGMA synchronous = NORMAL');
+        if (walMode === 'enable') {
+          logger.debug('Successfully enabled SQLite WAL mode');
+        }
+      } else if (walMode === 'enable') {
         logger.warn(
           `Failed to enable WAL mode (got '${journalMode}'). ` +
             'Database performance may be reduced. This can happen on network filesystems. ' +
             'Set PROMPTFOO_DISABLE_WAL_MODE=true to suppress this warning.',
         );
       }
-
-      // Additional WAL configuration for optimal performance
-      await client.execute('PRAGMA wal_autocheckpoint = 1000'); // Checkpoint every 1000 pages
-      await client.execute('PRAGMA synchronous = NORMAL'); // Good balance of safety and speed with WAL
     } catch (err) {
+      // Recovery must fail closed if it cannot restore the connection settings.
+      if (walMode === 'preserve') {
+        throw err;
+      }
       logger.warn(
         `Error configuring SQLite WAL mode: ${err}. ` +
           'Database will use default journal mode. Performance may be reduced. ' +
@@ -190,9 +192,7 @@ async function configureDatabase(client: Client, skipWalMode: boolean): Promise<
   }
 }
 
-// A statement that fails to acquire its lock never executed, so retrying it is
-// safe (no risk of double-applying a write). Shared-cache table locks surface as
-// SQLITE_LOCKED, which busy_timeout does NOT retry — it only covers SQLITE_BUSY.
+// Shared-cache table locks surface as SQLITE_LOCKED, which busy_timeout does not retry.
 const TRANSIENT_LOCK_RETRY_ATTEMPTS = 10;
 const TRANSIENT_LOCK_RETRY_BASE_MS = 5;
 const TRANSIENT_LOCK_RETRY_MAX_MS = 250;
@@ -235,22 +235,55 @@ function isTransientDatabaseLockError(error: unknown): boolean {
   return false;
 }
 
-async function withTransientLockRetry<T>(operation: () => Promise<T>): Promise<T> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await operation();
-    } catch (error) {
-      if (attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS || !isTransientDatabaseLockError(error)) {
-        throw error;
-      }
-      await sleep(
-        Math.min(TRANSIENT_LOCK_RETRY_BASE_MS * 2 ** (attempt - 1), TRANSIENT_LOCK_RETRY_MAX_MS),
-      );
-    }
-  }
-}
+function serializeTopLevelOperations(
+  client: Client,
+  db: Drizzle,
+  { reconnectOnLockFailure }: { reconnectOnLockFailure: boolean },
+): Drizzle {
+  const rawExecute = client.execute.bind(client);
 
-function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
+  const withLockRecovery = async <T>(operation: () => Promise<T>, retry: boolean): Promise<T> => {
+    for (let attempt = 1; ; attempt++) {
+      // The native transaction() method does not check client.closed itself.
+      if (client.closed) {
+        throw new Error('Database connection is closed');
+      }
+      try {
+        return await operation();
+      } catch (error) {
+        if (!isTransientDatabaseLockError(error)) {
+          throw error;
+        }
+        // libsql 0.5.29 can leave a failed statement active: later writes appear to
+        // succeed but disappear at close. Heal even when this operation will not
+        // retry. Reconnecting shared in-memory tests would destroy their schema.
+        if (reconnectOnLockFailure) {
+          try {
+            const result = await rawExecute('PRAGMA busy_timeout');
+            const busyTimeoutMs = Number(result.rows[0]?.timeout ?? 5000);
+            await client.reconnect();
+            // journal_mode persists in the file; restore only connection settings.
+            await configureConnection(rawExecute, busyTimeoutMs, 'preserve');
+          } catch (recoveryError) {
+            logger.warn('Could not recover database connection after lock failure', {
+              error: recoveryError,
+            });
+            try {
+              client.close();
+            } finally {
+              throw error;
+            }
+          }
+        }
+        if (!retry || attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS) {
+          throw error;
+        }
+        await sleep(
+          Math.min(TRANSIENT_LOCK_RETRY_BASE_MS * 2 ** (attempt - 1), TRANSIENT_LOCK_RETRY_MAX_MS),
+        );
+      }
+    }
+  };
   const transaction = db.transaction.bind(db);
   type TransactionCallback = Parameters<typeof transaction>[0];
   type TransactionContext = Parameters<TransactionCallback>[0];
@@ -269,32 +302,24 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
 
   const serializeClientMethod = <TArgs extends unknown[], TResult>(
     method: (...args: TArgs) => Promise<TResult>,
+    retry = true,
   ) => {
     return (...args: TArgs) => {
-      // The outer transaction already owns the serialized queue. If a helper
-      // called from that transaction uses the root db handle for a read, queueing
-      // it behind the outer transaction would deadlock. Retrying here would also
-      // deadlock (the contending lock is the very transaction we are inside), so
-      // run it directly.
+      // Queueing behind the outer transaction would deadlock. Its own lock also
+      // cannot clear until the callback returns, so recover without retrying.
       if (activeTransaction.getStore()) {
-        return method(...args);
+        return withLockRecovery(() => method(...args), false);
       }
-      // Statement-level methods are atomic, so a transient lock failure means
-      // nothing was applied. libsql runs interactive transactions on their own
-      // connection, so a prior writer's table lock can briefly outlive the JS
-      // promise that settled it; retry rides through that window without
-      // weakening isolation (reads still observe only committed rows).
-      return runSerialized(() => withTransientLockRetry(() => method(...args)));
+      return runSerialized(() => withLockRecovery(() => method(...args), retry));
     };
   };
 
-  // libSQL opens a new logical connection for top-level statements and interactive
-  // transactions, so an ordinary write started while a transaction owns the write lock
-  // fails with SQLITE_BUSY unless root-handle operations are serialized.
-  client.execute = serializeClientMethod(client.execute.bind(client)) as typeof client.execute;
+  // Statements and batches are atomic; executeMultiple can commit a prefix before
+  // failing, so retrying that script could duplicate writes.
+  client.execute = serializeClientMethod(rawExecute) as typeof client.execute;
   client.batch = serializeClientMethod(client.batch.bind(client));
   client.migrate = serializeClientMethod(client.migrate.bind(client));
-  client.executeMultiple = serializeClientMethod(client.executeMultiple.bind(client));
+  client.executeMultiple = serializeClientMethod(client.executeMultiple.bind(client), false);
 
   db.transaction = ((callback, config) => {
     const currentTransaction = activeTransaction.getStore();
@@ -305,7 +330,10 @@ function serializeTopLevelOperations(client: Client, db: Drizzle): Drizzle {
     }
 
     return runSerialized(() =>
-      transaction((tx) => activeTransaction.run(tx, () => callback(tx)), config),
+      withLockRecovery(
+        () => transaction((tx) => activeTransaction.run(tx, () => callback(tx)), config),
+        false,
+      ),
     );
   }) as typeof db.transaction;
 
@@ -335,10 +363,14 @@ export async function getDb() {
         await registerTestDatabaseClient(client);
       }
 
-      await configureDatabase(client, isTesting);
+      await configureConnection(client.execute.bind(client), 5000, isTesting ? 'skip' : 'enable');
 
       const drizzleLogger = new DefaultLogger({ writer: new DrizzleLogWriter() });
-      dbInstance = serializeTopLevelOperations(client, drizzle(client, { logger: drizzleLogger }));
+      dbInstance = serializeTopLevelOperations(client, drizzle(client, { logger: drizzleLogger }), {
+        // Never reconnect the shared-cache in-memory test database: closing its
+        // last connection would drop every table mid-test.
+        reconnectOnLockFailure: !isTesting,
+      });
       return dbInstance;
     })().catch((error) => {
       if (sqliteInstance) {
@@ -367,10 +399,26 @@ export async function closeDb() {
       // Attempt to checkpoint WAL file before closing
       if (!sqliteInstanceIsTesting && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
         try {
-          await sqliteInstance.execute('PRAGMA wal_checkpoint(TRUNCATE)');
-          logger.debug('Successfully checkpointed WAL file before closing');
-        } catch (err) {
-          logger.debug(`Could not checkpoint WAL file: ${err}`);
+          // Queue behind pending writes, then attempt truncation without waiting on
+          // readers. Native busy waits block the JS shutdown watchdog from firing.
+          await sqliteInstance.execute('PRAGMA busy_timeout = 0');
+          const result = await sqliteInstance.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+          const row = result.rows[0];
+          const checkpointStatus = {
+            busy: Number(row?.busy),
+            log: row?.log,
+            checkpointed: row?.checkpointed,
+          };
+
+          if (checkpointStatus.busy === 0) {
+            logger.debug('Successfully checkpointed WAL file before closing', checkpointStatus);
+          } else {
+            logger.warn('WAL checkpoint incomplete before closing database', checkpointStatus);
+          }
+        } catch (error) {
+          // Committed data is still safe: it lives in the WAL file, which replays on
+          // the next open. Only the truncation optimization is lost.
+          logger.warn('Could not checkpoint WAL file before close', { error });
         }
       }
 
