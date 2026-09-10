@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { Typography } from '@app/components/ui/typography';
 
 interface VarsFormProps {
   onAdd: (vars: Record<string, string>) => void;
@@ -22,7 +23,9 @@ const VarsForm = ({ onAdd, varsList, initialValues }: VarsFormProps) => {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Variables</h3>
+      <Typography variant="subtitle" as="h3">
+        Variables
+      </Typography>
       {varsList.length > 0 ? (
         <div className="space-y-3">
           {Object.keys(vars).map((varName) => (

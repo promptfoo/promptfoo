@@ -1,5 +1,7 @@
 import { useId } from 'react';
 
+import { Typography } from '@app/components/ui/typography';
+
 interface StepSectionProps {
   stepNumber: number;
   title: string;
@@ -38,10 +40,10 @@ export function StepSection({
             </>
           )}
         </div>
-        <h2 id={titleId} className="mb-2 text-2xl font-bold">
+        <Typography id={titleId} variant="pageTitle" as="h2" weight="bold" className="mb-2">
           {title}
-        </h2>
-        <p className="text-muted-foreground">{description}</p>
+        </Typography>
+        <Typography variant="muted">{description}</Typography>
       </div>
 
       {/* Content */}

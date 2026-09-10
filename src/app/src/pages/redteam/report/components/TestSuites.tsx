@@ -3,6 +3,7 @@ import React from 'react';
 import { DataTable } from '@app/components/data-table/data-table';
 import { Button } from '@app/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Typography } from '@app/components/ui/typography';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { formatASRForDisplay } from '@app/utils/redteam';
@@ -523,7 +524,9 @@ const TestSuites = ({
         data-testid="vulnerabilities-header"
         className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
-        <h2 className="text-xl font-semibold">Vulnerabilities and Mitigations</h2>
+        <Typography variant="title" as="h2">
+          Vulnerabilities and Mitigations
+        </Typography>
         <Button onClick={exportToCSV} className="print:hidden">
           <Download className="mr-2 size-4" />
           Export vulnerabilities to CSV

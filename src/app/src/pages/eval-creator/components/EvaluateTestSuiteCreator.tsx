@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
+import { Typography } from '@app/components/ui/typography';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
@@ -234,10 +235,12 @@ const EvaluateTestSuiteCreator = () => {
           <div className="container max-w-7xl mx-auto px-4 py-6 lg:py-10">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div className="space-y-2">
-                <h1 className="text-3xl font-bold tracking-tight">Create Evaluation</h1>
-                <p className="text-muted-foreground">
+                <Typography variant="pageTitle" as="h1" weight="bold" className="text-3xl">
+                  Create Evaluation
+                </Typography>
+                <Typography variant="muted">
                   Choose what to evaluate, write prompts, and add test cases.
-                </p>
+                </Typography>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -350,9 +353,13 @@ const EvaluateTestSuiteCreator = () => {
               {/* Left Sidebar - Step Navigation */}
               <nav aria-label="Setup steps" className="hidden lg:block">
                 <div className="space-y-2 lg:sticky lg:top-8">
-                  <h3 className="mb-4 px-3 text-sm font-semibold text-muted-foreground">
+                  <Typography
+                    variant="bodyMedium"
+                    as="h3"
+                    className="mb-4 px-3 font-semibold text-muted-foreground"
+                  >
                     SETUP STEPS
-                  </h3>
+                  </Typography>
 
                   <div className="grid gap-2 sm:grid-cols-2 lg:block lg:space-y-2">
                     {setupSteps.map((step) => {
