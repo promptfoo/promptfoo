@@ -36,6 +36,7 @@ import { applyGpt6AstraRequestRules, isGpt6AstraModel } from './gpt6';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
+  formatOpenAiError,
   getTokenUsage,
   OPENAI_CHAT_MODELS,
   validateFunctionCall,
@@ -639,6 +640,28 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         });
       if (refusal) {
         return refusal;
+      }
+      // A completed error-only envelope is independent of caller cancellation.
+      // Nonempty choices retain their existing success/refusal precedence.
+      if (
+        data !== null &&
+        typeof data === 'object' &&
+        !Array.isArray(data) &&
+        data.error !== null &&
+        typeof data.error === 'object' &&
+        !Array.isArray(data.error) &&
+        typeof data.error.message === 'string' &&
+        (data.choices == null || (Array.isArray(data.choices) && data.choices.length === 0))
+      ) {
+        return {
+          error: formatOpenAiError({
+            ...data,
+            error: { ...data.error, message: data.error.message },
+          }),
+          metadata: {
+            http: { status, statusText, headers: responseHeaders ?? {} },
+          },
+        };
       }
       throwIfAborted(callApiOptions?.abortSignal);
       const message = data.choices[0].message;

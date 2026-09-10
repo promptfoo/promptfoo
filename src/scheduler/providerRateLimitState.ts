@@ -309,7 +309,13 @@ export class ProviderRateLimitState extends EventEmitter {
   ): void {
     const parsed = parseRateLimitHeaders(headers);
     if (selectedResetAt !== undefined) {
-      parsed.resetAt = selectedResetAt;
+      const existingResetAt = this.slotQueue.getResetAt();
+      // A selected backoff must not shorten quota learned by a concurrent call.
+      // Fresh successful responses still replace quota through the normal path.
+      parsed.resetAt =
+        existingResetAt !== null && existingResetAt > Date.now()
+          ? Math.max(existingResetAt, selectedResetAt)
+          : selectedResetAt;
     }
 
     // Emit ratelimit:learned only once per provider when we first see limit headers
