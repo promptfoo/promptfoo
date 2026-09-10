@@ -96,7 +96,7 @@ const getIterativeGoalRubric = (goal: string | undefined): string => {
   `;
 };
 
-type StopReason = 'Grader failed' | 'Max iterations reached';
+type StopReason = 'Grader failed' | 'Max iterations reached' | 'Target error';
 
 interface IterativeMetadata {
   finalIteration: number;
@@ -460,11 +460,13 @@ export async function runRedteamConversation({
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
     if (targetResponse.error) {
-      logger.info(`[Iterative] ${i + 1}/${numIterations} - Target error`, {
+      logger.info(`[Iterative] ${i + 1}/${numIterations} - Target error, stopping attack`, {
         error: targetResponse.error,
         response: targetResponse,
       });
-      continue;
+      stopReason = 'Target error';
+      finalIteration = i + 1;
+      break;
     }
     if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
       logger.info(
