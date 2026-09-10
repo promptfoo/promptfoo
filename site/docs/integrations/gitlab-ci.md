@@ -10,6 +10,7 @@ Use the reusable Promptfoo GitLab CI template to run evals in merge request, bra
 ## Prerequisites
 
 - A GitLab repository with CI/CD enabled
+- A Docker or Kubernetes runner that honors the template's pinned container image
 - A Promptfoo config file, such as `promptfooconfig.yaml`
 - Masked provider credentials when your provider requires authentication
 - GitLab 17.9 or later for [`include:integrity`](https://docs.gitlab.com/ci/yaml/#includeintegrity), or an immutable commit SHA on older GitLab versions
@@ -23,7 +24,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-gWJYSFbacdtNgwYxEILHdX4EJD+5LioEG9e6XdN46g8='
+    integrity: 'sha256-59cmAHiLKcrimHmmSeCSKLvXSQgMFBW+4JTz3nRGu0M='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -33,6 +34,7 @@ promptfoo-eval:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
+        - .gitlab-ci.yml
         - promptfooconfig.yaml
         - prompts/**/*
         - tests/**/*
@@ -109,6 +111,7 @@ inspect-promptfoo-results:
   needs:
     - job: promptfoo-eval
       artifacts: true
+      optional: true
   when: always
   script:
     - node -e 'console.log(JSON.parse(require("node:fs").readFileSync(".promptfoo-results/results.json", "utf8")).results.stats)'

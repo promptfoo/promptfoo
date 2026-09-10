@@ -230,7 +230,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(job.cache.paths).toEqual(['$PROMPTFOO_CACHE_PATH/']);
     expect(commentJob.image).toEqual(job.image);
     expect(commentJob.environment).toEqual({ name: 'promptfoo-review', action: 'verify' });
-    expect(commentJob.variables.GIT_STRATEGY).toBe('none');
+    expect(commentJob.variables.GIT_STRATEGY).toBe('empty');
     expect(commentJob.variables.PROMPTFOO_GITLAB_TRUST_PROXY).toBe('false');
     expect(commentJob.when).toBe('always');
     expect(commentJob.resource_group).toContain('$CI_MERGE_REQUEST_IID');
@@ -439,6 +439,43 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         expect(requests[2].token).toBe('test-project-token');
         expect(JSON.parse(requests[2].body).body).toContain('Promptfoo eval: Failed');
         expect(JSON.parse(requests[2].body).body).toContain('2/3 tests passed');
+      },
+    );
+  });
+
+  it('replaces an earlier summary when a failed eval writes no results', async () => {
+    await runEvaluation();
+    fs.rmSync(path.join(tempDir, '.promptfoo-results/results.json'));
+    fs.writeFileSync(path.join(tempDir, '.promptfoo-results/job-status.txt'), 'failed\n');
+
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          request.url === '/api/v4/user'
+            ? JSON.stringify({ id: 123 })
+            : request.method === 'GET'
+              ? JSON.stringify([
+                  {
+                    author: { id: 123 },
+                    body: '<!-- promptfoo-eval:promptfoo-eval --> old',
+                    id: 9,
+                  },
+                ])
+              : '{}',
+        );
+      },
+      async (origin, requests) => {
+        const comment = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: `${origin}/api/v4`,
+          CI_SERVER_URL: origin,
+        });
+
+        expect(comment.status).toBe(0);
+        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'PUT']);
+        const body = JSON.parse(requests[2].body).body;
+        expect(body).toContain('Promptfoo eval: Failed');
+        expect(body).toContain('No results were written.');
       },
     );
   });

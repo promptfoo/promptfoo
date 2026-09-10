@@ -1,5 +1,6 @@
 # Reusable Promptfoo jobs for GitLab merge request, branch, and scheduled pipelines.
 # Include this file with an immutable commit SHA or GitLab's include:integrity.
+# Use a container executor; Shell and SSH runners ignore the pinned image below.
 .promptfoo-eval:
   image:
     name: ghcr.io/promptfoo/promptfoo:0.121.19@sha256:50d3a796710e4db7a5ede90bf27dc28146ef022a7ebb83914c5105608396fd96
@@ -166,7 +167,7 @@
     entrypoint: ['']
   stage: test
   variables:
-    GIT_STRATEGY: none
+    GIT_STRATEGY: empty
     PROMPTFOO_EVAL_JOB_NAME: promptfoo-eval
     PROMPTFOO_GITLAB_TRUST_PROXY: 'false'
     PROMPTFOO_OUTPUT_DIR: .promptfoo-results
@@ -192,11 +193,6 @@
           exit 1
           ;;
       esac
-
-      if [ ! -s "$PROMPTFOO_OUTPUT_DIR/results.json" ]; then
-        echo 'Skipping Promptfoo merge request comment: no results were written.' >&2
-        exit 0
-      fi
 
       if [ ! -s "$PROMPTFOO_OUTPUT_DIR/job-status.txt" ]; then
         echo 'Cannot post Promptfoo merge request comment: the eval job-status artifact is missing.' >&2
@@ -272,8 +268,15 @@
         throw new Error('Refusing to send the GitLab token to an unexpected or insecure API origin.');
       }
 
-      const result = JSON.parse(await readFile(`${outputDirectory}/results.json`, 'utf8'));
       const jobStatus = (await readFile(`${outputDirectory}/job-status.txt`, 'utf8')).trim();
+      let result = {};
+      try {
+        result = JSON.parse(await readFile(`${outputDirectory}/results.json`, 'utf8'));
+      } catch (error) {
+        if (jobStatus === 'success') {
+          throw error;
+        }
+      }
       const stats = result.results?.stats ?? {};
       const successes = Number(stats.successes ?? 0);
       const failures = Number(stats.failures ?? 0);
@@ -282,7 +285,8 @@
       const marker = `<!-- promptfoo-eval:${encodeURIComponent(jobName)} -->`;
       const outcome = jobStatus === 'success' ? 'Passed' : 'Failed';
       const pipelineMarker = `<!-- promptfoo-pipeline:${pipelineId} -->`;
-      let body = `${marker}\n${pipelineMarker}\n### Promptfoo eval: ${outcome}\n\n${successes}/${total} tests passed`;
+      let body = `${marker}\n${pipelineMarker}\n### Promptfoo eval: ${outcome}`;
+      body += total ? `\n\n${successes}/${total} tests passed` : '\n\nNo results were written.';
 
       if (share === 'true' && typeof result.shareableUrl === 'string') {
         try {
