@@ -253,9 +253,9 @@ function discoverFiles(
   }
 
   for (const file of files) {
-    if (!manifests.includes(nearestManifest(repoRoot, file))) {
+    // Package markers within dist belong to the package that emitted the declarations.
+    if (!declarationFiles.has(file) && !manifests.includes(nearestManifest(repoRoot, file))) {
       files.delete(file);
-      declarationFiles.delete(file);
     }
   }
   return { files, declarationFiles };
@@ -504,7 +504,7 @@ export function reportDependencyOwnership(
         }
       }
       for (const tag of body.matchAll(
-        /(?:^|[\r\n\u2028\u2029])[ \t]*@(?:type|param|returns?|typedef|property|prop|this|extends|implements|satisfies|throws|enum|template)\s*\{/g,
+        /(?:^|[\r\n\u2028\u2029])[ \t]*@(?:type|param|arg(?:ument)?|returns?|typedef|property|prop|this|extends|implements|satisfies|throws|enum|template)\s*\{/g,
       )) {
         const start = tag.index + tag[0].length;
         let depth = 1;

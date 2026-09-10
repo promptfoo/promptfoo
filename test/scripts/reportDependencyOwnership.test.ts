@@ -536,6 +536,7 @@ describe('dependency ownership report', () => {
       "import type { Type } from 'type-only'; import { type A } from 'type-only'; export type { B } from 'type-only'; export { type C } from 'type-only';",
     );
     write('src/external/library.d.ts', "export type Public = import('source-types').Public;");
+    json('dist/src/package.json', { type: 'module' });
     write('dist/src/index.d.ts', "export type Public = import('public-types').Public;");
     write('dist/src/index.d.cts', "import api = require('public-cjs-types'); export = api;");
     write('dist/tests/ignored.d.ts', "export type Test = import('test-types').Test;");
@@ -860,6 +861,21 @@ describe('dependency ownership report', () => {
     expect(report.coverage.manifests).toContain('code-scan-action/package.json');
     expect(report.declarations.find((entry) => entry.dependency === 'shared')?.references).toEqual([
       expect.objectContaining({ kind: 'type', specifier: 'shared' }),
+    ]);
+  });
+
+  it.each(['arg', 'argument'])('records JSDoc @%s parameter types', (tag) => {
+    write(
+      'src/index.js',
+      `/** @${tag} {import('schema').Node} value */\nexport function identity(value) { return value; }`,
+    );
+    const report = reportDependencyOwnership(root, config);
+    expect(report.undeclaredUsages).toEqual([
+      expect.objectContaining({
+        manifest: 'package.json',
+        dependency: 'schema',
+        references: [expect.objectContaining({ kind: 'type', line: 1 })],
+      }),
     ]);
   });
 
