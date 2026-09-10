@@ -3,11 +3,14 @@ import invariant from '../util/invariant';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 function* extractJsonBlocks(text: string): Generator<unknown> {
+  const MAX_JSON_CANDIDATES = 10_000;
+  const MAX_NESTED_RECOVERY_LENGTH = 1_024;
   const candidates = new Map<number, { end: number; endsLine: boolean } | undefined>();
   const openings: number[] = [];
   let inString = false;
   let escaped = false;
   let fence = '';
+  let fenceIndent = '';
   let offset = 0;
 
   // Record balanced ranges once, including blocks inside unfinished candidates.
@@ -15,14 +18,16 @@ function* extractJsonBlocks(text: string): Generator<unknown> {
     const lineStart = offset;
     offset += line.length + 1;
     const content = line.trimEnd();
-    const marker = /^[ \t]*(`{3,}|~{3,})/.exec(content);
+    const marker = /^([ \t]*)(`{3,}|~{3,})/.exec(content);
     if (marker) {
       if (!fence) {
-        fence = marker[1];
+        fenceIndent = marker[1];
+        fence = marker[2];
         openings.length = 0;
       } else if (
-        marker[1][0] === fence[0] &&
-        marker[1].length >= fence.length &&
+        marker[1] === fenceIndent &&
+        marker[2][0] === fence[0] &&
+        marker[2].length >= fence.length &&
         !content.slice(marker[0].length).trim()
       ) {
         fence = '';
@@ -53,6 +58,9 @@ function* extractJsonBlocks(text: string): Generator<unknown> {
       } else if (char === '{' || char === '[') {
         openings.push(index);
         if (column === firstContent) {
+          if (candidates.size >= MAX_JSON_CANDIDATES) {
+            candidates.delete(candidates.keys().next().value!);
+          }
           candidates.set(index, undefined);
         }
       } else if (char === '}' || char === ']') {
@@ -79,14 +87,19 @@ function* extractJsonBlocks(text: string): Generator<unknown> {
     if (start < end || !candidate) {
       continue;
     }
-    end = candidate.end;
     if (!candidate.endsLine) {
+      end = candidate.end;
       continue;
     }
     try {
-      yield JSON.parse(text.slice(start, end));
+      const parsed = JSON.parse(text.slice(start, candidate.end));
+      end = candidate.end;
+      yield parsed;
     } catch {
       // Delimiter balancing does not validate JSON syntax.
+      if (candidate.end - start > MAX_NESTED_RECOVERY_LENGTH) {
+        end = candidate.end;
+      }
     }
   }
 }

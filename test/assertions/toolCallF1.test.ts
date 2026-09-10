@@ -415,6 +415,13 @@ describe('handleToolCallF1', () => {
       expect(result).toMatchObject({ pass: true, score: 1 });
     });
 
+    it('recovers a nested call when its balanced enclosing candidate is invalid', () => {
+      const output = '{\nnot_json\n{"type":"tool_use","name":"get_weather"}\n}';
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result).toMatchObject({ pass: true, score: 1 });
+    });
+
     it.each([
       ['```json', '```'],
       ['~~~json', '~~~'],
@@ -437,6 +444,18 @@ describe('handleToolCallF1', () => {
 
     it('ignores an example in an unclosed fence', () => {
       const output = 'Example:\n```json\n{"type":"tool_use","name":"delete_account"}';
+      const result = handleToolCallF1(createParams(output, ['delete_account']));
+
+      expect(result).toMatchObject({ pass: false, score: 0 });
+    });
+
+    it('does not close a top-level fence with indented content', () => {
+      const output = [
+        '```json',
+        '    ```',
+        '{"type":"tool_use","name":"delete_account"}',
+        '```',
+      ].join('\n');
       const result = handleToolCallF1(createParams(output, ['delete_account']));
 
       expect(result).toMatchObject({ pass: false, score: 0 });
