@@ -95,4 +95,4 @@ Extend a Veo-generated video with Google AI Studio by copying `response.metadata
 - `google:video:*` uses Google AI Studio by default
 - Use `vertex:video:*` with the current model IDs above for explicit Vertex AI routing
 - Google AI Studio does not accept Vertex operation IDs for extension
-- Current Vertex AI Veo 3.1 models support extension through `sourceVideo`; use a Vertex operation name, `gs://` URI, base64 data, or a `file://` path. Vertex extension requests omit `durationSeconds`; configured durations are ignored with a warning. Veo adds 7 seconds to the source video.
+- Current Vertex AI Veo 3.1 models support extension through `sourceVideo`; use a `gs://` URI, base64 data, or a `file://` path. Operation IDs are not valid video inputs. Vertex extension requests omit `durationSeconds`; configured durations are ignored with a warning. Veo adds 7 seconds to the source video.

@@ -712,77 +712,21 @@ describe('GoogleVideoProvider', () => {
       expect(body.instances).toEqual([{ prompt: 'Test prompt' }]);
     });
 
-    it('should preserve the deprecated extendVideoId compatibility path', async () => {
-      const operationName =
-        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
-      const base64Video = Buffer.from('fake video').toString('base64');
-
-      // Mock job creation (POST)
-      mockRequest.mockResolvedValueOnce({
-        data: {
-          name: operationName,
-          done: false,
-        },
-      });
-
-      // Mock polling (POST) - returns done with video
-      mockRequest.mockResolvedValueOnce({
-        data: {
-          name: operationName,
-          done: true,
-          response: {
-            videos: [{ bytesBase64Encoded: base64Video }],
-          },
-        },
-      });
-
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
-        config: {
-          extendVideoId: 'previous-operation-id',
-          pollIntervalMs: 10,
-        },
-      });
+    it.each([
+      { extendVideoId: 'previous-operation-id' },
+      {
+        sourceVideo:
+          'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-001/operations/source-op',
+      },
+    ])('rejects unsupported Vertex operation input %j before sending a request', async (config) => {
+      const provider = new GoogleVideoProvider('veo-3.1-generate-001', { config });
 
       const result = await provider.callApi('Continue the video');
 
-      expect(mockRequest).toHaveBeenCalled();
-      expect(result.error).toBeUndefined();
-      expect(result.cached).toBe(false);
-
-      // Should include video extension in request
-      const firstCallOptions = mockRequest.mock.calls[0][0];
-      const body = JSON.parse(firstCallOptions.body);
-      expect(body.instances[0].video).toEqual({ operationName: 'previous-operation-id' });
-    });
-
-    it('should preserve Vertex operation names passed through sourceVideo', async () => {
-      const sourceOperationName =
-        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-001/operations/source-op';
-      const createdOperationName = 'created-op';
-      const base64Video = Buffer.from('fake video').toString('base64');
-      mockRequest.mockResolvedValueOnce({
-        data: { name: createdOperationName, done: false },
-      });
-      mockRequest.mockResolvedValueOnce({
-        data: {
-          name: createdOperationName,
-          done: true,
-          response: { videos: [{ bytesBase64Encoded: base64Video }] },
-        },
-      });
-
-      const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
-        config: {
-          sourceVideo: sourceOperationName,
-          pollIntervalMs: 10,
-        },
-      });
-
-      await provider.callApi('Extend');
-
-      const firstCallOptions = mockRequest.mock.calls[0][0];
-      const body = JSON.parse(firstCallOptions.body);
-      expect(body.instances[0].video).toEqual({ operationName: sourceOperationName });
+      expect(result.error).toContain('does not accept operation IDs');
+      expect(result.error).toContain('sourceVideo');
+      expect(mockRequest).not.toHaveBeenCalled();
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
     });
 
     // Vertex's extend-a-video body documents only storageUri and sampleCount and fixes the added

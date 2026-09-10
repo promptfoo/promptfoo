@@ -293,15 +293,14 @@ export class GoogleVideoProvider implements ApiProvider {
     instance: Record<string, unknown>,
     config: GoogleVideoOptions,
   ): string | undefined {
-    if (!config.sourceVideo) {
-      if (config.extendVideoId) {
-        instance.video = { operationName: config.extendVideoId };
-      }
-      return undefined;
+    if (
+      (!config.sourceVideo && config.extendVideoId) ||
+      config.sourceVideo?.includes('/operations/')
+    ) {
+      return 'Vertex AI Veo does not accept operation IDs for video extension. Set `sourceVideo` to a gs:// URI, base64 video data, or a file:// path.';
     }
 
-    if (config.sourceVideo.includes('/operations/')) {
-      instance.video = { operationName: config.sourceVideo };
+    if (!config.sourceVideo) {
       return undefined;
     }
 
