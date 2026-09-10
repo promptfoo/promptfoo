@@ -143,7 +143,7 @@ export class OTLPTracingExporter implements TracingExporter {
       traceId: this.hexToBase64(traceId, 'trace'),
       spanId: this.hexToBase64(spanId, 'span'),
       parentSpanId: parentSpanId ? this.hexToBase64(parentSpanId, 'span') : undefined,
-      name: this.getSpanName(span),
+      name: sanitizeCredentialText(this.getSpanName(span)),
       kind:
         span.spanData.type === 'generation' || span.spanData.type === 'response'
           ? OTLP_SPAN_KIND_CLIENT
@@ -345,7 +345,9 @@ export class OTLPTracingExporter implements TracingExporter {
       attributes[key] = sanitizeAttributeValue(value);
     }
 
-    const command = commandToString(data.data.command ?? data.data.cmd);
+    const command = commandToString(
+      sanitizeAttributeByKey('command', data.data.command ?? data.data.cmd),
+    );
     if (command) {
       attributes.command = command;
     }
@@ -583,7 +585,10 @@ function sanitizeSerializedAttribute(value: string): string {
         const sanitized = sanitizeStructuredAttribute(parsed, state);
         return state.changed ? JSON.stringify(sanitized) : sanitizeCredentialText(value);
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof RangeError) {
+        return '<redacted>';
+      }
       // Non-JSON strings still need the existing free-text credential redaction.
     }
   }
@@ -596,37 +601,47 @@ function parseStructuredJson(value: string): unknown {
     return JSON.parse(value);
   }
 
-  try {
-    return JSON.parse(value, (_key, parsed: unknown, context?: { source?: string }) => {
-      if (
-        typeof parsed === 'number' &&
-        (!Number.isSafeInteger(parsed) || (parsed === 0 && /[eE]-/.test(context?.source ?? ''))) &&
-        typeof context?.source === 'string'
-      ) {
-        return losslessJson.rawJSON!(context.source);
-      }
-      return parsed;
-    });
-  } catch (error) {
-    if (error instanceof RangeError) {
-      return JSON.parse(value);
+  return JSON.parse(value, (_key, parsed: unknown, context?: { source?: string }) => {
+    if (
+      typeof parsed === 'number' &&
+      (!Number.isSafeInteger(parsed) || (parsed === 0 && /[eE]-/.test(context?.source ?? ''))) &&
+      typeof context?.source === 'string'
+    ) {
+      return losslessJson.rawJSON!(context.source);
     }
-    throw error;
-  }
+    return parsed;
+  });
 }
 
 function sanitizeCredentialText(value: string): string {
+  const options =
+    /(^|\s)(--?[A-Za-z][A-Za-z\d_.-]*)([ \t]+|=)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s;]+)/g;
+  let match: RegExpExecArray | null;
+  let sanitized = '';
+  let copied = 0;
+  while ((match = options.exec(value))) {
+    const [, prefix, option, separator] = match;
+    if (isCredentialAttributeKey(option)) {
+      sanitized += value.slice(copied, match.index) + prefix + option + separator + '<redacted>';
+      copied = options.lastIndex;
+    } else {
+      // A boolean option can precede another option instead of a value.
+      options.lastIndex = match.index + prefix.length + option.length;
+    }
+  }
+  value = sanitized + value.slice(copied);
+
   return sanitizeBody(value)
     .replace(
       /\b([a-z][a-z\d+.-]*:\/\/)[^\s/?#@]+@/gi,
       (_match, prefix: string) => `${prefix}<redacted>@`,
     )
     .replace(
-      /(\bAuthorization\s*[:=]\s*)(?!\s*<redacted>(?=\s*(?:[;\r\n&#"'\\]|$)))(?:(?!;\s*(?:Authorization\s*[:=]|Cookie\s*:)|[\r\n&#]).)+/gi,
+      /(\b(?:Authorization|Cookie)\s*:[ \t]*)[^\r\n]*/gi,
       (_match, prefix: string) => `${prefix}<redacted>`,
     )
     .replace(
-      /(\bCookie\s*:\s*)[^\s;,"']+(?:;\s*(?!Authorization\s*[:=]|Cookie\s*:)[^\s;,"']+=[^\s;,"']+)*/gi,
+      /(\bAuthorization\s*=\s*)(?!\s*<redacted>(?=\s*(?:[;\r\n&#"'\\]|$)))(?:(?!;\s*(?:Authorization\s*[:=]|Cookie\s*:)|[\r\n&#]).)+/gi,
       (_match, prefix: string) => `${prefix}<redacted>`,
     )
     .replace(
@@ -757,11 +772,11 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
 
 function isCredentialPairValue(source: Record<string, unknown> | unknown[], key: string) {
   if (Array.isArray(source)) {
+    const option = source[Number(key) - 1];
     return (
-      key === '1' &&
-      source.length === 2 &&
-      typeof source[0] === 'string' &&
-      isCredentialAttributeKey(source[0])
+      typeof option === 'string' &&
+      isCredentialAttributeKey(option) &&
+      ((key === '1' && source.length === 2) || /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option))
     );
   }
   return (

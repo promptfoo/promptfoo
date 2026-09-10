@@ -551,13 +551,24 @@ describe('OTLPTracingExporter', () => {
       const negotiateCredential = 'negotiate-opaque/value';
       const awsCredential = 'aws-signature-opaque/value';
       const encodedCallback = `https://host/callback?%61ccess_token=${encodedCredential}`;
-      const logDetails =
-        `access_token: ${colonToken}; Cookie: session=${colonCookie}; csrf=${secondaryCookie}; ` +
-        `Authorization: Bearer ${headerCredential}; Authorization=Basic ${equalsCredential}; ` +
-        `Authorization: Digest realm="accounts;production", response="${digestCredential}"; ` +
-        `Authorization=Negotiate ${negotiateCredential}; ` +
-        `Authorization: AWS4-HMAC-SHA256 Credential=account, SignedHeaders=host;x-amz-date, ` +
-        `Signature=${awsCredential}`;
+      const logDetails = [
+        `access_token: ${colonToken}`,
+        `Cookie: session=${colonCookie}; csrf=${secondaryCookie}`,
+        `Authorization: Bearer ${headerCredential}`,
+        `Authorization=Basic ${equalsCredential}`,
+        `Authorization: Digest realm="accounts;production", response="${digestCredential}"`,
+        `Authorization=Negotiate ${negotiateCredential}`,
+        `Authorization: AWS4-HMAC-SHA256 Credential=account, SignedHeaders=host;x-amz-date, Signature=${awsCredential}`,
+      ].join('\n');
+      const expectedLogDetails = [
+        'access_token: <redacted>',
+        'Cookie: <redacted>',
+        'Authorization: <redacted>',
+        'Authorization=<redacted>',
+        'Authorization: <redacted>',
+        'Authorization=<redacted>',
+        'Authorization: <redacted>',
+      ].join('\n');
       const evaluationId = 'a'.repeat(64);
       const testCaseId = 'b'.repeat(64);
       const span = {
@@ -656,10 +667,7 @@ describe('OTLPTracingExporter', () => {
         token_endpoint: 'https://issuer.example.com/oauth/token',
         token_url: 'https://issuer.example.com/token',
         secretary: 'Alice',
-        logDetails:
-          'access_token: <redacted>; Cookie: <redacted>; Authorization: <redacted>; ' +
-          'Authorization=<redacted>; Authorization: <redacted>; Authorization=<redacted>; ' +
-          'Authorization: <redacted>',
+        logDetails: expectedLogDetails,
         nested: [{ refreshToken: '<redacted>' }],
       });
       expect(JSON.parse(attributes['tool.output'] as string)).toEqual({
@@ -677,10 +685,83 @@ describe('OTLPTracingExporter', () => {
         'Authentication failed for <REDACTED_API_KEY>: ' +
           '{"client_secret":"<redacted>","access_token":"<redacted>"}; ' +
           'https://host/callback?access_token=<redacted>&token_count=12; ' +
-          'access_token: <redacted>; Cookie: <redacted>; Authorization: <redacted>; ' +
-          'Authorization=<redacted>; Authorization: <redacted>; Authorization=<redacted>; ' +
-          'Authorization: <redacted>',
+          expectedLogDetails,
       );
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts headers, command arguments, and span names throughout %s payloads',
+    async (format) => {
+      const exporter = new OTLPTracingExporter();
+      const credentials = [
+        'opaque-digest-proof',
+        'opaque-cookie-value',
+        'opaque/cli-value',
+        'opaque cli token',
+        'sk-abcdefghijklmnopqrstuvwxyz',
+      ];
+      await exporter.export([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: {
+            type: 'custom',
+            name: credentials[4],
+            data: {
+              digest: `Authorization: Digest uri="/app?x=1&y=2", response="${credentials[0]}"`,
+              header_text: `Cookie: sid="${credentials[1]}"`,
+              cmd: ['deploy', '--api-key', credentials[2], '--region', 'test-region'],
+              invocation: `deploy --dry-run --api-key=${credentials[2]} --token-count 12`,
+              command: `deploy --dry-run --token "${credentials[3]}" --region test-region`,
+            },
+          },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: null,
+        } as any,
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcde0',
+          spanData: {
+            type: 'custom',
+            name: 'sandbox.exec',
+            data: { cmd: ['deploy', '--api-key', credentials[3], '--region', 'test-region'] },
+          },
+          traceMetadata: { 'promptfoo.otlp_format': format },
+          error: null,
+        } as any,
+      ]);
+      const body = mockFetchWithProxy.mock.calls[0][1].body as string | Uint8Array;
+      const payload =
+        format === 'protobuf'
+          ? await decodeExportTraceServiceRequest(body as Uint8Array)
+          : JSON.parse(body as string);
+      for (const credential of credentials) {
+        expect.soft(JSON.stringify(payload)).not.toContain(credential);
+      }
+      const span = payload.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[1]).command).toBe(
+        'deploy --api-key <redacted> --region test-region',
+      );
+      expect(getAttributes(span).command).toBe(
+        'deploy --dry-run --token <redacted> --region test-region',
+      );
+      expect(getAttributes(span).invocation).toBe(
+        'deploy --dry-run --api-key=<redacted> --token-count 12',
+      );
+      expect(getAttributes(span).cmd).toEqual({
+        arrayValue: {
+          values: [
+            { stringValue: 'deploy' },
+            { stringValue: '--api-key' },
+            { stringValue: '<redacted>' },
+            { stringValue: '--region' },
+            { stringValue: 'test-region' },
+          ],
+        },
+      });
     },
   );
 
@@ -735,9 +816,11 @@ describe('OTLPTracingExporter', () => {
       const unsafeInput =
         shape === 'oversized'
           ? oversizedInput
-          : '['.repeat(5000) +
+          : '{"order_id":9223372036854775807,"nested":' +
+            '['.repeat(5000) +
             JSON.stringify({ access_token: deeplyNestedSecret }) +
-            ']'.repeat(5000);
+            ']'.repeat(5000) +
+            '}';
       const spans = [
         {
           type: 'trace.span',
@@ -776,6 +859,7 @@ describe('OTLPTracingExporter', () => {
       const exportedSpans = payload.resourceSpans[0].scopeSpans[0].spans;
       expect(exportedSpans).toHaveLength(2);
       expect(JSON.stringify(exportedSpans)).not.toContain(deeplyNestedSecret);
+      expect(JSON.stringify(exportedSpans)).not.toContain('9223372036854776000');
       expect(getAttributes(exportedSpans[0])['tool.arguments']).toContain('<redacted>');
       expect(getAttributes(exportedSpans[1])['tool.arguments']).toBe('{"accountId":"123"}');
     },
