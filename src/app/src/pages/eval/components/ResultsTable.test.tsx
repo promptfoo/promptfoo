@@ -1,14 +1,14 @@
 import { act, StrictMode } from 'react';
 
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
-import { fetchEvalConfig, prefetchEvalResultDetail } from '@app/utils/api';
+import { prefetchEvalResultDetail } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import ResultsTable from './ResultsTable';
+import ResultsTable, { HydratedText } from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
 vi.mock('./store', () => ({
@@ -50,7 +50,6 @@ vi.mock('@app/hooks/useShiftKey', () => {
 vi.mock('@app/utils/api', () => ({
   clearEvalApiResponseCache: vi.fn(),
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
-  fetchEvalConfig: vi.fn(),
   prefetchEvalResultDetail: vi.fn(),
 }));
 
@@ -661,7 +660,6 @@ describe('ResultsTable Metrics Display', () => {
     };
 
     beforeEach(() => {
-      vi.mocked(fetchEvalConfig).mockReset();
       vi.mocked(prefetchEvalResultDetail).mockReset();
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
@@ -949,106 +947,40 @@ describe('ResultsTable Metrics Display', () => {
       expect(await screen.findByText('full transform')).toBeInTheDocument();
     });
 
-    it('loads an omitted column prompt by identity when its dialog opens', async () => {
-      const store = vi.mocked(useTableStore)();
-      vi.mocked(useTableStore).mockReturnValue({
-        ...store,
-        table: {
-          ...mockTableWithMedia,
-          head: {
-            ...mockTableWithMedia.head,
-            prompts: [
-              { label: 'prompt-a', raw: '[content omitted: 120000 characters]' },
-              { label: 'prompt-b', raw: '[content omitted: 120000 characters]' },
-            ],
-          },
-        },
-      });
-      vi.mocked(fetchEvalConfig).mockResolvedValue({
-        config: {
-          prompts: [
-            { label: 'prompt-b', raw: 'full prompt b' },
-            { label: 'prompt-a', raw: 'full prompt a' },
-          ],
-        },
-      });
-
-      renderWithProviders(<ResultsTable {...defaultProps} />);
-      expect(fetchEvalConfig).not.toHaveBeenCalled();
-      await userEvent.click(screen.getByText('prompt-a'));
-      expect(await screen.findByText('full prompt a')).toBeInTheDocument();
-    });
-
-    it('retries an omitted column prompt after config hydration fails', async () => {
-      const store = vi.mocked(useTableStore)();
-      vi.mocked(useTableStore).mockReturnValue({
-        ...store,
-        table: {
-          ...mockTableWithMedia,
-          head: {
-            ...mockTableWithMedia.head,
-            prompts: [{ label: 'prompt-a', raw: '[content omitted: 120000 characters]' }],
-          },
-        },
-      });
-      vi.mocked(fetchEvalConfig)
-        .mockRejectedValueOnce(new Error('temporary failure'))
-        .mockResolvedValueOnce({
-          config: { prompts: [{ label: 'prompt-a', raw: 'full prompt' }] },
-        });
-
-      renderWithProviders(<ResultsTable {...defaultProps} />);
-      await userEvent.click(screen.getByText('prompt-a'));
-      await waitFor(() => expect(fetchEvalConfig).toHaveBeenCalledTimes(1));
-      await userEvent.keyboard('{Escape}');
-      await userEvent.click(screen.getByText('prompt-a'));
-      expect(await screen.findByText('full prompt')).toBeInTheDocument();
-    });
-
     it('does not show hydrated text after a reused row changes identity', async () => {
       let resolveDetail: (value: any) => void = () => {};
-      vi.mocked(prefetchEvalResultDetail).mockImplementation(
-        () => new Promise((resolve) => (resolveDetail = resolve)),
+      let detailPromise: Promise<any>;
+      const loadValue = vi.fn(
+        () => (detailPromise = new Promise((resolve) => (resolveDetail = resolve))),
       );
-      const store = vi.mocked(useTableStore)();
-      let outputId = 'result-a';
-      vi.mocked(useTableStore).mockImplementation(() => ({
-        ...store,
-        config: { redteam: { injectVar: 'inject' } },
-        table: {
-          ...mockTableWithMedia,
-          head: { prompts: [{}], vars: ['inject'] },
-          body: [
-            {
-              ...mockTableWithMedia.body[0],
-              vars: ['[content omitted: 120000 characters]'],
-              outputs: [
-                {
-                  id: outputId,
-                  pass: true,
-                  score: 1,
-                  text: 'output',
-                  response: { prompt: '[content omitted: 120000 characters]' },
-                },
-              ],
-            },
-          ],
-        },
-      }));
-
-      const view = renderWithProviders(<ResultsTable {...defaultProps} />);
-      await userEvent.click(screen.getByRole('button', { name: 'Load value' }));
-      outputId = 'result-b';
-      view.rerender(<ResultsTable {...defaultProps} zoom={2} />);
-      resolveDetail({
-        evalId: '123',
-        resultId: 'result-a',
-        prompt: '',
-        text: '',
-        response: { prompt: 'full prompt a' },
+      const view = renderWithProviders(
+        <HydratedText
+          value="[content omitted: 120000 characters]"
+          loadValue={loadValue}
+          maxLength={100}
+          identity="result-a"
+        />,
+      );
+      const button = screen.getByRole('button', { name: 'Load value' });
+      await userEvent.click(button);
+      expect(loadValue).toHaveBeenCalledTimes(1);
+      view.rerender(
+        <HydratedText
+          value="[content omitted: 120000 characters]"
+          loadValue={loadValue}
+          maxLength={100}
+          identity="result-b"
+        />,
+      );
+      expect(screen.getByRole('button', { name: 'Load value' })).toBe(button);
+      await act(async () => {
+        resolveDetail('full prompt a');
+        await detailPromise;
+        await Promise.resolve();
+        await Promise.resolve();
       });
-      await waitFor(() => expect(screen.queryByText('full prompt a')).not.toBeInTheDocument());
-      expect(screen.getByRole('button', { name: 'Load value' })).toBeInTheDocument();
+      expect(screen.queryByText('full prompt a')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Load value' })).toBe(button);
     });
 
     it('renders variable video from file metadata', () => {

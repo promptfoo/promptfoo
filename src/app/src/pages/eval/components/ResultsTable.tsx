@@ -15,12 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import {
-  callApi,
-  clearEvalApiResponseCache,
-  fetchEvalConfig,
-  prefetchEvalResultDetail,
-} from '@app/utils/api';
+import { callApi, clearEvalApiResponseCache, prefetchEvalResultDetail } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
@@ -240,33 +235,11 @@ function TableHeader({
   maxLength,
   expandedText,
   resourceId,
-  loadExpandedText,
-  hydrationKey = expandedText,
   className,
-}: TruncatedTextProps & {
-  expandedText?: string;
-  resourceId?: string;
-  loadExpandedText?: () => Promise<string | undefined>;
-  hydrationKey?: string;
-  className?: string;
-}) {
+}: TruncatedTextProps & { expandedText?: string; resourceId?: string; className?: string }) {
   const [promptOpen, setPromptOpen] = React.useState(false);
-  const [fullText, setFullText] = React.useState<{ key?: string; value: string }>();
-  const hydrationKeyRef = React.useRef(hydrationKey);
-  hydrationKeyRef.current = hydrationKey;
-  const hydratedText = fullText && fullText.key === hydrationKey ? fullText.value : expandedText;
   const handlePromptOpen = () => {
     setPromptOpen(true);
-    if (isOmittedText(expandedText) && loadExpandedText) {
-      void loadExpandedText()
-        .then(
-          (value) =>
-            value &&
-            hydrationKeyRef.current === hydrationKey &&
-            setFullText({ key: hydrationKey, value }),
-        )
-        .catch(() => {});
-    }
   };
   const handlePromptClose = () => {
     setPromptOpen(false);
@@ -294,7 +267,7 @@ function TableHeader({
             <EvalOutputPromptDialog
               open={promptOpen}
               onClose={handlePromptClose}
-              prompt={hydratedText ?? expandedText}
+              prompt={expandedText}
             />
           )}
           {resourceId && (
@@ -319,7 +292,7 @@ function TableHeader({
   );
 }
 
-function HydratedText({
+export function HydratedText({
   value,
   loadValue,
   maxLength,
@@ -331,10 +304,11 @@ function HydratedText({
   identity: string;
 }) {
   const [fullValue, setFullValue] = React.useState<{ identity: string; value: string }>();
-  const [loading, setLoading] = React.useState(false);
+  const [loadingIdentity, setLoadingIdentity] = React.useState<string>();
   const identityRef = React.useRef(identity);
   identityRef.current = identity;
   const hydratedValue = fullValue?.identity === identity ? fullValue.value : undefined;
+  const loading = loadingIdentity === identity;
 
   if (hydratedValue || !isOmittedText(value)) {
     return <TruncatedText text={hydratedValue ?? value} maxLength={maxLength} />;
@@ -346,7 +320,7 @@ function HydratedText({
       size="sm"
       disabled={loading}
       onClick={async () => {
-        setLoading(true);
+        setLoadingIdentity(identity);
         try {
           const loaded = await loadValue();
           if (loaded && identityRef.current === identity) {
@@ -354,7 +328,9 @@ function HydratedText({
           }
         } catch {
         } finally {
-          setLoading(false);
+          if (identityRef.current === identity) {
+            setLoadingIdentity(undefined);
+          }
         }
       }}
     >
@@ -1312,7 +1288,6 @@ function PromptColumnHeader({
   passingTestCounts,
   metricTotals,
   config,
-  evalId,
   filterMode,
   headPromptCount,
   maxTextLength,
@@ -1333,7 +1308,6 @@ function PromptColumnHeader({
   passingTestCounts: PromptSummaryMetric[];
   metricTotals: Record<string, number>;
   config: ReturnType<typeof useTableStore.getState>['config'];
-  evalId: string | null;
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
   maxTextLength: number;
@@ -1407,34 +1381,6 @@ function PromptColumnHeader({
         expandedText={prompt.raw}
         maxLength={maxTextLength}
         resourceId={prompt.id}
-        hydrationKey={`${prompt.id || prompt.label || idx}`}
-        loadExpandedText={
-          isOmittedText(prompt.raw) && evalId
-            ? async () => {
-                const prompts = (await fetchEvalConfig(evalId)).config.prompts;
-                const values = Array.isArray(prompts)
-                  ? prompts
-                  : prompts && typeof prompts === 'object'
-                    ? Object.values(prompts)
-                    : [prompts];
-                const fullPrompt =
-                  values.find(
-                    (value) =>
-                      value &&
-                      typeof value === 'object' &&
-                      ((prompt.id && 'id' in value && value.id === prompt.id) ||
-                        (prompt.label && 'label' in value && value.label === prompt.label)),
-                  ) ?? values[idx];
-                if (typeof fullPrompt === 'string') {
-                  return fullPrompt;
-                }
-                if (fullPrompt && typeof fullPrompt === 'object') {
-                  const raw = (fullPrompt as Record<string, unknown>).raw;
-                  return typeof raw === 'string' ? raw : undefined;
-                }
-              }
-            : undefined
-        }
       />
       {renderPromptMetricDetails({
         metrics,
@@ -2452,7 +2398,6 @@ function ResultsTable({
                 passingTestCounts={passingTestCounts}
                 metricTotals={metricTotals}
                 config={config}
-                evalId={evalId}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
                 maxTextLength={maxTextLength}
