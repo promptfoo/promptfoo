@@ -80,6 +80,29 @@ describe('AssertionsResult', () => {
       expect(assertionsResult['failedReason']).toBe('Test failed');
     });
 
+    it('keeps a hard-error reason after a later ordinary failure', async () => {
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: false, score: 0, reason: 'ordinary mismatch' },
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Invalid regex pattern',
+          metadata: { assertionError: true },
+        },
+      });
+      assertionsResult.addResult({
+        index: 2,
+        result: { pass: false, score: 0, reason: 'later ordinary mismatch' },
+      });
+
+      expect((await assertionsResult.testResult()).reason).toBe('Invalid regex pattern');
+    });
+
     it('should throw error if short circuit enabled', () => {
       vi.mocked(getEnvBool).mockReturnValue(true);
 

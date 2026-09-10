@@ -581,6 +581,20 @@ describe('Assertion Fallback Mechanism', () => {
       expect(result.componentResults?.[0].metadata?.assertionError).toBe(true);
     });
 
+    it('does not fall through an invalid regex pattern', async () => {
+      const result = await runAssertions({
+        test: createTestCase([
+          { type: 'regex', value: '[', fallback: 'next' },
+          { type: 'contains', value: 'test' },
+        ]),
+        providerResponse: mockProviderResponse,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Invalid regex pattern');
+      expect(result.componentResults?.[0].metadata?.assertionError).toBe(true);
+    });
+
     it('does not fall through a file-backed assertion execution error', async () => {
       vi.mocked(runPython).mockRejectedValueOnce(new Error('Python exploded'));
       const assertions: Assertion[] = [

@@ -97,10 +97,16 @@ export class AssertionsResult {
     this.totalScore += result.score * weight;
     this.totalWeight += weight;
     this.componentResults[index] = result;
-    this.failedHardError ||= [result, ...(result.componentResults ?? [])].some(
+    const hardError = [result, ...(result.componentResults ?? [])].find(
       (component) =>
         component.metadata?.assertionError === true || component.metadata?.graderError === true,
     );
+    if (hardError) {
+      if (!this.failedHardError) {
+        this.failedReason = hardError.reason;
+      }
+      this.failedHardError = true;
+    }
 
     const isRedteamGuardrail =
       result.assertion?.type === 'guardrails' && result.assertion?.config?.purpose === 'redteam';
@@ -127,7 +133,9 @@ export class AssertionsResult {
       return;
     }
 
-    this.failedReason = result.reason;
+    if (!this.failedHardError) {
+      this.failedReason = result.reason;
+    }
 
     if (getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
       throw new Error(result.reason);
