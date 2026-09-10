@@ -342,7 +342,9 @@ describe('RateLimitRegistry cancellation during scheduling', () => {
       queueTimeoutMs: 100,
     });
     const timeout = vi.fn();
+    const cancelledEvent = vi.fn();
     state.on('queue:timeout', timeout);
+    state.on('queue:cancelled', cancelledEvent);
     const active = deferred<ProviderResponse>();
     const first = state.executeWithRetry('active', () => active.promise, {});
     const controller = new AbortController();
@@ -355,11 +357,17 @@ describe('RateLimitRegistry cancellation during scheduling', () => {
       await vi.advanceTimersByTimeAsync(0);
       await rejected;
       expect(timeout).not.toHaveBeenCalled();
+      expect(cancelledEvent).toHaveBeenCalledExactlyOnceWith({
+        rateLimitKey: 'events',
+        requestId: 'cancelled',
+        error: String(controller.signal.reason),
+      });
       const timedOut = state.executeWithRetry('timeout', vi.fn(), {});
       const timeoutRejected = expect(timedOut).rejects.toThrow('timed out after 100ms');
       await vi.advanceTimersByTimeAsync(100);
       await timeoutRejected;
       expect(timeout).toHaveBeenCalledOnce();
+      expect(cancelledEvent).toHaveBeenCalledOnce();
       expect(state.getMetrics()).toMatchObject({ activeRequests: 1, failedRequests: 2 });
     } finally {
       active.resolve({ output: 'done' });

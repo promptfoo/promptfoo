@@ -3,7 +3,12 @@ import logger from '../logger';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './openai/util';
-import { getRequestTimeoutMs, isCallerAbortError, throwIfAborted } from './shared';
+import {
+  getRequestTimeoutMs,
+  isCallerAbortError,
+  throwIfAborted,
+  waitForPromiseWithAbort,
+} from './shared';
 import type OpenAI from 'openai';
 
 import type {
@@ -96,7 +101,10 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
   ): Promise<ProviderResponse> {
     throwIfAborted(callApiOptions?.abortSignal);
     // Get the request body and config from parent class
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await waitForPromiseWithAbort(
+      this.getOpenAiBody(prompt, context, callApiOptions),
+      callApiOptions?.abortSignal,
+    );
     throwIfAborted(callApiOptions?.abortSignal);
 
     // Make the API call to Snowflake Cortex endpoint

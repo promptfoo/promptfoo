@@ -9,7 +9,12 @@ import {
   getTokenUsage,
   isOpenAiErrorOnlyResponse,
 } from './openai/util';
-import { getRequestTimeoutMs, isCallerAbortError, throwIfAborted } from './shared';
+import {
+  getRequestTimeoutMs,
+  isCallerAbortError,
+  throwIfAborted,
+  waitForPromiseWithAbort,
+} from './shared';
 import type OpenAI from 'openai';
 
 import type {
@@ -209,7 +214,10 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
   ): Promise<ProviderResponse> {
     throwIfAborted(callApiOptions?.abortSignal);
     // Get the request body and config
-    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await waitForPromiseWithAbort(
+      this.getOpenAiBody(prompt, context, callApiOptions),
+      callApiOptions?.abortSignal,
+    );
     throwIfAborted(callApiOptions?.abortSignal);
 
     // Make the API call directly

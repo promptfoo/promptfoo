@@ -154,13 +154,11 @@ export class ProviderRateLimitState extends EventEmitter {
         try {
           await this.slotQueue.acquire(`${requestId}-${attempt}`, options.abortSignal);
         } catch (acquireError) {
-          if (!options.abortSignal?.aborted) {
-            this.emit('queue:timeout', {
-              rateLimitKey: this.rateLimitKey,
-              requestId,
-              error: String(acquireError),
-            });
-          }
+          this.emit(options.abortSignal?.aborted ? 'queue:cancelled' : 'queue:timeout', {
+            rateLimitKey: this.rateLimitKey,
+            requestId,
+            error: String(acquireError),
+          });
           throw acquireError;
         }
 

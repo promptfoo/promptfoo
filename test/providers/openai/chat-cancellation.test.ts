@@ -11,6 +11,8 @@ import logger from '../../../src/logger';
 import { loadApiProvider } from '../../../src/providers';
 import { MCPClient } from '../../../src/providers/mcp/client';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { OpenRouterProvider } from '../../../src/providers/openrouter';
+import { SnowflakeCortexProvider } from '../../../src/providers/snowflake';
 import { RateLimitRegistry, wrapProviderWithRateLimiting } from '../../../src/scheduler';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
 import type { MockInstance } from 'vitest';
@@ -278,6 +280,32 @@ export async function get_tools() {
       await target.cleanup?.();
       await rm(directory, { recursive: true, force: true });
     }
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['OpenRouter', () => new OpenRouterProvider('fixture', { config: { apiKey: 'key' } })],
+    [
+      'Snowflake',
+      () =>
+        new SnowflakeCortexProvider('fixture', {
+          config: { apiKey: 'key', apiBaseUrl: 'https://snowflake.fixture.test' },
+        }),
+    ],
+  ])('aborts asynchronous body preparation in %s overrides', async (_name, createProvider) => {
+    const target = createProvider();
+    const body = await target.getOpenAiBody('fixture');
+    const preparation = createDeferred<typeof body>();
+    vi.spyOn(target, 'getOpenAiBody').mockReturnValueOnce(preparation.promise);
+    const controller = new AbortController();
+    const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
+    const rejected = expect(pending).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'cancel override preparation',
+    });
+    controller.abort(new Error('cancel override preparation'));
+    await rejected;
+    preparation.resolve(body);
     expect(fetch).not.toHaveBeenCalled();
   });
 
