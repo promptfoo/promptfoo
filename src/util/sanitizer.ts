@@ -1110,7 +1110,9 @@ function hasUnsafeJsonSerializer(value: unknown): boolean {
   return !(
     (Buffer.isBuffer(value) && value.toJSON === Buffer.prototype.toJSON) ||
     (value instanceof URL && value.toJSON === URL.prototype.toJSON) ||
-    (value instanceof Date && value.toJSON === Date.prototype.toJSON)
+    (value instanceof Date &&
+      value.toJSON === Date.prototype.toJSON &&
+      value.toISOString === Date.prototype.toISOString)
   );
 }
 
@@ -1165,9 +1167,6 @@ export function sanitizeObject(
     const ancestors: object[] = [];
     const safeObj = JSON.parse(
       JSON.stringify(obj, function (this: Record<string, unknown>, key, val) {
-        if (typeof val === 'bigint') {
-          return val.toString();
-        }
         const descriptor = Object.getOwnPropertyDescriptor(this, key);
         if (descriptor?.get) {
           return REDACTED;
@@ -1185,6 +1184,9 @@ export function sanitizeObject(
               : originalValue !== val && hasUnsafeJsonSerializer(originalValue)
                 ? REDACTED
                 : val;
+        if (typeof value === 'bigint') {
+          return value.toString();
+        }
         if (typeof value === 'object' && value !== null) {
           while (ancestors.length && ancestors[ancestors.length - 1] !== this) {
             ancestors.pop();

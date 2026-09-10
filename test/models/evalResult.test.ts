@@ -88,6 +88,8 @@ describe('EvalResult', () => {
           providerOutput: opaqueInput,
           options: {
             rubricPrompt: opaqueInput,
+            prefix: opaqueInput,
+            suffix: opaqueInput,
             provider: { id: 'fixture', config: { opaque: opaqueInput } },
             clientState: 'sk-abcdefghijklmnopqrstuvwxyz',
           },
@@ -119,6 +121,8 @@ describe('EvalResult', () => {
       expect(sanitized.testCase.vars).toEqual({ image: opaqueInput, apiKey: '[REDACTED]' });
       expect(sanitized.testCase.providerOutput).toBe(opaqueInput);
       expect(sanitized.testCase.options?.rubricPrompt).toBe(opaqueInput);
+      expect(sanitized.testCase.options?.prefix).toBe(opaqueInput);
+      expect(sanitized.testCase.options?.suffix).toBe(opaqueInput);
       expect(sanitized.testCase.options?.provider).toEqual({
         id: 'fixture',
         config: { opaque: '[REDACTED]' },
@@ -149,6 +153,13 @@ describe('EvalResult', () => {
       }
     },
   );
+
+  it('preserves non-object prompt config values', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      prompt: { raw: 'prompt', label: 'prompt', config: 'opaque config' as any },
+    });
+    expect(result.prompt.config).toBe('opaque config');
+  });
 
   it('reads test-case accessors once while preserving their values', () => {
     let reads = 0;

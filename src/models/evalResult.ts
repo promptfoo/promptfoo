@@ -226,6 +226,14 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
         rubricPrompt: sanitizeForDbWithSecrets(options.rubricPrompt, false),
       };
     }
+    for (const key of ['prefix', 'suffix'] as const) {
+      if (options?.[key] !== undefined) {
+        sanitized.options = {
+          ...sanitized.options,
+          [key]: sanitizeForDbWithSecrets(options[key], false),
+        };
+      }
+    }
     if (captured.assert) {
       sanitized.assert = captured.assert.map(sanitizeAssertionForDb);
     }
@@ -242,12 +250,9 @@ function sanitizePromptForDb(prompt: Prompt): Prompt {
   }
   try {
     const captured = { ...prompt };
-    const config = captured.config && { ...captured.config };
-    if (config) {
-      captured.config = config;
-    }
+    const config = captured.config;
     const sanitized = sanitizeForDbWithSecrets(captured, false);
-    if (config) {
+    if (config !== undefined) {
       sanitized.config = sanitizeForDbWithSecrets(config);
     }
     return sanitized;

@@ -1163,6 +1163,12 @@ describe('sanitizeObject', () => {
       expect(result.date).toBe('2023-01-01T00:00:00.000Z');
     });
 
+    it('redacts Dates with overridden ISO serialization', () => {
+      const date = new Date();
+      date.toISOString = () => 'Invalid key sk-date-fixture-should-not-persist';
+      expect(JSON.stringify(sanitizeObject({ date }))).not.toContain('sk-date-fixture');
+    });
+
     it('should convert RegExp objects to empty objects via JSON', () => {
       const regex = /test/gi;
       const result = sanitizeObject({ regex });
@@ -1396,6 +1402,15 @@ describe('sanitizeObject', () => {
         password: '[REDACTED]',
       });
       expect(result.password).not.toContain('secret');
+    });
+
+    it('redacts getter-projected BigInts before string conversion', () => {
+      const input = {
+        get connection() {
+          return 12345678901234567890n;
+        },
+      };
+      expect(sanitizeObject(input).connection).toBe('[REDACTED]');
     });
   });
 
