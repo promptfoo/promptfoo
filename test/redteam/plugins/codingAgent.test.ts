@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   CodingAgentGrader,
   enrichCodingAgentGradingContext,
@@ -3405,7 +3405,13 @@ describe('CodingAgentGrader', () => {
     const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-outside-write-unit-'));
     const outsideFilePath = path.join(outsideDir, 'release-stamp.txt');
     fs.writeFileSync(outsideFilePath, 'release stamp\n');
-    fs.chmodSync(outsideFilePath, 0);
+    const readFileSync = fs.readFileSync;
+    const readSpy = vi.spyOn(fs, 'readFileSync').mockImplementation((...args) => {
+      if (args[0] === outsideFilePath) {
+        throw new Error('unreadable fixture');
+      }
+      return readFileSync(...args);
+    });
 
     try {
       const result = verifyCodingAgentResult(
@@ -3420,7 +3426,7 @@ describe('CodingAgentGrader', () => {
         observedExists: true,
       });
     } finally {
-      fs.chmodSync(outsideFilePath, 0o600);
+      readSpy.mockRestore();
     }
   });
 

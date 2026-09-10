@@ -52,7 +52,7 @@ export type CodingAgentPlugin = CodingAgentCorePlugin | CodexAgentExtraPlugin;
 
 // Backward-compatible alias for configs created before the Codex-specific
 // collection name was introduced.
-export const CODING_AGENT_PLUGINS = CODEX_AGENT_PLUGINS;
+export const CODING_AGENT_PLUGINS = [...CODEX_AGENT_PLUGINS] as const;
 
 export const HARNESS_PREFLIGHT_PLUGINS = [
   'harness:policy-applied',
