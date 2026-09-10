@@ -102,6 +102,7 @@ import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
+  accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
@@ -3525,6 +3526,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
       countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
     });
+    accumulateGenerationTokenUsage(metrics.tokenUsage, row.testCase?.metadata?.providerTokenUsage);
 
     if (row.gradingResult?.tokensUsed) {
       accumulateGradingTokenUsage(metrics.tokenUsage, row.gradingResult.tokensUsed, {
