@@ -1062,6 +1062,41 @@ describe('sanitizeObject', () => {
   });
 
   describe('class instances and prototypes', () => {
+    it('preserves URL and Buffer JSON representations', () => {
+      expect(
+        sanitizeObject({ endpoint: new URL('https://example.com/path'), bytes: Buffer.from('ok') }),
+      ).toEqual({
+        endpoint: 'https://example.com/path',
+        bytes: { type: 'Buffer', data: [111, 107] },
+      });
+    });
+
+    it('preserves safe custom JSON projections', () => {
+      class Duration {
+        constructor(public milliseconds: number) {}
+        toJSON() {
+          return { seconds: this.milliseconds / 1000 };
+        }
+      }
+
+      expect(sanitizeObject({ duration: new Duration(2500) })).toEqual({
+        duration: { seconds: 2.5 },
+      });
+    });
+
+    it('does not let custom JSON rename nested credentials', () => {
+      const input = {
+        connection: {
+          credentials: { password: 'short-fixture' },
+          toJSON() {
+            return { message: this.credentials.password };
+          },
+        },
+      };
+
+      expect(JSON.stringify(sanitizeObject(input))).not.toContain('short-fixture');
+    });
+
     it('should convert class instances to plain objects via JSON', () => {
       class TestClass {
         public data: string;

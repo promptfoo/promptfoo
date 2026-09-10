@@ -1083,6 +1083,18 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
   return sanitizePlainObject(obj, depth, maxDepth, isEnvMap);
 }
 
+function hasSensitiveFields(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (!value || typeof value !== 'object' || seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+
+  return Object.entries(Object.getOwnPropertyDescriptors(value)).some(
+    ([key, descriptor]) =>
+      isSecretEnvVarName(key) || descriptor.get || hasSensitiveFields(descriptor.value, seen),
+  );
+}
+
 /**
  * Generic function to sanitize any object by removing or redacting sensitive information
  * @param obj - The object to sanitize
@@ -1135,8 +1147,7 @@ export function sanitizeObject(
         if (descriptor?.get) {
           return REDACTED;
         }
-        // JSON calls toJSON before the replacer. Inspect original fields so a
-        // custom serializer cannot rename credentials into harmless-looking keys.
+        // Keep original credential fields when toJSON would hide their names.
         const originalValue = descriptor?.value;
         const value =
           originalValue instanceof Error
@@ -1144,9 +1155,9 @@ export function sanitizeObject(
                 name: originalValue.name,
                 message: redactErrorMessages ? REDACTED : originalValue.message,
               }
-            : originalValue instanceof Date
-              ? val
-              : (originalValue ?? val);
+            : originalValue !== val && hasSensitiveFields(originalValue)
+              ? originalValue
+              : val;
         if (typeof value === 'object' && value !== null) {
           while (ancestors.length && ancestors[ancestors.length - 1] !== this) {
             ancestors.pop();
