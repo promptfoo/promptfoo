@@ -9,6 +9,7 @@ import { type ProviderMetrics, ProviderRateLimitState } from './providerRateLimi
 import { getRateLimitKey } from './rateLimitKey';
 
 import type { ApiProvider, CallApiOptionsParams } from '../types/providers';
+import type { RateLimitExecuteOptions } from './types';
 
 export interface RateLimitRegistryOptions {
   maxConcurrency: number;
@@ -46,12 +47,7 @@ export class RateLimitRegistry extends EventEmitter {
   async execute<T>(
     provider: ApiProvider,
     callFn: (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => Promise<T>,
-    options?: {
-      abortSignal?: AbortSignal;
-      getHeaders?: (result: T) => Record<string, string> | undefined;
-      isRateLimited?: (result: T | undefined, error?: Error) => boolean;
-      getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
-    },
+    options?: RateLimitExecuteOptions<T>,
   ): Promise<T> {
     const providerMaxRetries = getProviderMaxRetries(provider);
 

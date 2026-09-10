@@ -156,6 +156,28 @@ describe('Snowflake Cortex Provider', () => {
       });
     });
 
+    it('forwards caller cancellation without dispatching a pre-aborted request', async () => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: { accountIdentifier: 'myorg-myaccount', apiKey: 'test-key' },
+      });
+      const aborted = new AbortController();
+      aborted.abort();
+      await expect(
+        provider.callApi('Hello', undefined, { abortSignal: aborted.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        data: { choices: [{ message: { content: 'Hello' } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const controller = new AbortController();
+      await provider.callApi('Hello', undefined, { abortSignal: controller.signal });
+      expect(mockFetchWithCache.mock.calls[0][1]).toMatchObject({ signal: controller.signal });
+    });
+
     it('should handle API errors', async () => {
       const provider = new SnowflakeCortexProvider('mistral-large2', {
         config: {

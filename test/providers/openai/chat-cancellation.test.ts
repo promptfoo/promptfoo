@@ -1,8 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../src/cache';
+import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { loadApiProvider } from '../../../src/providers';
 import { MCPClient } from '../../../src/providers/mcp/client';
@@ -226,20 +230,51 @@ describe('OpenAI-compatible chat cancellation', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  it('does not dispatch after cancellation during asynchronous body preparation', async () => {
-    const target = provider();
-    const body = await target.getOpenAiBody('fixture');
-    const preparation = createDeferred<typeof body>();
-    vi.spyOn(target, 'getOpenAiBody').mockReturnValueOnce(preparation.promise);
+  it('stops waiting for configured body preparation before its JavaScript function settles', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'promptfoo-chat-remote-preparation-'));
+    const file = path.join(directory, 'tools.mjs');
+    await writeFile(
+      file,
+      `export const started = Promise.withResolvers();
+export const held = Promise.withResolvers();
+export let finished = false;
+export async function get_tools() {
+  started.resolve();
+  try { return await held.promise; }
+  finally { finished = true; }
+}
+`,
+    );
+    const fixture = await importModule(file);
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: {
+        apiBaseUrl: 'https://chat.fixture.test/v1',
+        apiKey: 'fixture-key',
+        maxRetries: 0,
+        tools: `file://${file}:get_tools`,
+      },
+    });
     const controller = new AbortController();
+    const reason = new Error('cancel preparation');
     const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
     const rejected = expect(pending).rejects.toMatchObject({
       name: 'AbortError',
-      message: 'cancel preparation',
+      message: reason.message,
+      cause: reason,
     });
-    controller.abort(new Error('cancel preparation'));
-    preparation.resolve(body);
-    await rejected;
+    try {
+      await fixture.started.promise;
+      controller.abort(reason);
+      await rejected;
+      expect(fixture.finished).toBe(false);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      fixture.held.resolve([]);
+      await pending.catch(() => undefined);
+      await vi.waitFor(() => expect(fixture.finished).toBe(true));
+      await target.cleanup();
+      await rm(directory, { recursive: true, force: true });
+    }
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -257,6 +292,56 @@ describe('OpenAI-compatible chat cancellation', () => {
     expect(transportSignal.aborted).toBe(true);
     expect(fetch).toHaveBeenCalledOnce();
     expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it('stops waiting for a tool callback and does not invoke the next callback', async () => {
+    const firstStarted = createDeferred<void>();
+    const firstResult = createDeferred<string>();
+    const second = vi.fn().mockResolvedValue('second result');
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: {
+        apiKey: 'fixture-key',
+        functionToolCallbacks: {
+          first: async () => {
+            firstStarted.resolve();
+            return firstResult.promise;
+          },
+          second,
+        },
+      },
+    });
+    fetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                tool_calls: [
+                  { id: '1', function: { name: 'first', arguments: '{}' } },
+                  { id: '2', function: { name: 'second', arguments: '{}' } },
+                ],
+              },
+              finish_reason: 'tool_calls',
+            },
+          ],
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const controller = new AbortController();
+    const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    try {
+      await firstStarted.promise;
+      controller.abort();
+      await rejected;
+      expect(second).not.toHaveBeenCalled();
+      expect(fetch).toHaveBeenCalledOnce();
+    } finally {
+      firstResult.resolve('first result');
+      await pending.catch(() => undefined);
+      await target.cleanup();
+    }
   });
 
   it.each([undefined, new Error('cancel body read'), 'cancel body read'])(

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { getFetchRetryContextMaxRetries } from '../../src/util/fetch/retryContext';
+import { createDeferred } from '../util/utils';
 
 import type { ApiProvider } from '../../src/types/providers';
 
@@ -282,6 +283,58 @@ describe('RateLimitRegistry integration - cancellation', () => {
       await expect(registry.execute(createProvider(), callFn)).rejects.toBe(reason);
       expect(callFn).toHaveBeenCalledOnce();
     } finally {
+      registry.dispose();
+    }
+  });
+
+  it('stops an active retry delay when the caller aborts', async () => {
+    vi.useFakeTimers();
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const controller = new AbortController();
+    const reason = new Error('cancel retry wait');
+    const callFn = vi.fn().mockRejectedValue(new Error('network temporarily unavailable'));
+
+    try {
+      const pending = registry.execute(createProvider(), callFn, {
+        abortSignal: controller.signal,
+      });
+      const rejected = expect(pending).rejects.toMatchObject({
+        name: 'AbortError',
+        message: reason.message,
+        cause: reason,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort(reason);
+      await rejected;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(callFn).toHaveBeenCalledOnce();
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('removes an aborted caller from the slot queue', async () => {
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const first = createDeferred<void>();
+    const firstCall = registry.execute(createProvider(), () => first.promise);
+    const controller = new AbortController();
+    const queuedCall = vi.fn();
+    const queued = registry.execute(createProvider(), queuedCall, {
+      abortSignal: controller.signal,
+    });
+    const reason = new Error('cancel queued call');
+
+    try {
+      controller.abort(reason);
+      await expect(queued).rejects.toMatchObject({
+        name: 'AbortError',
+        message: reason.message,
+        cause: reason,
+      });
+      expect(queuedCall).not.toHaveBeenCalled();
+    } finally {
+      first.resolve();
+      await firstCall;
       registry.dispose();
     }
   });

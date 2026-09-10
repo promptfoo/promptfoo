@@ -202,6 +202,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    throwIfAborted(callApiOptions?.abortSignal);
     // Get the request body and config
     const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
     throwIfAborted(callApiOptions?.abortSignal);
