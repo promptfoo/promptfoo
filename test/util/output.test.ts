@@ -2,7 +2,7 @@ import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { XMLParser } from 'fast-xml-parser';
-import yaml from 'js-yaml';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
@@ -268,6 +268,28 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
+  it('exports very large token-like config values with secret redaction intact', async () => {
+    const eval_ = new Eval({
+      tests: [{ vars: { media: 'A'.repeat(16_369_336), message: 'Public fixture text.' } }],
+      providers: [{ id: 'echo', config: { apiKey: 'fixture-api-key', max_tokens: 37 } }],
+    });
+
+    await writeOutput('output.json', eval_, null);
+
+    expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
+    const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = JSON.parse(outputJson);
+    expect(parsed.config.tests[0].vars).toEqual({
+      media: '[REDACTED]',
+      message: 'Public fixture text.',
+    });
+    expect(parsed.config.providers[0].config).toEqual({
+      apiKey: '[REDACTED]',
+      max_tokens: 37,
+    });
+    expect(outputJson).not.toContain('fixture-api-key');
+  });
+
   it('redacts env and secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
@@ -287,6 +309,20 @@ describe('writeOutput', () => {
           },
         },
       ],
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'tempo',
+          endpoint: 'https://tempo.example.com',
+          auth: { token: 'output-tempo-secret' },
+          headers: {
+            'X-Honeycomb-Team': 'output-honeycomb-secret',
+            'X-Tempo-Reader': 'tiny-reader-key',
+            'X-Trace-Access': 'Bearer short-secret',
+            'X-Scope-OrgID': 'tenant-a',
+          },
+        },
+      },
     });
 
     await writeOutput(outputPath, eval_, null);
@@ -301,6 +337,11 @@ describe('writeOutput', () => {
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
     expect(parsed.config.description).toBe('Test config');
     expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
+    expect(outputJson).not.toContain('output-tempo-secret');
+    expect(outputJson).not.toContain('output-honeycomb-secret');
+    expect(outputJson).not.toContain('short-secret');
+    expect(outputJson).not.toContain('tiny-reader-key');
+    expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
   });
 
   it.each([
@@ -312,12 +353,71 @@ describe('writeOutput', () => {
       extension: 'yaml',
       parse: (value: string) => yaml.load(value) as Record<string, any>,
     },
-  ])('omits nested response metadata from $extension output when metadata stripping is enabled', async ({
-    extension,
-    parse,
-  }) => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
-    try {
+  ])(
+    'omits nested response metadata from $extension output when metadata stripping is enabled',
+    async ({ extension, parse }) => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
+      try {
+        const eval_ = new Eval({});
+        await eval_.addResult({
+          success: true,
+          failureReason: ResultFailureReason.NONE,
+          score: 1,
+          namedScores: {},
+          latencyMs: 100,
+          provider: { id: 'provider' },
+          prompt: {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+          },
+          response: {
+            output: 'Test output',
+            metadata: {
+              transformedRequest: {
+                headers: {
+                  Authorization: 'Bearer nested-secret',
+                },
+              },
+            },
+          },
+          vars: {},
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {},
+          promptId: 'prompt',
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
+
+        await writeOutput(`output.${extension}`, eval_, null);
+
+        const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        const parsed = parse(written);
+        const result = parsed.results.results[0];
+        expect(result.metadata).toEqual({});
+        expect(result.response.metadata).toBeUndefined();
+        expect(written).not.toContain('nested-secret');
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
+
+  it.each([
+    {
+      extension: 'json',
+      parse: (value: string) => JSON.parse(value),
+    },
+    {
+      extension: 'yaml',
+      parse: (value: string) => yaml.load(value) as Record<string, any>,
+    },
+  ])(
+    'redacts credential headers and secret vars from non-persisted $extension output',
+    async ({ extension, parse }) => {
+      // A non-persisted eval (new Eval) holds raw in-memory rows; header redaction normally
+      // happens at the DB / JSONL boundary, so the file export must redact at its own boundary.
       const eval_ = new Eval({});
       await eval_.addResult({
         success: true,
@@ -326,28 +426,34 @@ describe('writeOutput', () => {
         namedScores: {},
         latencyMs: 100,
         provider: { id: 'provider' },
-        prompt: {
-          raw: 'Test prompt',
-          label: 'Test prompt',
-        },
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
         response: {
           output: 'Test output',
           metadata: {
-            transformedRequest: {
+            headers: {
+              'x-request-id': 'legacy_should_not_persist',
+              'x-safe-debug': 'keep-legacy',
+            },
+            http: {
+              status: 200,
+              statusText: 'OK',
               headers: {
-                Authorization: 'Bearer nested-secret',
+                'set-cookie': 'session=secret',
+                'x-request-id': 'req_should_not_persist',
+              },
+              requestHeaders: {
+                authorization: 'Bearer sk-should-not-persist',
+                'api-key': 'azure-api-key-should-not-persist',
+                'x-safe-debug': 'keep-me',
               },
             },
           },
         },
-        vars: {},
+        vars: { apiKey: 'sk-var-should-not-persist', safe: 'keep-me' },
         promptIdx: 0,
         testIdx: 0,
-        testCase: {},
+        testCase: { vars: { apiKey: 'sk-var-should-not-persist', safe: 'keep-me' } },
         promptId: 'prompt',
-        metadata: {
-          debug: 'top-level-secret',
-        },
       });
 
       await writeOutput(`output.${extension}`, eval_, null);
@@ -355,85 +461,20 @@ describe('writeOutput', () => {
       const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
       const parsed = parse(written);
       const result = parsed.results.results[0];
-      expect(result.metadata).toEqual({});
-      expect(result.response.metadata).toBeUndefined();
-      expect(written).not.toContain('nested-secret');
-    } finally {
-      restoreEnv();
-    }
-  });
-
-  it.each([
-    {
-      extension: 'json',
-      parse: (value: string) => JSON.parse(value),
+      expect(result.response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
+      expect(result.response.metadata.http.requestHeaders.authorization).toBe('[REDACTED]');
+      expect(result.response.metadata.http.requestHeaders['api-key']).toBe('[REDACTED]');
+      expect(result.response.metadata.http.requestHeaders['x-safe-debug']).toBe('keep-me');
+      expect(result.response.metadata.headers['x-request-id']).toBe('[REDACTED]');
+      expect(result.response.metadata.headers['x-safe-debug']).toBe('keep-legacy');
+      expect(result.vars.apiKey).toBe('[REDACTED]');
+      expect(result.vars.safe).toBe('keep-me');
+      expect(written).not.toContain('session=secret');
+      expect(written).not.toContain('sk-should-not-persist');
+      expect(written).not.toContain('azure-api-key-should-not-persist');
+      expect(written).not.toContain('sk-var-should-not-persist');
     },
-    {
-      extension: 'yaml',
-      parse: (value: string) => yaml.load(value) as Record<string, any>,
-    },
-  ])('redacts credential headers and secret vars from non-persisted $extension output', async ({
-    extension,
-    parse,
-  }) => {
-    // A non-persisted eval (new Eval) holds raw in-memory rows; header redaction normally
-    // happens at the DB / JSONL boundary, so the file export must redact at its own boundary.
-    const eval_ = new Eval({});
-    await eval_.addResult({
-      success: true,
-      failureReason: ResultFailureReason.NONE,
-      score: 1,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'provider' },
-      prompt: { raw: 'Test prompt', label: 'Test prompt' },
-      response: {
-        output: 'Test output',
-        metadata: {
-          headers: {
-            'x-request-id': 'legacy_should_not_persist',
-            'x-safe-debug': 'keep-legacy',
-          },
-          http: {
-            status: 200,
-            statusText: 'OK',
-            headers: {
-              'set-cookie': 'session=secret',
-              'x-request-id': 'req_should_not_persist',
-            },
-            requestHeaders: {
-              authorization: 'Bearer sk-should-not-persist',
-              'api-key': 'azure-api-key-should-not-persist',
-              'x-safe-debug': 'keep-me',
-            },
-          },
-        },
-      },
-      vars: { apiKey: 'sk-var-should-not-persist', safe: 'keep-me' },
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: { vars: { apiKey: 'sk-var-should-not-persist', safe: 'keep-me' } },
-      promptId: 'prompt',
-    });
-
-    await writeOutput(`output.${extension}`, eval_, null);
-
-    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-    const parsed = parse(written);
-    const result = parsed.results.results[0];
-    expect(result.response.metadata.http.headers['set-cookie']).toBe('[REDACTED]');
-    expect(result.response.metadata.http.requestHeaders.authorization).toBe('[REDACTED]');
-    expect(result.response.metadata.http.requestHeaders['api-key']).toBe('[REDACTED]');
-    expect(result.response.metadata.http.requestHeaders['x-safe-debug']).toBe('keep-me');
-    expect(result.response.metadata.headers['x-request-id']).toBe('[REDACTED]');
-    expect(result.response.metadata.headers['x-safe-debug']).toBe('keep-legacy');
-    expect(result.vars.apiKey).toBe('[REDACTED]');
-    expect(result.vars.safe).toBe('keep-me');
-    expect(written).not.toContain('session=secret');
-    expect(written).not.toContain('sk-should-not-persist');
-    expect(written).not.toContain('azure-api-key-should-not-persist');
-    expect(written).not.toContain('sk-var-should-not-persist');
-  });
+  );
 
   it('honors prompt stripping across V3 summary prompt copies', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
@@ -731,69 +772,69 @@ describe('writeOutput', () => {
       extension: 'yaml',
       parse: (value: string) => yaml.load(value) as Record<string, any>,
     },
-  ])('omits test-case metadata from $extension output when metadata stripping is enabled', async ({
-    extension,
-    parse,
-  }) => {
-    const restoreEnv = mockProcessEnv({
-      PROMPTFOO_STRIP_METADATA: 'true',
-      PROMPTFOO_STRIP_TEST_VARS: 'true',
-    });
+  ])(
+    'omits test-case metadata from $extension output when metadata stripping is enabled',
+    async ({ extension, parse }) => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_METADATA: 'true',
+        PROMPTFOO_STRIP_TEST_VARS: 'true',
+      });
 
-    try {
-      const eval_ = new Eval({});
-      await eval_.addResult({
-        success: true,
-        failureReason: ResultFailureReason.NONE,
-        score: 1,
-        namedScores: {},
-        latencyMs: 100,
-        provider: { id: 'provider' },
-        prompt: {
-          raw: 'Test prompt',
-          label: 'Test prompt',
-        },
-        response: {
-          output: 'Test output',
-        },
-        vars: {
-          customerEmail: 'secret@example.com',
-        },
-        promptIdx: 0,
-        testIdx: 0,
-        testCase: {
+      try {
+        const eval_ = new Eval({});
+        await eval_.addResult({
+          success: true,
+          failureReason: ResultFailureReason.NONE,
+          score: 1,
+          namedScores: {},
+          latencyMs: 100,
+          provider: { id: 'provider' },
+          prompt: {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+          },
+          response: {
+            output: 'Test output',
+          },
           vars: {
             customerEmail: 'secret@example.com',
           },
-          metadata: {
-            goal: 'goal testcase-secret',
-            pluginConfig: {
-              policy: 'policy testcase-secret',
+          promptIdx: 0,
+          testIdx: 0,
+          testCase: {
+            vars: {
+              customerEmail: 'secret@example.com',
             },
-            inputMaterialization: {
-              source: 'source testcase-secret',
+            metadata: {
+              goal: 'goal testcase-secret',
+              pluginConfig: {
+                policy: 'policy testcase-secret',
+              },
+              inputMaterialization: {
+                source: 'source testcase-secret',
+              },
             },
           },
-        },
-        promptId: 'prompt',
-        metadata: {
-          debug: 'top-level-secret',
-        },
-      });
+          promptId: 'prompt',
+          metadata: {
+            debug: 'top-level-secret',
+          },
+        });
 
-      await writeOutput(`output.${extension}`, eval_, null);
+        await writeOutput(`output.${extension}`, eval_, null);
 
-      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-      const parsed = parse(written);
-      const result = parsed.results.results[0];
-      expect(result.metadata).toEqual({});
-      expect(result.testCase.metadata).toBeUndefined();
-      expect(result.testCase.vars).toBeUndefined();
-      expect(written).not.toContain('testcase-secret');
-    } finally {
-      restoreEnv();
-    }
-  });
+        const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        const parsed = parse(written);
+        const result = parsed.results.results[0];
+        expect(result.metadata).toEqual({});
+        expect(result.testCase.metadata).toBeUndefined();
+        expect(result.testCase.vars).toBeUndefined();
+        expect(written).not.toContain('testcase-secret');
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
 
   it('omits trace vars from JSON output when test variable stripping is enabled', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_TEST_VARS: 'true' });
@@ -976,27 +1017,27 @@ describe('writeOutput', () => {
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    'yaml',
-    'txt',
-  ])('sanitizes runtime options before writing %s output for in-memory evals', async (extension) => {
-    const eval_ = new Eval(
-      {},
-      {
-        runtimeOptions: {
-          cache: false,
-          abortSignal: new AbortController().signal,
-          progressCallback: vi.fn(),
+  it.each(['yaml', 'txt'])(
+    'sanitizes runtime options before writing %s output for in-memory evals',
+    async (extension) => {
+      const eval_ = new Eval(
+        {},
+        {
+          runtimeOptions: {
+            cache: false,
+            abortSignal: new AbortController().signal,
+            progressCallback: vi.fn(),
+          },
         },
-      },
-    );
+      );
 
-    await writeOutput(`output.${extension}`, eval_, null);
+      await writeOutput(`output.${extension}`, eval_, null);
 
-    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-    const parsed = yaml.load(written) as { runtimeOptions: Record<string, unknown> };
-    expect(parsed.runtimeOptions).toEqual({ cache: false });
-  });
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = yaml.load(written) as { runtimeOptions: Record<string, unknown> };
+      expect(parsed.runtimeOptions).toEqual({ cache: false });
+    },
+  );
 
   it('redacts env and secret config fields in YAML output', async () => {
     const outputPath = 'output.yaml';

@@ -39,10 +39,6 @@ export const evalsToDatasets = mockSqliteTable('evals_to_datasets', {
   /* schema definition */
 });
 export const evalsToDatasetsRelations = mockRelations;
-export const llmOutputs = mockSqliteTable('llm_outputs', {
-  /* schema definition */
-});
-export const llmOutputsRelations = mockRelations;
 export const tracesTable = mockSqliteTable('traces', {
   /* schema definition */
 });

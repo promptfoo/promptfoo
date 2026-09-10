@@ -1,4 +1,6 @@
+import { AlwaysOffSampler, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import {
   generateSpanId,
@@ -11,6 +13,7 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from '../../src/tracing/evaluatorTracing';
+import * as genaiTracer from '../../src/tracing/genaiTracer';
 import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
 
@@ -49,13 +52,8 @@ vi.mock('../../src/tracing/otlpReceiver', () => ({
 describe('evaluatorTracing', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockStartOTLPReceiver.mockReset();
     mockStartOTLPReceiver.mockResolvedValue(undefined);
-    mockStopOTLPReceiver.mockReset();
     mockStopOTLPReceiver.mockResolvedValue(undefined);
-    mockUpdateOTLPReceiverOptions.mockReset();
-    mockRegisterOTLPReceiverTracePolicy.mockReset();
-    mockCreateTrace.mockReset();
     mockCreateTrace.mockResolvedValue(undefined);
     vi.mocked(getTraceStore).mockReturnValue({
       createTrace: mockCreateTrace,
@@ -140,6 +138,34 @@ describe('evaluatorTracing', () => {
       expect(result!.traceparent).toMatch(/^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/);
       expect(result!.evaluationId).toBe('eval-123');
       expect(result!.testCaseId).toBe('test-456');
+    });
+
+    it('preserves the sampling decision of a valid unsampled root span', async () => {
+      const tracerProvider = new NodeTracerProvider({ sampler: new AlwaysOffSampler() });
+      const getTracer = vi
+        .spyOn(genaiTracer, 'getGenAITracer')
+        .mockReturnValue(tracerProvider.getTracer('unsampled-test-case'));
+
+      try {
+        const result = await generateTraceContextIfNeeded(
+          {
+            metadata: {
+              tracingEnabled: true,
+              evaluationId: 'eval-unsampled',
+            },
+          },
+          {},
+          0,
+          0,
+        );
+
+        const rootContext = result?.rootSpan?.spanContext();
+        expect(rootContext?.traceFlags).toBe(0);
+        expect(result?.traceparent).toBe(`00-${rootContext!.traceId}-${rootContext!.spanId}-00`);
+      } finally {
+        getTracer.mockRestore();
+        await tracerProvider.shutdown();
+      }
     });
 
     it('should generate trace context when tracing is enabled via environment', async () => {
@@ -327,6 +353,43 @@ describe('evaluatorTracing', () => {
       expect(
         vi.mocked(logger.debug).mock.calls.some(([message]) => String(message).includes(secret)),
       ).toBe(false);
+    });
+
+    it('omits rendered trace-provider credentials and custom headers from debug logs', async () => {
+      const tracing = {
+        enabled: true,
+        queryDelay: 1_000,
+        provider: {
+          id: 'tempo' as const,
+          endpoint: 'https://tempo.example.com?opaque=endpoint-secret',
+          auth: { token: 'runtime-token', password: 'runtime-password' },
+          headers: {
+            'X-Tempo-Reader': 'tiny',
+            'X-Scope-OrgID': 'tenant-a',
+          },
+        },
+      };
+      const testSuite = {
+        providers: [],
+        prompts: [],
+        tracing,
+      } as unknown as TestSuite;
+
+      await startOtlpReceiverIfNeeded(testSuite);
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        '[EvaluatorTracing] Checking tracing configuration',
+        {
+          tracing: { enabled: true, queryDelay: 1_000, provider: { id: 'tempo' } },
+          testSuiteKeys: ['providers', 'prompts', 'tracing'],
+        },
+      );
+      const debugOutput = JSON.stringify(vi.mocked(logger.debug).mock.calls);
+      expect(debugOutput).not.toContain('endpoint-secret');
+      expect(debugOutput).not.toContain('runtime-token');
+      expect(debugOutput).not.toContain('runtime-password');
+      expect(debugOutput).not.toContain('tiny');
+      expect(testSuite.tracing?.provider).toEqual(tracing.provider);
     });
 
     it('should pass configured acceptFormats to the OTLP receiver', async () => {
@@ -738,6 +801,51 @@ describe('evaluatorTracing', () => {
       });
       expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
       expect(mockUpdateOTLPReceiverOptions).not.toHaveBeenCalled();
+      expect(cliState.activeOtlpReceiver).toEqual({
+        host: '127.0.0.1',
+        port: 4318,
+        acceptFormats: ['json'],
+      });
+    });
+
+    it('keeps the first receiver endpoint and formats until the final lease ends', async () => {
+      const firstLease = await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              host: '127.0.0.2',
+              port: 14318,
+              acceptFormats: ['protobuf'],
+            },
+          },
+        },
+      } as unknown as TestSuite);
+      const secondLease = await startOtlpReceiverIfNeeded({
+        providers: [],
+        prompts: [],
+        tracing: {
+          enabled: true,
+          otlp: {
+            http: { enabled: true, host: '127.0.0.3', port: 24318, acceptFormats: ['json'] },
+          },
+        },
+      } as unknown as TestSuite);
+
+      expect(cliState.activeOtlpReceiver).toEqual({
+        host: '127.0.0.2',
+        port: 14318,
+        acceptFormats: ['protobuf'],
+      });
+
+      await stopOtlpReceiverIfNeeded(firstLease);
+      expect(cliState.activeOtlpReceiver?.port).toBe(14318);
+
+      await stopOtlpReceiverIfNeeded(secondLease);
+      expect(cliState.activeOtlpReceiver).toBeUndefined();
     });
 
     it('should keep the receiver live until every overlapping evaluation releases its lease', async () => {
@@ -819,10 +927,12 @@ describe('evaluatorTracing', () => {
       await expect(restarting).resolves.toBe(true);
       expect(mockStartOTLPReceiver).toHaveBeenCalledTimes(1);
       expect(isOtlpReceiverStarted()).toBe(true);
+      expect(cliState.activeOtlpReceiver?.port).toBe(4318);
 
       await stopOtlpReceiverIfNeeded(true);
       expect(mockStopOTLPReceiver).toHaveBeenCalledTimes(2);
       expect(isOtlpReceiverStarted()).toBe(false);
+      expect(cliState.activeOtlpReceiver).toBeUndefined();
     });
   });
 });
