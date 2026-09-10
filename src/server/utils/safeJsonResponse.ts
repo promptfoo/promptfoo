@@ -100,16 +100,26 @@ export function sendJsonResponse<T>(
     beforeSend,
     evalId,
     logger,
+    retryPayload,
     tooLargeMessage = 'Response payload is too large to serialize',
   }: {
     beforeSend?: () => void;
     evalId?: string;
     logger?: JsonResponseLogger;
+    retryPayload?: () => T;
     tooLargeMessage?: string;
   } = {},
 ): void {
   try {
-    const body = JSON.stringify(payload);
+    let body: string;
+    try {
+      body = JSON.stringify(payload);
+    } catch (error) {
+      if (!retryPayload || !isJsonStringLengthError(error)) {
+        throw error;
+      }
+      body = JSON.stringify(retryPayload());
+    }
     beforeSend?.();
     sendSerializedJson(res, body);
     return;

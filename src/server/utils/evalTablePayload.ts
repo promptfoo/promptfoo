@@ -342,6 +342,16 @@ function trimTableRowForApi<T extends TableRowLike>(row: T, maxStringLength: num
   } as T;
 }
 
+export function omitTableCellPrompts<T extends TableLike>(table: T): T {
+  return {
+    ...table,
+    body: table.body.map((row) => ({
+      ...row,
+      outputs: row.outputs.map((cell) => (cell ? { ...cell, prompt: '' } : cell)),
+    })),
+  };
+}
+
 export function trimEvalTableForApi<T extends TableLike>(
   table: T,
   { maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT }: TrimOptions = {},

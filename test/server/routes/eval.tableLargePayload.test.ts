@@ -191,6 +191,32 @@ describe('GET /api/eval/:id/table large payload handling', () => {
     expect(response.body.table.body[0].outputs[0].detail).toBeUndefined();
   });
 
+  it('retries non-lean v4 tables with duplicated cell prompts removed', async () => {
+    mockNextPayloadStringifyRangeError(
+      (value) => value !== null && typeof value === 'object' && 'table' in value,
+    );
+    const response = await request(app).get('/api/eval/large-eval/table');
+
+    expect(response.status).toBe(200);
+    expect(response.body.table.head.prompts[0].raw).toBe(oversized);
+    expect(response.body.table.body[0].outputs[0].prompt).toBe('');
+    expect(response.body.table.body[0].outputs[0].response.output).toBe(oversized);
+    expect(response.body.config.tests[0].vars.image).toBe(oversized);
+  });
+
+  it('returns 413 when removing duplicated prompts still cannot fit the table', async () => {
+    const stringify = JSON.stringify;
+    vi.spyOn(JSON, 'stringify').mockImplementation((...args: Parameters<typeof JSON.stringify>) => {
+      if (args[0] !== null && typeof args[0] === 'object' && 'table' in args[0]) {
+        throw new RangeError('Invalid string length');
+      }
+      return stringify(...args);
+    });
+    const response = await request(app).get('/api/eval/large-eval/table');
+    expect(response.status).toBe(413);
+    expect(response.body).toEqual({ error: 'Eval table response is too large to serialize' });
+  });
+
   it('keeps legacy eval table payloads full so manual rating updates do not persist trimmed detail', async () => {
     const eval_ = (await Eval.findById('large-eval')) as unknown as Eval;
     vi.mocked(Eval.findById).mockResolvedValueOnce({

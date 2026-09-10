@@ -25,7 +25,11 @@ import { shouldShareResults } from '../../util/sharing';
 import { evalJobService } from '../services/evalJobService';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { replyValidationError, sendError } from '../utils/errors';
-import { trimEvalConfigForTableApi, trimEvalTableForApi } from '../utils/evalTablePayload';
+import {
+  omitTableCellPrompts,
+  trimEvalConfigForTableApi,
+  trimEvalTableForApi,
+} from '../utils/evalTablePayload';
 import { sendJsonResponse } from '../utils/safeJsonResponse';
 import type { Request, Response } from 'express';
 
@@ -450,11 +454,18 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     version: eval_.version(),
     id,
     stats: eval_.getStats(),
-  });
+  }) as unknown as EvalTableDTO;
 
-  sendJsonResponse(res, responsePayload as unknown as EvalTableDTO, {
+  sendJsonResponse(res, responsePayload, {
     evalId: id,
     logger,
+    retryPayload:
+      isLegacyTable || useLeanTable
+        ? undefined
+        : () => ({
+            ...responsePayload,
+            table: omitTableCellPrompts(responsePayload.table),
+          }),
     tooLargeMessage: 'Eval table response is too large to serialize',
   });
 });
