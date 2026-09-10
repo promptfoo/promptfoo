@@ -325,6 +325,7 @@ function validateFileReferencesInValue(value: unknown, state: ProviderValidation
   if (object) {
     if (typeof object.type === 'string') {
       validateCodeReference(object.transform, 'assertion transform', state);
+      validateCodeReference(object.contextTransform, 'assertion contextTransform', state);
     }
     if (
       typeof object.type === 'string' &&
@@ -337,9 +338,6 @@ function validateFileReferencesInValue(value: unknown, state: ProviderValidation
     }
     validateCodeReference(getObject(object.options)?.transform, 'test transform', state);
     if (object.type === 'file' && typeof object.path === 'string') {
-      validateConfigFileReference(object.path, state);
-    }
-    if (object.type === 'path' && typeof object.path === 'string') {
       validateConfigFileReference(object.path, state);
     }
     for (const [key, entry] of Object.entries(object)) {
@@ -522,6 +520,13 @@ function validateProviderReferenceWithState(
     'session responseParser',
     providerState,
   );
+  const multipart = getObject(configObject?.multipart);
+  for (const part of Array.isArray(multipart?.parts) ? multipart.parts : []) {
+    const source = getObject(getObject(part)?.source);
+    if (source?.type === 'path' && typeof source.path === 'string') {
+      validateConfigFileReference(source.path, providerState);
+    }
+  }
   if (renderedProviderId === 'browser' || renderedProviderId.startsWith('browser:')) {
     for (const action of Array.isArray(configObject?.actions) ? configObject.actions : []) {
       const entry = getObject(action);
@@ -593,6 +598,9 @@ function validateExecReference(
     const separator = part.indexOf('=');
     const option = (separator === -1 ? part : part.slice(0, separator)).toLowerCase();
     const optionValue = separator === -1 ? undefined : part.slice(separator + 1);
+    if (option === 'node_options') {
+      throw new ConfigurationError('MCP exec runtime options are not allowed');
+    }
     const preload =
       part.match(/^-r(.+)$/i)?.[1] ??
       (PRELOAD_EXECUTION_FLAGS.has(option) ? (optionValue ?? parts[++index]) : undefined);
@@ -621,7 +629,6 @@ function validateStaticConfigContents(value: unknown, state: ProviderValidationS
   validateFileReferencesInValue(value, state);
 
   if (Array.isArray(value)) {
-    value.forEach((entry) => validateProviderReferenceWithState(entry, state));
     return;
   }
 
@@ -676,8 +683,13 @@ function validateStaticConfigFile(
 }
 
 function validateProviderIdWithState(providerId: string, state: ProviderValidationState): void {
-  if (!providerId || /[\0\r\n]/.test(providerId)) {
+  if (!providerId) {
     throw new ConfigurationError('Invalid provider ID format: provider ID cannot be empty');
+  }
+  if (/[\0\r\n]/.test(providerId)) {
+    throw new ConfigurationError(
+      'Invalid provider ID format: provider ID contains control characters',
+    );
   }
 
   const renderedProviderId = renderProviderIdForValidation(providerId, state.env);

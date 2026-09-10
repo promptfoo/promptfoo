@@ -64,6 +64,19 @@ describe('MCP Security', () => {
       );
     });
 
+    it('rejects inline context transforms and runtime preload env', () => {
+      fs.writeFileSync(
+        path.join(workspace, 'config.json'),
+        JSON.stringify({
+          tests: [{ assert: [{ type: 'context-recall', contextTransform: 'process.cwd()' }] }],
+        }),
+      );
+      expect(() => validateMcpConfigFile('config.json')).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderId('exec:env NODE_OPTIONS=--require=/tmp/evil.js node ./script.js'),
+      ).toThrow(ConfigurationError);
+    });
+
     it('rejects inline callbacks and multipart path sources', () => {
       expect(() =>
         validateProviderReference({
@@ -79,6 +92,20 @@ describe('MCP Security', () => {
           },
         }),
       ).toThrow(ConfigurationError);
+    });
+
+    it('allows inert path-shaped values and external test arrays', () => {
+      expect(() =>
+        validateProviderReference({
+          id: 'http://localhost:8080',
+          config: { body: { type: 'path', path: '/etc/passwd' } },
+        }),
+      ).not.toThrow();
+      fs.writeFileSync(
+        path.join(workspace, 'tests.json'),
+        JSON.stringify([{ vars: { transform: 'uppercase this' } }]),
+      );
+      expect(() => validateMcpConfigFile('tests.json')).not.toThrow();
     });
 
     it('keeps the runtime provider base when following a nested schema reference', () => {

@@ -22,7 +22,13 @@ import { registerValidatePromptfooConfigTool } from './tools/validatePromptfooCo
 import type { NextFunction, Request, Response } from 'express';
 
 export const DEFAULT_MCP_HTTP_HOST = '127.0.0.1';
-const ALLOWED_MCP_HTTP_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
+const ALLOWED_MCP_HTTP_HOSTS = new Set([
+  '127.0.0.1',
+  'localhost',
+  'local.promptfoo.app',
+  '[::1]',
+  '::1',
+]);
 
 function getHostnameFromHostHeader(host: string): string | undefined {
   const bracketedIpv6 = host.match(/^(\[[^\]]+\])(?::\d+)?$/);
@@ -56,7 +62,7 @@ export function mcpHostProtection(req: Request, res: Response, next: NextFunctio
     return;
   }
 
-  logger.warn('[MCP] Blocked request with non-local Host header', {
+  logger.warn('[MCP] Blocked non-local HTTP request', {
     host: req.headers.host,
     method: req.method,
     path: req.path,

@@ -370,7 +370,12 @@ describe('MCP Server', () => {
       expect(next).not.toHaveBeenCalled();
       check({ origin: 'http://localhost:3000' });
       check({});
-      expect(next).toHaveBeenCalledTimes(2);
+      mcpHostProtection(
+        { headers: { host: 'local.promptfoo.app:3100' }, method: 'POST', path: '/mcp' } as any,
+        response as any,
+        next,
+      );
+      expect(next).toHaveBeenCalledTimes(3);
     });
 
     it('should reject DNS-rebinding Host headers', async () => {
