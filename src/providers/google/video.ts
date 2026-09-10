@@ -945,11 +945,16 @@ export class GoogleVideoProvider implements ApiProvider {
 
     // Step 1: Create video job
     logger.info(`[Google Video] Creating video job for model ${model}...`);
+    const {
+      duration: _duration,
+      durationSeconds: _durationSeconds,
+      ...requestConfig
+    } = effectiveConfig;
     const { operation: createdOp, error: createError } = await this.createVideoJob(prompt, {
-      ...effectiveConfig,
+      ...requestConfig,
       aspectRatio,
       resolution,
-      durationSeconds,
+      ...(isVideoExtension ? {} : { durationSeconds }),
     });
 
     if (createError || !createdOp) {

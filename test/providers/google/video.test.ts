@@ -805,7 +805,7 @@ describe('GoogleVideoProvider', () => {
         expect(mockRequest).toHaveBeenCalled();
         const body = JSON.parse(mockRequest.mock.calls[0][0].body);
         // The configured 4/6 must never reach the wire; Veo fixes the added length itself.
-        expect(body.parameters?.durationSeconds).not.toBe(durationSeconds);
+        expect(body.instances[0].durationSeconds).toBeUndefined();
       },
     );
 
@@ -836,7 +836,7 @@ describe('GoogleVideoProvider', () => {
       const firstCallOptions = mockRequest.mock.calls[0][0];
       const body = JSON.parse(firstCallOptions.body);
       expect(result.error).toBeUndefined();
-      expect(body.instances[0].durationSeconds).toBe('8');
+      expect(body.instances[0].durationSeconds).toBeUndefined();
       expect(body.instances[0].video).toEqual({
         gcsUri: 'gs://video-bucket/source.mp4',
         mimeType: 'video/mp4',

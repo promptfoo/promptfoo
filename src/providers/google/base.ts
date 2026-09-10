@@ -716,7 +716,7 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       }
     }
     if (results.length === 1) {
-      return results[0];
+      return results[0] ?? output;
     }
     return results
       .map((result) => {

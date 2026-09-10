@@ -336,6 +336,7 @@ export default function RedTeamSetupPage() {
         target = ProviderOptionsSchema.parse({
           id: targetType ? targetType.value : customTargetOption.value,
           label: target,
+          ...(targetType?.value.startsWith('vertex:') && { config: { region: 'global' } }),
         });
       }
 

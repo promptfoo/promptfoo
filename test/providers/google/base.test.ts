@@ -529,6 +529,19 @@ describe('GoogleGenericProvider', () => {
       expect(result).toEqual({ status: 'ok', values: [1, 2] });
     });
 
+    it('should preserve output when a single callback returns no value', async () => {
+      const output = [{ functionCall: { name: 'test_function', args: {} } }];
+      const provider = new TestGoogleProvider('gemini-3.6-flash');
+
+      const result = await provider['executeFunctionToolCallbacks'](
+        output,
+        { functionToolCallbacks: { test_function: vi.fn().mockResolvedValue(undefined) } },
+        false,
+      );
+
+      expect(result).toBe(output);
+    });
+
     it('should serialize multiple structured callback results predictably', async () => {
       const callback = vi
         .fn()

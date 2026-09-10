@@ -209,6 +209,20 @@ function normalizePassthroughGoogleToolConfig(
     : undefined;
 }
 
+function mergeGoogleToolConfigs(
+  ...configs: Array<GoogleToolConfig | undefined>
+): GoogleToolConfig | undefined {
+  const merged = Object.assign({}, ...configs.filter(Boolean));
+  const functionCallingConfig = Object.assign(
+    {},
+    ...configs.map((config) => config?.functionCallingConfig).filter(Boolean),
+  );
+  if (Object.keys(functionCallingConfig).length > 0) {
+    merged.functionCallingConfig = functionCallingConfig;
+  }
+  return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
 export function resolveGoogleToolConfig(config: CompletionOptions): {
   toolConfig?: GoogleToolConfig;
   toolsDisabled: boolean;
@@ -220,45 +234,11 @@ export function resolveGoogleToolConfig(config: CompletionOptions): {
     transformedToolChoice && typeof transformedToolChoice === 'object'
       ? (transformedToolChoice as GoogleToolConfig)
       : undefined;
-  const toolsDisabled = [
-    explicitConfig?.functionCallingConfig?.mode,
-    config.toolConfig?.functionCallingConfig?.mode,
-    config.tool_config?.function_calling_config?.mode,
-    toolChoiceConfig?.functionCallingConfig?.mode,
-    passthroughConfig?.functionCallingConfig?.mode,
-  ].some((mode) => normalizeGoogleToolMode(mode) === 'NONE');
-
-  if (toolsDisabled) {
-    return {
-      toolConfig: {
-        ...explicitConfig,
-        ...passthroughConfig,
-        functionCallingConfig: { mode: 'NONE' },
-      },
-      toolsDisabled: true,
-    };
-  }
+  const toolConfig = mergeGoogleToolConfigs(toolChoiceConfig, explicitConfig, passthroughConfig);
 
   return {
-    ...(explicitConfig
-      ? {
-          toolConfig: {
-            ...toolChoiceConfig,
-            ...explicitConfig,
-            ...(toolChoiceConfig?.functionCallingConfig || explicitConfig.functionCallingConfig
-              ? {
-                  functionCallingConfig: {
-                    ...toolChoiceConfig?.functionCallingConfig,
-                    ...explicitConfig.functionCallingConfig,
-                  },
-                }
-              : {}),
-          },
-        }
-      : toolChoiceConfig
-        ? { toolConfig: toolChoiceConfig }
-        : {}),
-    toolsDisabled: false,
+    ...(toolConfig ? { toolConfig } : {}),
+    toolsDisabled: toolConfig?.functionCallingConfig?.mode === 'NONE',
   };
 }
 
@@ -347,7 +327,14 @@ export function removeDeprecatedGeminiGenerationParams<T>(
   modelName: string,
   generationConfig: T,
 ): T {
-  if (!modelName.startsWith('gemini-3.6-flash') && !modelName.startsWith('gemini-3.5-flash-lite')) {
+  if (
+    ![
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-flash-latest',
+      'gemini-flash-lite-latest',
+    ].some((name) => modelName.startsWith(name))
+  ) {
     return generationConfig;
   }
   if (
@@ -1503,7 +1490,8 @@ function getMimeTypeFromBase64(data: string): string | undefined {
   }
 
   if (parsed) {
-    return SUPPORTED_INLINE_MEDIA_MIME_TYPES.has(parsed.mimeType) ? parsed.mimeType : undefined;
+    const mimeType = parsed.mimeType.toLowerCase();
+    return SUPPORTED_INLINE_MEDIA_MIME_TYPES.has(mimeType) ? mimeType : undefined;
   }
 
   if (base64Data.startsWith('/9j/')) {

@@ -194,27 +194,29 @@ describe('util', () => {
   });
 
   describe('removeDeprecatedGeminiGenerationParams', () => {
-    it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
-      'removes unsupported sampling and penalty parameters for %s',
-      (modelName) => {
-        expect(
-          removeDeprecatedGeminiGenerationParams(modelName, {
-            temperature: 0.5,
-            topP: 0.5,
-            top_p: 0.5,
-            topK: 10,
-            top_k: 10,
-            candidateCount: 2,
-            candidate_count: 2,
-            presencePenalty: 0.5,
-            presence_penalty: 0.5,
-            frequencyPenalty: 0.5,
-            frequency_penalty: 0.5,
-            maxOutputTokens: 128,
-          }),
-        ).toEqual({ maxOutputTokens: 128 });
-      },
-    );
+    it.each([
+      'gemini-3.6-flash',
+      'gemini-3.5-flash-lite',
+      'gemini-flash-latest',
+      'gemini-flash-lite-latest',
+    ])('removes unsupported sampling and penalty parameters for %s', (modelName) => {
+      expect(
+        removeDeprecatedGeminiGenerationParams(modelName, {
+          temperature: 0.5,
+          topP: 0.5,
+          top_p: 0.5,
+          topK: 10,
+          top_k: 10,
+          candidateCount: 2,
+          candidate_count: 2,
+          presencePenalty: 0.5,
+          presence_penalty: 0.5,
+          frequencyPenalty: 0.5,
+          frequency_penalty: 0.5,
+          maxOutputTokens: 128,
+        }),
+      ).toEqual({ maxOutputTokens: 128 });
+    });
 
     it('preserves generation parameters for other Gemini models', () => {
       const config = { presencePenalty: 0.5, frequencyPenalty: 0.5 };
@@ -1838,6 +1840,7 @@ describe('util', () => {
 
         it.each([
           ['application/pdf', Buffer.from('%PDF-1.7\n1 0 obj\n').toString('base64')],
+          ['IMAGE/PNG', Buffer.from('89504e470d0a1a0a0000000000000000', 'hex').toString('base64')],
           ['audio/wav', Buffer.from('RIFF....WAVEfmt ........').toString('base64')],
           ['audio/aiff', Buffer.from('FORM....AIFFCOMM........').toString('base64')],
           ['audio/mpeg', Buffer.from('ID3.................').toString('base64')],
@@ -1860,7 +1863,9 @@ describe('util', () => {
 
           const { contents } = geminiFormatAndSystemInstructions(prompt, { media: dataUrl });
 
-          expect(contents[0].parts).toEqual([{ inlineData: { mimeType, data: base64Data } }]);
+          expect(contents[0].parts).toEqual([
+            { inlineData: { mimeType: mimeType.toLowerCase(), data: base64Data } },
+          ]);
         });
 
         it.each([
@@ -3711,16 +3716,14 @@ describe('util', () => {
   });
 
   describe('resolveGoogleToolConfig', () => {
-    it('any disable signal forces NONE, even when explicit toolConfig says AUTO', () => {
-      // Documents the safety bias: a "no tools" signal from any source wins.
-      // If this needs to flip, update the test with the new precedence rule.
+    it('derives disablement from the winning tool config', () => {
       const result = resolveGoogleToolConfig({
-        toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
-        tool_choice: 'none',
+        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+        passthrough: { toolConfig: { functionCallingConfig: { mode: 'ANY' } } },
       });
       expect(result).toEqual({
-        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
-        toolsDisabled: true,
+        toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+        toolsDisabled: false,
       });
     });
 
@@ -3788,6 +3791,26 @@ describe('util', () => {
             allowedFunctionNames: ['get_weather'],
             streamFunctionCallArguments: true,
           },
+        },
+        toolsDisabled: false,
+      });
+    });
+
+    it('preserves passthrough-only tool config', () => {
+      expect(
+        resolveGoogleToolConfig({
+          passthrough: {
+            toolConfig: {
+              functionCallingConfig: {
+                mode: 'ANY',
+                allowedFunctionNames: ['get_weather'],
+              },
+            },
+          },
+        } as any),
+      ).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'ANY', allowedFunctionNames: ['get_weather'] },
         },
         toolsDisabled: false,
       });

@@ -323,7 +323,7 @@ redteam:
       });
     });
 
-    it.each(['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro'])(
+    it.each(['vertex:gemini-3.1-pro-preview', 'vertex:gemini-2.5-pro', 'vertex:gemini-3.6-flash'])(
       'should preserve legacy Vertex target ID %s when loading a YAML config',
       async (targetId) => {
         const user = userEvent.setup();
@@ -358,6 +358,7 @@ redteam:
           const { config, providerType } = useRedTeamConfig.getState();
           expect(config.target.id).toBe(targetId);
           expect(config.target.label).toBe(targetId);
+          expect(config.target.config).toEqual({ region: 'global' });
           expect(providerType).toBe('vertex');
         });
       },
