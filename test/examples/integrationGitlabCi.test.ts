@@ -227,6 +227,20 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     }
   }
 
+  it.each(['promptfoo-eval', 'promptfoo:eval', 'eval[model]'])(
+    'uses a valid resource group for eval job %s',
+    (name) => {
+      const variables: Record<string, string> = {
+        CI_PROJECT_ID: '123',
+        CI_MERGE_REQUEST_IID: '45',
+        PROMPTFOO_EVAL_JOB_NAME: name,
+      };
+      const group = commentJob.resource_group!.replace(/\$([A-Z_]+)/g, (_, key) => variables[key]);
+      // GitLab resource groups accept fewer characters than job names.
+      expect(group).toMatch(/^[A-Za-z0-9_./${} -]+$/);
+    },
+  );
+
   it('defines blocking, private, expiring JUnit artifacts and an isolated branch cache', () => {
     expect(job.image).toEqual({
       name: 'ghcr.io/promptfoo/promptfoo:0.123.0@sha256:e53a3332eee970854cfee19040e88ad9f72161c604d7262c477431af71555afd',

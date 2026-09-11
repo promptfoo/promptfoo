@@ -190,7 +190,7 @@
     name: promptfoo-review
     action: verify
   when: always
-  resource_group: 'promptfoo-comment-$CI_PROJECT_ID-$CI_MERGE_REQUEST_IID-$PROMPTFOO_EVAL_JOB_NAME'
+  resource_group: 'promptfoo-comment-$CI_PROJECT_ID-$CI_MERGE_REQUEST_IID'
   # Global setup/teardown hooks must not receive the merge-request write token.
   before_script: []
   after_script: []
