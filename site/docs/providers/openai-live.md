@@ -5,7 +5,7 @@ description: Test GPT-Live voice conversations with paced audio input, timestamp
 
 # OpenAI GPT-Live
 
-Use `openai:live:gpt-live-1` to evaluate [OpenAI's GPT-Live API](https://developers.openai.com/api/docs/guides/live). It connects to `/v1/live/sessions` and supports full-duplex audio, where the model can listen and speak simultaneously. `openai:gpt-live-1` and `openai:live` select the same provider, and dated `openai:gpt-live-*` snapshots also use it.
+Use `openai:live:gpt-live-1` to evaluate [OpenAI's GPT-Live API](https://developers.openai.com/api/docs/guides/live). It connects to `/v1/live/sessions` and supports full-duplex audio, where the model can listen and speak simultaneously. `openai:gpt-live-1` and `openai:live` select the same provider, as do dated `openai:gpt-live-1-YYYY-MM-DD` snapshots. The transcription-only `gpt-live-transcribe` model requires a separate transcription session and is not supported here.
 
 Set `OPENAI_API_KEY` to an OpenAI project key with Live access. For a compatible gateway, set `apiBaseUrl` and authenticate with `apiKey`, a credential header in `headers` (such as `Authorization` or `api-key`), or userinfo in `apiBaseUrl`, which is sent as a Basic `Authorization` header. When a gateway uses its own credential header or URL userinfo, an `OPENAI_API_KEY` from the environment is not sent to it unless the provider or prompt config sets `apiKey` or `apiKeyEnvar`. A prompt's `config` can set its own `apiBaseUrl`, `apiHost`, `organization`, and credentials; each session uses the merged endpoint, default headers, and credentials together.
 
