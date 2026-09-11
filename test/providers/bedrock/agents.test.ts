@@ -91,7 +91,7 @@ function buildAgentCacheKey({
   sessionId?: string;
   sessionState?: Record<string, unknown>;
 }) {
-  return `bedrock-agent:${agentId}:${agentAliasId}:${region}:${sha256(
+  return `bedrock-agent:v2:${agentId}:${agentAliasId}:${region}:${sha256(
     JSON.stringify({
       prompt,
       actionGroups,
@@ -152,6 +152,117 @@ describe('AwsBedrockAgentsProvider', () => {
     vi.unstubAllEnvs();
   });
 
+  it('places knowledge-base retrieval overrides in sessionState without explicit session attributes', async () => {
+    const knowledgeBaseConfigurations = [
+      {
+        knowledgeBaseId: 'kb-123',
+        retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 3 } },
+      },
+      { knowledgeBaseId: 'kb-deployed-defaults' },
+    ];
+    const provider = new AwsBedrockAgentsProvider('agent-123', {
+      config: {
+        agentId: 'agent-123',
+        agentAliasId: 'alias-456',
+        region: 'us-east-1',
+        knowledgeBaseConfigurations,
+        guardrailConfiguration: { guardrailId: 'configured-only', guardrailVersion: '1' },
+      },
+    });
+    mockSend.mockResolvedValueOnce(makeCompletionResponse('A quiet garden'));
+    const result = await provider.callApi('Describe the garden');
+    expect(result.output).toBe('A quiet garden');
+    expect(mockSend.mock.calls[0][0].sessionState.knowledgeBaseConfigurations).toEqual([
+      knowledgeBaseConfigurations[0],
+    ]);
+    expect(knowledgeBaseConfigurations).toHaveLength(2);
+    expect(mockSend.mock.calls[0][0]).not.toHaveProperty('knowledgeBaseConfigurations');
+    expect(result.metadata).not.toHaveProperty('guardrails');
+  });
+
+  it('uses deployed knowledge-base defaults for legacy ID-only configuration', async () => {
+    const provider = new AwsBedrockAgentsProvider('agent-123', {
+      config: {
+        agentId: 'agent-123',
+        agentAliasId: 'alias-456',
+        knowledgeBaseConfigurations: [{ knowledgeBaseId: 'kb-123' }],
+      },
+    });
+    mockSend.mockResolvedValueOnce(makeCompletionResponse('A quiet garden'));
+
+    const result = await provider.callApi('Describe the garden');
+
+    expect(result.output).toBe('A quiet garden');
+    expect(mockSend.mock.calls[0][0].sessionState).toBeUndefined();
+  });
+
+  it.each([
+    { category: 'technical' },
+    { documentType: 'manual', product: 'widget-pro' },
+    {},
+    null,
+    [],
+    'category',
+    { equals: 'technical' },
+    { equals: { key: 'category' } },
+    { equals: { key: 'category', value: 'technical' }, product: 'widget-pro' },
+    {
+      equals: { key: 'category', value: 'technical' },
+      notEquals: { key: 'product', value: 'old' },
+    },
+    { andAll: [{ equals: { key: 'category', value: 'technical' } }] },
+    { orAll: [{ equals: { key: 'category', value: 'technical' } }, { product: 'widget-pro' }] },
+  ])('rejects unsupported retrieval filter %j before client creation or cache lookup', async (filter) => {
+    const provider = new AwsBedrockAgentsProvider('agent-123', {
+      config: {
+        agentId: 'agent-123',
+        agentAliasId: 'alias-456',
+        knowledgeBaseConfigurations: [
+          {
+            knowledgeBaseId: 'kb-123',
+            retrievalConfiguration: { vectorSearchConfiguration: { filter: filter as any } },
+          },
+        ],
+      },
+    });
+    const getClient = vi.spyOn(provider, 'getAgentRuntimeClient');
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockGet.mockResolvedValueOnce(JSON.stringify({ output: 'cached response' }));
+
+    const result = await provider.callApi('Describe a quiet garden');
+
+    expect(result).toEqual({
+      error:
+        'Invalid knowledgeBaseConfigurations[0].retrievalConfiguration.vectorSearchConfiguration.filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.',
+    });
+    expect(getClient).not.toHaveBeenCalled();
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it('does not replay legacy cached guardrail claims', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockGet.mockImplementation(async (key: string) =>
+      key.startsWith('bedrock-agent:v2:')
+        ? null
+        : JSON.stringify({
+            output: 'legacy response',
+            metadata: { guardrails: { applied: true } },
+          }),
+    );
+    const provider = new AwsBedrockAgentsProvider('agent-123', {
+      config: { agentId: 'agent-123', agentAliasId: 'alias-456', region: 'us-east-1' },
+    });
+    mockSend.mockResolvedValueOnce(makeCompletionResponse('fresh response'));
+
+    const result = await provider.callApi('Describe a quiet garden');
+
+    expect(result.output).toBe('fresh response');
+    expect(result.metadata).not.toHaveProperty('guardrails');
+    expect(result.cached).not.toBe(true);
+    expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
   it('should hash prompt and config values while reusing the same cache key', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
 
@@ -171,7 +282,7 @@ describe('AwsBedrockAgentsProvider', () => {
             retrievalConfiguration: {
               vectorSearchConfiguration: {
                 filter: {
-                  sensitiveFilter: 'SECRET_FILTER_VALUE',
+                  equals: { key: 'sensitiveFilter', value: 'SECRET_FILTER_VALUE' },
                 },
               },
             },
@@ -212,7 +323,7 @@ describe('AwsBedrockAgentsProvider', () => {
             retrievalConfiguration: {
               vectorSearchConfiguration: {
                 filter: {
-                  sensitiveFilter: 'SECRET_FILTER_VALUE',
+                  equals: { key: 'sensitiveFilter', value: 'SECRET_FILTER_VALUE' },
                 },
               },
             },

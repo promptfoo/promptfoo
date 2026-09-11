@@ -421,6 +421,556 @@ describe('OpenInterpreterProvider', () => {
     await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
   });
 
+  it.each([
+    ['interpreter_home', { interpreter_home: '{% if useA %}home-a{% else %}home-b{% endif %}' }],
+    [
+      'cli_env.INTERPRETER_HOME',
+      { cli_env: { INTERPRETER_HOME: '{% if useA %}home-a{% else %}home-b{% endif %}' } },
+    ],
+  ])('renders a statement-templated %s before validating the home directory', async (_name, config) => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-home-statement-'));
+    temporaryRoots.push(root);
+    const home = path.join(root, 'home-a');
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: { ...config, basePath: root, working_dir: workspace, skip_git_repo_check: true },
+    } as any);
+
+    const resultPromise = provider.callApi('templated home', {
+      vars: { useA: true },
+      prompt: { raw: 'templated home', label: 'home statement template' },
+    } as any);
+    await startTurn(server);
+
+    expect(mocks.spawn.mock.calls[0][2].env.INTERPRETER_HOME).toBe(home);
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('renders row workspace variables before validating structured input paths', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-row-workspace-'));
+    temporaryRoots.push(root);
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(workspace);
+    fs.writeFileSync(path.join(workspace, 'inside.png'), 'image');
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({ config: { basePath: root } });
+
+    const resultPromise = provider.callApi(
+      JSON.stringify([{ type: 'local_image', path: 'inside.png' }]),
+      {
+        vars: {
+          workspace: 'workspace',
+          sandbox: 'read-only',
+          timeout: 1000,
+          skipGitCheck: true,
+          instruction: 'keep the literal {{secret}} placeholder',
+          secret: 'must-not-expand',
+        },
+        prompt: {
+          config: {
+            working_dir: '{{workspace}}',
+            sandbox_mode: '{{sandbox}}',
+            turn_timeout_ms: '{{timeout}}',
+            skip_git_repo_check: '{{skipGitCheck}}',
+            base_instructions: '{{instruction}}',
+          },
+        },
+      } as any,
+    );
+    const { threadStart, turnStart } = await startTurn(server);
+
+    expect(threadStart.params.cwd).toBe(workspace);
+    expect(threadStart.params.baseInstructions).toBe('keep the literal {{secret}} placeholder');
+    expect(turnStart.params.sandboxPolicy).toMatchObject({ type: 'readOnly' });
+    expect(turnStart.params.input).toEqual([
+      { type: 'localImage', path: fs.realpathSync(path.join(workspace, 'inside.png')) },
+    ]);
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('renders and validates typed base-provider templates for each row', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-base-template-'));
+    temporaryRoots.push(root);
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(workspace);
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        basePath: root,
+        working_dir: '{{workspace}}',
+        sandbox_mode: '{{sandbox}}',
+        turn_timeout_ms: '{{timeout}}',
+        network_access_enabled: '{{network}}',
+        skip_git_repo_check: true,
+      } as any,
+    });
+
+    const resultPromise = provider.callApi('templated base config', {
+      vars: { workspace: 'workspace', sandbox: 'read-only', timeout: 1000, network: false },
+      prompt: { raw: 'templated base config', label: 'base template' },
+    } as any);
+    const { threadStart, turnStart } = await startTurn(server);
+
+    expect(threadStart.params.cwd).toBe(workspace);
+    expect(turnStart.params.sandboxPolicy).toMatchObject({ type: 'readOnly' });
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('renders Nunjucks statement templates in typed base-provider options', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        skip_git_repo_check: '{% if skipGitCheck %}\ntrue\n{% else %}\nfalse\n{% endif %}',
+        sandbox_mode: '{% if writable %}\nworkspace-write\n{% else %}\nread-only\n{% endif %}',
+        network_access_enabled: '{% if network %}\ntrue\n{% else %}\nfalse\n{% endif %}',
+        turn_timeout_ms: '{% if timeout %}\n1000\n{% else %}\n500\n{% endif %}',
+      } as any,
+    });
+
+    const resultPromise = provider.callApi('conditional config', {
+      vars: { writable: false, network: false, skipGitCheck: true, timeout: true },
+      prompt: { raw: 'conditional config', label: 'conditional template' },
+    } as any);
+    const { turnStart } = await startTurn(server);
+
+    expect(turnStart.params.sandboxPolicy).toMatchObject({ type: 'readOnly' });
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('renders block-style Nunjucks statement templates in typed row options', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider();
+
+    const resultPromise = provider.callApi('conditional row config', {
+      vars: { writable: false, network: false, skipGitCheck: true, timeout: true },
+      prompt: {
+        raw: 'conditional row config',
+        label: 'conditional row template',
+        config: {
+          skip_git_repo_check: '{% if skipGitCheck %}\ntrue\n{% else %}\nfalse\n{% endif %}',
+          sandbox_mode: '{% if writable %}\nworkspace-write\n{% else %}\nread-only\n{% endif %}',
+          network_access_enabled: '{% if network %}\ntrue\n{% else %}\nfalse\n{% endif %}',
+          turn_timeout_ms: '{% if timeout %}\n1000\n{% else %}\n500\n{% endif %}',
+        },
+      },
+    } as any);
+    const { turnStart } = await startTurn(server);
+
+    expect(turnStart.params.sandboxPolicy).toMatchObject({ type: 'readOnly' });
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('renders Nunjucks comment templates in typed base-provider options', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        skip_git_repo_check: true,
+        sandbox_mode: '{# choose readonly #}read-only',
+      } as any,
+    });
+
+    const resultPromise = provider.callApi('comment config', {
+      vars: {},
+      prompt: { raw: 'comment config', label: 'comment template' },
+    } as any);
+    const { turnStart } = await startTurn(server);
+
+    expect(turnStart.params.sandboxPolicy).toMatchObject({ type: 'readOnly' });
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('renders a nested base-provider approval template for each row', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        skip_git_repo_check: true,
+        server_request_policy: { command_execution: '{{decision}}' },
+      } as any,
+    });
+
+    const resultPromise = provider.callApi('templated approval', {
+      vars: { decision: 'accept' },
+      prompt: { raw: 'templated approval', label: 'approval template' },
+    } as any);
+    await startTurn(server);
+    server.send({
+      id: 81,
+      method: 'item/commandExecution/requestApproval',
+      params: { threadId: 'thr_1', turnId: 'turn_1', itemId: 'cmd_1' },
+    });
+
+    await expect(
+      waitForMessage(server, (message) => message.id === 81 && message.result),
+    ).resolves.toMatchObject({ result: { decision: 'accept' } });
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('coerces a nested prompt-level boolean template before approval validation', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({ config: { skip_git_repo_check: true } });
+
+    const resultPromise = provider.callApi('templated permissions', {
+      vars: { strict: false },
+      prompt: {
+        raw: 'templated permissions',
+        label: 'permissions template',
+        config: {
+          server_request_policy: {
+            permissions: {
+              strict_auto_review: '{% if strict %}\ntrue\n{% else %}\nfalse\n{% endif %}',
+            },
+          },
+        },
+      },
+    } as any);
+    await startTurn(server);
+    server.send({
+      id: 82,
+      method: 'item/permissions/requestApproval',
+      params: { threadId: 'thr_1', turnId: 'turn_1', itemId: 'permission_1' },
+    });
+
+    await expect(
+      waitForMessage(server, (message) => message.id === 82 && message.result),
+    ).resolves.toMatchObject({
+      result: { permissions: {}, scope: 'turn', strictAutoReview: false },
+    });
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('merges templated base request policies with partial row overrides', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        skip_git_repo_check: true,
+        server_request_policy: {
+          command_execution: 'accept',
+          permissions: { permissions: { read: true }, scope: 'session' },
+          user_input: { q1: '{{answer}}' },
+          dynamic_tools: { baseTool: { success: true, text: 'base result' } },
+          mcp_elicitation: { action: 'accept', content: { answer: 'base' } },
+        },
+      } as any,
+    });
+
+    const resultPromise = provider.callApi('merged request policy', {
+      vars: { answer: 'approved' },
+      prompt: {
+        raw: 'merged request policy',
+        label: 'merged policy',
+        config: {
+          server_request_policy: {
+            file_change: 'decline',
+            permissions: { strict_auto_review: false },
+            dynamic_tools: {
+              baseTool: { success: false },
+              rowTool: { success: true, text: 'row result' },
+            },
+            mcp_elicitation: { action: 'decline' },
+          },
+        },
+      },
+    } as any);
+    await startTurn(server);
+
+    server.send({
+      id: 83,
+      method: 'item/commandExecution/requestApproval',
+      params: { threadId: 'thr_1', turnId: 'turn_1', itemId: 'command_1' },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 83 && message.result),
+    ).resolves.toMatchObject({ result: { decision: 'accept' } });
+
+    server.send({
+      id: 84,
+      method: 'item/fileChange/requestApproval',
+      params: { threadId: 'thr_1', turnId: 'turn_1', itemId: 'file_1' },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 84 && message.result),
+    ).resolves.toMatchObject({ result: { decision: 'decline' } });
+
+    server.send({
+      id: 85,
+      method: 'item/permissions/requestApproval',
+      params: { threadId: 'thr_1', turnId: 'turn_1', itemId: 'permission_1' },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 85 && message.result),
+    ).resolves.toMatchObject({
+      result: { permissions: { read: true }, scope: 'session', strictAutoReview: false },
+    });
+
+    server.send({
+      id: 86,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId: 'thr_1',
+        turnId: 'turn_1',
+        itemId: 'input_1',
+        questions: [{ id: 'q1', header: 'Question', question: 'Approve?', options: [] }],
+      },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 86 && message.result),
+    ).resolves.toMatchObject({ result: { answers: { q1: { answers: ['approved'] } } } });
+
+    server.send({
+      id: 87,
+      method: 'item/tool/call',
+      params: {
+        threadId: 'thr_1',
+        turnId: 'turn_1',
+        callId: 'tool_1',
+        tool: 'baseTool',
+        arguments: {},
+      },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 87 && message.result),
+    ).resolves.toMatchObject({
+      result: { contentItems: [{ type: 'inputText', text: '' }], success: false },
+    });
+
+    server.send({
+      id: 88,
+      method: 'mcpServer/elicitation/request',
+      params: { threadId: 'thr_1', turnId: 'turn_1', serverName: 'forms', mode: 'form' },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 88 && message.result),
+    ).resolves.toMatchObject({
+      result: { action: 'decline', content: null, _meta: null },
+    });
+
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it.each([
+    ['interpreter_home', { interpreter_home: '{{home}}' }],
+    ['cli_env.INTERPRETER_HOME', { cli_env: { INTERPRETER_HOME: '{{home}}' } }],
+  ])('renders a row-templated %s before validating the home directory', async (_name, config) => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-home-template-'));
+    temporaryRoots.push(root);
+    const home = path.join(root, 'home');
+    const workspace = path.join(root, 'workspace');
+    fs.mkdirSync(home);
+    fs.mkdirSync(workspace);
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: { ...config, basePath: root, working_dir: workspace, skip_git_repo_check: true },
+    } as any);
+
+    const resultPromise = provider.callApi('templated home', {
+      vars: { home: 'home' },
+      prompt: { raw: 'templated home', label: 'home template' },
+    } as any);
+    await startTurn(server);
+
+    expect(mocks.spawn.mock.calls[0][2].env.INTERPRETER_HOME).toBe(home);
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
+  it('allows framework test options in prompt config while rejecting provider-option typos', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const attachedProvider = {
+      id: vi.fn(() => 'attached-target'),
+      callApi: vi.fn(),
+    };
+    const provider = new OpenInterpreterProvider({
+      config: { provider: attachedProvider },
+    } as any);
+
+    const resultPromise = provider.callApi('framework options', {
+      vars: {},
+      prompt: {
+        config: {
+          transform: 'output',
+          storeOutputAs: 'saved',
+          runSerially: true,
+          provider: attachedProvider,
+          redteamGraderExamples: [
+            { output: 'example', pass: true, score: 1, reason: 'global grader example' },
+          ],
+        },
+      },
+    } as any);
+    await startTurn(server);
+    completeTurn(server, 'ok');
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'ok' });
+    expect(attachedProvider.id).not.toHaveBeenCalled();
+    expect(attachedProvider.callApi).not.toHaveBeenCalled();
+    await expect(
+      provider.callApi('bad config', {
+        vars: {},
+        prompt: { config: { approval_policiy: 'never' } },
+      } as any),
+    ).resolves.toMatchObject({ error: expect.stringContaining('approval_policiy') });
+  });
+
+  it('coerces env-rendered typed options when loading Open Interpreter', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined, OI_TIMEOUT: '1000', OI_SKIP_GIT: 'true' });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+
+    const provider = await loadApiProvider('openinterpreter', {
+      options: {
+        config: {
+          turn_timeout_ms: '{{ env.OI_TIMEOUT }}',
+          skip_git_repo_check: '{{ env.OI_SKIP_GIT }}',
+        },
+      },
+    } as any);
+
+    const resultPromise = provider.callApi('env-rendered config');
+    await startTurn(server);
+    completeTurn(server, 'reviewed');
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+    expect(mocks.spawn.mock.calls[0][1]).toEqual(expect.arrayContaining(['app-server']));
+  });
+
+  it('preserves free-form boolean-like strings while coercing schema-defined request-policy booleans', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenInterpreterProvider({
+      config: {
+        skip_git_repo_check: true,
+        server_request_policy: {
+          permissions: {
+            permissions: {
+              success: '{{yes}}',
+              rules: '{{no}}',
+              turn_timeout_ms: '{{timeout}}',
+              skip_git_repo_check: '{{skip}}',
+            },
+            strict_auto_review: '{{no}}',
+          },
+          user_input: {
+            success: '{{yes}}',
+            rules: '{{no}}',
+            turn_timeout_ms: '{{timeout}}',
+            skip_git_repo_check: '{{skip}}',
+          },
+          dynamic_tools: {
+            boolTool: { success: '{{yes}}', text: '{{no}}' },
+          },
+        },
+      } as any,
+    });
+
+    const resultPromise = provider.callApi('boolean-like strings', {
+      vars: { yes: 'true', no: 'false', timeout: '1000', skip: 'true' },
+      prompt: { raw: 'boolean-like strings', label: 'typed paths' },
+    } as any);
+    await startTurn(server);
+
+    server.send({
+      id: 88,
+      method: 'item/permissions/requestApproval',
+      params: { threadId: 'thr_1', turnId: 'turn_1', itemId: 'permission_1' },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 88 && message.result),
+    ).resolves.toMatchObject({
+      result: {
+        permissions: {
+          success: 'true',
+          rules: 'false',
+          turn_timeout_ms: '1000',
+          skip_git_repo_check: 'true',
+        },
+        strictAutoReview: false,
+      },
+    });
+
+    server.send({
+      id: 89,
+      method: 'item/tool/requestUserInput',
+      params: {
+        threadId: 'thr_1',
+        turnId: 'turn_1',
+        itemId: 'input_1',
+        questions: [
+          { id: 'success', header: 'Success', question: 'Success?', options: [] },
+          { id: 'rules', header: 'Rules', question: 'Rules?', options: [] },
+          { id: 'turn_timeout_ms', header: 'Timeout', question: 'Timeout?', options: [] },
+          { id: 'skip_git_repo_check', header: 'Skip Git', question: 'Skip Git?', options: [] },
+        ],
+      },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 89 && message.result),
+    ).resolves.toMatchObject({
+      result: {
+        answers: {
+          success: { answers: ['true'] },
+          rules: { answers: ['false'] },
+          turn_timeout_ms: { answers: ['1000'] },
+          skip_git_repo_check: { answers: ['true'] },
+        },
+      },
+    });
+
+    server.send({
+      id: 90,
+      method: 'item/tool/call',
+      params: {
+        threadId: 'thr_1',
+        turnId: 'turn_1',
+        callId: 'tool_1',
+        tool: 'boolTool',
+        arguments: {},
+      },
+    });
+    await expect(
+      waitForMessage(server, (message) => message.id === 90 && message.result),
+    ).resolves.toMatchObject({
+      result: { contentItems: [{ type: 'inputText', text: 'false' }], success: true },
+    });
+
+    completeTurn(server, 'reviewed');
+    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+  });
+
   it('forwards only the validated absolute local path when the launch directory contains a different file', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-path-leak-'));
@@ -1064,13 +1614,16 @@ describe('OpenInterpreterProvider', () => {
 
   it('removes an allocated temporary home if delegate construction fails', () => {
     const prefix = 'promptfoo-openinterpreter-home-';
-    const before = fs.readdirSync(os.tmpdir()).filter((entry) => entry.startsWith(prefix));
+    const mkdtemp = vi.spyOn(fs, 'mkdtempSync');
     vi.spyOn(providerRegistry, 'register').mockImplementationOnce(() => {
       throw new Error('registration failed');
     });
 
     expect(() => new OpenInterpreterProvider()).toThrow('registration failed');
-    expect(fs.readdirSync(os.tmpdir()).filter((entry) => entry.startsWith(prefix))).toEqual(before);
+    expect(mkdtemp).toHaveBeenCalledTimes(1);
+    const allocatedHome = mkdtemp.mock.results[0]?.value as string;
+    expect(allocatedHome.startsWith(path.join(os.tmpdir(), prefix))).toBe(true);
+    expect(fs.existsSync(allocatedHome)).toBe(false);
     expect(mocks.spawn).not.toHaveBeenCalled();
   });
 

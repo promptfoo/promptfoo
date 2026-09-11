@@ -173,6 +173,80 @@ describe('OpenAI Realtime Provider', () => {
   });
 
   describe('Basic Functionality', () => {
+    it('sends one user item after session readiness on the client-secret socket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const promise = provider.webSocketRequest('test-secret', 'hello');
+
+      mockHandlers.open.forEach((handler) => handler());
+      expect(sentWebSocketEvents(mockWs)).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'conversation.item.create' })]),
+      );
+
+      const handler = mockHandlers.message[0];
+      handler(Buffer.from(JSON.stringify({ type: 'session.created' })));
+      expect(
+        sentWebSocketEvents(mockWs).filter((event) => event.type === 'conversation.item.create'),
+      ).toHaveLength(1);
+      handler(Buffer.from(JSON.stringify({ type: 'session.ready' })));
+      expect(
+        sentWebSocketEvents(mockWs).filter((event) => event.type === 'conversation.item.create'),
+      ).toHaveLength(1);
+
+      emitOutputTextDone(handler, 'hello back');
+      emitResponseDone(handler);
+      await promise;
+    });
+
+    it('does not expose audio when usage reports tokens without audio bytes', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const promise = provider.webSocketRequest('test-secret', 'hello');
+      mockHandlers.open.forEach((handler) => handler());
+
+      const handler = mockHandlers.message[0];
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: {
+              usage: {
+                total_tokens: 2,
+                input_tokens: 1,
+                output_tokens: 1,
+                output_token_details: { audio_tokens: 1 },
+              },
+            },
+          }),
+        ),
+      );
+      const result = await promise;
+      expect(result.metadata).not.toHaveProperty('audio');
+      expect(result.output).toBe('');
+    });
+
+    it('does not expose missing audio on a direct socket response', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const promise = provider.directWebSocketRequest('hello');
+      const handler = mockHandlers.message[0];
+
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: {
+              usage: {
+                total_tokens: 2,
+                input_tokens: 1,
+                output_tokens: 1,
+                output_token_details: { audio_tokens: 1 },
+              },
+            },
+          }),
+        ),
+      );
+      const result = await promise;
+      expect(result.metadata).not.toHaveProperty('audio');
+    });
+
     it('should initialize with correct model and config', () => {
       const config = {
         modalities: ['text'],
@@ -994,10 +1068,15 @@ describe('OpenAI Realtime Provider', () => {
       expect(provider.persistentConnection).toBeNull();
     });
 
-    it('should handle audio response in persistent connection', async () => {
+    it.each([
+      'pcm16',
+      'g711_ulaw',
+      'g711_alaw',
+    ] as const)('returns the correct audio container for persistent %s output', async (format) => {
       const config = {
         modalities: ['text', 'audio'],
         maintainContext: true,
+        output_audio_format: format,
         voice: 'alloy' as const,
       };
 
@@ -1124,16 +1203,22 @@ describe('OpenAI Realtime Provider', () => {
       expect(response.metadata!.audio).toBeDefined();
 
       // Then verify audio properties
-      expect(response.audio!.format).toBe('wav');
+      expect(response.audio!.format).toBe(format === 'pcm16' ? 'wav' : format);
       // The audio data should be converted from PCM16 to WAV, so it will be different from the original
       expect(response.audio!.data).toBeDefined();
-      expect(response.audio!.data!.length).toBeGreaterThanOrEqual(
-        audioData.toString('base64').length,
-      ); // WAV has headers
+      const wavData = Buffer.from(response.audio!.data!, 'base64');
+      if (format === 'pcm16') {
+        expect(wavData.subarray(0, 4).toString()).toBe('RIFF');
+        expect(wavData.subarray(8, 12).toString()).toBe('WAVE');
+        expect(wavData.readUInt32LE(24)).toBe(24000);
+        expect(wavData.subarray(44)).toEqual(audioData);
+      } else {
+        expect(wavData).toEqual(audioData);
+      }
       expect(response.audio!.transcript).toBe('Hello there');
 
       // Verify metadata
-      expect(response.metadata!.audio!.format).toBe('wav');
+      expect(response.metadata!.audio!.format).toBe(format === 'pcm16' ? 'wav' : format);
       expect(response.metadata!.audio!.data).toBe(response.audio!.data); // Should match the audio data
     });
 

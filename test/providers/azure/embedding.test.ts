@@ -57,6 +57,31 @@ describe('AzureEmbeddingProvider', () => {
     });
   });
 
+  it.each([
+    undefined,
+    256,
+  ])('preserves the deployment and forwards dimensions %s', async (dimensions) => {
+    provider.config.dimensions = dimensions;
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: { data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 2 } },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+
+    const result = await provider.callEmbeddingApi('A small sample');
+
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toContain('/deployments/test-deployment/embeddings?api-version=');
+    expect(JSON.parse(request?.body as string)).toEqual({
+      input: 'A small sample',
+      model: 'test-deployment',
+      ...(dimensions === undefined ? {} : { dimensions }),
+    });
+    expect(result.embedding).toEqual([0.1, 0.2]);
+    expect(result.cached).toBe(false);
+  });
+
   it('should handle API call errors', async () => {
     vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API error'));
 
