@@ -2,13 +2,13 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import {
   extractModuleSpecifiers,
   normalizePath,
   resolveInternalModule,
 } from '../../scripts/architectureUtils';
+import { getRuntimeModuleSpecifiers } from './runtimeModuleSpecifiers';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const providerPluginEntryPoint = 'src/provider-plugin.ts';
@@ -19,67 +19,6 @@ const providerPluginFamilyFiles = [
   'src/providers/families/google.ts',
   'src/redteam/providers/registry.ts',
 ];
-
-function getRuntimeModuleSpecifiers(sourceText: string, filePath: string): string[] {
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
-  const specifiers: string[] = [];
-
-  function visit(node: ts.Node): void {
-    if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier)) {
-      const clause = node.importClause;
-      const namedBindings = clause?.namedBindings;
-      const runsAtRuntime =
-        clause == null ||
-        (!clause.isTypeOnly &&
-          (clause.name != null ||
-            namedBindings == null ||
-            ts.isNamespaceImport(namedBindings) ||
-            namedBindings.elements.some((element) => !element.isTypeOnly)));
-      if (runsAtRuntime) {
-        specifiers.push(node.moduleSpecifier.text);
-      }
-    } else if (
-      ts.isExportDeclaration(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteralLike(node.moduleSpecifier)
-    ) {
-      const runsAtRuntime =
-        !node.isTypeOnly &&
-        (!node.exportClause ||
-          ts.isNamespaceExport(node.exportClause) ||
-          node.exportClause.elements.some((element) => !element.isTypeOnly));
-      if (runsAtRuntime) {
-        specifiers.push(node.moduleSpecifier.text);
-      }
-    } else if (ts.isCallExpression(node)) {
-      const expression = node.expression;
-      const isRuntimeLoad =
-        expression.kind === ts.SyntaxKind.ImportKeyword ||
-        (ts.isIdentifier(expression) && expression.text === 'require') ||
-        (ts.isPropertyAccessExpression(expression) &&
-          ts.isIdentifier(expression.expression) &&
-          ((expression.expression.text === 'require' && expression.name.text === 'resolve') ||
-            (expression.expression.text === 'module' && expression.name.text === 'require')));
-      if (isRuntimeLoad) {
-        if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
-          throw new Error('Provider plugin runtime loads must use one static string specifier');
-        }
-        specifiers.push(node.arguments[0].text);
-      }
-    }
-
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
-  return [...new Set(specifiers)];
-}
 
 function scanPublicRuntimeGraph(): { files: string[]; violations: string[] } {
   const pending = [providerPluginEntryPoint];
@@ -141,20 +80,21 @@ describe('provider plugin package boundary', () => {
     expect(violations).toEqual([]);
   });
 
-  it.each(
-    providerPluginFamilyFiles,
-  )('%s does not depend on the CLI, server, or root facade', (relativePath) => {
-    const source = readFileSync(path.join(repoRoot, relativePath), 'utf8');
-    const violations = getRuntimeModuleSpecifiers(source, relativePath).filter(
-      (specifier) =>
-        specifier === '../index' ||
-        specifier === '../../index' ||
-        specifier.includes('/commands/') ||
-        specifier.includes('/server/'),
-    );
+  it.each(providerPluginFamilyFiles)(
+    '%s does not depend on the CLI, server, or root facade',
+    (relativePath) => {
+      const source = readFileSync(path.join(repoRoot, relativePath), 'utf8');
+      const violations = getRuntimeModuleSpecifiers(source, relativePath).filter(
+        (specifier) =>
+          specifier === '../index' ||
+          specifier === '../../index' ||
+          specifier.includes('/commands/') ||
+          specifier.includes('/server/'),
+      );
 
-    expect(violations).toEqual([]);
-  });
+      expect(violations).toEqual([]);
+    },
+  );
 
   it('keeps the plugin contract independent of the broad legacy types barrel', () => {
     const source = readFileSync(path.join(repoRoot, 'src/providers/registryTypes.ts'), 'utf8');
@@ -171,7 +111,7 @@ describe('provider plugin package boundary', () => {
     'module.require(name)',
   ])('fails closed for unsupported runtime load: %s', (source) => {
     expect(() => getRuntimeModuleSpecifiers(source, 'fixture.ts')).toThrow(
-      'Provider plugin runtime loads must use one static string specifier',
+      'Runtime loads must use one static string specifier',
     );
   });
 });

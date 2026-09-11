@@ -3,7 +3,7 @@ import { builtinModules } from 'node:module';
 import path from 'node:path';
 
 import { globSync } from 'glob';
-import ts from 'typescript';
+import { type Node, parseSync, Visitor } from 'oxc-parser';
 
 export interface LayerDefinition {
   name: string;
@@ -268,203 +268,142 @@ export function getLayerForFile(relativePath: string, config: LayerConfig): stri
   return 'unclassified';
 }
 
-function isRuntimeLoaderExpression(node: ts.Expression): boolean {
+function getStaticModuleSpecifier(node: Node): string | undefined {
+  if (node.type === 'Literal' && typeof node.value === 'string') {
+    return node.value;
+  }
+  if (node.type === 'TemplateLiteral' && node.expressions.length === 0) {
+    return node.quasis[0]?.value.cooked ?? undefined;
+  }
+  return undefined;
+}
+
+function isRuntimeLoader(node: Node, aliases: Set<string>): boolean {
   return (
-    (ts.isIdentifier(node) && node.text === 'require') ||
-    (ts.isPropertyAccessExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      ((node.expression.text === 'require' && node.name.text === 'resolve') ||
-        (node.expression.text === 'module' && node.name.text === 'require')))
+    (node.type === 'Identifier' && (node.name === 'require' || aliases.has(node.name))) ||
+    (node.type === 'MemberExpression' &&
+      !node.computed &&
+      node.object.type === 'Identifier' &&
+      node.property.type === 'Identifier' &&
+      ((node.object.name === 'require' && node.property.name === 'resolve') ||
+        (node.object.name === 'module' && node.property.name === 'require')))
   );
 }
 
-function getRuntimeLoaderAlias(node: ts.VariableDeclaration): string | undefined {
-  if (!ts.isIdentifier(node.name) || !node.initializer) {
-    return undefined;
-  }
-  if (isRuntimeLoaderExpression(node.initializer)) {
-    return node.name.text;
-  }
-  return ts.isCallExpression(node.initializer) &&
-    ts.isIdentifier(node.initializer.expression) &&
-    node.initializer.expression.text === 'createRequire'
-    ? node.name.text
-    : undefined;
+export interface RuntimeModuleReference {
+  specifier: string;
+  kind: 'import' | 'require';
 }
 
-function getRuntimeLoaderAliases(sourceFile: ts.SourceFile): Set<string> {
+function extractModuleReferences(
+  sourceText: string,
+  filePath: string,
+  includeTypes: boolean,
+): RuntimeModuleReference[] {
+  const { program, errors } = parseSync(filePath, sourceText);
+  if (errors.length > 0) {
+    throw new Error(`Could not parse ${filePath}: ${errors[0].message}`);
+  }
   const aliases = new Set<string>();
-  function visit(node: ts.Node): void {
-    if (ts.isVariableDeclaration(node)) {
-      const alias = getRuntimeLoaderAlias(node);
-      if (alias) {
-        aliases.add(alias);
+  const declarations: Array<{ name: string; init: Node }> = [];
+  new Visitor({
+    VariableDeclarator(node) {
+      if (node.id.type === 'Identifier' && node.init) {
+        declarations.push({ name: node.id.name, init: node.init });
+      }
+    },
+  }).visit(program);
+  let previousSize: number;
+  do {
+    previousSize = aliases.size;
+    for (const { name, init } of declarations) {
+      if (
+        isRuntimeLoader(init, aliases) ||
+        (init.type === 'CallExpression' &&
+          init.callee.type === 'Identifier' &&
+          init.callee.name === 'createRequire')
+      ) {
+        aliases.add(name);
       }
     }
-    ts.forEachChild(node, visit);
-  }
-  visit(sourceFile);
-  return aliases;
-}
+  } while (aliases.size !== previousSize);
 
-function getLiteralRuntimeCallSpecifier(
-  node: ts.CallExpression,
-  loaderAliases: Set<string> = new Set(),
-): string | undefined {
-  if (node.arguments.length === 0 || !ts.isStringLiteralLike(node.arguments[0])) {
-    return undefined;
+  const references: RuntimeModuleReference[] = [];
+  function add(source: Node | null | undefined, kind: RuntimeModuleReference['kind']): void {
+    const specifier = source ? getStaticModuleSpecifier(source) : undefined;
+    if (specifier !== undefined) {
+      references.push({ specifier, kind });
+    }
   }
-  const expression = node.expression;
-  const isRuntimeModuleCall =
-    expression.kind === ts.SyntaxKind.ImportKeyword ||
-    isRuntimeLoaderExpression(expression) ||
-    (ts.isIdentifier(expression) && loaderAliases.has(expression.text));
-  return isRuntimeModuleCall ? node.arguments[0].text : undefined;
+  new Visitor({
+    ImportDeclaration(node) {
+      if (
+        includeTypes ||
+        (node.importKind !== 'type' &&
+          (node.specifiers.length === 0 ||
+            node.specifiers.some(
+              (specifier) =>
+                specifier.type !== 'ImportSpecifier' || specifier.importKind !== 'type',
+            )))
+      ) {
+        add(node.source, 'import');
+      }
+    },
+    ExportAllDeclaration(node) {
+      if (includeTypes || node.exportKind !== 'type') {
+        add(node.source, 'import');
+      }
+    },
+    ExportNamedDeclaration(node) {
+      if (
+        includeTypes ||
+        (node.exportKind !== 'type' &&
+          (node.specifiers.length === 0 ||
+            node.specifiers.some((specifier) => specifier.exportKind !== 'type')))
+      ) {
+        add(node.source, 'import');
+      }
+    },
+    ImportExpression(node) {
+      add(node.source, 'import');
+    },
+    TSImportEqualsDeclaration(node) {
+      if (
+        (includeTypes || node.importKind !== 'type') &&
+        node.moduleReference.type === 'TSExternalModuleReference'
+      ) {
+        add(node.moduleReference.expression, 'require');
+      }
+    },
+    TSImportType(node) {
+      if (includeTypes) {
+        add(node.source, 'import');
+      }
+    },
+    CallExpression(node) {
+      if (isRuntimeLoader(node.callee, aliases)) {
+        add(node.arguments[0], 'require');
+      }
+    },
+  }).visit(program);
+  return references;
 }
 
 export function extractModuleSpecifiers(sourceText: string, filePath: string): string[] {
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
-  const specifiers: string[] = [];
-  const loaderAliases = getRuntimeLoaderAliases(sourceFile);
-
-  function addStaticCallSpecifier(node: ts.CallExpression): void {
-    const specifier = getLiteralRuntimeCallSpecifier(node, loaderAliases);
-    if (specifier !== undefined) {
-      specifiers.push(specifier);
-    }
-  }
-
-  function visit(node: ts.Node): void {
-    if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteralLike(node.moduleSpecifier)
-    ) {
-      specifiers.push(node.moduleSpecifier.text);
-    }
-
-    if (
-      ts.isImportEqualsDeclaration(node) &&
-      ts.isExternalModuleReference(node.moduleReference) &&
-      node.moduleReference.expression &&
-      ts.isStringLiteralLike(node.moduleReference.expression)
-    ) {
-      specifiers.push(node.moduleReference.expression.text);
-    }
-
-    if (
-      ts.isImportTypeNode(node) &&
-      ts.isLiteralTypeNode(node.argument) &&
-      ts.isStringLiteralLike(node.argument.literal)
-    ) {
-      specifiers.push(node.argument.literal.text);
-    }
-
-    if (ts.isCallExpression(node)) {
-      addStaticCallSpecifier(node);
-    }
-
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
-  return specifiers;
+  return extractModuleReferences(sourceText, filePath, true).map(({ specifier }) => specifier);
 }
 
-/**
- * Extracts only module specifiers that can affect the emitted runtime graph.
- * Type-only imports/exports and import() types are intentionally excluded so
- * package-readiness budgets measure what consumers load, not declaration-only
- * compatibility dependencies.
- */
+/** Runtime references retain the loader kind because import() always uses ESM resolution. */
+export function extractRuntimeModuleReferences(
+  sourceText: string,
+  filePath: string,
+): RuntimeModuleReference[] {
+  return extractModuleReferences(sourceText, filePath, false);
+}
+
+/** Excludes type-only references from package runtime budgets. */
 export function extractRuntimeModuleSpecifiers(sourceText: string, filePath: string): string[] {
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    filePath.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
-  const specifiers: string[] = [];
-  const loaderAliases = getRuntimeLoaderAliases(sourceFile);
-
-  function addCallSpecifier(node: ts.CallExpression): void {
-    const specifier = getLiteralRuntimeCallSpecifier(node, loaderAliases);
-    if (specifier !== undefined) {
-      specifiers.push(specifier);
-    }
-  }
-
-  function importHasRuntimeValue(node: ts.ImportDeclaration): boolean {
-    const clause = node.importClause;
-    if (!clause) {
-      return true;
-    }
-    if (clause.isTypeOnly) {
-      return false;
-    }
-    if (clause.name) {
-      return true;
-    }
-    if (!clause.namedBindings || ts.isNamespaceImport(clause.namedBindings)) {
-      return true;
-    }
-    return (
-      clause.namedBindings.elements.length === 0 ||
-      clause.namedBindings.elements.some((element) => !element.isTypeOnly)
-    );
-  }
-
-  function exportHasRuntimeValue(node: ts.ExportDeclaration): boolean {
-    if (node.isTypeOnly) {
-      return false;
-    }
-    if (!node.exportClause || ts.isNamespaceExport(node.exportClause)) {
-      return true;
-    }
-    return (
-      node.exportClause.elements.length === 0 ||
-      node.exportClause.elements.some((element) => !element.isTypeOnly)
-    );
-  }
-
-  function visit(node: ts.Node): void {
-    if (
-      ts.isImportDeclaration(node) &&
-      ts.isStringLiteralLike(node.moduleSpecifier) &&
-      importHasRuntimeValue(node)
-    ) {
-      specifiers.push(node.moduleSpecifier.text);
-    } else if (
-      ts.isExportDeclaration(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteralLike(node.moduleSpecifier) &&
-      exportHasRuntimeValue(node)
-    ) {
-      specifiers.push(node.moduleSpecifier.text);
-    } else if (
-      ts.isImportEqualsDeclaration(node) &&
-      !node.isTypeOnly &&
-      ts.isExternalModuleReference(node.moduleReference) &&
-      node.moduleReference.expression &&
-      ts.isStringLiteralLike(node.moduleReference.expression)
-    ) {
-      specifiers.push(node.moduleReference.expression.text);
-    } else if (ts.isCallExpression(node)) {
-      addCallSpecifier(node);
-    }
-
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
-  return specifiers;
+  return extractRuntimeModuleReferences(sourceText, filePath).map(({ specifier }) => specifier);
 }
 
 export function resolveInternalModule(

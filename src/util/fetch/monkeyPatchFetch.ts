@@ -10,6 +10,8 @@ import type { FetchOptions } from './types';
 
 const gzipAsync = promisify(gzip);
 
+export const PROMPTFOO_TEAM_ID_HEADER = 'x-promptfoo-team-id';
+
 function isConnectionError(error: Error) {
   return (
     error instanceof TypeError &&
@@ -20,7 +22,7 @@ function isConnectionError(error: Error) {
 }
 
 /** Extracts the request URL as a string. A `Request`'s `toString()` is "[object Request]", so read `.url`. */
-function getRequestUrlString(url: string | URL | Request): string {
+export function getRequestUrlString(url: string | URL | Request): string {
   return url instanceof Request ? url.url : url.toString();
 }
 
@@ -72,7 +74,16 @@ export function isPromptfooCloudApiHost(url: string | URL | Request): boolean {
 }
 
 /**
- * Resolves the `Authorization` header value for a request to the configured Promptfoo
+ * Resolves the header name used to carry the Cloud API credential (defaults to
+ * `Authorization`, but may be configured to a different name via
+ * `promptfoo auth login --auth-header-name` or `PROMPTFOO_CLOUD_AUTH_HEADER`).
+ */
+export function getCloudAuthHeaderName(): string {
+  return cloudConfig.getAuthHeaderName();
+}
+
+/**
+ * Resolves the auth header value for a request to the configured Promptfoo
  * Cloud origin, or `undefined` when the request is not cloud-bound or no API key is
  * saved. Centralizing this keeps the live request (`monkeyPatchFetch`) and the cache
  * key (`getHeadersForCacheKey` in cache.ts) in lockstep.
@@ -83,6 +94,30 @@ export function getCloudBearerToken(url: string | URL | Request): string | undef
   }
   const token = cloudConfig.getApiKey();
   return token ? `Bearer ${token}` : undefined;
+}
+
+function isPromptfooCloudTaskUrl(url: string | URL | Request): boolean {
+  if (!isPromptfooCloudApiHost(url)) {
+    return false;
+  }
+
+  try {
+    const targetUrl = new URL(getRequestUrlString(url));
+    const pathname = targetUrl.pathname.replace(/\/+$/, '');
+    return pathname.endsWith('/api/v1/task') || pathname.endsWith('/api/v1/task/harmful');
+  } catch {
+    return false;
+  }
+}
+
+/** Returns the persisted CLI team for authenticated Cloud task requests. */
+export function getCloudTaskTeamId(url: string | URL | Request): string | undefined {
+  if (!isPromptfooCloudTaskUrl(url)) {
+    return undefined;
+  }
+
+  const organizationId = cloudConfig.getCurrentOrganizationId();
+  return cloudConfig.getCurrentTeamId(organizationId);
 }
 
 /**
@@ -100,9 +135,8 @@ function getEffectiveHeaders(
   return headers ?? (url instanceof Request ? url.headers : undefined);
 }
 
-/** Case-insensitive check for a caller-supplied `Authorization` header (any `HeadersInit` shape). */
-function hasAuthorizationHeader(headers: HeadersInit | undefined): boolean {
-  return new Headers(headers).has('authorization');
+function hasHeader(headers: HeadersInit | undefined, name: string): boolean {
+  return new Headers(headers).has(name);
 }
 
 /**
@@ -150,12 +184,31 @@ export async function monkeyPatchFetch(
   }
 
   // Attach the saved cloud credential only for cloud-bound requests, and never
-  // override an Authorization header the caller set explicitly — token
-  // validation/rotation sends the token being validated, not the saved one.
-  const cloudAuth = getCloudBearerToken(url);
-  const effectiveHeaders = getEffectiveHeaders(url, opts.headers);
-  if (cloudAuth && !hasAuthorizationHeader(effectiveHeaders)) {
-    opts.headers = setHeader(effectiveHeaders, 'Authorization', cloudAuth);
+  // override an auth header the caller set explicitly — token validation/rotation
+  // sends the token being validated, not the saved one. The header name itself may
+  // be configured to something other than `Authorization` via
+  // `promptfoo auth login --auth-header-name` or PROMPTFOO_CLOUD_AUTH_HEADER.
+  // Only resolve the header name once we know a credential will actually be
+  // injected, so non-cloud-bound requests never depend on `getAuthHeaderName`.
+  // Callers validating/rotating a not-yet-saved credential under a header name
+  // that may differ from the currently saved one set `skipCloudAuthInjection` to
+  // opt out entirely, rather than relying on header-name matching (which can't
+  // tell an old saved header apart from a new candidate one).
+  if (!options?.skipCloudAuthInjection) {
+    const cloudAuth = getCloudBearerToken(url);
+    if (cloudAuth) {
+      const cloudAuthHeaderName = getCloudAuthHeaderName();
+      const effectiveHeaders = getEffectiveHeaders(url, opts.headers);
+      if (!hasHeader(effectiveHeaders, cloudAuthHeaderName)) {
+        opts.headers = setHeader(effectiveHeaders, cloudAuthHeaderName, cloudAuth);
+      }
+    }
+
+    const cloudTaskTeamId = getCloudTaskTeamId(url);
+    const headersWithAuth = getEffectiveHeaders(url, opts.headers);
+    if (cloudTaskTeamId && !hasHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER)) {
+      opts.headers = setHeader(headersWithAuth, PROMPTFOO_TEAM_ID_HEADER, cloudTaskTeamId);
+    }
   }
   try {
     // biome-ignore lint/style/noRestrictedGlobals: we need raw fetch here

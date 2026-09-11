@@ -5,7 +5,7 @@ import {
   computeCrossLayerEdges,
   computeRuntimeDependencyClosure,
   computeStronglyConnectedComponents,
-  extractRuntimeModuleSpecifiers,
+  extractRuntimeModuleReferences,
   findBackEdges,
   getNodeBuiltinName,
   getPackageName,
@@ -13,6 +13,8 @@ import {
   readLayerConfig,
   scanArchitectureSources,
 } from './architectureUtils';
+
+import type { RuntimeModuleReference } from './architectureUtils';
 
 export type PackageArtifactFormat = 'esm' | 'cjs';
 
@@ -132,6 +134,8 @@ function validateArtifactConfig(
     artifacts !== undefined &&
     (artifacts === null ||
       typeof artifacts !== 'object' ||
+      Array.isArray(artifacts) ||
+      Object.keys(artifacts).length === 0 ||
       Object.entries(artifacts).some(
         ([format, artifactPath]) =>
           !['esm', 'cjs'].includes(format) ||
@@ -161,6 +165,9 @@ function validateArtifactConfig(
     );
   }
   if (!artifacts) {
+    if (candidate.maxArtifactFiles !== undefined || candidate.maxArtifactBytes !== undefined) {
+      throw new Error(`Package candidate "${candidate.name}" artifact budgets require artifacts.`);
+    }
     return {};
   }
   return {
@@ -334,6 +341,7 @@ function resolveArtifactImport(
   packageRoot: string,
   importer: string,
   specifier: string,
+  kind: RuntimeModuleReference['kind'],
 ): { outsidePackage: boolean; relativePath?: string } | undefined {
   if (!specifier.startsWith('.')) {
     return undefined;
@@ -354,10 +362,10 @@ function resolveArtifactImport(
 
   const candidates = [
     unresolvedPath,
-    ...(path.extname(importer) === '.cjs'
+    ...(kind === 'require'
       ? ['.js', '.json', '.node'].map((extension) => `${unresolvedPath}${extension}`)
       : []),
-    ...(path.extname(importer) === '.cjs'
+    ...(kind === 'require'
       ? ['index.js', 'index.json', 'index.node'].map((indexFile) =>
           path.join(unresolvedPath, indexFile),
         )
@@ -384,10 +392,10 @@ interface ArtifactClosureState {
 function addArtifactSpecifier(
   packageRoot: string,
   artifactPath: string,
-  specifier: string,
+  { specifier, kind }: RuntimeModuleReference,
   state: ArtifactClosureState,
 ): void {
-  const resolvedArtifact = resolveArtifactImport(packageRoot, artifactPath, specifier);
+  const resolvedArtifact = resolveArtifactImport(packageRoot, artifactPath, specifier, kind);
   if (resolvedArtifact?.outsidePackage) {
     state.outsidePackageImports.add(`${artifactPath}: ${specifier}`);
     return;
@@ -458,14 +466,17 @@ export function computePackageArtifactClosure(
       continue;
     }
     files.add(artifactPath);
-    const sourceText = fs.readFileSync(absolutePath, 'utf8');
-    totalBytes += Buffer.byteLength(sourceText);
+    const contents = fs.readFileSync(absolutePath);
+    totalBytes += contents.length;
     if (!/\.(?:c|m)?js$/.test(artifactPath)) {
       continue;
     }
 
-    for (const specifier of extractRuntimeModuleSpecifiers(sourceText, artifactPath)) {
-      addArtifactSpecifier(packageRoot, artifactPath, specifier, state);
+    for (const reference of extractRuntimeModuleReferences(
+      contents.toString('utf8'),
+      artifactPath,
+    )) {
+      addArtifactSpecifier(packageRoot, artifactPath, reference, state);
     }
   }
 

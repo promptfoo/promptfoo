@@ -127,6 +127,13 @@ const rawRedteamProviderFactories: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath === REDTEAM_PROVIDER_PATHS.goblin,
+    create: async (_providerPath, providerOptions) => {
+      const { GoblinProvider } = await import('./goblin/index');
+      return new GoblinProvider(providerOptions.config);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath === REDTEAM_PROVIDER_PATHS.indirectWebPwn,
     create: async (_providerPath, providerOptions) => {
       const { default: RedteamIndirectWebPwnProvider } = await import('./indirectWebPwn');

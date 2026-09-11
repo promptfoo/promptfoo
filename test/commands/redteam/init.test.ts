@@ -94,24 +94,24 @@ describe('redteam init command', () => {
     expect(redteamInit).not.toHaveBeenCalled();
   });
 
-  it.each([
-    new ExitPromptError(),
-    new AbortPromptError(),
-  ])('marks %s cancellation without hard-exiting', async (error) => {
-    process.exitCode = undefined;
-    vi.mocked(redteamInit).mockRejectedValueOnce(error);
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+  it.each([new ExitPromptError(), new AbortPromptError()])(
+    'marks %s cancellation without hard-exiting',
+    async (error) => {
+      process.exitCode = undefined;
+      vi.mocked(redteamInit).mockRejectedValueOnce(error);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
 
-    await expect(program.parseAsync(['node', 'test', 'init', '--no-gui'])).resolves.toBe(program);
+      await expect(program.parseAsync(['node', 'test', 'init', '--no-gui'])).resolves.toBe(program);
 
-    expect(telemetry.record).toHaveBeenCalledWith('funnel', {
-      type: 'redteam onboarding',
-      step: 'early exit',
-    });
-    expect(logger.info).toHaveBeenCalled();
-    expect(process.exitCode).toBe(130);
-    expect(exitSpy).not.toHaveBeenCalled();
-  });
+      expect(telemetry.record).toHaveBeenCalledWith('funnel', {
+        type: 'redteam onboarding',
+        step: 'early exit',
+      });
+      expect(logger.info).toHaveBeenCalled();
+      expect(process.exitCode).toBe(130);
+      expect(exitSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it('rethrows unexpected errors', async () => {
     vi.mocked(redteamInit).mockRejectedValueOnce(new Error('unexpected failure'));

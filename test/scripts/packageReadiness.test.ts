@@ -35,7 +35,7 @@ describe('package readiness', () => {
         const specifier = getPackageCandidateSpecifier(candidate);
         return specifier ? [specifier] : [];
       }),
-    ).toEqual(['promptfoo/contracts', 'promptfoo/provider-plugin']);
+    ).toEqual(['promptfoo/contracts', 'promptfoo/assertions/pure', 'promptfoo/provider-plugin']);
   });
 });
 
@@ -58,6 +58,10 @@ describe('package artifact readiness', () => {
 
   it.each([
     [{ artifacts: null }, 'contains invalid artifacts'],
+    [{ artifacts: {}, maxArtifactFiles: 1, maxArtifactBytes: 100 }, 'contains invalid artifacts'],
+    [{ artifacts: [], maxArtifactFiles: 1, maxArtifactBytes: 100 }, 'contains invalid artifacts'],
+    [{ maxArtifactFiles: 1 }, 'artifact budgets require artifacts'],
+    [{ maxArtifactBytes: 100 }, 'artifact budgets require artifacts'],
     [{ entrypoint: null }, 'must declare a string entrypoint'],
   ])('rejects malformed candidate config: %s', (override, message) => {
     write('src/index.ts', 'export {};');
@@ -179,6 +183,43 @@ describe('package artifact readiness', () => {
     });
     expect(computePackageArtifactClosure(packageRoot, 'dist/index.cjs')).toMatchObject({
       files: ['dist/chunk.js', 'dist/index.cjs'],
+      missingFiles: [],
+    });
+  });
+
+  it('uses ESM resolution for dynamic imports inside CommonJS', () => {
+    write('dist/index.cjs', "void import('./chunk');");
+    write('dist/chunk.js', 'module.exports = true;');
+
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.cjs')).toMatchObject({
+      files: ['dist/index.cjs'],
+      missingFiles: ['dist/chunk'],
+    });
+  });
+
+  it('uses CommonJS resolution for createRequire inside ESM', () => {
+    write(
+      'dist/index.js',
+      "import { createRequire } from 'node:module'; const load = createRequire(import.meta.url); load('./chunk');",
+    );
+    write('dist/chunk.js', 'export const value = true;');
+
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.js')).toMatchObject({
+      files: ['dist/chunk.js', 'dist/index.js'],
+      missingFiles: [],
+    });
+  });
+
+  it('counts the original bytes of binary artifacts', () => {
+    const source = "require('./native.node'); require('./module.wasm');";
+    const binary = Buffer.from([0xff, 0x80, 0, 0x61]);
+    write('dist/index.cjs', source);
+    fs.writeFileSync(path.join(packageRoot, 'dist/native.node'), binary);
+    fs.writeFileSync(path.join(packageRoot, 'dist/module.wasm'), binary);
+
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.cjs')).toMatchObject({
+      files: ['dist/index.cjs', 'dist/module.wasm', 'dist/native.node'],
+      totalBytes: Buffer.byteLength(source) + binary.length * 2,
       missingFiles: [],
     });
   });

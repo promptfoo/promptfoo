@@ -1,12 +1,21 @@
-import { pureAssertionRegistry, pureInverseAssertionBaseTypes } from './pureRegistry';
+import { pureAssertionRegistry } from './pureRegistry';
+import { pureInverseAssertionBaseTypes } from './pureTypes';
 
-import type { PureAssertionParams, PureAssertionType, PureGradingResult } from './pureRegistry';
+import type { PureAssertionParams } from './pureRegistry';
+import type { PureAssertionType } from './pureTypes';
 
 export interface PureAssertion {
   type: PureAssertionType;
   value?: unknown;
   threshold?: number;
   weight?: number;
+}
+
+export interface PureGradingResult {
+  pass: boolean;
+  score: number;
+  reason: string;
+  assertion: PureAssertion;
 }
 
 export interface PureProviderResponse {
@@ -73,7 +82,7 @@ export async function runPureAssertion({
   } as PureAssertionParams;
 
   const result = await pureAssertionRegistry.run(params.baseType, params);
-  return assertion.weight === 0 ? { ...result, pass: true } : result;
+  return { ...result, assertion, ...(assertion.weight === 0 ? { pass: true } : {}) };
 }
 
-export { createPureAssertionRegistry, pureAssertionRegistry } from './pureRegistry';
+export type { PureAssertionType } from './pureTypes';

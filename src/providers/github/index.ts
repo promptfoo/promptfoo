@@ -1,21 +1,15 @@
-import { OpenAiChatCompletionProvider } from '../openai/chat';
-
 import type { ProviderOptions } from '../../types/providers';
 import type { ProviderLoadContext } from '../registryTypes';
 
+export const GITHUB_MODELS_RETIREMENT_MESSAGE =
+  'GitHub Models was retired on July 30, 2026, including its inference API. ' +
+  'Configure another provider with its own credentials. GitHub Copilot is a separate service. ' +
+  'See https://docs.github.com/en/github-models';
+
 export function createGitHubProvider(
-  providerPath: string,
-  providerOptions: ProviderOptions,
+  _providerPath: string,
+  _providerOptions: ProviderOptions,
   _context: ProviderLoadContext,
-) {
-  const splits = providerPath.split(':');
-  const modelName = splits.slice(1).join(':') || 'openai/gpt-5';
-  return new OpenAiChatCompletionProvider(modelName, {
-    ...providerOptions,
-    config: {
-      ...providerOptions.config,
-      apiBaseUrl: 'https://models.github.ai/inference',
-      apiKeyEnvar: 'GITHUB_TOKEN',
-    },
-  });
+): never {
+  throw new Error(GITHUB_MODELS_RETIREMENT_MESSAGE);
 }

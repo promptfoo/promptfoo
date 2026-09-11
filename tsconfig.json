@@ -14,8 +14,7 @@
     "resolveJsonModule": true,
     "composite": true,
     "rootDir": ".",
-    "ignoreDeprecations": "6.0",
-    "baseUrl": "./"
+    "types": ["node"]
   },
   "include": [
     "*.ts",

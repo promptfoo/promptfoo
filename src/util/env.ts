@@ -2,6 +2,11 @@ import * as fs from 'fs';
 
 import dotenv from 'dotenv';
 import logger from '../logger';
+import { refreshConfigDirectoryPathFromEnv } from './config/manage';
+
+interface SetupEnvOptions {
+  refreshConfigDirectory?: boolean;
+}
 
 /**
  * Load environment variables from .env file(s).
@@ -9,7 +14,7 @@ import logger from '../logger';
  *                  When paths are explicitly specified, all files must exist or an error is thrown.
  *                  When multiple files are provided, later files override values from earlier files.
  */
-export function setupEnv(envPath: string | string[] | undefined) {
+export function setupEnv(envPath: string | string[] | undefined, options: SetupEnvOptions = {}) {
   if (envPath) {
     // Normalize to array and expand comma-separated values
     const rawPaths = Array.isArray(envPath) ? envPath : [envPath];
@@ -19,6 +24,9 @@ export function setupEnv(envPath: string | string[] | undefined) {
 
     if (paths.length === 0) {
       dotenv.config({ quiet: true });
+      if (options.refreshConfigDirectory) {
+        refreshConfigDirectoryPathFromEnv();
+      }
       return;
     }
 
@@ -43,5 +51,9 @@ export function setupEnv(envPath: string | string[] | undefined) {
     dotenv.config({ path: pathArg, override: true, quiet: true });
   } else {
     dotenv.config({ quiet: true });
+  }
+
+  if (options.refreshConfigDirectory) {
+    refreshConfigDirectoryPathFromEnv();
   }
 }

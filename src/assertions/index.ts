@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import async from 'async';
-import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import { matchesConversationRelevance } from '../external/matchers/deepeval';
@@ -20,7 +19,10 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  getProviderCallTracingContext,
+} from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
@@ -40,6 +42,7 @@ import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
+import { loadYaml } from '../util/yamlLoad';
 import { AssertionsResult } from './assertionsResult';
 import { defaultAssertionRegistry } from './defaultRegistry';
 import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
@@ -75,7 +78,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:goal-success',
 ]);
 
-const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
+const TRACE_AWARE_ASSERTION_TYPES = new Set<string>([
   'javascript',
   'python',
   'ruby',
@@ -89,20 +92,20 @@ const TRACE_AWARE_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:tool-used',
 ]);
 
-export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
-  if (assertion.type === 'assert-set') {
+export function assertionUsesTrace(assertion: AssertionOrSet | Assertion<string>): boolean {
+  if (assertion.type === 'assert-set' && 'assert' in assertion) {
     return assertion.assert.some(assertionUsesTrace);
   }
 
   return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
 }
 
-function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
+function assertionMayNeedTraceContext(assertion: AssertionOrSet | Assertion<string>): boolean {
   if (assertionUsesTrace(assertion)) {
     return true;
   }
 
-  if (assertion.type === 'assert-set') {
+  if (assertion.type === 'assert-set' && 'assert' in assertion) {
     return assertion.assert.some(assertionMayNeedTraceContext);
   }
 
@@ -110,7 +113,7 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     return true;
   }
 
-  return typeof assertion.value === 'string'
+  return 'value' in assertion && typeof assertion.value === 'string'
     ? assertion.value.startsWith('file://') || isPackagePath(assertion.value)
     : false;
 }
@@ -200,7 +203,7 @@ export function renderMetricName(
  * @param assertion - The assertion to test
  * @returns true if the assertion is inverse, false otherwise
  */
-export function isAssertionInverse(assertion: Assertion): boolean {
+export function isAssertionInverse(assertion: Pick<Assertion<string>, 'type'>): boolean {
   return assertion.type.startsWith('not-');
 }
 
@@ -210,9 +213,12 @@ export function isAssertionInverse(assertion: Assertion): boolean {
  * @param assertion - The assertion to get the base type.
  * @returns The base type of the assertion.
  */
-export function getAssertionBaseType(assertion: Assertion): AssertionType {
-  const inverse = isAssertionInverse(assertion);
-  return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
+export function getAssertionBaseType<TType extends string>(
+  assertion: Pick<Assertion<TType>, 'type'>,
+): AssertionParams<TType>['baseType'] {
+  return (
+    isAssertionInverse(assertion) ? assertion.type.slice(4) : assertion.type
+  ) as AssertionParams<TType>['baseType'];
 }
 
 /**
@@ -254,7 +260,7 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
  * @see runAssertions for batch assertion execution
  * @see evaluate for full evaluation pipeline
  */
-export async function runAssertion({
+async function runAssertionInternal<TType extends string>({
   prompt,
   provider,
   assertion,
@@ -264,11 +270,11 @@ export async function runAssertion({
   providerResponse,
   traceId,
   traceData,
-  registry = defaultAssertionRegistry,
+  registry,
 }: {
   prompt?: string;
   provider?: ApiProvider;
-  assertion: Assertion;
+  assertion: Assertion<TType>;
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   providerResponse: ProviderResponse;
@@ -276,8 +282,8 @@ export async function runAssertion({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
-  registry?: AssertionRegistry<AssertionParams, GradingResult>;
-}): Promise<GradingResult> {
+  registry: AssertionRegistry<AssertionParams<TType>, GradingResult<TType>>;
+}): Promise<GradingResult<TType>> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
 
@@ -305,10 +311,10 @@ export async function runAssertion({
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
-  // Add trace data if traceId is available
-  if (traceId && assertionMayNeedTraceContext(assertion)) {
+  if (traceData !== undefined || (traceId && assertionMayNeedTraceContext(assertion))) {
     try {
-      const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
+      const resolvedTraceData =
+        traceData === undefined && traceId ? await loadTraceData(traceId) : traceData;
       if (resolvedTraceData) {
         context.trace = {
           traceId: resolvedTraceData.traceId,
@@ -457,7 +463,12 @@ export async function runAssertion({
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
   // Generate traceparent for grader calls to link them to the main trace
-  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
+  const activeTraceparent = getProviderCallTracingContext()?.getActiveTraceparent();
+  const graderTraceparent = traceId
+    ? activeTraceparent?.split('-')[1] === traceId
+      ? activeTraceparent
+      : generateTraceparent(traceId, generateSpanId())
+    : undefined;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
@@ -472,7 +483,7 @@ export async function runAssertion({
     assertion,
   );
 
-  const assertionParams: AssertionParams = {
+  const assertionParams: AssertionParams<TType> = {
     assertion,
     baseType: getAssertionBaseType(assertion),
     providerCallContext,
@@ -538,6 +549,43 @@ export async function runAssertion({
   }
 
   return enrichedResult;
+}
+
+type RunAssertionOptions<TType extends string = AssertionType> = Omit<
+  Parameters<typeof runAssertionInternal<TType>>[0],
+  'registry'
+> & { registry?: AssertionRegistry<AssertionParams<TType>, GradingResult<TType>> };
+
+export function runAssertion<TType extends string>(
+  options: RunAssertionOptions<TType> & {
+    registry: AssertionRegistry<AssertionParams<TType>, GradingResult<TType>>;
+  },
+): Promise<GradingResult<TType>>;
+export function runAssertion(options: RunAssertionOptions): Promise<GradingResult>;
+export async function runAssertion<TType extends string>(
+  options: RunAssertionOptions<TType>,
+): Promise<GradingResult<TType>> {
+  // Custom assertion types require an explicit registry. Only built-ins use this default.
+  const registry =
+    options.registry ??
+    (defaultAssertionRegistry as unknown as AssertionRegistry<
+      AssertionParams<TType>,
+      GradingResult<TType>
+    >);
+  const run = () => runAssertionInternal({ ...options, registry });
+  const tracingContext = options.traceId ? getProviderCallTracingContext() : undefined;
+  if (!tracingContext) {
+    return run();
+  }
+
+  return tracingContext.withGraderSpan(
+    {
+      graderId: options.assertion.type,
+      evalId: options.test.metadata?.evaluationId as string | undefined,
+      testIndex: tracingContext.testIndex,
+    },
+    run,
+  );
 }
 
 /**
@@ -734,7 +782,7 @@ export async function runCompareAssertion(
 
 export async function readAssertions(filePath: string): Promise<Assertion[]> {
   try {
-    const assertions = yaml.load(await fs.readFile(filePath, 'utf-8')) as Assertion[];
+    const assertions = loadYaml(await fs.readFile(filePath, 'utf-8')) as Assertion[];
     if (!Array.isArray(assertions) || assertions[0]?.type === undefined) {
       throw new Error('Assertions file must be an array of assertion objects');
     }

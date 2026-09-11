@@ -108,7 +108,7 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
-  it('continues cleanup after a JSONL writer fails to close', async () => {
+  it('continues cleanup and recovers a JSONL close failure when results persisted', async () => {
     const outputPath = path.join(os.tmpdir(), `promptfoo-evaluator-${randomUUID()}.jsonl`);
     const originalClose = JsonlFileWriter.prototype.close;
     const closeSpy = vi
@@ -118,6 +118,7 @@ describeEvaluator('evaluator execution control', () => {
         throw new Error('simulated close failure');
       });
     const shutdownSpy = vi.spyOn(providerRegistry, 'shutdownAll').mockResolvedValue();
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
       callApi: vi.fn().mockResolvedValue({
@@ -133,9 +134,13 @@ describeEvaluator('evaluator execution control', () => {
 
     try {
       const evalRecord = new Eval({ outputPath });
-      await expect(evaluate(testSuite, evalRecord, {})).rejects.toThrow('simulated close failure');
+      // Results persisted, so the close failure is recoverable (the output file is
+      // regenerated from the database) — the run still succeeds and cleanup still runs.
+      await expect(evaluate(testSuite, evalRecord, {})).resolves.toBeDefined();
       expect(shutdownSpy).toHaveBeenCalledOnce();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('simulated close failure'));
     } finally {
+      warnSpy.mockRestore();
       closeSpy.mockRestore();
       shutdownSpy.mockRestore();
       fs.rmSync(outputPath, { force: true });

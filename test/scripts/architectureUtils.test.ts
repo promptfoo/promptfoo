@@ -42,9 +42,46 @@ describe('extractModuleSpecifiers', () => {
       'module-require',
     ]);
   });
+
+  it('collects TypeScript-specific module specifiers without reading strings or comments', () => {
+    const source = `
+      import legacy = require('legacy-module');
+      type Imported = import('type-module').Imported;
+      export * from 'exported-module';
+      import(\`./dynamic-template.js\`);
+      require(\`template-package\`);
+      require.resolve(\`resolved-template-package\`);
+      import(\`./\${name}.js\`);
+      const text = "require('ignored-module')";
+      // import('ignored-comment')
+    `;
+
+    expect(extractModuleSpecifiers(source, 'fixture.ts')).toEqual([
+      'legacy-module',
+      'type-module',
+      'exported-module',
+      './dynamic-template.js',
+      'template-package',
+      'resolved-template-package',
+    ]);
+  });
 });
 
 describe('extractRuntimeModuleSpecifiers', () => {
+  it.each([extractModuleSpecifiers, extractRuntimeModuleSpecifiers])(
+    'follows transitive loader aliases regardless of declaration order',
+    (extract) => {
+      const source = `
+        function later() { const second = first; return second('yaml'); }
+        const first = require;
+        const fromCreateRequire = createRequire(import.meta.url);
+        const third = fromCreateRequire;
+        third('zod');
+      `;
+      expect(extract(source, 'fixture.ts')).toEqual(['yaml', 'zod']);
+    },
+  );
+
   it('excludes type-only module references from the runtime graph', () => {
     const source = `
       import runtimeDefault, { type ImportedType, runtimeValue } from 'runtime-import';

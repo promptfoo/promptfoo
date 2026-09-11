@@ -19,7 +19,14 @@
       "entrypoint": "src/assertions/pure.ts",
       "allowedExternal": [],
       "allowedBuiltins": [],
-      "maxSourceFiles": 18
+      "maxSourceFiles": 19,
+      "packageSubpath": "assertions/pure",
+      "artifacts": {
+        "esm": "dist/src/assertions/pure.js",
+        "cjs": "dist/src/assertions/pure.cjs"
+      },
+      "maxArtifactFiles": 1,
+      "maxArtifactBytes": 45000
     },
     {
       "name": "provider-plugin",
