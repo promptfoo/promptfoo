@@ -566,9 +566,16 @@ describe('RedteamIterativeMetaProvider', () => {
       },
     );
 
-    it.each(['zero-width', 'bijection', 'homoglyph'])(
-      'should fail closed when a layered %s attack receives malformed multi-input JSON',
-      async (strategy) => {
+    it.each(
+      ['zero-width', 'bijection', 'homoglyph'].flatMap((strategy) =>
+        ['user_message: malformed JSON', '{}', '{"user_message": 123}'].map((attackPrompt) => ({
+          strategy,
+          attackPrompt,
+        })),
+      ),
+    )(
+      'should fail closed for a $strategy mutation envelope: $attackPrompt',
+      async ({ strategy, attackPrompt }) => {
         const inputs = { user_message: 'Untrusted customer message' } satisfies Inputs;
         const vars = { __prompt: '{"user_message":"baseline"}', user_message: 'baseline' };
         const prompt = { raw: '{{user_message}}', label: 'multi-input' };
@@ -578,7 +585,7 @@ describe('RedteamIterativeMetaProvider', () => {
           metadata: { pluginId: 'intent', pluginConfig: { inputs } },
         } as AtomicTestCase;
         mockAgentProvider.callApi = vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
-          output: { result: 'user_message: malformed JSON' },
+          output: { result: attackPrompt },
           materializationHandled: true,
         });
 
@@ -597,7 +604,9 @@ describe('RedteamIterativeMetaProvider', () => {
           perTurnLayers: [{ id: strategy }],
         });
 
-        expect(result.error).toMatch(/requires a valid multi-input JSON object/);
+        expect(result.error).toMatch(
+          /requires (a valid multi-input JSON object|every attackable multi-input field as text)/,
+        );
         expect(result.metadata.redteamHistory).toHaveLength(0);
         expect(mockGetTargetResponse).not.toHaveBeenCalled();
       },

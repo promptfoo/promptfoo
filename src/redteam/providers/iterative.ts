@@ -369,6 +369,7 @@ export async function runRedteamConversation({
           purpose: test?.metadata?.purpose as string | undefined,
           goal: test?.metadata?.goal as string | undefined,
           inputs,
+          vars,
         },
       );
       if (lastTransformResult.tokenUsage) {

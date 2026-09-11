@@ -1486,44 +1486,49 @@ describe('RedteamIterativeProvider', () => {
       },
     );
 
-    it('should fail closed when a runtime mutation receives malformed multi-input JSON', async () => {
-      const inputs = { user_message: 'Untrusted customer message' } satisfies Inputs;
-      const vars = { __prompt: '{"user_message":"baseline"}', user_message: 'baseline' };
-      const prompt = { raw: '{{user_message}}', label: 'multi-input' };
-      const test = {
-        vars,
-        assert: [],
-        metadata: { pluginId: 'intent', pluginConfig: { inputs } },
-      } as AtomicTestCase;
-      const attacker = createMockProvider({
-        id: 'malformed-layered-attacker',
-        response: createProviderResponse({
-          output: { improvement: 'attack', prompt: 'user_message: malformed JSON' },
-          materializationHandled: true,
-        }),
-      });
+    it.each(['user_message: malformed JSON', '{}', '{"user_message": 123}'])(
+      'should fail closed for an invalid runtime mutation envelope: %s',
+      async (attackPrompt) => {
+        const inputs = { user_message: 'Untrusted customer message' } satisfies Inputs;
+        const vars = { __prompt: '{"user_message":"baseline"}', user_message: 'baseline' };
+        const prompt = { raw: '{{user_message}}', label: 'multi-input' };
+        const test = {
+          vars,
+          assert: [],
+          metadata: { pluginId: 'intent', pluginConfig: { inputs } },
+        } as AtomicTestCase;
+        const attacker = createMockProvider({
+          id: 'malformed-layered-attacker',
+          response: createProviderResponse({
+            output: { improvement: 'attack', prompt: attackPrompt },
+            materializationHandled: true,
+          }),
+        });
 
-      const result = await runRedteamConversation({
-        context: { vars, prompt, test, originalProvider: mockTargetProvider },
-        filters: undefined,
-        injectVar: '__prompt',
-        inputs,
-        numIterations: 1,
-        options: {},
-        prompt,
-        redteamProvider: attacker,
-        gradingProvider: mockRedteamProvider,
-        targetProvider: mockTargetProvider,
-        test,
-        vars,
-        excludeTargetOutputFromAgenticAttackGeneration: false,
-        perTurnLayers: [{ id: 'zero-width' }],
-      });
+        const result = await runRedteamConversation({
+          context: { vars, prompt, test, originalProvider: mockTargetProvider },
+          filters: undefined,
+          injectVar: '__prompt',
+          inputs,
+          numIterations: 1,
+          options: {},
+          prompt,
+          redteamProvider: attacker,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: mockTargetProvider,
+          test,
+          vars,
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+          perTurnLayers: [{ id: 'zero-width' }],
+        });
 
-      expect(result.error).toMatch(/requires a valid multi-input JSON object/);
-      expect(result.metadata.redteamHistory).toHaveLength(0);
-      expect(mockGetTargetResponse).not.toHaveBeenCalled();
-    });
+        expect(result.error).toMatch(
+          /requires (a valid multi-input JSON object|every attackable multi-input field as text)/,
+        );
+        expect(result.metadata.redteamHistory).toHaveLength(0);
+        expect(mockGetTargetResponse).not.toHaveBeenCalled();
+      },
+    );
 
     it('should default perTurnLayers to empty array when not provided', async () => {
       const result = await runRedteamConversation({

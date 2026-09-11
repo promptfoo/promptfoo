@@ -320,6 +320,7 @@ export async function runMetaAgentRedteam({
         purpose: test?.metadata?.purpose as string | undefined,
         goal: test?.metadata?.goal as string | undefined,
         inputs,
+        vars,
       };
 
       lastTransformResult = await applyRuntimeTransforms(

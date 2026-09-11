@@ -64,6 +64,7 @@ export interface RuntimeTransformContext {
   goal?: string;
   /** Multi-input definitions used to preserve the JSON envelope and benign fields. */
   inputs?: Inputs;
+  vars?: TestCaseWithPlugin['vars'];
 }
 
 /**
@@ -114,7 +115,7 @@ export async function applyRuntimeTransforms(
   // This reuses the exact same code path as pre-eval transforms
   // Include context metadata so layer strategies (like indirect-web-pwn) can access evalId, purpose, etc.
   let testCase: TestCaseWithPlugin = {
-    vars: { [injectVar]: prompt },
+    vars: { ...context?.vars, [injectVar]: prompt },
     assert: [],
     metadata: {
       pluginId: 'runtime-transform',
