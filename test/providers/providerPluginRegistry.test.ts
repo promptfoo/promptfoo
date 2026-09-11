@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { evaluateWithSource } from '../../src/evaluate';
 import {
   MissingProviderPackageError,
   PROVIDER_PLUGIN_API_VERSION,
@@ -155,6 +156,37 @@ describe('ProviderPluginRegistry', () => {
       await expect(second.callApi('still running')).resolves.toEqual({ output: 'ok' });
       await second.cleanup?.();
       expect(cleanup).toHaveBeenCalledTimes(2);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('cleans up plugin providers created by programmatic evaluation', async () => {
+    const cleanup = vi.fn();
+    const dispose = registerProviderPlugin(
+      createManifest(
+        'evaluation-cleanup',
+        (providerPath) => providerPath === 'evaluation-cleanup:model',
+        async () => [
+          {
+            test: () => true,
+            create: async () => ({
+              id: () => 'evaluation-cleanup:model',
+              callApi: async () => ({ output: 'ok' }),
+              cleanup,
+            }),
+          },
+        ],
+      ),
+    );
+
+    try {
+      await evaluateWithSource({
+        prompts: ['hello'],
+        providers: ['evaluation-cleanup:model'],
+        tests: [{ vars: {}, assert: [{ type: 'equals', value: 'ok' }] }],
+      });
+      expect(cleanup).toHaveBeenCalledOnce();
     } finally {
       dispose();
     }
