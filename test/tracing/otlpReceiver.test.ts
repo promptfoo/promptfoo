@@ -804,6 +804,47 @@ describe('OTLPReceiver', () => {
       );
     });
 
+    it('scrubs numeric event secrets echoed in span and event names', async () => {
+      const redactingReceiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['private.pin'],
+      });
+      (redactingReceiver as any).traceStore = mockTraceStore;
+      await request(redactingReceiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/json')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'e'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'PIN 938471',
+                      startTimeUnixNano: '1000000000',
+                      status: { code: 2, message: 'PIN 938471' },
+                      events: [
+                        {
+                          name: 'PIN 938471',
+                          timeUnixNano: '1500000000',
+                          attributes: [{ key: 'private.pin', value: { intValue: 938471 } }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+      const spans = mockTraceStore.addSpans.mock.calls.at(-1)?.[1];
+      expect(JSON.stringify(spans)).not.toContain('938471');
+      expect(spans?.[0].events?.[0].attributes?.['private.pin']).toBe('[REDACTED]');
+    });
+
     it('redacts span name and statusMessage that echo a redacted attribute value', async () => {
       const redactingReceiver = new OTLPReceiver({
         acceptFormats: ['json'],

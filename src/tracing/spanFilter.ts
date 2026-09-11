@@ -20,6 +20,7 @@ export function isRelevantSpan(span: SpanRelevanceInput): boolean {
 
   if (
     span.statusCode === 2 ||
+    /^tool\s+\S/i.test(span.name?.trim() ?? '') ||
     /(?:approval|guardrail)/i.test(span.name ?? '') ||
     span.attributes?.['approval.required'] !== undefined ||
     span.attributes?.['openai.agents.span_type'] !== undefined ||

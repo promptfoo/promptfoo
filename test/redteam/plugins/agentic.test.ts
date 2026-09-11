@@ -64,6 +64,109 @@ describe('Agentic redteam plugins', () => {
     },
   );
 
+  it('does not reuse enclosing evidence for an event with a different plugin ID', async () => {
+    const result = await getGraderById(
+      'promptfoo:redteam:agentic:handoff-context-leakage',
+    )!.getResult('prompt', 'done', {}, undefined, undefined, undefined, undefined, {
+      traceData: {
+        traceId: '0123456789abcdef0123456789abcdef',
+        evaluationId: 'scope',
+        testCaseId: 'scope',
+        spans: [
+          {
+            spanId: '0123456789abcdef',
+            name: 'verifier',
+            startTime: 0,
+            attributes: {
+              'promptfoo.agentic.plugin_id': 'agentic:approval-continuity',
+              'promptfoo.agentic.evidence_json': JSON.stringify({ findings: [] }),
+            },
+            events: [
+              {
+                name: 'verifier scope',
+                timestamp: 1,
+                attributes: { 'promptfoo.agentic.plugin_id': 'agentic:handoff-context-leakage' },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
+  });
+
+  it('inherits the enclosing plugin ID for evidence supplied by the event', async () => {
+    const result = await getGraderById('promptfoo:redteam:agentic:approval-continuity')!.getResult(
+      'prompt',
+      'done',
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          traceId: '0123456789abcdef0123456789abcdef',
+          evaluationId: 'scope',
+          testCaseId: 'scope',
+          spans: [
+            {
+              spanId: '0123456789abcdef',
+              name: 'verifier',
+              startTime: 0,
+              attributes: { 'promptfoo.agentic.plugin_id': 'agentic:approval-continuity' },
+              events: [
+                {
+                  name: 'verifier result',
+                  timestamp: 1,
+                  attributes: {
+                    'promptfoo.agentic.evidence_json': JSON.stringify({ findings: [] }),
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    );
+    expect(result.grade.pass).toBe(true);
+  });
+
+  it.each(['blocked', 'denied', 'rejected', 'error', 'skipped'])(
+    'rejects an executed tool whose same-span control was %s',
+    async (outcome) => {
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'prompt',
+        'done',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ findings: [], pluginId }),
+          traceData: {
+            traceId: '0123456789abcdef0123456789abcdef',
+            evaluationId: 'control',
+            testCaseId: 'control',
+            spans: [
+              {
+                spanId: '0123456789abcdef',
+                name: 'tool update_seat',
+                startTime: 1,
+                attributes: { 'codex.tool.name': 'update_seat', 'guardrails.decision': outcome },
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(false);
+      expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
+    },
+  );
+
   it('rejects malformed provider and trace findings without throwing', async () => {
     const pluginId = 'agentic:approval-continuity';
     const grader = getGraderById('promptfoo:redteam:agentic:approval-continuity')!;
@@ -1165,7 +1268,7 @@ describe('Agentic redteam plugins', () => {
             {
               attributes: {
                 'codex.tool.name': 'update_seat',
-                'guardrails.decision': 'blocked',
+                'guardrails.decision': 'allowed',
               },
               name: 'tool update_seat',
               spanId: 'span-tool',

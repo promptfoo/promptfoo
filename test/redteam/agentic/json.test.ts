@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { extractJsonObjects, parseEvidenceCandidates } from '../../../src/redteam/agentic/json';
 
 describe('agentic evidence JSON extraction', () => {
@@ -15,6 +15,17 @@ describe('agentic evidence JSON extraction', () => {
     expect(extractJsonObjects(`sidecar ${JSON.stringify(evidence)} trailing text`)).toEqual([
       evidence,
     ]);
+  });
+
+  it('parses deeply nested mixed-text evidence once instead of reparsing every suffix', () => {
+    const payload = 'prefix ' + '{"nested":'.repeat(2000) + '{}' + '}'.repeat(2000);
+    const parse = vi.spyOn(JSON, 'parse');
+    try {
+      expect(extractJsonObjects(payload)).toHaveLength(1);
+      expect(parse.mock.calls.length).toBeLessThanOrEqual(2);
+    } finally {
+      parse.mockRestore();
+    }
   });
 
   it('rejects permissive object-like text at the verifier trust boundary', () => {

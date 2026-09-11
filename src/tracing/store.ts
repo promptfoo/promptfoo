@@ -482,7 +482,9 @@ export class TraceStore {
             name: row.name,
             statusCode: spanData.statusCode,
           }) &&
-          !row.events?.some((event) => isRelevantSpan({ attributes: event.attributes ?? {} }))
+          !row.events?.some((event) =>
+            isRelevantSpan({ name: event.name, attributes: event.attributes ?? {} }),
+          )
         ) {
           continue;
         }

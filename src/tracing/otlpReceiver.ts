@@ -388,9 +388,9 @@ export class OTLPReceiver {
         const sensitive =
           current.sensitive ||
           Boolean(current.key && this.shouldRedactAttribute(current.key, redactAttributePatterns));
-        if (typeof current.value === 'string') {
-          if (sensitive && current.value.length > 0) {
-            redactedSourceValues.add(current.value);
+        if (['string', 'number', 'boolean'].includes(typeof current.value)) {
+          if (sensitive && String(current.value).length > 0) {
+            redactedSourceValues.add(String(current.value));
           }
           continue;
         }

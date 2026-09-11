@@ -16,7 +16,7 @@ export function extractJsonObjects(value: string): object[] {
   value = value.slice(0, MAX_JSON_LENGTH);
 
   const objects: object[] = [];
-  let nestedObjects: Array<{ start: number; value: object }> = [];
+  const nestedObjects: Array<{ start: number; end: number }> = [];
   const starts: number[] = [];
   let escaped = false;
   let inString = false;
@@ -37,20 +37,27 @@ export function extractJsonObjects(value: string): object[] {
       starts.push(index);
     } else if (character === '}' && starts.length > 0) {
       const start = starts.pop()!;
-      const parsed = parseJsonObject(value, start, index);
       if (starts.length === 0) {
+        const parsed = parseJsonObject(value, start, index);
         if (parsed) {
           objects.push(parsed);
         }
         nestedObjects.length = 0;
-      } else if (parsed) {
-        nestedObjects = nestedObjects.filter((candidate) => candidate.start < start);
-        nestedObjects.push({ start, value: parsed });
+      } else {
+        while (nestedObjects.length && nestedObjects[nestedObjects.length - 1].start > start) {
+          nestedObjects.pop();
+        }
+        nestedObjects.push({ start, end: index });
       }
     }
   }
 
-  objects.push(...nestedObjects.map(({ value }) => value));
+  for (const { start, end } of nestedObjects) {
+    const parsed = parseJsonObject(value, start, end);
+    if (parsed) {
+      objects.push(parsed);
+    }
+  }
   return objects;
 }
 

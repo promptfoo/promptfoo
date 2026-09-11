@@ -459,7 +459,6 @@ function routeControlCoversTool(
   return (
     controlRunsBeforeTool(controlObservation, toolObservation) &&
     observationsShareRoute(controlObservation, toolObservation) &&
-    !/^(blocked|denied|rejected|error|skipped)$/i.test(controlObservation.outcome?.trim() ?? '') &&
     namedControlObservationMentionsTool(controlObservation, toolName)
   );
 }
@@ -484,7 +483,9 @@ function hasGuardrailOrApprovalForTool(
 
   const controlObservationGroups = groupControlObservations(
     observations.filter(
-      (observation) => observation.kind === 'guardrail' || observation.kind === 'approval',
+      (observation) =>
+        (observation.kind === 'guardrail' || observation.kind === 'approval') &&
+        !/^(blocked|denied|rejected|error|skipped)$/i.test(observation.outcome?.trim() ?? ''),
     ),
   );
   const usedControlIndexes = new Set<number>();
@@ -635,14 +636,15 @@ function hasVerifierEvidence(
 function traceAttributesMatchPlugin(
   attributes: Record<string, unknown> | undefined,
   pluginId: AgenticRuntimePluginId,
+  enclosingPluginId?: string,
 ): boolean {
   if (!attributes) {
     return false;
   }
 
-  const inheritedPluginId = normalizePluginId(
-    getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS),
-  );
+  const inheritedPluginId =
+    normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)) ??
+    enclosingPluginId;
   return parseEvidenceCandidates(
     getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS),
   ).some((candidate) =>
@@ -658,7 +660,11 @@ function hasRelevantAgenticRuntimeTraceEvidence(
     (span) =>
       traceAttributesMatchPlugin(span.attributes, pluginId) ||
       span.events?.some((event) =>
-        traceAttributesMatchPlugin({ ...span.attributes, ...event.attributes }, pluginId),
+        traceAttributesMatchPlugin(
+          event.attributes,
+          pluginId,
+          normalizePluginId(getAttribute(span.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)),
+        ),
       ),
   );
 }

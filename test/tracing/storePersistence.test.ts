@@ -37,6 +37,24 @@ describe('TraceStore span persistence', () => {
     return traceStore;
   }
 
+  it.each(['tool update_seat', 'guardrail update_seat'])(
+    'retains an internal span containing a name-only %s event',
+    async (name) => {
+      const traceStore = await createTrace('named-event');
+      await traceStore.addSpans('named-event', [
+        {
+          spanId: 'event-parent',
+          name: 'request handler',
+          startTime: 0,
+          events: [{ name, timestamp: 1, attributes: {} }],
+        },
+      ]);
+      const spans = await traceStore.getSpans('named-event', { includeInternalSpans: false });
+      expect(spans).toHaveLength(1);
+      expect(spans[0].events?.[0].name).toBe(name);
+    },
+  );
+
   it('ignores duplicate span IDs in a single insertion', async () => {
     const traceStore = await createTrace('single-insertion');
 
