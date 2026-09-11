@@ -19,10 +19,10 @@ Read `references/redteam-setup-patterns.md` when you need concrete YAML
 patterns.
 For OpenAPI specs, you can run the bundled
 `scripts/openapi-operation-to-redteam-config.mjs` to draft a one-operation
-redteam setup config, then inspect the inferred inputs, policy, and plugins. The
-script ships in this skill's `scripts/` directory; when the skill is installed as
-a plugin it lives in the plugin cache, not your project, so run it by its absolute
-path (or copy it in) rather than a bare `scripts/...` path.
+redteam setup config, then inspect the inferred inputs, policy, and plugins. Run it
+by its absolute plugin-cache path within the intact installed bundle, or copy the
+complete `plugins/promptfoo/skills` tree into your project, preserving relative
+paths so `../../openapi-converter-core.mjs` remains available.
 With `--token-env`, it infers Bearer/OAuth2/OpenID and header/query/cookie API-key auth; use
 `--auth-header`/`--auth-prefix` to override.
 For live connectivity QA, add `--smoke-test true` to include one deterministic

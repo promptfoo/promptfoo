@@ -25,7 +25,7 @@ const expectedSkillDirs = [
   'promptfoo-redteam-run',
   'promptfoo-redteam-setup',
 ];
-const expectedPluginVersion = '0.1.1';
+const expectedPluginVersion = '0.1.2';
 const expectedFixtureDirs = [
   'evals-json-rubric',
   'evals-local-js',
@@ -1869,6 +1869,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       '.claude-plugin/plugin.json',
       '.codex-plugin/plugin.json',
       'assets/promptfoo-panda.svg',
+      'skills/openapi-converter-core.mjs',
       'skills/promptfoo-evals/SKILL.md',
       'skills/promptfoo-evals/agents/openai.yaml',
       'skills/promptfoo-evals/references/eval-patterns.md',
