@@ -120,9 +120,9 @@ export class GoogleImageProvider implements ApiProvider {
       return this.callVertexApi(prompt);
     }
 
-    // Otherwise, try Google AI Studio with API key
+    // Otherwise, try Google AI Studio.
     const apiKey = this.getApiKey();
-    if (apiKey) {
+    if (apiKey || this.config.apiKeyRequired === false) {
       return this.callGeminiApi(prompt);
     }
 
@@ -208,7 +208,7 @@ export class GoogleImageProvider implements ApiProvider {
 
   private async callGeminiApi(prompt: string): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
-    if (!apiKey) {
+    if (!apiKey && this.config.apiKeyRequired !== false) {
       return {
         error:
           'API key not found. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable.',
@@ -243,7 +243,7 @@ export class GoogleImageProvider implements ApiProvider {
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
+        ...(apiKey && { 'x-goog-api-key': apiKey }),
         ...(this.config.headers || {}),
       };
       const authDiscriminator = createAuthCacheDiscriminator(headers);

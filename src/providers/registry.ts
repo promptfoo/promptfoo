@@ -489,7 +489,7 @@ export const providerMap: ProviderFactory[] = [
       const { createCloudflareGatewayProvider } = await import('./cloudflare-gateway');
       return createCloudflareGatewayProvider(providerPath, {
         ...providerOptions,
-        env: context.env,
+        env: providerOptions.env ?? context.env,
       });
     },
   },

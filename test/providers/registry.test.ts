@@ -174,6 +174,17 @@ describe('Provider Registry', () => {
       );
     });
 
+    it('forwards a provider-scoped Perplexity key through Cloudflare Gateway', async () => {
+      const provider = await registry.create('cloudflare-gateway:perplexity-ai:sonar', {
+        options: {
+          config: { accountId: 'fixture-account', gatewayId: 'fixture-gateway' },
+          env: { PERPLEXITY_API_KEY: 'provider-key' },
+        },
+        env: { PERPLEXITY_API_KEY: 'suite-key' },
+      });
+      expect((provider as OpenAiChatCompletionProvider).getApiKey()).toBe('provider-key');
+    });
+
     it('keeps a provider-scoped Comet API key for image requests', async () => {
       const provider = await registry.create('cometapi:image:test-model', {
         ...mockContext,

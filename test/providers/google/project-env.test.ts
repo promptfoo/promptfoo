@@ -205,6 +205,33 @@ describe('scoped Google cloud project resolution', () => {
       },
     );
 
+    it.each([false, true])('honors apiKeyRequired=%s at request time', async (apiKeyRequired) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: response,
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const provider = new Provider(model, {
+        config: {
+          vertexai: false,
+          apiKeyRequired,
+          headers: { 'X-Proxy-Auth': 'fixture-proxy-key' },
+        },
+      });
+      const result = await provider.callApi('Draw a circle');
+      if (apiKeyRequired) {
+        expect(result.error).toBeDefined();
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      } else {
+        expect(result.error).toBeUndefined();
+        expect(fetchWithCache).toHaveBeenCalledTimes(1);
+        const headers = new Headers(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers);
+        expect(headers.has('x-goog-api-key')).toBe(false);
+        expect(headers.get('X-Proxy-Auth')).toBe('fixture-proxy-key');
+      }
+    });
+
     it('honors explicit AI Studio mode despite a scoped project', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: response,
