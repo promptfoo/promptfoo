@@ -86,6 +86,21 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenCalledWith([{ type: 'equals', value: 'new value' }]);
   });
 
+  it('round-trips structured assertion values as JSON', async () => {
+    const user = userEvent.setup();
+    renderComponent(
+      <AssertsForm onAdd={onAdd} initialValues={[{ type: 'tokens-used', value: { max: 100 } }]} />,
+    );
+
+    const valueInput = screen.getByRole('textbox', { name: 'Value' });
+    expect(valueInput).toHaveValue('{"max":100}');
+    await user.click(valueInput);
+    await user.keyboard('{Control>}a{/Control}');
+    await user.paste('{"max":50}');
+
+    expect(onAdd).toHaveBeenCalledWith([{ type: 'tokens-used', value: { max: 50 } }]);
+  });
+
   it('should update the type of an assertion and call onAdd with the updated assertions array when the type is changed via the Select', async () => {
     initialValues = [{ type: 'equals', value: 'initial value' }];
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
