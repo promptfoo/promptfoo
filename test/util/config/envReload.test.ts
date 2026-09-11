@@ -568,7 +568,7 @@ describe('suite environment loading', () => {
     expect(testSuite.prompts).toHaveLength(3);
   });
 
-  it.each(['inline', 'file', 'scalar'])(
+  it.each(['inline', 'file', 'scalar', 'glob'])(
     'loads %s scenarios relative to each config directory',
     async (form) => {
       const paths = ['first', 'second'].map((name) => {
@@ -577,9 +577,9 @@ describe('suite environment loading', () => {
         config.scenarios =
           form === 'inline'
             ? [{ config: [{}], tests: ['cases.yaml'] }]
-            : form === 'file'
-              ? ['file://scenarios.yaml']
-              : 'file://scenarios.yaml';
+            : form === 'scalar'
+              ? 'file://scenarios.yaml'
+              : [form === 'glob' ? 'file://scenario*.yaml' : 'file://scenarios.yaml'];
         fs.writeFileSync(configPath, JSON.stringify(config));
         fs.writeFileSync(
           path.join(path.dirname(configPath), 'cases.yaml'),
