@@ -19,7 +19,7 @@ interface GitLabJob {
     when: string;
   };
   before_script: string[];
-  cache: { key: string; paths: string[] };
+  cache: { key: string; paths: string[] } | [];
   environment?: { action: string; name: string };
   image: { entrypoint: string[]; name: string };
   id_tokens?: Record<string, { aud: string }>;
@@ -236,10 +236,10 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
       paths: ['$PROMPTFOO_OUTPUT_DIR/results.json', '$PROMPTFOO_OUTPUT_DIR/results.junit.xml'],
       reports: { junit: '$PROMPTFOO_OUTPUT_DIR/results.junit.xml' },
     });
-    expect(job.cache.key).toContain('$CI_JOB_NAME_SLUG');
-    expect(job.cache.key).toContain('$CI_PROJECT_ID');
-    expect(job.cache.key).toContain('$CI_COMMIT_SHA');
-    expect(job.cache.paths).toEqual(['$PROMPTFOO_CACHE_PATH/']);
+    expect(job.cache).toEqual({
+      key: 'promptfoo-$CI_PROJECT_ID-$CI_JOB_NAME_SLUG-$CI_COMMIT_SHA',
+      paths: ['$PROMPTFOO_CACHE_PATH/'],
+    });
     expect(commentJob.image).toEqual(job.image);
     expect(commentJob.environment).toEqual({ name: 'promptfoo-review', action: 'verify' });
     expect(commentJob.variables.GIT_STRATEGY).toBe('empty');
@@ -628,6 +628,46 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         const body = JSON.parse(requests.at(-1)!.body).body;
         expect(body).toContain('Promptfoo eval: Failed');
         expect(body).toContain('No results were written.');
+      },
+    );
+  });
+
+  it('does not restore stale default-cache results into an artifact-only comment job', async () => {
+    evalJobStatus = 'failed';
+    const defaultCache = { key: 'shared-results', paths: ['.promptfoo-results'] };
+    const effectiveCache = commentJob.cache ?? defaultCache;
+    // Runner restores cache after GIT_STRATEGY: empty and before current artifacts.
+    if (!Array.isArray(effectiveCache)) {
+      const output = path.join(tempDir, '.promptfoo-results');
+      fs.mkdirSync(output, { recursive: true });
+      fs.writeFileSync(
+        path.join(output, 'results.json'),
+        JSON.stringify({
+          results: { stats: { successes: 99, failures: 0, errors: 0 } },
+          shareableUrl: 'https://old.example/eval/previous-pipeline',
+        }),
+      );
+    }
+
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          request.url === '/api/v4/user' ? '{"id":123}' : request.method === 'GET' ? '[]' : '{}',
+        );
+      },
+      async (origin, requests) => {
+        const comment = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: `${origin}/api/v4`,
+          CI_SERVER_URL: origin,
+          PROMPTFOO_SHARE: 'true',
+        });
+        expect(comment.status).toBe(0);
+        const body = JSON.parse(requests.at(-1)!.body).body;
+        expect(body).toContain('Promptfoo eval: Failed');
+        expect(body).toContain('No results were written.');
+        expect(body).not.toContain('99/99');
+        expect(body).not.toContain('old.example');
       },
     );
   });

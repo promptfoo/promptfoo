@@ -170,6 +170,7 @@
 
 .promptfoo-comment:
   id_tokens: {}
+  cache: []
   image:
     name: ghcr.io/promptfoo/promptfoo:0.123.0@sha256:e53a3332eee970854cfee19040e88ad9f72161c604d7262c477431af71555afd
     entrypoint: ['']
