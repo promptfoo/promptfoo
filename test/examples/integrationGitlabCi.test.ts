@@ -44,6 +44,7 @@ const template = parse(templateSource) as Record<string, GitLabJob>;
 const job = template['.promptfoo-eval'];
 const commentJob = template['.promptfoo-comment'];
 const imagePath = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+const serviceAccountTokenPath = '/var/run/secrets/kubernetes.io/serviceaccount/token';
 const describeUnix = process.platform === 'win32' ? describe.skip : describe;
 
 describeUnix('GitLab CI integration example', () => {
@@ -125,10 +126,12 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     return new Promise((resolve, reject) => {
       const isCommentJob = script === commentJob.script[0];
       // Map the pinned image's tools to the fixture tools on the host platform.
-      const fixtureScript = script.replaceAll(
-        `export PATH=${imagePath}`,
-        `export PATH='${binDir}:${path.dirname(process.execPath)}:/usr/bin:/bin'`,
-      );
+      const fixtureScript = script
+        .replaceAll(
+          `export PATH=${imagePath}`,
+          `export PATH='${binDir}:${path.dirname(process.execPath)}:/usr/bin:/bin'`,
+        )
+        .replaceAll(serviceAccountTokenPath, path.join(tempDir, 'service-account-token'));
       const child = spawn('/bin/sh', ['-ec', fixtureScript], {
         cwd: tempDir,
         env: {
@@ -255,6 +258,17 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
 
   it('disables post-eval shells that would reintroduce GitLab credentials', () => {
     expect(job.after_script).toEqual([]);
+  });
+
+  it('rejects readable Kubernetes service-account tokens before running eval code', async () => {
+    fs.writeFileSync(path.join(tempDir, 'service-account-token'), 'fixture-kubernetes-token');
+
+    const result = await runEvaluation();
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('automount_service_account_token');
+    expect(result.stderr).not.toContain('fixture-kubernetes-token');
+    expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
   });
 
   it.each(['mkdir', 'env', 'node', 'promptfoo'])(

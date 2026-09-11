@@ -65,6 +65,11 @@
         exit 1
       fi
 
+      if [ -r /var/run/secrets/kubernetes.io/serviceaccount/token ]; then
+        echo 'Disable automount_service_account_token in GitLab Runner before running executable eval code.' >&2
+        exit 1
+      fi
+
       # Kubernetes executors can leave job credentials on a same-UID container init.
       if [ "$$" -ne 1 ] && [ -r /proc/1/environ ]; then
         if ! env -i PATH="$PATH" node --input-type=module <<'PROMPTFOO_CHECK_CONTAINER_INIT'; then
