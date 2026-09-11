@@ -1,6 +1,8 @@
 import logger from '../../logger';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/render';
+import { isSecretField, REDACTED } from '../../util/sanitizer';
+import { analyzeTemplateReference } from '../../util/templates';
 import { sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { calculateOpenAIUsageCost } from './billing';
@@ -12,6 +14,7 @@ import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
+  VarValue,
 } from '../../types/index';
 import type { OpenAiSharedOptions } from './types';
 
@@ -29,6 +32,8 @@ interface AgentsApiOptions extends OpenAiSharedOptions {
   vault_ids?: string[];
   timeoutMs?: number;
   pollIntervalMs?: number;
+  cleanupTimeoutMs?: number;
+  usageTimeoutMs?: number;
   retainSession?: boolean;
 }
 
@@ -53,7 +58,7 @@ interface Turn {
   id: string;
   subagent_id: string | null;
   status: 'queued' | 'in_progress' | 'waiting' | 'completed' | 'failed' | 'cancelled';
-  error?: { message: string } | null;
+  error?: { code?: string; message: string } | null;
   usage?: Usage | null;
 }
 
@@ -74,27 +79,127 @@ interface Page<T> {
   last_id: string | null;
 }
 
-const SENSITIVE_CONFIG_KEY = /(authorization|api[_-]?key|token|secret|password|credential)/i;
+const MAX_TIMER_MS = 2_147_483_647;
+const MAX_ERROR_DETAIL_LENGTH = 1_024;
+const TRANSIENT_STATUS_CODES = new Set([500, 502, 503, 504]);
+const RETRY_BASE_DELAY_MS = 1_000;
+const RETRY_MAX_DELAY_MS = 8_000;
+const CLEANUP_RETRY_MAX_DELAY_MS = 5_000;
+// Redacting short values such as `x-api-key: 1` would corrupt unrelated error text.
+const MIN_CREDENTIAL_LENGTH = 8;
+const CREDENTIAL_NAME =
+  /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password|(?:^|[-_])key$)/i;
 
-function collectSensitiveConfigValues(value: unknown, key = ''): string[] {
+class AgentsApiHttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'AgentsApiHttpError';
+  }
+}
+
+function isCredentialName(name: string): boolean {
+  return isSecretField(name) || CREDENTIAL_NAME.test(name);
+}
+
+function addCredential(credentials: Set<string>, value: unknown): void {
+  if (typeof value !== 'string') {
+    return;
+  }
+  const trimmed = value.trim();
+  for (const candidate of [trimmed, trimmed.replace(/^(?:Bearer|Basic|Token)\s+/i, '')]) {
+    if (candidate.length >= MIN_CREDENTIAL_LENGTH) {
+      credentials.add(candidate);
+      credentials.add(encodeURIComponent(candidate));
+    }
+  }
+}
+
+/** Collect credential values from credential-named keys and secret URL query parameters. */
+function collectConfigCredentials(value: unknown, credentials: Set<string>, key = ''): void {
   if (typeof value === 'string') {
-    return key && SENSITIVE_CONFIG_KEY.test(key) ? [value] : [];
+    if (key && isCredentialName(key)) {
+      addCredential(credentials, value);
+    }
+    if (/^[a-z][a-z\d+.-]*:\/\//i.test(value)) {
+      try {
+        const url = new URL(value);
+        addCredential(credentials, decodeURIComponent(url.password));
+        for (const [name, param] of url.searchParams) {
+          if (isCredentialName(name)) {
+            addCredential(credentials, param);
+          }
+        }
+      } catch {
+        // Strings that are not valid URLs contain no query credentials.
+      }
+    }
+    return;
   }
   if (Array.isArray(value)) {
-    return value.flatMap((item) => collectSensitiveConfigValues(item, key));
+    for (const item of value) {
+      collectConfigCredentials(item, credentials, key);
+    }
+    return;
   }
-  if (!value || typeof value !== 'object') {
-    return [];
+  if (value && typeof value === 'object') {
+    for (const [childKey, item] of Object.entries(value)) {
+      collectConfigCredentials(item, credentials, childKey);
+    }
   }
-  return Object.entries(value).flatMap(([childKey, item]) =>
-    collectSensitiveConfigValues(item, childKey),
-  );
+}
+
+function sortCredentials(credentials: Set<string>): string[] {
+  // Replace longer values first so a credential containing another is fully removed.
+  return [...credentials].sort((left, right) => right.length - left.length);
+}
+
+function redactCredentials(text: string, credentials: readonly string[]): string {
+  let redacted = text;
+  for (const credential of credentials) {
+    redacted = redacted.split(credential).join(REDACTED);
+  }
+  return redacted
+    .replace(/\bsk-[\w-]{16,}/g, REDACTED)
+    .replace(/\b(Bearer|Basic)\s+[\w.~+/=-]{8,}/gi, `$1 ${REDACTED}`);
+}
+
+function referencesVariable(template: string, names: string[]): boolean {
+  return names.some((name) => {
+    const reference = analyzeTemplateReference(template, name);
+    return reference.parsed && reference.referenced;
+  });
+}
+
+/** Render only strings that reference test vars, preserving literal braces in commands and code. */
+function renderConfigTemplates(
+  value: unknown,
+  vars: Record<string, VarValue>,
+  names: string[],
+): unknown {
+  if (typeof value === 'string') {
+    return (value.includes('{{') || value.includes('{%')) && referencesVariable(value, names)
+      ? renderVarsInObject(value, vars)
+      : value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => renderConfigTemplates(item, vars, names));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, renderConfigTemplates(item, vars, names)]),
+    );
+  }
+  return typeof value === 'function' ? renderVarsInObject(value, vars) : value;
 }
 
 /** Managed Codex sessions, distinct from the local @openai/agents SDK provider. */
 export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   declare config: AgentsApiOptions;
   private readonly modelOverride: string;
+  private credentials: string[] = [];
 
   constructor(
     modelName = '',
@@ -106,14 +211,25 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       options,
     );
     this.modelOverride = modelName;
-    for (const key of ['timeoutMs', 'pollIntervalMs'] as const) {
+    for (const key of ['timeoutMs', 'pollIntervalMs', 'cleanupTimeoutMs'] as const) {
       const value = config[key];
       if (
         value !== undefined &&
-        (!Number.isSafeInteger(value) || value <= 0 || value > 2_147_483_647)
+        (!Number.isSafeInteger(value) || value <= 0 || value > MAX_TIMER_MS)
       ) {
-        throw new Error(`Agents API ${key} must be a positive integer no greater than 2147483647`);
+        throw new Error(
+          `Agents API ${key} must be a positive integer no greater than ${MAX_TIMER_MS}`,
+        );
       }
+    }
+    const { usageTimeoutMs } = config;
+    if (
+      usageTimeoutMs !== undefined &&
+      (!Number.isSafeInteger(usageTimeoutMs) || usageTimeoutMs < 0 || usageTimeoutMs > MAX_TIMER_MS)
+    ) {
+      throw new Error(
+        `Agents API usageTimeoutMs must be a non-negative integer no greater than ${MAX_TIMER_MS}`,
+      );
     }
     if (config.environment && !['none', 'openai_hosted'].includes(config.environment.type)) {
       throw new Error('Agents API environment.type must be "none" or "openai_hosted"');
@@ -127,6 +243,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     return this.modelName ? `openai:agents-api:${this.modelName}` : 'openai:agents-api';
   }
 
+  private redact(text: string): string {
+    return redactCredentials(text, this.credentials);
+  }
+
   private async request<T>(
     endpoint: string,
     method: 'GET' | 'POST' | 'DELETE',
@@ -134,54 +254,59 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     signal: AbortSignal,
     body?: unknown,
     query?: string,
+    // Replaying a session creation can start another billable agent task.
+    idempotent = method !== 'POST',
   ): Promise<T> {
-    signal.throwIfAborted();
-    const response = await fetchWithRetries(
-      appendOpenAiApiPath(this.getApiUrl(), endpoint, query),
-      {
-        method,
-        headers,
-        signal,
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      },
-      30_000,
-      // Replaying a session creation can start another billable agent task.
-      method === 'POST' ? 0 : this.config.maxRetries,
-    );
-    if (method === 'DELETE' && response.status === 404) {
-      // A previous deletion may have succeeded even if its response was lost.
-      await response.body?.cancel();
-      return undefined as T;
-    }
-    if (!response.ok) {
-      let detail = '';
-      try {
-        const body = JSON.parse(await readBoundedText(response, 8_192));
-        const message = typeof body?.error === 'string' ? body.error : body?.error?.message;
-        if (typeof message === 'string') {
-          detail = message;
-          // Error messages may echo request credentials, including custom auth headers.
-          const credentials = [
-            this.getApiKey(),
-            ...Object.values(this.config.headers ?? {}),
-            ...collectSensitiveConfigValues(this.config),
-            headers.get('Authorization')?.replace(/^(Bearer|Basic)\s+/i, ''),
-          ];
-          for (const credential of credentials) {
-            if (credential) {
-              detail = detail.split(credential).join('[REDACTED]');
-            }
-          }
-          detail = detail.slice(0, 1_024);
-        }
-      } catch {
-        signal.throwIfAborted();
-      }
-      throw new Error(
-        `Agents API ${method} failed: HTTP ${response.status} ${response.statusText}${detail ? `: ${detail}` : ''}`,
+    const maxRetries = Math.max(0, this.config.maxRetries ?? 4);
+    for (let attempt = 0; ; attempt++) {
+      signal.throwIfAborted();
+      const response = await fetchWithRetries(
+        appendOpenAiApiPath(this.getApiUrl(), endpoint, query),
+        {
+          method,
+          headers,
+          signal,
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        },
+        30_000,
+        idempotent ? this.config.maxRetries : 0,
       );
+      if (idempotent && TRANSIENT_STATUS_CODES.has(response.status) && attempt < maxRetries) {
+        await response.body?.cancel();
+        await sleepWithAbort(
+          Math.min(RETRY_BASE_DELAY_MS * 2 ** attempt, RETRY_MAX_DELAY_MS),
+          signal,
+        );
+        continue;
+      }
+      if (method === 'DELETE' && response.status === 404) {
+        // A previous deletion may have succeeded even if its response was lost.
+        await response.body?.cancel();
+        return undefined as T;
+      }
+      if (!response.ok) {
+        let detail = '';
+        try {
+          const parsed = JSON.parse(await readBoundedText(response, 8_192));
+          const message = typeof parsed?.error === 'string' ? parsed.error : parsed?.error?.message;
+          if (typeof message === 'string') {
+            // Error messages may echo request credentials, including custom auth headers.
+            detail = this.redact(message).slice(0, MAX_ERROR_DETAIL_LENGTH);
+          }
+        } catch {
+          signal.throwIfAborted();
+        }
+        throw new AgentsApiHttpError(
+          `Agents API ${method} failed: HTTP ${response.status} ${response.statusText}${detail ? `: ${detail}` : ''}`,
+          response.status,
+        );
+      }
+      if (response.status === 204) {
+        return undefined as T;
+      }
+      const text = await response.text();
+      return (text ? JSON.parse(text) : undefined) as T;
     }
-    return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
   }
 
   private async list<T>(endpoint: string, headers: Headers, signal: AbortSignal): Promise<T[]> {
@@ -201,7 +326,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         undefined,
         query.toString(),
       );
-      if (!Array.isArray(page.data)) {
+      if (!Array.isArray(page?.data)) {
         throw new Error('Agents API returned an invalid list response');
       }
       items.push(...page.data);
@@ -238,11 +363,14 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
+    const mergedConfig = { ...this.config, ...context?.prompt?.config };
+    // Promptfoo can attach a live provider here; do not render its methods or state.
+    delete mergedConfig.provider;
     try {
-      const mergedConfig = { ...this.config, ...context?.prompt?.config };
-      // Promptfoo can attach a live provider here; do not render its methods or state.
-      delete mergedConfig.provider;
-      const config = renderVarsInObject(mergedConfig, context?.vars) as AgentsApiOptions;
+      const vars = context?.vars;
+      const config = (
+        vars ? renderConfigTemplates(mergedConfig, vars, Object.keys(vars)) : mergedConfig
+      ) as AgentsApiOptions;
       // Keep request credentials and lifecycle settings isolated across concurrent calls.
       const callProvider = new OpenAiAgentsApiProvider(this.modelOverride, {
         config,
@@ -251,18 +379,31 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       const spanContext = buildChatSpanContext({
         system: 'openai',
         model: callProvider.modelName,
-        providerId: callProvider.id(),
+        providerId: this.id(),
         prompt,
         context,
       });
       return await withGenAISpan(
-        { ...spanContext, operationName: 'invoke_agent' },
+        { ...spanContext, operationName: 'invoke_agent', agentId: config.agent_id },
         () => callProvider.runSession(prompt, options),
-        extractProviderResponseAttributes,
+        (response) => ({
+          ...extractProviderResponseAttributes(response),
+          responseModel:
+            typeof response.metadata?.model === 'string' ? response.metadata.model : undefined,
+        }),
       );
     } catch (error) {
       options?.abortSignal?.throwIfAborted();
-      return { cached: false, error: error instanceof Error ? error.message : String(error) };
+      const credentials = new Set<string>();
+      addCredential(credentials, this.getApiKey());
+      collectConfigCredentials(mergedConfig, credentials);
+      return {
+        cached: false,
+        error: redactCredentials(
+          error instanceof Error ? error.message : String(error),
+          sortCredentials(credentials),
+        ),
+      };
     }
   }
 
@@ -273,7 +414,18 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     options?.abortSignal?.throwIfAborted();
     const headers = new Headers(this.getOpenAiRequestHeaders());
     const apiKey = this.getApiKey();
-    if (!apiKey && !headers.has('Authorization') && this.requiresApiKey()) {
+    const credentials = new Set<string>();
+    addCredential(credentials, apiKey);
+    let hasHeaderCredential = false;
+    headers.forEach((value, name) => {
+      if (isCredentialName(name)) {
+        hasHeaderCredential ||= value.trim().length > 0;
+        addCredential(credentials, value);
+      }
+    });
+    collectConfigCredentials(this.config, credentials);
+    this.credentials = sortCredentials(credentials);
+    if (!apiKey && !hasHeaderCredential && this.requiresApiKey()) {
       return { error: this.getMissingApiKeyErrorMessage() };
     }
     if (apiKey && !headers.has('Authorization')) {
@@ -283,6 +435,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     headers.set('OpenAI-Beta', 'agents=v1');
 
     const timeoutMs = this.config.timeoutMs ?? 300_000;
+    const deadline = Date.now() + timeoutMs;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const signal = options?.abortSignal
@@ -291,6 +444,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     let endpoint: string | undefined;
     let completed = false;
     const result: ProviderResponse = { cached: false };
+    const metadata: Record<string, unknown> = {};
     try {
       const session = await this.request<Session>('agents/sessions', 'POST', headers, signal, {
         agent_id: this.config.agent_id,
@@ -304,12 +458,12 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         vault_ids: this.config.vault_ids,
         stream: false,
       });
-      if (!session.id || typeof session.id !== 'string') {
+      if (!session?.id || typeof session.id !== 'string') {
         throw new Error('Agents API did not return a session ID');
       }
       endpoint = `agents/sessions/${encodeURIComponent(session.id)}`;
-      result.metadata = { sessionId: session.id };
-      const { session: finished, turn } = await this.waitForTurn(
+      metadata.sessionId = session.id;
+      const { session: completedSession, turn } = await this.waitForTurn(
         session,
         endpoint,
         headers,
@@ -318,10 +472,19 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       const items = (await this.list<Item>(`${endpoint}/items`, headers, signal)).filter(
         (item) => item.turn_id === turn.id,
       );
+      const output = this.getFinalAnswer(items);
+      const finished = await this.waitForFinalUsage(
+        completedSession,
+        endpoint,
+        headers,
+        signal,
+        deadline,
+        options?.abortSignal,
+      );
       // Session usage includes subagent work; root-turn usage can undercount it.
       const usage = finished.usage ?? turn.usage;
       const model = finished.agent.model;
-      result.output = this.getFinalAnswer(items);
+      result.output = output;
       result.tokenUsage = usage
         ? {
             prompt: usage.input_tokens,
@@ -341,8 +504,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           serviceTier: finished.agent.service_tier,
         });
       }
-      result.metadata = {
-        ...result.metadata,
+      Object.assign(metadata, {
         turnId: turn.id,
         model,
         costScope: hasSubagents
@@ -351,31 +513,22 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         toolCalls: items
           .filter((item) => item.type !== 'message' && item.type !== 'reasoning')
           .map(({ id, type, name, status }) => ({ id, type, name, status })),
-      };
+        ...(usage ? {} : { usageUnavailable: true }),
+      });
       completed = true;
     } catch (error) {
       options?.abortSignal?.throwIfAborted();
       result.error = controller.signal.aborted
         ? `Agents API request timed out after ${timeoutMs}ms`
-        : error instanceof Error
-          ? error.message
-          : String(error);
+        : this.redact(error instanceof Error ? error.message : String(error));
     } finally {
       clearTimeout(timer);
       if (endpoint && (!completed || !this.config.retainSession)) {
-        try {
-          // Cleanup must still run after the eval's signal has been aborted.
-          await this.request(endpoint, 'DELETE', headers, AbortSignal.timeout(10_000));
-          result.metadata = { ...result.metadata, sessionDeleted: true };
-        } catch (error) {
-          const cleanupError = error instanceof Error ? error.message : String(error);
-          result.metadata = { ...result.metadata, sessionDeleted: false, cleanupError };
-          logger.warn('[OpenAI Agents API] Failed to delete session', {
-            sessionId: result.metadata?.sessionId,
-            error: cleanupError,
-          });
-        }
+        await this.cleanupSession(endpoint, headers, !completed, metadata);
       }
+    }
+    if (Object.keys(metadata).length) {
+      result.metadata = metadata;
     }
     return result;
   }
@@ -389,7 +542,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     let session = initialSession;
     while (true) {
       if (session.status === 'failed') {
-        throw new Error(`Agents API session failed: ${session.error ?? 'unknown error'}`);
+        const error = this.redact(session.error ?? 'unknown error');
+        throw new Error(`Agents API session failed: ${error.slice(0, MAX_ERROR_DETAIL_LENGTH)}`);
       }
       if (session.status === 'requires_action') {
         const actions = session.required_actions?.map((action) => action.type).join(', ');
@@ -402,7 +556,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       // Subagent completion and an idle session are not proof that the root turn succeeded.
       const turn = turns.find((candidate) => candidate.subagent_id === null);
       if (turn?.status === 'failed' || turn?.status === 'cancelled') {
-        throw new Error(`Agents API turn ${turn.status}: ${turn.error?.message ?? turn.id}`);
+        const error = this.redact(turn.error?.message ?? turn.id);
+        throw new Error(
+          `Agents API turn ${turn.status}: ${error.slice(0, MAX_ERROR_DETAIL_LENGTH)}`,
+        );
       }
       if (turn?.status === 'completed') {
         session = await this.request<Session>(endpoint, 'GET', headers, signal);
@@ -410,6 +567,105 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       }
       await sleepWithAbort(this.config.pollIntervalMs ?? 1_000, signal);
       session = await this.request<Session>(endpoint, 'GET', headers, signal);
+    }
+  }
+
+  /** Session usage is attached shortly after the root turn completes; deleting sooner loses it. */
+  private async waitForFinalUsage(
+    session: Session,
+    endpoint: string,
+    headers: Headers,
+    signal: AbortSignal,
+    deadline: number,
+    evalSignal?: AbortSignal,
+  ): Promise<Session> {
+    const waitUntil = Math.min(Date.now() + (this.config.usageTimeoutMs ?? 15_000), deadline);
+    const pollIntervalMs = Math.min(this.config.pollIntervalMs ?? 1_000, 1_000);
+    let latest = session;
+    try {
+      while (!latest.usage && Date.now() < waitUntil) {
+        await sleepWithAbort(Math.min(pollIntervalMs, waitUntil - Date.now()), signal);
+        latest = await this.request<Session>(endpoint, 'GET', headers, signal);
+      }
+    } catch (error) {
+      evalSignal?.throwIfAborted();
+      // A completed answer stays successful when only its usage cannot be read.
+      logger.debug('[OpenAI Agents API] Final session usage unavailable', {
+        sessionId: session.id,
+        error: this.redact(error instanceof Error ? error.message : String(error)),
+      });
+    }
+    return latest;
+  }
+
+  /** Cancel unfinished work, then delete the session once the API allows it. */
+  private async cleanupSession(
+    endpoint: string,
+    headers: Headers,
+    cancel: boolean,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    const cleanupTimeoutMs = this.config.cleanupTimeoutMs ?? 60_000;
+    // Cleanup must still run after the eval's signal has been aborted.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), cleanupTimeoutMs);
+    let lastError: unknown;
+    try {
+      if (cancel) {
+        try {
+          await this.request(
+            `${endpoint}/events`,
+            'POST',
+            headers,
+            controller.signal,
+            { events: [{ type: 'agent.session.input.cancel' }] },
+            undefined,
+            true,
+          );
+          metadata.sessionCancelled = true;
+        } catch (error) {
+          controller.signal.throwIfAborted();
+          // A session without an active turn can reject cancellation; deletion still applies.
+          logger.debug('[OpenAI Agents API] Session cancellation was not accepted', {
+            sessionId: metadata.sessionId,
+            error: this.redact(error instanceof Error ? error.message : String(error)),
+          });
+        }
+      }
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await this.request(endpoint, 'DELETE', headers, controller.signal);
+          metadata.sessionDeleted = true;
+          return;
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            lastError = error;
+          }
+          // Deletion is rejected until an active or cancelled turn is durably idle.
+          if (!(error instanceof AgentsApiHttpError) || error.status !== 409) {
+            throw error;
+          }
+          await sleepWithAbort(
+            Math.min(RETRY_BASE_DELAY_MS * 2 ** attempt, CLEANUP_RETRY_MAX_DELAY_MS),
+            controller.signal,
+          );
+        }
+      }
+    } catch (error) {
+      const reason = lastError ?? error;
+      const message = reason instanceof Error ? reason.message : String(reason);
+      const cleanupError = this.redact(
+        controller.signal.aborted
+          ? `Agents API session cleanup timed out after ${cleanupTimeoutMs}ms${lastError ? `: ${message}` : ''}`
+          : message,
+      );
+      Object.assign(metadata, { sessionDeleted: false, cleanupError });
+      logger.warn('[OpenAI Agents API] Failed to delete session', {
+        sessionId: metadata.sessionId,
+        error: cleanupError,
+      });
+    } finally {
+      clearTimeout(timer);
     }
   }
 }

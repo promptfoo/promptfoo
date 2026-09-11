@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiAgentsApiProvider } from '../../../src/providers/openai/agents-api';
+import { withGenAISpan } from '../../../src/providers/tracing';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -7,6 +8,11 @@ vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
   ...(await importOriginal()),
   fetchWithRetries: vi.fn(),
 }));
+
+vi.mock('../../../src/providers/tracing', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/providers/tracing')>();
+  return { ...actual, withGenAISpan: vi.fn(actual.withGenAISpan) };
+});
 
 const usage = {
   input_tokens: 100,
@@ -32,6 +38,49 @@ const page = (data: unknown[], more = false, lastId: string | null = null) => ({
   last_id: lastId,
 });
 const json = (data: unknown) => new Response(JSON.stringify(data));
+const apiError = (status: number, message: string) =>
+  new Response(JSON.stringify({ error: { message } }), { status });
+
+function defaultResponse(pathname: string, method?: string) {
+  if (method === 'DELETE') {
+    return json({ deleted: true });
+  }
+  if (pathname.endsWith('/turns')) {
+    return json(page([turn]));
+  }
+  if (pathname.endsWith('/items')) {
+    return json(page([message]));
+  }
+  return json(session);
+}
+
+/** Override selected API routes; unmatched requests use the default successful session. */
+function mockApi(route: (pathname: string, method: string) => Response | undefined) {
+  vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+    const pathname = new URL(String(url)).pathname;
+    const method = options?.method ?? 'GET';
+    return route(pathname, method) ?? defaultResponse(pathname, method);
+  });
+}
+
+const calls = () =>
+  vi.mocked(fetchWithRetries).mock.calls.map(([url, options]) => ({
+    pathname: new URL(String(url)).pathname,
+    method: options?.method ?? 'GET',
+    options,
+  }));
+
+const withoutUsage = (pathname: string, method: string) => {
+  if (method === 'DELETE') {
+    return undefined;
+  }
+  if (pathname.endsWith('/turns')) {
+    return json(page([{ ...turn, usage: null }]));
+  }
+  return pathname.endsWith('/sess_test') || pathname.endsWith('/sessions')
+    ? json({ ...session, usage: null })
+    : undefined;
+};
 
 describe('OpenAiAgentsApiProvider', () => {
   let restoreEnv: () => void;
@@ -39,19 +88,9 @@ describe('OpenAiAgentsApiProvider', () => {
   beforeEach(() => {
     restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
     vi.mocked(fetchWithRetries).mockReset();
-    vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
-      if (options?.method === 'DELETE') {
-        return json({ deleted: true });
-      }
-      const pathname = new URL(String(url)).pathname;
-      if (pathname.endsWith('/turns')) {
-        return json(page([turn]));
-      }
-      if (pathname.endsWith('/items')) {
-        return json(page([message]));
-      }
-      return json(session);
-    });
+    vi.mocked(fetchWithRetries).mockImplementation(async (url, options) =>
+      defaultResponse(new URL(String(url)).pathname, options?.method),
+    );
   });
 
   afterEach(() => {
@@ -126,11 +165,40 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(agentProvider.modelName).toBe('gpt-5.6');
   });
 
+  it('attributes invoke_agent spans to the configured provider and saved agent', async () => {
+    vi.mocked(withGenAISpan).mockClear();
+    const agentProvider = new OpenAiAgentsApiProvider('', {
+      id: 'hosted-agent',
+      config: { apiKey: 'test-key', agent_id: 'agent_saved' },
+    });
+    const result = await agentProvider.callApi('hi');
+    const [spanContext, , extractAttributes] = vi.mocked(withGenAISpan).mock.calls[0];
+    expect(spanContext).toMatchObject({
+      operationName: 'invoke_agent',
+      providerId: 'hosted-agent',
+      agentId: 'agent_saved',
+    });
+    expect(extractAttributes?.(result)).toMatchObject({ responseModel: 'gpt-6-astra' });
+  });
+
   it('fails before making requests when credentials are absent', async () => {
     expect(await new OpenAiAgentsApiProvider().callApi('hi')).toMatchObject({
       error: expect.stringContaining('OPENAI_API_KEY'),
     });
     expect(fetchWithRetries).not.toHaveBeenCalled();
+  });
+
+  it('accepts a credential header for compatible gateways without an API key', async () => {
+    const result = await new OpenAiAgentsApiProvider('', {
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1',
+        headers: { 'api-key': 'gateway-credential' },
+      },
+    }).callApi('hi');
+    expect(result.output).toBe('42');
+    const headers = new Headers(vi.mocked(fetchWithRetries).mock.calls[0][1]!.headers);
+    expect(headers.get('api-key')).toBe('gateway-credential');
+    expect(headers.has('Authorization')).toBe(false);
   });
 
   it('renders nested config once and preserves variable values as literal data', async () => {
@@ -148,6 +216,22 @@ describe('OpenAiAgentsApiProvider', () => {
       metadata: { purpose: 'qa' },
     });
     expect(agentProvider.config.agent?.instructions).toBe('Follow {{role}}');
+  });
+
+  it('sends literal template braces unchanged unless they reference test variables', async () => {
+    const setupCommands = [
+      { command: "docker inspect -f '{{.State.Running}}' app" },
+      { command: `python -c "print(f'{{name}}')"` },
+      { command: 'echo "{{"answer": 42}}"' },
+    ];
+    await provider({
+      agent: { instructions: 'Answer as {{role}}' },
+      environment: { type: 'openai_hosted', setup_commands: setupCommands },
+    }).callApi('hi', { vars: { role: 'a tester' }, prompt: { raw: 'hi', label: 'test' } });
+    expect(JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]!.body as string)).toMatchObject({
+      agent: { instructions: 'Answer as a tester' },
+      environment: { setup_commands: setupCommands },
+    });
   });
 
   it('applies per-prompt config without injecting a default model into a saved agent', async () => {
@@ -265,12 +349,23 @@ describe('OpenAiAgentsApiProvider', () => {
   });
 
   it.each([0, -1, NaN, Infinity, 1.5, 2_147_483_648])(
-    'rejects invalid timeout/poll values: %s',
+    'rejects invalid timeout, poll, and cleanup values: %s',
     (value) => {
       expect(() => provider({ timeoutMs: value })).toThrow('positive integer');
       expect(() => provider({ pollIntervalMs: value })).toThrow('positive integer');
+      expect(() => provider({ cleanupTimeoutMs: value })).toThrow('positive integer');
     },
   );
+
+  it.each([-1, NaN, 1.5, 2_147_483_648])('rejects invalid usage wait values: %s', (value) => {
+    expect(() => provider({ usageTimeoutMs: value })).toThrow('non-negative integer');
+  });
+
+  it('rejects an unsupported environment type', () => {
+    expect(() =>
+      provider({ environment: { type: 'self_hosted' } as unknown as { type: 'none' } }),
+    ).toThrow('environment.type must be "none" or "openai_hosted"');
+  });
 
   it.each([400, 401, 403, 429, 500])(
     'reports HTTP %s as an error with no false output',
@@ -279,8 +374,27 @@ describe('OpenAiAgentsApiProvider', () => {
       const result = await provider().callApi('hi');
       expect(result.error).toContain(`HTTP ${status}`);
       expect(result.output).toBeUndefined();
+      // Session creation is never replayed, even after a transient server error.
+      expect(fetchWithRetries).toHaveBeenCalledTimes(1);
     },
   );
+
+  it('reports a missing session ID without attempting cleanup', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(json({ status: 'idle' }));
+    const result = await provider().callApi('hi');
+    expect(result.error).toBe('Agents API did not return a session ID');
+    expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports an invalid list response', async () => {
+    vi.mocked(fetchWithRetries)
+      .mockResolvedValueOnce(json(session))
+      .mockResolvedValueOnce(json({ data: null }));
+    expect(await provider().callApi('hi')).toMatchObject({
+      error: 'Agents API returned an invalid list response',
+      metadata: { sessionDeleted: true },
+    });
+  });
 
   it('waits through initial idle and completed subagent turns until the root finishes', async () => {
     vi.useFakeTimers();
@@ -305,7 +419,7 @@ describe('OpenAiAgentsApiProvider', () => {
     const result = await provider().callApi('hi');
     expect(result.error).toContain(`turn ${status}: task stopped`);
     expect(result.output).toBeUndefined();
-    expect(result.metadata?.sessionDeleted).toBe(true);
+    expect(result.metadata).toMatchObject({ sessionCancelled: true, sessionDeleted: true });
   });
 
   it('reports required client actions and removes the waiting session', async () => {
@@ -318,7 +432,80 @@ describe('OpenAiAgentsApiProvider', () => {
     );
     const result = await provider().callApi('hi');
     expect(result.error).toContain('requires client-side actions (function_call)');
-    expect(result.metadata?.sessionDeleted).toBe(true);
+    expect(result.metadata).toMatchObject({ sessionCancelled: true, sessionDeleted: true });
+  });
+
+  it('cancels unfinished work and retries deletion until the session is idle', async () => {
+    vi.useFakeTimers();
+    let deletions = 0;
+    mockApi((pathname, method) => {
+      if (method === 'DELETE') {
+        deletions++;
+        return deletions < 3
+          ? apiError(
+              409,
+              'session must be durably idle or failed without required actions before deletion',
+            )
+          : undefined;
+      }
+      if (pathname.endsWith('/events')) {
+        return new Response(null, { status: 202 });
+      }
+      return method === 'POST'
+        ? json({
+            ...session,
+            status: 'requires_action',
+            required_actions: [{ type: 'function_call' }],
+          })
+        : undefined;
+    });
+    const pending = provider().callApi('hi');
+    await vi.advanceTimersByTimeAsync(3_000);
+    const result = await pending;
+    expect(result.error).toContain('requires client-side actions (function_call)');
+    expect(result.metadata).toMatchObject({ sessionCancelled: true, sessionDeleted: true });
+    expect(deletions).toBe(3);
+    const requests = calls();
+    const cancel = requests.findIndex((request) => request.pathname.endsWith('/events'));
+    expect(JSON.parse(requests[cancel].options!.body as string)).toEqual({
+      events: [{ type: 'agent.session.input.cancel' }],
+    });
+    expect(requests.findIndex((request) => request.method === 'DELETE')).toBeGreaterThan(cancel);
+  });
+
+  it('still deletes a session when the API rejects cancellation', async () => {
+    mockApi((pathname) => {
+      if (pathname.endsWith('/events')) {
+        return apiError(400, 'no active turn to cancel');
+      }
+      return pathname.endsWith('/turns')
+        ? json(page([{ ...turn, status: 'failed', error: { message: 'stopped' } }]))
+        : undefined;
+    });
+    const result = await provider().callApi('hi');
+    expect(result.error).toContain('turn failed: stopped');
+    expect(result.metadata).toMatchObject({ sessionDeleted: true });
+    expect(result.metadata).not.toHaveProperty('sessionCancelled');
+  });
+
+  it('reports a redacted cleanup timeout and skips cancellation after success', async () => {
+    vi.useFakeTimers();
+    mockApi((_pathname, method) =>
+      method === 'DELETE' ? apiError(409, 'session busy for test-key') : undefined,
+    );
+    const pending = provider({ cleanupTimeoutMs: 3_000 }).callApi('hi');
+    await vi.advanceTimersByTimeAsync(3_000);
+    const result = await pending;
+    expect(result.output).toBe('42');
+    expect(result.error).toBeUndefined();
+    expect(result.metadata).toMatchObject({
+      sessionDeleted: false,
+      cleanupError: expect.stringContaining('cleanup timed out after 3000ms'),
+    });
+    expect(result.metadata?.cleanupError).toContain('HTTP 409');
+    expect(result.metadata?.cleanupError).not.toContain('test-key');
+    expect(result.metadata).not.toHaveProperty('sessionCancelled');
+    expect(calls().some((request) => request.pathname.endsWith('/events'))).toBe(false);
   });
 
   it('paginates turns and output, excluding commentary and other turns', async () => {
@@ -396,17 +583,34 @@ describe('OpenAiAgentsApiProvider', () => {
   });
 
   it('preserves the eval result and reports cleanup failures', async () => {
-    vi.mocked(fetchWithRetries)
-      .mockResolvedValueOnce(json(session))
-      .mockResolvedValueOnce(json(page([turn])))
-      .mockResolvedValueOnce(json(session))
-      .mockResolvedValueOnce(json(page([message])))
-      .mockResolvedValueOnce(new Response(null, { status: 503 }));
+    mockApi((_pathname, method) =>
+      method === 'DELETE' ? apiError(403, 'missing api.agents.write') : undefined,
+    );
     const result = await provider().callApi('hi');
     expect(result).toMatchObject({
       output: '42',
-      metadata: { sessionDeleted: false, cleanupError: expect.stringContaining('503') },
+      metadata: {
+        sessionDeleted: false,
+        cleanupError: expect.stringContaining('HTTP 403'),
+      },
     });
+    expect(result.metadata?.cleanupError).toContain('missing api.agents.write');
+  });
+
+  it('retries a transient deletion failure', async () => {
+    vi.useFakeTimers();
+    let deletions = 0;
+    mockApi((_pathname, method) => {
+      if (method !== 'DELETE') {
+        return undefined;
+      }
+      deletions++;
+      return deletions === 1 ? new Response(null, { status: 503 }) : undefined;
+    });
+    const pending = provider().callApi('hi');
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(await pending).toMatchObject({ output: '42', metadata: { sessionDeleted: true } });
+    expect(deletions).toBe(2);
   });
 
   it('retries reads and idempotent cleanup, but never session creation', async () => {
@@ -414,6 +618,31 @@ describe('OpenAiAgentsApiProvider', () => {
     for (const [, request, , retries] of vi.mocked(fetchWithRetries).mock.calls) {
       expect(retries).toBe(request?.method === 'POST' ? 0 : 3);
     }
+  });
+
+  it('retries transient status reads before failing the run', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchWithRetries)
+      .mockResolvedValueOnce(json(session))
+      .mockResolvedValueOnce(new Response('bad gateway', { status: 502 }))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }));
+    const pending = provider().callApi('hi');
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(await pending).toMatchObject({ output: '42', metadata: { sessionDeleted: true } });
+    expect(calls().filter((request) => request.pathname.endsWith('/turns'))).toHaveLength(3);
+  });
+
+  it('fails after exhausting transient read retries', async () => {
+    vi.useFakeTimers();
+    mockApi((_pathname, method) =>
+      method === 'GET' ? new Response(null, { status: 503 }) : undefined,
+    );
+    const pending = provider({ maxRetries: 1 }).callApi('hi');
+    await vi.advanceTimersByTimeAsync(1_000);
+    const result = await pending;
+    expect(result.error).toContain('HTTP 503');
+    expect(result.metadata).toMatchObject({ sessionDeleted: true });
+    expect(calls().filter((request) => request.pathname.endsWith('/turns'))).toHaveLength(2);
   });
 
   it('treats an already deleted session as successful cleanup', async () => {
@@ -462,7 +691,7 @@ describe('OpenAiAgentsApiProvider', () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(await pending).toMatchObject({
       error: 'Agents API request timed out after 100ms',
-      metadata: { sessionDeleted: true },
+      metadata: { sessionCancelled: true, sessionDeleted: true },
     });
   });
 
@@ -477,9 +706,11 @@ describe('OpenAiAgentsApiProvider', () => {
     await vi.advanceTimersByTimeAsync(0);
     controller.abort(new Error('cancel eval'));
     await rejected;
-    const cleanup = vi.mocked(fetchWithRetries).mock.calls.at(-1)![1]!;
-    expect(cleanup.method).toBe('DELETE');
-    expect(cleanup.signal?.aborted).toBe(false);
+    const [cancel, deletion] = calls().slice(-2);
+    expect(cancel.pathname).toMatch(/\/events$/);
+    expect(deletion.method).toBe('DELETE');
+    expect(cancel.options?.signal?.aborted).toBe(false);
+    expect(deletion.options?.signal?.aborted).toBe(false);
   });
 
   it('does not create a session after cancellation', async () => {
@@ -489,15 +720,84 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 
-  it('leaves unavailable beta usage and cost unset', async () => {
-    vi.mocked(fetchWithRetries)
-      .mockResolvedValueOnce(json(session))
-      .mockResolvedValueOnce(json(page([{ ...turn, usage: null }])))
-      .mockResolvedValueOnce(json({ ...session, usage: null }));
-    const result = await provider().callApi('hi');
-    expect(result.output).toBe('42');
+  it('waits for final session usage before deleting the session', async () => {
+    vi.useFakeTimers();
+    let sessionReads = 0;
+    mockApi((pathname, method) => {
+      if (pathname.endsWith('/turns')) {
+        return json(page([{ ...turn, usage: null }]));
+      }
+      if (pathname.endsWith('/sess_test') && method === 'GET') {
+        sessionReads++;
+        return json({ ...session, usage: sessionReads >= 3 ? usage : null });
+      }
+      return method === 'POST' ? json({ ...session, usage: null }) : undefined;
+    });
+    const pending = provider().callApi('hi');
+    await vi.advanceTimersByTimeAsync(2_000);
+    const result = await pending;
+    expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+    expect(result.cost).toBeGreaterThan(0);
+    expect(result.metadata).not.toHaveProperty('usageUnavailable');
+    expect(sessionReads).toBe(3);
+    const requests = calls();
+    const lastSessionRead = requests
+      .map((request) => request.method === 'GET' && request.pathname.endsWith('/sess_test'))
+      .lastIndexOf(true);
+    expect(requests.findIndex((request) => request.method === 'DELETE')).toBeGreaterThan(
+      lastSessionRead,
+    );
+  });
+
+  it('keeps a successful answer when final usage stays unavailable', async () => {
+    vi.useFakeTimers();
+    mockApi(withoutUsage);
+    const pending = provider({ usageTimeoutMs: 2_000 }).callApi('hi');
+    await vi.advanceTimersByTimeAsync(2_000);
+    const result = await pending;
+    expect(result).toMatchObject({
+      output: '42',
+      metadata: { usageUnavailable: true, sessionDeleted: true },
+    });
+    expect(result.error).toBeUndefined();
     expect(result.tokenUsage).toBeUndefined();
     expect(result.cost).toBeUndefined();
+  });
+
+  it('skips the usage wait when usageTimeoutMs is 0', async () => {
+    mockApi(withoutUsage);
+    const result = await provider({ usageTimeoutMs: 0 }).callApi('hi');
+    expect(result.metadata).toMatchObject({ usageUnavailable: true, sessionDeleted: true });
+    expect(
+      calls().filter(
+        (request) => request.method === 'GET' && request.pathname.endsWith('/sess_test'),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('does not turn a completed answer into a timeout while waiting for usage', async () => {
+    vi.useFakeTimers();
+    mockApi(withoutUsage);
+    const pending = provider({ timeoutMs: 1_500 }).callApi('hi');
+    await vi.advanceTimersByTimeAsync(1_500);
+    const result = await pending;
+    expect(result).toMatchObject({
+      output: '42',
+      metadata: { usageUnavailable: true, sessionDeleted: true },
+    });
+    expect(result.error).toBeUndefined();
+  });
+
+  it('propagates eval cancellation while waiting for usage', async () => {
+    vi.useFakeTimers();
+    mockApi(withoutUsage);
+    const controller = new AbortController();
+    const pending = provider().callApi('hi', undefined, { abortSignal: controller.signal });
+    const rejected = expect(pending).rejects.toThrow('cancel eval');
+    await vi.advanceTimersByTimeAsync(500);
+    controller.abort(new Error('cancel eval'));
+    await rejected;
+    expect(calls().at(-1)?.method).toBe('DELETE');
   });
 
   it('accepts completed assistant output when the API leaves its phase unset', async () => {
@@ -530,6 +830,64 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(result.error).not.toContain('alternate_credential_value');
     expect(result.error).not.toContain('nested_secret');
     expect(result.error).toContain('[REDACTED]');
+  });
+
+  it('redacts credentials echoed in failed turn errors without mangling short values', async () => {
+    vi.mocked(fetchWithRetries)
+      .mockResolvedValueOnce(json(session))
+      .mockResolvedValueOnce(
+        json(
+          page([
+            {
+              ...turn,
+              status: 'failed',
+              error: {
+                code: 'mcp_error',
+                message:
+                  'MCP rejected Authorization: Bearer nested-token-value (nested-token-value), subscription-secret-value, and query-secret-value for req_1a2b at index 1',
+              },
+            },
+          ]),
+        ),
+      );
+    const result = await provider({
+      headers: { 'x-api-key': '1' },
+      agent: {
+        tools: [
+          {
+            type: 'mcp',
+            server_url: 'https://mcp.example/sse?key=query-secret-value',
+            headers: {
+              Authorization: 'Bearer nested-token-value',
+              'X-Subscription-Key': 'subscription-secret-value',
+            },
+          },
+        ],
+      },
+    }).callApi('hi');
+    expect(result.error).toContain('Agents API turn failed: MCP rejected Authorization:');
+    expect(result.error).toContain('for req_1a2b at index 1');
+    for (const secret of [
+      'nested-token-value',
+      'subscription-secret-value',
+      'query-secret-value',
+    ]) {
+      expect(result.error).not.toContain(secret);
+    }
+    expect(result.metadata).toMatchObject({ sessionDeleted: true });
+  });
+
+  it('redacts failed session errors and OpenAI-style keys', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      json({
+        ...session,
+        status: 'failed',
+        error: 'Rejected sk-live1234567890abcdefXYZ for test-key',
+      }),
+    );
+    const result = await provider().callApi('hi');
+    expect(result.error).toBe('Agents API session failed: Rejected [REDACTED] for [REDACTED]');
+    expect(result.metadata).toMatchObject({ sessionCancelled: true, sessionDeleted: true });
   });
 
   it('limits error detail length', async () => {
