@@ -9,6 +9,22 @@ export const MediaParamsSchema = z.object({
 
 export type MediaParams = z.infer<typeof MediaParamsSchema>;
 
+// GET /api/media?key=... supports provider-defined storage keys.
+const MediaQuerySchema = z.object({
+  key: z
+    .string()
+    .min(1)
+    .max(2048)
+    .refine(
+      (key) =>
+        !key.startsWith('/') &&
+        !key.includes('\\') &&
+        !key.includes('\0') &&
+        !key.split('/').some((part) => part === '.' || part === '..'),
+      'Invalid media key',
+    ),
+});
+
 // GET /api/media/stats
 
 export const MediaStatsResponseSchema = z.object({
@@ -46,5 +62,6 @@ export const MediaSchemas = {
   },
   Get: {
     Params: MediaParamsSchema,
+    Query: MediaQuerySchema,
   },
 } as const;

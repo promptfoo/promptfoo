@@ -604,7 +604,17 @@ describe('ResultsTable Metrics Display', () => {
   });
 
   describe('ResultsTable Media Rendering', () => {
-    it('shows PDF artifact links and readable attack text', () => {
+    it.each([
+      ['document/abcdef123456.pdf', '/api/media/document/abcdef123456.pdf'],
+      [
+        'tenant/campaign/09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
+        '/api/media?key=tenant%2Fcampaign%2F09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
+      ],
+      [
+        'document/' + 'a'.repeat(64) + '.pdf',
+        '/api/media?key=document%2F' + 'a'.repeat(64) + '.pdf',
+      ],
+    ])('shows PDF artifact links for storage key %s', (storageKey, expectedUrl) => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
@@ -625,7 +635,7 @@ describe('ResultsTable Metrics Display', () => {
                   pdf: {
                     input: 'document',
                     mode: 'scanned',
-                    storageKey: 'document/abcdef123456.pdf',
+                    storageKey,
                     templateStorageKey: 'document/123456abcdef.pdf',
                   },
                 },
@@ -637,7 +647,7 @@ describe('ResultsTable Metrics Display', () => {
       renderWithProviders(<ResultsTable {...defaultProps} />);
       expect(screen.getByRole('link', { name: 'Open PDF' })).toHaveAttribute(
         'href',
-        expect.stringContaining('/api/media/document/abcdef123456.pdf'),
+        expect.stringContaining(expectedUrl),
       );
       expect(screen.getByRole('link', { name: 'Clean template' })).toHaveAttribute(
         'href',

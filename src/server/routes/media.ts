@@ -1,17 +1,26 @@
 /**
  * Media serving routes for the local web UI.
  *
- * Serves media files stored in the local filesystem storage.
+ * Serves media files through the configured storage provider.
  */
 
 import express from 'express';
 import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
 import { MediaSchemas } from '../../types/api/media';
-import { replyValidationError } from '../utils/errors';
+import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
+
+mediaRouter.get('/', async (req: Request, res: Response): Promise<void> => {
+  const queryResult = MediaSchemas.Get.Query.safeParse(req.query);
+  if (!queryResult.success) {
+    replyValidationError(res, queryResult.error);
+    return;
+  }
+  await serveMedia(queryResult.data.key, res, false);
+});
 
 /**
  * Get storage stats
@@ -93,11 +102,13 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
     return;
   }
 
-  try {
-    const { type, filename } = paramsResult.data;
-    const key = `${type}/${filename}`;
+  const { type, filename } = paramsResult.data;
+  await serveMedia(`${type}/${filename}`, res, true);
+});
 
-    logger.debug(`[Media API] Serving media: ${key}`);
+async function serveMedia(key: string, res: Response, contentAddressed: boolean): Promise<void> {
+  try {
+    logger.debug('[Media API] Serving media', { key });
 
     const exists = await mediaExists(key);
     if (!exists) {
@@ -108,7 +119,7 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
     const data = await retrieveMedia(key);
 
     // Determine content type from filename
-    const extension = filename.split('.').pop()?.toLowerCase() || '';
+    const extension = key.split('.').pop()?.toLowerCase() || '';
     const contentTypes: Record<string, string> = {
       wav: 'audio/wav',
       mp3: 'audio/mpeg',
@@ -128,10 +139,13 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', data.length);
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // 1 year cache (content-addressed)
+    res.setHeader(
+      'Cache-Control',
+      contentAddressed ? 'public, max-age=31536000, immutable' : 'private, no-cache',
+    );
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(data);
   } catch (error) {
-    logger.error('[Media API] Error serving media', { error });
-    res.status(500).json({ error: 'Failed to serve media' });
+    sendError(res, 500, 'Failed to serve media', error);
   }
-});
+}

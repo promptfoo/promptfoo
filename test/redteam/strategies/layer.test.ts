@@ -6,6 +6,9 @@ import type { TestCaseWithPlugin } from '../../../src/types/index';
 
 describe('addLayerTestCases', () => {
   it.each([
+    ['pdf'],
+    ['base64', 'pdf'],
+    ['rot13', { id: 'pdf', config: { mode: 'scanned' } }],
     ['pdf', 'base64'],
     ['jailbreak:hydra', 'pdf'],
     ['mischievous-user', 'pdf'],
@@ -13,7 +16,7 @@ describe('addLayerTestCases', () => {
     ['pdf', 'pdf'],
   ])('rejects unsupported PDF composition: %j', async (...steps) => {
     await expect(addLayerTestCases([], 'prompt', { steps }, [], vi.fn())).rejects.toThrow(
-      'final strategy in a single-turn layer',
+      'PDF is a standalone strategy',
     );
   });
   const mockStrategies: Strategy[] = [

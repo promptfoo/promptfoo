@@ -39,30 +39,29 @@ describe('StrategyConfigDialog', () => {
     expect(mockOnSave).toHaveBeenCalledWith('pdf', { input: 'document', mode: 'scanned' });
   });
 
-  it.each([
-    ['base64', true],
-    ['jailbreak:hydra', false],
-    ['mischievous-user', false],
-  ])('offers PDF after %s only when the layer stays single-turn', async (step, available) => {
-    const user = userEvent.setup();
-    renderWithProviders(
-      <StrategyConfigDialog
-        open
-        strategy="layer"
-        config={{ steps: [step] }}
-        onClose={mockOnClose}
-        onSave={mockOnSave}
-        strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
-        allStrategies={[{ id: 'pdf', config: { input: 'document' } }]}
-      />,
-    );
-    await user.click(screen.getByRole('combobox'));
-    expect(screen.queryByRole('option', { name: /^pdf$/ }) !== null).toBe(available);
-  });
+  it.each([[], ['base64'], ['jailbreak:hydra'], ['mischievous-user']])(
+    'does not offer PDF inside a layer with steps %j',
+    async (...steps) => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open
+          strategy="layer"
+          config={{ steps }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          allStrategies={[{ id: 'pdf', config: { input: 'document' } }]}
+        />,
+      );
+      await user.click(screen.getByRole('combobox'));
+      expect(screen.queryByRole('option', { name: /^pdf$/ })).not.toBeInTheDocument();
+    },
+  );
 
-  it('preserves the PDF input and scanned mode when adding it to a layer', async () => {
+  it('preserves the configured strategy options when adding it to a layer', async () => {
     const user = userEvent.setup();
-    const pdf = { id: 'pdf', config: { input: 'document', mode: 'scanned' } };
+    const strategy = { id: 'jailbreak:meta', config: { numIterations: 7 } };
     renderWithProviders(
       <StrategyConfigDialog
         open
@@ -71,13 +70,13 @@ describe('StrategyConfigDialog', () => {
         onClose={mockOnClose}
         onSave={mockOnSave}
         strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
-        allStrategies={[pdf]}
+        allStrategies={[strategy]}
       />,
     );
     await user.click(screen.getByRole('combobox'));
-    await user.click(screen.getByRole('option', { name: /^pdf$/ }));
+    await user.click(screen.getByRole('option', { name: /^jailbreak:meta$/ }));
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['rot13', pdf] });
+    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['rot13', strategy] });
   });
 
   it('should correctly filter layerPlugins when using the stable empty array for selectedPlugins', async () => {

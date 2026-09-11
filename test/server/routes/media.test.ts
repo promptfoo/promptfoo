@@ -42,6 +42,59 @@ describe('Media Routes', () => {
     vi.resetAllMocks();
   });
 
+  describe('GET /api/media?key=...', () => {
+    it.each([
+      'tenant/campaign/09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
+      'document/' + 'a'.repeat(64) + '.pdf',
+      'tenant/invoice ?#&%2F.pdf',
+    ])('serves the exact provider-defined key %s', async (key) => {
+      const data = Buffer.from('%PDF-1.7 test');
+      mockedMediaExists.mockResolvedValue(true);
+      mockedRetrieveMedia.mockResolvedValue(data);
+      const response = await api.get('/api/media').query({ key });
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(data);
+      expect(response.headers['content-type']).toBe('application/pdf');
+      expect(response.headers['cache-control']).toBe('private, no-cache');
+      expect(response.headers['x-content-type-options']).toBe('nosniff');
+      expect(mockedMediaExists).toHaveBeenCalledWith(key);
+      expect(mockedRetrieveMedia).toHaveBeenCalledWith(key);
+    });
+
+    it.each([
+      undefined,
+      '',
+      '../private.pdf',
+      'document/../../private.pdf',
+      '/private.pdf',
+      'document/./private.pdf',
+      'document\\..\\private.pdf',
+      'file\0.pdf',
+      'a'.repeat(2049),
+      ['first.pdf', 'second.pdf'],
+    ])('rejects invalid keys before touching storage: %j', async (key) => {
+      const response = await api.get('/api/media').query({ key });
+      expect(response.status).toBe(400);
+      expect(mockedMediaExists).not.toHaveBeenCalled();
+      expect(mockedRetrieveMedia).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 for a missing provider key', async () => {
+      mockedMediaExists.mockResolvedValue(false);
+      const response = await api.get('/api/media').query({ key: 'campaign/missing.pdf' });
+      expect(response.status).toBe(404);
+      expect(mockedRetrieveMedia).not.toHaveBeenCalled();
+    });
+
+    it('does not disclose provider errors', async () => {
+      mockedMediaExists.mockResolvedValue(true);
+      mockedRetrieveMedia.mockRejectedValue(new Error('Secret storage credentials'));
+      const response = await api.get('/api/media').query({ key: 'campaign/invoice.pdf' });
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to serve media' });
+    });
+  });
+
   describe('GET /api/media/stats', () => {
     beforeEach(() => {
       vi.resetAllMocks();

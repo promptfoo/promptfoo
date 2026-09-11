@@ -41,7 +41,9 @@ import type { StrategyCardData } from './strategies/types';
 // We use ADDITIONAL_STRATEGIES (not ALL_STRATEGIES) because ALL_STRATEGIES includes preset strategies
 // like 'default', 'multilingual' which aren't meant to be composed as layer steps.
 // We exclude 'layer' itself to prevent infinite recursion.
-const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
+const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter(
+  (s) => s !== 'layer' && s !== 'pdf',
+).sort();
 
 // Type for layer strategy steps (can be strings or objects with nested config)
 type StepType = string | { id: string; config?: Partial<StrategyConfig> };
@@ -141,9 +143,6 @@ export default function StrategyConfigDialog({
     );
 
     return LAYER_TRANSFORMABLE_STRATEGIES.filter((strategy) => {
-      if (strategy === 'pdf' && hasAgenticStrategy) {
-        return false;
-      }
       // Cannot add duplicates
       if (stepIds.has(strategy)) {
         return false;

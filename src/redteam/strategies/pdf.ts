@@ -72,7 +72,9 @@ async function prepareTemplate(
 }
 
 function resolveInput(testCase: TestCaseWithPlugin, injectVar: string, configuredInput?: string) {
-  const inputs = testCase.metadata.pluginConfig?.inputs as Inputs | undefined;
+  const configuredInputs = testCase.metadata.pluginConfig?.inputs as Inputs | undefined;
+  const inputs =
+    configuredInputs && Object.keys(configuredInputs).length ? configuredInputs : undefined;
   const pdfInputs = Object.entries(inputs ?? {}).filter(
     ([, definition]) => normalizeInputDefinition(definition).type === 'pdf',
   );
@@ -83,9 +85,7 @@ function resolveInput(testCase: TestCaseWithPlugin, injectVar: string, configure
     throw new Error('PDF strategy requires one PDF input, or config.input naming a PDF input');
   }
   if (testCase.metadata.pdf) {
-    throw new Error(
-      'PDF must be the final strategy in a single-turn layer; multi-turn PDF transforms are not supported',
-    );
+    throw new Error('PDF strategy requires an untransformed test case');
   }
   const definition = inputs?.[input] ? normalizeInputDefinition(inputs[input]) : undefined;
   if (definition?.config?.benign) {
@@ -104,13 +104,11 @@ function resolveInput(testCase: TestCaseWithPlugin, injectVar: string, configure
   );
   let inputVars = testCase.metadata.inputVars as Record<string, unknown> | undefined;
   if (inputs && typeof testCase.vars?.[injectVar] === 'string') {
-    // A preceding text strategy may have changed the JSON since plugin generation.
+    // Use the current serialized inputs rather than a stale metadata snapshot.
     try {
       inputVars = JSON.parse(String(testCase.vars[injectVar]));
     } catch {
-      throw new Error(
-        'PDF strategy requires valid JSON for multi-input attacks; place it after strategies that preserve input JSON',
-      );
+      throw new Error('PDF strategy requires valid JSON for multi-input attacks');
     }
   }
   const payload = inputs ? inputVars?.[input] : testCase.vars?.[injectVar];

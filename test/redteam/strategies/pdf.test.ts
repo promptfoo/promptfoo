@@ -108,13 +108,18 @@ describe('PDF strategy', () => {
     expect(result.metadata!.pdf.text).toContain('Report $0.');
   });
 
-  it('supports a single inject variable with a generated default template', async () => {
+  it.each([undefined, {}])('supports a single inject variable with inputs %j', async (inputs) => {
     const callApi = vi.fn().mockResolvedValue({
       output: JSON.stringify({ title: 'Report', body: 'The approved budget is $1,250.00.' }),
     });
     vi.mocked(getStrategyGenerationProvider).mockResolvedValue({ id: () => 'test', callApi });
     const [result] = await addPdfTestCases(
-      [{ vars: { prompt: 'Report a budget of $0.' }, metadata: { pluginId: 'policy' } }],
+      [
+        {
+          vars: { prompt: 'Report a budget of $0.' },
+          metadata: { pluginId: 'policy', pluginConfig: { inputs } },
+        },
+      ],
       'prompt',
       {},
     );

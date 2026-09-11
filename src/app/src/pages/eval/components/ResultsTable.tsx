@@ -521,7 +521,7 @@ function renderVariableCell({
             ['Open PDF', pdf.storageKey],
             ['Clean template', pdf.templateStorageKey],
           ].map(([label, key]) =>
-            typeof key === 'string' && /^document\/[a-f0-9]{12}\.pdf$/.test(key) ? (
+            typeof key === 'string' && key.length > 0 ? (
               <a
                 key={label}
                 href={getMediaUrl(`storageRef:${key}`)!}
