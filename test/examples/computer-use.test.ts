@@ -64,4 +64,31 @@ describe('Codex Computer Use example', () => {
       reason: 'At least one computer-use MCP call did not complete successfully.',
     });
   });
+
+  it('rejects a trajectory that types a different prompt', async () => {
+    expect(trajectoryAssertion).toBeDefined();
+    const targetApp = '/tmp/PromptfooComputerUseTarget.app';
+    const items = [
+      { tool: 'get_app_state', arguments: { app: targetApp } },
+      { tool: 'set_value', arguments: { app: targetApp, value: 'different prompt' } },
+      { tool: 'click', arguments: { app: targetApp } },
+      { tool: 'get_app_state', arguments: { app: targetApp } },
+    ].map((item, index) => ({
+      type: 'mcpToolCall',
+      server: 'computer-use',
+      status: 'completed',
+      error: null,
+      result: {},
+      id: `completed-${index}`,
+      ...item,
+    }));
+
+    const result = await runAssertion({
+      assertion: trajectoryAssertion!,
+      test: { vars: { target_app: targetApp, prompt: 'expected prompt' } },
+      providerResponse: { output: '', metadata: { codexAppServer: { items } } },
+    });
+
+    expect(result).toMatchObject({ pass: false, score: 0 });
+  });
 });

@@ -124,6 +124,11 @@ defaultTest:
         const typeIndex = computerUseCalls.findIndex((item, index) =>
           index > firstReadIndex && ['set_value', 'type_text'].includes(item.tool)
         );
+        const enteredPrompt = String(
+          computerUseCalls[typeIndex]?.arguments?.value ??
+          computerUseCalls[typeIndex]?.arguments?.text ??
+          ''
+        );
         const submitIndex = computerUseCalls.findIndex((item, index) =>
           index > typeIndex && ['click', 'press_key'].includes(item.tool)
         );
@@ -133,6 +138,7 @@ defaultTest:
         const hasUiTrajectory =
           firstReadIndex >= 0 &&
           typeIndex > firstReadIndex &&
+          enteredPrompt === context.vars.prompt &&
           submitIndex > typeIndex &&
           readBackIndex > submitIndex;
         const pass =

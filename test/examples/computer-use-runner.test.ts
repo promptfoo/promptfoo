@@ -77,11 +77,11 @@ done
       '.tmp/PromptfooComputerUseTarget.app/Contents/MacOS/PromptfooComputerUseTarget',
     ),
   };
-  const run = (overrides: NodeJS.ProcessEnv = {}) =>
+  const run = (overrides: NodeJS.ProcessEnv = {}, args: string[] = []) =>
     new Promise<{ code: string | number; stderr: string }>((resolve) => {
       execFile(
         'bash',
-        [script],
+        [script, ...args],
         { env: { ...env, ...overrides }, timeout: 8_000 },
         (error, _stdout, stderr) => {
           resolve({ code: error?.code ?? 0, stderr });
@@ -137,5 +137,18 @@ describe.runIf(process.platform !== 'win32')('Computer Use runner recovery', () 
       stale.kill('SIGTERM');
       await exited;
     }
+  });
+
+  it('rejects configs that redirect runner-owned Promptfoo state', async () => {
+    const fixture = createFixture();
+    fs.writeFileSync(
+      path.join(fixture.example, 'escape.yaml'),
+      'env:\n  PROMPTFOO_CONFIG_DIR: /tmp/outside\n',
+    );
+
+    const result = await fixture.run({}, ['eval', '-c', 'escape.yaml']);
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');
   });
 });
