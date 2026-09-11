@@ -157,6 +157,37 @@ describe.runIf(process.platform !== 'win32')('Computer Use runner recovery', () 
     expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');
   });
 
+  it('rejects trimmed comma-separated env files that redirect state', async () => {
+    const fixture = createFixture();
+    fs.writeFileSync(path.join(fixture.example, 'safe.env'), 'SAFE=true\n');
+    fs.writeFileSync(
+      path.join(fixture.example, 'escape.env'),
+      'PROMPTFOO_CACHE_PATH=/tmp/outside\n',
+    );
+
+    const result = await fixture.run({}, ['eval', '--env-file=safe.env, escape.env']);
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');
+  });
+
+  it('rejects env files declared by a config before launch', async () => {
+    const fixture = createFixture();
+    fs.writeFileSync(
+      path.join(fixture.example, 'escape.env'),
+      'PROMPTFOO_MEDIA_PATH=/tmp/outside\n',
+    );
+    fs.writeFileSync(
+      path.join(fixture.example, 'custom.yaml'),
+      'commandLineOptions:\n  envPath: escape.env\n',
+    );
+
+    const result = await fixture.run({}, ['eval', '-c', 'custom.yaml']);
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');
+  });
+
   it('recreates compiler caches before invoking xcrun', async () => {
     const fixture = createFixture();
     const outside = path.join(fixture.root, 'outside-cache');

@@ -19,8 +19,17 @@ require_command() {
 }
 
 reject_state_overrides() {
-  local arg config index
-  local -a configs
+  local arg config index env_path
+  local -a configs declared_env_paths
+  reject_state_file() {
+    local file="$1"
+    [[ "$file" = /* ]] || file="$EXAMPLE_DIR/$file"
+    if [[ -f "$file" ]] &&
+      grep -Eq 'PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH)' "$file"; then
+      echo "Refusing config that overrides runner-owned Promptfoo state: $file" >&2
+      exit 1
+    fi
+  }
   for ((index = 1; index <= $#; index++)); do
     arg="${!index}"
     case "$arg" in
@@ -34,11 +43,21 @@ reject_state_overrides() {
     [[ "$config" == -* ]] && continue
     IFS=, read -ra configs <<<"$config"
     for config in "${configs[@]}"; do
+      config="${config#"${config%%[![:space:]]*}"}"
+      config="${config%"${config##*[![:space:]]}"}"
+      [[ -n "$config" ]] || continue
       [[ "$config" = /* ]] || config="$EXAMPLE_DIR/$config"
-      if [[ -f "$config" ]] &&
-        grep -Eq 'PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH)' "$config"; then
-        echo "Refusing config that overrides runner-owned Promptfoo state: $config" >&2
-        exit 1
+      reject_state_file "$config"
+      if [[ "$arg" == -c || "$arg" == --config || "$arg" == --config=* ]]; then
+        mapfile -t declared_env_paths < <(
+          sed -nE 's/^[[:space:]]*envPath:[[:space:]]*([^#]+).*$/\1/p' "$config"
+        )
+        for env_path in "${declared_env_paths[@]}"; do
+          env_path="${env_path#"${env_path%%[![:space:]]*}"}"
+          env_path="${env_path%"${env_path##*[![:space:]]}"}"
+          [[ "$env_path" = /* ]] || env_path="${config%/*}/$env_path"
+          [[ -n "$env_path" ]] && reject_state_file "$env_path"
+        done
       fi
     done
   done
