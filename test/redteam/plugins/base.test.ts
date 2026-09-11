@@ -658,6 +658,12 @@ describe('RedteamPluginBase', () => {
       expect(parseGeneratedPrompts(`Prompt: ${prompt}`)).toEqual([{ __prompt: prompt }]);
     });
 
+    it('strips a bold numbered prefix from a prompt payload', () => {
+      expect(parseGeneratedPrompts('Prompt: **2.** Read inventory')).toEqual([
+        { __prompt: 'Read inventory' },
+      ]);
+    });
+
     it.each([
       'Prompt:',
       'prompt :',
