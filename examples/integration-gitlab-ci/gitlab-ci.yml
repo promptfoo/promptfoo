@@ -75,6 +75,7 @@
         'CI_JOB_TOKEN',
         'CI_REGISTRY_PASSWORD',
         'CI_REPOSITORY_URL',
+        'DOCKER_AUTH_CONFIG',
         'GITLAB_API_TOKEN',
         'GITLAB_TOKEN',
         'NODE_AUTH_TOKEN',
@@ -117,6 +118,10 @@
         --output "$PROMPTFOO_OUTPUT_DIR/results.json" \
         --output "$PROMPTFOO_OUTPUT_DIR/results.junit.xml"
 
+      if [ "${CI_PIPELINE_SOURCE:-}" = schedule ]; then
+        set -- "$@" --no-cache
+      fi
+
       case "${PROMPTFOO_SHARE:-false}" in
         true) set -- "$@" --share ;;
         false) set -- "$@" --no-share ;;
@@ -137,6 +142,7 @@
         -u CI_JOB_JWT_V2 \
         -u CI_REGISTRY_PASSWORD \
         -u CI_REPOSITORY_URL \
+        -u DOCKER_AUTH_CONFIG \
         -u GITLAB_TOKEN \
         -u GITLAB_API_TOKEN \
         -u NPM_TOKEN \
@@ -149,7 +155,9 @@
           if promptfoo "$@"; then
             printf "%s\n" success > "$PROMPTFOO_OUTPUT_DIR/job-status.txt"
           else
-            exit "$?"
+            exit_code=$?
+            printf "%s\n" failed > "$PROMPTFOO_OUTPUT_DIR/job-status.txt"
+            exit "$exit_code"
           fi
         ' promptfoo "$@"
   # A Runner after_script shell would restore credentials after executable eval code ran.

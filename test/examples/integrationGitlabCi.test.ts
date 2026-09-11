@@ -58,7 +58,7 @@ describeUnix('GitLab CI integration example', () => {
       path.join(binDir, 'npm'),
       `#!/bin/sh
 printf '%s\\n' "$@" > "$PROMPTFOO_TEST_CAPTURE_DIR/npm-args"
-if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_BUILD_TOKEN:-}" ] || [ -n "\${CI_DEPENDENCY_PROXY_PASSWORD:-}" ] || [ -n "\${CI_DEPLOY_PASSWORD:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
+if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_BUILD_TOKEN:-}" ] || [ -n "\${CI_DEPENDENCY_PROXY_PASSWORD:-}" ] || [ -n "\${CI_DEPLOY_PASSWORD:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${DOCKER_AUTH_CONFIG:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
   printf 'present\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/npm-token"
 else
   printf 'absent\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/npm-token"
@@ -79,7 +79,7 @@ if [ "\${1:-}" = '--version' ]; then
   exit 0
 fi
 printf '%s\\n' "$@" > "$PROMPTFOO_TEST_CAPTURE_DIR/promptfoo-args"
-if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_BUILD_TOKEN:-}" ] || [ -n "\${CI_DEPENDENCY_PROXY_PASSWORD:-}" ] || [ -n "\${CI_DEPLOY_PASSWORD:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
+if [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ] || [ -n "\${CI_BUILD_TOKEN:-}" ] || [ -n "\${CI_DEPENDENCY_PROXY_PASSWORD:-}" ] || [ -n "\${CI_DEPLOY_PASSWORD:-}" ] || [ -n "\${CI_JOB_TOKEN:-}" ] || [ -n "\${CI_REGISTRY_PASSWORD:-}" ] || [ -n "\${DOCKER_AUTH_CONFIG:-}" ] || [ -n "\${CI_REPOSITORY_URL:-}" ]; then
   printf 'present\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/promptfoo-token"
 else
   printf 'absent\\n' > "$PROMPTFOO_TEST_CAPTURE_DIR/promptfoo-token"
@@ -96,6 +96,9 @@ node -e '
     }),
   );
 fs.writeFileSync(directory + "/results.junit.xml", "<testsuites />");
+if (process.env.PROMPTFOO_TEST_TAMPER_STATUS === "true") {
+  fs.writeFileSync(directory + "/job-status.txt", "success");
+}
 '
 if [ "\${PROMPTFOO_TEST_FAIL_ASSERTION:-false}" = true ]; then
   exit "\${PROMPTFOO_FAILED_TEST_EXIT_CODE:-1}"
@@ -362,7 +365,11 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it('explicitly disables sharing and removes GitLab tokens from the eval process', async () => {
-    const result = await runEvaluation();
+    const result = await runEvaluation({
+      DOCKER_AUTH_CONFIG: JSON.stringify({
+        auths: { 'registry.example': { auth: 'fixture-auth' } },
+      }),
+    });
     const args = fs.readFileSync(path.join(tempDir, 'promptfoo-args'), 'utf8');
 
     expect(result.status).toBe(0);
@@ -370,6 +377,17 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(args).not.toContain('\n--share\n');
     expect(fs.readFileSync(path.join(tempDir, 'promptfoo-token'), 'utf8').trim()).toBe('absent');
     expect(fs.existsSync(path.join(tempDir, '.promptfoo-results/results.junit.xml'))).toBe(true);
+  });
+
+  it.each([
+    ['schedule', true],
+    ['merge_request_event', false],
+  ])('bypasses response caching only for scheduled pipelines: %s', async (source, bypassCache) => {
+    const evaluation = await runEvaluation({ CI_PIPELINE_SOURCE: String(source) });
+    const args = fs.readFileSync(path.join(tempDir, 'promptfoo-args'), 'utf8').split('\n');
+
+    expect(evaluation.status).toBe(0);
+    expect(args.includes('--no-cache')).toBe(bypassCache);
   });
 
   it('removes Node preload hooks before invoking executable eval code', async () => {
@@ -458,7 +476,10 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it('preserves failing eval exit codes while still posting a failure summary', async () => {
-    const evaluation = await runEvaluation({ PROMPTFOO_TEST_EXIT_CODE: '100' });
+    const evaluation = await runEvaluation({
+      PROMPTFOO_TEST_EXIT_CODE: '100',
+      PROMPTFOO_TEST_TAMPER_STATUS: 'true',
+    });
     expect(evaluation.status).toBe(100);
 
     await withGitLabServer(

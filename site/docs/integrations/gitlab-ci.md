@@ -24,7 +24,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-2zTTBRDDot54sCt66kUQY3yeJSzHU8sN/bxP3292uA0='
+    integrity: 'sha256-B0Skp12SdV3Ljn44XxzcTY0ZZM+ydjOq7biM+1PIIHg='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -79,7 +79,7 @@ The template supports these job variables:
 
 ### 3. Configure Caching (Optional but Recommended)
 
-The template stores Promptfoo's response cache in `.promptfoo/cache` and uses a key containing the project, job name, and immutable commit SHA. This avoids collisions between branch names that normalize to the same GitLab slug; caches are reused by retries of the same commit rather than shared between commits.
+The template stores Promptfoo's response cache in `.promptfoo/cache` and uses a key containing the project, job name, and immutable commit SHA. This avoids collisions between branch names that normalize to the same GitLab slug; caches are reused by retries of the same commit rather than shared between commits. Scheduled evals bypass cached responses to detect model or endpoint changes.
 
 Keep GitLab's separate caches for protected branches enabled, and consider disabling caching when prompt inputs or model responses contain sensitive data:
 
