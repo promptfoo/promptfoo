@@ -1073,10 +1073,11 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
-      if (modelType === 'live' || modelType === 'gpt-live-1') {
+      // GPT-Live snapshots use the Live endpoint, not Chat Completions or Responses.
+      if (modelType === 'live' || modelType.startsWith('gpt-live-')) {
         const { OpenAiLiveProvider } = await import('./openai/live');
         return new OpenAiLiveProvider(
-          modelType === 'gpt-live-1' ? modelType : modelName || configuredModel || 'gpt-live-1',
+          modelType === 'live' ? modelName || configuredModel || 'gpt-live-1' : modelType,
           providerOptions,
         );
       }

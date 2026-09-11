@@ -3,7 +3,7 @@ import { providerRegistry } from '../providerRegistry';
 import { getRequestTimeoutMs } from '../shared';
 import { hasHeaderOverride, OpenAiGenericProvider } from './index';
 import { prepareLiveInput } from './liveInput';
-import { LIVE_FRAME_MS, LiveSession } from './liveSession';
+import { isLiveCredentialHeader, LIVE_FRAME_MS, LiveSession } from './liveSession';
 import { appendOpenAiApiPath } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -56,7 +56,9 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
 
   cleanup(): void {
     for (const controller of this.activeSessions) {
-      controller.abort();
+      const reason = new Error('GPT-Live provider shut down.');
+      reason.name = 'AbortError';
+      controller.abort(reason);
     }
   }
 
@@ -72,7 +74,8 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
     const controller = new AbortController();
-    const abort = () => controller.abort();
+    // Rethrow the caller's reason so eval cancellation is reported accurately.
+    const abort = () => controller.abort(options?.abortSignal?.reason);
     options?.abortSignal?.addEventListener('abort', abort, { once: true });
     this.activeSessions.add(controller);
     providerRegistry.register(this);
@@ -128,7 +131,10 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       controller.signal.throwIfAborted();
       const apiKey = this.getApiKey();
       const headers = this.getOpenAiRequestHeaders(config.headers);
-      if (!apiKey && this.requiresApiKey() && !hasHeaderOverride(headers, 'Authorization')) {
+      const hasHeaderCredential = Object.entries(headers).some(
+        ([name, value]) => isLiveCredentialHeader(name) && String(value).trim().length > 0,
+      );
+      if (!apiKey && this.requiresApiKey() && !hasHeaderCredential) {
         throw new Error(this.getMissingApiKeyErrorMessage());
       }
       const url = new URL(appendOpenAiApiPath(this.getApiUrl(), 'live/sessions'));

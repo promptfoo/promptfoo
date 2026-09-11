@@ -1,6 +1,9 @@
+import type { IncomingMessage } from 'node:http';
+
 import { ProxyAgent } from 'proxy-agent';
 import { getProxyForUrl } from 'proxy-from-env';
 import WebSocket from 'ws';
+import { isSecretField, REDACTED } from '../../util/sanitizer';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { convertG711ToPcm16, convertPcm16ToWav } from './audio';
 import { calculateOpenAIUsageCost } from './billing';
@@ -29,6 +32,18 @@ interface BackendTurn {
   id: string;
   calls: ToolCall[];
 }
+interface LiveApiError {
+  code?: string;
+  type?: string;
+  message?: string;
+  param?: string;
+  clientEventId?: string;
+}
+interface LiveDelegation {
+  id: string;
+  target: 'client' | 'responses';
+  offsetMs?: number;
+}
 
 interface SessionOptions {
   url: string;
@@ -49,28 +64,96 @@ interface SessionOptions {
 
 export const LIVE_FRAME_MS = 20;
 
+const OPENING_INSTRUCTION_ID = 'promptfoo_start';
+const OPENING_COMMENTARY_ID = 'promptfoo_opening';
+const MAX_API_ERRORS = 20;
+const MAX_ERROR_MESSAGE_LENGTH = 500;
+const MAX_TRANSCRIPT_BYTES = 1024 * 1024;
+const MAX_TRANSCRIPT_DELTAS = 20_000;
+const MAX_AUDIO_BYTES = 32 * 1024 * 1024;
+const MAX_HANDSHAKE_BODY_BYTES = 8 * 1024;
+const HANDSHAKE_BODY_TIMEOUT_MS = 2_000;
+const PENDING_WORK_ERROR =
+  'GPT-Live capture window ended with backend work pending. Increase responseWindowMs.';
+const LATE_WORK_ERROR =
+  'GPT-Live backend requested work after the capture window ended. Increase responseWindowMs.';
+const CREDENTIAL_HEADER =
+  /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i;
+const GUARDRAIL_ERROR = /moderation|content[\s_-]*(?:filter|policy)|safety|flagged/i;
+
+/** Credential-named headers authenticate compatible gateways and are redacted from diagnostics. */
+export function isLiveCredentialHeader(name: string): boolean {
+  return isSecretField(name) || CREDENTIAL_HEADER.test(name);
+}
+
+function collectCredentials(headers: Record<string, string>): string[] {
+  return Object.entries(headers)
+    .filter(([name, value]) => typeof value === 'string' && isLiveCredentialHeader(name))
+    .flatMap(([, value]) => [value, value.replace(/^(?:Bearer|Basic)\s+/i, '')])
+    .filter((value) => value.trim().length >= 4)
+    .sort((left, right) => right.length - left.length);
+}
+
+function safeLabel(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[\w.-]{1,80}$/.test(value) ? value : undefined;
+}
+
+function describeApiError({ code, type, message }: LiveApiError): string {
+  const label = code ?? type;
+  const detail = message?.replace(/[\s.]+$/, '');
+  return `${label ? ` (${label})` : ''}${detail ? `: ${detail}` : ''}.`;
+}
+
+/** Accept canonical base64 with or without padding. */
+function decodeBase64(value: string): Buffer | undefined {
+  const bytes = Buffer.from(value, 'base64');
+  return bytes.toString('base64').replace(/=+$/, '') === value.replace(/=+$/, '')
+    ? bytes
+    : undefined;
+}
+
+function readErrorMessage(body: string): string | undefined {
+  try {
+    const parsed = JSON.parse(body);
+    const message = typeof parsed?.error === 'string' ? parsed.error : parsed?.error?.message;
+    return typeof message === 'string' && message.trim() ? message.trim() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export class LiveSession {
   private ws!: WebSocket;
   private proxyAgent?: ProxyAgent;
   private timers = new Set<ReturnType<typeof setTimeout>>();
+  private startupTimer?: ReturnType<typeof setTimeout>;
   private resolve!: (response: ProviderResponse) => void;
   private done = false;
   private started = false;
-  private openingPrompted = false;
   private closing = false;
   private finalized = false;
   private sessionId?: string;
   private error?: string;
+  private guardrailReason?: string;
   private reason?: string;
   private voiceSeconds?: number;
   private audioChunks: Buffer[] = [];
   private audioBytes = 0;
   private inputBytesSent = 0;
+  private streamStartedAt = 0;
+  private framesSent = 0;
+  /** Undefined until a text prompt's opening instruction is acknowledged. */
+  private captureEndFrame?: number;
   private transcript: LiveTranscriptDelta[] = [];
+  private transcriptBytes = 0;
+  private apiErrors: LiveApiError[] = [];
+  private commands = new Map<string, string>();
+  private commandCount = 0;
+  private readonly credentials: string[];
   private tokenUsage: TokenUsage = { numRequests: 1 };
   private backendCost: number | undefined = 0;
   private backendResponses: { id: string; model: string; usage: unknown }[] = [];
-  private delegations = new Set<string>();
+  private delegations: LiveDelegation[] = [];
   private clientDelegationOccurred = false;
   private pendingHandlers = 0;
   private backendTurns = new Map<string, BackendTurn>();
@@ -78,7 +161,9 @@ export class LiveSession {
   private completedToolCalls = new Set<string>();
   private handlerController = new AbortController();
 
-  constructor(private options: SessionOptions) {}
+  constructor(private options: SessionOptions) {
+    this.credentials = collectCredentials(options.headers);
+  }
 
   run(): Promise<ProviderResponse> {
     return new Promise((resolve) => {
@@ -96,8 +181,14 @@ export class LiveSession {
         maxPayload: 16 * 1024 * 1024,
       });
       this.options.signal.addEventListener('abort', this.onAbort, { once: true });
-      const startupTimer = this.later(
-        () => this.fail('GPT-Live timed out waiting for session.started.'),
+      // Startup covers the handshake, session.started, and a text prompt's opening acknowledgment.
+      this.startupTimer = this.later(
+        () =>
+          this.fail(
+            this.started
+              ? 'GPT-Live timed out waiting for the opening instruction acknowledgment.'
+              : 'GPT-Live timed out waiting for session.started.',
+          ),
         this.options.websocketTimeout,
       );
       this.later(
@@ -133,9 +224,6 @@ export class LiveSession {
           if (!event || typeof event.type !== 'string') {
             throw new Error('Missing event type');
           }
-          if (event.type === 'session.started') {
-            clearTimeout(startupTimer);
-          }
           this.handleEvent(event);
         } catch {
           this.fail('Invalid GPT-Live server event.');
@@ -148,8 +236,7 @@ export class LiveSession {
         );
       });
       this.ws.on('unexpected-response', (_request, response) => {
-        response.resume();
-        this.fail(`GPT-Live WebSocket handshake failed (HTTP ${response.statusCode}).`);
+        this.reportHandshakeFailure(response);
       });
       this.ws.on('close', () => {
         if (!this.done) {
@@ -177,6 +264,14 @@ export class LiveSession {
     return timer;
   }
 
+  private clearStartupTimer(): void {
+    if (this.startupTimer) {
+      clearTimeout(this.startupTimer);
+      this.timers.delete(this.startupTimer);
+      this.startupTimer = undefined;
+    }
+  }
+
   private send(event: LiveEvent): void {
     if (this.done || this.ws.readyState !== WebSocket.OPEN) {
       return;
@@ -188,27 +283,82 @@ export class LiveSession {
     }
   }
 
+  /** Name promptfoo's commands so Live errors can identify the rejected command. */
+  private registerCommand(command: string, eventId = `promptfoo_${++this.commandCount}`): string {
+    this.commands.set(eventId, command);
+    return eventId;
+  }
+
+  /** Keep the first specific failure; later generic errors never replace it. */
+  private setError(error: string): void {
+    this.error ??= error;
+  }
+
+  private redact(text: string): string {
+    let redacted = text;
+    for (const credential of this.credentials) {
+      redacted = redacted.split(credential).join(REDACTED);
+    }
+    return redacted
+      .replace(/\b(Bearer|Basic)\s+(?!\[REDACTED\])[\w.~+/=-]{8,}/gi, `$1 ${REDACTED}`)
+      .replace(/\bsk-[\w-]{16,}/g, REDACTED);
+  }
+
+  /** Report a rejected upgrade with the bounded API message from its response body. */
+  private reportHandshakeFailure(response: IncomingMessage): void {
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    let reported = false;
+    const report = () => {
+      if (reported) {
+        return;
+      }
+      reported = true;
+      response.destroy();
+      const message = readErrorMessage(Buffer.concat(chunks).toString('utf8'));
+      const detail = message
+        ? `: ${this.redact(message)
+            .slice(0, MAX_ERROR_MESSAGE_LENGTH)
+            .replace(/[\s.]+$/, '')}`
+        : '';
+      this.fail(`GPT-Live WebSocket handshake failed (HTTP ${response.statusCode})${detail}.`);
+    };
+    this.later(report, HANDSHAKE_BODY_TIMEOUT_MS);
+    response.on('data', (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > MAX_HANDSHAKE_BODY_BYTES) {
+        report();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    response.once('end', report);
+    response.once('error', report);
+  }
+
   private streamAudio(): void {
     const bytesPerSecond =
       this.options.format.rate * (this.options.format.type === 'audio/pcm' ? 2 : 1);
     const frameSize = (bytesPerSecond * LIVE_FRAME_MS) / 1000;
-    const totalFrames = Math.ceil(
-      ((this.options.audio.length / bytesPerSecond) * 1000 + this.options.responseWindowMs) /
-        LIVE_FRAME_MS,
-    );
     const silence =
       this.options.format.type === 'audio/pcmu'
         ? 0xff
         : this.options.format.type === 'audio/pcma'
           ? 0xd5
           : 0;
-    let frame = 0;
-    const startedAt = performance.now();
+    this.streamStartedAt = performance.now();
+    if (this.options.audio.length) {
+      // Recorded audio starts the response window when the clip ends.
+      this.captureEndFrame = Math.ceil(
+        ((this.options.audio.length / bytesPerSecond) * 1000 + this.options.responseWindowMs) /
+          LIVE_FRAME_MS,
+      );
+    }
     const sendFrame = () => {
       if (this.done || this.closing) {
         return;
       }
-      if (frame >= totalFrames) {
+      if (this.captureEndFrame !== undefined && this.framesSent >= this.captureEndFrame) {
         this.closeSession();
         return;
       }
@@ -220,10 +370,19 @@ export class LiveSession {
         this.inputBytesSent + frameSize,
       );
       this.send({ type: 'session.input_audio.append', audio: bytes.toString('base64') });
-      frame++;
-      this.later(sendFrame, Math.max(0, startedAt + frame * LIVE_FRAME_MS - performance.now()));
+      this.framesSent++;
+      this.later(
+        sendFrame,
+        Math.max(0, this.streamStartedAt + this.framesSent * LIVE_FRAME_MS - performance.now()),
+      );
     };
     sendFrame();
+  }
+
+  /** A text prompt's response window starts with the opening prompt, not session startup. */
+  private startResponseWindow(): void {
+    const elapsedMs = performance.now() - this.streamStartedAt;
+    this.captureEndFrame = Math.ceil((elapsedMs + this.options.responseWindowMs) / LIVE_FRAME_MS);
   }
 
   private handleEvent(event: LiveEvent): void {
@@ -235,10 +394,13 @@ export class LiveSession {
         }
         this.started = true;
         this.sessionId = event.session.id;
-        if (!this.options.audio.length) {
+        if (this.options.audio.length) {
+          this.clearStartupTimer();
+        } else {
+          // Acknowledgments follow input frame progress, so silence streams while this is pending.
           this.send({
             type: 'session.instructions.append',
-            event_id: 'promptfoo_start',
+            event_id: this.registerCommand('session.instructions.append', OPENING_INSTRUCTION_ID),
             delegation_id: null,
             content:
               "Immediately answer the user's last message out loud, without waiting for the caller to speak, then pause and listen.",
@@ -248,17 +410,18 @@ export class LiveSession {
         break;
       case 'session.instructions.appended':
         if (
-          event.client_event_id === 'promptfoo_start' &&
-          !this.options.audio.length &&
-          !this.closing &&
-          !this.openingPrompted
+          event.client_event_id === OPENING_INSTRUCTION_ID &&
+          this.captureEndFrame === undefined &&
+          !this.closing
         ) {
-          this.openingPrompted = true;
+          this.clearStartupTimer();
           this.send({
             type: 'session.commentary.append',
+            event_id: this.registerCommand('session.commentary.append', OPENING_COMMENTARY_ID),
             delegation_id: null,
             content: 'Begin now, following the instructions provided.',
           });
+          this.startResponseWindow();
         }
         break;
       case 'session.input_transcript.delta':
@@ -271,6 +434,14 @@ export class LiveSession {
           this.fail('Invalid GPT-Live transcript delta.');
           return;
         }
+        this.transcriptBytes += Buffer.byteLength(event.delta);
+        if (
+          this.transcriptBytes > MAX_TRANSCRIPT_BYTES ||
+          this.transcript.length >= MAX_TRANSCRIPT_DELTAS
+        ) {
+          this.fail('GPT-Live transcript exceeded the capture limit.');
+          return;
+        }
         this.transcript.push({
           role: event.type === 'session.input_transcript.delta' ? 'user' : 'assistant',
           delta: event.delta,
@@ -279,13 +450,13 @@ export class LiveSession {
         });
         break;
       case 'session.output_audio.delta': {
-        if (typeof event.delta !== 'string') {
+        const bytes = typeof event.delta === 'string' ? decodeBase64(event.delta) : undefined;
+        if (!bytes) {
           this.fail('Invalid GPT-Live audio delta.');
           return;
         }
-        const bytes = Buffer.from(event.delta, 'base64');
         this.audioBytes += bytes.length;
-        if (this.audioBytes > 32 * 1024 * 1024) {
+        if (this.audioBytes > MAX_AUDIO_BYTES) {
           this.fail('GPT-Live audio exceeded the capture limit.');
           return;
         }
@@ -301,31 +472,72 @@ export class LiveSession {
       case 'response.event':
         this.handleBackendEvent(event);
         break;
-      case 'error': {
-        const code =
-          typeof event.error?.code === 'string' && /^[\w-]{1,80}$/.test(event.error.code)
-            ? ` (${event.error.code})`
-            : '';
-        this.error = `GPT-Live API error${code}.`;
-        if (this.started) {
-          this.closeSession();
-        } else {
-          this.finish();
-        }
+      case 'error':
+        this.handleApiError(event);
         break;
-      }
       case 'session.closed':
         this.finalized = this.readUsage(event);
-        this.reason = event.reason;
-        if (event.reason !== 'close_requested' && event.reason !== 'remote_hangup') {
-          this.error ??= `GPT-Live session ended: ${event.reason ?? 'unknown reason'}.`;
-        }
-        if (this.inputBytesSent < this.options.audio.length) {
-          this.error ??= 'GPT-Live session ended before input audio replay completed.';
+        this.reason = safeLabel(event.reason);
+        if (this.reason === 'content') {
+          this.guardrailReason = 'GPT-Live safety filter ended the session.';
+        } else {
+          if (this.reason !== 'close_requested' && this.reason !== 'remote_hangup') {
+            this.setError(`GPT-Live session ended: ${this.reason ?? 'unknown reason'}.`);
+          }
+          if (this.inputBytesSent < this.options.audio.length) {
+            this.setError('GPT-Live session ended before input audio replay completed.');
+          }
         }
         this.finish();
         break;
     }
+  }
+
+  private handleApiError(event: LiveEvent): void {
+    const details = event.error && typeof event.error === 'object' ? event.error : {};
+    const clientEventId = [details.client_event_id, event.client_event_id].find(
+      (id): id is string => typeof id === 'string',
+    );
+    const apiError: LiveApiError = {
+      code: safeLabel(details.code),
+      type: safeLabel(details.type),
+      message:
+        typeof details.message === 'string'
+          ? this.redact(details.message).slice(0, MAX_ERROR_MESSAGE_LENGTH)
+          : undefined,
+      param:
+        typeof details.param === 'string' ? this.redact(details.param).slice(0, 200) : undefined,
+      clientEventId,
+    };
+    if (this.apiErrors.length < MAX_API_ERRORS) {
+      this.apiErrors.push(apiError);
+    }
+    const detail = describeApiError(apiError);
+    if (!this.started) {
+      this.fail(`GPT-Live startup failed${detail}`);
+      return;
+    }
+    // session.close cancels pending appends and queued work; those errors don't change the result.
+    if (this.closing) {
+      return;
+    }
+    if (clientEventId) {
+      this.setError(
+        `GPT-Live rejected ${this.commands.get(clientEventId) ?? 'a client event'}${detail}`,
+      );
+      // Without the opening prompt, the model is never asked to speak.
+      if (clientEventId === OPENING_INSTRUCTION_ID || clientEventId === OPENING_COMMENTARY_ID) {
+        this.closeSession();
+      }
+      return;
+    }
+    const text = [apiError.code, apiError.type, apiError.message].filter(Boolean).join(' ');
+    if (GUARDRAIL_ERROR.test(text)) {
+      // Moderation can interrupt the current speech without ending the session.
+      this.guardrailReason ??= `GPT-Live moderation interrupted the response${detail}`;
+      return;
+    }
+    this.setError(`GPT-Live API error${detail}`);
   }
 
   private readUsage(event: LiveEvent): boolean {
@@ -343,24 +555,36 @@ export class LiveSession {
       this.fail('Invalid GPT-Live delegation event.');
       return;
     }
-    if (this.closing || this.delegations.has(delegation.id)) {
+    if (this.delegations.some((entry) => entry.id === delegation.id)) {
       return;
     }
-    this.delegations.add(delegation.id);
-    if (delegation.target === 'responses') {
-      this.backendTurns.set(delegation.id, { id: delegation.response_id ?? '', calls: [] });
-      return;
-    }
-    if (delegation.target !== 'client') {
+    if (delegation.target !== 'responses' && delegation.target !== 'client') {
       this.fail('Invalid GPT-Live delegation target.');
+      return;
+    }
+    this.delegations.push({
+      id: delegation.id,
+      target: delegation.target,
+      ...(Number.isFinite(event.offset_ms) && { offsetMs: event.offset_ms }),
+    });
+    if (this.closing) {
+      this.setError(LATE_WORK_ERROR);
+      return;
+    }
+    if (delegation.target === 'responses') {
+      this.backendTurns.set(delegation.id, {
+        id: typeof delegation.response_id === 'string' ? delegation.response_id : '',
+        calls: [],
+      });
       return;
     }
     this.clientDelegationOccurred = true;
     this.backendCost = undefined;
     const handler = this.options.delegationHandler;
     if (!handler) {
-      this.error =
-        'GPT-Live requested client delegation, but no delegationHandler is configured. Configure a handler or Responses delegation.';
+      this.setError(
+        'GPT-Live requested client delegation, but no delegationHandler is configured. Configure a handler or Responses delegation.',
+      );
       this.closeSession();
       return;
     }
@@ -376,7 +600,12 @@ export class LiveSession {
         throw new Error('Invalid delegation result');
       }
       if (!this.done && !this.closing) {
-        this.send({ type: 'session.commentary.append', delegation_id: delegation.id, content });
+        this.send({
+          type: 'session.commentary.append',
+          event_id: this.registerCommand('session.commentary.append'),
+          delegation_id: delegation.id,
+          content,
+        });
       }
     });
   }
@@ -392,6 +621,9 @@ export class LiveSession {
       if (typeof event.response?.id !== 'string') {
         this.fail('Invalid GPT-Live backend response.');
         return;
+      }
+      if (this.closing && !this.backendTurns.has(delegationId)) {
+        this.setError(LATE_WORK_ERROR);
       }
       this.backendTurns.set(delegationId, { id: event.response.id, calls: [] });
     } else if (event.type === 'response.output_item.done' && event.item?.type === 'function_call') {
@@ -423,22 +655,29 @@ export class LiveSession {
       }
       this.backendTurns.delete(delegationId);
       if (event.type !== 'response.completed') {
-        this.error ??= `GPT-Live backend ${event.type}.`;
+        this.setError(`GPT-Live backend ${event.type}.`);
         this.closeSession();
         return;
       }
-      if (turn?.calls.length && !this.closing) {
-        this.backendTurns.set(delegationId, { id: '', calls: [] });
-        this.completeTools(turn.calls);
+      if (!turn?.calls.length) {
+        return;
       }
+      if (this.closing) {
+        // After session.close, function results can no longer continue the backend response.
+        this.setError(LATE_WORK_ERROR);
+        return;
+      }
+      this.backendTurns.set(delegationId, { id: '', calls: [] });
+      this.completeTools(turn.calls);
     }
   }
 
   private completeTools(calls: ToolCall[]): void {
     const handler = this.options.functionCallHandler;
     if (!handler) {
-      this.error =
-        'GPT-Live backend requested function calls, but no functionCallHandler is configured.';
+      this.setError(
+        'GPT-Live backend requested function calls, but no functionCallHandler is configured.',
+      );
       this.closeSession();
       return;
     }
@@ -469,11 +708,12 @@ export class LiveSession {
         }
         this.send({
           type: 'response.item.create',
+          event_id: this.registerCommand('response.item.create'),
           item: { type: 'function_call_output', call_id: call.call_id, output },
         });
       }
       if (!this.done && !this.closing) {
-        this.send({ type: 'response.create' });
+        this.send({ type: 'response.create', event_id: this.registerCommand('response.create') });
       }
     });
   }
@@ -483,7 +723,7 @@ export class LiveSession {
     void callback()
       .catch(() => {
         if (!this.done && !this.closing) {
-          this.error = 'GPT-Live backend handler failed.';
+          this.setError('GPT-Live backend handler failed.');
           this.closeSession();
         }
       })
@@ -523,12 +763,15 @@ export class LiveSession {
       return;
     }
     this.closing = true;
+    this.clearStartupTimer();
     if (this.pendingHandlers || this.backendTurns.size) {
-      this.error ??=
-        'GPT-Live capture window ended with backend work pending. Increase responseWindowMs.';
+      this.setError(PENDING_WORK_ERROR);
     }
     this.handlerController.abort();
     this.send({ type: 'session.close' });
+    if (this.done) {
+      return;
+    }
     this.later(
       () => this.fail('GPT-Live timed out waiting for session.closed; final usage is unconfirmed.'),
       this.options.closeTimeoutMs,
@@ -536,7 +779,7 @@ export class LiveSession {
   }
 
   private fail(error: string): void {
-    this.error ??= error;
+    this.setError(error);
     this.finish();
   }
 
@@ -549,12 +792,14 @@ export class LiveSession {
       clearTimeout(timer);
     }
     this.timers.clear();
+    this.startupTimer = undefined;
     this.options.signal.removeEventListener('abort', this.onAbort);
     this.handlerController.abort();
     this.ws.terminate();
     this.proxyAgent?.destroy();
-    if (this.pendingHandlers || this.backendTurns.size) {
-      this.error ??= 'GPT-Live session ended with backend work pending. Increase responseWindowMs.';
+    const safetyEnded = this.reason === 'content' && this.finalized;
+    if (!safetyEnded && (this.pendingHandlers || this.backendTurns.size)) {
+      this.setError('GPT-Live session ended with backend work pending. Increase responseWindowMs.');
     }
     const output = this.transcript
       .filter((part) => part.role === 'assistant')
@@ -563,14 +808,15 @@ export class LiveSession {
     const rawAudio = Buffer.concat(this.audioChunks);
     const pcm = this.options.format.type === 'audio/pcm';
     if (pcm && rawAudio.length % 2) {
-      this.error ??= 'GPT-Live returned incomplete PCM16 samples.';
+      this.setError('GPT-Live returned incomplete PCM16 samples.');
     }
-    if (!this.error && !output && !rawAudio.length) {
-      this.error =
-        'GPT-Live returned no transcript or audio. Increase responseWindowMs or check the prompt and input audio.';
+    if (!this.guardrailReason && !this.error && !output && !rawAudio.length) {
+      this.setError(
+        'GPT-Live returned no transcript or audio. Increase responseWindowMs or check the prompt and input audio.',
+      );
     }
     if (!this.finalized) {
-      this.error ??= 'GPT-Live final session usage is unconfirmed.';
+      this.setError('GPT-Live final session usage is unconfirmed.');
     }
     const rate =
       this.options.config.costPerMinute ?? (this.options.model === 'gpt-live-1' ? 0.05 : undefined);
@@ -595,7 +841,18 @@ export class LiveSession {
       sessionId: this.sessionId,
       tokenUsage: this.tokenUsage,
       cost,
-      ...(this.reason === 'content' && { isRefusal: true }),
+      // Safety interventions are graded as refusals, not provider errors.
+      ...(this.guardrailReason
+        ? {
+            isRefusal: true,
+            guardrails: { flagged: true, flaggedOutput: true, reason: this.guardrailReason },
+          }
+        : {}),
+      ...(this.reason === 'content' && {
+        finishReason: 'content_filter',
+        conversationEnded: true,
+        conversationEndReason: 'content',
+      }),
       ...(rawAudio.length && {
         audio: {
           data: convertPcm16ToWav(
@@ -622,6 +879,8 @@ export class LiveSession {
         finalUsageConfirmed: this.finalized,
         closeReason: this.reason,
         backendResponses: this.backendResponses,
+        delegations: this.delegations,
+        apiErrors: this.apiErrors,
         responseWindowMs: this.options.responseWindowMs,
       },
     });

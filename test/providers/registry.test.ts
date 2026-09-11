@@ -60,39 +60,6 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
-  it.each(['openai:live:gpt-live-1', 'openai:live', 'openai:gpt-live-1'])(
-    'routes %s to the Live endpoint with scoped configuration',
-    async (providerPath) => {
-      const factories = await getProviderFactories(providerPath);
-      const factory = factories.find((entry) => entry.test(providerPath));
-      const provider = await factory!.create(
-        providerPath,
-        {
-          id: 'live-fixture',
-          config: { audio: { output: { voice: 'quartz' } } },
-          env: { OPENAI_API_KEY: 'provider-key' },
-        },
-        { basePath: '.', options: {}, env: { OPENAI_API_KEY: 'suite-key' } },
-      );
-      expect(provider.constructor.name).toBe('OpenAiLiveProvider');
-      expect(provider.id()).toBe('live-fixture');
-      expect(provider).toHaveProperty('modelName', 'gpt-live-1');
-      expect(provider).toHaveProperty('config.audio.output.voice', 'quartz');
-      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'provider-key');
-    },
-  );
-
-  it.each(['azure:live:gpt-live-1', 'azureopenai:live:gpt-live-1', 'openai:realtime:gpt-live-1'])(
-    'rejects the incompatible Live route %s',
-    async (providerPath) => {
-      const factories = await getProviderFactories(providerPath);
-      const factory = factories.find((entry) => entry.test(providerPath));
-      await expect(
-        factory!.create(providerPath, {}, { basePath: '.', options: {} }),
-      ).rejects.toThrow('openai:live:');
-    },
-  );
-
   it.each([
     'openai:gpt-4o-mini-realtime-preview-2024-12-17',
     'openai:realtime:gpt-4o-mini-realtime-preview-2024-12-17',
@@ -111,6 +78,46 @@ describe('Provider Registry', () => {
     expect(provider).toHaveProperty('modelName', 'gpt-4o-mini-realtime-preview-2024-12-17');
     expect(provider.id()).toBe('realtime-fixture');
     expect(provider).toHaveProperty('config.apiBaseUrl', 'http://localhost:1234/v1');
+  });
+
+  it.each([
+    ['openai:live:gpt-live-1', 'gpt-live-1'],
+    ['openai:live', 'gpt-live-1'],
+    ['openai:gpt-live-1', 'gpt-live-1'],
+    ['openai:gpt-live-1-2026-09-01', 'gpt-live-1-2026-09-01'],
+  ])(
+    'routes %s to the Live endpoint with scoped configuration',
+    async (providerPath, modelName) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath));
+      const provider = await factory!.create(
+        providerPath,
+        {
+          id: 'live-fixture',
+          config: { audio: { output: { voice: 'quartz' } } },
+          env: { OPENAI_API_KEY: 'provider-key' },
+        },
+        { basePath: '.', options: {}, env: { OPENAI_API_KEY: 'suite-key' } },
+      );
+      expect(provider.constructor.name).toBe('OpenAiLiveProvider');
+      expect(provider.id()).toBe('live-fixture');
+      expect(provider).toHaveProperty('modelName', modelName);
+      expect(provider).toHaveProperty('config.audio.output.voice', 'quartz');
+      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'provider-key');
+    },
+  );
+
+  it.each([
+    'azure:live:gpt-live-1',
+    'azureopenai:live:gpt-live-1',
+    'openai:realtime:gpt-live-1',
+    'openai:realtime:gpt-live-1-2026-09-01',
+  ])('rejects the incompatible Live route %s', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    await expect(factory!.create(providerPath, {}, { basePath: '.', options: {} })).rejects.toThrow(
+      'openai:live:',
+    );
   });
 
   it.each([
