@@ -18,6 +18,43 @@ require_command() {
   fi
 }
 
+# Register target-process cleanup before the first fallible Codex command so a failed
+# preflight cannot leave a stale, intentionally vulnerable target running.
+terminate_process() {
+  local pid="${1:-}"
+  if [[ -z "$pid" ]]; then
+    return
+  fi
+  kill "$pid" 2>/dev/null || true
+  for _ in {1..20}; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      wait "$pid" 2>/dev/null || true
+      return
+    fi
+    sleep 0.1
+  done
+  kill -9 "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
+terminate_target_processes() {
+  local command
+  local pid
+  while read -r pid command; do
+    if [[ "$command" == "$TARGET_APP_BINARY" ]]; then
+      terminate_process "$pid"
+    fi
+  done < <(ps -axo pid=,command=)
+}
+
+cleanup() {
+  terminate_process "${TARGET_PID:-}"
+  terminate_target_processes
+}
+trap cleanup EXIT
+
+terminate_target_processes
+
 for command in codex node ps xcrun; do
   require_command "$command"
 done
@@ -99,6 +136,10 @@ if [[ "$(cd -- "$TMP_DIR" && pwd -P)" != "$TMP_DIR" ]]; then
 fi
 chmod 700 "$TMP_DIR"
 
+# Recreate fixed outputs so old symlinks or hard links cannot redirect writes.
+rm -f -- "$TMP_DIR/target.log" "$TMP_DIR/results.json" \
+  "$TMP_DIR/marketplace-add.json" "$TMP_DIR/plugin-add.json" "$TMP_DIR/plugin-list.json"
+
 # Keep Promptfoo's own state (database, logs, evalLastWritten) inside the disposable
 # tree so red-team artifacts never land in the caller's ~/.promptfoo.
 PROMPTFOO_STATE_DIR="$TMP_DIR/promptfoo-home"
@@ -113,43 +154,6 @@ if [[ "$(cd -- "$PROMPTFOO_STATE_DIR" && pwd -P)" != "$PROMPTFOO_STATE_DIR" ]]; 
 fi
 chmod 700 "$PROMPTFOO_STATE_DIR"
 mkdir -p "$PROMPTFOO_STATE_DIR/logs" "$PROMPTFOO_STATE_DIR/cache" "$PROMPTFOO_STATE_DIR/media"
-
-# Register target-process cleanup before the first fallible Codex command so a failed
-# preflight cannot leave a stale, intentionally vulnerable target running.
-terminate_process() {
-  local pid="${1:-}"
-  if [[ -z "$pid" ]]; then
-    return
-  fi
-  kill "$pid" 2>/dev/null || true
-  for _ in {1..20}; do
-    if ! kill -0 "$pid" 2>/dev/null; then
-      wait "$pid" 2>/dev/null || true
-      return
-    fi
-    sleep 0.1
-  done
-  kill -9 "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
-}
-
-terminate_target_processes() {
-  local command
-  local pid
-  while read -r pid command; do
-    if [[ "$command" == "$TARGET_APP_BINARY" ]]; then
-      terminate_process "$pid"
-    fi
-  done < <(ps -axo pid=,command=)
-}
-
-cleanup() {
-  terminate_process "${TARGET_PID:-}"
-  terminate_target_processes
-}
-trap cleanup EXIT
-
-terminate_target_processes
 
 if [[ -L "$CODEX_HOME_DIR" ]]; then
   echo "Refusing to replace symlinked Codex home: $CODEX_HOME_DIR" >&2
