@@ -654,7 +654,7 @@ export async function createOutputData(
   };
 
   if (options.includeMedia) {
-    const blobAssets = await exportBlobAssets(summary, output.traces);
+    const blobAssets = await exportBlobAssets(evalRecord.id, summary, output.traces);
     if (blobAssets.length > 0) {
       output.blobAssets = blobAssets;
     }
@@ -664,14 +664,18 @@ export async function createOutputData(
 }
 
 async function exportBlobAssets(
+  evalId: string,
   results: OutputFile['results'],
   traces?: OutputFile['traces'],
 ): Promise<ExportedBlobAsset[]> {
-  const { getBlobByHash } = await import('../blobs');
+  const { getShareAuthorizedBlob } = await import('../blobs');
   const assets: ExportedBlobAsset[] = [];
   for (const hash of collectBlobHashes({ results: resultsForMediaExportScan(results), traces })) {
     try {
-      const blob = await getBlobByHash(hash);
+      const blob = await getShareAuthorizedBlob(hash, evalId);
+      if (!blob) {
+        continue;
+      }
       if (blob.data.length > BLOB_MAX_SIZE) {
         logger.warn('[Output] Skipping oversized blob in eval export', {
           hash,

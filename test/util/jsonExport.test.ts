@@ -120,7 +120,7 @@ describe('JSON export with improved error handling', () => {
         results: [{ response: { output: `promptfoo://blob/${hash}` } }],
         stats: { successes: 1, failures: 0 },
       });
-      vi.spyOn(blobs, 'getBlobByHash').mockResolvedValue({
+      vi.spyOn(blobs, 'getShareAuthorizedBlob').mockResolvedValue({
         data,
         metadata: {
           mimeType: 'image/png',
@@ -135,6 +135,7 @@ describe('JSON export with improved error handling', () => {
       expect(JSON.parse(fs.readFileSync(tempFilePath, 'utf8'))).not.toHaveProperty('blobAssets');
 
       await writeOutput(tempFilePath, mockEval, null, { includeMedia: true });
+      expect(blobs.getShareAuthorizedBlob).toHaveBeenCalledWith(hash, mockEval.id);
       const parsed = JSON.parse(fs.readFileSync(tempFilePath, 'utf8'));
       expect(parsed.blobAssets).toEqual([
         {
@@ -158,7 +159,7 @@ describe('JSON export with improved error handling', () => {
           spans: [],
         },
       ]);
-      vi.spyOn(blobs, 'getBlobByHash').mockResolvedValue({
+      vi.spyOn(blobs, 'getShareAuthorizedBlob').mockResolvedValue({
         data,
         metadata: {
           mimeType: 'image/png',
@@ -190,7 +191,7 @@ describe('JSON export with improved error handling', () => {
     it('should not embed response blob bytes when response output stripping is enabled', async () => {
       const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
       const hash = 'c'.repeat(64);
-      const getBlobSpy = vi.spyOn(blobs, 'getBlobByHash');
+      const getBlobSpy = vi.spyOn(blobs, 'getShareAuthorizedBlob');
       mockEval.toEvaluateSummary.mockResolvedValue({
         version: 3,
         timestamp: '2025-01-01T00:00:00.000Z',
