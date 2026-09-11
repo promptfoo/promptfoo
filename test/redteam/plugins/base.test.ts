@@ -284,26 +284,29 @@ describe('RedteamPluginBase', () => {
     });
   });
 
-  it('should reject empty parsed prompts and retry for replacement content', async () => {
-    vi.spyOn(provider, 'callApi')
-      .mockResolvedValueOnce({
-        output: 'Prompt:\nPrompt: valid request',
-      })
-      .mockResolvedValueOnce({
-        output: 'Prompt: replacement request',
-      });
+  it.each(['Prompt:\nPrompt: valid request', 'Prompt: valid request\nPrompt:'])(
+    'retries empty parsed prompts from %j',
+    async (output) => {
+      vi.spyOn(provider, 'callApi')
+        .mockResolvedValueOnce({
+          output,
+        })
+        .mockResolvedValueOnce({
+          output: 'Prompt: replacement request',
+        });
 
-    const result = await plugin.generateTests(2);
+      const result = await plugin.generateTests(2);
 
-    expect(result.map((test) => test.vars?.testVar).sort()).toEqual([
-      'replacement request',
-      'valid request',
-    ]);
-    expect(provider.callApi).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining('no user-facing content after the output marker'),
-    );
-  });
+      expect(result.map((test) => test.vars?.testVar).sort()).toEqual([
+        'replacement request',
+        'valid request',
+      ]);
+      expect(provider.callApi).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('no user-facing content after the output marker'),
+      );
+    },
+  );
 
   it('should honor maxCharsPerMessage from plugin config without cliState', async () => {
     plugin = new TestPlugin(provider, 'test purpose', 'testVar', {

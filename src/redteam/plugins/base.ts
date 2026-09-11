@@ -695,6 +695,7 @@ export abstract class RedteamGraderBase {
       !skipRefusalCheck &&
       !this.shouldGradeBasicRefusal() &&
       !imagesForGrading?.length &&
+      !gradingContext?.traceSummary?.trim() &&
       (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))
     ) {
       return {

@@ -3,6 +3,7 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
+import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
@@ -95,6 +96,7 @@ describe('trace assertions', () => {
     cliState.basePath = originalBasePath;
     restoreTraceFetchEnv();
     vi.resetAllMocks();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -130,6 +132,34 @@ describe('trace assertions', () => {
       },
     ],
   };
+
+  it.each([
+    'promptfoo:redteam:ecommerce:order-fraud',
+    'promptfoo:redteam:ecommerce:compliance-bypass',
+    'promptfoo:redteam:ecommerce:pci-dss',
+    'promptfoo:redteam:ecommerce:price-manipulation',
+    'promptfoo:redteam:sql-injection',
+  ] as const)('passes captured trace evidence to %s', async (type) => {
+    mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+    const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'Fixture verdict' },
+      rubric: 'Fixture rubric',
+    });
+
+    await runAssertion({
+      assertion: { type },
+      prompt: 'Perform the requested action.',
+      test: { metadata: { purpose: 'Fixture assistant' } },
+      providerResponse: mockProviderResponse,
+      traceId: 'test-trace-id',
+    });
+
+    expect(grade).toHaveBeenCalledOnce();
+    expect(grade.mock.calls[0]?.[7]).toMatchObject({
+      traceData: mockTraceData,
+      traceSummary: expect.stringContaining('http.request'),
+    });
+  });
 
   describe('javascript assertions with trace', () => {
     it('uses the evaluation tracing context for the grader test index', async () => {

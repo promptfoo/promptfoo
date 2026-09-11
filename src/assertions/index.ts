@@ -167,7 +167,11 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     return assertion.assert.some(assertionMayNeedTraceContext);
   }
 
-  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
+  if (
+    assertion.type.startsWith('promptfoo:redteam:coding-agent:') ||
+    assertion.type.startsWith('promptfoo:redteam:ecommerce:') ||
+    assertion.type === 'promptfoo:redteam:sql-injection'
+  ) {
     return true;
   }
 
