@@ -142,7 +142,7 @@ vi.mock('../../../src/util/file', async () => {
 
 vi.mock('../../../src/util/testCaseReader', () => ({
   readTest: vi.fn().mockImplementation(async (test) => test),
-  readTests: vi.fn().mockImplementation(async (tests) => {
+  readTests: vi.fn(async (tests) => {
     if (!tests) {
       return [];
     }
@@ -217,6 +217,7 @@ vi.mock('../../../src/assertions', () => ({
 // Global setup for all tests - set default mock implementation for $RefParser
 beforeEach(() => {
   mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  vi.mocked(readTests).mockReset();
 });
 
 describe('combineConfigs', () => {
@@ -1075,7 +1076,7 @@ describe('combineConfigs', () => {
     expect(result.sharing).toBeUndefined();
   });
 
-  it('should load defaultTest from external file when string starts with file://', async () => {
+  it('preserves an absolute defaultTest file reference without loading it', async () => {
     const externalDefaultTest = {
       assert: [{ type: 'equals', value: 'test' }],
       vars: { foo: 'bar' },
@@ -1097,8 +1098,8 @@ describe('combineConfigs', () => {
 
     const result = await combineConfigs(['config.json']);
 
-    // combineConfigs should preserve the string reference, not load it
-    expect(result.defaultTest).toBe('file://path/to/defaultTest.yaml');
+    expect(result.defaultTest).toBe(`file://${path.resolve('path/to/defaultTest.yaml')}`);
+    expect(maybeLoadFromExternalFile).not.toHaveBeenCalled();
   });
 
   it('should preserve string defaultTest when combining configs with file:// reference', async () => {
@@ -1123,7 +1124,7 @@ describe('combineConfigs', () => {
     const result = await combineConfigs(['config1.json', 'config2.json']);
 
     // Should preserve the file:// reference from the second config
-    expect(result.defaultTest).toBe('file://external/defaultTest.yaml');
+    expect(result.defaultTest).toBe(`file://${path.resolve('external/defaultTest.yaml')}`);
   });
 
   it('should merge inline defaultTest objects when combining configs', async () => {
@@ -2591,7 +2592,9 @@ describe('resolveConfigs with external defaultTest', () => {
 
     const result = await resolveConfigs({ config: ['config.json'] }, {});
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://shared/defaultTest.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      `file://${path.resolve('shared/defaultTest.yaml')}`,
+    );
     expect(result.testSuite.defaultTest).toEqual(
       expect.objectContaining({
         assert: externalDefaultTest.assert,

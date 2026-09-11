@@ -17,8 +17,6 @@ import type {
   VarValue,
 } from '../../types/index';
 
-const nunjucks = getNunjucksEngine(undefined, false, true);
-
 export interface Message {
   input: string;
   output: string | object;
@@ -69,7 +67,7 @@ export async function matchesConversationRelevance(
   let promptText: string;
   if (loadedRubricPrompt) {
     // Use custom rubric prompt with nunjucks rendering
-    promptText = nunjucks.renderString(loadedRubricPrompt, {
+    promptText = getNunjucksEngine(undefined, false, true).renderString(loadedRubricPrompt, {
       ...(vars || {}),
       messages,
     });

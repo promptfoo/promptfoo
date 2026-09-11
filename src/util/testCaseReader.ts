@@ -21,12 +21,15 @@ import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { isProviderTypeMap } from './gradingProvider';
 import { parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
 
 import type {
+  AssertionOrSet,
   CsvRow,
   EnvOverrides,
+  GradingConfig,
   ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
@@ -426,6 +429,44 @@ async function loadTestWithVars(
   return ret;
 }
 
+function resolveGradingProviderPaths(
+  provider: GradingConfig['provider'],
+  basePath: string,
+): GradingConfig['provider'] {
+  if (typeof provider === 'string') {
+    return provider.startsWith('file://')
+      ? 'file://' + path.resolve(basePath, provider.slice('file://'.length))
+      : provider;
+  }
+  if (isProviderTypeMap(provider)) {
+    return Object.fromEntries(
+      Object.entries(provider).map(([type, value]) => [
+        type,
+        resolveGradingProviderPaths(value, basePath),
+      ]),
+    );
+  }
+  if (provider && typeof provider === 'object' && typeof provider.id === 'string') {
+    return { ...provider, id: resolveGradingProviderPaths(provider.id, basePath) as string };
+  }
+  return provider;
+}
+
+function resolveAssertionProviderPaths<T extends AssertionOrSet>(
+  assertion: T,
+  basePath: string,
+): T {
+  if (assertion.type === 'assert-set') {
+    return {
+      ...assertion,
+      assert: assertion.assert.map((child) => resolveAssertionProviderPaths(child, basePath)),
+    };
+  }
+  return assertion.provider
+    ? { ...assertion, provider: resolveGradingProviderPaths(assertion.provider, basePath) }
+    : assertion;
+}
+
 export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
@@ -459,6 +500,18 @@ export async function readTest(
         env,
       });
     }
+  }
+
+  if (testCase.options?.provider) {
+    testCase.options = {
+      ...testCase.options,
+      provider: resolveGradingProviderPaths(testCase.options.provider, effectiveBasePath),
+    };
+  }
+  if (testCase.assert) {
+    testCase.assert = testCase.assert.map((assertion) =>
+      resolveAssertionProviderPaths(assertion, effectiveBasePath),
+    );
   }
 
   if (

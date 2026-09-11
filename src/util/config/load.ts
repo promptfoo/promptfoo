@@ -700,10 +700,16 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     scenarios: configs.some((config) => config.scenarios !== undefined)
       ? configs.flatMap((config) => config.scenarios || [])
       : undefined,
-    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
+    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr, index) => {
       // If any config has a string defaultTest (file reference), preserve it
       if (typeof curr.defaultTest === 'string') {
-        return curr.defaultTest;
+        return curr.defaultTest.startsWith('file://')
+          ? 'file://' +
+              path.resolve(
+                path.dirname(resolvedConfigPaths[index]),
+                curr.defaultTest.slice('file://'.length),
+              )
+          : curr.defaultTest;
       }
       // If prev is already a string (file reference), keep it
       if (typeof prev === 'string') {
@@ -860,9 +866,13 @@ async function resolveLoadedConfig(
 
   // Load defaultTest from file:// reference if needed
   let processedDefaultTest: Partial<TestCase> | undefined;
+  let defaultTestBasePath = basePath;
   if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
     const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
     processedDefaultTest = loaded as Partial<TestCase>;
+    defaultTestBasePath = path.dirname(
+      path.resolve(basePath, defaultTestRaw.slice('file://'.length)),
+    );
   } else if (defaultTestRaw) {
     processedDefaultTest = defaultTestRaw as Partial<TestCase>;
   }
@@ -932,7 +942,7 @@ async function resolveLoadedConfig(
   invariant(Array.isArray(config.providers), 'providers must be an array');
 
   config.defaultTest = processedDefaultTest
-    ? await readTest(processedDefaultTest, basePath, true, config.env)
+    ? await readTest(processedDefaultTest, defaultTestBasePath, true, config.env)
     : undefined;
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
@@ -982,11 +992,12 @@ async function resolveLoadedConfig(
     env: config.env,
     basePath,
   });
-  const parsedTests: TestCase[] = await readTests(
-    config.tests || [],
-    cmdObj.tests ? undefined : basePath,
-    config.env,
-  );
+  // Combined file tests are already loaded. Reading them again loses remote provenance
+  // and resolves their remaining references relative to the first config.
+  const parsedTests: TestCase[] =
+    configPaths && !cmdObj.tests && !cmdObj.vars
+      ? (fileConfig.tests as TestCase[])
+      : await readTests(config.tests || [], cmdObj.tests ? undefined : basePath, config.env);
 
   // Parse testCases for each scenario
   if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
@@ -1066,6 +1077,7 @@ async function resolveLoadedConfig(
   };
 
   const testSuite: TestSuite = {
+    env: config.env,
     description: config.description,
     tags: config.tags,
     prompts: parsedPrompts,

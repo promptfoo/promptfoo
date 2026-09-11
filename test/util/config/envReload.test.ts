@@ -6,9 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { getEnvString } from '../../../src/envars';
+import { evaluate as evaluateResolved } from '../../../src/evaluator';
+import { renderLlmRubricPrompt } from '../../../src/matchers/rubric';
+import Eval from '../../../src/models/eval';
 import { evaluate } from '../../../src/node/evaluate';
 import { loadApiProvider, loadApiProviders } from '../../../src/providers/index';
 import { isApiProvider } from '../../../src/types/providers';
+import { readAzureBlobText } from '../../../src/util/azureBlob';
 import { combineConfigs, resolveConfigs } from '../../../src/util/config/load';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import { getNunjucksEngine } from '../../../src/util/templates';
@@ -19,6 +23,11 @@ import type { UnifiedConfig } from '../../../src/types/index';
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/cache')>()),
   fetchWithCache: vi.fn(),
+}));
+
+vi.mock('../../../src/util/azureBlob', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/util/azureBlob')>()),
+  readAzureBlobText: vi.fn(),
 }));
 
 describe('suite environment loading', () => {
@@ -268,7 +277,13 @@ describe('suite environment loading', () => {
                 },
               },
             ],
-            tests: [{ assert: [{ type: 'equals', value: `${name}-key:${name}-key` }] }],
+            tests: [
+              {
+                assert: [
+                  { type: 'equals', value: '{{ env.OPENAI_API_KEY }}:{{ env.OPENAI_API_KEY }}' },
+                ],
+              },
+            ],
           },
           { cache: false },
         );
@@ -290,6 +305,102 @@ describe('suite environment loading', () => {
     });
     const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
     await expectRequest(testSuite.providers[0], 'process');
+  });
+
+  it('keeps resolved CLI suites scoped after another config is loaded', async () => {
+    const suites = [];
+    for (const name of ['first', 'second']) {
+      const resolved = await resolveConfigs(
+        {
+          config: [
+            writeConfig(name, {
+              env: { OPENAI_API_KEY: `${name}-key` },
+              tests: [{ assert: [{ type: 'equals', value: `${name}-key` }] }],
+            }),
+          ],
+        },
+        {},
+      );
+      resolved.testSuite.providers = [
+        {
+          id: () => name,
+          callApi: async () => {
+            await Promise.resolve();
+            return { output: getEnvString('OPENAI_API_KEY') };
+          },
+        },
+      ];
+      suites.push(resolved);
+    }
+    const results = await Promise.all(
+      suites.map(async ({ config, testSuite }) => {
+        const result = await evaluateResolved(testSuite, new Eval(config), {});
+        return (await result.getResults())[0];
+      }),
+    );
+    expect(results.map(({ success, score }) => ({ success, score }))).toEqual([
+      { success: true, score: 1 },
+      { success: true, score: 1 },
+    ]);
+  });
+
+  it('renders rubric environments inside each concurrent suite', async () => {
+    const results = await Promise.all(
+      ['first', 'second'].map((name) =>
+        cliState.withEnv({ OPENAI_API_KEY: `${name}-key` }, async () => {
+          await Promise.resolve();
+          return renderLlmRubricPrompt('{{ env.OPENAI_API_KEY }}', {});
+        }),
+      ),
+    );
+    expect(results).toEqual(['first-key', 'second-key']);
+  });
+
+  it.each(['single', 'array'])(
+    'retains scoped environment for a %s function provider',
+    async (form) => {
+      const callback = async () => ({ output: getEnvString('OPENAI_API_KEY') });
+      const [provider] = await loadApiProviders(form === 'single' ? callback : [callback], {
+        env: { OPENAI_API_KEY: 'function-key' },
+      });
+      expect((await provider.callApi('Hello')).output).toBe('function-key');
+      expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
+    },
+  );
+
+  it('preserves remote dataset references through config resolution', async () => {
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      '- vars: missing-vars.yaml\n  provider: file://missing-provider.js\n',
+    );
+    const configPath = writeConfig('remote', { tests: 'az://account/container/tests.yaml' });
+    const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+    expect(testSuite.tests).toEqual([
+      { description: 'Row #1', vars: 'missing-vars.yaml', provider: 'file://missing-provider.js' },
+    ]);
+    expect(readAzureBlobText).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves nested default-test files from a later config directory', async () => {
+    const first = writeConfig('first', {});
+    const second = writeConfig('second', {
+      defaultTest: 'file://defaults/test.yaml',
+      tests: [{ vars: {} }],
+    });
+    const defaultsDir = path.join(path.dirname(second), 'defaults');
+    fs.mkdirSync(defaultsDir);
+    fs.writeFileSync(
+      path.join(defaultsDir, 'test.yaml'),
+      'vars: vars.yaml\nprovider: file://provider.yaml\n',
+    );
+    fs.writeFileSync(path.join(defaultsDir, 'vars.yaml'), 'source: nested-default\n');
+    fs.writeFileSync(path.join(defaultsDir, 'provider.yaml'), 'id: echo\n');
+    const { testSuite } = await resolveConfigs({ config: [first, second] }, {});
+    expect(typeof testSuite.defaultTest === 'object' && testSuite.defaultTest.vars).toEqual({
+      source: 'nested-default',
+    });
+    expect(
+      typeof testSuite.defaultTest === 'object' && isApiProvider(testSuite.defaultTest.provider),
+    ).toBe(true);
   });
 
   it('uses suite env while expanding nested prompt files', async () => {
@@ -368,6 +479,62 @@ describe('suite environment loading', () => {
       const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
       expect(url).toBe('https://suite.example/v1/chat/completions');
       expect(request?.headers).toMatchObject({ Authorization: 'Bearer suite-key' });
+    },
+  );
+
+  it.each(['options', 'assertion', 'typed'] as const)(
+    'resolves a standalone %s grader relative to its test file',
+    async (location) => {
+      const casesDir = path.join(tempDir, 'cases');
+      fs.mkdirSync(casesDir);
+      const testsPath = path.join(casesDir, 'tests.json');
+      const provider =
+        location === 'typed'
+          ? { text: 'file://grader.yaml', embedding: 'file://unused.yaml' }
+          : 'file://grader.yaml';
+      fs.writeFileSync(path.join(casesDir, 'grader.yaml'), 'id: openai:chat:test-model\n');
+      fs.writeFileSync(
+        testsPath,
+        JSON.stringify([
+          {
+            ...(location === 'options' ? { options: { provider } } : {}),
+            assert: [
+              {
+                type: 'llm-rubric',
+                value: 'The response is correct',
+                ...(location === 'options' ? {} : { provider }),
+              },
+            ],
+          },
+        ]),
+      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: { content: '{"pass":true,"score":1,"reason":"Correct"}' },
+              finish_reason: 'stop',
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const result = await evaluate(
+        {
+          env: { OPENAI_API_BASE_URL: 'https://suite.example/v1', OPENAI_API_KEY: 'suite-key' },
+          providers: ['echo'],
+          prompts: ['answer'],
+          tests: testsPath,
+        },
+        { cache: false },
+      );
+      const [row] = await result.getResults();
+      expect(row.error).toBeUndefined();
+      expect(row.success).toBe(true);
+      expect(row.score).toBe(1);
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
     },
   );
 });

@@ -27,7 +27,6 @@ import type {
   VarValue,
 } from '../types/index';
 
-const nunjucks = getNunjucksEngine(undefined, false, true);
 const DEFAULT_GRADING_MAX_IMAGES = 4;
 const DEFAULT_GRADING_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 const GRADING_AUDIO_MAX_BYTES = 20 * 1024 * 1024;
@@ -138,6 +137,7 @@ export async function renderLlmRubricPrompt(
   rubricPrompt: string,
   context: Record<string, VarValue>,
 ) {
+  const nunjucks = getNunjucksEngine(undefined, false, true);
   const enableObjectAccess = getEnvBool('PROMPTFOO_DISABLE_OBJECT_STRINGIFY', false);
   const processedContext = processContextForTemplating(context, enableObjectAccess);
 
