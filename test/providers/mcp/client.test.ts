@@ -1328,6 +1328,44 @@ describe('MCPClient', () => {
     });
 
     it.each(['transport', 'client'])(
+      'finishes cancelled startup cleanup when %s close stalls',
+      async (resource) => {
+        const entered = createDeferred<void>();
+        const handshake = createDeferred<void>();
+        const closeContinue = createDeferred<void>();
+        mockClient.connect.mockImplementationOnce(() => {
+          entered.resolve();
+          return handshake.promise;
+        });
+        const close = resource === 'transport' ? mockStdioTransport.close : mockClient.close;
+        close.mockReturnValueOnce(closeContinue.promise);
+        mcpClient = new MCPClient({
+          enabled: true,
+          server: { command: 'node', args: ['fixture-server.js'] },
+        });
+        const controller = new AbortController();
+        const initialization = mcpClient.initialize(controller.signal);
+        const rejection = expect(initialization).rejects.toThrow('cancelled startup');
+        await entered.promise;
+        controller.abort(new Error('cancelled startup'));
+        const cleanup = mcpClient.cleanup();
+        const settled = await Promise.race([
+          cleanup.then(() => true),
+          new Promise<boolean>((resolve) => setImmediate(() => resolve(false))),
+        ]);
+        const bothClosesStarted =
+          mockStdioTransport.close.mock.calls.length === 1 &&
+          mockClient.close.mock.calls.length === 1;
+        closeContinue.resolve();
+        handshake.resolve();
+        await Promise.all([cleanup, rejection]);
+        expect(settled).toBe(true);
+        expect(bothClosesStarted).toBe(true);
+        expect(mcpClient.connectedServers).toEqual([]);
+      },
+    );
+
+    it.each(['transport', 'client'])(
       'aborts a pending token refresh stalled in %s close without reopening',
       async (resource) => {
         const closeStarted = createDeferred<void>();
