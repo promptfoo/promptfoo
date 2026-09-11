@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
 import express from 'express';
-import { getBlobByHash, getBlobUrl } from '../../blobs';
+import { getBlobStorageProvider, isSafeInlineBlobMimeType, type StoredBlob } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
 import { BlobsSchemas } from '../../contracts/api/blobs';
 import { ApiRoutes } from '../../contracts/api/routes';
@@ -468,14 +468,21 @@ blobsRouter.get(
       return;
     }
 
-    let blob: Awaited<ReturnType<typeof getBlobByHash>>;
+    let blob: StoredBlob;
     try {
-      const presigned = await getBlobUrl(hash);
+      const provider = getBlobStorageProvider();
+      blob = await provider.getByHash(hash);
+      // Retained objects can have a different MIME from their later import registration.
+      // Only redirect when the stored MIME agrees with the registered passive type.
+      const presigned =
+        isSafeInlineBlobMimeType(asset.mimeType) &&
+        blob.metadata.mimeType.toLowerCase() === asset.mimeType.toLowerCase()
+          ? await provider.getUrl(hash)
+          : null;
       if (presigned) {
         res.redirect(302, presigned);
         return;
       }
-      blob = await getBlobByHash(hash);
     } catch (error) {
       logger.error('[BlobRoute] Failed to load blob', { error, hash });
       replyError(res, 404, 'Blob not found');
@@ -489,13 +496,20 @@ blobsRouter.get(
     }
 
     // Validate MIME type before setting header to prevent injection attacks
-    const mimeType = blob.metadata.mimeType || asset.mimeType;
+    // Match the registered-MIME getter while reusing the bytes already read above.
+    const mimeType = asset.mimeType;
     if (SAFE_MIME_TYPE_REGEX.test(mimeType)) {
       res.setHeader('Content-Type', mimeType);
     } else {
       logger.warn('[BlobRoute] Invalid MIME type, using fallback', { mimeType, hash });
       res.setHeader('Content-Type', 'application/octet-stream');
     }
+    // Deduplicated bytes can retain MIME metadata from before a failed import/store.
+    // Keep opaque storage metadata intact, but never render active content inline here.
+    if (!isSafeInlineBlobMimeType(mimeType)) {
+      res.setHeader('Content-Disposition', 'attachment');
+    }
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Length', (blob.metadata.sizeBytes ?? asset.sizeBytes).toString());
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     res.setHeader('Accept-Ranges', 'none');
