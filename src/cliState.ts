@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { setEnvOverridesProvider } from './envOverrides';
 
-import type { TestSuite, UnifiedConfig } from './types/index';
+import type { EnvOverrides, TestSuite, UnifiedConfig } from './types/index';
 
 export interface ActiveOtlpReceiver {
   host: string;
@@ -60,7 +60,7 @@ interface CliState {
   readonly activeOtlpReceiver?: ActiveOtlpReceiver;
 
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
-  withConfig<T>(config: Partial<UnifiedConfig>, fn: () => Promise<T>): Promise<T>;
+  withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T;
   withRequestTracingConfig<T>(
     tracingConfig: NonNullable<TestSuite['tracing']>,
     fn: () => Promise<T>,
@@ -69,7 +69,7 @@ interface CliState {
 }
 
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
-const configContext = new AsyncLocalStorage<{ config: Partial<UnifiedConfig> }>();
+const envContext = new AsyncLocalStorage<{ env: EnvOverrides | undefined }>();
 const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();
@@ -95,8 +95,8 @@ const state: CliState = {
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T> {
     return maxConcurrencyContext.run({ maxConcurrency }, fn);
   },
-  withConfig<T>(config: Partial<UnifiedConfig>, fn: () => Promise<T>): Promise<T> {
-    return configContext.run({ config }, fn);
+  withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T {
+    return envContext.run({ env }, fn);
   },
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;
@@ -118,8 +118,8 @@ const state: CliState = {
 };
 
 setEnvOverridesProvider(() => {
-  const store = configContext.getStore();
-  return store ? store.config.env : state.config?.env;
+  const store = envContext.getStore();
+  return store ? store.env : state.config?.env;
 });
 
 export default state;

@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { getEnvString } from '../../../src/envars';
-import { loadApiProviders } from '../../../src/providers/index';
+import { evaluate } from '../../../src/node/evaluate';
+import { loadApiProvider, loadApiProviders } from '../../../src/providers/index';
 import { isApiProvider } from '../../../src/types/providers';
 import { combineConfigs, resolveConfigs } from '../../../src/util/config/load';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
@@ -137,10 +138,10 @@ describe('suite environment loading', () => {
                 : {}),
               ...(location === 'scenario' ? { scenarios: [{ config: [{}], tests: [test] }] } : {}),
             });
-      const { testSuite, config } = await resolveConfigs({ config: [configPath] }, {});
+      const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
       const provider =
         location === 'default'
-          ? typeof config.defaultTest === 'object' && config.defaultTest.provider
+          ? typeof testSuite.defaultTest === 'object' && testSuite.defaultTest.provider
           : location === 'scenario'
             ? testSuite.scenarios?.[0].tests?.[0].provider
             : testSuite.tests?.[0].provider;
@@ -222,31 +223,151 @@ describe('suite environment loading', () => {
   );
 
   it('uses the scoped environment for regular and file-path templates', async () => {
-    const result = await cliState.withConfig(
-      { env: { OPENAI_API_KEY: 'scoped-key' } },
-      async () => {
-        await Promise.resolve();
-        return [
-          getEnvString('OPENAI_API_KEY'),
-          getNunjucksEngine().renderString('{{ env.OPENAI_API_KEY }}', {}),
-          getNunjucksEngineForFilePath().renderString('{{ env.OPENAI_API_KEY }}', {}),
-        ];
-      },
-    );
+    const result = await cliState.withEnv({ OPENAI_API_KEY: 'scoped-key' }, async () => {
+      await Promise.resolve();
+      return [
+        getEnvString('OPENAI_API_KEY'),
+        getNunjucksEngine().renderString('{{ env.OPENAI_API_KEY }}', {}),
+        getNunjucksEngineForFilePath().renderString('{{ env.OPENAI_API_KEY }}', {}),
+      ];
+    });
     expect(result).toEqual(['scoped-key', 'scoped-key', 'scoped-key']);
     expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
   });
 
-  it('inherits the active scoped environment when loader options omit env', async () => {
-    const [provider] = await cliState.withConfig(
-      {
-        env: {
+  it.each(['single', 'multiple'])(
+    'retains scoped credentials through the %s loader',
+    async (loader) => {
+      const provider = await cliState.withEnv(
+        {
           OPENAI_API_BASE_URL: 'https://suite.example/v1',
           OPENAI_API_KEY: 'suite-key',
         },
-      },
-      () => loadApiProviders(['openai:chat:test-model']),
+        async () =>
+          loader === 'single'
+            ? loadApiProvider('openai:chat:test-model')
+            : (await loadApiProviders(['openai:chat:test-model']))[0],
+      );
+      await expectRequest(provider, 'suite');
+    },
+  );
+
+  it('keeps concurrent evaluations scoped through runtime rendering and provider calls', async () => {
+    const results = await Promise.all(
+      ['first', 'second'].map(async (name) => {
+        const result = await evaluate(
+          {
+            env: { OPENAI_API_KEY: `${name}-key` },
+            prompts: ['{{ env.OPENAI_API_KEY }}'],
+            providers: [
+              {
+                id: () => name,
+                callApi: async (prompt) => {
+                  await Promise.resolve();
+                  return { output: `${prompt}:${getEnvString('OPENAI_API_KEY')}` };
+                },
+              },
+            ],
+            tests: [{ assert: [{ type: 'equals', value: `${name}-key:${name}-key` }] }],
+          },
+          { cache: false },
+        );
+        return (await result.getResults())[0];
+      }),
     );
-    await expectRequest(provider, 'suite');
+    expect(results.map(({ success, score }) => ({ success, score }))).toEqual([
+      { success: true, score: 1 },
+      { success: true, score: 1 },
+    ]);
+    expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
   });
+
+  it('renders a reloaded config without inheriting the previous environment', async () => {
+    const configPath = writeConfig('templates', {
+      providers: [
+        { id: 'openai:chat:test-model', config: { apiBaseUrl: '{{ env.OPENAI_API_BASE_URL }}' } },
+      ],
+    });
+    const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+    await expectRequest(testSuite.providers[0], 'process');
+  });
+
+  it('uses suite env while expanding nested prompt files', async () => {
+    const previousFile = path.join(tempDir, 'previous.json');
+    const suiteFile = path.join(tempDir, 'suite.json');
+    fs.writeFileSync(previousFile, JSON.stringify('previous content'));
+    fs.writeFileSync(suiteFile, JSON.stringify('suite content'));
+    cliState.config = { env: { OPENAI_API_KEY: previousFile } };
+    const configPath = writeConfig('prompt', {
+      env: { OPENAI_API_KEY: suiteFile },
+      prompts: ['file://prompt.yaml'],
+    });
+    fs.writeFileSync(
+      path.join(path.dirname(configPath), 'prompt.yaml'),
+      'content: file://{{ env.OPENAI_API_KEY }}\n',
+    );
+    const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+    expect(JSON.parse(testSuite.prompts[0].raw)).toEqual({ content: 'suite content' });
+  });
+
+  it('loads array test references relative to each config directory', async () => {
+    const paths = ['first', 'second'].map((name) => {
+      const configPath = writeConfig(name, { tests: ['cases.yaml'] });
+      fs.writeFileSync(
+        path.join(path.dirname(configPath), 'cases.yaml'),
+        `- vars:\n    source: ${name}\n`,
+      );
+      return configPath;
+    });
+    const { testSuite } = await resolveConfigs({ config: paths }, {});
+    expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['first', 'second']);
+  });
+
+  it('keeps labeled prompt files from different config directories distinct', async () => {
+    const paths = ['first', 'second'].map((name) => {
+      const configPath = writeConfig(name, {
+        prompts: { 'file://prompt.txt': name, 'Inline prompt': 'inline' },
+      });
+      fs.writeFileSync(path.join(path.dirname(configPath), 'prompt.txt'), name);
+      return configPath;
+    });
+    const { testSuite } = await resolveConfigs({ config: paths }, {});
+    expect(testSuite.prompts.map(({ raw, label }) => ({ raw, label }))).toEqual(
+      expect.arrayContaining([
+        { raw: 'first', label: expect.stringMatching(/^first: /) },
+        { raw: 'second', label: expect.stringMatching(/^second: /) },
+        { raw: 'Inline prompt', label: 'inline' },
+      ]),
+    );
+    expect(testSuite.prompts).toHaveLength(3);
+  });
+
+  it.each(['string', 'object'] as const)(
+    'resolves standalone %s test providers during evaluation',
+    async (form) => {
+      const testsPath = path.join(tempDir, 'cases.json');
+      fs.writeFileSync(
+        testsPath,
+        JSON.stringify([
+          { provider: 'openai:chat:test-model', assert: [{ type: 'equals', value: 'Hello' }] },
+        ]),
+      );
+      const result = await evaluate(
+        {
+          env: { OPENAI_API_BASE_URL: 'https://suite.example/v1', OPENAI_API_KEY: 'suite-key' },
+          prompts: ['Echo should not handle this'],
+          providers: ['echo'],
+          tests: form === 'string' ? testsPath : { path: testsPath },
+        },
+        { cache: false },
+      );
+      const [row] = await result.getResults();
+      expect(row.success).toBe(true);
+      expect(row.score).toBe(1);
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://suite.example/v1/chat/completions');
+      expect(request?.headers).toMatchObject({ Authorization: 'Bearer suite-key' });
+    },
+  );
 });

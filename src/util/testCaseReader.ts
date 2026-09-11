@@ -9,6 +9,7 @@ import dedent from 'dedent';
 import { globSync } from 'glob';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
+import { getEnvOverrides } from '../envOverrides';
 import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
 import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
@@ -429,7 +430,7 @@ export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
   isDefaultTest: boolean = false,
-  env?: EnvOverrides,
+  env: EnvOverrides | undefined = getEnvOverrides(),
 ): Promise<TestCase> {
   let testCase: TestCase;
   let effectiveBasePath = basePath;
@@ -591,27 +592,39 @@ export async function loadTestsFromGlob(
 export async function readTests(
   tests: TestSuiteConfig['tests'],
   basePath: string = '',
-  env?: EnvOverrides,
+  env: EnvOverrides | undefined = getEnvOverrides(),
 ): Promise<TestCase[]> {
   const ret: TestCase[] = [];
+  const loadStandalone = async (source: string, config?: Record<string, any>) => {
+    const tests = await readStandaloneTestsFile(source, basePath, config);
+    if (source.includes('://') && !source.startsWith('file://')) {
+      // Remote datasets are data; do not execute local provider or vars file references.
+      return tests;
+    }
+    const testBasePath = path.dirname(
+      getStandaloneTestsFileMetadata(source, basePath).pathWithoutFunction,
+    );
+    return Promise.all(tests.map((test) => readTest(test, testBasePath, false, env)));
+  };
 
   if (typeof tests === 'string') {
     if (tests.startsWith('az://')) {
-      return readStandaloneTestsFile(tests, basePath);
+      return loadStandalone(tests);
     }
     // Points to a tests file with multiple test cases
     if (tests.endsWith('yaml') || tests.endsWith('yml')) {
       return loadTestsFromGlob(tests, basePath, env);
     }
     // Points to a tests.{csv,json,yaml,yml,py,js,ts,mjs} or Google Sheet
-    return readStandaloneTestsFile(tests, basePath);
+    return loadStandalone(tests);
   } else if (
     typeof tests === 'object' &&
+    tests !== null &&
     !Array.isArray(tests) &&
     'path' in tests &&
     typeof tests.path === 'string'
   ) {
-    return readStandaloneTestsFile(tests.path, basePath, tests.config);
+    return loadStandalone(tests.path, tests.config);
   }
   if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
@@ -630,13 +643,13 @@ export async function readTests(
           pathWithoutSheet.endsWith('.xls') ||
           globOrTest.replace(/^file:\/\//, '').includes(':')
         ) {
-          ret.push(...(await readStandaloneTestsFile(globOrTest, basePath)));
+          ret.push(...(await loadStandalone(globOrTest)));
         } else {
           // Resolve globs for other file types
           ret.push(...(await loadTestsFromGlob(globOrTest, basePath, env)));
         }
       } else if ('path' in globOrTest) {
-        ret.push(...(await readStandaloneTestsFile(globOrTest.path, basePath, globOrTest.config)));
+        ret.push(...(await loadStandalone(globOrTest.path, globOrTest.config)));
       } else {
         // Load individual TestCase
         ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath, false, env));
