@@ -605,16 +605,24 @@ describe('ResultsTable Metrics Display', () => {
 
   describe('ResultsTable Media Rendering', () => {
     it.each([
-      ['document/abcdef123456.pdf', '/api/media/document/abcdef123456.pdf'],
-      [
-        'tenant/campaign/09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
-        '/api/media?key=tenant%2Fcampaign%2F09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
-      ],
-      [
-        'document/' + 'a'.repeat(64) + '.pdf',
-        '/api/media?key=document%2F' + 'a'.repeat(64) + '.pdf',
-      ],
-    ])('shows PDF artifact links for storage key %s', (storageKey, expectedUrl) => {
+      {
+        storageKey: 'document/abcdef123456.pdf',
+        expectedUrl: '/api/media/document/abcdef123456.pdf',
+      },
+      {
+        storageKey: 'tenant/campaign/09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
+        expectedUrl: '/api/media?key=tenant%2Fcampaign%2F09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
+      },
+      {
+        storageKey: 'document/' + 'a'.repeat(64) + '.pdf',
+        expectedUrl: '/api/media?key=document%2F' + 'a'.repeat(64) + '.pdf',
+      },
+      {
+        storageKey: '09d620f6-9b31-4cea-936d-4bdc38ea7bc1',
+        expectedUrl: '/api/media?key=09d620f6-9b31-4cea-936d-4bdc38ea7bc1',
+      },
+      { storageKey: undefined, expectedUrl: 'data:application/pdf;base64,do-not-display' },
+    ])('shows PDF artifacts with storage key $storageKey', ({ storageKey, expectedUrl }) => {
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
@@ -636,7 +644,7 @@ describe('ResultsTable Metrics Display', () => {
                     input: 'document',
                     mode: 'scanned',
                     storageKey,
-                    templateStorageKey: 'document/123456abcdef.pdf',
+                    templateStorageKey: storageKey ? 'document/123456abcdef.pdf' : undefined,
                   },
                 },
               },
@@ -645,14 +653,21 @@ describe('ResultsTable Metrics Display', () => {
         },
       }));
       renderWithProviders(<ResultsTable {...defaultProps} />);
-      expect(screen.getByRole('link', { name: 'Open PDF' })).toHaveAttribute(
-        'href',
-        expect.stringContaining(expectedUrl),
-      );
-      expect(screen.getByRole('link', { name: 'Clean template' })).toHaveAttribute(
-        'href',
-        expect.stringContaining('/api/media/document/123456abcdef.pdf'),
-      );
+      expect(
+        screen.getByRole('link', { name: storageKey ? 'Open PDF' : 'Download PDF' }),
+      ).toHaveAttribute('href', expect.stringContaining(expectedUrl));
+      if (storageKey) {
+        expect(screen.getByRole('link', { name: 'Clean template' })).toHaveAttribute(
+          'href',
+          expect.stringContaining('/api/media/document/123456abcdef.pdf'),
+        );
+      } else {
+        expect(screen.queryByRole('link', { name: 'Clean template' })).not.toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'Download PDF' })).toHaveAttribute(
+          'download',
+          'attack.pdf',
+        );
+      }
       expect(screen.getByText('Change the payment terms.')).toBeInTheDocument();
       expect(screen.queryByText(/do-not-display/)).not.toBeInTheDocument();
     });

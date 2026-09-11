@@ -3,8 +3,9 @@ import path from 'node:path';
 
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { storeMedia } from '../../storage';
+import { isMediaStorageEnabled, storeMedia } from '../../storage';
 import { normalizeInputDefinition, PdfTemplateSchema } from '../../types/shared';
+import { sha256 } from '../../util/createHash';
 import { extractFirstJsonObject } from '../../util/json';
 import { createPdf, inspectPdf, MAX_PDF_BYTES, scanPdf } from '../pdf';
 import { getStrategyGenerationProvider } from './types';
@@ -16,6 +17,20 @@ const ConfigSchema = z.object({
   input: z.string().min(1).optional(),
   mode: z.enum(['text', 'scanned']).default('text'),
 });
+
+async function savePdf(bytes: Buffer, filename: string, text?: string) {
+  if (!isMediaStorageEnabled()) {
+    return undefined;
+  }
+  const { ref } = await storeMedia(bytes, {
+    mediaType: 'document',
+    contentType: 'application/pdf',
+    strategyId: 'pdf',
+    originalFilename: filename,
+    originalText: text,
+  });
+  return ref.key;
+}
 
 async function prepareTemplate(
   config: z.infer<typeof PdfTemplateSchema>,
@@ -62,13 +77,8 @@ async function prepareTemplate(
       'PDF templates must contain extractable text. Use mode: scanned to test rasterized copies',
     );
   }
-  const { ref } = await storeMedia(bytes, {
-    mediaType: 'document',
-    contentType: 'application/pdf',
-    strategyId: 'pdf',
-    originalFilename: 'template.pdf',
-  });
-  return { bytes, text, key: ref.key, contentHash: ref.contentHash };
+  const key = await savePdf(bytes, 'template.pdf');
+  return { bytes, text, key, contentHash: `sha256:${sha256(bytes)}` };
 }
 
 function resolveInput(testCase: TestCaseWithPlugin, injectVar: string, configuredInput?: string) {
@@ -152,13 +162,7 @@ export async function addPdfTestCases(
     const text = `${template.text}\n\n${notes}`;
     const rendered = await createPdf(notes, template.bytes);
     const bytes = mode === 'scanned' ? await scanPdf(rendered) : rendered;
-    const { ref } = await storeMedia(bytes, {
-      mediaType: 'document',
-      contentType: 'application/pdf',
-      strategyId: 'pdf',
-      originalFilename: 'attack.pdf',
-      originalText: text,
-    });
+    const storageKey = await savePdf(bytes, 'attack.pdf', text);
     results.push({
       ...testCase,
       vars: {
@@ -180,9 +184,9 @@ export async function addPdfTestCases(
           text,
           templateText: template.text,
           templateStorageKey: template.key,
-          templateHash: `sha256:${template.contentHash}`,
-          storageKey: ref.key,
-          contentHash: `sha256:${ref.contentHash}`,
+          templateHash: template.contentHash,
+          storageKey,
+          contentHash: `sha256:${sha256(bytes)}`,
         },
       },
     });

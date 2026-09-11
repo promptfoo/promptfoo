@@ -55,7 +55,13 @@ function getPdfGradingInput(test: AtomicTestCase) {
   const vars: NonNullable<AtomicTestCase['vars']> = { ...test.vars, [pdf.input]: pdf.text };
   for (const [key, value] of Object.entries(vars)) {
     if (typeof value === 'string' && value.startsWith('data:')) {
-      const readable = test.metadata?.inputVars?.[key];
+      const materialized = test.metadata?.inputMaterialization?.[key];
+      const readable =
+        typeof materialized?.bodyText === 'string'
+          ? [materialized.bodyText, materialized.injectedInstruction]
+              .filter((part) => typeof part === 'string' && part)
+              .join('\n\n')
+          : test.metadata?.inputVars?.[key];
       vars[key] =
         typeof readable === 'string' && !readable.startsWith('data:')
           ? readable

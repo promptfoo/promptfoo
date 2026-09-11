@@ -135,7 +135,10 @@ async function serveMedia(key: string, res: Response, contentAddressed: boolean)
       ogv: 'video/ogg',
     };
 
-    const contentType = contentTypes[extension] || 'application/octet-stream';
+    const contentType =
+      data.subarray(0, 5).toString('ascii') === '%PDF-'
+        ? 'application/pdf'
+        : contentTypes[extension] || 'application/octet-stream';
 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', data.length);

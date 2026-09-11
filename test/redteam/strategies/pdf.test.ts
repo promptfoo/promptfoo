@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -8,6 +9,7 @@ import { createPdf, inspectPdf } from '../../../src/redteam/pdf';
 import { addPdfTestCases } from '../../../src/redteam/strategies/pdf';
 import { getStrategyGenerationProvider } from '../../../src/redteam/strategies/types';
 import {
+  getMediaStorage,
   LocalFileSystemProvider,
   resetMediaStorage,
   retrieveMedia,
@@ -26,6 +28,7 @@ describe('PDF strategy', () => {
   let originalBasePath: string | undefined;
   beforeEach(async () => {
     vi.resetAllMocks();
+    vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'false');
     directory = await fs.mkdtemp(path.join(os.tmpdir(), 'promptfoo-pdf-test-'));
     originalBasePath = cliState.basePath;
     cliState.basePath = directory;
@@ -39,6 +42,7 @@ describe('PDF strategy', () => {
     cliState.basePath = originalBasePath;
     resetMediaStorage();
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
     await fs.rm(directory, { recursive: true, force: true });
   });
 
@@ -97,6 +101,39 @@ describe('PDF strategy', () => {
     });
     const [result] = await addPdfTestCases([original], '__prompt', {});
     expect(result.vars!.question).toBe('Please explain the payment terms.');
+  });
+
+  it('keeps PDF bytes inline without touching disabled storage', async () => {
+    vi.stubEnv('PROMPTFOO_INLINE_MEDIA', 'true');
+    const store = vi
+      .spyOn(getMediaStorage(), 'store')
+      .mockRejectedValue(new Error('Read-only storage'));
+    const [result] = await addPdfTestCases([testCase()], '__prompt', {});
+    const bytes = Buffer.from(String(result.vars!.document).split(',')[1], 'base64');
+    expect((await inspectPdf(bytes)).text).toContain('Report $0.');
+    expect(result.metadata!.pdf.storageKey).toBeUndefined();
+    expect(result.metadata!.pdf.templateStorageKey).toBeUndefined();
+    expect(result.metadata!.pdf.contentHash).toBe(
+      `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
+    );
+    expect(store).not.toHaveBeenCalled();
+  });
+
+  it('computes SHA-256 independently of the storage provider integrity hash', async () => {
+    let nextKey = 0;
+    vi.spyOn(getMediaStorage(), 'store').mockImplementation(async (_bytes, metadata) => ({
+      ref: { provider: 'custom', key: `opaque-${nextKey++}`, contentHash: 'opaque-etag', metadata },
+      deduplicated: false,
+    }));
+    const [result] = await addPdfTestCases([testCase()], '__prompt', {});
+    const bytes = Buffer.from(String(result.vars!.document).split(',')[1], 'base64');
+    const template = await fs.readFile(path.join(directory, 'invoice.pdf'));
+    expect(result.metadata!.pdf.contentHash).toBe(
+      `sha256:${createHash('sha256').update(bytes).digest('hex')}`,
+    );
+    expect(result.metadata!.pdf.templateHash).toBe(
+      `sha256:${createHash('sha256').update(template).digest('hex')}`,
+    );
   });
 
   it('sends scanned PDF bytes while retaining the clean facts and attack for grading', async () => {

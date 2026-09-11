@@ -47,6 +47,7 @@ describe('Media Routes', () => {
       'tenant/campaign/09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
       'document/' + 'a'.repeat(64) + '.pdf',
       'tenant/invoice ?#&%2F.pdf',
+      '09d620f6-9b31-4cea-936d-4bdc38ea7bc1',
     ])('serves the exact provider-defined key %s', async (key) => {
       const data = Buffer.from('%PDF-1.7 test');
       mockedMediaExists.mockResolvedValue(true);

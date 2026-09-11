@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 
 export const MAX_PDF_BYTES = 5 * 1024 * 1024;
+const MAX_PDF_TEXT_CHARS = 50_000;
 const MAX_PAGES = 10;
 const PAGE_SIZE: [number, number] = [612, 792];
 const MARGIN = 48;
@@ -34,6 +35,9 @@ async function loadPdf(bytes: Uint8Array): Promise<PDFDocument> {
 
 /** Render text on new pages, preserving the template's existing pages. */
 export async function createPdf(text: string, template?: Uint8Array): Promise<Buffer> {
+  if (text.length > MAX_PDF_TEXT_CHARS) {
+    throw new Error('PDF text exceeds the 50,000-character limit');
+  }
   const document = template ? await loadPdf(template) : await PDFDocument.create();
   if (!template) {
     document.setCreationDate(new Date(0));
@@ -95,8 +99,12 @@ export async function inspectPdf(bytes: Uint8Array): Promise<{ text: string; pag
   const parser = new PDFParse({ data: new Uint8Array(bytes), isEvalSupported: false });
   try {
     const result = await parser.getText();
+    const text = result.pages.map((page) => page.text).join('\n\n');
+    if (text.length > MAX_PDF_TEXT_CHARS) {
+      throw new Error('PDF extracted text exceeds the 50,000-character limit');
+    }
     return {
-      text: result.pages.map((page) => page.text).join('\n\n'),
+      text,
       pageCount: document.getPageCount(),
     };
   } finally {
