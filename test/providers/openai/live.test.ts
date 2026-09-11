@@ -768,6 +768,39 @@ describe('OpenAiLiveProvider', () => {
     expect(sockets).toHaveLength(1);
   });
 
+  it('does not forward an ambient OpenAI key to a gateway with its own credential header', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
+    const upgradeHeaders = async (config: OpenAiLiveOptions) => {
+      const result = new OpenAiLiveProvider('gpt-live-1', {
+        config: {
+          headers: { 'api-key': 'gateway-key' },
+          responseWindowMs: 100,
+          websocketTimeout: 200,
+          closeTimeoutMs: 100,
+          ...config,
+        },
+      }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      closed(socket);
+      expect((await result).error).toBeUndefined();
+      return socket.options.headers;
+    };
+
+    expect(await upgradeHeaders({ apiBaseUrl: 'http://localhost:1234/v1' })).toEqual({
+      'api-key': 'gateway-key',
+    });
+    // An explicit key source or the official API still receives the OpenAI key.
+    expect(
+      await upgradeHeaders({
+        apiBaseUrl: 'http://localhost:1234/v1',
+        apiKeyEnvar: 'OPENAI_API_KEY',
+      }),
+    ).toMatchObject({ Authorization: 'Bearer ambient-openai-key', 'api-key': 'gateway-key' });
+    expect(await upgradeHeaders({})).toMatchObject({ Authorization: 'Bearer ambient-openai-key' });
+  });
+
   it('uses prompt-scoped headers, including a case-insensitive authorization override', async () => {
     const result = provider({ headers: { 'X-Route': 'provider' } }).callApi('Hi', {
       vars: {},

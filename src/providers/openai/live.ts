@@ -131,10 +131,10 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       controller.signal.throwIfAborted();
       const apiKey = this.getApiKey();
       const headers = this.getOpenAiRequestHeaders(config.headers);
-      const hasHeaderCredential = Object.entries(headers).some(
+      const credentialHeaders = Object.entries(headers).filter(
         ([name, value]) => isLiveCredentialHeader(name) && String(value).trim().length > 0,
       );
-      if (!apiKey && this.requiresApiKey() && !hasHeaderCredential) {
+      if (!apiKey && this.requiresApiKey() && !credentialHeaders.length) {
         throw new Error(this.getMissingApiKeyErrorMessage());
       }
       const url = new URL(appendOpenAiApiPath(this.getApiUrl(), 'live/sessions'));
@@ -142,10 +142,16 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       if (url.search) {
         throw new Error('GPT-Live session URLs do not accept query parameters.');
       }
+      // Don't forward an ambient OPENAI_API_KEY to a gateway that authenticates with its own
+      // credential header; an explicit apiKey or apiKeyEnvar still sends it.
+      const sendApiKey =
+        Boolean(config.apiKey || config.apiKeyEnvar) ||
+        url.hostname.toLowerCase() === 'api.openai.com' ||
+        !credentialHeaders.some(([name]) => name.toLowerCase() !== 'authorization');
       const session = new LiveSession({
         url: url.toString(),
         headers: {
-          ...(apiKey && !hasHeaderOverride(headers, 'Authorization')
+          ...(apiKey && sendApiKey && !hasHeaderOverride(headers, 'Authorization')
             ? { Authorization: `Bearer ${apiKey}` }
             : {}),
           ...headers,

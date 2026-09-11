@@ -7,7 +7,7 @@ description: Test GPT-Live voice conversations with paced audio input, timestamp
 
 Use `openai:live:gpt-live-1` to evaluate [OpenAI's GPT-Live API](https://developers.openai.com/api/docs/guides/live). It connects to `/v1/live/sessions` and supports full-duplex audio, where the model can listen and speak simultaneously. `openai:gpt-live-1` and `openai:live` select the same provider, and dated `openai:gpt-live-*` snapshots also use it.
 
-Set `OPENAI_API_KEY` to an OpenAI project key with Live access. For a compatible gateway, set `apiBaseUrl` and authenticate with `apiKey` or a credential header in `headers`, such as `Authorization` or `api-key`.
+Set `OPENAI_API_KEY` to an OpenAI project key with Live access. For a compatible gateway, set `apiBaseUrl` and authenticate with `apiKey` or a credential header in `headers`, such as `Authorization` or `api-key`. When a gateway uses its own credential header, an `OPENAI_API_KEY` from the environment is not sent to it unless you set `apiKey` or `apiKeyEnvar`.
 
 ## Quickstart
 
