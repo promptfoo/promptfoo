@@ -16,6 +16,13 @@ class DuplicateCandidatePortfolioPlugin extends PortfolioRedteamPluginBase {
       instructions: 'Generate accepted prompts.',
       requiredPredicates: ['accepted'],
     },
+    {
+      id: 'also-required',
+      label: 'Also required',
+      description: 'another required prompt',
+      instructions: 'Generate accepted prompts.',
+      requiredPredicates: ['accepted'],
+    },
   ];
 
   initialCallCount = 0;
@@ -151,7 +158,7 @@ describe('PortfolioRedteamPluginBase', () => {
     expect(plugin.familyTemplateCalls).toBe(0);
   });
 
-  it('repairs a required family when generation attempts repeat one valid prompt', async () => {
+  it('repairs a required family when another family already accepted its prompt', async () => {
     const plugin = new DuplicateCandidatePortfolioPlugin(
       createMockProvider(),
       'test purpose',
@@ -160,7 +167,7 @@ describe('PortfolioRedteamPluginBase', () => {
 
     const tests = await plugin.generateTests(2);
 
-    expect(plugin.initialCallCount).toBe(2);
+    expect(plugin.initialCallCount).toBe(3);
     expect(plugin.repairCallCount).toBe(1);
     expect(tests.map((test) => test.vars?.prompt)).toEqual([
       'accepted repeated prompt',
