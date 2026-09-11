@@ -258,6 +258,12 @@ describe('isSecretEnvVarName', () => {
   ])('leaves %s alone', (name) => {
     expect(isSecretEnvVarName(name)).toBe(false);
   });
+
+  it('preserves auth type values in sanitized env maps', () => {
+    expect(sanitizeObject({ env: { WATSONX_AI_AUTH_TYPE: 'iam' } })).toEqual({
+      env: { WATSONX_AI_AUTH_TYPE: 'iam' },
+    });
+  });
 });
 
 describe('sanitizeObject', () => {

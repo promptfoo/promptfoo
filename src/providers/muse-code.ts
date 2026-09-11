@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { z } from 'zod';
 import cliState from '../cliState';
-import { getEnvString } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { extractProviderResponseAttributes, withGenAISpan } from '../tracing/genaiTracer';
 import { renderVarsInObject } from '../util/render';
@@ -282,8 +282,11 @@ function parseResponse(result: ProcessResult): ProviderResponse {
 }
 
 function redactCredentials(response: ProviderResponse, credentials: string[]): ProviderResponse {
+  const shouldStripRaw =
+    getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false) ||
+    getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
   if (!credentials.length) {
-    return response;
+    return shouldStripRaw ? { ...response, raw: undefined } : response;
   }
   const pattern = new RegExp(
     credentials
@@ -294,20 +297,31 @@ function redactCredentials(response: ProviderResponse, credentials: string[]): P
   );
   const redact = (value: string) => value.replace(pattern, REDACTED);
   const rawStrings: string[] = [];
-  JSON.stringify(response.raw, (_key, value) => {
-    if (typeof value === 'string') {
-      rawStrings.push(value);
-    }
-    return value;
-  });
+  for (const value of Array.isArray(response.raw)
+    ? response.raw.map((event) => event?.payload)
+    : [response.raw]) {
+    JSON.stringify(value, (_key, item) => {
+      if (typeof item === 'string') {
+        rawStrings.push(item);
+      }
+      return item;
+    });
+  }
+  const eventTexts = Array.isArray(response.raw)
+    ? response.raw
+        .map((event) => event?.payload?.text)
+        .filter((value): value is string => typeof value === 'string')
+    : [];
+  const containsAdjacentCredential = (values: string[], credential: string) =>
+    values.some((value, index) => index > 0 && (values[index - 1] + value).includes(credential));
   const hasSplitCredential = credentials.some(
     (credential) =>
       !rawStrings.some((value) => value.includes(credential)) &&
-      rawStrings.some(
-        (value, index) => index > 0 && (rawStrings[index - 1] + value).includes(credential),
-      ),
+      (containsAdjacentCredential(rawStrings, credential) ||
+        containsAdjacentCredential(eventTexts, credential)),
   );
-  const sanitizedResponse = hasSplitCredential ? { ...response, raw: undefined } : response;
+  const sanitizedResponse =
+    shouldStripRaw || hasSplitCredential ? { ...response, raw: undefined } : response;
   return JSON.parse(
     JSON.stringify(sanitizedResponse, (_key, value) => {
       if (typeof value === 'string') {
@@ -398,7 +412,7 @@ export class MuseCodeProvider implements ApiProvider {
     delete merged.provider;
     let config: MuseCodeConfig;
     try {
-      config = MuseCodeConfigSchema.parse(renderVarsInObject(merged, context?.vars));
+      config = MuseCodeConfigSchema.strict().parse(renderVarsInObject(merged, context?.vars));
       if (config.session_id && config.no_session_log) {
         throw new Error('session_id cannot be combined with no_session_log');
       }

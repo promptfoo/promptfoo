@@ -379,11 +379,13 @@ function getFieldNameWords(name: string): string[] {
 }
 
 function isCredentialName(name: string): boolean {
+  const words = getFieldNameWords(name);
+  if (['method', 'mode', 'type'].includes(words[words.length - 1] ?? '')) {
+    return false;
+  }
   return (
     isSecretEnvVarName(name) ||
-    getFieldNameWords(name).some(
-      (word) => isSecretField(word) || /^(key|pat|credential|pass|pw)$/.test(word),
-    )
+    words.some((word) => isSecretField(word) || /^(key|pat|credential|pass|pw)$/.test(word))
   );
 }
 
