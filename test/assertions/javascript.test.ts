@@ -907,7 +907,7 @@ describe('JavaScript file references', () => {
       },
       false,
       0.75,
-      'NOT: Custom reason',
+      'Custom reason',
     ],
   ];
 
@@ -972,7 +972,7 @@ describe('JavaScript file references', () => {
       },
       false,
       0.75,
-      'NOT: Custom reason',
+      'Custom reason',
     ],
   ];
 
@@ -1749,8 +1749,8 @@ return s >= 0.5 && s <= 0.75;`,
 describe('not-javascript: GradingResult reason preservation on inversion', () => {
   const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
 
-  it('preserves custom reason prefixed with NOT: when function returns pass:true and assertion is inverted (test fails)', async () => {
-    // Function says "output contains foo" — not-javascript should fail and keep the reason.
+  it('preserves custom reason verbatim when function returns pass:true and assertion is inverted (test fails)', async () => {
+    // Function says "output contains foo" — not-javascript should fail and keep the reason verbatim.
     const assertion: Assertion = {
       type: 'not-javascript',
       value: async (output: string) => ({
@@ -1771,8 +1771,8 @@ describe('not-javascript: GradingResult reason preservation on inversion', () =>
     expect(result.pass).toBe(false);
     // Reason must NOT be the generic "Custom function returned true"
     expect(result.reason).not.toBe('Custom function returned true');
-    // Reason must surface the custom message
-    expect(result.reason).toContain('Expected output not to contain "foo", but it did.');
+    // Reason must surface the custom message verbatim (no NOT: prefix)
+    expect(result.reason).toBe('Expected output not to contain "foo", but it did.');
   });
 
   it('preserves custom reason when function returns pass:false and assertion is inverted (test passes)', async () => {
