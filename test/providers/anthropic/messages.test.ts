@@ -1674,9 +1674,13 @@ describe('AnthropicMessagesProvider', () => {
         completion: 9,
         total: 26,
       });
-      expect(mcpMocks.callTool).toHaveBeenCalledWith('search_companies', {
-        query: 'clean energy',
-      });
+      expect(mcpMocks.callTool).toHaveBeenCalledWith(
+        'search_companies',
+        {
+          query: 'clean energy',
+        },
+        undefined,
+      );
       expect(createSpy).toHaveBeenCalledTimes(2);
 
       const secondRequest = createSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;

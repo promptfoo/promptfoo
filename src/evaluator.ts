@@ -1450,10 +1450,14 @@ async function gradeRunEvalResponse({
 
   const assertionProviderResponse = {
     ...processedResponse,
+    // Keep generated audio available to graders after persistence replaces its
+    // inline bytes with a blob reference in the saved result.
+    ...(response.audio?.data ? { audio: response.audio } : {}),
     providerTransformedOutput,
   };
 
-  if (deferGrading) {
+  // Finish audio grading per row instead of retaining every inline clip in the queue.
+  if (deferGrading && !response.audio?.data) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
@@ -1641,7 +1645,10 @@ async function runEvalInternal({
   evalId,
   providerCallQueue,
   rateLimitRegistry,
-}: RunEvalOptions): Promise<EvaluateResult[]> {
+  onTargetResponse,
+}: RunEvalOptions & { onTargetResponse?: (row: EvaluateResult) => void }): Promise<
+  EvaluateResult[]
+> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
     typeof provider.delay === 'number',
@@ -1765,40 +1772,42 @@ async function runEvalInternal({
           if (response.tokenUsage) {
             accumulateResponseTokenUsage(ret.tokenUsage, response);
           }
+          onTargetResponse?.({ ...ret, tokenUsage: structuredClone(ret.tokenUsage) });
+          // Row timeouts do not cancel deferred grading; the evaluation deadline does.
+          const outcomeSignal =
+            deferGrading && evaluateOptions
+              ? (gradingAbortSignal ?? evaluateOptions.abortSignal)
+              : abortSignal;
           try {
             await applyProviderDelayIfNeeded(provider, response, abortSignal);
+            await applyRunEvalResponseOutcome({
+              abortSignal: outcomeSignal,
+              deferGrading,
+              evalId,
+              isRedteam,
+              latencyMs,
+              prompt,
+              promptIdx: promptIndex,
+              provider,
+              providerCallQueue,
+              rateLimitRegistry,
+              renderedPrompt: rendered.renderedPrompt,
+              response,
+              ret,
+              test,
+              testIdx: testIndex,
+              testSuite,
+              traceContext: executionTraceContext,
+              vars: persistedVars,
+            });
           } catch (err) {
-            if (!abortSignal?.aborted) {
+            if (!abortSignal?.aborted && !outcomeSignal?.aborted) {
               throw err;
             }
             ret.error = err instanceof Error ? err.message : String(err);
             ret.failureReason = ResultFailureReason.ERROR;
             return [ret];
           }
-          await applyRunEvalResponseOutcome({
-            // Row timeouts do not cancel deferred grading; the evaluation deadline does.
-            abortSignal:
-              deferGrading && evaluateOptions
-                ? (gradingAbortSignal ?? evaluateOptions.abortSignal)
-                : abortSignal,
-            deferGrading,
-            evalId,
-            isRedteam,
-            latencyMs,
-            prompt,
-            promptIdx: promptIndex,
-            provider,
-            providerCallQueue,
-            rateLimitRegistry,
-            renderedPrompt: rendered.renderedPrompt,
-            response,
-            ret,
-            test,
-            testIdx: testIndex,
-            testSuite,
-            traceContext: executionTraceContext,
-            vars: persistedVars,
-          });
 
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
             // Save the output in a register for later use
@@ -2023,13 +2032,13 @@ function updatePromptResultCounts(metrics: PromptMetrics, row: EvaluateResult) {
   }
 }
 
-async function updateDerivedMetrics(
+function updateDerivedMetrics(
   metrics: PromptMetrics,
   derivedMetrics: NonNullable<TestSuite['derivedMetrics']>,
   evalStep: RunEvalOptions,
   promptEvalCount: number,
+  math: typeof import('mathjs'),
 ) {
-  const math = await import('mathjs');
   if (Object.prototype.hasOwnProperty.call(metrics.namedScores, '__count')) {
     logger.warn("Metric name '__count' is reserved for derived metrics and will be overridden.");
   }
@@ -3096,6 +3105,7 @@ function adjustConcurrencyForSerialFeatures({
 interface ProcessEvalStepOptions {
   deferGrading?: boolean;
   onRowsReady?: () => void;
+  onTargetResponse?: (row: EvaluateResult) => void;
   precomputedRows?: EvaluateResult[];
   providerCallQueue?: ProviderCallQueue;
   shouldSkipStaleRows?: () => boolean;
@@ -3110,6 +3120,7 @@ interface GroupedRows {
 interface EvalProcessingContext {
   assertionTypes: Set<string>;
   concurrency: number;
+  mathjsModule: typeof import('mathjs') | null;
   numComplete: number;
   options: InternalEvaluateOptions;
   promptEvalCounts: number[];
@@ -3552,19 +3563,21 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
-  private async updatePromptMetricsForRow({
+  private updatePromptMetricsForRow({
     derivedMetrics,
     evalStep,
+    mathjsModule,
     metrics,
     promptEvalCount,
     row,
   }: {
     derivedMetrics: TestSuite['derivedMetrics'];
     evalStep: RunEvalOptions;
+    mathjsModule: typeof import('mathjs') | null;
     metrics: PromptMetrics;
     promptEvalCount: number;
     row: EvaluateResult;
-  }): Promise<void> {
+  }): void {
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
       accumulateNamedMetric(metrics, {
@@ -3576,7 +3589,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     if (derivedMetrics) {
-      await updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount);
+      invariant(mathjsModule, 'Expected mathjs to be loaded for derived metrics');
+      updateDerivedMetrics(metrics, derivedMetrics, evalStep, promptEvalCount, mathjsModule);
     }
 
     updatePromptResultCounts(metrics, row);
@@ -3608,6 +3622,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     {
       deferGrading = false,
       onRowsReady,
+      onTargetResponse,
       precomputedRows,
       providerCallQueue,
       shouldSkipStaleRows,
@@ -3622,6 +3637,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           (await this.runEvalStepAfterBeforeEach(evalStep, {
             deferGrading,
             onRowsReady,
+            onTargetResponse,
             providerCallQueue,
             testSuite: context.testSuite,
           }));
@@ -3639,11 +3655,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     {
       deferGrading,
       onRowsReady,
+      onTargetResponse,
       providerCallQueue,
       testSuite,
     }: {
       deferGrading: boolean;
       onRowsReady?: () => void;
+      onTargetResponse?: (row: EvaluateResult) => void;
       providerCallQueue?: ProviderCallQueue;
       testSuite: TestSuite;
     },
@@ -3656,6 +3674,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const rows = await runEvalInternal({
       ...evalStep,
       deferGrading,
+      onTargetResponse,
       providerCallQueue: deferGrading ? providerCallQueue : undefined,
     });
     onRowsReady?.();
@@ -3683,7 +3702,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       // namedScores tracking here, move afterEach above this call.
       this.trackCompletedRow(evalStep, row, context);
       context.numComplete++;
-      const promptEvalCount = reservePromptEvalCount(context, row.promptIdx);
 
       // Apply afterEach hook mutations before persisting. Pass a shallow copy
       // so in-place mutations don't corrupt the row on hook failure.
@@ -3732,11 +3750,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
-      await this.updatePromptMetricsForRow({
+      this.updatePromptMetricsForRow({
         derivedMetrics: context.testSuite.derivedMetrics,
         evalStep,
+        mathjsModule: context.mathjsModule,
         metrics,
-        promptEvalCount,
+        promptEvalCount: reservePromptEvalCount(context, row.promptIdx),
         row,
       });
 
@@ -3815,6 +3834,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     let timeoutId: NodeJS.Timeout | undefined;
     let didTimeout = false;
+    let completedTarget: EvaluateResult | undefined;
     const clearEvalStepTimeout = () => {
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -3830,6 +3850,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           {
             deferGrading,
             onRowsReady: clearEvalStepTimeout,
+            onTargetResponse: (row) => {
+              if (!didTimeout) {
+                completedTarget = row;
+              }
+            },
             providerCallQueue,
             shouldSkipStaleRows: () => didTimeout,
           },
@@ -3847,7 +3872,25 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (!didTimeout) {
         throw error;
       }
-      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      if (completedTarget) {
+        await this.processEvalRows(
+          evalStep,
+          index,
+          [
+            {
+              ...completedTarget,
+              error: `Evaluation timed out after ${timeoutMs}ms`,
+              success: false,
+              score: 0,
+              failureReason: ResultFailureReason.ERROR,
+            },
+          ],
+          undefined,
+          context,
+        );
+      } else {
+        await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      }
     } finally {
       clearEvalStepTimeout();
     }
@@ -4922,9 +4965,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     concurrency = concurrencySettings.concurrency;
     const { usesConversationVar } = concurrencySettings;
 
+    // Awaiting after accumulating scores lets other rows change the total
+    // before derived metrics use this row's __count.
+    const mathjsModule = testSuite.derivedMetrics ? await import('mathjs') : null;
+
     const processingContext: EvalProcessingContext = {
       assertionTypes,
       concurrency,
+      mathjsModule,
       numComplete: 0,
       options,
       promptEvalCounts: createPromptEvalCounts(prompts),

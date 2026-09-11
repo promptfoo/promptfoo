@@ -17,9 +17,6 @@ import type {
 const OPENAI_MODERATION_MODELS = [
   { id: 'omni-moderation-latest', maxTokens: 32768, capabilities: ['text', 'image'] },
   { id: 'omni-moderation-2024-09-26', maxTokens: 32768, capabilities: ['text', 'image'] },
-  { id: 'text-moderation-latest', maxTokens: 32768, capabilities: ['text'] },
-  { id: 'text-moderation-stable', maxTokens: 32768, capabilities: ['text'] },
-  { id: 'text-moderation-007', maxTokens: 32768, capabilities: ['text'] },
 ];
 
 type OpenAIModerationModelId = string;
@@ -241,7 +238,7 @@ export class OpenAiModerationProvider
   static MODERATION_MODEL_IDS = OPENAI_MODERATION_MODELS.map((model) => model.id);
 
   constructor(
-    modelName: OpenAIModerationModelId = 'text-moderation-latest',
+    modelName: OpenAIModerationModelId = 'omni-moderation-latest',
     options: { config?: OpenAIModerationConfig; id?: string; env?: any } = {},
   ) {
     super(modelName, options);
@@ -277,6 +274,7 @@ export class OpenAiModerationProvider
         cache.get(cacheKey),
         options?.abortSignal,
       );
+      options?.abortSignal?.throwIfAborted();
 
       if (cachedResponse) {
         logger.debug('Returning cached moderation response');
