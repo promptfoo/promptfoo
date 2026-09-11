@@ -358,7 +358,7 @@ function controlRunsBeforeTool(
 
 function toolInvocationKey(observation: AgentObservation, index: number): string {
   if (observation.spanId && observation.source !== 'trace-event') {
-    return `span:${observation.spanId}:${observation.tool ?? observation.operation ?? ''}:${observation.callId ?? ''}`;
+    return `span:${observation.spanId}:${observation.callId ?? ''}`;
   }
 
   if (observation.spanName || observation.timestamp !== undefined) {
@@ -376,7 +376,7 @@ function uniqueToolInvocations(observations: AgentObservation[]): AgentObservati
       .filter((observation) => observation.source !== 'trace-event' && observation.spanId)
       .map(
         (observation) =>
-          `${observation.spanId}:${observation.tool ?? observation.operation ?? ''}:${observation.callId ?? observation.timestamp ?? ''}`,
+          `${observation.spanId}:${observation.callId ?? observation.timestamp ?? ''}`,
       ),
   );
   const seen = new Set<string>();
@@ -385,7 +385,7 @@ function uniqueToolInvocations(observations: AgentObservation[]): AgentObservati
       if (
         observation.source === 'trace-event' &&
         spanInvocations.has(
-          `${observation.spanId}:${observation.tool ?? observation.operation ?? ''}:${observation.callId ?? observation.timestamp ?? ''}`,
+          `${observation.spanId}:${observation.callId ?? observation.timestamp ?? ''}`,
         )
       ) {
         return false;
@@ -485,7 +485,9 @@ function hasGuardrailOrApprovalForTool(
     observations.filter(
       (observation) =>
         (observation.kind === 'guardrail' || observation.kind === 'approval') &&
-        !/^(blocked|denied|rejected|error|skipped)$/i.test(observation.outcome?.trim() ?? ''),
+        !/^(blocked|denied|rejected|error|errored|skipped|fail(?:ed|ure)?)$/i.test(
+          observation.outcome?.trim() ?? '',
+        ),
     ),
   );
   const usedControlIndexes = new Set<number>();

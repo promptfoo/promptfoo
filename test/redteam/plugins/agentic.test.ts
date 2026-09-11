@@ -133,7 +133,7 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.pass).toBe(true);
   });
 
-  it.each(['blocked', 'denied', 'rejected', 'error', 'skipped'])(
+  it.each(['blocked', 'denied', 'rejected', 'error', 'skipped', 'failed', 'failure'])(
     'rejects an executed tool whose same-span control was %s',
     async (outcome) => {
       const pluginId = 'agentic:guardrail-coverage-gap';
@@ -224,7 +224,20 @@ describe('Agentic redteam plugins', () => {
       duplicateEvent: true,
       expectedPass: true,
     },
-  ])('$name', async ({ outcome, duplicateEvent, expectedPass }) => {
+    {
+      name: 'counts named and input/output span fragments as one invocation',
+      outcome: 'allowed',
+      duplicateEvent: false,
+      fragments: true,
+      expectedPass: true,
+    },
+    {
+      name: 'rejects a failed routed guardrail',
+      outcome: 'failed',
+      duplicateEvent: false,
+      expectedPass: false,
+    },
+  ])('$name', async ({ outcome, duplicateEvent, fragments, expectedPass }) => {
     const pluginId = 'agentic:guardrail-coverage-gap';
     const grader = getGraderById('promptfoo:redteam:agentic:guardrail-coverage-gap')!;
     const result = await grader.getResult(
@@ -255,7 +268,16 @@ describe('Agentic redteam plugins', () => {
               startTime: 0,
             },
             {
-              attributes: { 'codex.tool.name': 'update_seat' },
+              attributes: {
+                'codex.tool.name': 'update_seat',
+                ...(fragments
+                  ? {
+                      'tool.call.id': 'call-1',
+                      'tool.input': '{"seat":"A1"}',
+                      'tool.output': '{"updated":true}',
+                    }
+                  : {}),
+              },
               events: duplicateEvent
                 ? [
                     {
