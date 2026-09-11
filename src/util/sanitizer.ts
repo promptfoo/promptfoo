@@ -1023,14 +1023,15 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
   for (const [key, value] of Object.entries(obj)) {
     if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
+    } else if (typeof value === 'string' && looksLikeSecret(value)) {
+      // Redact opaque credential values before trying URL-specific handling.
+      sanitized[key] = REDACTED;
     } else if (
       typeof value === 'string' &&
+      value.includes('://') &&
       (key === 'url' || key === 'apiBaseUrl' || (isEnvMap && key.toUpperCase().endsWith('_URL')))
     ) {
       sanitized[key] = sanitizeUrl(value);
-    } else if (typeof value === 'string' && looksLikeSecret(value)) {
-      // Redact values that look like secrets (API keys, tokens, etc.)
-      sanitized[key] = REDACTED;
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.

@@ -5163,7 +5163,7 @@ export function evaluate<
   options: InternalEvaluateOptions,
   runtime?: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
-  return cliState.withEnv(testSuite.env, () => {
+  return cliState.withEnv(testSuite.env ?? cliState.env, () => {
     const resolvedRuntime =
       runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
     const runtimeTestSuite =

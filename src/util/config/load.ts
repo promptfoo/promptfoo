@@ -526,7 +526,8 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
 
 /** Reads config files and resolves their tests using the combined environment. */
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
-  return (await prepareCombinedConfig(configPaths)).config;
+  const { config, parsedTests } = await prepareCombinedConfig(configPaths);
+  return { ...config, tests: parsedTests };
 }
 
 async function prepareCombinedConfig(configPaths: string[], skipTests = false) {
@@ -643,7 +644,7 @@ async function prepareCombinedConfig(configPaths: string[], skipTests = false) {
   };
   const makeTestAbsolute = (configPath: string, test: unknown): unknown => {
     if (typeof test === 'string') {
-      if (test.includes('://') && !test.startsWith('file://')) {
+      if (test.includes('{{') || (test.includes('://') && !test.startsWith('file://'))) {
         return test;
       }
       const value = test.startsWith('file://') ? test.slice('file://'.length) : test;
@@ -736,13 +737,7 @@ async function prepareCombinedConfig(configPaths: string[], skipTests = false) {
     defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr, index) => {
       // If any config has a string defaultTest (file reference), preserve it
       if (typeof curr.defaultTest === 'string') {
-        return curr.defaultTest.startsWith('file://')
-          ? 'file://' +
-              path.resolve(
-                path.dirname(resolvedConfigPaths[index]),
-                curr.defaultTest.slice('file://'.length),
-              )
-          : curr.defaultTest;
+        return makeTestAbsolute(resolvedConfigPaths[index], curr.defaultTest) as string;
       }
       // If prev is already a string (file reference), keep it
       if (typeof prev === 'string') {
@@ -798,23 +793,28 @@ async function prepareCombinedConfig(configPaths: string[], skipTests = false) {
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
+  const parsedTests: TestCase[] = [];
   if (!skipTests) {
-    combinedConfig.tests = await cliState.withEnv(combinedConfig.env, async () => {
-      const tests: TestCase[] = [];
-      for (const [index, config] of configs.entries()) {
-        tests.push(
-          ...(await readTests(
-            config.tests,
-            path.dirname(resolvedConfigPaths[index]),
-            combinedConfig.env,
-          )),
-        );
-      }
-      return tests;
-    });
+    for (const [index, config] of configs.entries()) {
+      parsedTests.push(
+        ...(await readTests(
+          config.tests,
+          path.dirname(resolvedConfigPaths[index]),
+          combinedConfig.env,
+        )),
+      );
+    }
   }
+  // Persist source references rather than executable tests. Loaded providers can hold
+  // credentials or cycles, and retry must resolve the original sources once.
+  combinedConfig.tests = configs.flatMap((config, index) =>
+    [config.tests || []]
+      .flat()
+      .map((test) => makeTestAbsolute(resolvedConfigPaths[index], test) as TestCase),
+  );
   return {
     config: combinedConfig,
+    parsedTests,
     testSources: skipTests
       ? []
       : configs.map((config, index) => ({
@@ -841,6 +841,7 @@ export async function resolveConfigs(
   testSources?: { tests: TestSuiteConfig['tests']; basePath: string }[];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
+  let parsedFileTests: TestCase[] | undefined;
   let testSources: { tests: TestSuiteConfig['tests']; basePath: string }[] | undefined;
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
@@ -851,13 +852,21 @@ export async function resolveConfigs(
       Boolean(cmdObj.tests || cmdObj.vars || cmdObj.assertions),
     );
     fileConfig = prepared.config;
+    parsedFileTests = prepared.parsedTests;
     testSources = prepared.testSources;
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
   }
   const resolved = await cliState.withEnv(fileConfig.env || defaultConfig.env, () =>
-    resolveLoadedConfig(cmdObj, fileConfig, defaultConfig, promptReferenceSources, type),
+    resolveLoadedConfig(
+      cmdObj,
+      fileConfig,
+      defaultConfig,
+      promptReferenceSources,
+      type,
+      parsedFileTests,
+    ),
   );
   return { ...resolved, testSources };
 }
@@ -868,6 +877,7 @@ async function resolveLoadedConfig(
   defaultConfig: Partial<UnifiedConfig>,
   promptReferenceSources: PromptReferenceSource[],
   type?: 'DatasetGeneration' | 'AssertionGeneration',
+  parsedFileTests?: TestCase[],
 ) {
   const configPaths = cmdObj.config;
   // Standalone assertion mode
@@ -1046,8 +1056,8 @@ async function resolveLoadedConfig(
   // Combined file tests are already loaded. Reading them again loses remote provenance
   // and resolves their remaining references relative to the first config.
   const parsedTests: TestCase[] =
-    configPaths && !cmdObj.tests && !cmdObj.vars && !cmdObj.assertions
-      ? (config.tests as TestCase[])
+    configPaths && !cmdObj.tests && !cmdObj.vars && !cmdObj.assertions && parsedFileTests
+      ? parsedFileTests
       : await readTests(config.tests || [], cmdObj.tests ? undefined : basePath, config.env);
 
   // Parse testCases for each scenario

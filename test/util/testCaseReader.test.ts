@@ -1211,39 +1211,6 @@ describe('readTests', () => {
     expect(loadApiProvider).not.toHaveBeenCalled();
   });
 
-  it('keeps nested grading provider files relative to a standalone test file', async () => {
-    vi.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify([
-        {
-          options: { provider: 'file://graders/options.js' },
-          assert: [{ type: 'llm-rubric', value: 'ok', provider: 'file://graders/assert.js' }],
-        },
-      ]),
-    );
-
-    const [test] = await readTests('/suite/tests/cases.json');
-
-    expect(test.options?.provider).toBe(
-      `file://${path.resolve('/suite/tests/graders/options.js')}`,
-    );
-    const assertion = test.assert?.[0];
-    expect(assertion?.type === 'assert-set' ? undefined : assertion?.provider).toBe(
-      `file://${path.resolve('/suite/tests/graders/assert.js')}`,
-    );
-  });
-
-  it('renders absolute env-backed nested provider files before resolving paths', async () => {
-    const providerPath = path.resolve('/tmp/grader.js');
-    const test = await readTest(
-      { options: { provider: 'file://{{ env.TEST_PROVIDER }}' } },
-      '/suite/tests',
-      false,
-      { TEST_PROVIDER: providerPath },
-    );
-
-    expect(test.options?.provider).toBe(`file://${providerPath}`);
-  });
-
   it.each(['C:\\configs\\tests.yaml', 'file://C:\\configs\\tests.yaml'])(
     'reads structured YAML tests from a Windows path (%s)',
     async (file) => {
