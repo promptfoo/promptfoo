@@ -1714,15 +1714,18 @@ describe('ClaudeCodeSDKProvider', () => {
         mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
       });
 
-      it('should report missing key when no Vertex/Bedrock env is set', () => {
+      it('defers missing-key validation until prompt config is available', async () => {
         mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
         mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
         mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
 
         const provider = new ClaudeCodeSDKProvider();
         const result = checkProviderApiKeys([provider]);
-        expect(result.size).toBe(1);
-        expect(result.get('ANTHROPIC_API_KEY')).toEqual(['anthropic:claude-agent-sdk']);
+        expect(result.size).toBe(0);
+        await expect(provider.callApi('Missing credentials')).rejects.toThrow(
+          'Anthropic API key is not set',
+        );
+        expect(mockQuery).not.toHaveBeenCalled();
       });
 
       it('should not report missing key when apiKeyRequired is false', () => {
