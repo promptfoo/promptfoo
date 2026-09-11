@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'DeepSeek V4 Pro vs GPT-5.6 comparison on MMLU reasoning tasks'
+description: 'DeepSeek V4.1 Flash vs GPT-5.6 on MMLU reasoning tasks'
 
 prompts:
   - |
@@ -17,8 +17,9 @@ prompts:
 
 providers:
   - openai:chat:gpt-5.6
-  - id: deepseek:deepseek-v4-pro
+  - id: deepseek:deepseek-flash
     config:
+      max_tokens: 8192
       passthrough:
         thinking:
           type: enabled
