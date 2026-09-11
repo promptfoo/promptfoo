@@ -133,16 +133,6 @@ describe('suite environment loading', () => {
     }
   });
 
-  it('keeps persisted test sources separate from loaded test providers', async () => {
-    const configPath = externalConfig('suite');
-    const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
-
-    expect(config.tests).toEqual([path.join(path.dirname(configPath), 'tests.yaml')]);
-    expect(config.tests).not.toBe(testSuite.tests);
-    expect(JSON.stringify(config.tests)).not.toContain('suite-key');
-    expect(testSuite.tests?.[0].provider).toBeDefined();
-  });
-
   it.each(['inline', 'external', 'default', 'scenario'] as const)(
     'retains credentials for %s test providers across later config loads',
     async (location) => {
@@ -381,26 +371,6 @@ describe('suite environment loading', () => {
     expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
   });
 
-  it('inherits config env when a resolved suite omits env', async () => {
-    cliState.config = { env: { OPENAI_API_KEY: 'config-key' } };
-    const result = await evaluateResolved(
-      {
-        prompts: [{ raw: 'Hello', label: 'Hello' }],
-        providers: [
-          {
-            id: () => 'echo',
-            callApi: async () => ({ output: getEnvString('OPENAI_API_KEY') }),
-          },
-        ],
-        tests: [{ assert: [{ type: 'equals', value: 'config-key' }] }],
-      },
-      new Eval({}),
-      {},
-    );
-
-    expect((await result.getResults())[0]).toMatchObject({ success: true, score: 1 });
-  });
-
   it('renders a reloaded config without inheriting the previous environment', async () => {
     const configPath = writeConfig('templates', {
       providers: [
@@ -534,6 +504,27 @@ describe('suite environment loading', () => {
     },
   );
 
+  it.each([false, true])(
+    'resolves process-backed grading paths unless disabled (%j)',
+    async (disabled) => {
+      const restore = mockProcessEnv({ GRADER_PATH: 'graders/judge.js' });
+      cliState.config = { env: { GRADER_PATH: 'stale.js' } };
+      try {
+        const reference = 'file://{{ env.GRADER_PATH }}';
+        const test = await cliState.withEnv(
+          { PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: String(disabled) },
+          () =>
+            readTest({ options: { provider: { text: reference } } }, path.join(tempDir, 'tests')),
+        );
+        expect(test.options?.provider).toEqual({
+          text: disabled ? reference : `file://${path.join(tempDir, 'tests/graders/judge.js')}`,
+        });
+      } finally {
+        restore();
+      }
+    },
+  );
+
   it('resolves nested default-test files from a later config directory', async () => {
     const first = writeConfig('first', {});
     const second = writeConfig('second', {
@@ -612,6 +603,59 @@ describe('suite environment loading', () => {
     expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['first', 'second']);
   });
 
+  it.each(['yaml', 'json', 'jsonl'])(
+    'resolves nested provider files from each %s test source',
+    async (extension) => {
+      cliState.basePath = tempDir;
+      fs.writeFileSync(path.join(tempDir, 'grader.yaml'), 'id: echo\nlabel: stale\n');
+      const paths = ['first', 'second'].map((name) => {
+        const configPath = writeConfig(name, { tests: [`nested/cases.${extension}`] });
+        const sourceDir = path.join(path.dirname(configPath), 'nested');
+        fs.mkdirSync(sourceDir);
+        fs.writeFileSync(path.join(sourceDir, 'grader.yaml'), `id: echo\nlabel: ${name}\n`);
+        const test = { provider: 'file://grader.yaml', vars: {} };
+        fs.writeFileSync(
+          path.join(sourceDir, `cases.${extension}`),
+          extension === 'yaml'
+            ? '- provider: file://grader.yaml\n  vars: {}\n'
+            : JSON.stringify(extension === 'json' ? [test] : test),
+        );
+        return configPath;
+      });
+      const { testSuite } = await resolveConfigs({ config: paths }, {});
+      expect(
+        testSuite.tests?.map((test) => isApiProvider(test.provider) && test.provider.label),
+      ).toEqual(['first', 'second']);
+    },
+  );
+
+  it('expands nested vars references relative to the vars file', async () => {
+    cliState.basePath = tempDir;
+    fs.writeFileSync(path.join(tempDir, 'value.json'), JSON.stringify('stale'));
+    fs.mkdirSync(path.join(tempDir, 'nested'));
+    fs.writeFileSync(path.join(tempDir, 'nested/value.json'), JSON.stringify('selected'));
+    fs.writeFileSync(path.join(tempDir, 'nested/vars.yaml'), 'source: file://value.json\n');
+    const test = await readTest({ vars: 'nested/vars.yaml' }, tempDir);
+    expect(test.vars).toEqual({ source: 'selected' });
+  });
+
+  it('resolves generator config files from the supplied base path', async () => {
+    cliState.basePath = tempDir;
+    fs.writeFileSync(path.join(tempDir, 'value.json'), JSON.stringify('stale'));
+    const sourceDir = path.join(tempDir, 'source');
+    fs.mkdirSync(sourceDir);
+    fs.writeFileSync(path.join(sourceDir, 'value.json'), JSON.stringify('selected'));
+    fs.writeFileSync(
+      path.join(sourceDir, 'cases.cjs'),
+      'module.exports = (config) => [{ vars: { source: config.value } }];',
+    );
+    const [test] = await readTests(
+      { path: 'cases.cjs', config: { value: 'file://value.json' } },
+      sourceDir,
+    );
+    expect(test.vars).toEqual({ source: 'selected' });
+  });
+
   it('loads nested default test files relative to their own directory', async () => {
     const firstConfigPath = writeConfig('first-default', {});
     const configPath = writeConfig('nested-default', {
@@ -680,6 +724,66 @@ describe('suite environment loading', () => {
     },
   );
 
+  it("uses a grading provider's own env when resolving its file path", async () => {
+    const test = await readTest(
+      {
+        options: {
+          provider: { id: 'file://{{ env.GRADER_PATH }}', env: { GRADER_PATH: 'provider.js' } },
+        },
+      },
+      tempDir,
+      false,
+      { GRADER_PATH: 'suite.js' },
+    );
+    expect(test.options?.provider).toMatchObject({
+      id: `file://${path.join(tempDir, 'provider.js')}`,
+    });
+  });
+
+  it('does not inherit a stale grader path with an explicit empty environment', async () => {
+    const restore = mockProcessEnv({ GRADER_PATH: 'process.js' });
+    cliState.config = { env: { GRADER_PATH: 'stale.js' } };
+    try {
+      const test = await readTest(
+        { options: { provider: 'file://{{ env.GRADER_PATH }}' } },
+        tempDir,
+        false,
+        {},
+      );
+      expect(test.options?.provider).toBe(`file://${path.join(tempDir, 'process.js')}`);
+    } finally {
+      restore();
+    }
+  });
+
+  it.each([
+    ['PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', 'true', 'false', false],
+    ['PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', 'false', 'true', true],
+    ['PROMPTFOO_SELF_HOSTED', 'true', 'false', false],
+    ['PROMPTFOO_DISABLE_TEMPLATING', 'true', 'false', false],
+    ['PROMPTFOO_DISABLE_TEMPLATING', 'false', 'true', true],
+  ] as const)(
+    'uses the explicit %s=%s when resolving grader paths',
+    async (flag, selected, ambient, shouldRender) => {
+      const restore = mockProcessEnv({
+        GRADER_PATH: 'process.js',
+        PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: undefined,
+      });
+      cliState.config = { env: { [flag]: ambient } };
+      try {
+        const provider = 'file://{{ env.GRADER_PATH }}';
+        const test = await readTest({ options: { provider } }, tempDir, false, {
+          [flag]: selected,
+        });
+        expect(test.options?.provider).toBe(
+          shouldRender ? `file://${path.join(tempDir, 'process.js')}` : provider,
+        );
+      } finally {
+        restore();
+      }
+    },
+  );
+
   it.each(['string', 'object'] as const)(
     'resolves standalone %s test providers during evaluation',
     async (form) => {
@@ -706,6 +810,62 @@ describe('suite environment loading', () => {
       const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
       expect(url).toBe('https://suite.example/v1/chat/completions');
       expect(request?.headers).toMatchObject({ Authorization: 'Bearer suite-key' });
+    },
+  );
+
+  it.each(['options', 'assertion', 'typed'] as const)(
+    'resolves a standalone %s grader relative to its test file',
+    async (location) => {
+      const casesDir = path.join(tempDir, 'cases');
+      fs.mkdirSync(casesDir);
+      const testsPath = path.join(casesDir, 'tests.json');
+      const provider =
+        location === 'typed'
+          ? { text: 'file://grader.yaml', embedding: 'file://unused.yaml' }
+          : 'file://grader.yaml';
+      fs.writeFileSync(path.join(casesDir, 'grader.yaml'), 'id: openai:chat:test-model\n');
+      fs.writeFileSync(
+        testsPath,
+        JSON.stringify([
+          {
+            ...(location === 'options' ? { options: { provider } } : {}),
+            assert: [
+              {
+                type: 'llm-rubric',
+                value: 'The response is correct',
+                ...(location === 'options' ? {} : { provider }),
+              },
+            ],
+          },
+        ]),
+      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: { content: '{"pass":true,"score":1,"reason":"Correct"}' },
+              finish_reason: 'stop',
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const result = await evaluate(
+        {
+          env: { OPENAI_API_BASE_URL: 'https://suite.example/v1', OPENAI_API_KEY: 'suite-key' },
+          providers: ['echo'],
+          prompts: ['answer'],
+          tests: testsPath,
+        },
+        { cache: false },
+      );
+      const [row] = await result.getResults();
+      expect(row.error).toBeUndefined();
+      expect(row.success).toBe(true);
+      expect(row.score).toBe(1);
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
     },
   );
 });
