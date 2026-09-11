@@ -445,6 +445,7 @@ async function transformForPerTurnLayer(
 
     let pageState = pageStateMap.get(stateKey);
     let turnNumber: number;
+    let runtimeTokenUsage: CreateWebPageResponse['tokenUsage'];
 
     if (pageState) {
       // Subsequent turn: Update the existing page
@@ -466,6 +467,7 @@ async function transformForPerTurnLayer(
           preferSmallModel,
           targetId,
         );
+        runtimeTokenUsage = response.tokenUsage;
 
         // Update state with new embedding location and fetch prompt
         const previousLocation = pageState.embeddingLocation;
@@ -515,6 +517,7 @@ async function transformForPerTurnLayer(
           preferSmallModel,
           targetId,
         );
+        runtimeTokenUsage = response.tokenUsage;
 
         // Clean up expired entries before adding new ones
         cleanupExpiredPageState();
@@ -579,6 +582,7 @@ async function transformForPerTurnLayer(
         embeddedPrompt: attackPrompt, // The prompt embedded in the page (URLs replaced)
         indirectWebPwnTurn: turnNumber,
         fetchPrompt, // The "Please visit URL..." prompt sent to the AI
+        ...(runtimeTokenUsage ? { runtimeTokenUsage } : {}),
       },
     });
   }

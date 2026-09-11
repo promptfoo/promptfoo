@@ -540,6 +540,32 @@ describe('TrueFoundry', () => {
         expect(result.guardrails).toMatchObject({ flaggedInput: false, flaggedOutput: true });
       });
 
+      it.each(['direct', 'nested'])(
+        'prefers the %s verdict over a boolean result',
+        async (shape) => {
+          const check = (verdict: boolean) => ({
+            result: !verdict,
+            ...(shape === 'direct' ? { verdict } : { data: { verdict } }),
+          });
+          mockedFetchWithRetries.mockResolvedValueOnce(
+            new Response(
+              JSON.stringify({
+                error: { type: 'guardrail_checks_failed' },
+                guardrail_checks: {
+                  input_guardrails: [check(true)],
+                  output_guardrails: [check(false)],
+                },
+              }),
+              { status: 400, statusText: 'Bad Request' },
+            ),
+          );
+
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.guardrails).toMatchObject({ flaggedInput: false, flaggedOutput: true });
+        },
+      );
+
       it('should prefer the structured Azure prompt parameter over ambiguous error text', async () => {
         mockedFetchWithRetries.mockResolvedValueOnce(
           new Response(
@@ -885,6 +911,98 @@ describe('TrueFoundry', () => {
   });
 
   describe('createTrueFoundryProvider', () => {
+    beforeEach(() => {
+      mockedFetchWithRetries.mockReset();
+    });
+
+    it.each(['cohere-main/embed-english-v3.0', 'tenant/vector-index:stable'])(
+      'selects embeddings explicitly and preserves the wire ID %s',
+      async (modelName) => {
+        const provider = createTrueFoundryProvider(`truefoundry:${modelName}`, {
+          config: {
+            config: {
+              task: 'embedding',
+              apiBaseUrl: 'https://tenant.example/gateway',
+              passthrough: { input_type: 'search_query' },
+            },
+          },
+          env: { TRUEFOUNDRY_API_KEY: 'scoped-test-key' },
+        });
+        expect(provider).toBeInstanceOf(TrueFoundryEmbeddingProvider);
+        expect(provider.id()).toBe(`truefoundry:${modelName}`);
+
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              data: [{ embedding: [0.1, 0.2], index: 0 }],
+              usage: { prompt_tokens: 3, total_tokens: 3 },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+        const response = await (provider as TrueFoundryEmbeddingProvider).callEmbeddingApi('hello');
+        expect(response).toMatchObject({
+          embedding: [0.1, 0.2],
+          tokenUsage: { total: 3, prompt: 3, numRequests: 1 },
+        });
+        expect(mockedFetchWithRetries).toHaveBeenCalledWith(
+          'https://tenant.example/gateway/embeddings',
+          expect.objectContaining({
+            headers: expect.objectContaining({ Authorization: 'Bearer scoped-test-key' }),
+            body: JSON.stringify({ input: 'hello', model: modelName, input_type: 'search_query' }),
+          }),
+          expect.any(Number),
+          undefined,
+        );
+      },
+    );
+
+    it('uses explicit chat even when the account name contains embedding', async () => {
+      const provider = createTrueFoundryProvider('truefoundry:embedding-team/chat-alias:stable', {
+        config: { config: { task: 'chat', apiKey: 'test-key' } },
+      });
+      expect(provider).toBeInstanceOf(TrueFoundryProvider);
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'hello' } }] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
+      const response = await provider.callApi('hello');
+      expect(response.output).toBe('hello');
+      const [url, request] = mockedFetchWithRetries.mock.calls[0];
+      expect(url).toBe(`${TRUEFOUNDRY_API_BASE}/chat/completions`);
+      const body = JSON.parse(request?.body as string);
+      expect(body.model).toBe('embedding-team/chat-alias:stable');
+      expect(body).not.toHaveProperty('task');
+    });
+
+    it('returns embedding API errors for explicitly selected tenant aliases', async () => {
+      const provider = createTrueFoundryProvider('truefoundry:tenant/vector-index', {
+        config: { config: { task: 'embedding', apiKey: 'test-key' } },
+      }) as TrueFoundryEmbeddingProvider;
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { message: 'Unknown deployment' } }), {
+          status: 400,
+          statusText: 'Bad Request',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+      const response = await provider.callEmbeddingApi('hello');
+      expect(response.error).toContain('400 Bad Request');
+      expect(response.error).toContain('Unknown deployment');
+      expect(response).not.toHaveProperty('embedding');
+    });
+
+    it.each(['', 'embeddings', 'image', null, false])('rejects unsupported task %j', (task) => {
+      expect(() =>
+        createTrueFoundryProvider('truefoundry:tenant/model', {
+          config: { config: { task } },
+        }),
+      ).toThrow('TrueFoundry config.task must be "chat" or "embedding"');
+      expect(mockedFetchWithRetries).not.toHaveBeenCalled();
+    });
+
     it('should create chat provider for non-embedding models', () => {
       const provider = createTrueFoundryProvider('truefoundry:openai/gpt-4', {
         config: {

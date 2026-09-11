@@ -50,6 +50,8 @@ export interface AzureCompletionOptions {
   systemPrompt?: string;
 
   // OpenAI params
+  /** Output vector size for embeddings from text-embedding-3 and later models. */
+  dimensions?: number;
   max_tokens?: number;
   temperature?: number;
   top_p?: number;
@@ -114,6 +116,8 @@ export interface AzureCompletionOptions {
  * Options shared by Azure chat and responses providers.
  */
 export interface AzureChatResponsesOptions extends AzureCompletionOptions {
+  /** Underlying model ID for request compatibility and cost estimates when the deployment is aliased. */
+  modelName?: string;
   /**
    * When true, omit hardcoded defaults for temperature, max_tokens, top_p, etc.
    * Only values explicitly set via config or environment variables will be sent.

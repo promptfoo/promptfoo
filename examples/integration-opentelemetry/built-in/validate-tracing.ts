@@ -26,8 +26,8 @@ const tracerProvider = new NodeTracerProvider({
 tracerProvider.register();
 
 // Now import providers (after OTEL is set up)
-import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import { GenAIAttributes, PromptfooAttributes } from '../../src/tracing/genaiTracer';
+import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import { GenAIAttributes, PromptfooAttributes } from '../../../src/tracing/genaiTracer';
 
 interface ValidationResult {
   name: string;
@@ -93,11 +93,11 @@ async function validateProvider(
     const span = spans[0];
 
     // Validate GenAI attributes
-    const system = span.attributes[GenAIAttributes.SYSTEM];
+    const providerIdentity = span.attributes[GenAIAttributes.PROVIDER_NAME];
     results.push({
-      name: `${providerName}: gen_ai.system`,
-      passed: !!system,
-      message: system ? `Value: ${system}` : 'Missing attribute',
+      name: `${providerName}: gen_ai.provider.name`,
+      passed: !!providerIdentity,
+      message: providerIdentity ? `Value: ${providerIdentity}` : 'Missing attribute',
     });
 
     const opName = span.attributes[GenAIAttributes.OPERATION_NAME];

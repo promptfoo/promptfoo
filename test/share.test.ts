@@ -70,6 +70,10 @@ vi.mock('../src/globalConfig/cloud', () => {
     getCurrentTeamId: vi.fn(),
     getCurrentOrganizationId: vi.fn(),
     getAppUrl: vi.fn(),
+    getAuthHeaders: vi.fn(() => {
+      const apiKey = cloudConfig.getApiKey();
+      return apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined;
+    }),
   };
 
   return { cloudConfig };
@@ -842,6 +846,72 @@ describe('createShareableUrl', () => {
       );
       expect(mockFetch.mock.calls[0][1].body).not.toContain('azure-secret');
     });
+
+    it.each([false, true])(
+      'removes in-memory tracing credentials before sharing with cloud enabled: %s',
+      async (cloudEnabled) => {
+        vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloudEnabled);
+        vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+        vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-456');
+        mockEval.config = {
+          env: { TEMPO_REFERENCE: 'nested-secret', SAFE_REGION: 'us-west-2' },
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com/tempo?opaque=endpoint-secret',
+              auth: {
+                username: 'trace-reader',
+                password: 'runtime-password',
+                token: 'runtime-token',
+              },
+              headers: {
+                Authorization: 'Bearer runtime-header',
+                'X-Tempo-Reader': 'tiny',
+                'X-Honeycomb-Team': '{{ env.TEMPO_REFERENCE }}',
+                'X-Scope-OrgID': 'tenant-a',
+              },
+            },
+          },
+        };
+        mockFetch
+          .mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({ id: mockEval.id }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            json: () => Promise.resolve({}),
+          });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const requestBody = mockFetch.mock.calls[0][1].body;
+        const sharedConfig = JSON.parse(requestBody).config;
+        expect(sharedConfig.tracing.provider).toEqual({
+          id: 'tempo',
+          endpoint: 'https://tempo.example.com/tempo',
+          auth: { username: 'trace-reader' },
+          headers: {
+            'X-Honeycomb-Team': '{{ env.TEMPO_REFERENCE }}',
+            'X-Scope-OrgID': 'tenant-a',
+          },
+        });
+        expect(sharedConfig.env).toEqual({ SAFE_REGION: 'us-west-2' });
+        for (const secret of [
+          'endpoint-secret',
+          'runtime-password',
+          'runtime-token',
+          'runtime-header',
+          'nested-secret',
+          '"tiny"',
+        ]) {
+          expect(requestBody).not.toContain(secret);
+        }
+        expect(mockEval.config.tracing?.provider?.headers?.['X-Tempo-Reader']).toBe('tiny');
+      },
+    );
 
     it('includes eval tags in the shared config payload', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);

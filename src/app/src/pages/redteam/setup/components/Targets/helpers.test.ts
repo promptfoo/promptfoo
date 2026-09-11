@@ -34,6 +34,13 @@ describe('getProviderType', () => {
     expect(result).toBe(expected);
   });
 
+  it.each(['openai:codex-security', 'openai:codex-security:gpt-5.6-luna'])(
+    'recognizes %s as Codex Security instead of a foundation OpenAI model',
+    (providerId) => {
+      expect(getProviderType(providerId)).toBe('codex-security');
+    },
+  );
+
   it('should return the substring before the first colon when multiple colons are present', () => {
     const providerId = 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0';
     const expected = 'bedrock';
@@ -45,7 +52,26 @@ describe('getProviderType', () => {
 
   it.each([
     { providerId: 'http', expected: 'http', description: 'http provider' },
+    { providerId: 'https', expected: 'http', description: 'https provider alias' },
+    { providerId: 'http://api.example.test', expected: 'http', description: 'http URL provider' },
+    {
+      providerId: 'https://api.example.test',
+      expected: 'http',
+      description: 'https URL provider',
+    },
     { providerId: 'websocket', expected: 'websocket', description: 'websocket provider' },
+    { providerId: 'ws', expected: 'websocket', description: 'ws provider alias' },
+    { providerId: 'wss', expected: 'websocket', description: 'wss provider alias' },
+    {
+      providerId: 'ws://socket.example.test',
+      expected: 'websocket',
+      description: 'ws URL provider',
+    },
+    {
+      providerId: 'wss://socket.example.test',
+      expected: 'websocket',
+      description: 'wss URL provider',
+    },
     { providerId: 'custom', expected: 'custom', description: 'custom provider' },
   ])(
     'should return the providerId itself for direct provider types like $description ("$providerId")',
