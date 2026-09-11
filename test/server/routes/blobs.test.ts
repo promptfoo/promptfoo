@@ -8,19 +8,26 @@ import { createApp } from '../../../src/server/server';
 vi.mock('../../../src/blobs/extractor');
 vi.mock('../../../src/blobs', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/blobs')>()),
-  getBlobByHash: vi.fn(),
-  getBlobUrl: vi.fn(),
+  getBlobStorageProvider: vi.fn(),
 }));
 vi.mock('../../../src/database');
 
 // Import after mocking
-import { getBlobByHash, getBlobUrl } from '../../../src/blobs';
+import { getBlobStorageProvider } from '../../../src/blobs';
 import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
 import { getDb } from '../../../src/database';
 
 const mockedIsBlobStorageEnabled = vi.mocked(isBlobStorageEnabled);
-const mockedGetBlobUrl = vi.mocked(getBlobUrl);
-const mockedGetBlobByHash = vi.mocked(getBlobByHash);
+const mockedProvider = {
+  providerId: 'test',
+  store: vi.fn(),
+  getByHash: vi.fn(),
+  exists: vi.fn(),
+  deleteByHash: vi.fn(),
+  getUrl: vi.fn(),
+};
+const mockedGetUrl = mockedProvider.getUrl;
+const mockedGetByHash = mockedProvider.getByHash;
 const mockedGetDb = vi.mocked(getDb);
 
 describe('Blobs Routes', () => {
@@ -86,6 +93,7 @@ describe('Blobs Routes', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
+      vi.mocked(getBlobStorageProvider).mockReturnValue(mockedProvider);
     });
 
     afterEach(() => {
@@ -151,14 +159,15 @@ describe('Blobs Routes', () => {
         });
 
         const presignedUrl = 'https://s3.amazonaws.com/bucket/blob?signature=xyz';
-        mockedGetBlobUrl.mockResolvedValue(presignedUrl);
+        mockedGetUrl.mockResolvedValue(presignedUrl);
+        mockedGetByHash.mockResolvedValue(createBlobResponse(mimeType, 1024));
 
         const response = await api.get(`/api/blobs/${validHash}`);
 
         expect(response.status).toBe(302);
         expect(response.header.location).toBe(presignedUrl);
-        expect(mockedGetBlobUrl).toHaveBeenCalledWith(validHash);
-        expect(mockedGetBlobByHash).not.toHaveBeenCalled();
+        expect(mockedGetUrl).toHaveBeenCalledWith(validHash);
+        expect(mockedGetByHash).toHaveBeenCalledExactlyOnceWith(validHash);
         expect(response.header['content-disposition']).toBeUndefined();
       },
     );
@@ -171,8 +180,8 @@ describe('Blobs Routes', () => {
         provider: 'local',
       });
 
-      mockedGetBlobUrl.mockResolvedValue(null);
-      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/png', 1024));
+      mockedGetUrl.mockResolvedValue(null);
+      mockedGetByHash.mockResolvedValue(createBlobResponse('image/png', 1024));
 
       const response = await api.get(`/api/blobs/${validHash}`);
 
@@ -185,7 +194,7 @@ describe('Blobs Routes', () => {
         response.header['content-length'] === '1024' ||
           response.header['transfer-encoding'] === 'chunked',
       ).toBe(true);
-      expect(mockedGetBlobByHash).toHaveBeenCalledWith(validHash);
+      expect(mockedGetByHash).toHaveBeenCalledExactlyOnceWith(validHash);
     });
 
     it('should use fallback MIME type for invalid MIME types', async () => {
@@ -194,8 +203,8 @@ describe('Blobs Routes', () => {
         { evalId: 'eval-456' },
       );
 
-      mockedGetBlobUrl.mockResolvedValue(null);
-      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('audio/wav.html', 2048));
+      mockedGetUrl.mockResolvedValue(null);
+      mockedGetByHash.mockResolvedValue(createBlobResponse('audio/wav.html', 2048));
 
       const response = await api.get(`/api/blobs/${validHash}`);
 
@@ -205,20 +214,22 @@ describe('Blobs Routes', () => {
       expect(response.header['accept-ranges']).toBe('none');
     });
 
-    it('should use blob metadata MIME type when available', async () => {
+    it('uses registered MIME and reuses stored bytes when passive types disagree', async () => {
       setupDbWithAssetAndReference(
         { hash: validHash, mimeType: 'image/png', sizeBytes: 1024, provider: 'local' },
         { evalId: 'eval-789' },
       );
 
-      mockedGetBlobUrl.mockResolvedValue(null);
-      // Blob metadata has different MIME type and size than the asset record
-      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/jpeg', 2048));
+      mockedGetUrl.mockResolvedValue('https://storage.example/mismatched-type');
+      // A different stored label must not override registered MIME or authorize a redirect.
+      mockedGetByHash.mockResolvedValue(createBlobResponse('image/jpeg', 2048));
 
       const response = await api.get(`/api/blobs/${validHash}`);
 
       expect(response.status).toBe(200);
-      expect(response.header['content-type']).toBe('image/jpeg');
+      expect(response.header['content-type']).toBe('image/png');
+      expect(mockedGetUrl).not.toHaveBeenCalled();
+      expect(mockedGetByHash).toHaveBeenCalledExactlyOnceWith(validHash);
       expect(response.header['cache-control']).toBe('public, max-age=31536000, immutable');
       expect(response.header['accept-ranges']).toBe('none');
       // Content-Length may be absent if response is gzipped
@@ -247,8 +258,8 @@ describe('Blobs Routes', () => {
         sizeBytes: 16,
         provider: 'custom',
       });
-      mockedGetBlobUrl.mockResolvedValue(null);
-      mockedGetBlobByHash.mockResolvedValue(createBlobResponse(mimeType, 16));
+      mockedGetUrl.mockResolvedValue(null);
+      mockedGetByHash.mockResolvedValue(createBlobResponse(mimeType, 16));
 
       const response = await api.get(`/api/blobs/${validHash}`);
 
@@ -271,15 +282,15 @@ describe('Blobs Routes', () => {
     ])(
       'serves non-passive %s metadata as a download without changing its type',
       async (mimeType) => {
-        // The real getter supplies registered MIME; the route preserves valid download types.
+        // The route preserves registered MIME for valid download types.
         setupDbWithAssetAndReference({
           hash: validHash,
           mimeType,
           sizeBytes: 16,
           provider: 'custom',
         });
-        mockedGetBlobUrl.mockResolvedValue('https://storage.example/active-object');
-        mockedGetBlobByHash.mockResolvedValue({
+        mockedGetUrl.mockResolvedValue('https://storage.example/active-object');
+        mockedGetByHash.mockResolvedValue({
           ...createBlobResponse(mimeType, 16),
           data: Buffer.from('{"fixture":true}'),
         });
@@ -290,7 +301,7 @@ describe('Blobs Routes', () => {
         expect(response.header['content-type']).toBe(mimeType);
         expect(response.header['content-disposition']).toBe('attachment');
         expect(response.header['x-content-type-options']).toBe('nosniff');
-        expect(mockedGetBlobUrl).not.toHaveBeenCalled();
+        expect(mockedGetUrl).not.toHaveBeenCalled();
       },
     );
 
@@ -301,23 +312,24 @@ describe('Blobs Routes', () => {
         sizeBytes: 16,
         provider: 'custom',
       });
-      mockedGetBlobUrl.mockRejectedValue(new Error('URL generation failed'));
+      mockedGetUrl.mockRejectedValue(new Error('URL generation failed'));
+      mockedGetByHash.mockResolvedValue(createBlobResponse('image/png', 16));
 
       const response = await api.get(`/api/blobs/${validHash}`);
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: 'Blob not found' });
-      expect(mockedGetBlobByHash).not.toHaveBeenCalled();
+      expect(mockedGetByHash).toHaveBeenCalledExactlyOnceWith(validHash);
     });
 
-    it('should return 404 when getBlobByHash throws error', async () => {
+    it('should return 404 when the provider cannot read the blob', async () => {
       setupDbWithAssetAndReference(
         { hash: validHash, mimeType: 'text/plain', sizeBytes: 512, provider: 'local' },
         { evalId: 'eval-error' },
       );
 
-      mockedGetBlobUrl.mockResolvedValue(null);
-      mockedGetBlobByHash.mockRejectedValue(new Error('File system error'));
+      mockedGetUrl.mockResolvedValue(null);
+      mockedGetByHash.mockRejectedValue(new Error('File system error'));
 
       const response = await api.get(`/api/blobs/${validHash}`);
 

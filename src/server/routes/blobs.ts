@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
 import express from 'express';
-import { getBlobByHash, getBlobUrl, isSafeInlineBlobMimeType } from '../../blobs';
+import { getBlobStorageProvider, isSafeInlineBlobMimeType, type StoredBlob } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
 import { getDb } from '../../database';
 import {
@@ -465,16 +465,21 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
-  let blob: Awaited<ReturnType<typeof getBlobByHash>>;
+  let blob: StoredBlob;
   try {
-    // A provider URL can retain the original object's MIME after sanitized import.
-    // Proxy non-passive content so the registered MIME and download headers apply.
-    const presigned = isSafeInlineBlobMimeType(asset.mimeType) ? await getBlobUrl(hash) : null;
+    const provider = getBlobStorageProvider();
+    blob = await provider.getByHash(hash);
+    // Retained objects can have a different MIME from their later import registration.
+    // Only redirect when the stored MIME agrees with the registered passive type.
+    const presigned =
+      isSafeInlineBlobMimeType(asset.mimeType) &&
+      blob.metadata.mimeType.toLowerCase() === asset.mimeType.toLowerCase()
+        ? await provider.getUrl(hash)
+        : null;
     if (presigned) {
       res.redirect(302, presigned);
       return;
     }
-    blob = await getBlobByHash(hash);
   } catch (error) {
     logger.error('[BlobRoute] Failed to load blob', { error, hash });
     res.status(404).json({ error: 'Blob not found' });
@@ -488,7 +493,8 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   }
 
   // Validate MIME type before setting header to prevent injection attacks
-  const mimeType = blob.metadata.mimeType || asset.mimeType;
+  // Match the registered-MIME getter while reusing the bytes already read above.
+  const mimeType = asset.mimeType;
   if (SAFE_MIME_TYPE_REGEX.test(mimeType)) {
     res.setHeader('Content-Type', mimeType);
   } else {

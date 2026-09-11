@@ -490,20 +490,57 @@ describe('importCommand', () => {
     });
 
     it.each([
-      ['text/html', '<!doctype html><title>retained fixture</title>'],
-      [
-        'image/svg+xml',
-        '<svg xmlns="http://www.w3.org/2000/svg"><title>retained fixture</title></svg>',
-      ],
+      {
+        storedMimeType: 'text/html',
+        importedMimeType: 'text/html',
+        expectedMimeType: 'application/octet-stream',
+        redirect: false,
+        contents: Buffer.from('<!doctype html><title>retained fixture</title>'),
+      },
+      {
+        storedMimeType: 'image/svg+xml',
+        importedMimeType: 'image/svg+xml',
+        expectedMimeType: 'application/octet-stream',
+        redirect: false,
+        contents: Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg"><title>retained fixture</title></svg>',
+        ),
+      },
+      {
+        storedMimeType: 'text/html',
+        importedMimeType: 'image/png',
+        expectedMimeType: 'image/png',
+        redirect: false,
+        contents: Buffer.from('<!doctype html><title>cross-label fixture</title>'),
+      },
+      {
+        storedMimeType: 'image/svg+xml',
+        importedMimeType: 'audio/wav',
+        expectedMimeType: 'audio/wav',
+        redirect: false,
+        contents: Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg"><title>cross-label fixture</title></svg>',
+        ),
+      },
+      {
+        storedMimeType: 'image/png',
+        importedMimeType: 'image/png',
+        expectedMimeType: 'image/png',
+        redirect: true,
+        contents: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5K0AAAAASUVORK5CYII=',
+          'base64',
+        ),
+      },
     ])(
-      'proxies imported retained %s instead of its active custom URL',
-      async (mimeType, contents) => {
+      'serves retained $storedMimeType imported as $importedMimeType with registered MIME',
+      async ({ storedMimeType, importedMimeType, expectedMimeType, redirect, contents }) => {
         const blobDir = createTempDir('promptfoo-import-retained-mime-');
         const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'false' });
         const provider = new FilesystemBlobStorageProvider({ basePath: blobDir });
         setBlobStorageProvider(provider);
         const destination = express().get('/asset', (_req, res) => {
-          res.setHeader('Content-Type', mimeType);
+          res.setHeader('Content-Type', storedMimeType);
           res.send(Buffer.from(contents));
         });
         const destinationServer = destination.listen(0, '127.0.0.1');
@@ -525,14 +562,14 @@ describe('importCommand', () => {
           const hash = sha256(data);
           const uri = `promptfoo://blob/${hash}`;
           const db = await getDb();
-          const failure = await storeBlob(data, mimeType, {
+          const failure = await storeBlob(data, storedMimeType, {
             evalId: 'missing-orphan-mime-eval',
           }).catch((error: Error) => error);
           expect(failure).toBeInstanceOf(Error);
           expect(String((failure as Error).cause)).toMatch(/FOREIGN KEY constraint failed/);
           const blobPath = path.join(blobDir, hash.slice(0, 2), hash.slice(2, 4), hash);
           const metadata = fs.readFileSync(`${blobPath}.meta.json`, 'utf8');
-          expect(JSON.parse(metadata).mimeType).toBe(mimeType);
+          expect(JSON.parse(metadata).mimeType).toBe(storedMimeType);
           expect(await db.all(sql`SELECT hash FROM blob_assets WHERE hash = ${hash}`)).toEqual([]);
           expect((await request(app).get(`/api/blobs/${hash}`)).status).toBe(404);
 
@@ -542,7 +579,12 @@ describe('importCommand', () => {
           sampleData.results.results = [sampleData.results.results[0]];
           sampleData.results.results[0].response = { output: uri };
           sampleData.blobAssets = [
-            { hash, mimeType, sizeBytes: data.length, data: data.toString('base64') },
+            {
+              hash,
+              mimeType: importedMimeType,
+              sizeBytes: data.length,
+              data: data.toString('base64'),
+            },
           ];
           const filePath = path.join(blobDir, 'retained-mime.json');
           fs.writeFileSync(filePath, JSON.stringify(sampleData));
@@ -552,7 +594,7 @@ describe('importCommand', () => {
           expect(process.exitCode).toBeUndefined();
           expect(logger.error).not.toHaveBeenCalled();
           expect(await db.all(sql`SELECT mime_type FROM blob_assets WHERE hash = ${hash}`)).toEqual(
-            [{ mime_type: 'application/octet-stream' }],
+            [{ mime_type: expectedMimeType }],
           );
           expect(
             await db.all(
@@ -570,10 +612,17 @@ describe('importCommand', () => {
             });
           expect(response.status).toBe(200);
           expect(response.body).toEqual(data);
-          expect(response.headers['content-type']).toBe('application/octet-stream');
-          expect(getUrl).not.toHaveBeenCalled();
-          expect(response.headers['content-disposition']).toBe('attachment');
-          expect(response.headers['x-content-type-options']).toBe('nosniff');
+          expect(response.headers['content-type']).toBe(expectedMimeType);
+          if (redirect) {
+            expect(getUrl).toHaveBeenCalledOnce();
+            expect(getUrl.mock.calls[0][0]).toBe(hash);
+          } else {
+            expect(getUrl).not.toHaveBeenCalled();
+            expect(response.headers['x-content-type-options']).toBe('nosniff');
+          }
+          expect(response.headers['content-disposition']).toBe(
+            expectedMimeType === 'application/octet-stream' ? 'attachment' : undefined,
+          );
           expect(fs.readFileSync(blobPath)).toEqual(data);
           expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
           await expect(getShareAuthorizedBlob(hash, 'unrelated-eval')).resolves.toBeNull();
