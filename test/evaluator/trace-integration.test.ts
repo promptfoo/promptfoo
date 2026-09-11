@@ -799,7 +799,7 @@ describe('evaluator trace integration', () => {
       expect(mockFetchTraceContext).not.toHaveBeenCalled();
     });
 
-    it('propagates cancellation during external trace collection', async () => {
+    it('preserves a completed response when external trace collection is cancelled', async () => {
       const controller = new AbortController();
       const provider = createMockProvider({ response: { output: 'Target output' } });
       mockFetchTraceContext.mockImplementationOnce(async () => {
@@ -811,7 +811,7 @@ describe('evaluator trace integration', () => {
         createRunOptions(provider, { abortSignal: controller.signal }),
       );
 
-      expect(result.error).toContain('cancelled by user');
+      expect(result.response?.output).toBe('Target output');
       expect(mockFetchTraceContext).toHaveBeenCalledWith(
         traceId,
         expect.objectContaining({ abortSignal: controller.signal }),
