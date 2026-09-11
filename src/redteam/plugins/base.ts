@@ -447,10 +447,16 @@ export abstract class RedteamPluginBase {
   }
 }
 
-function appendAllowedEntities(rubric: string, entities: unknown): string {
-  return !rubric.includes('<AllowedEntities>') && Array.isArray(entities) && entities.length
-    ? `${rubric}\n\n<AllowedEntities>\n${entities.map((entity) => `<Entity>${String(entity)}</Entity>`).join('\n')}\n</AllowedEntities>`
-    : rubric;
+function appendAllowedEntities(
+  rubric: string,
+  entities: unknown,
+  hasCanonicalBlock: boolean,
+): string {
+  if (hasCanonicalBlock || !Array.isArray(entities) || !entities.length) {
+    return rubric;
+  }
+  const block = `<AllowedEntities>\n${entities.map((entity) => `<Entity>${String(entity)}</Entity>`).join('\n')}\n</AllowedEntities>`;
+  return rubric.includes(block) ? rubric : `${rubric}\n\n${block}`;
 }
 
 /**
@@ -474,7 +480,11 @@ export abstract class RedteamGraderBase {
         conversationTranscript: '',
         ...vars,
       });
-      return appendAllowedEntities(renderedRubric, vars.entities);
+      return appendAllowedEntities(
+        renderedRubric,
+        vars.entities,
+        this.rubric.includes('<AllowedEntities>'),
+      );
     } catch (error) {
       const extractedVars = extractVariablesFromTemplate(this.rubric);
       const missingVars = extractedVars.filter((v) => !(v in vars));
@@ -670,7 +680,11 @@ export abstract class RedteamGraderBase {
     const finalRubric =
       responseAttributionGuidance +
       '\n\n' +
-      appendAllowedEntities(this.renderRubric(vars), vars.entities) +
+      appendAllowedEntities(
+        this.renderRubric(vars),
+        vars.entities,
+        this.rubric.includes('<AllowedEntities>'),
+      ) +
       (additionalRubric ? '\n\n' + additionalRubric : '') +
       gradingGuidanceString +
       graderExamplesString +

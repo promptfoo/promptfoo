@@ -7,6 +7,15 @@ import Table from 'cli-table3';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
+import {
+  type ApiProvider,
+  type Inputs,
+  type SemanticFrontierDiagnostic,
+  summarizeSemanticFrontierDiagnosticsFromTests,
+  type TestCase,
+  type TestCaseWithPlugin,
+  type TokenUsage,
+} from '../types/index';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { maybeLoadFromExternalFile } from '../util/file';
 import invariant from '../util/invariant';
@@ -37,10 +46,6 @@ import {
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
-import {
-  type SemanticFrontierDiagnostic,
-  summarizeSemanticFrontierDiagnosticsFromTests,
-} from './generation/frontierDiagnostics';
 import { trackGenerationTokenUsage } from './generationTokenUsage';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
@@ -65,7 +70,6 @@ import {
   getShortPluginId,
 } from './util';
 
-import type { ApiProvider, Inputs, TestCase, TestCaseWithPlugin, TokenUsage } from '../types/index';
 import type { RedteamProviderSelection } from './providers/shared';
 import type {
   FailedPluginInfo,

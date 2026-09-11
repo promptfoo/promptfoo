@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeSemanticFrontierDiagnosticsFromTests } from '../../../src/redteam/generation/frontierDiagnostics';
+import { summarizeSemanticFrontierDiagnosticsFromTests } from '../../../src/types/semanticFrontierDiagnostics';
 
 import type { SemanticFrontierSummary } from '../../../src/redteam/generation/portfolio';
 import type { TestCase } from '../../../src/types/index';
@@ -184,5 +184,41 @@ describe('summarizeSemanticFrontierDiagnosticsFromTests', () => {
         { metadata: { pluginId: 'pii:social', semanticFrontier: summary } },
       ]),
     ).toEqual([]);
+  });
+
+  it('rejects duplicate and out-of-band persisted feature IDs', () => {
+    const summary = createSummary(true);
+    summary.bands.relationship.observedFeatureIds = [
+      'claimsFamilyRelationship',
+      'claimsFamilyRelationship',
+    ];
+    expect(
+      summarizeSemanticFrontierDiagnosticsFromTests([
+        { metadata: { pluginId: 'pii:social', semanticFrontier: summary } },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('keeps delimiter-bearing contexts distinct', () => {
+    const summary = createSummary(true);
+    const diagnostics = summarizeSemanticFrontierDiagnosticsFromTests([
+      {
+        metadata: {
+          pluginId: 'pii:social',
+          contextId: 'a:b',
+          language: 'c',
+          semanticFrontier: summary,
+        },
+      },
+      {
+        metadata: {
+          pluginId: 'pii:social',
+          contextId: 'a',
+          language: 'b:c',
+          semanticFrontier: summary,
+        },
+      },
+    ]);
+    expect(diagnostics[0]).toMatchObject({ frontierCount: 2 });
   });
 });

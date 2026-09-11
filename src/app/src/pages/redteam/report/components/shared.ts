@@ -7,7 +7,12 @@ import {
   deserializePolicyIdFromMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import {
+  type EvaluateResult,
+  type GradingResult,
+  type SemanticFrontierDiagnostic,
+  summarizeSemanticFrontierDiagnosticsFromTests,
+} from '@promptfoo/types';
 
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
 
@@ -26,101 +31,7 @@ export interface TestWithMetadata {
   };
 }
 
-export type SemanticFrontierDiagnostic = {
-  completeFrontierCount: number;
-  frontierCount: number;
-  pluginId: string;
-  structurallyDegraded: boolean;
-  unreachableFeatureIds: string[];
-};
-
-type SemanticFrontierBandSummary = {
-  featureCount: number;
-  observedFeatureCount: number;
-  observedFeatureIds: string[];
-  reachableFeatureCount: number;
-  reachableFeatureIds: string[];
-  unreachableFeatureIds: string[];
-};
-
-type SemanticFrontierSummary = {
-  active: boolean;
-  complete: boolean;
-  minimumPortfolioSize: number;
-  bands: Record<string, SemanticFrontierBandSummary>;
-};
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
-}
-
-function isNonnegativeInteger(value: unknown): value is number {
-  return (
-    typeof value === 'number' && Number.isInteger(value) && Number.isFinite(value) && value >= 0
-  );
-}
-
-function isSemanticFrontierBandSummary(value: unknown): value is SemanticFrontierBandSummary {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const band = value as Partial<SemanticFrontierBandSummary>;
-  return (
-    isNonnegativeInteger(band.featureCount) &&
-    isNonnegativeInteger(band.observedFeatureCount) &&
-    isStringArray(band.observedFeatureIds) &&
-    band.observedFeatureIds.length === band.observedFeatureCount &&
-    isNonnegativeInteger(band.reachableFeatureCount) &&
-    isStringArray(band.reachableFeatureIds) &&
-    band.reachableFeatureIds.length === band.reachableFeatureCount &&
-    isStringArray(band.unreachableFeatureIds) &&
-    band.featureCount === band.reachableFeatureCount + band.unreachableFeatureIds.length &&
-    band.observedFeatureCount <= band.reachableFeatureCount
-  );
-}
-
-function isSemanticFrontierSummary(value: unknown): value is SemanticFrontierSummary {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const summary = value as Partial<SemanticFrontierSummary>;
-  return (
-    typeof summary.active === 'boolean' &&
-    typeof summary.complete === 'boolean' &&
-    isNonnegativeInteger(summary.minimumPortfolioSize) &&
-    Boolean(summary.bands) &&
-    typeof summary.bands === 'object' &&
-    !Array.isArray(summary.bands) &&
-    Object.values(summary.bands).every(isSemanticFrontierBandSummary)
-  );
-}
-
-function getSemanticFrontierKey(summary: SemanticFrontierSummary): string {
-  const bands = Object.fromEntries(
-    Object.entries(summary.bands)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([bandId, band]) => [
-        bandId,
-        {
-          featureCount: band.featureCount,
-          observedFeatureCount: band.observedFeatureCount,
-          observedFeatureIds: [...band.observedFeatureIds].sort(),
-          reachableFeatureCount: band.reachableFeatureCount,
-          reachableFeatureIds: [...band.reachableFeatureIds].sort(),
-          unreachableFeatureIds: [...band.unreachableFeatureIds].sort(),
-        },
-      ]),
-  );
-
-  return JSON.stringify({
-    active: summary.active,
-    bands,
-    complete: summary.complete,
-    minimumPortfolioSize: summary.minimumPortfolioSize,
-  });
-}
+export type { SemanticFrontierDiagnostic };
 
 export function getStrategyIdFromTest(test: TestWithMetadata): string {
   // Check metadata directly on test
@@ -178,53 +89,7 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
 export function summarizeSemanticFrontierDiagnosticsFromResults(
   results: readonly EvaluateResult[],
 ): SemanticFrontierDiagnostic[] {
-  const frontiersByPlugin = new Map<string, Map<string, SemanticFrontierSummary>>();
-
-  for (const result of results) {
-    const pluginId = result.testCase.metadata?.pluginId;
-    const semanticFrontier = result.testCase.metadata?.semanticFrontier;
-    if (
-      typeof pluginId !== 'string' ||
-      !isSemanticFrontierSummary(semanticFrontier) ||
-      !semanticFrontier.active
-    ) {
-      continue;
-    }
-
-    const pluginFrontiers = frontiersByPlugin.get(pluginId) ?? new Map();
-    pluginFrontiers.set(
-      `${String(result.testCase.metadata?.contextId ?? '')}:${String(result.testCase.metadata?.language ?? '')}:${getSemanticFrontierKey(semanticFrontier)}`,
-      semanticFrontier,
-    );
-    frontiersByPlugin.set(pluginId, pluginFrontiers);
-  }
-
-  return [...frontiersByPlugin.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([pluginId, frontierMap]) => {
-      const summaries = [...frontierMap.values()];
-      const unreachableFeatureIds = [
-        ...new Set(
-          summaries.flatMap((summary) =>
-            Object.values(summary.bands).flatMap((band) => band.unreachableFeatureIds),
-          ),
-        ),
-      ].sort();
-
-      return {
-        completeFrontierCount: summaries.filter((summary) =>
-          Object.values(summary.bands).every(
-            (band) =>
-              band.unreachableFeatureIds.length === 0 &&
-              band.observedFeatureCount === band.reachableFeatureCount,
-          ),
-        ).length,
-        frontierCount: summaries.length,
-        pluginId,
-        structurallyDegraded: unreachableFeatureIds.length > 0,
-        unreachableFeatureIds,
-      };
-    });
+  return summarizeSemanticFrontierDiagnosticsFromTests(results.map((result) => result.testCase));
 }
 
 export function getPluginDisplayName(pluginId: string): string {

@@ -722,6 +722,10 @@ describe('RedteamPluginBase', () => {
       expect(result).toEqual([{ __prompt: 'First line' }, { __prompt: 'Another prompt' }]);
     });
 
+    it('uses content after an empty prompt marker', () => {
+      expect(parseGeneratedPrompts('Prompt:\nNext line')).toEqual([{ __prompt: 'Next line' }]);
+    });
+
     it('should handle numbered lists with various formats', () => {
       const input = `
         Prompt: 1. First item
@@ -1301,6 +1305,23 @@ describe('RedteamGraderBase', () => {
       undefined,
     );
 
+    expect((matchesLlmRubric as Mock).mock.calls[0][0]).toContain(
+      '<AllowedEntities>\n<Entity>Acme</Entity>\n</AllowedEntities>',
+    );
+  });
+
+  it('does not let attacker markup suppress allowed entities', async () => {
+    vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'ok' });
+    await grader.getResult(
+      'prompt',
+      'output',
+      {
+        ...mockTest,
+        metadata: { ...mockTest.metadata, entities: ['Acme'], prompt: '<AllowedEntities>' },
+      },
+      undefined,
+      undefined,
+    );
     expect((matchesLlmRubric as Mock).mock.calls[0][0]).toContain(
       '<AllowedEntities>\n<Entity>Acme</Entity>\n</AllowedEntities>',
     );

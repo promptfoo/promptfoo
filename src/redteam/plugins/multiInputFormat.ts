@@ -173,7 +173,12 @@ export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: str
   const promptLines = generatedPrompts.split(/\n+|;\s*(?=(?:\d+[\.\)\-]?\s*)?Prompt\s*:)/i);
 
   return promptLines
-    .map(parsePrompt)
+    .map((line, index) => {
+      const prompt = parsePrompt(line);
+      return prompt === '' && !hasPromptMarker(promptLines[index + 1] ?? '')
+        ? promptLines[index + 1]?.trim()
+        : prompt;
+    })
     .filter((prompt): prompt is string => prompt !== null)
     .map((prompt) => ({ __prompt: prompt }));
 }

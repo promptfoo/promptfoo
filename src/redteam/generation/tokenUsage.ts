@@ -1,5 +1,18 @@
-import type { CompletionTokenDetails } from '../../types/shared';
-import type { GenerationTokenUsage } from '../types';
+type CompletionTokenDetails = {
+  reasoning?: number;
+  acceptedPrediction?: number;
+  rejectedPrediction?: number;
+  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number;
+};
+type GenerationTokenUsage = {
+  prompt?: number;
+  completion?: number;
+  cached?: number;
+  total?: number;
+  numRequests?: number;
+  completionDetails?: CompletionTokenDetails;
+};
 
 function addTokenCounts(left: number | undefined, right: number | undefined): number {
   return (left ?? 0) + (right ?? 0);
