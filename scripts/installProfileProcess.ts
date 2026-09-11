@@ -122,7 +122,7 @@ function existingNpmCli(candidate: string | undefined): candidate is string {
   );
 }
 
-/** Invoke npm's JavaScript CLI on Windows without executing a .cmd file or using a shell. */
+/** Invoke npm on Windows without executing a .cmd file or using a shell. */
 export function npmInvocation(
   options: { platform?: NodeJS.Platform; nodePath?: string; npmExecPath?: string } = {},
 ): { command: string; prefix: string[] } {
@@ -146,17 +146,24 @@ export function npmInvocation(
       })
       .split(/\r?\n/)
       .map((entry) => entry.trim())
-      .filter((entry) => ['npm', 'npm.cmd'].includes(path.win32.basename(entry).toLowerCase()));
+      .filter((entry) =>
+        ['npm', 'npm.cmd', 'npm.exe'].includes(path.win32.basename(entry).toLowerCase()),
+      );
   } catch {
     // A Node installation may include npm even when its wrappers are absent from PATH.
   }
 
-  const directories = [
-    ...npmPaths.map((entry) => path.win32.dirname(entry)),
-    path.win32.dirname(nodePath),
-  ];
-  for (const directory of directories) {
-    const candidate = path.win32.join(directory, 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  for (const executable of [...npmPaths, nodePath]) {
+    if (path.win32.basename(executable).toLowerCase() === 'npm.exe') {
+      return { command: executable, prefix: ['--workspaces=false'] };
+    }
+    const candidate = path.win32.join(
+      path.win32.dirname(executable),
+      'node_modules',
+      'npm',
+      'bin',
+      'npm-cli.js',
+    );
     if (existingNpmCli(candidate)) {
       return { command: nodePath, prefix: [candidate, '--workspaces=false'] };
     }

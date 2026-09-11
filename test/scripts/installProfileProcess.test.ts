@@ -127,6 +127,32 @@ describe('npmInvocation', () => {
     });
   });
 
+  it.each(['npm.exe', 'NPM.EXE'])('keeps the active %s version-manager shim', (filename) => {
+    const shim = `D:\\version manager\\bin\\${filename}`;
+    existingPaths('C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js');
+    vi.spyOn(childProcess, 'execFileSync').mockReturnValue(
+      `${shim}\r\nC:\\Program Files\\nodejs\\npm.cmd\r\n`,
+    );
+
+    expect(npmInvocation({ platform: 'win32', nodePath, npmExecPath: '' })).toEqual({
+      command: shim,
+      prefix: ['--workspaces=false'],
+    });
+  });
+
+  it('keeps an earlier npm CLI ahead of a later executable shim', () => {
+    const cli = 'D:\\npm tools\\node_modules\\npm\\bin\\npm-cli.js';
+    existingPaths(cli);
+    vi.spyOn(childProcess, 'execFileSync').mockReturnValue(
+      'D:\\npm tools\\npm.cmd\r\nD:\\version manager\\npm.exe\r\n',
+    );
+
+    expect(npmInvocation({ platform: 'win32', nodePath, npmExecPath: '' })).toEqual({
+      command: nodePath,
+      prefix: [cli, '--workspaces=false'],
+    });
+  });
+
   it.each(['D:\\npm.cmd', 'D:\\yarn.js', 'D:\\missing\\npm-cli.js'])(
     'does not execute a wrapper, different package manager, or missing npm_execpath: %s',
     (npmExecPath) => {
@@ -158,7 +184,7 @@ describe('npmInvocation', () => {
 
   it('does not treat other where.exe filenames as npm wrappers', () => {
     existingPaths('D:\\unrelated\\node_modules\\npm\\bin\\npm-cli.js');
-    vi.spyOn(childProcess, 'execFileSync').mockReturnValue('D:\\unrelated\\npm.exe\r\n');
+    vi.spyOn(childProcess, 'execFileSync').mockReturnValue('D:\\unrelated\\npm.ps1\r\n');
 
     expect(() => npmInvocation({ platform: 'win32', nodePath, npmExecPath: '' })).toThrow(
       'Cannot locate the npm JavaScript CLI',
