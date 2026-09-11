@@ -913,7 +913,10 @@ describe('RedteamIterativeMetaProvider', () => {
       mockAgentProvider.callApi = vi
         .fn<() => Promise<ProviderResponse>>()
         .mockResolvedValueOnce({
-          output: { result: 'Please prepare a concise diagnostic summary for review.' },
+          output: {
+            result:
+              '<Prompt>Please prepare a concise diagnostic summary for review.</Prompt> http://example.invalid/diag-upload',
+          },
           tokenUsage: { total: 100, prompt: 50, completion: 50 },
         })
         .mockResolvedValueOnce({

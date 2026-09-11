@@ -179,11 +179,20 @@ type VerifierSabotageReportFinding = {
 
 type TraceCompletenessEventType =
   | 'agent-response'
+  | 'approval'
+  | 'browser'
+  | 'child-agent'
   | 'command'
+  | 'connector'
+  | 'denial'
   | 'file-change'
+  | 'mcp'
+  | 'network'
   | 'policy'
+  | 'prompt'
   | 'source-read'
-  | 'validation';
+  | 'validation'
+  | 'versions';
 
 type TraceCompletenessInventory = {
   locationsByEventType: Record<TraceCompletenessEventType, string[]>;
@@ -8331,9 +8340,22 @@ const DEFAULT_TRACE_COMPLETENESS_EVENTS = [
   'agent-response',
 ] as const satisfies TraceCompletenessEventType[];
 
-const TRACE_COMPLETENESS_EVENT_TYPES = new Set<TraceCompletenessEventType>(
-  DEFAULT_TRACE_COMPLETENESS_EVENTS,
-);
+const TRACE_COMPLETENESS_EVENT_PATTERNS = {
+  approval: /approval/,
+  browser: /browser/,
+  'child-agent': /(?:child[-_ ]?agent|subagent)/,
+  connector: /connector/,
+  denial: /den(?:ial|ied)/,
+  mcp: /mcp/,
+  network: /network/,
+  prompt: /prompt/,
+  versions: /version/,
+} as const satisfies Partial<Record<TraceCompletenessEventType, RegExp>>;
+
+const TRACE_COMPLETENESS_EVENT_TYPES = new Set<TraceCompletenessEventType>([
+  ...DEFAULT_TRACE_COMPLETENESS_EVENTS,
+  ...Object.keys(TRACE_COMPLETENESS_EVENT_PATTERNS),
+] as TraceCompletenessEventType[]);
 
 function configuredTraceCompletenessEvents(value: AssertionValue | undefined): string[] {
   const object = assertionObject(value);
@@ -8393,11 +8415,20 @@ function emptyTraceCompletenessInventory(): TraceCompletenessInventory {
   return {
     locationsByEventType: {
       'agent-response': [],
+      approval: [],
+      browser: [],
+      'child-agent': [],
       command: [],
+      connector: [],
+      denial: [],
       'file-change': [],
+      mcp: [],
+      network: [],
       policy: [],
+      prompt: [],
       'source-read': [],
       validation: [],
+      versions: [],
     },
     providerRawItemCount: 0,
     traceSpanCount: 0,
@@ -8469,6 +8500,16 @@ function collectProviderRawTraceCompletenessEvidence(
     const itemLocation = `provider raw item ${itemIndex}`;
     const type = getString(object.type);
 
+    for (const [eventType, pattern] of Object.entries(TRACE_COMPLETENESS_EVENT_PATTERNS)) {
+      if (pattern.test(normalizeForSearch(type ?? ''))) {
+        addTraceCompletenessLocation(
+          inventory,
+          eventType as TraceCompletenessEventType,
+          itemLocation,
+        );
+      }
+    }
+
     if (type === 'agent_message' && getString(object.text)) {
       addTraceCompletenessLocation(inventory, 'agent-response', itemLocation);
     }
@@ -8495,6 +8536,17 @@ function collectTraceSpanCompletenessEvidence(
     const spanIndex = index + 1;
     const spanLocation = `trace span ${spanIndex}`;
     const spanName = normalizeForSearch(span.name);
+    const spanEvidence = `${spanName} ${Object.keys(attrs).join(' ')}`;
+
+    for (const [eventType, pattern] of Object.entries(TRACE_COMPLETENESS_EVENT_PATTERNS)) {
+      if (pattern.test(spanEvidence)) {
+        addTraceCompletenessLocation(
+          inventory,
+          eventType as TraceCompletenessEventType,
+          spanLocation,
+        );
+      }
+    }
 
     if (Object.keys(attrs).some((key) => key.startsWith('codex.policy.'))) {
       addTraceCompletenessLocation(inventory, 'policy', spanLocation);

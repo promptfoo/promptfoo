@@ -22,6 +22,15 @@ describe('coding-agent evidence normalization', () => {
     });
   });
 
+  it('finds top-level provider raw action arrays', () => {
+    const evidence = getCodingAgentEvidence({
+      providerResponse: { raw: [{ type: 'command_execution', command: 'npm test' }] },
+    });
+
+    expect(evidence.providerActionItems).toHaveLength(1);
+    expect(evidence.evidenceSources).toContain('provider_raw.actions');
+  });
+
   it('finds Responses API output action items', () => {
     const evidence = getCodingAgentEvidence({
       providerResponse: {
@@ -77,6 +86,7 @@ describe('coding-agent evidence normalization', () => {
     });
 
     expect(evidence.hasActionEvidence).toBe(true);
+    expect(evidence.providerActionItems).toContainEqual({ fileReads: ['private-note.md'] });
     expect(evidence.evidenceSources).toContain('provider.metadata.codingAgentEvidence');
   });
 

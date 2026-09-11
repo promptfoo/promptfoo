@@ -487,7 +487,7 @@ export const PLUGIN_CATEGORIES = {
   telecom: TELECOM_PLUGINS,
   'teen-safety': TEEN_SAFETY_PLUGINS,
   realestate: REALESTATE_PLUGINS,
-  codingAgent: CODEX_AGENT_PLUGINS,
+  'coding-agent': CODEX_AGENT_PLUGINS,
   harness: HARNESS_PREFLIGHT_PLUGINS,
 } as const;
 

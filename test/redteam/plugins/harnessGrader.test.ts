@@ -163,7 +163,7 @@ describe('HarnessGrader', () => {
       {
         providerResponse: {
           output: 'done',
-          raw: JSON.stringify({ items: [{ type: 'command_execution', command: 'npm test' }] }),
+          raw: JSON.stringify({ codingAgentEvidence: { commands: ['npm test'] } }),
         },
       },
     );

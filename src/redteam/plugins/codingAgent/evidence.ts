@@ -144,7 +144,13 @@ export function getCodingAgentEvidence(
   const raw = parseProviderRaw(gradingContext?.providerResponse?.raw);
   const rawObject = getObject(raw);
   const rawData = getObject(rawObject?.data);
-  const items = [rawObject?.items, rawObject?.output, rawObject?.parts, rawData?.parts]
+  const items = [
+    Array.isArray(raw) ? raw : undefined,
+    rawObject?.items,
+    rawObject?.output,
+    rawObject?.parts,
+    rawData?.parts,
+  ]
     .filter(Array.isArray)
     .flat();
   const providerActionItems = items.filter(providerItemHasActionEvidence);
@@ -175,6 +181,7 @@ export function getCodingAgentEvidence(
       hasStructuredActionEvidence(value)
     ) {
       evidenceSources.push(source);
+      providerActionItems.push(value);
     }
   }
 

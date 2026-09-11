@@ -339,6 +339,12 @@ export async function runMetaAgentRedteam({
       continue;
     }
 
+    // Extract JSON from <Prompt> tags if present (multi-input mode)
+    const extractedPrompt = extractPromptFromTags(attackPrompt);
+    if (extractedPrompt) {
+      attackPrompt = extractedPrompt;
+    }
+
     const missingAnchors = missingConcreteTaskAnchors(attackPrompt, concreteTask);
     if (missingAnchors.length > 0) {
       logger.info('[IterativeMeta] Rejecting attack prompt that dropped concrete-task anchors', {
@@ -346,12 +352,6 @@ export async function runMetaAgentRedteam({
         missingAnchorCount: missingAnchors.length,
       });
       continue;
-    }
-
-    // Extract JSON from <Prompt> tags if present (multi-input mode)
-    const extractedPrompt = extractPromptFromTags(attackPrompt);
-    if (extractedPrompt) {
-      attackPrompt = extractedPrompt;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
