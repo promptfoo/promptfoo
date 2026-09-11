@@ -631,6 +631,34 @@ describe('suite environment loading', () => {
     }
   });
 
+  it.each([
+    ['PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', 'true', 'false', false],
+    ['PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', 'false', 'true', true],
+    ['PROMPTFOO_SELF_HOSTED', 'true', 'false', false],
+    ['PROMPTFOO_DISABLE_TEMPLATING', 'true', 'false', false],
+    ['PROMPTFOO_DISABLE_TEMPLATING', 'false', 'true', true],
+  ] as const)(
+    'uses the explicit %s=%s when resolving grader paths',
+    async (flag, selected, ambient, shouldRender) => {
+      const restore = mockProcessEnv({
+        GRADER_PATH: 'process.js',
+        PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: undefined,
+      });
+      cliState.config = { env: { [flag]: ambient } };
+      try {
+        const provider = 'file://{{ env.GRADER_PATH }}';
+        const test = await readTest({ options: { provider } }, tempDir, false, {
+          [flag]: selected,
+        });
+        expect(test.options?.provider).toBe(
+          shouldRender ? `file://${path.join(tempDir, 'process.js')}` : provider,
+        );
+      } finally {
+        restore();
+      }
+    },
+  );
+
   it.each(['string', 'object'] as const)(
     'resolves standalone %s test providers during evaluation',
     async (form) => {

@@ -60,6 +60,7 @@ interface CliState {
   readonly activeOtlpReceiver?: ActiveOtlpReceiver;
 
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
+  readonly env?: EnvOverrides;
   withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T;
   withRequestTracingConfig<T>(
     tracingConfig: NonNullable<TestSuite['tracing']>,
@@ -95,6 +96,10 @@ const state: CliState = {
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T> {
     return maxConcurrencyContext.run({ maxConcurrency }, fn);
   },
+  get env() {
+    const store = envContext.getStore();
+    return store ? store.env : state.config?.env;
+  },
   withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T {
     return envContext.run({ env }, fn);
   },
@@ -117,9 +122,6 @@ const state: CliState = {
   },
 };
 
-setEnvOverridesProvider(() => {
-  const store = envContext.getStore();
-  return store ? store.env : state.config?.env;
-});
+setEnvOverridesProvider(() => state.env);
 
 export default state;

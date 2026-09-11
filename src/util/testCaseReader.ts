@@ -7,9 +7,9 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
 import { globSync } from 'glob';
+import cliState from '../cliState';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
-import { getEnvOverrides } from '../envOverrides';
 import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
 import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
@@ -449,15 +449,7 @@ function resolveGradingProviderPaths(
     if (!provider.startsWith('file://')) {
       return provider;
     }
-    const processEnvDisabled = getEnvBool(
-      'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
-      getEnvBool('PROMPTFOO_SELF_HOSTED', false),
-    );
-    const rendered = renderEnvOnlyInObject(
-      provider,
-      { ...(processEnvDisabled ? {} : process.env), ...env },
-      true,
-    );
+    const rendered = cliState.withEnv(env, () => renderEnvOnlyInObject(provider));
     return rendered.includes('{{')
       ? rendered
       : 'file://' + path.resolve(basePath, rendered.slice('file://'.length));
@@ -499,7 +491,7 @@ export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
   isDefaultTest: boolean = false,
-  env: EnvOverrides | undefined = getEnvOverrides(),
+  env: EnvOverrides | undefined = cliState.env,
 ): Promise<TestCase> {
   if (typeof test === 'object' && remoteTestCases.has(test as TestCase)) {
     return test as TestCase;
@@ -676,13 +668,12 @@ export async function loadTestsFromGlob(
 export async function readTests(
   tests: TestSuiteConfig['tests'],
   basePath: string = '',
-  env: EnvOverrides | undefined = getEnvOverrides(),
+  env: EnvOverrides | undefined = cliState.env,
 ): Promise<TestCase[]> {
-  const ret: TestCase[] = [];
   const loadStandalone = async (source: string, config?: Record<string, any>) => {
     const tests = await readStandaloneTestsFile(source, basePath, config);
     if (source.includes('://') && !source.startsWith('file://')) {
-      // Remote datasets are data; do not execute local provider or vars file references.
+      // Resolve local provider and vars references only for local sources.
       return tests;
     }
     const testBasePath = path.dirname(
@@ -710,46 +701,50 @@ export async function readTests(
   ) {
     return loadStandalone(tests.path, tests.config);
   }
-  if (Array.isArray(tests)) {
-    for (const globOrTest of tests) {
-      if (typeof globOrTest === 'string') {
-        // Extract path without function name (Windows-aware)
-        const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
-        const lastColonIndex = pathWithoutScheme.lastIndexOf(':');
-        const pathWithoutFunction: string =
-          lastColonIndex > 1 ? pathWithoutScheme.slice(0, lastColonIndex) : pathWithoutScheme;
-        // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-        const pathWithoutSheet = globOrTest.split('#')[0];
-        // For Python, JS, xlsx/xls files, or files with potential function names, use readStandaloneTestsFile
-        if (
-          isJavascriptFile(pathWithoutFunction) ||
-          pathWithoutFunction.endsWith('.py') ||
-          pathWithoutSheet.endsWith('.xlsx') ||
-          pathWithoutSheet.endsWith('.xls') ||
-          lastColonIndex > 1
-        ) {
-          ret.push(...(await loadStandalone(globOrTest)));
-        } else {
-          // Resolve globs for other file types
-          ret.push(...(await loadTestsFromGlob(globOrTest, basePath, env)));
-        }
-      } else if (remoteTestCases.has(globOrTest as TestCase)) {
-        ret.push(globOrTest as TestCase);
-      } else if ('path' in globOrTest) {
-        ret.push(...(await loadStandalone(globOrTest.path, globOrTest.config)));
-      } else {
-        // Load individual TestCase
-        ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath, false, env));
-      }
-    }
-  } else if (tests !== undefined && tests !== null) {
-    logger.warn(dedent`
-      Warning: Unsupported 'tests' format in promptfooconfig.yaml.
-      Expected: string, string[], or TestCase[], but received: ${typeof tests}
+  if (!Array.isArray(tests)) {
+    if (tests !== undefined && tests !== null) {
+      logger.warn(dedent`
+        Warning: Unsupported 'tests' format in promptfooconfig.yaml.
+        Expected: string, string[], or TestCase[], but received: ${typeof tests}
 
-      Please check your configuration file and ensure the 'tests' field is correctly formatted.
-      For more information, visit: https://promptfoo.dev/docs/configuration/reference/#test-case
-    `);
+        Please check your configuration file and ensure the 'tests' field is correctly formatted.
+        For more information, visit: https://promptfoo.dev/docs/configuration/reference/#test-case
+      `);
+    }
+    return [];
+  }
+
+  const ret: TestCase[] = [];
+  for (const globOrTest of tests) {
+    if (typeof globOrTest === 'string') {
+      // Extract path without function name (Windows-aware)
+      const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
+      const lastColonIndex = pathWithoutScheme.lastIndexOf(':');
+      const pathWithoutFunction: string =
+        lastColonIndex > 1 ? pathWithoutScheme.slice(0, lastColonIndex) : pathWithoutScheme;
+      // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
+      const pathWithoutSheet = globOrTest.split('#')[0];
+      // For Python, JS, xlsx/xls files, or files with potential function names, use readStandaloneTestsFile
+      if (
+        isJavascriptFile(pathWithoutFunction) ||
+        pathWithoutFunction.endsWith('.py') ||
+        pathWithoutSheet.endsWith('.xlsx') ||
+        pathWithoutSheet.endsWith('.xls') ||
+        lastColonIndex > 1
+      ) {
+        ret.push(...(await loadStandalone(globOrTest)));
+      } else {
+        // Resolve globs for other file types
+        ret.push(...(await loadTestsFromGlob(globOrTest, basePath, env)));
+      }
+    } else if (remoteTestCases.has(globOrTest as TestCase)) {
+      ret.push(globOrTest as TestCase);
+    } else if ('path' in globOrTest) {
+      ret.push(...(await loadStandalone(globOrTest.path, globOrTest.config)));
+    } else {
+      // Load individual TestCase
+      ret.push(await readTest(globOrTest as TestCaseWithVarsFile, basePath, false, env));
+    }
   }
 
   if (

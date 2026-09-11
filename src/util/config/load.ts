@@ -830,7 +830,7 @@ export async function resolveConfigs(
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
-    fileConfig = await cliState.withEnv(undefined, () => combineConfigs(configPaths));
+    fileConfig = await combineConfigs(configPaths);
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
