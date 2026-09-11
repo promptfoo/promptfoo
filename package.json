@@ -109,8 +109,8 @@
     "mcp": "node dist/src/entrypoint.js mcp",
     "deps:ownership": "tsx scripts/reportDependencyOwnership.ts",
     "prepare": "husky || exit 0",
-    "docs:api": "npm ci --prefix scripts/node-api-docs --ignore-scripts --registry=https://registry.npmjs.org && npm run generate --prefix scripts/node-api-docs && tsx scripts/nodeApiReferencePostprocess.ts && prettier --write 'site/docs/api/node/reference/**/*.md'",
-    "docs:api:check": "npm run docs:api && npm run docs:api:validate && git diff --exit-code -- site/docs/api/node/reference && test -z \"$(git ls-files --others --exclude-standard -- site/docs/api/node/reference)\"",
+    "docs:api": "npm ci --prefix scripts/node-api-docs --ignore-scripts --registry=https://registry.npmjs.org && npm run generate --prefix scripts/node-api-docs && tsx scripts/nodeApiReferencePostprocess.ts && prettier --write \"site/docs/api/node/reference/**/*.md\"",
+    "docs:api:check": "npm run docs:api && tsx scripts/checkNodeApiDocs.ts --check-clean",
     "docs:api:validate": "tsx scripts/checkNodeApiDocs.ts"
   },
   "overrides": {

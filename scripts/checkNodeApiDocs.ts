@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -187,8 +188,26 @@ export function validateNodeApiDocs(rootDir = process.cwd()) {
   }
 }
 
+export function checkNodeApiDocsClean(rootDir = process.cwd()) {
+  execFileSync('git', ['diff', '--exit-code', '--', REFERENCE_DIR], { cwd: rootDir });
+  const untracked = execFileSync(
+    'git',
+    ['ls-files', '--others', '--exclude-standard', '--', REFERENCE_DIR],
+    {
+      cwd: rootDir,
+      encoding: 'utf8',
+    },
+  );
+  if (untracked.trim()) {
+    throw new Error(`Generated Node.js API documentation is not tracked:\n${untracked}`);
+  }
+}
+
 const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : undefined;
 if (invokedPath === import.meta.url) {
   validateNodeApiDocs();
+  if (process.argv.includes('--check-clean')) {
+    checkNodeApiDocsClean();
+  }
   console.log('Node.js API documentation contract is valid.');
 }

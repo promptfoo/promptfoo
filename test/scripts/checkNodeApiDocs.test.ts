@@ -1,9 +1,10 @@
+import { execFileSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { validateNodeApiDocs } from '../../scripts/checkNodeApiDocs';
+import { checkNodeApiDocsClean, validateNodeApiDocs } from '../../scripts/checkNodeApiDocs';
 
 describe('validateNodeApiDocs', () => {
   const tempDirs: string[] = [];
@@ -26,6 +27,20 @@ describe('validateNodeApiDocs', () => {
     }
     return root;
   }
+
+  it.each(['modified', 'untracked'])('rejects %s generated documentation', (change) => {
+    const root = copyContract();
+    execFileSync('git', ['init', '--quiet'], { cwd: root });
+    execFileSync('git', ['add', 'site/docs/api/node/reference'], { cwd: root });
+    expect(() => checkNodeApiDocsClean(root)).not.toThrow();
+    const file = path.join(
+      root,
+      'site/docs/api/node/reference',
+      change === 'untracked' ? 'new.md' : 'README.md',
+    );
+    fs.appendFileSync(file, '\nGenerated content changed.\n');
+    expect(() => checkNodeApiDocsClean(root)).toThrow();
+  });
 
   it('accepts the checked-in Node.js API docs contract', () => {
     expect(() => validateNodeApiDocs()).not.toThrow();
