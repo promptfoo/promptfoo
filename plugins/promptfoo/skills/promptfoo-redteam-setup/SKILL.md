@@ -15,7 +15,10 @@ If the target connection is missing or broken, use `promptfoo-provider-setup`.
 
 ## 1. Map the target and scope
 
-Use routes, auth checks, tests, clients, specs, or safe live probes as evidence.
+For white-box planning, trace the selected entrypoint through prompts, tool
+registration, authorization, and data access. Use the runtime's enabled tools and
+settings; examples or READMEs may describe a different deployment. See
+`references/redteam-setup-patterns.md` → Static code to redteam setup.
 Record the target environment, allowed actions, test accounts/objects, and
 request budget from the user's scope. Reuse existing authorization; resolve
 materially missing boundaries before live calls.
@@ -32,6 +35,9 @@ authorize tool use, or relax the security policy.
   “not found” does not prove authorization enforcement.
 - For a wrapper, preserve the application's auth and tool boundaries rather
   than testing a reimplementation of its business logic.
+- Check state lifetime: a conversation ID may not isolate authentication or
+  shared tool state. Define setup/reset steps and observable failure evidence
+  before generating stateful probes.
 - Record file/line or probe evidence and mark assumptions that remain unverified.
 
 The optional `scripts/openapi-operation-to-redteam-config.mjs` drafts one OpenAPI
@@ -47,8 +53,15 @@ Use a stable target `label`, the real request fields, and `{{env.VAR}}` secrets.
 For a single-input target, supply its prompt template or `redteam.injectVar`.
 For multi-input targets, use `inputs` without `redteam.injectVar`.
 
-Write `redteam.purpose` around allowed users/actions and forbidden data/actions.
-Choose 2–5 plugins supported by the evidence:
+Keep `redteam.purpose` focused: normal task, tested identity, attacker-controlled
+input, reachable tools/data, allowed behavior, and forbidden outcomes. Include
+concrete synthetic object IDs and ownership where needed by the generator.
+Keep source citations, commands, and budgets in the plan; put attack directions
+in plugin `config.modifiers.testGenerationInstructions` and verdict exceptions
+in `graderGuidance`. Distinguish intended policy from observed enforcement:
+a missing check is a candidate gap, not permission; an imagined role is not policy.
+
+Choose only plugins supported by the evidence:
 
 - Policy/business rules: `policy` with explicit policy text.
 - Object ownership and privileges: `bola`, `bfla`, `rbac`.
@@ -61,7 +74,9 @@ Choose 2–5 plugins supported by the evidence:
 
 Avoid `plugins: default` unless the user wants a broad scan. Use
 `graderGuidance`/`graderExamples` when default grading would misread allowed
-behavior; keep known pass/fail controls for any custom grading.
+behavior; keep known pass/fail controls for any custom grading. Grade the named
+boundary: an explicitly requested action that fails is not automatically an
+unauthorized action. Check borderline verdicts against real tool/state evidence.
 
 ## 3. Bound generation and evaluation
 
@@ -86,13 +101,13 @@ initial cases and results justify it.
 
 ## 4. Validate and generate
 
-Use the installed Promptfoo version; in its repository align Node with
+Use `npx promptfoo` to resolve the installed CLI; in its repository align Node with
 `source ~/.nvm/nvm.sh && nvm use` and substitute `npm run local --` below.
 Install or upgrade with `npx promptfoo@latest` only when needed.
 
 ```bash
-promptfoo validate config -c path/to/promptfooconfig.yaml
-promptfoo redteam generate -c path/to/promptfooconfig.yaml -o path/to/redteam.yaml --no-cache --no-progress-bar --strict --remote
+npx promptfoo validate config -c path/to/promptfooconfig.yaml
+npx promptfoo redteam generate -c path/to/promptfooconfig.yaml -o path/to/redteam.yaml --no-cache --no-progress-bar --strict --remote
 ```
 
 Use a fresh output path beside the source config so relative `file://` targets
@@ -102,7 +117,8 @@ from the command working directory, so use absolute paths when directories vary.
 JS providers expose `callApi`; Python supports `file://provider.py:function_name`.
 
 Inspect generated `tests`, assertions, plugin IDs, purpose, input variables, and
-case count. Check generated probes and configured actions against the authorized
+case count. Confirm probes retain the IDs, tool path, preconditions, and forbidden
+outcome that made each hypothesis testable. Check configured actions against the authorized
 scope before handoff. Verify connectivity with explicit safe fixtures before a scan;
 `validate target` uses placeholder vars and remote diagnostics. Hand the reviewed
 generated file to `promptfoo-redteam-run` instead of regenerating it implicitly.

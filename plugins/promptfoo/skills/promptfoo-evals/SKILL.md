@@ -59,14 +59,14 @@ Follow the repo's layout; otherwise use `evals/<suite>/` with `prompts/` and
 
 ## 4. Validate, run, inspect
 
-Use the project's installed Promptfoo version and record it. Install or upgrade
+Use `npx promptfoo` to resolve the project's installed CLI and record its version. Install or upgrade
 with `npx promptfoo@latest` only when needed. In the Promptfoo repository, align
 Node with `source ~/.nvm/nvm.sh && nvm use` and use `npm run local --` in place
-of `promptfoo` below.
+of `npx promptfoo` below.
 
 ```bash
-promptfoo validate config -c path/to/promptfooconfig.yaml
-promptfoo eval -c path/to/promptfooconfig.yaml -o output.json --no-cache --no-share
+npx promptfoo validate config -c path/to/promptfooconfig.yaml
+npx promptfoo eval -c path/to/promptfooconfig.yaml -o output.json --no-cache --no-share
 ```
 
 Add `--env-file .env` only when needed and the file exists. `--no-share` disables

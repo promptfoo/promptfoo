@@ -221,9 +221,9 @@ otherwise inline the source in the rubric as shown.
 ## Focused Reruns
 
 ```bash
-promptfoo eval -c promptfooconfig.yaml --filter-pattern invoice -o /tmp/invoice.json --no-cache --no-share
-promptfoo eval -c promptfooconfig.yaml --filter-metadata area=billing -o /tmp/billing.json --no-cache --no-share
-promptfoo eval -c promptfooconfig.yaml --filter-failing /tmp/eval-results.json -o /tmp/failing.json --no-cache --no-share
+npx promptfoo eval -c promptfooconfig.yaml --filter-pattern invoice -o /tmp/invoice.json --no-cache --no-share
+npx promptfoo eval -c promptfooconfig.yaml --filter-metadata area=billing -o /tmp/billing.json --no-cache --no-share
+npx promptfoo eval -c promptfooconfig.yaml --filter-failing /tmp/eval-results.json -o /tmp/failing.json --no-cache --no-share
 ```
 
 ## CI Gate
@@ -234,7 +234,7 @@ one graded result and rejects missing/invalid counters as well as failed cases:
 ```bash
 set -e
 result_dir=$(mktemp -d)
-PROMPTFOO_FAILED_TEST_EXIT_CODE=0 promptfoo eval -c promptfooconfig.yaml -o "$result_dir/results.json" --no-cache --no-share
+PROMPTFOO_FAILED_TEST_EXIT_CODE=0 npx promptfoo eval -c promptfooconfig.yaml -o "$result_dir/results.json" --no-cache --no-share
 node -e "const s=require(process.argv[1]).results.stats; const valid=[s.successes,s.failures,s.errors].every(n=>Number.isInteger(n)&&n>=0); if(!valid || s.successes+s.failures===0 || s.errors || s.failures) process.exit(1)" "$result_dir/results.json"
 ```
 

@@ -129,7 +129,7 @@ describe('published agent skill examples', () => {
     expect(results.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
   });
 
-  it('validates the complete public example and supplies distinct expected statuses', async () => {
+  it('validates every public config and supplies distinct expected statuses', async () => {
     const markdown = fs.readFileSync(
       path.join(repoRoot, 'site/docs/integrations/agent-skill.md'),
       'utf8',
@@ -139,16 +139,18 @@ describe('published agent skill examples', () => {
     for (const match of markdown.matchAll(
       /```(?:yaml|json) title="([^"]+)"\r?\n([\s\S]*?)\r?\n```/g,
     )) {
-      if (written.has(match[1])) {
-        continue;
-      }
+      expect(written.has(match[1]), `duplicate example filename: ${match[1]}`).toBe(false);
       written.add(match[1]);
       const filePath = path.join(exampleDir, match[1]);
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
       fs.writeFileSync(filePath, match[2]);
     }
     expect(written.has('prompts/chat.json')).toBe(true);
-    await runCli(['validate', 'config', '-c', path.join(exampleDir, 'promptfooconfig.yaml')]);
+    const configs = [...written].filter((file) => path.basename(file) === 'promptfooconfig.yaml');
+    expect(configs).toHaveLength(2);
+    for (const config of configs) {
+      await runCli(['validate', 'config', '-c', path.join(exampleDir, config)]);
+    }
     const tests = yaml.load(
       fs.readFileSync(path.join(exampleDir, 'tests/happy-path.yaml'), 'utf8'),
     ) as {

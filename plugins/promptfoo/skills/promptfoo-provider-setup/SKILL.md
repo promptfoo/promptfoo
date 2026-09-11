@@ -70,13 +70,13 @@ Anchor nearby imports to `Path(__file__).resolve().parent`.
 
 ## 4. Validate and smoke-test
 
-Use the installed `promptfoo` version. In the Promptfoo repository, align Node
+Use `npx promptfoo` to resolve the installed CLI, including project-local installs. In the Promptfoo repository, align Node
 with `source ~/.nvm/nvm.sh && nvm use` and substitute `npm run local --`.
 Install or upgrade with `npx promptfoo@latest` only when needed.
 
 ```bash
-promptfoo validate config -c path/to/promptfooconfig.yaml
-promptfoo eval -c path/to/promptfooconfig.yaml -o output.json --no-cache --no-share
+npx promptfoo validate config -c path/to/promptfooconfig.yaml
+npx promptfoo eval -c path/to/promptfooconfig.yaml -o output.json --no-cache --no-share
 ```
 
 Create one or two tests that exercise the real request and response transform,
@@ -84,7 +84,7 @@ including an error control when relevant (set `maxRetries: 0` for deliberate
 HTTP errors). Prefer these explicit fixtures when
 an endpoint requires real IDs: `validate target` uses placeholder/empty vars.
 
-Use `promptfoo validate target -c path/to/promptfooconfig.yaml` for additional
+Use `npx promptfoo validate target -c path/to/promptfooconfig.yaml` for additional
 connectivity/session diagnostics when appropriate. It calls the target and can
 send config and responses to Promptfoo's remote validation helper. `--no-share`
 on an eval disables result sharing, not remote validation or model/grader calls.

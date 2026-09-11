@@ -25,9 +25,9 @@ the intended vars. Use explicit smoke fixtures for targets that require real IDs
 `validate target` can make multiple calls and send config/responses to a remote
 helper; use it only when its diagnostics fit the scope.
 
-Use the project's installed Promptfoo version and record it. In the Promptfoo
+Use `npx promptfoo` to resolve the project's installed CLI and record its version. In the Promptfoo
 repository, align Node with `source ~/.nvm/nvm.sh && nvm use` and substitute
-`npm run local --` for `promptfoo`. Install or upgrade with
+`npm run local --` for `npx promptfoo`. Install or upgrade with
 `npx promptfoo@latest` only when needed.
 
 ## 2. Run and export
@@ -35,8 +35,8 @@ repository, align Node with `source ~/.nvm/nvm.sh && nvm use` and substitute
 Prefer `redteam eval` for an existing generated file:
 
 ```bash
-promptfoo validate config -c path/to/redteam.yaml
-promptfoo redteam eval -c path/to/redteam.yaml -o results.json --no-cache --no-share --no-progress-bar --remote
+npx promptfoo validate config -c path/to/redteam.yaml
+npx promptfoo redteam eval -c path/to/redteam.yaml -o results.json --no-cache --no-share --no-progress-bar --remote
 ```
 
 Keep generated files beside their source config for relative `file://` targets.
@@ -73,6 +73,14 @@ Read the JSON artifact, not just the exit status:
   validly graded results. Report transport/grader errors separately.
 - Confirm `shareableUrl` is null for a no-share run.
 
+For tool-using apps, inspect actual calls and results. A final refusal does not
+undo a write. Check persisted state on the same server before resetting it;
+tool arguments alone prove an attempted call, not its success. Mark missing
+evidence inconclusive even if the automated grader passes.
+Verify required observations reach the grader's input; arbitrary provider
+metadata is not automatically included. Supply captured facts in explicit
+grading context or review them separately before accepting the verdict.
+
 A missing or malformed grader response is a grading failure, not a vulnerability
 or a pass. Repair the real grader and rerun; do not substitute a marker-based
 mock to report a real scan as successful. Mock graders verify fixture wiring only.
@@ -81,13 +89,13 @@ For custom grading, check known-good and known-bad outputs before trusting score
 ## 4. Rerun and report
 
 ```bash
-promptfoo redteam eval -c path/to/redteam.yaml --filter-failing results.json -o failing-rerun.json --no-cache --no-share --no-progress-bar --remote
-promptfoo redteam eval -c path/to/redteam.yaml --filter-errors-only results.json -o errors-rerun.json --no-cache --no-share --no-progress-bar --remote
-promptfoo redteam eval -c path/to/redteam.yaml --filter-metadata pluginId=policy -o policy-rerun.json --no-cache --no-share --no-progress-bar --remote
+npx promptfoo redteam eval -c path/to/redteam.yaml --filter-failing results.json -o failing-rerun.json --no-cache --no-share --no-progress-bar --remote
+npx promptfoo redteam eval -c path/to/redteam.yaml --filter-errors-only results.json -o errors-rerun.json --no-cache --no-share --no-progress-bar --remote
+npx promptfoo redteam eval -c path/to/redteam.yaml --filter-metadata pluginId=policy -o policy-rerun.json --no-cache --no-share --no-progress-bar --remote
 ```
 
-Use `promptfoo retry <evalId>` to repair ERROR rows in place. A filtered rerun
-has a different denominator; report it separately from full-suite coverage.
+Use the error-filtered command above to preserve remote grading and no sharing.
+A filtered rerun has a different denominator; report it separately from full-suite coverage.
 If an error filter finds nothing, inspect failure classification in the source
 artifact before changing tests.
 

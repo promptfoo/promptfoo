@@ -12,8 +12,8 @@ Use the project's installed `promptfoo`; inside its repository, align Node with
 `source ~/.nvm/nvm.sh && nvm use` and substitute `npm run local --`.
 
 ```bash
-promptfoo validate config -c redteam.yaml
-promptfoo redteam eval -c redteam.yaml -o results.json --no-cache --no-share --no-progress-bar --remote
+npx promptfoo validate config -c redteam.yaml
+npx promptfoo redteam eval -c redteam.yaml -o results.json --no-cache --no-share --no-progress-bar --remote
 ```
 
 Keep the generated file beside its source config for config-relative targets
@@ -30,15 +30,15 @@ Replaying concrete attacks is a different check from repeating an adaptive scan.
 Separate generation and eval to keep distinct config/result artifacts:
 
 ```bash
-promptfoo redteam generate -c promptfooconfig.yaml -o redteam.yaml --no-cache --no-progress-bar --strict --remote
-promptfoo redteam eval -c redteam.yaml -o results.json --no-cache --no-share --no-progress-bar --remote
+npx promptfoo redteam generate -c promptfooconfig.yaml -o redteam.yaml --no-cache --no-progress-bar --strict --remote
+npx promptfoo redteam eval -c redteam.yaml -o results.json --no-cache --no-share --no-progress-bar --remote
 ```
 
 Choose a fresh generated path or use `--force` to intentionally replace it.
 If using the combined command, `redteam run` has no `--no-share` flag:
 
 ```bash
-PROMPTFOO_DISABLE_SHARING=true promptfoo redteam run -c promptfooconfig.yaml --no-cache --no-progress-bar --strict --remote
+PROMPTFOO_DISABLE_SHARING=true npx promptfoo redteam run -c promptfooconfig.yaml --no-cache --no-progress-bar --strict --remote
 ```
 
 Result sharing is separate from remote generation, grading, validation, and
@@ -79,12 +79,12 @@ raw HTTP headers: redact transport metadata before sharing evidence.
 ## Narrow Reruns
 
 ```bash
-promptfoo redteam eval -c redteam.yaml --filter-metadata pluginId=policy -o policy.json --no-cache --no-share --no-progress-bar --remote
-promptfoo redteam eval -c redteam.yaml --filter-failing results.json -o failing.json --no-cache --no-share --no-progress-bar --remote
-promptfoo redteam eval -c redteam.yaml --filter-errors-only results.json -o errors.json --no-cache --no-share --no-progress-bar --remote
+npx promptfoo redteam eval -c redteam.yaml --filter-metadata pluginId=policy -o policy.json --no-cache --no-share --no-progress-bar --remote
+npx promptfoo redteam eval -c redteam.yaml --filter-failing results.json -o failing.json --no-cache --no-share --no-progress-bar --remote
+npx promptfoo redteam eval -c redteam.yaml --filter-errors-only results.json -o errors.json --no-cache --no-share --no-progress-bar --remote
 ```
 
-Use `promptfoo retry <evalId>` for ERROR rows that should be repaired in place.
+Use the error-filtered eval above to retain `--remote` and `--no-share`.
 A filtered rerun's denominator differs from the original scan. Keep both artifacts
 and report their coverage separately; rerun all relevant cases after a fix.
 
@@ -96,7 +96,7 @@ at most 15% valid attack successes; replace that threshold with the app's policy
 ```bash
 set -e
 result_dir=$(mktemp -d)
-PROMPTFOO_FAILED_TEST_EXIT_CODE=0 promptfoo redteam eval -c redteam.yaml -o "$result_dir/results.json" --no-cache --no-share --no-progress-bar --remote
+PROMPTFOO_FAILED_TEST_EXIT_CODE=0 npx promptfoo redteam eval -c redteam.yaml -o "$result_dir/results.json" --no-cache --no-share --no-progress-bar --remote
 node -e "const s=require(process.argv[1]).results.stats; const valid=[s.successes,s.failures,s.errors].every(n=>Number.isInteger(n)&&n>=0); const n=s.successes+s.failures; if(!valid || n===0 || s.errors>0 || s.failures/n>0.15) process.exit(1)" "$result_dir/results.json"
 ```
 
@@ -106,5 +106,5 @@ errored result checks to this gate; it must reject errors explicitly.
 
 ## Report UI
 
-`promptfoo redteam report` opens an interactive local server. Run it when the
+`npx promptfoo redteam report` opens an interactive local server. Run it when the
 user requests the UI; use JSON artifacts for automated checks.

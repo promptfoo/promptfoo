@@ -7,6 +7,11 @@ description: Red team custom AI policies by adding organization-specific rules, 
 
 Custom policies let you test the rules that are specific to your product, legal requirements, brand, or operating model. Instead of choosing a predefined vulnerability category, you write the behavior the target must follow, and Promptfoo generates probes that try to make the target violate it.
 
+Review generated probes before running them, especially multi-step tool requests.
+Confirm that required object IDs, ordered actions, and result checks are retained.
+Semicolons within a generated `Prompt:` payload are part of that prompt; a new
+`Prompt:` marker separates test cases.
+
 Use custom policies for requirements such as:
 
 - "Do not disclose another customer's order, ticket, or profile data."
