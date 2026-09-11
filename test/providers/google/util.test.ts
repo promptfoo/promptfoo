@@ -2128,6 +2128,23 @@ describe('util', () => {
           expect(vars.media).toBe(media);
         });
 
+        it('should preserve M4A aliases when only the alias appears in the prompt', () => {
+          const audio = Buffer.from('....ftypisom........').toString('base64');
+          const vars = { audio, alias: audio };
+          const sourceVars = { audio: 'file://recording.m4a', alias: '{{audio}}' };
+
+          const { contents } = geminiFormatAndSystemInstructions(vars.alias, vars, undefined, {
+            sourceVars,
+          });
+
+          expect(contents[0].parts[0].inlineData?.mimeType).toBe('audio/mp4');
+          expect(contents[0].parts).toEqual([
+            { inlineData: { mimeType: 'audio/mp4', data: audio } },
+          ]);
+          expect(vars).toEqual({ audio, alias: audio });
+          expect(sourceVars).toEqual({ audio: 'file://recording.m4a', alias: '{{audio}}' });
+        });
+
         it('should preserve explicit video MIME types despite M4A file provenance', () => {
           const base64Data = Buffer.from('....ftypisom........').toString('base64');
           const media = `data:video/mp4;base64,${base64Data}`;

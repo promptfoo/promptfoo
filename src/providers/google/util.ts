@@ -1806,7 +1806,8 @@ function processImagesInContents(
       ) {
         mimeType = 'audio/mp4';
       }
-      if (mimeType) {
+      // An alias of the same raw bytes must not downgrade known M4A audio provenance.
+      if (mimeType && (mimeType !== 'video/mp4' || base64ToMimeType.get(value) !== 'audio/mp4')) {
         base64ToMimeType.set(value, mimeType);
       }
     }

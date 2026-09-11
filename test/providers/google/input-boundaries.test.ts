@@ -193,6 +193,47 @@ describe('Google media and tool-policy input boundaries', () => {
     });
 
     it.each([
+      ['isom', 'file-first'],
+      ['isom', 'alias-first'],
+      ['mp42', 'file-first'],
+      ['mp42', 'alias-first'],
+    ])('preserves M4A aliases for %s with %s variables', async (brand, order) => {
+      // Only the BMFF identification prefix is needed for this representation boundary.
+      const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
+      bytes.write(brand, 8, 'ascii');
+      const file = path.join(temporaryDirectory, 'recording.m4a');
+      await writeFile(file, bytes);
+      const encoded = bytes.toString('base64');
+      const originalVars =
+        order === 'file-first'
+          ? { audio: `file://${file}`, alias: '{{audio}}' }
+          : { alias: '{{audio}}', audio: `file://${file}` };
+      const vars = { ...originalVars };
+      const prompt = { raw: '{{audio}}', label: 'm4a-alias' };
+      const provider = await load(route);
+      const rendered = await renderPrompt(prompt, vars, {}, provider);
+      expect(rendered).toBe(encoded);
+      expect(vars).toEqual({ audio: encoded, alias: encoded });
+      expect(originalVars).toEqual({ audio: `file://${file}`, alias: '{{audio}}' });
+
+      const response = await withCacheEnabled(false, () =>
+        provider.callApi(rendered, { vars, prompt, test: { vars: originalVars } }),
+      );
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('ok');
+      const body = requestBody(route);
+      expect(body.contents[0].parts[0].inlineData.mimeType).toBe('audio/mp4');
+      expect(body).toEqual({
+        contents: [
+          { role: 'user', parts: [{ inlineData: { mimeType: 'audio/mp4', data: encoded } }] },
+        ],
+        generationConfig: {},
+      });
+      expect(vars).toEqual({ audio: encoded, alias: encoded });
+      expect(originalVars).toEqual({ audio: `file://${file}`, alias: '{{audio}}' });
+    });
+
+    it.each([
       ['ANY', 'NONE', true, 'native'],
       ['NONE', 'ANY', false, 'native'],
       ['ANY', 'NONE', true, 'JSON object'],
