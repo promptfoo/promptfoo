@@ -964,7 +964,7 @@ export const providerMap: ProviderFactory[] = [
 
       if (modelType === 'agents-api') {
         const { OpenAiAgentsApiProvider } = await import('./openai/agents-api');
-        return new OpenAiAgentsApiProvider(modelName || configuredModel, {
+        return new OpenAiAgentsApiProvider(modelName, {
           ...providerOptions,
           env: { ...context.env, ...providerOptions.env },
         });

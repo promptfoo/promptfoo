@@ -2,6 +2,7 @@ import logger from '../../logger';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/render';
 import { sleepWithAbort } from '../../util/time';
+import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath, assertOpenAiApiModel } from './util';
@@ -15,6 +16,7 @@ import type {
 import type { OpenAiSharedOptions } from './types';
 
 interface AgentsApiOptions extends OpenAiSharedOptions {
+  model?: string;
   agent_id?: string;
   agent?: {
     model?: string;
@@ -72,6 +74,23 @@ interface Page<T> {
   last_id: string | null;
 }
 
+const SENSITIVE_CONFIG_KEY = /(authorization|api[_-]?key|token|secret|password|credential)/i;
+
+function collectSensitiveConfigValues(value: unknown, key = ''): string[] {
+  if (typeof value === 'string') {
+    return key && SENSITIVE_CONFIG_KEY.test(key) ? [value] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectSensitiveConfigValues(item, key));
+  }
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+  return Object.entries(value).flatMap(([childKey, item]) =>
+    collectSensitiveConfigValues(item, childKey),
+  );
+}
+
 /** Managed Codex sessions, distinct from the local @openai/agents SDK provider. */
 export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   declare config: AgentsApiOptions;
@@ -82,7 +101,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     options: { config?: AgentsApiOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     const config = options.config ?? {};
-    super(modelName || config.agent?.model || (config.agent_id ? '' : 'gpt-6-astra'), options);
+    super(
+      modelName || config.agent?.model || config.model || (config.agent_id ? '' : 'gpt-6-astra'),
+      options,
+    );
     this.modelOverride = modelName;
     for (const key of ['timeoutMs', 'pollIntervalMs'] as const) {
       const value = config[key];
@@ -142,6 +164,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           const credentials = [
             this.getApiKey(),
             ...Object.values(this.config.headers ?? {}),
+            ...collectSensitiveConfigValues(this.config),
             headers.get('Authorization')?.replace(/^(Bearer|Basic)\s+/i, ''),
           ];
           for (const credential of credentials) {
@@ -225,7 +248,18 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         config,
         env: this.env,
       });
-      return await callProvider.runSession(prompt, options);
+      const spanContext = buildChatSpanContext({
+        system: 'openai',
+        model: callProvider.modelName,
+        providerId: callProvider.id(),
+        prompt,
+        context,
+      });
+      return await withGenAISpan(
+        { ...spanContext, operationName: 'invoke_agent' },
+        () => callProvider.runSession(prompt, options),
+        extractProviderResponseAttributes,
+      );
     } catch (error) {
       options?.abortSignal?.throwIfAborted();
       return { cached: false, error: error instanceof Error ? error.message : String(error) };

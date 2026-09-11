@@ -192,6 +192,17 @@ describe('OpenAiAgentsApiProvider', () => {
     ).toBe(suffix || 'gpt-5.6');
   });
 
+  it('allows prompt config to override a configured model without a suffix', async () => {
+    await provider({ model: 'gpt-6-astra' }).callApi('hi', {
+      vars: {},
+      prompt: { raw: 'hi', label: 'test', config: { agent: { model: 'gpt-5.6' } } },
+    });
+
+    expect(
+      JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]!.body as string).agent.model,
+    ).toBe('gpt-5.6');
+  });
+
   it('isolates per-prompt credentials and lifecycle settings across concurrent calls', async () => {
     const agentProvider = provider();
     const results = await Promise.all(
@@ -503,7 +514,8 @@ describe('OpenAiAgentsApiProvider', () => {
       new Response(
         JSON.stringify({
           error: {
-            message: 'Invalid environment promptfoo-qa for test-key and alternate_credential_value',
+            message:
+              'Invalid environment promptfoo-qa for test-key, alternate_credential_value, and nested_secret',
           },
         }),
         { status: 400 },
@@ -511,10 +523,12 @@ describe('OpenAiAgentsApiProvider', () => {
     );
     const result = await provider({
       headers: { 'X-Api-Key': 'alternate_credential_value' },
+      agent: { tools: [{ headers: { Authorization: 'nested_secret' } }] },
     }).callApi('hi');
     expect(result.error).toContain('Invalid environment promptfoo-qa');
     expect(result.error).not.toContain('test-key');
     expect(result.error).not.toContain('alternate_credential_value');
+    expect(result.error).not.toContain('nested_secret');
     expect(result.error).toContain('[REDACTED]');
   });
 
