@@ -119,8 +119,8 @@ describe('ResultsTable Metrics Display', () => {
             testPassCount: 10,
             testFailCount: 0,
             tokenUsage: {
+              prompt: 500,
               completion: 500,
-              total: 1000,
             },
             totalLatencyMs: 2000,
           },

@@ -19,6 +19,7 @@ import { callApiJson } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
+import { getCombinedTokenUsageTotal } from '@app/utils/tokenUsage';
 import { ApiRoutes, EVAL_TABLE_MAX_PAGE_SIZE, EvalResponseSchemas } from '@promptfoo/contracts';
 import { FILE_METADATA_KEY, HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
 import {
@@ -708,10 +709,7 @@ function renderTokenMetrics({
   testCount?: PromptSummaryMetric;
 }): React.ReactNode {
   const getTotal = (usage: NonNullable<typeof metrics>['tokenUsage'] | undefined) =>
-    (usage?.total ?? 0) +
-    (usage?.attacker?.total ?? 0) +
-    (usage?.assertions?.total ?? 0) +
-    (usage?.generation?.total ?? 0);
+    getCombinedTokenUsageTotal(usage);
   const totalTokens = getTotal(metrics?.tokenUsage);
   if (!totalTokens) {
     return null;

@@ -1,5 +1,6 @@
 import * as api from '@app/utils/api';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import { fetchMediaItemByHash } from './useMediaItems';
 
 vi.mock('@app/utils/api');
@@ -98,6 +99,15 @@ describe('fetchMediaItemByHash', () => {
     expect(result).toEqual({
       item: null,
       error: 'network_error',
+    });
+  });
+
+  it('should return server_error when a legacy response fails schema parsing', async () => {
+    vi.mocked(api.callApiJson).mockRejectedValue(new ZodError([]));
+
+    await expect(fetchMediaItemByHash('abc123')).resolves.toEqual({
+      item: null,
+      error: 'server_error',
     });
   });
 

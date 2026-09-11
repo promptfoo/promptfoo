@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiResponseError, callApiJson } from '@app/utils/api';
 import { MEDIA_PAGE_SIZE } from '@app/utils/media';
 import { ApiRoutes, BlobsSchemas } from '@promptfoo/contracts';
+import { ZodError } from 'zod';
 
 import type { EvalOption, MediaItem, MediaSort, MediaTypeFilter } from '../types';
 
@@ -180,7 +181,10 @@ export async function fetchMediaItemByHash(hash: string): Promise<FetchMediaItem
   } catch (error) {
     return {
       item: null,
-      error: error instanceof ApiResponseError ? 'server_error' : 'network_error',
+      error:
+        error instanceof ApiResponseError || error instanceof ZodError
+          ? 'server_error'
+          : 'network_error',
     };
   }
 }
