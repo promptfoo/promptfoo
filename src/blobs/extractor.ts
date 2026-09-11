@@ -154,14 +154,45 @@ type StoreOnce = (
   minSizeBytes?: number,
 ) => Promise<BlobRef | null>;
 
+/**
+ * Evals run with --no-write have no database row to own stored media, and an unreferenced blob
+ * cannot be served or shared, so their media stays inline as PROMPTFOO_INLINE_MEDIA does. The
+ * lookup runs at most once, and only when a response has media to store or reference, so text-only
+ * and in-memory evaluations never query a database that may not be migrated. A failed lookup also
+ * keeps media inline.
+ */
+function createPersistenceCheck(context: BlobContext): () => Promise<boolean> {
+  let persisted: Promise<boolean> | undefined;
+  return () => {
+    const { evalId } = context;
+    if (!evalId) {
+      return Promise.resolve(true);
+    }
+    persisted ??= isEvalPersisted(evalId).catch((error: unknown) => {
+      logger.debug('[BlobExtractor] Could not confirm the eval is saved; keeping media inline', {
+        evalId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    });
+    return persisted;
+  };
+}
+
 function createStoreOnce(blobContext: BlobContext): StoreOnce {
   const cache = new Map<string, Promise<BlobRef | null>>();
+  const isPersisted = createPersistenceCheck(blobContext);
   return async (base64OrDataUrl, defaultMimeType, location, kind, minSizeBytes) => {
     // Canonicalize the cache key on the parsed bytes (not the raw input string)
     // so a `data:image/png;base64,XYZ` URL and the bare `XYZ` base64 hit the
     // same cache slot when they decode to the same buffer.
     const parsed = parseBinary(base64OrDataUrl, defaultMimeType);
-    if (!parsed || !shouldExternalize(parsed.buffer, minSizeBytes)) {
+    if (
+      !parsed ||
+      !shouldExternalize(parsed.buffer, minSizeBytes) ||
+      !isBlobStorageEnabled() ||
+      !(await isPersisted())
+    ) {
       return null;
     }
 
@@ -393,12 +424,6 @@ export async function extractAndStoreBinaryData(
     return response;
   }
 
-  // Evals run with --no-write have no database row to own stored media, and an unreferenced blob
-  // cannot be served or shared, so keep their media inline as PROMPTFOO_INLINE_MEDIA does.
-  if (context?.evalId && !(await isEvalPersisted(context.evalId))) {
-    return response;
-  }
-
   let mutated = false;
   const next: ProviderResponse = { ...response };
   const blobContext = context || {};
@@ -590,7 +615,12 @@ export async function extractAndStoreBinaryData(
 
   const finalResponse = mutated ? next : response;
   if (blobContext.evalId) {
-    await recordExistingBlobReferences(finalResponse, blobContext, 'response');
+    await recordExistingBlobReferences(
+      finalResponse,
+      blobContext,
+      'response',
+      createPersistenceCheck(blobContext),
+    );
   }
 
   return finalResponse;
@@ -605,9 +635,13 @@ async function recordExistingBlobReferences(
   value: unknown,
   context: BlobContext,
   location: string,
+  isPersisted: () => Promise<boolean>,
 ): Promise<void> {
   const hashes = [...new Set(extractBlobHashesFromValue(value))];
   if (hashes.length > 0) {
+    if (!(await isPersisted())) {
+      return;
+    }
     await Promise.all(hashes.map((hash) => recordBlobReference(hash, { ...context, location })));
     return;
   }
@@ -615,7 +649,7 @@ async function recordExistingBlobReferences(
   if (Array.isArray(value)) {
     await Promise.all(
       value.map((child, idx) =>
-        recordExistingBlobReferences(child, context, `${location}[${idx}]`),
+        recordExistingBlobReferences(child, context, `${location}[${idx}]`, isPersisted),
       ),
     );
     return;
@@ -623,7 +657,12 @@ async function recordExistingBlobReferences(
 
   if (value && typeof value === 'object') {
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-      await recordExistingBlobReferences(child, context, location ? `${location}.${key}` : key);
+      await recordExistingBlobReferences(
+        child,
+        context,
+        location ? `${location}.${key}` : key,
+        isPersisted,
+      );
     }
   }
 }

@@ -259,6 +259,33 @@ describe('Local blob extraction', () => {
     expect(blobIndexModule.recordBlobReference).not.toHaveBeenCalled();
   });
 
+  it('does not check eval persistence for a response without media', async () => {
+    const blobIndexModule = await import('../../src/blobs/index');
+    const response: ProviderResponse = { output: 'plain text answer' };
+
+    const result = await extractAndStoreBinaryData(response, { evalId: 'eval-in-memory' });
+
+    expect(result).toBe(response);
+    // In-memory evaluations may run without a migrated database.
+    expect(blobIndexModule.isEvalPersisted).not.toHaveBeenCalled();
+  });
+
+  it('keeps media inline when eval persistence cannot be checked', async () => {
+    const blobIndexModule = await import('../../src/blobs/index');
+    vi.mocked(blobIndexModule.isEvalPersisted).mockRejectedValue(new Error('no such table: evals'));
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: 'ok',
+      audio: { data: largeBase64, format: 'wav' },
+    };
+
+    const result = await extractAndStoreBinaryData(response, { evalId: 'eval-in-memory' });
+
+    expect(result?.audio?.data).toBe(largeBase64);
+    expect(result?.audio?.blobRef).toBeUndefined();
+    expect(mockStoreBlob).not.toHaveBeenCalled();
+  });
+
   it('should externalize image data URIs to blobRefs', async () => {
     const largeBase64 = Buffer.alloc(2000).toString('base64');
     const response: ProviderResponse = {
