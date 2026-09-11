@@ -398,6 +398,50 @@ describe('OpenAiAgentsApiProvider', () => {
     });
   });
 
+  it('retries reads and idempotent cleanup, but never session creation', async () => {
+    await provider({ maxRetries: 3 }).callApi('hi');
+    for (const [, request, , retries] of vi.mocked(fetchWithRetries).mock.calls) {
+      expect(retries).toBe(request?.method === 'POST' ? 0 : 3);
+    }
+  });
+
+  it('treats an already deleted session as successful cleanup', async () => {
+    vi.mocked(fetchWithRetries)
+      .mockResolvedValueOnce(json(session))
+      .mockResolvedValueOnce(json(page([turn])))
+      .mockResolvedValueOnce(json(session))
+      .mockResolvedValueOnce(json(page([message])))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }));
+    expect(await provider().callApi('hi')).toMatchObject({
+      output: '42',
+      metadata: { sessionDeleted: true },
+    });
+  });
+
+  it('preserves a completed empty text answer', async () => {
+    vi.mocked(fetchWithRetries)
+      .mockResolvedValueOnce(json(session))
+      .mockResolvedValueOnce(json(page([turn])))
+      .mockResolvedValueOnce(json(session))
+      .mockResolvedValueOnce(
+        json(page([{ ...message, content: [{ type: 'output_text', text: '' }] }])),
+      );
+    const result = await provider().callApi('hi');
+    expect(result.output).toBe('');
+    expect(result.error).toBeUndefined();
+  });
+
+  it('rejects a final message with no text value', async () => {
+    vi.mocked(fetchWithRetries)
+      .mockResolvedValueOnce(json(session))
+      .mockResolvedValueOnce(json(page([turn])))
+      .mockResolvedValueOnce(json(session))
+      .mockResolvedValueOnce(json(page([{ ...message, content: [{ type: 'output_text' }] }])));
+    expect(await provider().callApi('hi')).toMatchObject({
+      error: expect.stringContaining('without a final assistant answer'),
+    });
+  });
+
   it('bounds polling with the overall timeout and cleans up', async () => {
     vi.useFakeTimers();
     vi.mocked(fetchWithRetries)

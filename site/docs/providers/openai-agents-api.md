@@ -89,7 +89,7 @@ providers:
 | `timeoutMs`                                        | Overall request and polling deadline in milliseconds                                                           | `300000`                                             |
 | `pollIntervalMs`                                   | Delay between status checks in milliseconds                                                                    | `1000`                                               |
 | `retainSession`                                    | Keep successful sessions for later inspection or artifact download                                             | `false`                                              |
-| `maxRetries`                                       | Retries for read requests; session creation is not retried                                                     | `4`                                                  |
+| `maxRetries`                                       | Retries for reads and session deletion; session creation is not retried                                        | `4`                                                  |
 | `apiKey`, `apiKeyEnvar`                            | Standard OpenAI credential overrides                                                                           | `OPENAI_API_KEY`                                     |
 | `apiBaseUrl`, `apiHost`, `organization`, `headers` | Standard OpenAI endpoint and header overrides                                                                  | OpenAI API defaults                                  |
 

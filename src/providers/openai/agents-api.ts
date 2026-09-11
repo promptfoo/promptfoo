@@ -124,8 +124,13 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       },
       30_000,
       // Replaying a session creation can start another billable agent task.
-      method === 'GET' ? this.config.maxRetries : 0,
+      method === 'POST' ? 0 : this.config.maxRetries,
     );
+    if (method === 'DELETE' && response.status === 404) {
+      // A previous deletion may have succeeded even if its response was lost.
+      await response.body?.cancel();
+      return undefined as T;
+    }
     if (!response.ok) {
       let detail = '';
       try {
@@ -193,15 +198,15 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       (item) => item.type === 'message' && item.role === 'assistant' && item.status === 'completed',
     );
     const finalMessages = messages.filter((item) => item.phase === 'final_answer');
-    const output = (finalMessages.length ? finalMessages : messages.filter((item) => !item.phase))
+    const textParts = (
+      finalMessages.length ? finalMessages : messages.filter((item) => !item.phase)
+    )
       .flatMap((item) => item.content ?? [])
-      .filter((part) => part.type === 'output_text')
-      .map((part) => part.text ?? '')
-      .join('\n');
-    if (!output) {
+      .filter((part) => part.type === 'output_text' && typeof part.text === 'string');
+    if (!textParts.length) {
       throw new Error('Agents API turn completed without a final assistant answer');
     }
-    return output;
+    return textParts.map((part) => part.text).join('\n');
   }
 
   async callApi(
