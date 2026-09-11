@@ -386,7 +386,10 @@ export abstract class RedteamPluginBase {
   }
 }
 
-function redactTraceValue(value: unknown, key = ''): unknown {
+function redactTraceValue(value: unknown, key = '', depth = 0): unknown {
+  if (depth > 20) {
+    return '[TRUNCATED]';
+  }
   if (isSecretField(key) || isSecretEnvVarName(key)) {
     return '[REDACTED]';
   }
@@ -398,7 +401,7 @@ function redactTraceValue(value: unknown, key = ''): unknown {
         typeof previous === 'string' &&
         (option === 'u' || option === 'user' || option === 'proxy-user' || isSecretField(option))
         ? '[REDACTED]'
-        : redactTraceValue(entry);
+        : redactTraceValue(entry, '', depth + 1);
     });
   }
   if (value && typeof value === 'object') {
@@ -411,7 +414,7 @@ function redactTraceValue(value: unknown, key = ''): unknown {
         headerName &&
         (isSecretField(headerName) || isSecretEnvVarName(headerName))
           ? '[REDACTED]'
-          : redactTraceValue(entryValue, entryKey),
+          : redactTraceValue(entryValue, entryKey, depth + 1),
       ]),
     );
   }
@@ -428,14 +431,22 @@ function redactTraceEvidence(text: string): string {
   }
   return redactPrivateKeys(text.replace(/\\\r?\n\s*/g, ' '))
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/@\s"'`\\]+)@/gi, '$1[REDACTED]@')
-    .replace(/\bhttps?:\/\/[^\s"'`\\]+/gi, (url) => sanitizeUrl(url))
+    .replace(/\bhttps?:\/\/[^\s"'`\\]+/gi, (url) => {
+      const sanitized = sanitizeUrl(url);
+      if (/^https?:\/\/hooks\.slack\.com\//i.test(sanitized)) {
+        return sanitized.replace(/(\/services\/[^/?#\s]+\/[^/?#\s]+\/)[^/?#\s]+/i, '$1[REDACTED]');
+      }
+      return /^https?:\/\/(?:[^/]+\.)?discord(?:app)?\.com\//i.test(sanitized)
+        ? sanitized.replace(/(\/api\/webhooks\/[^/?#\s]+\/)[^/?#\s]+/i, '$1[REDACTED]')
+        : sanitized;
+    })
     .replace(/(['"])([\w-]+)(\s*:\s*)[^'"]*\1/gi, (match, quote, key, separator) =>
       isSecretField(key) || /^(?:authorization|(?:set-)?cookie)$/i.test(key)
         ? quote + key + separator + '[REDACTED]' + quote
         : match,
     )
     .replace(
-      /\b([\w-]+)(\s*:\s*)[^"'\\;]*?(?=;\s+[A-Za-z][\w-]*\s+-|\s+-[A-Za-z]|$)/gi,
+      /\b([\w-]+)(\s*:\s*)[^"'\\;&|\r\n]*?(?=;|&&|\|\||\r?\n|\s+-[A-Za-z]|$)/gi,
       (match, key, separator) =>
         isSecretField(key) || /^(?:authorization|(?:set-)?cookie)$/i.test(key)
           ? key + separator + '[REDACTED]'
@@ -456,7 +467,7 @@ function redactTraceEvidence(text: string): string {
           : match,
     )
     .replace(
-      /\b((?:set-)?cookie\s*:\s*)[^"'`\\]*?(?=;\s+[A-Za-z][\w-]*\s+-|\s+-[A-Za-z]|$)/gi,
+      /\b((?:set-)?cookie\s*:\s*)[^"'`\\;&|\r\n]*?(?=;|&&|\|\||\r?\n|\s+-[A-Za-z]|$)/gi,
       '$1[REDACTED]',
     )
     .replace(/\b(authorization\s*:\s*)[^"'`\s\\;]+/gi, '$1[REDACTED]')

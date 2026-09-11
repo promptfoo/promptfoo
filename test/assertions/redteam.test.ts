@@ -15,7 +15,8 @@ describe('handleRedteam', () => {
   });
 
   it.each([
-    { tracing: {}, metadata: {}, include: true },
+    { tracing: {}, metadata: {}, include: false },
+    { tracing: { enabled: true }, metadata: {}, include: true },
     { tracing: { includeInGrading: false }, metadata: {}, include: false },
     { tracing: {}, metadata: { tracing: { includeInGrading: false } }, include: false },
     {

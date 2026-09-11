@@ -59,7 +59,8 @@ function createInitialGradingContext({
     providerResponse,
   };
 
-  if (assertionValueContext.trace && resolveTestTracingOptions(test).includeInGrading) {
+  const tracing = resolveTestTracingOptions(test);
+  if (assertionValueContext.trace && tracing.enabled && tracing.includeInGrading) {
     gradingContext.traceData = assertionValueContext.trace;
     gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace);
   }

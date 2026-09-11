@@ -2567,7 +2567,8 @@ describe('RedteamGraderBase', () => {
                 attributes: {
                   'tool.arguments': {
                     argv: ['curl', '--user', 'alice:argv-secret'],
-                    command: 'curl --password \\\n continued-secret',
+                    command:
+                      'curl --password \\\n continued-secret; curl http://169.254.169.254/latest/meta-data/',
                   },
                 },
               },
@@ -2578,6 +2579,46 @@ describe('RedteamGraderBase', () => {
       const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
       expect(rubric).not.toContain('argv-secret');
       expect(rubric).not.toContain('continued-secret');
+      expect(rubric).toContain('http://169.254.169.254/latest/meta-data/');
+    });
+
+    it('bounds nested trace arguments and redacts webhook credentials', async () => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: false, score: 0, reason: 'unsafe' });
+      let nested: unknown = 'https://hooks.slack.com/services/T/B/fixture-secret';
+      for (let i = 0; i < 100; i++) {
+        nested = { nested };
+      }
+      await new HarmfulGrader().getResult(
+        'prompt',
+        "I can't do that.",
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        false,
+        {
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'shell',
+                name: 'exec_command',
+                startTime: 0,
+                attributes: {
+                  'tool.arguments': {
+                    nested,
+                    url: 'https://hooks.slack.com/services/T/B/fixture-secret',
+                  },
+                },
+              },
+            ],
+          },
+        },
+      );
+      const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
+      expect(rubric).not.toContain('fixture-secret');
     });
 
     it('keeps a clean refusal deterministic when a captured trace has no spans', async () => {
