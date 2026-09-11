@@ -240,7 +240,15 @@ async function resolveNestedProviders(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
   constructedTestSuite: TestSuite,
   providerMap: Record<string, ApiProvider>,
+  ownedProviders: Set<ApiProvider>,
 ): Promise<void> {
+  const track = async (provider: Promise<ApiProvider>) => {
+    const resolved = await provider;
+    if (!Object.values(providerMap).includes(resolved)) {
+      ownedProviders.add(resolved);
+    }
+    return resolved;
+  };
   if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
     constructedTestSuite.defaultTest = cloneTestForResolve(constructedTestSuite.defaultTest);
 
@@ -248,20 +256,22 @@ async function resolveNestedProviders(
       constructedTestSuite.defaultTest.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.provider)
     ) {
-      constructedTestSuite.defaultTest.provider = await resolveProvider(
-        constructedTestSuite.defaultTest.provider,
-        providerMap,
-        { env: testSuiteConfig.env, basePath: cliState.basePath },
+      constructedTestSuite.defaultTest.provider = await track(
+        resolveProvider(constructedTestSuite.defaultTest.provider, providerMap, {
+          env: testSuiteConfig.env,
+          basePath: cliState.basePath,
+        }),
       );
     }
     if (
       constructedTestSuite.defaultTest.options?.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.options.provider)
     ) {
-      constructedTestSuite.defaultTest.options.provider = await resolveGradingProvider(
-        constructedTestSuite.defaultTest.options.provider,
-        providerMap,
-        { env: testSuiteConfig.env, basePath: cliState.basePath },
+      constructedTestSuite.defaultTest.options.provider = await track(
+        resolveGradingProvider(constructedTestSuite.defaultTest.options.provider, providerMap, {
+          env: testSuiteConfig.env,
+          basePath: cliState.basePath,
+        }),
       );
     }
   }
@@ -270,20 +280,24 @@ async function resolveNestedProviders(
 
   for (const test of constructedTestSuite.tests) {
     if (test.options?.provider && !isApiProvider(test.options.provider)) {
-      test.options.provider = await resolveGradingProvider(test.options.provider, providerMap, {
-        env: testSuiteConfig.env,
-        basePath: cliState.basePath,
-      });
+      test.options.provider = await track(
+        resolveGradingProvider(test.options.provider, providerMap, {
+          env: testSuiteConfig.env,
+          basePath: cliState.basePath,
+        }),
+      );
     }
     for (const assertion of test.assert || []) {
       if (assertion.type === 'assert-set' || typeof assertion.provider === 'function') {
         continue;
       }
       if (assertion.provider && !isApiProvider(assertion.provider)) {
-        assertion.provider = await resolveGradingProvider(assertion.provider, providerMap, {
-          env: testSuiteConfig.env,
-          basePath: cliState.basePath,
-        });
+        assertion.provider = await track(
+          resolveGradingProvider(assertion.provider, providerMap, {
+            env: testSuiteConfig.env,
+            basePath: cliState.basePath,
+          }),
+        );
       }
     }
   }
@@ -333,11 +347,19 @@ export async function evaluateWithSource(
       : [testSuiteConfig.providers]
     ).filter(isApiProvider),
   );
+  const ownedProviders = new Set(
+    loadedProviders.filter((provider) => !callerOwnedProviders.has(provider)),
+  );
 
   try {
     const providerMap = buildConfiguredProviderMap(loadedProviders);
     const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
-    await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
+    await resolveNestedProviders(
+      testSuiteConfig,
+      constructedTestSuite,
+      providerMap,
+      ownedProviders,
+    );
 
     const parsedProviderPromptMap = readProviderPromptMap(
       testSuiteConfig,
@@ -382,10 +404,16 @@ export async function evaluateWithSource(
 
     return ret;
   } finally {
-    for (const provider of loadedProviders) {
-      if (!callerOwnedProviders.has(provider)) {
+    let cleanupError: unknown;
+    for (const provider of ownedProviders) {
+      try {
         await provider.cleanup?.();
+      } catch (error) {
+        cleanupError ??= error;
       }
+    }
+    if (cleanupError) {
+      throw cleanupError;
     }
   }
 }

@@ -396,7 +396,7 @@ export async function loadApiProviders(
   } else if (isApiProvider(providerPaths)) {
     return [providerPaths];
   } else if (Array.isArray(providerPaths)) {
-    const providersArrays = await Promise.all(
+    const providerResults = await Promise.allSettled(
       providerPaths.map(async (provider, idx) => {
         if (isApiProvider(provider)) {
           return [provider];
@@ -435,7 +435,28 @@ export async function loadApiProviders(
         }
       }),
     );
-    return providersArrays.flat();
+    const failure = providerResults.find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    if (failure) {
+      const callerOwned = new Set(providerPaths.filter(isApiProvider));
+      await Promise.allSettled(
+        providerResults
+          .filter(
+            (result): result is PromiseFulfilledResult<ApiProvider[]> =>
+              result.status === 'fulfilled',
+          )
+          .flatMap((result) => result.value)
+          .filter((provider) => !callerOwned.has(provider))
+          .map((provider) => provider.cleanup?.()),
+      );
+      throw failure.reason;
+    }
+    return providerResults
+      .filter(
+        (result): result is PromiseFulfilledResult<ApiProvider[]> => result.status === 'fulfilled',
+      )
+      .flatMap((result) => result.value);
   }
   throw new Error('Invalid providers list');
 }

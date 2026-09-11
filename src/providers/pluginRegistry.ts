@@ -119,6 +119,9 @@ export class ProviderPluginRegistry {
     manifest: ProviderPluginManifest,
     { position = 'last', replaceExisting = false }: ProviderPluginRegistrationOptions = {},
   ): () => void {
+    if (typeof manifest.name !== 'string' || manifest.name.trim() === '') {
+      throw new Error('Provider plugin name must be a non-empty string');
+    }
     if (manifest.apiVersion !== PROVIDER_PLUGIN_API_VERSION) {
       throw new Error(
         `Unsupported provider plugin API version for '${manifest.name}': ${manifest.apiVersion}`,

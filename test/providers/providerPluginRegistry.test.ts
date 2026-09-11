@@ -8,7 +8,7 @@ import {
   registerProviderPlugin,
 } from '../../src/provider-plugin';
 import { builtinProviderPlugins } from '../../src/providers/builtinProviderPlugins';
-import { loadApiProvider } from '../../src/providers/index';
+import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { isRedteamProviderPath } from '../../src/providers/registryTypes';
 
@@ -187,6 +187,115 @@ describe('ProviderPluginRegistry', () => {
         tests: [{ vars: {}, assert: [{ type: 'equals', value: 'ok' }] }],
       });
       expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('cleans up nested plugin providers created by programmatic evaluation', async () => {
+    const cleanup = vi.fn();
+    const dispose = registerProviderPlugin(
+      createManifest(
+        'nested-cleanup',
+        (providerPath) => providerPath === 'nested-cleanup:model',
+        async () => [
+          {
+            test: () => true,
+            create: async () => ({
+              id: () => 'nested-cleanup:model',
+              callApi: async () => ({ output: 'ok' }),
+              cleanup,
+            }),
+          },
+        ],
+      ),
+    );
+
+    try {
+      await evaluateWithSource({
+        prompts: ['hello'],
+        providers: [{ id: 'echo' }],
+        tests: [
+          {
+            vars: {},
+            options: { provider: 'nested-cleanup:model' },
+            assert: [{ type: 'equals', value: 'hello' }],
+          },
+        ],
+      });
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('cleans created providers when a later provider load fails', async () => {
+    const cleanup = vi.fn();
+    const dispose = registerProviderPlugin(
+      createManifest(
+        'partial-cleanup',
+        (providerPath) => providerPath.startsWith('partial-cleanup:'),
+        async () => [
+          {
+            test: () => true,
+            create: async (providerPath) => {
+              if (providerPath.endsWith(':fail')) {
+                throw new Error('load failed');
+              }
+              return {
+                id: () => providerPath,
+                callApi: async () => ({ output: 'ok' }),
+                cleanup,
+              };
+            },
+          },
+        ],
+      ),
+    );
+
+    try {
+      await expect(
+        loadApiProviders(['partial-cleanup:ok', 'partial-cleanup:fail']),
+      ).rejects.toThrow('load failed');
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('continues evaluation-owned cleanup after one hook fails', async () => {
+    const secondCleanup = vi.fn();
+    const dispose = registerProviderPlugin(
+      createManifest(
+        'cleanup-order',
+        (providerPath) => providerPath.startsWith('cleanup-order:'),
+        async () => [
+          {
+            test: () => true,
+            create: async (providerPath) => ({
+              id: () => providerPath,
+              callApi: async () => ({ output: 'ok' }),
+              cleanup:
+                providerPath === 'cleanup-order:first'
+                  ? async () => {
+                      throw new Error('cleanup failed');
+                    }
+                  : secondCleanup,
+            }),
+          },
+        ],
+      ),
+    );
+
+    try {
+      await expect(
+        evaluateWithSource({
+          prompts: ['hello'],
+          providers: ['cleanup-order:first', 'cleanup-order:second'],
+          tests: [{ vars: {}, assert: [{ type: 'equals', value: 'ok' }] }],
+        }),
+      ).rejects.toThrow('cleanup failed');
+      expect(secondCleanup).toHaveBeenCalledOnce();
     } finally {
       dispose();
     }
@@ -386,6 +495,12 @@ describe('ProviderPluginRegistry', () => {
         load: undefined,
       } as unknown as ProviderPluginManifest),
     ).toThrow("Provider plugin 'invalid' must define canHandle() and load()");
+    expect(() =>
+      registry.register({
+        ...manifest,
+        name: '',
+      } as unknown as ProviderPluginManifest),
+    ).toThrow('Provider plugin name must be a non-empty string');
   });
 
   it('wraps canHandle failures with plugin and provider context', async () => {
