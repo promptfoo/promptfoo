@@ -220,11 +220,6 @@ interface ColumnState {
   columnVisibility: VisibilityState;
 }
 
-export interface PaginationState {
-  pageIndex: number;
-  pageSize: number;
-}
-
 export type ResultsFilterType =
   | 'metric'
   | 'metadata'

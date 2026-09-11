@@ -3,8 +3,7 @@ import React from 'react';
 import { Button } from '@app/components/ui/button';
 import Editor from '@app/components/ui/code-editor';
 import Prism from '@app/lib/prism';
-import { callApiResult } from '@app/utils/api';
-import { ApiRoutes, ProviderResponseSchemas } from '@promptfoo/contracts';
+import { callApi } from '@app/utils/api';
 import dedent from 'dedent';
 import { Play } from 'lucide-react';
 import TransformTestDialog from '../TransformTestDialog';
@@ -15,6 +14,7 @@ interface RequestTransformTabProps {
   selectedTarget: HttpProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
   defaultRequestTransform?: string;
+  isTargetConfigInvalid?: () => boolean;
 }
 
 const highlightJS = (code: string): string => {
@@ -33,6 +33,7 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
   selectedTarget,
   updateCustomTarget,
   defaultRequestTransform,
+  isTargetConfigInvalid,
 }) => {
   // Test dialog states
   const [testOpen, setTestOpen] = React.useState(false);
@@ -52,28 +53,35 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
 
   // Test handler function
   const handleTest = async (transformCode: string, testInput: string) => {
-    const response = await callApiResult(
-      ApiRoutes.Providers.TestRequestTransform,
-      ProviderResponseSchemas.TestRequestTransform.Response,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          transformCode,
-          prompt: testInput,
-        }),
+    if (isTargetConfigInvalid?.()) {
+      return { success: false, error: 'Invalid target configuration' };
+    }
+    const response = await callApi('/providers/test-request-transform', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        transformCode,
+        prompt: testInput,
+      }),
+    });
 
     if (!response.ok) {
+      let errorMessage = 'Failed to test transform';
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } catch {
+        errorMessage = `Server error: ${response.status} ${response.statusText}`;
+      }
       return {
         success: false,
-        error: response.error.message || 'Failed to test transform',
+        error: errorMessage,
       };
     }
 
-    const data = response.data;
+    const data = await response.json();
 
     if (data.success) {
       return {
@@ -128,6 +136,7 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
           variant="outline"
           size="sm"
           onClick={() => setTestOpen(true)}
+          disabled={isTargetConfigInvalid?.()}
           className="absolute right-2 top-2 z-10"
         >
           <Play className="mr-1 size-4" />

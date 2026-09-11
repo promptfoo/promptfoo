@@ -19,6 +19,7 @@ import { ApiRoutes, ProviderResponseSchemas } from '@promptfoo/contracts';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
 import { AlertTriangle, CheckCircle, ChevronDown, Info, Sparkles } from 'lucide-react';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import PageWrapper from './PageWrapper';
 
 import type { ApplicationDefinition } from '../types';
@@ -82,6 +83,7 @@ function DiscoveryResult({
  */
 export default function Purpose({ onNext, onBack }: PromptsProps) {
   const { config, updateApplicationDefinition } = useRedTeamConfig();
+  const { targetConfigError } = useRedTeamTargetConfigValidation();
   const { recordEvent } = useTelemetry();
   const {
     data: { status: apiHealthStatus },
@@ -161,6 +163,11 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleTargetPurposeDiscovery = React.useCallback(async () => {
+    if (targetConfigError) {
+      setDiscoveryError(targetConfigError);
+      return;
+    }
+
     recordEvent('feature_used', { feature: 'redteam_config_target_test' });
     try {
       setIsDiscovering(true);
@@ -197,7 +204,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
       setIsDiscovering(false);
       setShowSlowDiscoveryMessage(false);
     }
-  }, [config.target]);
+  }, [config.target, targetConfigError]);
 
   const hasTargetConfigured = JSON.stringify(config.target) !== JSON.stringify(DEFAULT_HTTP_TARGET);
 
@@ -337,6 +344,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     <Button
                       disabled={
                         !hasTargetConfigured ||
+                        Boolean(targetConfigError) ||
                         apiHealthStatus !== 'connected' ||
                         !!discoveryError ||
                         !!discoveryResult ||
@@ -380,7 +388,15 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                         </AlertContent>
                       </Alert>
                     )}
-                    {discoveryError && (
+                    {targetConfigError && (
+                      <Alert variant="destructive">
+                        <AlertTriangle className="size-4" />
+                        <AlertContent>
+                          <AlertDescription>{targetConfigError}</AlertDescription>
+                        </AlertContent>
+                      </Alert>
+                    )}
+                    {discoveryError && !targetConfigError && (
                       <>
                         <Alert variant="destructive">
                           <AlertTriangle className="size-4" />

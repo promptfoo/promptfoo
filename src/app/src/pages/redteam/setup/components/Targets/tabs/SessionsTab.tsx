@@ -21,8 +21,7 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Textarea } from '@app/components/ui/textarea';
 import { cn } from '@app/lib/utils';
 import ChatMessages from '@app/pages/eval/components/ChatMessages';
-import { type ApiResponseError, callApiResult } from '@app/utils/api';
-import { ApiRoutes, ProviderResponseSchemas, type TestSessionResponse } from '@promptfoo/contracts';
+import { callApi } from '@app/utils/api';
 import {
   AlertCircle,
   AlertTriangle,
@@ -34,7 +33,6 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
-import { z } from 'zod';
 import StatefulnessRadioGroup, { STATEFULNESS_QUESTION } from '../../StatefulnessRadioGroup';
 import VariableSelectionDialog from './VariableSelectionDialog';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
@@ -281,134 +279,36 @@ interface SessionsTabProps {
   selectedTarget: HttpProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
   onTestComplete?: (success: boolean) => void;
+  isTargetConfigInvalid?: () => boolean;
 }
 
-const SessionRequestDetailsSchema = z
-  .object({
-    prompt: z.string().optional(),
-    sessionId: z.string().nullable().optional(),
-  })
-  .passthrough();
-
-const SessionTestDetailsSchema = z
-  .object({
-    sessionId: z.string().nullable().optional(),
-    sessionSource: z.string().optional(),
-    request1: SessionRequestDetailsSchema.nullable().optional(),
-    response1: z.unknown().optional(),
-    request2: SessionRequestDetailsSchema.nullable().optional(),
-    response2: z.unknown().optional(),
-    hasSessionIdTemplate: z.boolean().optional(),
-    hasSessionParser: z.boolean().optional(),
-    sessionParser: z.string().optional(),
-  })
-  .passthrough();
-
-type SessionTestDetails = z.infer<typeof SessionTestDetailsSchema>;
+interface SessionRequest {
+  prompt?: string;
+}
 
 interface TestResult {
   success: boolean;
   message: string;
   reason?: string;
   error?: string;
-  details?: SessionTestDetails;
-}
-
-function parseSessionTestDetails(details: unknown): SessionTestDetails | undefined {
-  const result = SessionTestDetailsSchema.safeParse(details);
-  return result.success ? result.data : undefined;
-}
-
-function normalizeSessionTestResult(data: TestSessionResponse): TestResult {
-  const details = parseSessionTestDetails(data.details);
-  return {
-    success: data.success,
-    message:
-      data.message ??
-      data.error ??
-      (data.success ? 'Session test completed.' : 'Session test failed.'),
-    ...(data.reason === undefined ? {} : { reason: data.reason }),
-    ...(data.error === undefined ? {} : { error: data.error }),
-    ...(details === undefined ? {} : { details }),
+  details?: {
+    sessionId?: string;
+    request1?: SessionRequest;
+    response1?: unknown;
+    request2?: SessionRequest;
+    response2?: unknown;
+    sessionSource?: string;
+    hasSessionIdTemplate?: boolean;
+    hasSessionParser?: boolean;
+    sessionParser?: string;
   };
-}
-
-function testResultFromError(error: ApiResponseError): TestResult {
-  const bodyMessage = typeof error.body.message === 'string' ? error.body.message : undefined;
-  const bodyError = typeof error.body.error === 'string' ? error.body.error : undefined;
-  const details = parseSessionTestDetails(error.body.details);
-  return {
-    success: false,
-    message: bodyMessage ?? bodyError ?? error.message ?? 'Session test failed.',
-    reason: bodyError ?? error.message,
-    ...(details === undefined ? {} : { details }),
-  };
-}
-
-interface RunSessionTestOptions {
-  selectedTarget: HttpProviderOptions;
-  mainInputVariable?: string;
-  setIsTestRunning: React.Dispatch<React.SetStateAction<boolean>>;
-  setTestResult: React.Dispatch<React.SetStateAction<TestResult | null>>;
-  setDetailsExpanded: React.Dispatch<React.SetStateAction<boolean>>;
-  onTestComplete?: (success: boolean) => void;
-}
-
-async function runSessionTest({
-  selectedTarget,
-  mainInputVariable,
-  setIsTestRunning,
-  setTestResult,
-  setDetailsExpanded,
-  onTestComplete,
-}: RunSessionTestOptions): Promise<void> {
-  setIsTestRunning(true);
-  setTestResult(null);
-
-  try {
-    const response = await callApiResult(
-      ApiRoutes.Providers.TestSession,
-      ProviderResponseSchemas.TestSession.Response,
-      {
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          provider: selectedTarget,
-          sessionConfig: {
-            sessionSource: selectedTarget.config?.sessionSource,
-            sessionParser: selectedTarget.config?.sessionParser,
-          },
-          mainInputVariable,
-        }),
-      },
-    );
-
-    if (response.ok) {
-      const data = normalizeSessionTestResult(response.data);
-      setTestResult(data);
-      setDetailsExpanded(!data.success);
-      onTestComplete?.(data.success);
-      return;
-    }
-
-    setTestResult(testResultFromError(response.error));
-    setDetailsExpanded(true);
-    onTestComplete?.(false);
-  } catch (error) {
-    setTestResult({
-      success: false,
-      message: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-    });
-    setDetailsExpanded(true);
-    onTestComplete?.(false);
-  } finally {
-    setIsTestRunning(false);
-  }
 }
 
 const SessionsTab: React.FC<SessionsTabProps> = ({
   selectedTarget,
   updateCustomTarget,
   onTestComplete,
+  isTargetConfigInvalid,
 }) => {
   const [isTestRunning, setIsTestRunning] = React.useState(false);
   const [testResult, setTestResult] = React.useState<TestResult | null>(null);
@@ -419,8 +319,17 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
   // Get input variables from the provider config
   const inputVariables = selectedTarget.inputs ? Object.keys(selectedTarget.inputs) : [];
   const hasMultipleInputs = inputVariables.length > 0;
+  const targetUrl =
+    (typeof selectedTarget.config?.url === 'string' && selectedTarget.config.url.trim()) ||
+    (typeof selectedTarget.id === 'string' && /^https?:\/\//i.test(selectedTarget.id)
+      ? selectedTarget.id
+      : undefined);
 
   const handleTestSessionClick = () => {
+    if (isTargetConfigInvalid?.()) {
+      onTestComplete?.(false);
+      return;
+    }
     if (hasMultipleInputs) {
       // Pre-select first variable if none selected
       if (!selectedMainVariable && inputVariables.length > 0) {
@@ -428,26 +337,66 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
       }
       setShowVariableDialog(true);
     } else {
-      void runSessionTest({
-        selectedTarget,
-        setIsTestRunning,
-        setTestResult,
-        setDetailsExpanded,
-        onTestComplete,
-      });
+      runSessionTest();
     }
   };
 
   const handleDialogConfirm = () => {
     setShowVariableDialog(false);
-    void runSessionTest({
-      selectedTarget,
-      mainInputVariable: selectedMainVariable,
-      setIsTestRunning,
-      setTestResult,
-      setDetailsExpanded,
-      onTestComplete,
-    });
+    runSessionTest(selectedMainVariable);
+  };
+
+  const runSessionTest = async (mainInputVariable?: string) => {
+    if (isTargetConfigInvalid?.()) {
+      onTestComplete?.(false);
+      return;
+    }
+    setIsTestRunning(true);
+    setTestResult(null);
+
+    try {
+      // Test session configuration through the backend API
+      const response = await callApi('/providers/test-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          provider: selectedTarget,
+          sessionConfig: {
+            sessionSource: selectedTarget.config?.sessionSource,
+            sessionParser: selectedTarget.config?.sessionParser,
+          },
+          // Pass the main input variable for multi-input configurations
+          mainInputVariable,
+        }),
+      });
+
+      if (response.ok) {
+        const data: TestResult = await response.json();
+        setTestResult(data);
+        setDetailsExpanded(!data.success);
+        onTestComplete?.(data.success);
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        setTestResult({
+          success: false,
+          message:
+            errorData.message || errorData.error || `Test failed with status: ${response.status}`,
+          reason: errorData.error || errorData.reason,
+          details: errorData.details,
+        });
+        setDetailsExpanded(true);
+        onTestComplete?.(false);
+      }
+    } catch (error) {
+      setTestResult({
+        success: false,
+        message: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+      setDetailsExpanded(true);
+      onTestComplete?.(false);
+    } finally {
+      setIsTestRunning(false);
+    }
   };
 
   return (
@@ -687,7 +636,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
               <Button
                 onClick={handleTestSessionClick}
-                disabled={isTestRunning || !selectedTarget.config?.url}
+                disabled={isTestRunning || !targetUrl || Boolean(isTargetConfigInvalid?.())}
                 size="sm"
                 className="mb-3"
               >
@@ -699,7 +648,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 {isTestRunning ? 'Testing...' : 'Test Session'}
               </Button>
 
-              {!selectedTarget.config?.url && (
+              {!targetUrl && (
                 <Alert variant="warning" className="mb-3">
                   <AlertCircle className="size-4" />
                   <AlertContent>

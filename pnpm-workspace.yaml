@@ -1,3 +1,24 @@
 packages:
   - 'src/app'
   - 'site'
+
+# Supply-chain floor for local pnpm installs. The unit is MINUTES, so 14400 = 10 days,
+# matching the "10 days" minimumReleaseAge renovate.json already applies to the npm
+# datasource. Scope note: CI, the Dockerfile, and the publish workflow all install with
+# `npm ci`, which has no equivalent setting, so this covers the optional local pnpm path
+# only -- Renovate remains the control that gates what actually reaches main.
+minimumReleaseAge: 14400
+
+# Build-script allowlist. pnpm 11 dropped the `pnpm` field in package.json ("The 'pnpm'
+# field in package.json is no longer read by pnpm") and renamed onlyBuiltDependencies to
+# this map, so pnpm 11+ reads only this file. package.json still carries
+# pnpm.onlyBuiltDependencies for older pnpm; keep the two lists identical.
+allowBuilds:
+  '@huggingface/transformers': true
+  '@playwright/browser-chromium': true
+  '@swc/core': true
+  core-js: true
+  core-js-pure: true
+  esbuild: true
+  protobufjs: true
+  sharp: true

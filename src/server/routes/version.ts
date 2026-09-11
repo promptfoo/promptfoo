@@ -2,20 +2,12 @@ import express from 'express';
 import semverGt from 'semver/functions/gt.js';
 import semverValid from 'semver/functions/valid.js';
 import { VERSION } from '../../constants';
-import { ApiRoutes } from '../../contracts/api/routes';
-import { VersionSchemas } from '../../contracts/api/version';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
-import { isUpdateBlockedByRuntime } from '../../runtimeCompatibility';
+import { VersionSchemas } from '../../types/api/version';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
 import { isRunningUnderNpx } from '../../util/promptfooCommand';
-import { replyError } from '../utils/errors';
-import {
-  getRuntimeNoticeForVersionResponse,
-  getRuntimePolicyForVersionResponse,
-  isUpdateAvailableForRuntime,
-} from './versionUtils';
 import type { Request, Response } from 'express';
 
 /**
@@ -51,9 +43,9 @@ function isUpdateAvailable(latestVersion: string | null, currentVersion: string)
 }
 
 /**
- * Build the version-response fields shared by the success and error paths: environment-derived
- * update commands plus the runtime compatibility notice/policy. All inputs are synchronous and
- * cannot throw, so this is safe to call from the 500 fallback handler.
+ * Build the version-response fields shared by the success and error paths: the environment-derived
+ * update commands. All inputs are synchronous and cannot throw, so this is safe to call from the
+ * 500 fallback handler.
  */
 function buildBaseVersionFields() {
   const selfHosted = getEnvBool('PROMPTFOO_SELF_HOSTED');
@@ -67,12 +59,6 @@ function buildBaseVersionFields() {
     isNpx,
     updateCommands,
     commandType: updateCommands.commandType,
-    runtimeNotice: getRuntimeNoticeForVersionResponse(
-      process.version,
-      getEnvBool('PROMPTFOO_DISABLE_RUNTIME_WARNINGS'),
-    ),
-    runtimePolicy: getRuntimePolicyForVersionResponse(process.version),
-    updateBlockedByRuntime: isUpdateBlockedByRuntime(updateCommands.commandType),
   };
 }
 
@@ -95,7 +81,7 @@ const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
 // During outages: ~60 requests/hour vs ~12 with 5-minute delay.
 const FAILURE_RETRY_DELAY = 60 * 1000; // 1 minute
 
-router.get(ApiRoutes.Version.routerPath, async (_req: Request, res: Response): Promise<void> => {
+router.get('/', async (_req: Request, res: Response): Promise<void> => {
   try {
     const now = Date.now();
     const updateChecksDisabled = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
@@ -127,31 +113,22 @@ router.get(ApiRoutes.Version.routerPath, async (_req: Request, res: Response): P
       }
     }
 
-    const base = buildBaseVersionFields();
     // Ensure latestVersion is never null in response (maintains API contract)
     const resolvedLatestVersion = latestVersion ?? VERSION;
-    const latestUpdateAvailable = isUpdateAvailable(resolvedLatestVersion, VERSION);
     const response = {
-      ...base,
+      ...buildBaseVersionFields(),
       latestVersion: resolvedLatestVersion,
-      updateAvailable: isUpdateAvailableForRuntime(
-        latestUpdateAvailable,
-        base.updateBlockedByRuntime,
-      ),
-      blockedUpdateNotice:
-        latestUpdateAvailable && base.commandType !== 'docker' && base.runtimePolicy
-          ? getRuntimeNoticeForVersionResponse(process.version)
-          : null,
+      updateAvailable: isUpdateAvailable(resolvedLatestVersion, VERSION),
     };
 
     res.json(VersionSchemas.Response.parse(response));
   } catch (error) {
     logger.error(`Error in version check endpoint: ${error}`);
-    replyError(res, 500, 'Failed to check version', {
+    res.status(500).json({
       ...buildBaseVersionFields(),
+      error: 'Failed to check version',
       latestVersion: VERSION,
       updateAvailable: false,
-      blockedUpdateNotice: null,
     });
   }
 });

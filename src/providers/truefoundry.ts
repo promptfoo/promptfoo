@@ -25,6 +25,7 @@ type TrueFoundryMCPServer = {
 };
 
 type TrueFoundryCompletionOptions = OpenAiCompletionOptions & {
+  task?: 'chat' | 'embedding';
   metadata?: TrueFoundryMetadata;
   loggingConfig?: TrueFoundryLoggingConfig;
   mcp_servers?: TrueFoundryMCPServer[];
@@ -38,11 +39,7 @@ type TrueFoundryProviderOptions = ProviderOptions & {
 type JsonRecord = Record<string, unknown>;
 
 const TRUEFOUNDRY_GUARDRAIL_ERROR_TYPE = 'guardrail_checks_failed';
-const DOWNSTREAM_GUARDRAIL_ERROR_CODES = new Set([
-  'content_filter',
-  'content_filter_error',
-  'content_policy_violation',
-]);
+const DOWNSTREAM_GUARDRAIL_ERROR_CODES = new Set(['content_filter', 'content_policy_violation']);
 const DOWNSTREAM_GUARDRAIL_MESSAGE_PATTERNS = [
   /\bresponse content blocked by label\b/i,
   /\b(?:prompt|input|response|output|completion) (?:was )?(?:blocked|filtered)\b/i,
@@ -129,6 +126,10 @@ function isGuardrailError(payload: JsonRecord, error: JsonRecord, message: strin
   ];
   if (contentFilterResults.some(hasFilteredContent)) {
     return true;
+  }
+
+  if (errorCode === 'content_filter_error' || innerErrorCode === 'content_filter_error') {
+    return false;
   }
 
   return DOWNSTREAM_GUARDRAIL_MESSAGE_PATTERNS.some((pattern) => pattern.test(message));
@@ -382,7 +383,7 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
  *
  * @param providerPath - Provider path, e.g., "truefoundry:openai/gpt-4"
  * @param options - Provider options
- * @returns A TrueFoundry provider (chat or embedding based on model type)
+ * @returns A TrueFoundry provider selected by config.task, with legacy model-name inference
  */
 export function createTrueFoundryProvider(
   providerPath: string,
@@ -395,8 +396,15 @@ export function createTrueFoundryProvider(
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
-  // Determine if this is an embedding model based on model name
-  const isEmbeddingModel = modelName.toLowerCase().includes('embedding');
+  const task = options.config?.config?.task;
+  if (task !== undefined && task !== 'chat' && task !== 'embedding') {
+    throw new Error('TrueFoundry config.task must be "chat" or "embedding"');
+  }
+
+  // Keep legacy inference when task is omitted. Account and deployment names are opaque,
+  // so explicit task selection must not consume or rewrite any part of the model name.
+  const isEmbeddingModel =
+    task === 'embedding' || (task === undefined && modelName.toLowerCase().includes('embedding'));
 
   const providerOptions: TrueFoundryProviderOptions = {
     ...options.config,
