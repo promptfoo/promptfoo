@@ -242,13 +242,13 @@ describe('package artifact readiness', () => {
 
   it('follows CommonJS package main and strips ESM URL suffixes', () => {
     write('dist/index.cjs', "require('./plugin');");
-    write('dist/plugin/package.json', JSON.stringify({ main: 'lib/start.js' }));
-    write('dist/plugin/lib/start.js', 'module.exports = true;');
+    write('dist/plugin/package.json', JSON.stringify({ main: 'lib' }));
+    write('dist/plugin/lib/index.js', 'module.exports = true;');
     write('dist/index.js', "import './chunk.js?cache=1#fragment';");
     write('dist/chunk.js', 'export {};');
 
     expect(computePackageArtifactClosure(packageRoot, 'dist/index.cjs')).toMatchObject({
-      files: ['dist/index.cjs', 'dist/plugin/lib/start.js'],
+      files: ['dist/index.cjs', 'dist/plugin/lib/index.js'],
       missingFiles: [],
     });
     expect(computePackageArtifactClosure(packageRoot, 'dist/index.js')).toMatchObject({
@@ -285,6 +285,30 @@ describe('package artifact readiness', () => {
       totalBytes: Buffer.byteLength(source) + binary.length * 2,
       missingFiles: [],
     });
+  });
+
+  it('scans extensionless JavaScript and rejects undeclared runtime externals', () => {
+    write('package.json', JSON.stringify({ dependencies: {} }));
+    write('dist/index.cjs', "require('./loader');");
+    write('dist/loader', "require('yaml');");
+
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.cjs')).toMatchObject({
+      files: ['dist/index.cjs', 'dist/loader'],
+      externalDependencies: ['yaml'],
+    });
+    const report = computePackageArtifactReadinessReport(packageRoot, [
+      {
+        name: 'fixture',
+        entrypoint: 'src/index.ts',
+        artifacts: { cjs: 'dist/index.cjs' },
+        allowedExternal: ['yaml'],
+        allowedBuiltins: [],
+        maxSourceFiles: 1,
+        maxArtifactFiles: 2,
+        maxArtifactBytes: 100,
+      },
+    ]);
+    expect(report.violations).toContain('fixture/cjs: undeclared external dependencies: yaml');
   });
 
   it('rejects format-specific dependency drift', () => {

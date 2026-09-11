@@ -398,7 +398,13 @@ function resolveArtifactImport(
       ? ['.js', '.json', '.node'].map((extension) => `${unresolvedPath}${extension}`)
       : []),
     ...(packageMain
-      ? [packageMain, ...['.js', '.json', '.node'].map((extension) => `${packageMain}${extension}`)]
+      ? [
+          packageMain,
+          ...['.js', '.json', '.node'].map((extension) => `${packageMain}${extension}`),
+          ...['index.js', 'index.json', 'index.node'].map((indexFile) =>
+            path.join(packageMain, indexFile),
+          ),
+        ]
       : []),
     ...(kind === 'require'
       ? ['index.js', 'index.json', 'index.node'].map((indexFile) =>
@@ -509,7 +515,7 @@ export function computePackageArtifactClosure(
     files.add(artifactPath);
     const contents = fs.readFileSync(absolutePath);
     totalBytes += contents.length;
-    if (!/\.(?:c|m)?js$/.test(artifactPath)) {
+    if (!/\.(?:c|m)?js$/.test(artifactPath) && path.extname(artifactPath) !== '') {
       continue;
     }
 
@@ -561,6 +567,17 @@ export function computePackageArtifactReadinessReport(
   candidates: PackageCandidateDefinition[],
 ): PackageArtifactReadinessReport {
   const violations: string[] = [];
+  const manifestPath = path.join(packageRoot, 'package.json');
+  const manifest = (
+    fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath, 'utf8')) : {}
+  ) as {
+    dependencies?: Record<string, string>;
+    peerDependencies?: Record<string, string>;
+  };
+  const declaredRuntimeDependencies = new Set([
+    ...Object.keys(manifest.dependencies ?? {}),
+    ...Object.keys(manifest.peerDependencies ?? {}),
+  ]);
   const reports = candidates.flatMap((candidate): PackageArtifactCandidateReport[] => {
     if (!candidate.artifacts) {
       return [];
@@ -595,6 +612,16 @@ export function computePackageArtifactReadinessReport(
         violations.push(
           `${candidate.name}/${format}: unexpected external dependencies: ${unexpectedExternal.join(', ')}`,
         );
+      }
+      if (fs.existsSync(manifestPath)) {
+        const undeclaredExternal = closure.externalDependencies.filter(
+          (dependency) => !declaredRuntimeDependencies.has(dependency),
+        );
+        if (undeclaredExternal.length > 0) {
+          violations.push(
+            `${candidate.name}/${format}: undeclared external dependencies: ${undeclaredExternal.join(', ')}`,
+          );
+        }
       }
       const unexpectedBuiltins = closure.nodeBuiltins.filter(
         (builtin) => !candidate.allowedBuiltins.includes(builtin),

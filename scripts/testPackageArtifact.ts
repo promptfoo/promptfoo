@@ -178,8 +178,7 @@ async function runAsync(
 }
 
 function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {}): string {
-  assert(process.env.npm_execpath, 'Expected npm_execpath when running package artifact test');
-  return run(process.execPath, [process.env.npm_execpath, ...args], cwd, envOverrides);
+  return run(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, cwd, envOverrides);
 }
 
 function assertPackagedFiles(packResult: PackResult): void {

@@ -57,6 +57,12 @@ const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
 const BUILTIN_MODULES = new Set(
   builtinModules.flatMap((moduleName) => [moduleName, moduleName.replace(/^node:/, '')]),
 );
+const PREFIX_ONLY_BUILTINS = new Set(
+  builtinModules
+    .filter((moduleName) => moduleName.startsWith('node:'))
+    .map((moduleName) => moduleName.slice('node:'.length))
+    .filter((moduleName) => !builtinModules.includes(moduleName)),
+);
 
 export function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
@@ -534,13 +540,21 @@ export function getExternalModuleName(specifier: string): string | undefined {
 /** The npm package name a specifier imports, or undefined for relative imports and Node builtins. */
 export function getPackageName(specifier: string): string | undefined {
   const moduleName = getExternalModuleName(specifier);
-  return moduleName && !BUILTIN_MODULES.has(moduleName) ? moduleName : undefined;
+  return moduleName &&
+    (!BUILTIN_MODULES.has(moduleName) ||
+      (!specifier.startsWith('node:') && PREFIX_ONLY_BUILTINS.has(moduleName)))
+    ? moduleName
+    : undefined;
 }
 
 /** The normalized Node builtin name a specifier imports, or undefined for npm/internal imports. */
 export function getNodeBuiltinName(specifier: string): string | undefined {
   const moduleName = getExternalModuleName(specifier);
-  return moduleName && BUILTIN_MODULES.has(moduleName) ? moduleName : undefined;
+  return moduleName &&
+    BUILTIN_MODULES.has(moduleName) &&
+    (specifier.startsWith('node:') || !PREFIX_ONLY_BUILTINS.has(moduleName))
+    ? moduleName
+    : undefined;
 }
 
 export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'leaf-external' | 'path';

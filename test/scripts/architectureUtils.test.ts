@@ -11,11 +11,19 @@ import {
   findViolations,
   getExternalModuleName,
   getLayerForFile,
+  getNodeBuiltinName,
+  getPackageName,
   getSourceFiles,
   type LayerConfig,
   readLayerConfig,
   resolveInternalModule,
 } from '../../scripts/architectureUtils';
+
+it('keeps prefix-only Node builtins distinct from npm packages', () => {
+  expect(getNodeBuiltinName('node:sqlite')).toBe('sqlite');
+  expect(getNodeBuiltinName('sqlite')).toBeUndefined();
+  expect(getPackageName('sqlite')).toBe('sqlite');
+});
 
 describe('extractModuleSpecifiers', () => {
   it('collects static ESM and CommonJS module specifiers', () => {
