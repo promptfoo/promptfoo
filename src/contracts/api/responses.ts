@@ -134,6 +134,7 @@ export const ProviderResponseSchemas = {
   },
   Discover: {
     Response: z.object({
+      tokenUsage: BaseTokenUsageSchema.optional(),
       purpose: z.string().nullable(),
       limitations: z.string().nullable(),
       user: z.string().nullable(),

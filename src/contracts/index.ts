@@ -5,6 +5,7 @@ export * from './api/common.js';
 export * from './api/configs.js';
 export * from './api/media.js';
 export * from './api/modelAudit.js';
+export * from './api/providers.js';
 export * from './api/responses.js';
 export * from './api/routes.js';
 export * from './api/traces.js';

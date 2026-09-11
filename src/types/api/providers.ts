@@ -1,4 +1,7 @@
 import { z } from 'zod';
+
+export { JsonProviderOptionsWithIdSchema } from '../../contracts/api/providers.js';
+
 import { ProviderOptionsSchema } from '../../validators/providers';
 import { ProviderResponseSchemas } from './responses.js';
 

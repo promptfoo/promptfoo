@@ -15,6 +15,7 @@ import {
   InputDefinitionObjectSchema,
   InputsSchema,
   isTransformFunction,
+  JsonProviderOptionsWithIdSchema,
   LoginRequestSchema,
   NODE_20_RUNTIME_NOTICE_ID,
   NODE_20_SUPPORT_END_DATE,
@@ -75,6 +76,29 @@ describe('contracts leaf surface', () => {
       expect(hasFunctionToolCallValidator({ validateFunctionToolCall: 'not-a-function' })).toBe(
         false,
       );
+    });
+
+    it('preserves the portable provider schema and its legacy export', async () => {
+      const legacy = await import('../../src/types/api/providers');
+      expect(legacy.JsonProviderOptionsWithIdSchema).toBe(JsonProviderOptionsWithIdSchema);
+      const provider = {
+        id: 'echo',
+        env: { CUSTOM_TEMPLATE_VAR: 'value' },
+        inputs: {
+          document: {
+            description: 'Review document',
+            type: 'docx',
+            config: { injectionPlacements: ['comment'] },
+          },
+        },
+      };
+      expect(JsonProviderOptionsWithIdSchema.parse(provider)).toEqual(provider);
+      expect(JsonProviderOptionsWithIdSchema.safeParse({ ...provider, id: '' }).success).toBe(
+        false,
+      );
+      expect(
+        JsonProviderOptionsWithIdSchema.safeParse({ ...provider, env: { invalid: 1 } }).success,
+      ).toBe(false);
     });
 
     it('re-exports runtime compatibility policy through the barrel', () => {

@@ -13,6 +13,7 @@ import { ErrorResponseSchema } from '../contracts/api/common';
 import { ConfigSchemas } from '../contracts/api/configs';
 import { MediaSchemas } from '../contracts/api/media';
 import { ModelAuditSchemas } from '../contracts/api/modelAudit';
+import { JsonProviderOptionsWithIdSchema } from '../contracts/api/providers';
 import { type ApiRouteContract, ApiRoutes } from '../contracts/api/routes';
 import { TracesSchemas } from '../contracts/api/traces';
 import { UserSchemas } from '../contracts/api/user';
@@ -45,19 +46,13 @@ const OpenApiCreateJobRequestSchema = z
   })
   .passthrough();
 
-const OpenApiProviderOptionsWithIdSchema = z
-  .object({
-    id: z.string().min(1),
-  })
-  .passthrough();
-
 const OpenApiTestProviderRequestSchema = z.object({
   prompt: z.string().optional(),
-  providerOptions: OpenApiProviderOptionsWithIdSchema,
+  providerOptions: JsonProviderOptionsWithIdSchema,
 });
 
 const OpenApiTestSessionRequestSchema = z.object({
-  provider: OpenApiProviderOptionsWithIdSchema,
+  provider: JsonProviderOptionsWithIdSchema,
   sessionConfig: z
     .object({
       sessionSource: z.string().optional(),
@@ -75,7 +70,6 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
 export const SERVER_OPENAPI_ROUTE_COUNT = 67;
 
 type OpenApiSchema = ZodMediaTypeObject['schema'];
-type RouteRequest = NonNullable<RouteConfig['request']>;
 type RegisteredRouteConfig = RouteConfig & {
   operationId: string;
   tags: string[];
@@ -85,43 +79,24 @@ export function createServerOpenApiRegistry() {
   const registry = new OpenAPIRegistry();
   const routes: RegisteredRouteConfig[] = [];
 
-  function schema<T extends z.ZodType>(_name: string, zodSchema: T): T {
-    // The DTO schemas are created before this generator runs. Passing them directly
-    // keeps @asteasolutions/zod-to-openapi isolated to docs generation instead of
-    // importing it from runtime validation modules just to attach `.openapi()`.
-    return zodSchema;
-  }
-
-  function params<T extends RouteRequest['params']>(name: string, zodSchema: T): T {
-    return schema(name, zodSchema as z.ZodType) as T;
-  }
-
-  function query<T extends RouteRequest['query']>(name: string, zodSchema: T): T {
-    return schema(name, zodSchema as z.ZodType) as T;
-  }
-
-  function jsonBody(name: string, zodSchema: z.ZodType, description = 'JSON request body') {
+  function jsonBody(zodSchema: z.ZodType, description = 'JSON request body') {
     return {
       description,
       required: true,
       content: {
         [APPLICATION_JSON]: {
-          schema: schema(name, zodSchema),
+          schema: zodSchema,
         },
       },
     };
   }
 
-  function jsonResponse(
-    name: string,
-    zodSchema: z.ZodType,
-    description = 'Successful response',
-  ): ResponseConfig {
+  function jsonResponse(zodSchema: z.ZodType, description = 'Successful response'): ResponseConfig {
     return {
       description,
       content: {
         [APPLICATION_JSON]: {
-          schema: schema(name, zodSchema),
+          schema: zodSchema,
         },
       },
     };
@@ -133,7 +108,7 @@ export function createServerOpenApiRegistry() {
         'Evaluation table data. `format=json` returns an exported table object and `format=csv` returns CSV.',
       content: {
         [APPLICATION_JSON]: {
-          schema: schema('EvalTableJsonResponse', OpenApiEvalTableJsonResponseSchema),
+          schema: OpenApiEvalTableJsonResponseSchema,
         },
         [TEXT_CSV]: {
           schema: {
@@ -156,7 +131,7 @@ export function createServerOpenApiRegistry() {
   }
 
   function errorResponse(description: string): ResponseConfig {
-    return jsonResponse('ErrorResponse', ErrorResponseSchema, description);
+    return jsonResponse(ErrorResponseSchema, description);
   }
 
   function validationError() {
@@ -234,32 +209,32 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Health, {
     responses: {
-      200: jsonResponse('HealthResponse', ServerSchemas.Health.Response),
+      200: jsonResponse(ServerSchemas.Health.Response),
     },
   });
 
   registerContract(ApiRoutes.RemoteHealth, {
     responses: {
-      200: jsonResponse('RemoteHealthResponse', ServerSchemas.RemoteHealth.Response),
+      200: jsonResponse(ServerSchemas.RemoteHealth.Response),
     },
   });
 
   registerContract(ApiRoutes.Results.List, {
     request: {
-      query: query('ListResultsQuery', ServerSchemas.ResultList.Query),
+      query: ServerSchemas.ResultList.Query,
     },
     responses: {
-      200: jsonResponse('ListResultsResponse', ServerSchemas.ResultList.Response),
+      200: jsonResponse(ServerSchemas.ResultList.Response),
       400: validationError(),
     },
   });
 
   registerContract(ApiRoutes.Results.Get, {
     request: {
-      params: params('ResultParams', ServerSchemas.Result.Params),
+      params: ServerSchemas.Result.Params,
     },
     responses: {
-      200: jsonResponse('ResultResponse', ServerSchemas.Result.Response),
+      200: jsonResponse(ServerSchemas.Result.Response),
       400: validationError(),
       404: notFound('Result not found'),
     },
@@ -267,42 +242,42 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Prompts.List, {
     responses: {
-      200: jsonResponse('PromptsResponse', ServerSchemas.Prompts.Response),
+      200: jsonResponse(ServerSchemas.Prompts.Response),
     },
   });
 
   registerContract(ApiRoutes.History, {
     request: {
-      query: query('HistoryQuery', ServerSchemas.History.Query),
+      query: ServerSchemas.History.Query,
     },
     responses: {
-      200: jsonResponse('HistoryResponse', ServerSchemas.History.Response),
+      200: jsonResponse(ServerSchemas.History.Response),
       400: validationError(),
     },
   });
 
   registerContract(ApiRoutes.Prompts.Get, {
     request: {
-      params: params('PromptHashParams', ServerSchemas.Prompt.Params),
+      params: ServerSchemas.Prompt.Params,
     },
     responses: {
-      200: jsonResponse('PromptResponse', ServerSchemas.Prompt.Response),
+      200: jsonResponse(ServerSchemas.Prompt.Response),
       400: validationError(),
     },
   });
 
   registerContract(ApiRoutes.Datasets, {
     responses: {
-      200: jsonResponse('DatasetsResponse', ServerSchemas.Datasets.Response),
+      200: jsonResponse(ServerSchemas.Datasets.Response),
     },
   });
 
   registerContract(ApiRoutes.Results.ShareCheckDomain, {
     request: {
-      query: query('ShareCheckDomainQuery', ServerSchemas.ShareCheckDomain.Query),
+      query: ServerSchemas.ShareCheckDomain.Query,
     },
     responses: {
-      200: jsonResponse('ShareCheckDomainResponse', ServerSchemas.ShareCheckDomain.Response),
+      200: jsonResponse(ServerSchemas.ShareCheckDomain.Response),
       400: validationError(),
       404: notFound('Evaluation not found'),
     },
@@ -310,10 +285,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Results.Share, {
     request: {
-      body: jsonBody('ShareRequest', ServerSchemas.Share.Request),
+      body: jsonBody(ServerSchemas.Share.Request),
     },
     responses: {
-      200: jsonResponse('ShareResponse', ServerSchemas.Share.Response),
+      200: jsonResponse(ServerSchemas.Share.Response),
       400: validationError(),
       404: notFound('Evaluation not found'),
       500: serverError(),
@@ -322,20 +297,20 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.DatasetGenerate, {
     request: {
-      body: jsonBody('DatasetGenerateRequest', ServerSchemas.DatasetGenerate.Request),
+      body: jsonBody(ServerSchemas.DatasetGenerate.Request),
     },
     responses: {
-      200: jsonResponse('DatasetGenerateResponse', ServerSchemas.DatasetGenerate.Response),
+      200: jsonResponse(ServerSchemas.DatasetGenerate.Response),
       400: validationError(),
     },
   });
 
   registerContract(ApiRoutes.Telemetry, {
     request: {
-      body: jsonBody('TelemetryEvent', ServerSchemas.Telemetry.Request),
+      body: jsonBody(ServerSchemas.Telemetry.Request),
     },
     responses: {
-      200: jsonResponse('TelemetryResponse', ServerSchemas.Telemetry.Response),
+      200: jsonResponse(ServerSchemas.Telemetry.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -343,10 +318,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Configs.List, {
     request: {
-      query: query('ListConfigsQuery', ConfigSchemas.List.Query),
+      query: ConfigSchemas.List.Query,
     },
     responses: {
-      200: jsonResponse('ListConfigsResponse', ConfigSchemas.List.Response),
+      200: jsonResponse(ConfigSchemas.List.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -354,10 +329,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Configs.Create, {
     request: {
-      body: jsonBody('CreateConfigRequest', ConfigSchemas.Create.Request),
+      body: jsonBody(ConfigSchemas.Create.Request),
     },
     responses: {
-      200: jsonResponse('CreateConfigResponse', ConfigSchemas.Create.Response),
+      200: jsonResponse(ConfigSchemas.Create.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -365,10 +340,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Configs.ListByType, {
     request: {
-      params: params('ListConfigsByTypeParams', ConfigSchemas.ListByType.Params),
+      params: ConfigSchemas.ListByType.Params,
     },
     responses: {
-      200: jsonResponse('ListConfigsByTypeResponse', ConfigSchemas.ListByType.Response),
+      200: jsonResponse(ConfigSchemas.ListByType.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -376,10 +351,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Configs.Get, {
     request: {
-      params: params('GetConfigParams', ConfigSchemas.Get.Params),
+      params: ConfigSchemas.Get.Params,
     },
     responses: {
-      200: jsonResponse('GetConfigResponse', ConfigSchemas.Get.Response),
+      200: jsonResponse(ConfigSchemas.Get.Response),
       400: validationError(),
       404: notFound('Config not found'),
       500: serverError(),
@@ -388,20 +363,20 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.CreateJob, {
     request: {
-      body: jsonBody('CreateJobRequest', OpenApiCreateJobRequestSchema),
+      body: jsonBody(OpenApiCreateJobRequestSchema),
     },
     responses: {
-      200: jsonResponse('CreateJobResponse', EvalSchemas.CreateJob.Response),
+      200: jsonResponse(EvalSchemas.CreateJob.Response),
       400: validationError(),
     },
   });
 
   registerContract(ApiRoutes.Eval.GetJob, {
     request: {
-      params: params('GetJobParams', EvalSchemas.GetJob.Params),
+      params: EvalSchemas.GetJob.Params,
     },
     responses: {
-      200: jsonResponse('GetJobResponse', EvalSchemas.GetJob.Response),
+      200: jsonResponse(EvalSchemas.GetJob.Response),
       400: validationError(),
       404: notFound('Job not found'),
     },
@@ -409,11 +384,11 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.Update, {
     request: {
-      params: params('UpdateEvalParams', EvalSchemas.Update.Params),
-      body: jsonBody('UpdateEvalRequest', EvalSchemas.Update.Request),
+      params: EvalSchemas.Update.Params,
+      body: jsonBody(EvalSchemas.Update.Request),
     },
     responses: {
-      200: jsonResponse('UpdateEvalResponse', EvalSchemas.Update.Response),
+      200: jsonResponse(EvalSchemas.Update.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -421,11 +396,11 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.UpdateAuthor, {
     request: {
-      params: params('UpdateEvalAuthorParams', EvalSchemas.UpdateAuthor.Params),
-      body: jsonBody('UpdateEvalAuthorRequest', EvalSchemas.UpdateAuthor.Request),
+      params: EvalSchemas.UpdateAuthor.Params,
+      body: jsonBody(EvalSchemas.UpdateAuthor.Request),
     },
     responses: {
-      200: jsonResponse('UpdateEvalAuthorResponse', EvalSchemas.UpdateAuthor.Response),
+      200: jsonResponse(EvalSchemas.UpdateAuthor.Response),
       400: validationError(),
       404: notFound('Evaluation not found'),
       500: serverError(),
@@ -434,8 +409,8 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.Table, {
     request: {
-      params: params('EvalTableParams', EvalSchemas.Table.Params),
-      query: query('EvalTableQuery', EvalSchemas.Table.Query),
+      params: EvalSchemas.Table.Params,
+      query: EvalSchemas.Table.Query,
     },
     responses: {
       200: evalTableResponse(),
@@ -448,11 +423,11 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.MetadataKeys, {
     request: {
-      params: params('GetMetadataKeysParams', EvalSchemas.MetadataKeys.Params),
-      query: query('GetMetadataKeysQuery', EvalSchemas.MetadataKeys.Query),
+      params: EvalSchemas.MetadataKeys.Params,
+      query: EvalSchemas.MetadataKeys.Query,
     },
     responses: {
-      200: jsonResponse('GetMetadataKeysResponse', EvalSchemas.MetadataKeys.Response),
+      200: jsonResponse(EvalSchemas.MetadataKeys.Response),
       400: validationError(),
       404: notFound('Evaluation not found'),
       500: serverError(),
@@ -461,11 +436,11 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.MetadataValues, {
     request: {
-      params: params('GetMetadataValuesParams', EvalSchemas.MetadataValues.Params),
-      query: query('GetMetadataValuesQuery', EvalSchemas.MetadataValues.Query),
+      params: EvalSchemas.MetadataValues.Params,
+      query: EvalSchemas.MetadataValues.Query,
     },
     responses: {
-      200: jsonResponse('GetMetadataValuesResponse', EvalSchemas.MetadataValues.Response),
+      200: jsonResponse(EvalSchemas.MetadataValues.Response),
       400: validationError(),
       404: notFound('Evaluation not found'),
       500: serverError(),
@@ -474,8 +449,8 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.AddResults, {
     request: {
-      params: params('AddResultsParams', EvalSchemas.AddResults.Params),
-      body: jsonBody('AddResultsRequest', EvalSchemas.AddResults.Request),
+      params: EvalSchemas.AddResults.Params,
+      body: jsonBody(EvalSchemas.AddResults.Request),
     },
     responses: {
       204: noContent('Results added'),
@@ -487,10 +462,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.Replay, {
     request: {
-      body: jsonBody('ReplayRequest', EvalSchemas.Replay.Request),
+      body: jsonBody(EvalSchemas.Replay.Request),
     },
     responses: {
-      200: jsonResponse('ReplayResponse', EvalSchemas.Replay.Response),
+      200: jsonResponse(EvalSchemas.Replay.Response),
       400: validationError(),
       404: notFound('Evaluation not found'),
       500: serverError(),
@@ -499,11 +474,11 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.SubmitRating, {
     request: {
-      params: params('SubmitRatingParams', EvalSchemas.SubmitRating.Params),
-      body: jsonBody('SubmitRatingRequest', EvalSchemas.SubmitRating.Request),
+      params: EvalSchemas.SubmitRating.Params,
+      body: jsonBody(EvalSchemas.SubmitRating.Request),
     },
     responses: {
-      200: jsonResponse('SubmitRatingResponse', EvalSchemas.SubmitRating.Response),
+      200: jsonResponse(EvalSchemas.SubmitRating.Response),
       400: validationError(),
       404: notFound('Result or evaluation not found'),
       500: serverError(),
@@ -512,10 +487,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.Save, {
     request: {
-      body: jsonBody('SaveEvalRequest', EvalSchemas.Save.Request),
+      body: jsonBody(EvalSchemas.Save.Request),
     },
     responses: {
-      200: jsonResponse('SaveEvalResponse', EvalSchemas.Save.Response),
+      200: jsonResponse(EvalSchemas.Save.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -523,10 +498,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.Delete, {
     request: {
-      params: params('DeleteEvalParams', EvalSchemas.Delete.Params),
+      params: EvalSchemas.Delete.Params,
     },
     responses: {
-      200: jsonResponse('DeleteEvalResponse', EvalSchemas.Delete.Response),
+      200: jsonResponse(EvalSchemas.Delete.Response),
       400: validationError(),
       404: notFound('Evaluation not found'),
       500: serverError(),
@@ -535,7 +510,7 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.BulkDelete, {
     request: {
-      body: jsonBody('BulkDeleteEvalsRequest', EvalSchemas.BulkDelete.Request),
+      body: jsonBody(EvalSchemas.BulkDelete.Request),
     },
     responses: {
       204: noContent('Evaluations deleted'),
@@ -546,11 +521,11 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Eval.Copy, {
     request: {
-      params: params('CopyEvalParams', EvalSchemas.Copy.Params),
-      body: jsonBody('CopyEvalRequest', EvalSchemas.Copy.Request),
+      params: EvalSchemas.Copy.Params,
+      body: jsonBody(EvalSchemas.Copy.Request),
     },
     responses: {
-      201: jsonResponse('CopyEvalResponse', EvalSchemas.Copy.Response, 'Evaluation copied'),
+      201: jsonResponse(EvalSchemas.Copy.Response, 'Evaluation copied'),
       400: validationError(),
       404: notFound('Evaluation not found'),
       500: serverError(),
@@ -559,17 +534,17 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Media.Stats, {
     responses: {
-      200: jsonResponse('MediaStatsResponse', MediaSchemas.Stats.Response),
+      200: jsonResponse(MediaSchemas.Stats.Response),
       500: serverError(),
     },
   });
 
   registerContract(ApiRoutes.Media.Info, {
     request: {
-      params: params('MediaInfoParams', MediaSchemas.Info.Params),
+      params: MediaSchemas.Info.Params,
     },
     responses: {
-      200: jsonResponse('MediaInfoResponse', MediaSchemas.Info.Response),
+      200: jsonResponse(MediaSchemas.Info.Response),
       400: validationError(),
       404: notFound('Media not found'),
       500: serverError(),
@@ -578,7 +553,7 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Media.Get, {
     request: {
-      params: params('MediaParams', MediaSchemas.Get.Params),
+      params: MediaSchemas.Get.Params,
     },
     responses: {
       200: binaryResponse('Media bytes'),
@@ -590,13 +565,13 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.ModelAudit.CheckInstalled, {
     responses: {
-      200: jsonResponse('CheckInstalledResponse', ModelAuditSchemas.CheckInstalled.Response),
+      200: jsonResponse(ModelAuditSchemas.CheckInstalled.Response),
     },
   });
 
   registerContract(ApiRoutes.ModelAudit.ListScanners, {
     responses: {
-      200: jsonResponse('ListScannersResponse', ModelAuditSchemas.ListScanners.Response),
+      200: jsonResponse(ModelAuditSchemas.ListScanners.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -604,10 +579,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.ModelAudit.CheckPath, {
     request: {
-      body: jsonBody('CheckPathRequest', ModelAuditSchemas.CheckPath.Request),
+      body: jsonBody(ModelAuditSchemas.CheckPath.Request),
     },
     responses: {
-      200: jsonResponse('CheckPathResponse', ModelAuditSchemas.CheckPath.Response),
+      200: jsonResponse(ModelAuditSchemas.CheckPath.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -615,21 +590,21 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.ModelAudit.Scan, {
     request: {
-      body: jsonBody('ScanRequest', ModelAuditSchemas.Scan.Request),
+      body: jsonBody(ModelAuditSchemas.Scan.Request),
     },
     responses: {
-      200: jsonResponse('ScanResponse', ModelAuditSchemas.Scan.Response),
+      200: jsonResponse(ModelAuditSchemas.Scan.Response),
       400: validationError(),
-      500: jsonResponse('ScanErrorResponse', ModelAuditSchemas.Scan.ErrorResponse),
+      500: jsonResponse(ModelAuditSchemas.Scan.ErrorResponse),
     },
   });
 
   registerContract(ApiRoutes.ModelAudit.ListScans, {
     request: {
-      query: query('ListScansQuery', ModelAuditSchemas.ListScans.Query),
+      query: ModelAuditSchemas.ListScans.Query,
     },
     responses: {
-      200: jsonResponse('ListScansResponse', ModelAuditSchemas.ListScans.Response),
+      200: jsonResponse(ModelAuditSchemas.ListScans.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -637,7 +612,7 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.ModelAudit.GetLatestScan, {
     responses: {
-      200: jsonResponse('GetLatestScanResponse', ModelAuditSchemas.GetLatestScan.Response),
+      200: jsonResponse(ModelAuditSchemas.GetLatestScan.Response),
       404: notFound('No scans found'),
       500: serverError(),
     },
@@ -645,10 +620,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.ModelAudit.GetScan, {
     request: {
-      params: params('GetScanParams', ModelAuditSchemas.GetScan.Params),
+      params: ModelAuditSchemas.GetScan.Params,
     },
     responses: {
-      200: jsonResponse('GetScanResponse', ModelAuditSchemas.GetScan.Response),
+      200: jsonResponse(ModelAuditSchemas.GetScan.Response),
       400: validationError(),
       404: notFound('Model scan not found'),
       500: serverError(),
@@ -657,10 +632,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.ModelAudit.DeleteScan, {
     request: {
-      params: params('DeleteScanParams', ModelAuditSchemas.DeleteScan.Params),
+      params: ModelAuditSchemas.DeleteScan.Params,
     },
     responses: {
-      200: jsonResponse('DeleteScanResponse', ModelAuditSchemas.DeleteScan.Response),
+      200: jsonResponse(ModelAuditSchemas.DeleteScan.Response),
       400: validationError(),
       404: notFound('Model scan not found'),
       500: serverError(),
@@ -669,17 +644,17 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Providers.ConfigStatus, {
     responses: {
-      200: jsonResponse('ConfigStatusResponse', ProviderSchemas.ConfigStatus.Response),
+      200: jsonResponse(ProviderSchemas.ConfigStatus.Response),
       500: serverError(),
     },
   });
 
   registerContract(ApiRoutes.Providers.Test, {
     request: {
-      body: jsonBody('TestProviderRequest', OpenApiTestProviderRequestSchema),
+      body: jsonBody(OpenApiTestProviderRequestSchema),
     },
     responses: {
-      200: jsonResponse('TestProviderResponse', ProviderSchemas.Test.Response),
+      200: jsonResponse(ProviderSchemas.Test.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -687,10 +662,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Providers.Discover, {
     request: {
-      body: jsonBody('DiscoverRequest', OpenApiProviderOptionsWithIdSchema),
+      body: jsonBody(JsonProviderOptionsWithIdSchema),
     },
     responses: {
-      200: jsonResponse('DiscoverResponse', ProviderSchemas.Discover.Response),
+      200: jsonResponse(ProviderSchemas.Discover.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -698,7 +673,7 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Providers.HttpGenerator, {
     request: {
-      body: jsonBody('HttpGeneratorRequest', ProviderSchemas.HttpGenerator.Request),
+      body: jsonBody(ProviderSchemas.HttpGenerator.Request),
     },
     responses: {
       200: rawJsonResponse('Generated HTTP provider config', {}),
@@ -709,36 +684,30 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Providers.TestRequestTransform, {
     request: {
-      body: jsonBody('TestRequestTransformRequest', ProviderSchemas.TestRequestTransform.Request),
+      body: jsonBody(ProviderSchemas.TestRequestTransform.Request),
     },
     responses: {
-      200: jsonResponse(
-        'TestRequestTransformResponse',
-        ProviderSchemas.TestRequestTransform.Response,
-      ),
-      400: jsonResponse('ProviderTransformErrorResponse', ErrorResponseSchema),
+      200: jsonResponse(ProviderSchemas.TestRequestTransform.Response),
+      400: jsonResponse(ErrorResponseSchema),
     },
   });
 
   registerContract(ApiRoutes.Providers.TestResponseTransform, {
     request: {
-      body: jsonBody('TestResponseTransformRequest', ProviderSchemas.TestResponseTransform.Request),
+      body: jsonBody(ProviderSchemas.TestResponseTransform.Request),
     },
     responses: {
-      200: jsonResponse(
-        'TestResponseTransformResponse',
-        ProviderSchemas.TestResponseTransform.Response,
-      ),
-      400: jsonResponse('ProviderTransformErrorResponse', ErrorResponseSchema),
+      200: jsonResponse(ProviderSchemas.TestResponseTransform.Response),
+      400: jsonResponse(ErrorResponseSchema),
     },
   });
 
   registerContract(ApiRoutes.Providers.TestSession, {
     request: {
-      body: jsonBody('TestSessionRequest', OpenApiTestSessionRequestSchema),
+      body: jsonBody(OpenApiTestSessionRequestSchema),
     },
     responses: {
-      200: jsonResponse('TestSessionResponse', ProviderSchemas.TestSession.Response),
+      200: jsonResponse(ProviderSchemas.TestSession.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -746,10 +715,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Redteam.GenerateTest, {
     request: {
-      body: jsonBody('TestCaseGenerationRequest', RedteamSchemas.GenerateTest.Request),
+      body: jsonBody(RedteamSchemas.GenerateTest.Request),
     },
     responses: {
-      200: jsonResponse('TestCaseGenerationResponse', RedteamSchemas.GenerateTest.Response),
+      200: jsonResponse(RedteamSchemas.GenerateTest.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -757,25 +726,25 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Redteam.Run, {
     request: {
-      body: jsonBody('RedteamRunRequest', RedteamSchemas.Run.Request),
+      body: jsonBody(RedteamSchemas.Run.Request),
     },
     responses: {
-      200: jsonResponse('RedteamRunResponse', RedteamSchemas.Run.Response),
+      200: jsonResponse(RedteamSchemas.Run.Response),
       400: validationError(),
     },
   });
 
   registerContract(ApiRoutes.Redteam.Cancel, {
     responses: {
-      200: jsonResponse('RedteamCancelResponse', RedteamSchemas.Cancel.Response),
+      200: jsonResponse(RedteamSchemas.Cancel.Response),
       400: validationError(),
     },
   });
 
   registerContract(ApiRoutes.Redteam.Task, {
     request: {
-      params: params('RedteamTaskParams', RedteamSchemas.Task.Params),
-      body: jsonBody('RedteamTaskRequest', RedteamSchemas.Task.Request),
+      params: RedteamSchemas.Task.Params,
+      body: jsonBody(RedteamSchemas.Task.Request),
     },
     responses: {
       200: rawJsonResponse('Task-specific JSON response', {}),
@@ -786,16 +755,16 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Redteam.Status, {
     responses: {
-      200: jsonResponse('RedteamStatusResponse', RedteamSchemas.Status.Response),
+      200: jsonResponse(RedteamSchemas.Status.Response),
     },
   });
 
   registerContract(ApiRoutes.Traces.GetByEval, {
     request: {
-      params: params('GetTracesByEvalParams', TracesSchemas.GetByEval.Params),
+      params: TracesSchemas.GetByEval.Params,
     },
     responses: {
-      200: jsonResponse('GetTracesByEvalResponse', TracesSchemas.GetByEval.Response),
+      200: jsonResponse(TracesSchemas.GetByEval.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -803,10 +772,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Traces.Get, {
     request: {
-      params: params('GetTraceParams', TracesSchemas.Get.Params),
+      params: TracesSchemas.Get.Params,
     },
     responses: {
-      200: jsonResponse('GetTraceResponse', TracesSchemas.Get.Response),
+      200: jsonResponse(TracesSchemas.Get.Response),
       400: validationError(),
       404: notFound('Trace not found'),
       500: serverError(),
@@ -815,24 +784,24 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.User.Get, {
     responses: {
-      200: jsonResponse('GetUserResponse', UserSchemas.Get.Response),
+      200: jsonResponse(UserSchemas.Get.Response),
       500: serverError(),
     },
   });
 
   registerContract(ApiRoutes.User.GetId, {
     responses: {
-      200: jsonResponse('GetUserIdResponse', UserSchemas.GetId.Response),
+      200: jsonResponse(UserSchemas.GetId.Response),
       500: serverError(),
     },
   });
 
   registerContract(ApiRoutes.User.Update, {
     request: {
-      body: jsonBody('UpdateUserRequest', UserSchemas.Update.Request),
+      body: jsonBody(UserSchemas.Update.Request),
     },
     responses: {
-      200: jsonResponse('UpdateUserResponse', UserSchemas.Update.Response),
+      200: jsonResponse(UserSchemas.Update.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -840,17 +809,17 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.User.ClearEmail, {
     responses: {
-      200: jsonResponse('ClearUserEmailResponse', UserSchemas.ClearEmail.Response),
+      200: jsonResponse(UserSchemas.ClearEmail.Response),
       500: serverError(),
     },
   });
 
   registerContract(ApiRoutes.User.EmailStatus, {
     request: {
-      query: query('GetEmailStatusQuery', UserSchemas.EmailStatus.Query),
+      query: UserSchemas.EmailStatus.Query,
     },
     responses: {
-      200: jsonResponse('GetEmailStatusResponse', UserSchemas.EmailStatus.Response),
+      200: jsonResponse(UserSchemas.EmailStatus.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -858,10 +827,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.User.Login, {
     request: {
-      body: jsonBody('LoginRequest', UserSchemas.Login.Request),
+      body: jsonBody(UserSchemas.Login.Request),
     },
     responses: {
-      200: jsonResponse('LoginResponse', UserSchemas.Login.Response),
+      200: jsonResponse(UserSchemas.Login.Response),
       400: validationError(),
       401: errorResponse('Authentication failed'),
     },
@@ -869,31 +838,31 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.User.Logout, {
     responses: {
-      200: jsonResponse('LogoutResponse', UserSchemas.Logout.Response),
+      200: jsonResponse(UserSchemas.Logout.Response),
       500: serverError(),
     },
   });
 
   registerContract(ApiRoutes.User.CloudConfig, {
     responses: {
-      200: jsonResponse('CloudConfigResponse', UserSchemas.CloudConfig.Response),
+      200: jsonResponse(UserSchemas.CloudConfig.Response),
       500: serverError(),
     },
   });
 
   registerContract(ApiRoutes.Version, {
     responses: {
-      200: jsonResponse('VersionResponse', VersionSchemas.Response),
+      200: jsonResponse(VersionSchemas.Response),
       500: serverError(),
     },
   });
 
   registerContract(ApiRoutes.Blobs.Library, {
     request: {
-      query: query('MediaLibraryQuery', BlobsSchemas.Library.Query),
+      query: BlobsSchemas.Library.Query,
     },
     responses: {
-      200: jsonResponse('MediaLibraryResponse', BlobsSchemas.Library.Response),
+      200: jsonResponse(BlobsSchemas.Library.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -901,10 +870,10 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Blobs.LibraryEvals, {
     request: {
-      query: query('MediaLibraryEvalsQuery', BlobsSchemas.LibraryEvals.Query),
+      query: BlobsSchemas.LibraryEvals.Query,
     },
     responses: {
-      200: jsonResponse('MediaLibraryEvalsResponse', BlobsSchemas.LibraryEvals.Response),
+      200: jsonResponse(BlobsSchemas.LibraryEvals.Response),
       400: validationError(),
       500: serverError(),
     },
@@ -912,7 +881,7 @@ export function createServerOpenApiRegistry() {
 
   registerContract(ApiRoutes.Blobs.Get, {
     request: {
-      params: params('GetBlobParams', BlobsSchemas.Get.Params),
+      params: BlobsSchemas.Get.Params,
     },
     responses: {
       200: binaryResponse('Blob bytes'),

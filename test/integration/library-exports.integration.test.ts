@@ -28,7 +28,7 @@ const contractsRuntimeBudgetBytes = {
   'contracts.js': 60_000,
   'contracts.cjs': 70_000,
 } as const;
-const contractsDeclarationClosureBudgetBytes = 95_000;
+const contractsDeclarationClosureBudgetBytes = 120_000;
 
 function resolveLocalModule(importerPath: string, specifier: string): string {
   const resolvedPath = path.resolve(path.dirname(importerPath), specifier);
@@ -183,8 +183,7 @@ describeIfBuildExists('Library Exports', () => {
       // chunk), not just the shim, so a regression that inlines a heavy dep into a chunk is caught.
       for (const [entry, budgetBytes] of Object.entries(contractsRuntimeBudgetBytes)) {
         const { totalBytes, bareSpecifiers } = readModuleClosure(path.join(distDir, entry));
-        // Shared local API routes and response schemas bring the closures to ~47KB ESM / ~57KB
-        // CJS. Keep format-specific headroom while still catching a leaked or inlined dependency.
+        // Keep runtime size bounded while catching leaked or inlined dependencies.
         expect(totalBytes).toBeLessThan(budgetBytes);
         // Leaf-safe contract: zod is the ONLY external the subpath may pull. This catches both a
         // newly-leaked dependency (extra entry) AND zod accidentally being inlined (zod disappears).
@@ -195,7 +194,7 @@ describeIfBuildExists('Library Exports', () => {
         const declarationPath = path.join(distDir, declaration);
         expect(fs.existsSync(declarationPath)).toBe(true);
         const { totalBytes, bareSpecifiers } = readModuleClosure(declarationPath);
-        // The entry and its generated transform declaration chunk total ~80KB in either format.
+        // Shared API and provider schemas produce about 106 KB of declarations.
         expect(totalBytes).toBeLessThan(contractsDeclarationClosureBudgetBytes);
         expect([...bareSpecifiers].sort()).toEqual(['zod']);
       }

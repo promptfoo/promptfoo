@@ -1,5 +1,7 @@
+import type { Server } from 'node:http';
+
 import request from 'supertest';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 // Mock dependencies
@@ -33,10 +35,20 @@ const mockedNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 
 describe('Redteam Routes', () => {
-  let app: ReturnType<typeof createApp>;
+  let app: Server;
 
-  beforeEach(() => {
-    app = createApp();
+  beforeAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      app = createApp().listen(0, '127.0.0.1', (error?: Error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+  });
+
+  afterAll(async () => {
+    await new Promise<void>((resolve, reject) => {
+      app.close((error) => (error ? reject(error) : resolve()));
+    });
   });
 
   describe('POST /redteam/generate-test', () => {

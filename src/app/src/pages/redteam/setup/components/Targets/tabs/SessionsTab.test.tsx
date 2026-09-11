@@ -6,31 +6,7 @@ import SessionsTab from './SessionsTab';
 import type { ProviderOptions } from '@promptfoo/types';
 
 // Mock the callApi utility
-vi.mock('@app/utils/api', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@app/utils/api')>()),
-  callApi: vi.fn(),
-  callApiResult: vi.fn(
-    async (
-      route: { clientPath: string },
-      schema: { parse: (value: unknown) => unknown },
-      options?: RequestInit,
-    ) => {
-      const response = await vi.mocked(callApi)(route.clientPath, options);
-      const body = await response.json();
-      if (!response.ok) {
-        return {
-          ok: false,
-          error: {
-            message: body.message ?? body.error ?? 'Request failed',
-            body,
-          },
-          response,
-        };
-      }
-      return { ok: true, data: schema.parse(body), response };
-    },
-  ),
-}));
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 
 // Mock the VariableSelectionDialog component
 vi.mock('./VariableSelectionDialog', () => ({
