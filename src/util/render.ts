@@ -121,13 +121,13 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): 
   }
   if (typeof obj === 'string') {
     const nativePath = obj.match(
-      /^\s*\{\{\s*([A-Za-z_$][\w$]*(?:(?:\.[A-Za-z_$][\w$]*)|(?:\[['"][^'"]+['"]\]))*)\s*\}\}\s*$/,
+      /^\s*\{\{\s*([A-Za-z_$][\w$]*(?:(?:\.[A-Za-z_$][\w$]*)|(?:\[\s*(?:['"][^'"]+['"]|\d+)\s*\]))*)\s*\}\}\s*$/,
     )?.[1];
     if (nativePath) {
       let value: unknown = vars;
-      const keys = [...nativePath.matchAll(/(?:^|\.)([A-Za-z_$][\w$]*)|\[['"]([^'"]+)['"]\]/g)].map(
-        (match) => match[1] ?? match[2],
-      );
+      const keys = [
+        ...nativePath.matchAll(/(?:^|\.)([A-Za-z_$][\w$]*)|\[\s*(?:['"]([^'"]+)['"]|(\d+))\s*\]/g),
+      ].map((match) => match[1] ?? match[2] ?? String(Number(match[3])));
       for (const key of keys) {
         if (
           !value ||

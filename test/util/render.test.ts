@@ -56,6 +56,18 @@ describe('renderVarsInObject', () => {
     ).toEqual({ limit: 5, enabled: true });
   });
 
+  it.each([
+    ['{{ values[0] }}', 0],
+    ['{{ values[ 1 ] }}', false],
+    ['{{ values[2].items[0] }}', { count: 5 }],
+  ])('preserves native values for array expression %s', (expression, expected) => {
+    expect(
+      renderVarsInObject(expression, {
+        values: [0, false, { items: [{ count: 5 }] }],
+      }),
+    ).toEqual(expected);
+  });
+
   it('should render variables in array objects', async () => {
     const obj = ['{{ greeting }}', '{{ name }}', 42];
     const vars = { greeting: 'Hello', name: 'World' };
