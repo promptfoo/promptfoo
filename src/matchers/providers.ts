@@ -61,24 +61,27 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  const callProvider = (): Promise<T> => {
+  const invokeProvider = (): Promise<T> => {
     executionContext?.queuedCallAbortSignal?.throwIfAborted();
-    const promise = tracingContext
+    return tracingContext
       ? (tracingContext.withProviderSpan(
           { provider, callContext, operationName, role: 'grader', promptLabel: label },
           invoke,
         ) as Promise<T>)
       : invoke(callContext);
-    return raceWithAbortSignal(promise, executionContext?.queuedCallAbortSignal);
   };
+  const callProvider = () =>
+    raceWithAbortSignal(invokeProvider(), executionContext?.queuedCallAbortSignal);
 
   const executeCall = () => {
     executionContext?.queuedCallAbortSignal?.throwIfAborted();
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
+      // Keep the limiter slot until the provider settles, even if the caller times out.
+      // Some providers cannot stop an in-flight request when their signal aborts.
       return raceWithAbortSignal(
         executionContext.rateLimitRegistry.execute(
           provider,
-          callProvider,
+          invokeProvider,
           createProviderRateLimitOptions(executionContext.queuedCallAbortSignal),
         ),
         executionContext.queuedCallAbortSignal,
