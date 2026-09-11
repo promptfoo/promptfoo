@@ -169,11 +169,6 @@ export async function getShareAuthorizedBlob(
   return getBlobByHash(hash);
 }
 
-export async function getBlobUrl(hash: string, expiresInSeconds?: number): Promise<string | null> {
-  const provider = getBlobStorageProvider();
-  return provider.getUrl(hash, expiresInSeconds);
-}
-
 export async function recordBlobReference(
   hash: string,
   refContext: {
