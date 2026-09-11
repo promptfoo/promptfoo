@@ -126,7 +126,7 @@ describe('constants', () => {
   });
 
   it('ADDITIONAL_PLUGINS should contain supported coding-agent plugins', () => {
-    expect(CODING_AGENT_PLUGINS).toEqual(expect.arrayContaining(CODEX_AGENT_PLUGINS));
+    expect(CODING_AGENT_PLUGINS).toEqual(expect.arrayContaining([...CODEX_AGENT_PLUGINS]));
 
     CODING_AGENT_PLUGINS.forEach((plugin) => {
       expect(ADDITIONAL_PLUGINS).toContain(plugin);

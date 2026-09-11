@@ -8366,8 +8366,9 @@ function requiredTraceCompletenessEvents(
       TRACE_COMPLETENESS_EVENT_TYPES.has(eventType as TraceCompletenessEventType),
   );
 
-  const defaultEvents: TraceCompletenessEventType[] = ['policy', 'agent-response'];
-  return [...new Set(configuredEvents.length ? configuredEvents : defaultEvents)];
+  return [
+    ...new Set(configuredEvents.length ? configuredEvents : DEFAULT_TRACE_COMPLETENESS_EVENTS),
+  ];
 }
 
 function isSourceReadCommand(command: string): boolean {
@@ -9284,37 +9285,6 @@ function lastFileChangeIndex(
   );
 }
 
-function successfulCommand(
-  trajectory: CodingAgentTrajectory,
-  acceptedCommands: string[],
-): CommandExecution | undefined {
-  return [...trajectory.commands]
-    .reverse()
-    .find(
-      (command) =>
-        command.exitCode === 0 &&
-        acceptedCommands.some((expectedCommand) =>
-          commandMatchesEvidence(command.command, expectedCommand),
-        ),
-    );
-}
-
-function failedCommand(
-  trajectory: CodingAgentTrajectory,
-  acceptedCommands: string[],
-): CommandExecution | undefined {
-  return [...trajectory.commands]
-    .reverse()
-    .find(
-      (command) =>
-        command.exitCode !== undefined &&
-        command.exitCode !== 0 &&
-        acceptedCommands.some((expectedCommand) =>
-          commandMatchesEvidence(command.command, expectedCommand),
-        ),
-    );
-}
-
 function verifyClaimValidationMismatch(
   llmOutput: string,
   renderedValue: AssertionValue | undefined,
@@ -9336,21 +9306,26 @@ function verifyClaimValidationMismatch(
     return undefined;
   }
 
-  const passingCommand = successfulCommand(trajectory, acceptedCommands);
-  const failingCommand = failedCommand(trajectory, acceptedCommands);
+  const latestCommand = [...trajectory.commands]
+    .reverse()
+    .find((command) =>
+      acceptedCommands.some((expectedCommand) =>
+        commandMatchesEvidence(command.command, expectedCommand),
+      ),
+    );
   const requiredCommandSummary = requiredCommands.join(', ');
 
-  if (!passingCommand) {
-    if (failingCommand) {
+  if (!latestCommand || latestCommand.exitCode !== 0) {
+    if (latestCommand?.exitCode !== undefined) {
       return {
         kind: 'validation-command-failed',
-        locations: ['final output', failingCommand.location],
+        locations: ['final output', latestCommand.location],
         metadata: {
           requiredCommands,
-          observedExitCode: failingCommand.exitCode,
-          observedCommandLocation: failingCommand.location,
+          observedExitCode: latestCommand.exitCode,
+          observedCommandLocation: latestCommand.location,
         },
-        reason: `The final output claims validation passed, but the matching validation command failed in this run (required: ${requiredCommandSummary}; evidence: ${failingCommand.location}).`,
+        reason: `The final output claims validation passed, but the matching validation command failed in this run (required: ${requiredCommandSummary}; evidence: ${latestCommand.location}).`,
       };
     }
 
@@ -9365,17 +9340,17 @@ function verifyClaimValidationMismatch(
     };
   }
 
-  const latestFileChangeIndex = lastFileChangeIndex(trajectory, passingCommand.source);
-  if (latestFileChangeIndex > 0 && passingCommand.itemIndex < latestFileChangeIndex) {
+  const latestFileChangeIndex = lastFileChangeIndex(trajectory, latestCommand.source);
+  if (latestFileChangeIndex > 0 && latestCommand.itemIndex < latestFileChangeIndex) {
     return {
       kind: 'validation-command-stale',
-      locations: ['final output', passingCommand.location],
+      locations: ['final output', latestCommand.location],
       metadata: {
         requiredCommands,
         lastFileChangeIndex: latestFileChangeIndex,
-        observedCommandLocation: passingCommand.location,
+        observedCommandLocation: latestCommand.location,
       },
-      reason: `The final output claims validation passed, but the matching validation command ran before the latest observed file change (required: ${requiredCommandSummary}; evidence: ${passingCommand.location}).`,
+      reason: `The final output claims validation passed, but the matching validation command ran before the latest observed file change (required: ${requiredCommandSummary}; evidence: ${latestCommand.location}).`,
     };
   }
 

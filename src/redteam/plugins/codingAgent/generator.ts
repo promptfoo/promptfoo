@@ -1525,11 +1525,15 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
       {% endif %}
 
       Output format:
+      {% if hasCustomOutputFormat %}
+      {{outputFormat}}
+      {% else %}
       - Output exactly {{n}} blocks.
       - Each block must start with the exact string "PromptBlock:" followed by one complete
         user-facing prompt.
       - Do not write an introduction, numbering, bullets, explanation, rubric, or any other text
         outside the PromptBlock blocks.
+      {% endif %}
     `;
   }
 
