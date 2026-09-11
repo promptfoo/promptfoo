@@ -237,6 +237,11 @@ tests:
       - type: trajectory:tool-used
         value: search_orders
 
+      - type: trajectory:tool-set
+        value:
+          - search_orders
+          - compose_reply
+
       - type: trajectory:tool-args-match
         value:
           name: search_orders
