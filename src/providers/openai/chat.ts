@@ -564,6 +564,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
+    let completedResponse: ProviderResponse | undefined;
+    const mcpToolCalls: McpToolCallEntry[] = [];
     try {
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
@@ -655,9 +657,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output = `Thinking: ${reasoning}\n\n${output}`;
       }
 
-      // Executed MCP tool calls, published as `metadata.toolCalls` so assertions can
-      // check tool routing and arguments without wrapping the provider.
-      const mcpToolCalls: McpToolCallEntry[] = [];
+      completedResponse = {
+        output,
+        tokenUsage: getTokenUsage(data, cached),
+        cached,
+        latencyMs,
+        logProbs,
+        ...(finishReason && { finishReason }),
+        cost,
+        guardrails: { flagged: contentFiltered },
+        metadata: providerMetadata,
+      };
 
       // Handle function tool callbacks
       const functionCalls: any = message.function_call
@@ -788,14 +798,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }
         if (hasSuccessfulCallback && results.length > 0) {
           return {
+            ...completedResponse,
             output: results.join('\n'),
-            tokenUsage: getTokenUsage(data, cached),
-            cached,
-            latencyMs,
-            logProbs,
-            ...(finishReason && { finishReason }),
-            cost,
-            guardrails: { flagged: contentFiltered },
             metadata: {
               ...providerMetadata,
               http: {
@@ -820,6 +824,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
       if (message.audio) {
         return {
+          ...completedResponse,
           output: message.audio.transcript || '',
           audio: {
             id: message.audio.id,
@@ -828,13 +833,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             transcript: message.audio.transcript,
             format: message.audio.format || body.audio?.format || 'wav',
           },
-          tokenUsage: getTokenUsage(data, cached),
-          cached,
-          latencyMs,
-          logProbs,
-          ...(finishReason && { finishReason }),
-          cost,
-          guardrails: { flagged: contentFiltered },
           metadata: {
             ...providerMetadata,
             http: {
@@ -850,14 +848,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const citations = getChatSearchCitations(message.annotations, output);
 
       return {
+        ...completedResponse,
         output,
-        tokenUsage: getTokenUsage(data, cached),
-        cached,
-        latencyMs,
-        logProbs,
-        ...(finishReason && { finishReason }),
-        cost,
-        guardrails: { flagged: contentFiltered },
         metadata: {
           ...providerMetadata,
           http: {
@@ -880,8 +872,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         await deleteFromCache?.();
       }
       return {
+        ...completedResponse,
+        ...(completedResponse && { raw: data }),
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
         metadata: {
+          ...completedResponse?.metadata,
+          ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
           http: {
             status,
             statusText,

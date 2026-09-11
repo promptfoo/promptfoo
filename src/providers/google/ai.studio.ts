@@ -415,7 +415,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           options?.abortSignal,
         );
       } catch (error) {
-        return { ...response, output: undefined, error: String(error) };
+        return {
+          ...response,
+          ...(options?.abortSignal?.aborted ? {} : { output: undefined }),
+          error: String(error),
+        };
       }
       return response;
     } catch (err) {

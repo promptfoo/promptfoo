@@ -1745,6 +1745,62 @@ describe('AnthropicMessagesProvider', () => {
       },
     );
 
+    it('records completed parallel MCP tools when another tool is cancelled', async () => {
+      const controller = new AbortController();
+      let started!: () => void;
+      const pendingTool = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      provider = createProvider('claude-sonnet-4-6', {
+        config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
+      });
+      mcpMocks.callTool.mockResolvedValueOnce({ content: 'completed tool output' });
+      mcpMocks.callTool.mockImplementationOnce(() => {
+        started();
+        return new Promise((_resolve, reject) => {
+          controller.signal.addEventListener('abort', () => reject(controller.signal.reason), {
+            once: true,
+          });
+        });
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_done',
+            name: 'search_companies',
+            input: { query: 'done' },
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu_wait',
+            name: 'search_companies',
+            input: { query: 'wait' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+      } as Anthropic.Messages.Message);
+      const pending = provider.callApi('Find companies', undefined, {
+        abortSignal: controller.signal,
+      });
+      await pendingTool;
+      controller.abort(new Error('cancelled parallel tool'));
+      const result = await pending;
+      expect(result.error).toContain('cancelled parallel tool');
+      expect(result.tokenUsage?.total).toBe(11);
+      expect(result.metadata?.toolCalls).toEqual([
+        {
+          id: 'toolu_done',
+          name: 'search_companies',
+          input: { query: 'done' },
+          output: 'completed tool output',
+          is_error: false,
+        },
+      ]);
+      expect(createSpy).toHaveBeenCalledOnce();
+    });
+
     it('sums thinking tokens across MCP continuation rounds', async () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
