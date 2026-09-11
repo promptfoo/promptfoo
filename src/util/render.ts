@@ -120,9 +120,21 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): 
     return obj;
   }
   if (typeof obj === 'string') {
-    const nativeVar = obj.match(/^\s*\{\{\s*([A-Za-z_$][\w$]*)\s*\}\}\s*$/)?.[1];
-    if (nativeVar && nativeVar in vars) {
-      return vars[nativeVar] as T;
+    const nativePath = obj.match(
+      /^\s*\{\{\s*([A-Za-z_$][\w$]*(?:(?:\.[A-Za-z_$][\w$]*)|(?:\[['"][^'"]+['"]\]))*)\s*\}\}\s*$/,
+    )?.[1];
+    if (nativePath) {
+      let value: unknown = vars;
+      for (const key of nativePath.replace(/\[['"]([^'"]+)['"]\]/g, '.$1').split('.')) {
+        if (!value || typeof value !== 'object' || !Object.hasOwn(value, key)) {
+          value = undefined;
+          break;
+        }
+        value = (value as Record<string, unknown>)[key];
+      }
+      if (value !== undefined) {
+        return value as T;
+      }
     }
     const nunjucksEngine = getNunjucksEngine();
     return nunjucksEngine.renderString(obj, vars) as unknown as T;

@@ -48,7 +48,12 @@ describe('renderVarsInObject', () => {
   });
 
   it('preserves native values for full variable expressions', () => {
-    expect(renderVarsInObject({ limit: '{{ limit }}' }, { limit: 5 })).toEqual({ limit: 5 });
+    expect(
+      renderVarsInObject(
+        { limit: '{{ settings.limit }}', enabled: '{{ settings["enabled"] }}' },
+        { settings: { limit: 5, enabled: true } },
+      ),
+    ).toEqual({ limit: 5, enabled: true });
   });
 
   it('should render variables in array objects', async () => {

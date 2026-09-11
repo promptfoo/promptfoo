@@ -261,6 +261,11 @@ describe('structured value assertions', () => {
     ).toBeUndefined();
     expect(
       getRunnableAssertionValueError(
+        make({ type: 'trajectory:step-count', value: { min: '{{ min_steps }}' } as any }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
         make({ type: 'trajectory:step-count', value: { min: -1 } as any }),
       ),
     ).toMatch(/finite non-negative integer/);
@@ -592,6 +597,14 @@ describe('shared trace/trajectory hardening parity', () => {
         }),
       ),
     ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:tool-sequence',
+          value: { mode: '{{ sequence_mode }}', steps: ['search'] } as any,
+        }),
+      ),
+    ).toBeUndefined();
   });
 
   it('rejects non-positive trajectory:goal-success timeoutMs', () => {
@@ -605,6 +618,14 @@ describe('shared trace/trajectory hardening parity', () => {
         make({
           type: 'trajectory:goal-success',
           value: { goal: 'finish', timeoutMs: 5000 } as any,
+        }),
+      ),
+    ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:goal-success',
+          value: { goal: 'finish', timeoutMs: '{{ timeout }}' } as any,
         }),
       ),
     ).toBeUndefined();

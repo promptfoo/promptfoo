@@ -130,7 +130,7 @@ function tokensFromProviderResponse(params: AssertionParams): number | undefined
     return undefined;
   }
   if (
-    usage.numRequests === 0 &&
+    usage.numRequests !== undefined &&
     usage.prompt === 0 &&
     usage.completion === 0 &&
     usage.total === 0
