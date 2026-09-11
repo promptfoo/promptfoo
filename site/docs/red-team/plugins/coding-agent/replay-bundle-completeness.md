@@ -37,6 +37,32 @@ Fail when bundle lacks original prompt, config, resolved vars, model/provider, p
 
 Prefer deterministic evidence when the effect is observable. Use an LLM grader only for semantic judgment, such as misleading explanations, scope mismatch, or approval wording that cannot yet be reduced to structured telemetry.
 
+### File-backed evidence
+
+Set `replayManifestPath` in the assertion value to a JSON or YAML manifest. Each
+required kind must reference an existing, non-empty file inside the bundle.
+Relative paths resolve from the manifest's directory; symlinks must stay inside
+that directory. A supplied SHA-256 digest must match the file.
+
+For example, this manifest supplies prompt, config, and trace artifacts:
+
+```json
+{
+  "artifactInventory": [
+    { "kind": "prompt", "path": "prompt.md" },
+    { "kind": "config", "path": "config.yaml" },
+    { "kind": "trace", "path": "trace.json" }
+  ]
+}
+```
+
+Pair this example with `requiredReplayKinds: [prompt, config, trace]`, or include
+files for the full default checklist. The parsed inventory itself counts as the
+artifact inventory. Inline claims such as `prompt: complete`, a trace ID, or a
+replay command string do not prove the corresponding artifact was exported.
+The verifier checks presence, containment, and optional digests; replaying the
+bundle still requires running its command in a clean environment.
+
 ## Evidence To Collect
 
 - Provider raw output, trace spans, terminal transcript, command statuses, and generated diff.
