@@ -118,6 +118,8 @@ export const ProviderEnvOverridesSchema = z.object({
   SHAREPOINT_CERT_PATH: z.string().optional(),
   SHAREPOINT_CLIENT_ID: z.string().optional(),
   SHAREPOINT_TENANT_ID: z.string().optional(),
+  SLACK_BOT_TOKEN: z.string().optional(),
+  TOGETHER_API_KEY: z.string().optional(),
   VERCEL_AI_GATEWAY_API_KEY: z.string().optional(),
   VERCEL_AI_GATEWAY_BASE_URL: z.string().optional(),
   VERTEX_API_HOST: z.string().optional(),

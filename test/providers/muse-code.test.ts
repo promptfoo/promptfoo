@@ -1165,6 +1165,29 @@ describe('MuseCodeProvider', () => {
     expect(spawn).toHaveBeenCalledTimes(2);
   });
 
+  it('locks upper- and lowercase spellings of the same session UUID', async () => {
+    const id = 'abcdefab-cdef-4abc-8def-abcdefabcdef';
+    onSpawn = (child) => {
+      if (child !== children[0]) {
+        child.close();
+      }
+    };
+    const instance = provider({ config: { session_id: id.toUpperCase(), working_dir: testDir } });
+    const first = instance.callApi(prompt);
+    await started.promise;
+    const overlap = instance.callApi('overlap', {
+      prompt: { raw: 'overlap', label: 'overlap', config: { session_id: id } },
+      vars: {},
+    });
+    const result = await overlap;
+    expect(result.error).toContain('already in use');
+    expect(spawn).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(spawn).mock.calls[0][1]).toEqual(expect.arrayContaining(['--session-id', id]));
+    children[0].stdout.write(fixture);
+    children[0].close();
+    await first;
+  });
+
   it('creates a separate workspace for each independent call without caching responses', async () => {
     const instance = provider();
     const results = await Promise.all([instance.callApi(prompt), instance.callApi(prompt)]);

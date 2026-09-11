@@ -322,14 +322,19 @@ function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
 export const FS_READONLY_ALLOWED_TOOLS = ['Read', 'Grep', 'Glob', 'LS'].sort(); // sort and export for tests
 
 // Claude Agent SDK supports these model aliases in addition to full model names
-// See: https://docs.anthropic.com/en/docs/claude-agent-sdk/model-config
+// See: https://code.claude.com/docs/en/model-config
 export const CLAUDE_CODE_MODEL_ALIASES = [
   'default',
+  'best',
+  'fable',
+  'fable[1m]',
   'sonnet',
   'opus',
   'haiku',
   'sonnet[1m]',
+  'opus[1m]',
   'opusplan',
+  'opusplan[1m]',
 ];
 
 /**
@@ -1281,6 +1286,7 @@ function mcpServerContainsCacheSensitiveData(server: MCPServerConfig): boolean {
   if (
     server.auth ||
     Object.keys(server.headers ?? {}).length > 0 ||
+    Object.keys(server.env ?? {}).length > 0 ||
     (server.args?.length ?? 0) > 0
   ) {
     return true;

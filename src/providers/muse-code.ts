@@ -50,7 +50,7 @@ const MuseCodeConfigSchema = z.object({
   trust_workspace: z.boolean().optional(),
   no_foreign_personal_context: z.boolean().optional(),
   no_session_log: z.boolean().optional(),
-  session_id: z.uuid().optional(),
+  session_id: z.uuid().toLowerCase().optional(),
   max_model_steps: z.number().int().positive().optional(),
   timeout_ms: z.number().int().positive().max(2_147_483_647).optional(),
   max_output_bytes: z.number().int().positive().optional(),

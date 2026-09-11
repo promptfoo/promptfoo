@@ -1,0 +1,186 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
+import { AzureGenericProvider } from '../../src/providers/azure/generic';
+import { OpenAiGenericProvider } from '../../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { createTogetherAiProvider } from '../../src/providers/togetherai';
+import { ProviderOptionsSchema } from '../../src/validators/providers';
+import { mockProcessEnv } from '../util/utils';
+
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+}));
+
+let restoreEnvironment: () => void;
+beforeEach(() => {
+  restoreEnvironment = mockProcessEnv();
+  vi.mocked(fetchWithCache)
+    .mockReset()
+    .mockResolvedValue({
+      data: {
+        choices: [
+          { text: 'fixture output', message: { content: 'fixture output' }, finish_reason: 'stop' },
+        ],
+        data: [{ embedding: [0.1, 0.2] }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+});
+afterEach(() => {
+  restoreEnvironment();
+  vi.restoreAllMocks();
+});
+
+describe.each(['chat', 'completion', 'embedding'])('TogetherAI %s connection policy', (type) => {
+  it('keeps connection and runtime settings out of the model body', async () => {
+    const provider = createTogetherAiProvider(`togetherai:${type}:fixture-model`, {
+      config: {
+        id: 'custom-provider',
+        config: {
+          apiBaseUrl: 'http://fixture.invalid/v1',
+          apiKey: 'configured-key',
+          useDefaultApiKey: false,
+          headers: { 'X-Fixture': 'header-value' },
+          cost: 0.01,
+          basePath: '/fixture/config',
+          linkedTargetId: 'fixture-target',
+          maxRetries: 0,
+          mcp: { enabled: false },
+          functionToolCallbacks: { example: () => 'result' },
+          temperature: 0.25,
+          repetition_penalty: 1.1,
+          passthrough: { custom_field: 'value', temperature: 0.5 },
+        },
+      },
+    });
+    const response =
+      type === 'embedding'
+        ? await provider.callEmbeddingApi!('fixture prompt')
+        : await provider.callApi('fixture prompt');
+    expect(response.error).toBeUndefined();
+    expect(provider.id()).toBe('custom-provider');
+    const [url, request, , , , retries] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toBe(
+      `http://fixture.invalid/v1/${type === 'chat' ? 'chat/completions' : type === 'completion' ? 'completions' : 'embeddings'}`,
+    );
+    expect(request?.headers).toMatchObject({
+      Authorization: 'Bearer configured-key',
+      'X-Fixture': 'header-value',
+    });
+    expect(retries).toBe(0);
+    const body = JSON.parse(request?.body as string);
+    expect(body).toMatchObject({
+      temperature: 0.5,
+      repetition_penalty: 1.1,
+      custom_field: 'value',
+    });
+    for (const key of [
+      'apiKey',
+      'useDefaultApiKey',
+      'basePath',
+      'linkedTargetId',
+      'apiBaseUrl',
+      'apiKeyEnvar',
+      'headers',
+      'cost',
+      'maxRetries',
+      'mcp',
+      'functionToolCallbacks',
+      'passthrough',
+    ]) {
+      expect(body).not.toHaveProperty(key);
+    }
+  });
+});
+
+describe.each([
+  ['OpenAI', OpenAiGenericProvider],
+  ['Azure', AzureGenericProvider],
+] as const)('%s named credential precedence', (_name, Provider) => {
+  it('uses the provider environment before the process environment', async () => {
+    mockProcessEnv({ TOGETHER_API_KEY: 'process-key' });
+    const provider = new Provider('fixture-model', {
+      config: { apiKeyEnvar: 'TOGETHER_API_KEY' },
+      env: { TOGETHER_API_KEY: 'provider-key' },
+    });
+    expect(provider.getApiKey()).toBe('provider-key');
+    if (provider instanceof AzureGenericProvider) {
+      await provider.ensureInitialized();
+    }
+  });
+});
+
+it('sends the model parameters the OpenAI provider resolved, not their raw copies', async () => {
+  const provider = createTogetherAiProvider('togetherai:chat:fixture-model', {
+    config: {
+      config: {
+        apiKey: 'configured-key',
+        tools: [{ type: 'function', function: { name: '{{ toolName }}' } }],
+        response_format: { type: 'json_schema', json_schema: { name: '{{ schemaName }}' } },
+      },
+    },
+  });
+  const response = await provider.callApi('fixture prompt', {
+    prompt: { raw: 'fixture prompt', label: 'fixture' },
+    vars: { toolName: 'get_weather', schemaName: 'weather' },
+  });
+  expect(response.error).toBeUndefined();
+  const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+  expect(body.tools).toEqual([{ type: 'function', function: { name: 'get_weather' } }]);
+  expect(body.response_format).toEqual({ type: 'json_schema', json_schema: { name: 'weather' } });
+});
+
+it('still sends model parameters the chat provider only emits for reasoning models', async () => {
+  const provider = createTogetherAiProvider('togetherai:chat:deepseek-ai/DeepSeek-R1', {
+    config: { config: { apiKey: 'configured-key', reasoning_effort: 'high' } },
+  });
+  const response = await provider.callApi('fixture prompt');
+  expect(response.error).toBeUndefined();
+  const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+  expect(body.reasoning_effort).toBe('high');
+});
+
+it('still sends model parameters the completion provider does not resolve', async () => {
+  const provider = createTogetherAiProvider('togetherai:completion:meta-llama/Llama-3-8b-hf', {
+    config: {
+      config: { apiKey: 'configured-key', response_format: { type: 'json_object' } },
+    },
+  });
+  const response = await provider.callApi('fixture prompt');
+  expect(response.error).toBeUndefined();
+  const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+  expect(body.response_format).toEqual({ type: 'json_object' });
+});
+
+it('routes an Object prototype key to the default chat provider', () => {
+  const provider = createTogetherAiProvider('togetherai:constructor:fixture-model');
+  expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+  expect(provider.id()).toBe('constructor:fixture-model');
+});
+
+it('preserves the normalized provider environment over the factory context', () => {
+  const provider = createTogetherAiProvider('togetherai:chat:fixture-model', {
+    env: { TOGETHER_API_KEY: 'context-key' },
+    config: { env: { TOGETHER_API_KEY: 'provider-key' } },
+  }) as OpenAiGenericProvider;
+  expect(provider.getApiKey()).toBe('provider-key');
+});
+
+it('preserves Together credentials through provider config validation', async () => {
+  mockProcessEnv({ TOGETHER_API_KEY: 'process-key' });
+  const providerId = 'togetherai:chat:fixture-model';
+  const options = ProviderOptionsSchema.parse({
+    id: providerId,
+    config: { apiBaseUrl: 'http://fixture.invalid/v1' },
+    env: { TOGETHER_API_KEY: 'validated-provider-key' },
+  });
+  const provider = createTogetherAiProvider(providerId, { config: options });
+  expect((await provider.callApi('hello')).error).toBeUndefined();
+  expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.headers).toMatchObject({
+    Authorization: 'Bearer validated-provider-key',
+  });
+});

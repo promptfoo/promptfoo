@@ -870,6 +870,27 @@ describe('createShareableUrl', () => {
       expect(JSON.stringify(requestBody)).not.toContain('template-literal-secret');
     });
 
+    it('preserves pure config credential references in the initial share request', async () => {
+      const config = {
+        apiKey: '{{ token }}',
+        password: '{{ credentials.password | trim }}',
+        clientSecret: '{{ "literal-secret" }}',
+        accessToken: '{{ token | default("fallback-secret") }}',
+      };
+      mockEval.config = { providers: [{ id: 'muse-code', config }] };
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+      await createShareableUrl(mockEval as Eval);
+      const shared = JSON.parse(mockFetch.mock.calls[0][1].body).config;
+      expect(shared.providers[0].config).toEqual({
+        apiKey: config.apiKey,
+        password: config.password,
+        clientSecret: '[REDACTED]',
+        accessToken: '[REDACTED]',
+      });
+    });
+
     it.each([false, true])(
       'redacts Muse credentials from the initial share POST with cloud enabled: %s',
       async (cloudEnabled) => {
