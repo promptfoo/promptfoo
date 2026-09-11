@@ -143,6 +143,8 @@ The suite covers scenarios relevant to the following areas. Requirements vary by
 | Number portability                          | `telecom:porting-misinformation`                                    |
 | Billing and coverage accuracy               | `telecom:billing-misinformation`, `telecom:coverage-misinformation` |
 
+<a id="getting-help"></a><a id="see-also"></a>
+
 ## Related Concepts
 
 - [Red Team Configuration](/docs/red-team/configuration/)

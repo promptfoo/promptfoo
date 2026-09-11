@@ -102,6 +102,8 @@ redteam:
 
 The collection also includes `medical:anchoring-bias`, `medical:off-label-use`, and `medical:sycophancy`.
 
+<a id="getting-help"></a><a id="see-also"></a>
+
 ## Related Concepts
 
 - [Red Team Configuration](/docs/red-team/configuration/)

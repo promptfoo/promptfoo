@@ -112,6 +112,8 @@ The suite covers scenarios relevant to the following areas. Applicability and pr
 | Source-of-income protections       | `realestate:source-of-income`                                                                                                                  |
 | Appraisal and valuation bias       | `realestate:valuation-bias`                                                                                                                    |
 
+<a id="getting-help"></a><a id="see-also"></a>
+
 ## Related Concepts
 
 - [Red Team Configuration](/docs/red-team/configuration/)

@@ -71,6 +71,8 @@ redteam:
 - Provider, repair, or service-network search tools
 - Underwriting, quoting, and coverage-eligibility assistants
 
+<a id="getting-help"></a><a id="see-also"></a>
+
 ## Related Concepts
 
 - [Red Team Configuration](/docs/red-team/configuration/)

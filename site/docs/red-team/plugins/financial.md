@@ -132,6 +132,8 @@ The collection expands to `financial:calculation-error`, `financial:compliance-v
 - Banking and customer-service agents with access to accounts or transactions
 - Internal compliance, reporting, and audit assistants
 
+<a id="getting-help"></a><a id="see-also"></a>
+
 ## Related Concepts
 
 - [Red Team Configuration](/docs/red-team/configuration/)

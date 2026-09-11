@@ -64,6 +64,8 @@ redteam:
 - Telehealth, formulary, and prior-authorization workflows
 - Electronic health-record and medication-ordering integrations
 
+<a id="getting-help"></a><a id="see-also"></a>
+
 ## Related Concepts
 
 - [Red Team Configuration](/docs/red-team/configuration/)
