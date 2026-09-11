@@ -331,7 +331,11 @@ describe('OTLPReceiver', () => {
                       spanId: '4444444444444444',
                       name: 'malformed events',
                       startTimeUnixNano: '1000000000',
-                      events: {},
+                      events: [
+                        null,
+                        { name: 'bad attributes', attributes: {} },
+                        { name: 'valid event', attributes: [] },
+                      ],
                     },
                   ],
                 },
@@ -341,7 +345,9 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([]);
+      expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
+        expect.objectContaining({ name: 'valid event', attributes: {} }),
+      ]);
     });
 
     it('should accept json with a charset content type', async () => {

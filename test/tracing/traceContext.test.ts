@@ -311,6 +311,13 @@ describe('fetchTraceContext', () => {
           nested: { authorization: 'secret-token' },
           'account.pin': 123456,
         },
+        events: [
+          {
+            name: 'event secret-token',
+            timestamp: 2,
+            attributes: { customer: { ssn: 'secret-token' } },
+          },
+        ],
       },
     ]);
 
@@ -318,7 +325,7 @@ describe('fetchTraceContext', () => {
       providerConfig,
       queryDelay: 0,
       maxRetries: 0,
-      redactAttributes: ['authorization', 'pin'],
+      redactAttributes: ['authorization', 'pin', 'ssn'],
     });
 
     expect(storedSpans).toEqual([
@@ -329,6 +336,13 @@ describe('fetchTraceContext', () => {
           nested: { authorization: '[REDACTED]' },
           'account.pin': '[REDACTED]',
         },
+        events: [
+          {
+            name: 'event [REDACTED]',
+            timestamp: 2,
+            attributes: { customer: { ssn: '[REDACTED]' } },
+          },
+        ],
       }),
     ]);
   });

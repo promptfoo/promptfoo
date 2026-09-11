@@ -357,7 +357,7 @@ function toolInvocationKey(observation: AgentObservation, index: number): string
   if (observation.spanName || observation.timestamp !== undefined) {
     return `trace:${observation.source}:${observation.spanId ?? ''}:${observation.spanName ?? ''}:${
       observation.timestamp ?? ''
-    }:${observation.location}`;
+    }:${observation.callId ?? observation.location}`;
   }
 
   return `observation:${index}:${observation.location}`;
@@ -557,13 +557,26 @@ function findingMatchesPlugin(
 function dedupeFindings(findings: AgenticRuntimeFinding[]): AgenticRuntimeFinding[] {
   const seen = new Set<string>();
   return findings.filter((finding) => {
-    const key = JSON.stringify([
-      normalizePluginId(finding.pluginId),
-      finding.kind,
-      finding.location,
-      finding.evidence,
-      finding.severity,
-    ]);
+    if (
+      typeof finding.pluginId !== 'string' ||
+      typeof finding.kind !== 'string' ||
+      (finding.location !== undefined && typeof finding.location !== 'string') ||
+      (finding.severity !== undefined && typeof finding.severity !== 'string')
+    ) {
+      return false;
+    }
+    let key: string;
+    try {
+      key = JSON.stringify([
+        normalizePluginId(finding.pluginId),
+        finding.kind,
+        finding.location,
+        finding.evidence,
+        finding.severity,
+      ]);
+    } catch {
+      return false;
+    }
     if (seen.has(key)) {
       return false;
     }

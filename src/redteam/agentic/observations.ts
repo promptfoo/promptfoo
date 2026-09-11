@@ -650,8 +650,8 @@ export function observationsFromTraceData(
       ...observationsFromTraceAttributes(traceSpan.attributes, spanLocation, source, traceSpan),
     );
 
-    traceSpan.events?.forEach((event) => {
-      const eventLocation = `${spanLocation} event ${event.name || 'event'}`;
+    traceSpan.events?.forEach((event, eventIndex) => {
+      const eventLocation = `${spanLocation} event ${eventIndex + 1}`;
       const inheritedPluginId = getAttribute(traceSpan.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS);
       const eventSpan = {
         attributes: {

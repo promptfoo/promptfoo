@@ -367,6 +367,15 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
     name: scrubEcho(span.name),
     statusMessage: scrubEcho(span.statusMessage),
     attributes: sanitizedAttributes,
+    events: span.events?.map((event) => ({
+      ...event,
+      name: scrubEcho(event.name),
+      attributes: sanitizeTraceAttributes(event.attributes ?? {}, {
+        redactAttributes,
+        sanitizeSensitiveAttributes: false,
+        truncateValues: false,
+      }),
+    })),
   };
 }
 

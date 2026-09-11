@@ -779,11 +779,21 @@ export class OTLPReceiver {
               startTime, // Convert to ms
               endTime: span.endTimeUnixNano ? Number(span.endTimeUnixNano) / 1_000_000 : undefined,
               attributes,
-              events: (Array.isArray(span.events) ? span.events : []).map((event) => ({
-                name: event.name,
-                timestamp: event.timeUnixNano ? Number(event.timeUnixNano) / 1_000_000 : startTime,
-                attributes: this.parseAttributes(event.attributes),
-              })),
+              events: (Array.isArray(span.events) ? span.events : []).flatMap((event) =>
+                event &&
+                typeof event === 'object' &&
+                (event.attributes === undefined || Array.isArray(event.attributes))
+                  ? [
+                      {
+                        name: event.name,
+                        timestamp: event.timeUnixNano
+                          ? Number(event.timeUnixNano) / 1_000_000
+                          : startTime,
+                        attributes: this.parseAttributes(event.attributes),
+                      },
+                    ]
+                  : [],
+              ),
               statusCode: span.status?.code,
               statusMessage: span.status?.message,
             },
