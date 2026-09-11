@@ -1051,8 +1051,12 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
         ]),
       );
     } else if (key === 'apiHost' && typeof value === 'string') {
-      const host = sanitizeUrlForLogging(`https://${value}`).replace(/^https:\/\//, '');
-      sanitized[key] = value.includes('/') ? host : host.replace(/\/(?=[?#]|$)/, '');
+      const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
+      const hasScheme = scheme.test(value);
+      const endpoint = sanitizeUrlForLogging(hasScheme ? value : `https://${value}`);
+      const host = hasScheme ? endpoint : endpoint.replace(/^https:\/\//, '');
+      const hasPath = value.replace(scheme, '').split(/[?#]/, 1)[0].includes('/');
+      sanitized[key] = hasPath ? host : host.replace(/\/(?=[?#]|$)/, '');
     } else if (
       typeof value === 'string' &&
       (key === 'url' ||
@@ -1317,7 +1321,11 @@ export function sanitizeUrlForLogging(url: string): string {
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
     parsed.pathname = parsed.pathname
       .split('/')
-      .map((segment) => {
+      .map((segment, index, segments) => {
+        const previous = decodeFormComponent(segments[index - 1] ?? '') ?? '';
+        if (segment && isSecretField(previous)) {
+          return '%5BREDACTED%5D';
+        }
         try {
           const decoded = decodeURIComponent(segment);
           return OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) || looksLikeSecret(decoded)

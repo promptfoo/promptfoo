@@ -93,6 +93,8 @@ interface Page<T> {
 }
 
 const MAX_TIMER_MS = 2_147_483_647;
+const MAX_LIST_PAGES = 100;
+const MAX_LIST_ITEMS = 10_000;
 const MAX_ERROR_DETAIL_LENGTH = 1_024;
 const TRANSIENT_STATUS_CODES = new Set([500, 502, 503, 504]);
 // Assistant messages, messages between agents, and reasoning are not tool activity.
@@ -196,8 +198,9 @@ function getUrlCredentials(value: string): string[] {
   if (userinfo) {
     found.push(userinfo, basicCredential(userinfo));
   }
-  for (const segment of url.pathname.split('/')) {
-    if (sanitizeUrlForLogging(`/${segment}`) === '/%5BREDACTED%5D') {
+  const sanitizedSegments = sanitizeUrlForLogging(url.pathname).split('/');
+  for (const [index, segment] of url.pathname.split('/').entries()) {
+    if (sanitizedSegments[index] === '%5BREDACTED%5D') {
       found.push(segment, decodeUrlComponent(segment));
     }
   }
@@ -495,7 +498,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const items: T[] = [];
     const cursors = new Set<string>();
     let after: string | undefined;
-    do {
+    for (let pageCount = 0; pageCount < MAX_LIST_PAGES; pageCount++) {
       const query = new URLSearchParams({ order: 'asc', limit: '100' });
       if (after) {
         query.set('after', after);
@@ -511,6 +514,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!Array.isArray(page?.data)) {
         throw new Error('Agents API returned an invalid list response');
       }
+      if (items.length + page.data.length > MAX_LIST_ITEMS) {
+        throw new Error(`Agents API pagination limit exceeded (${MAX_LIST_ITEMS} items)`);
+      }
       items.push(...page.data);
       if (!page.has_more) {
         return items;
@@ -520,7 +526,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       }
       after = page.last_id;
       cursors.add(after);
-    } while (true);
+    }
+    throw new Error(`Agents API pagination limit exceeded (${MAX_LIST_PAGES} pages)`);
   }
 
   private async listSubagentIds(

@@ -339,6 +339,24 @@ describe('OpenAiAgentsApiProvider', () => {
   });
 
   describe('URL-authenticated gateways', () => {
+    it.each(['auth/opaquegateway7294', '%61uth/%6Fpaquegateway7294'])(
+      'recognizes split path authentication at %s',
+      async (credentialPath) => {
+        mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
+        const gateway = new OpenAiAgentsApiProvider('', {
+          config: { apiBaseUrl: `https://gateway.example/${credentialPath}/v1` },
+        });
+        expect((await gateway.callApi('hi')).output).toBe('42');
+        for (const [, options] of vi.mocked(fetchWithRetries).mock.calls) {
+          expect(new Headers(options?.headers).get('Authorization')).toBeNull();
+        }
+        vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+          apiError(401, 'Rejected opaquegateway7294'),
+        );
+        expect((await gateway.callApi('hi')).error).not.toContain('opaquegateway7294');
+      },
+    );
+
     const queryGatewayUrl = 'https://gateway.example/v1?api-key=gateway-query-secret';
     const userinfoGatewayUrl = 'https://gateway-user:gateway-password@gateway.example/v1';
     const authorizations = () =>
@@ -1016,6 +1034,34 @@ describe('OpenAiAgentsApiProvider', () => {
       .mockResolvedValueOnce(json(page([], true, 'same')));
     expect(await provider().callApi('hi')).toMatchObject({
       error: expect.stringContaining('pagination cursor'),
+    });
+  });
+
+  it('bounds pagination with unique cursors', async () => {
+    let pages = 0;
+    mockApi((pathname) => {
+      if (pathname.endsWith('/turns')) {
+        pages++;
+        return json(pages <= 101 ? page([], true, `cursor-${pages}`) : page([turn]));
+      }
+      return undefined;
+    });
+    expect(await provider().callApi('hi')).toMatchObject({
+      error: expect.stringContaining('pagination limit'),
+      metadata: { sessionDeleted: true },
+    });
+    expect(pages).toBe(100);
+  });
+
+  it('bounds response items before accumulating a page', async () => {
+    mockApi((pathname) =>
+      pathname.endsWith('/turns')
+        ? json(page(Array.from({ length: 10_001 }, () => turn)))
+        : undefined,
+    );
+    expect(await provider().callApi('hi')).toMatchObject({
+      error: expect.stringContaining('pagination limit'),
+      metadata: { sessionDeleted: true },
     });
   });
 

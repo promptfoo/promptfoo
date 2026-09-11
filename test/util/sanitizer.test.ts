@@ -1341,6 +1341,10 @@ describe('sanitizeObject', () => {
       'gateway.example:8443',
       'gateway.example/path',
       'gateway.example/path/',
+      'https://api.azure.com',
+      'https://api.azure.com/',
+      'http://gateway.example:8080',
+      'https://gateway.example/path',
     ])('preserves apiHost formatting for %s', (apiHost) => {
       expect(sanitizeObject({ apiHost })).toEqual({ apiHost });
     });
@@ -1350,6 +1354,25 @@ describe('sanitizeObject', () => {
       expect(JSON.stringify(sanitizeObject({ [key]: endpoint }))).not.toContain(
         'auth-supersecretvalue123',
       );
+    });
+
+    it.each(['apiBaseUrl', 'server_url', 'apiHost'])(
+      'redacts split path credentials in %s',
+      (key) => {
+        const endpoint = `${key === 'apiHost' ? '' : 'https://'}gateway.example/auth/opaquegateway7294/v1`;
+        expect(JSON.stringify(sanitizeObject({ [key]: endpoint }))).not.toContain(
+          'opaquegateway7294',
+        );
+      },
+    );
+
+    it('redacts credential path values even when adjacent URL escapes are malformed', () => {
+      expect(sanitizeUrlForLogging('https://gateway.example/auth/opaque%ZZ')).not.toContain(
+        'opaque',
+      );
+      expect(
+        sanitizeUrlForLogging('https://gateway.example/%ZZ/auth-supersecretvalue123'),
+      ).not.toContain('supersecretvalue123');
     });
 
     it('should sanitize HTTP request config', () => {
