@@ -986,7 +986,7 @@ const redteam = {
   maxConcurrency: 1,
   numTests,
   plugins: inferPlugins(fields, policy, numTests),
-  strategies: ['jailbreak:meta'],
+  strategies: [{ id: 'jailbreak:meta', config: { numIterations: 2 } }],
 };
 if (args['generator-provider']) {
   redteam.provider = args['generator-provider'];

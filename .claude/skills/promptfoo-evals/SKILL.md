@@ -174,14 +174,14 @@ checks, etc.).
 
 ### 6. Validate and run
 
-Use the project-installed Promptfoo version; install or upgrade explicitly when needed.
+Use `npx promptfoo` to resolve the project-installed version; install or upgrade explicitly when needed.
 Before finishing, validate and provide run commands. Always use `--no-cache`
 during development to avoid stale results. Only run eval if credentials are
 available and safe to call.
 
 ```bash
-promptfoo validate config -c <config>
-promptfoo eval -c <config> -o output.json --no-cache --no-share
+npx promptfoo validate config -c <config>
+npx promptfoo eval -c <config> -o output.json --no-cache --no-share
 ```
 
 `--no-share` disables result sharing; target/model/grader calls still use their

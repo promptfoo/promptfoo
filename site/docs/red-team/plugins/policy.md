@@ -10,7 +10,8 @@ Custom policies let you test the rules that are specific to your product, legal 
 Review generated probes before running them, especially multi-step tool requests.
 Confirm that required object IDs, ordered actions, and result checks are retained.
 Semicolons within a generated `Prompt:` payload are part of that prompt; a new
-`Prompt:` marker separates test cases.
+`Prompt:` marker separates test cases, including numbered or bold markers such as
+`**2. Prompt:**`.
 
 Use custom policies for requirements such as:
 

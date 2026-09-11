@@ -3514,9 +3514,10 @@ describe('promptfoo-provider-setup skill', () => {
         message: 'Say exactly PONG.',
       });
       // The "Say exactly PONG." message never reaches the target here, so the
-      // smoke assertion falls back to is-json on the structured response
-      // instead of `contains: PONG` (which would fail by construction).
-      expect(test.assert).toEqual([{ type: 'is-json' }]);
+      // smoke assertion checks the selected status value, not the JSON envelope.
+      expect(test.assert).toEqual([
+        { type: 'javascript', value: 'output !== null && output !== undefined' },
+      ]);
       expect(test.description).toBe('getHealth responds successfully');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
@@ -4936,7 +4937,9 @@ describe('promptfoo-redteam-setup skill', () => {
       { id: 'rbac', numTests: 1 },
       { id: 'bola', numTests: 1 },
     ]);
-    expect(generated.redteam.strategies).toEqual(['jailbreak:meta']);
+    expect(generated.redteam.strategies).toEqual([
+      { id: 'jailbreak:meta', config: { numIterations: 2 } },
+    ]);
     const [policyPlugin] = generated.redteam.plugins as unknown[];
     expectRecord(policyPlugin, 'Generated OpenAPI redteam policy plugin');
     expectRecord(policyPlugin.config, 'Generated OpenAPI redteam policy config');

@@ -1447,7 +1447,7 @@ function Dn(e, t, n) {
 		let r = !1, a = !1;
 		n === 63 && L(e.input.charCodeAt(e.position + 1)) && (r = a = !0, e.position += 1, H(e, t));
 		let c = e.line, l = M(e), u = U(e, t, O, !1, !0);
-		H(e, t), n = e.input.charCodeAt(e.position), (i || a || e.line === c) && n === 58 ? (r = !0, e.position++, H(e, t), i || cn(e, l), u || j(e), U(e, t, O, !1, !0) || j(e), H(e, t), i || A(e)) : i && r ? (u || j(e), j(e)) : i ? j(e) : r && (cn(e, l), u || j(e), j(e), A(e)), n = e.input.charCodeAt(e.position), n === 44 ? (o = !0, e.position++) : o = !1;
+		H(e, t), n = e.input.charCodeAt(e.position), (i || a || e.line === c) && n === 58 ? (e.position++, H(e, t), i || cn(e, l), u || j(e), U(e, t, O, !1, !0) || j(e), H(e, t), i || A(e)) : i && r ? (u || j(e), j(e)) : i ? j(e) : r && (cn(e, l), u || j(e), j(e), A(e)), n = e.input.charCodeAt(e.position), n === 44 ? (o = !0, e.position++) : o = !1;
 	}
 	P(e, "unexpected end of the stream within a flow collection");
 }

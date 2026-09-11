@@ -5,16 +5,21 @@ export default class EvalsJsonRubricGrader {
 
   async callApi(prompt) {
     const { candidate } = JSON.parse(prompt);
-    const answer = JSON.parse(candidate);
+    let answer;
+    try {
+      answer = JSON.parse(candidate);
+    } catch {
+      answer = null;
+    }
     const pass =
-      answer.invoice_id === 'inv-123' && answer.status === 'approved' && answer.risk === 'low';
+      answer?.invoice_id === 'inv-123' && answer.status === 'approved' && answer.risk === 'low';
     return {
       output: JSON.stringify({
         pass,
         score: pass ? 1 : 0,
         reason: pass
           ? 'Deterministic grader: invoice approval criteria satisfied.'
-          : 'Deterministic grader: missing invoice id, approval, or risk details.',
+          : 'Deterministic grader: invalid JSON or missing invoice id, approval, or risk details.',
       }),
     };
   }

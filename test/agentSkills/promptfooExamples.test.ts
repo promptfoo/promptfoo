@@ -55,6 +55,7 @@ function runCli(args: string[]) {
         PROMPTFOO_CONFIG_DIR: path.join(tempDir, 'state'),
         PROMPTFOO_DISABLE_TELEMETRY: 'true',
         PROMPTFOO_DISABLE_UPDATE: 'true',
+        PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
         PROMPTFOO_FAILED_TEST_EXIT_CODE: '0',
       },
     },
@@ -73,6 +74,10 @@ describe('published agent skill examples', () => {
       [{ invoice_id: 'inv-123', status: 'approved', risk: 'low' }, true],
       [{ invoice_id: 'inv-999', status: 'denied', risk: 'high' }, false],
       [{ message: 'No answer' }, false],
+      [null, false],
+      [[], false],
+      [42, false],
+      ['plain text', false],
     ] as const) {
       const response = await grader.callApi(
         JSON.stringify({
@@ -82,6 +87,8 @@ describe('published agent skill examples', () => {
       );
       expect(JSON.parse(response.output).pass).toBe(expected);
     }
+    const malformed = await grader.callApi(JSON.stringify({ candidate: '{invalid JSON' }));
+    expect(JSON.parse(malformed.output)).toMatchObject({ pass: false, score: 0 });
   });
 
   it('runs the documented calibration suite with one pass and two failures', async () => {
@@ -163,82 +170,178 @@ describe('published agent skill examples', () => {
     }
   });
 
-  it('rejects missing and wrong-type answers with every documented HTTP JSON transform', async () => {
-    const documents = [
-      reference('promptfoo-provider-setup', 'provider-patterns.md'),
-      reference('promptfoo-redteam-setup', 'redteam-setup-patterns.md'),
-      fs.readFileSync(path.join(repoRoot, 'site/docs/integrations/agent-skill.md'), 'utf8'),
-      fs.readFileSync(
-        path.join(repoRoot, '.claude/skills/promptfoo-evals/references/cheatsheet.md'),
-        'utf8',
-      ),
-    ];
-    const transforms = documents.flatMap((markdown) => {
-      const extracted = httpJsonTransforms(markdown);
-      expect(extracted.length).toBeGreaterThan(0);
-      return extracted;
-    });
-    const server = http.createServer(async (request, response) => {
-      let body = '';
-      for await (const chunk of request) {
-        body += chunk;
-      }
-      const message = JSON.parse(body).message;
-      const value = message === 'good' ? 'PONG' : 42;
-      response.setHeader('Content-Type', 'application/json');
-      response.end(
-        JSON.stringify(
-          message === 'missing'
-            ? {}
-            : { output: value, answer: value, choices: [{ message: { content: value } }] },
+  it.each(['eval', 'redteam'] as const)(
+    'rejects missing and wrong-type answers with every documented HTTP JSON transform in %s',
+    async (mode) => {
+      const documents = [
+        reference('promptfoo-provider-setup', 'provider-patterns.md'),
+        reference('promptfoo-redteam-setup', 'redteam-setup-patterns.md'),
+        fs.readFileSync(path.join(repoRoot, 'site/docs/integrations/agent-skill.md'), 'utf8'),
+        fs.readFileSync(
+          path.join(repoRoot, '.claude/skills/promptfoo-evals/references/cheatsheet.md'),
+          'utf8',
         ),
-      );
+      ];
+      const transforms = documents.flatMap((markdown) => {
+        const extracted = httpJsonTransforms(markdown);
+        expect(extracted.length).toBeGreaterThan(0);
+        return extracted;
+      });
+      const server = http.createServer(async (request, response) => {
+        let body = '';
+        for await (const chunk of request) {
+          body += chunk;
+        }
+        const message = JSON.parse(body).message;
+        const value = message === 'good' ? 'PONG' : 42;
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          JSON.stringify(
+            message === 'missing'
+              ? {}
+              : { output: value, answer: value, choices: [{ message: { content: value } }] },
+          ),
+        );
+      });
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+      try {
+        const address = server.address() as { port: number };
+        const config = {
+          prompts: ['{{message}}'],
+          [mode === 'redteam' ? 'targets' : 'providers']: transforms.map(
+            (transformResponse, index) => ({
+              id: 'https',
+              label: `documented-response-${index}`,
+              config: {
+                url: `http://127.0.0.1:${address.port}`,
+                method: 'POST',
+                stateful: false,
+                maxRetries: 0,
+                body: { message: '{{message}}' },
+                transformResponse,
+              },
+            }),
+          ),
+          ...(mode === 'redteam'
+            ? { redteam: { purpose: 'Return PONG for valid requests.', plugins: ['policy'] } }
+            : {}),
+          tests: ['good', 'missing', 'wrong-type'].map((message) => ({
+            vars: { message },
+            assert: [{ type: 'equals', value: 'PONG' }],
+          })),
+        };
+        const configPath = path.join(tempDir, `http-answer-${mode}.yaml`);
+        const outputPath = path.join(tempDir, `http-answer-${mode}.json`);
+        fs.writeFileSync(configPath, yaml.dump(config));
+        await runCli([
+          ...(mode === 'redteam' ? ['redteam', 'eval'] : ['eval']),
+          '-c',
+          configPath,
+          '-o',
+          outputPath,
+          '--no-cache',
+          '--no-share',
+          '--no-progress-bar',
+        ]);
+        const results = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+        expect(results.results.stats).toMatchObject({
+          successes: transforms.length,
+          failures: 0,
+          errors: transforms.length * 2,
+        });
+        for (const row of results.results.results) {
+          if (row.error) {
+            expect(row.error).toContain('Expected string');
+          }
+        }
+      } finally {
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+      }
+    },
+  );
+
+  it('runs generated OpenAPI smoke assertions against transformed response values', async () => {
+    const values: Record<string, unknown> = {
+      text: 'ready',
+      object: { ok: true },
+    };
+    const server = http.createServer((request, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ answer: values[request.url!.slice(1)] }));
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     try {
       const address = server.address() as { port: number };
-      const config = {
-        prompts: ['{{message}}'],
-        providers: transforms.map((transformResponse, index) => ({
-          id: 'https',
-          label: `documented-response-${index}`,
-          config: {
-            url: `http://127.0.0.1:${address.port}`,
-            method: 'POST',
-            stateful: false,
-            maxRetries: 0,
-            body: { message: '{{message}}' },
-            transformResponse,
-          },
-        })),
-        tests: ['good', 'missing', 'wrong-type'].map((message) => ({
-          vars: { message },
-          assert: [{ type: 'equals', value: 'PONG' }],
-        })),
-      };
-      const configPath = path.join(tempDir, 'http-answer.yaml');
-      const outputPath = path.join(tempDir, 'http-answer.json');
-      fs.writeFileSync(configPath, yaml.dump(config));
-      await runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-        '--no-share',
-        '--no-progress-bar',
-      ]);
-      const results = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-      expect(results.results.stats).toMatchObject({
-        successes: transforms.length,
-        failures: 0,
-        errors: transforms.length * 2,
-      });
-      for (const row of results.results.results) {
-        if (row.error) {
-          expect(row.error).toContain('Expected string');
-        }
+      const specPath = path.join(tempDir, 'response-types.yaml');
+      fs.writeFileSync(
+        specPath,
+        yaml.dump({
+          openapi: '3.1.0',
+          paths: Object.fromEntries(
+            Object.entries(values).map(([name, value]) => [
+              `/${name}`,
+              {
+                get: {
+                  operationId: name,
+                  responses: {
+                    '200': {
+                      description: 'Health response',
+                      content: {
+                        'application/json': {
+                          schema: {
+                            type: 'object',
+                            properties: {
+                              answer: { type: typeof value },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            ]),
+          ),
+        }),
+      );
+      for (const name of Object.keys(values)) {
+        const generated = yaml.load(
+          execFileSync(
+            process.execPath,
+            [
+              path.join(
+                skillsRoot,
+                'promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs',
+              ),
+              '--spec',
+              specPath,
+              '--operation-id',
+              name,
+              '--base-url-env',
+              'HEALTH_URL',
+            ],
+            { encoding: 'utf8' },
+          ),
+        ) as { providers: { config: { url: string } }[] };
+        generated.providers[0].config.url = `http://127.0.0.1:${address.port}/${name}`;
+        const configPath = path.join(tempDir, `response-${name}.yaml`);
+        const outputPath = path.join(tempDir, `response-${name}.json`);
+        fs.writeFileSync(configPath, yaml.dump(generated));
+        await runCli([
+          'eval',
+          '-c',
+          configPath,
+          '-o',
+          outputPath,
+          '--no-cache',
+          '--no-share',
+          '--no-progress-bar',
+        ]);
+        const results = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+        expect(results.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
+        expect(results.results.results[0].response.output).toEqual(values[name]);
       }
     } finally {
       await new Promise<void>((resolve, reject) =>

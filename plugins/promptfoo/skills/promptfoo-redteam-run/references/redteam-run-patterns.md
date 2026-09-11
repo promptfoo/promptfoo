@@ -1,8 +1,10 @@
 # Redteam Run Patterns
 
 Use `--remote` for hosted generation/evaluation even when a local OpenAI key
-exists. If generated-config validation reports remote inference disabled, use
-the scan's existing Cloud credentials or set `PROMPTFOO_REMOTE_GENERATION_URL`
+exists. An "explicitly disabled" error names the active environment flags;
+unset those flags first, because `--remote` does not override them.
+For other remote-inference configuration errors, use the scan's existing Cloud
+credentials or set `PROMPTFOO_REMOTE_GENERATION_URL`
 to its approved endpoint (hosted default: `https://api.promptfoo.app/api/v1/task`).
 Keep a configured self-hosted endpoint unchanged.
 

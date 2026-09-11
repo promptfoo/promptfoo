@@ -916,9 +916,11 @@ const promptReachesTarget =
 const responseIsJson = Boolean(responseMediaEntry);
 const smokeAssert = promptReachesTarget
   ? [{ type: 'contains', value: 'PONG' }]
-  : responseIsJson
-    ? [{ type: 'is-json' }]
-    : [{ type: 'javascript', value: "typeof output === 'string' && output.length > 0" }];
+  : responseField
+    ? [{ type: 'javascript', value: 'output !== null && output !== undefined' }]
+    : responseIsJson
+      ? [{ type: 'is-json' }]
+      : [{ type: 'javascript', value: "typeof output === 'string' && output.length > 0" }];
 const config = {
   description: args.description || `Provider setup generated from ${args['operation-id']}`,
   prompts: ['{{message}}'],

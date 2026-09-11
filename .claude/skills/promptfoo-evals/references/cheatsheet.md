@@ -367,8 +367,8 @@ defaultTest:
 Always use `--no-cache` during development to avoid stale results.
 
 ```bash
-promptfoo validate config -c path/to/promptfooconfig.yaml
-promptfoo eval -c path/to/promptfooconfig.yaml -o output.json --no-cache --no-share
+npx promptfoo validate config -c path/to/promptfooconfig.yaml
+npx promptfoo eval -c path/to/promptfooconfig.yaml -o output.json --no-cache --no-share
 ```
 
 For CI/non-UI workflows, use `-o output.json` and check `success`, `score`, and
