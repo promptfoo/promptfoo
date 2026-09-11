@@ -50,7 +50,7 @@ export function createEnvoyProvider(
 
   // Get the gateway URL from config or environment
   const apiBaseUrl =
-    configuredBaseUrl || options.env?.ENVOY_API_BASE_URL || getEnvString('ENVOY_API_BASE_URL');
+    configuredBaseUrl || (options.env?.ENVOY_API_BASE_URL ?? getEnvString('ENVOY_API_BASE_URL'));
 
   if (!apiBaseUrl) {
     throw new Error(

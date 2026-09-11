@@ -237,6 +237,16 @@ describe('Envoy gateway URLs', () => {
     expect(request?.headers).toMatchObject({ Authorization: 'Bearer test-context-key' });
   });
 
+  it('honors an empty context gateway for direct factory callers', async () => {
+    const factories = await getProviderFactories('envoy:route:stable');
+    const factory = factories.find((entry) => entry.test('envoy:route:stable'))!;
+
+    await expect(
+      factory.create('envoy:route:stable', {}, { env: { ENVOY_API_BASE_URL: '' } }),
+    ).rejects.toThrow('requires a gateway URL');
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('does not borrow the OpenAI key when the selected variable is missing', async () => {
     const provider = await loadApiProvider('envoy:route:stable', {
       options: { config: { apiKeyEnvar: 'MISSING_ENVOY_TEST_KEY' } },
