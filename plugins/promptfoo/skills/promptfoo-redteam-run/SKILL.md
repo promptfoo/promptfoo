@@ -66,6 +66,8 @@ Read the JSON artifact, not just the exit status:
   and the expected test coverage. Zero graded results are inconclusive.
 - Inspect failing/error rows: `response.output`, `gradingResult`, `error`,
   `metadata.pluginId`, `metadata.strategyId`, and target label.
+- An `error` string can describe an assertion failure. Use `failureReason` and
+  the stats to distinguish a policy violation from an execution error.
 - Compute attack success rate as `failures / (successes + failures)` only for
   validly graded results. Report transport/grader errors separately.
 - Confirm `shareableUrl` is null for a no-share run.

@@ -72,6 +72,9 @@ jq '.results.stats | (.successes + .failures) as $n | if $n > 0 then .failures /
 
 Report zero graded rows as inconclusive and errors separately. `shareableUrl`
 should be null with `--no-share`; this says nothing about remote grading traffic.
+Assertion failures can also populate `error`; inspect `failureReason` and stats
+before classifying them as infrastructure errors. Adaptive history may contain
+raw HTTP headers: redact transport metadata before sharing evidence.
 
 ## Narrow Reruns
 

@@ -7,7 +7,7 @@ sidebar_position: 99
 
 # Agent Skills for Evals and Red Teaming
 
-AI coding agents can write promptfoo configs, but they often get the details wrong: shell-style env vars that do not work, hallucination rubrics that cannot see the source material, tests dumped inline instead of in files, and red-team configs that collapse real app inputs into one generic prompt field.
+AI coding agents can write promptfoo configs, but can miss details that make the results useful: correct environment-variable syntax, source evidence for graders, assertions that reject wrong answers, and red-team inputs that preserve the app's trust boundaries.
 
 Promptfoo ships one agent-skill bundle with four focused skills — `promptfoo-evals` for eval authoring, `promptfoo-provider-setup` for connecting targets, and `promptfoo-redteam-setup` plus `promptfoo-redteam-run` for red-team setup and scan triage. The same bundle is published to both the [Claude Code](https://code.claude.com) and [OpenAI Codex](https://openai.com/index/codex) marketplaces.
 
@@ -19,15 +19,15 @@ Without the skill, agents frequently:
 
 - Use `$ENV_VAR` syntax in YAML configs, which does not work because promptfoo uses Nunjucks `'{{env.VAR}}'`
 - Write `llm-rubric` assertions that reference "the article" but don't inline the source, so the grader can't actually compare
-- Dump all tests inline in the config instead of using `file://tests/*.yaml`
-- Reach for `llm-rubric` when `contains` or `is-json` would be faster, free, and deterministic
+- Write assertions that also pass for wrong answers, such as checking only whether the output is valid JSON
+- Use a model grader for objective conditions that `equals`, `is-json`, or `javascript` can check directly
 
 The skill gives the agent these rules up front.
 
 The red-team skills cover a different set of common mistakes: flattening
 multi-input targets into one prompt field, choosing broad scans before mapping
-the app boundary, and regenerating probes when a stable rerun would be easier to
-compare.
+the app boundary, and regenerating seeds unnecessarily. Adaptive reruns still
+produce new attacks; retain their transcripts when comparing results.
 
 ## Install
 
@@ -126,8 +126,8 @@ examples (provider and redteam setup also include a `scripts/` directory).
 
 ## Usage
 
-Once installed, the agent activates automatically when you ask it to create or
-update eval coverage. In Claude Code, you can also invoke a skill directly with
+Once installed, the agent selects a skill when you ask for eval coverage, a
+target connection, or a redteam workflow. In Claude Code, you can also invoke a skill directly with
 a slash command (namespaced when installed from the marketplace):
 
 ```text
@@ -140,7 +140,7 @@ skill activates from the task context.
 For red-team work, ask for the task directly:
 
 ```text
-Create a focused red team config for this invoice assistant. Preserve user_id, invoice_id, and message inputs; test policy, RBAC, and BOLA.
+Create a focused red team config for this invoice assistant. Identify the authenticated test account and caller-controlled fields from the API contract. Use known owned/unowned invoices and a small request budget.
 Run the generated redteam scan, summarize attack success rate, and give me the narrowest rerun command for failures.
 ```
 
