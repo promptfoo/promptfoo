@@ -213,7 +213,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      await user.click(getMediaCardAction('Image: Evaluation 2'));
+      await user.click(getMediaCardAction('Image: Evaluation 2, hash-1'));
 
       expect(onItemClick).toHaveBeenCalledWith(items[1]);
     });
@@ -238,9 +238,9 @@ describe('MediaGrid', () => {
       );
 
       // Check that selection checkboxes are rendered with item-specific labels.
-      expect(screen.getByLabelText('Deselect Evaluation 2')).toBeInTheDocument(); // hash-1 is selected
-      expect(screen.getByLabelText('Select Evaluation 1')).toBeInTheDocument();
-      expect(screen.getByLabelText('Select Evaluation 3')).toBeInTheDocument();
+      expect(screen.getByLabelText('Deselect Evaluation 2, hash-1')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select Evaluation 1, hash-0')).toBeInTheDocument();
+      expect(screen.getByLabelText('Select Evaluation 3, hash-2')).toBeInTheDocument();
     });
 
     it('calls onToggleSelection when checkbox is clicked', async () => {
@@ -261,7 +261,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      await user.click(screen.getByLabelText('Select Evaluation 1'));
+      await user.click(screen.getByLabelText('Select Evaluation 1, hash-0'));
 
       expect(onToggleSelection).toHaveBeenCalledWith('hash-0');
     });
@@ -282,7 +282,7 @@ describe('MediaGrid', () => {
         />,
       );
 
-      expect(getCardContainer('Image: Evaluation 2 (currently viewing)')).toHaveClass(
+      expect(getCardContainer('Image: Evaluation 2, hash-1 (currently viewing)')).toHaveClass(
         'border-primary',
       );
     });
