@@ -231,21 +231,30 @@ function transformSpan(
     },
     statusCode: normalizeStatusCode(span.status?.code),
     statusMessage: span.status?.message,
-    events: span.events?.flatMap((event) =>
-      event && typeof event.name === 'string' && event.name.trim()
-        ? [
-            {
-              name: event.name,
-              timestamp: event.timeUnixNano ? nanoToMs(event.timeUnixNano) : startTime,
-              attributes: attributesToRecord(
-                event.attributes?.filter(
-                  (attribute) => attribute && typeof attribute.key === 'string' && attribute.value,
+    events: Array.isArray(span.events)
+      ? span.events.flatMap((event) => {
+          if (!event || typeof event.name !== 'string' || !event.name.trim()) {
+            return [];
+          }
+          try {
+            return [
+              {
+                name: event.name,
+                timestamp: event.timeUnixNano ? nanoToMs(event.timeUnixNano) : startTime,
+                attributes: attributesToRecord(
+                  event.attributes?.filter(
+                    (attribute) =>
+                      attribute && typeof attribute.key === 'string' && attribute.value,
+                  ),
                 ),
-              ),
-            },
-          ]
-        : [],
-    ),
+              },
+            ];
+          } catch {
+            // A malformed event must not discard the span and its other verifier evidence.
+            return [];
+          }
+        })
+      : [],
   };
 }
 

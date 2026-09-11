@@ -542,18 +542,6 @@ function inferredTraceFindings(
   return [];
 }
 
-function evidenceCandidateMatchesPlugin(value: unknown, pluginId: AgenticRuntimePluginId): boolean {
-  return parseEvidenceCandidates(value).some((candidate) => {
-    const evidence = candidate as AgenticRuntimeEvidence;
-    return (
-      hasVerifierEvidence(evidence) &&
-      (normalizePluginId(evidence.pluginId) === pluginId ||
-        (Array.isArray(evidence.findings) &&
-          evidence.findings.some((finding) => normalizePluginId(finding.pluginId) === pluginId)))
-    );
-  });
-}
-
 function findingMatchesPlugin(
   finding: AgenticRuntimeFinding,
   pluginId: AgenticRuntimePluginId,
@@ -595,6 +583,7 @@ function dedupeFindings(findings: AgenticRuntimeFinding[]): AgenticRuntimeFindin
 function normalizeEvidenceForPlugin(
   evidence: AgenticRuntimeEvidence | undefined,
   pluginId: AgenticRuntimePluginId | undefined,
+  inheritedPluginId?: string,
 ): AgenticRuntimeEvidence | undefined {
   if (!evidence || !pluginId) {
     return evidence;
@@ -603,7 +592,7 @@ function normalizeEvidenceForPlugin(
     return undefined;
   }
 
-  const normalizedEvidencePluginId = normalizePluginId(evidence.pluginId);
+  const normalizedEvidencePluginId = normalizePluginId(evidence.pluginId ?? inheritedPluginId);
   const normalizedFindings = Array.isArray(evidence.findings)
     ? evidence.findings.map((finding) => ({
         ...finding,
@@ -651,15 +640,13 @@ function traceAttributesMatchPlugin(
     return false;
   }
 
-  return (
-    evidenceCandidateMatchesPlugin(
-      getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS),
-      pluginId,
-    ) ||
-    (normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)) === pluginId &&
-      parseEvidenceCandidates(getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS)).some(
-        (candidate) => Boolean(normalizeEvidenceForPlugin(candidate, pluginId)),
-      ))
+  const inheritedPluginId = normalizePluginId(
+    getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS),
+  );
+  return parseEvidenceCandidates(
+    getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS),
+  ).some((candidate) =>
+    hasVerifierEvidence(normalizeEvidenceForPlugin(candidate, pluginId, inheritedPluginId)),
   );
 }
 

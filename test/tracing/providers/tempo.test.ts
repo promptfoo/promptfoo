@@ -138,6 +138,31 @@ describe('TempoProvider', () => {
     );
   });
 
+  it.each([{ kvlistValue: { values: [null] } }, { arrayValue: { values: [null] } }])(
+    'drops a malformed event while keeping its span and valid events: %j',
+    async (value) => {
+      const data = structuredClone(traceResponse);
+      data.batches[0].scopeSpans[0].spans[0].events!.unshift({
+        name: 'broken event',
+        timeUnixNano: '1704067200500000000',
+        attributes: [{ key: 'broken', value }],
+      });
+      mockedFetch.mockResolvedValueOnce(response(data));
+      const result = await new TempoProvider({
+        id: 'tempo',
+        endpoint: 'http://tempo:3200',
+      }).fetchTrace(TRACE_ID);
+      expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
+      expect(result?.spans[0].events).toEqual([
+        {
+          name: 'tool event',
+          timestamp: 1704067200500,
+          attributes: { command: 'echo fixture' },
+        },
+      ]);
+    },
+  );
+
   it('accepts canonical base64 span identifiers', async () => {
     const encodedResponse = structuredClone(traceResponse);
     for (const span of encodedResponse.batches[0].scopeSpans[0].spans) {

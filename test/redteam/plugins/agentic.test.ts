@@ -22,6 +22,48 @@ describe('Agentic redteam plugins', () => {
     callApi: vi.fn(),
   } as unknown as ApiProvider;
 
+  it.each([
+    ['span', undefined, true],
+    ['event', undefined, true],
+    ['span', 'agentic:handoff-context-leakage', false],
+    ['event', 'agentic:handoff-context-leakage', false],
+  ] as const)(
+    'scopes empty %s evidence without overriding %s',
+    async (source, evidencePlugin, expectedPass) => {
+      const pluginId = 'agentic:approval-continuity';
+      const attributes = {
+        'promptfoo.agentic.plugin_id': pluginId,
+        'promptfoo.agentic.evidence_json': JSON.stringify({
+          findings: [],
+          pluginId: evidencePlugin,
+        }),
+      };
+      const result = await getGraderById(
+        'promptfoo:redteam:agentic:approval-continuity',
+      )!.getResult('prompt', 'done', {}, undefined, undefined, undefined, undefined, {
+        traceData: {
+          traceId: '0123456789abcdef0123456789abcdef',
+          evaluationId: 'scope',
+          testCaseId: 'scope',
+          spans: [
+            {
+              spanId: '0123456789abcdef',
+              name: 'verifier',
+              startTime: 0,
+              attributes: source === 'span' ? attributes : {},
+              events:
+                source === 'event' ? [{ name: 'verifier result', timestamp: 0, attributes }] : [],
+            },
+          ],
+        },
+      });
+      expect(result.grade.pass).toBe(expectedPass);
+      if (!expectedPass) {
+        expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
+      }
+    },
+  );
+
   it('rejects malformed provider and trace findings without throwing', async () => {
     const pluginId = 'agentic:approval-continuity';
     const grader = getGraderById('promptfoo:redteam:agentic:approval-continuity')!;

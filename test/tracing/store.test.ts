@@ -696,6 +696,42 @@ describe('TraceStore', () => {
       });
     });
 
+    it.each([true, false])(
+      'redacts overlapping span and event secrets together: %s',
+      async (longerInEvent) => {
+        const short = 'SYNTHETIC_SHORT_SECRET';
+        const long = `prefix-${short}-suffix`;
+        const spans = [
+          {
+            spanId: 'span-overlap',
+            name: long,
+            startTime: 0,
+            statusMessage: long,
+            attributes: { authorization: longerInEvent ? short : long },
+            events: [
+              { name: long, timestamp: 0, attributes: { api_key: longerInEvent ? long : short } },
+            ],
+          },
+        ];
+        mockDb.select
+          .mockReturnValueOnce({
+            from: vi.fn().mockReturnThis(),
+            where: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockResolvedValue([{ traceId: 'trace-overlap' }]),
+          })
+          .mockReturnValueOnce({
+            from: vi.fn().mockReturnThis(),
+            where: vi.fn().mockResolvedValue(spans),
+          });
+        const result = await traceStore.getTrace('trace-overlap');
+        expect(result?.spans[0]).toMatchObject({
+          name: '<redacted>',
+          statusMessage: '<redacted>',
+          events: [{ name: '<redacted>', attributes: { api_key: '<redacted>' } }],
+        });
+      },
+    );
+
     it('should allow callers to retrieve raw span attributes for a single trace', async () => {
       const mockTrace = {
         id: '1',

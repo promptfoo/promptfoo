@@ -48,26 +48,6 @@ export interface AddSpansOptions {
   warnIfMissingTrace?: boolean;
 }
 
-function sanitizeEvents(
-  events: TraceSpanEvent[] | null | undefined,
-  shouldSanitizeAttributes: boolean,
-): TraceSpanEvent[] | undefined {
-  return events?.map((event) => {
-    const attributes = shouldSanitizeAttributes
-      ? sanitizeTraceAttributes(event.attributes)
-      : (event.attributes ?? undefined);
-    if (!shouldSanitizeAttributes || !event.attributes) {
-      return { ...event, attributes };
-    }
-    const secrets = getRedactedValues(event.attributes, attributes);
-    return {
-      ...event,
-      name: scrubEcho(event.name, secrets),
-      attributes,
-    };
-  });
-}
-
 function getRedactedValues(raw: unknown, safe: unknown): string[] {
   const secrets: string[] = [];
   const pending: Array<[unknown, unknown]> = [[raw, safe]];
@@ -87,7 +67,7 @@ function getRedactedValues(raw: unknown, safe: unknown): string[] {
       }
     }
   }
-  return secrets.sort((left, right) => right.length - left.length);
+  return secrets;
 }
 
 function scrubEcho<T extends string | undefined>(value: T, secrets: string[]): T {
@@ -107,7 +87,12 @@ function serializeSpan(
       ? sanitizeTraceAttributes(rawAttributes)
       : rawAttributes
     : undefined;
-  const events = sanitizeEvents(span.events, shouldSanitizeAttributes);
+  const events = span.events?.map((event) => ({
+    ...event,
+    attributes: shouldSanitizeAttributes
+      ? sanitizeTraceAttributes(event.attributes)
+      : (event.attributes ?? undefined),
+  }));
   const secrets = shouldSanitizeAttributes
     ? [
         ...getRedactedValues(rawAttributes, attributes),
@@ -117,6 +102,7 @@ function serializeSpan(
       ]
     : [];
 
+  secrets.sort((left, right) => right.length - left.length);
   const safeEvents = events?.map((event) => ({ ...event, name: scrubEcho(event.name, secrets) }));
   return {
     spanId: span.spanId,
