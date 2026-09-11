@@ -43,9 +43,13 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { sanitizeRuntimeOptions } from '../util/sanitizer';
+import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
-import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  accumulateGenerationTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from '../util/tokenUsageUtils';
 import {
   invalidateEvaluationCache,
   notifyEvaluationChanged,
@@ -1008,7 +1012,10 @@ export function combineFilterConditions(
     if (idx === 0) {
       return cond;
     }
-    return logicOperator === 'OR' ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
+    // Filters arrive as unvalidated JSON from the query string, and the UI sends
+    // lowercase 'or'/'and'. Anything that isn't a recognized OR falls back to AND.
+    const isOr = typeof logicOperator === 'string' && logicOperator.toUpperCase() === 'OR';
+    return isOr ? sql`${acc} OR ${cond}` : sql`${acc} AND ${cond}`;
   }, filterConditions[0].condition);
 }
 
@@ -1418,7 +1425,7 @@ export default class Eval {
           createdAt: createdAt.getTime(),
           author,
           description: config.description,
-          config,
+          config: sanitizeTracingConfigForPersistence(config),
           results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -1584,7 +1591,7 @@ export default class Eval {
   async save() {
     const db = await getDb();
     const updateObj: Record<string, unknown> = {
-      config: this.config,
+      config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
       prompts: this.prompts,
       description: this.config.description,
@@ -2295,7 +2302,9 @@ export default class Eval {
   }
 
   async loadResults() {
-    this.results = await EvalResult.findManyByEvalId(this.id);
+    if (this.persisted) {
+      this.results = await EvalResult.findManyByEvalId(this.id);
+    }
     this._resultsLoaded = true;
   }
 
@@ -2349,6 +2358,11 @@ export default class Eval {
 
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
+
+    accumulateGenerationTokenUsage(
+      stats.tokenUsage,
+      this.config.metadata?.generationAccounting?.tokenUsage,
+    );
 
     return stats;
   }
@@ -2653,8 +2667,11 @@ export default class Eval {
       results,
       config:
         resultProjection === 'redteamReport'
-          ? projectConfigForRedteamReport(this.config)
-          : projectConfigForOutput(this.config, outputStripFlags),
+          ? projectConfigForRedteamReport(sanitizeTracingConfigForPersistence(this.config))
+          : projectConfigForOutput(
+              sanitizeTracingConfigForPersistence(this.config),
+              outputStripFlags,
+            ),
       author: this.author || null,
       prompts:
         stripFlags === undefined
@@ -2707,7 +2724,7 @@ export default class Eval {
     });
 
     // Deep clone to prevent mutation issues
-    const newConfig = structuredClone(this.config);
+    const newConfig = structuredClone(sanitizeTracingConfigForPersistence(this.config));
     newConfig.description = copyDescription;
 
     const newPrompts = structuredClone(this.prompts);
@@ -2727,7 +2744,7 @@ export default class Eval {
           createdAt: Date.now(),
           author,
           description: copyDescription,
-          config: newConfig,
+          config: sanitizeTracingConfigForPersistence(newConfig),
           results: {},
           prompts: newPrompts,
           vars: newVars,

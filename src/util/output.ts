@@ -31,7 +31,11 @@ import { streamEvalCsv } from './eval/evalTableUtils';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
-import { sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
+import {
+  sanitizeObject,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type { EvaluateResult, EvaluateTableOutput } from '../types';
@@ -333,11 +337,14 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
 };
 
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
-  return sanitizeObject(projectConfigForOutput(config, getOutputStripFlags()), {
-    context: 'output config',
-    throwOnError: true,
-    maxDepth: Number.POSITIVE_INFINITY,
-  }) as OutputFile['config'];
+  return sanitizeObject(
+    projectConfigForOutput(sanitizeTracingConfigForPersistence(config), getOutputStripFlags()),
+    {
+      context: 'output config',
+      throwOnError: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+    },
+  ) as OutputFile['config'];
 }
 
 function resultsForMediaExportScan(results: OutputFile['results']): unknown {

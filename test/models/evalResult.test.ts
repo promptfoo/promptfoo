@@ -8,6 +8,7 @@ import EvalResult, {
   sanitizeResultForJsonlArtifact,
 } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
+import { WebSocketProvider } from '../../src/providers/websocket';
 import { TOOL_ARGUMENT_ATTRIBUTE_KEYS } from '../../src/tracing/toolAttributes';
 import {
   type ApiProvider,
@@ -114,6 +115,24 @@ describe('EvalResult', () => {
         label: 'Test Provider',
         config: {
           apiKey: '[REDACTED]',
+        },
+      });
+    });
+
+    it('should redact env-rendered credentials from templated WebSocket provider data', () => {
+      const provider = new WebSocketProvider('websocket', {
+        config: {
+          url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=runtime-secret',
+          messageTemplate: '{{ prompt }}',
+        },
+      });
+
+      expect(sanitizeProvider(provider)).toEqual({
+        id: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D',
+        label: undefined,
+        config: {
+          url: 'ws://127.0.0.1/sessions/{{ sessionId }}?token=%5BREDACTED%5D',
+          messageTemplate: '{{ prompt }}',
         },
       });
     });
@@ -1371,36 +1390,35 @@ describe('EvalResult', () => {
         providerOutput: undefined,
         options: { repeat: 2 },
       },
-    ])('projects test-case prompt and output copies for $name', ({
-      env,
-      providerOutput,
-      options,
-    }) => {
-      const createResult = () =>
-        createEvaluateResult({
-          testCase: {
-            providerOutput: 'sensitive provider output',
-            options: {
-              prefix: 'sensitive prompt prefix',
-              suffix: 'sensitive prompt suffix',
-              repeat: 2,
+    ])(
+      'projects test-case prompt and output copies for $name',
+      ({ env, providerOutput, options }) => {
+        const createResult = () =>
+          createEvaluateResult({
+            testCase: {
+              providerOutput: 'sensitive provider output',
+              options: {
+                prefix: 'sensitive prompt prefix',
+                suffix: 'sensitive prompt suffix',
+                repeat: 2,
+              },
             },
-          },
-        });
-      const restoreEnv = mockProcessEnv(env);
+          });
+        const restoreEnv = mockProcessEnv(env);
 
-      try {
-        for (const result of [
-          projectEvaluateResultForOutput(createResult()),
-          sanitizeResultForJsonlArtifact(createResult()),
-        ]) {
-          expect(result.testCase.providerOutput).toBe(providerOutput);
-          expect(result.testCase.options).toEqual(options);
+        try {
+          for (const result of [
+            projectEvaluateResultForOutput(createResult()),
+            sanitizeResultForJsonlArtifact(createResult()),
+          ]) {
+            expect(result.testCase.providerOutput).toBe(providerOutput);
+            expect(result.testCase.options).toEqual(options);
+          }
+        } finally {
+          restoreEnv();
         }
-      } finally {
-        restoreEnv();
-      }
-    });
+      },
+    );
 
     it('fails closed on malformed scalar prompts and responses under strip flags', () => {
       const malformed = createEvaluateResult({
@@ -1579,6 +1597,62 @@ describe('EvalResult', () => {
 
       expect(result.toEvaluateResult().tokenUsage?.assertions).toMatchObject({
         numRequests: 1,
+      });
+    });
+
+    it('does not invent grading requests when reconstructing deterministic assertions', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Deterministic assertion passed',
+          tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
+        },
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage?.assertions).toMatchObject({
+        total: 0,
+        numRequests: 0,
+      });
+    });
+
+    it('separates logical and incurred requests when legacy grading results imply a cache hit', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: mockTestCase,
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: null,
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'Legacy cached grading result',
+          tokensUsed: { total: 97, cached: 97, numRequests: 0 },
+        },
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage).toMatchObject({
+        assertions: { total: 97, cached: 97, numRequests: 1 },
+        incurredTokenUsage: { assertions: { total: 0, numRequests: 0 } },
       });
     });
 
@@ -1962,38 +2036,35 @@ describe('EvalResult', () => {
         expectedSearchName: 'search "[output stripped]"',
         expectedCommandName: 'exec [output stripped]',
       },
-    ])('projects $name trace payload aliases', ({
-      env,
-      removed,
-      retained,
-      expectedSearchName,
-      expectedCommandName,
-    }) => {
-      const restoreEnv = mockProcessEnv(env);
+    ])(
+      'projects $name trace payload aliases',
+      ({ env, removed, retained, expectedSearchName, expectedCommandName }) => {
+        const restoreEnv = mockProcessEnv(env);
 
-      try {
-        const projected = projectTracesForOutput(createTraces());
-        const span = projected[0].spans[0] as (typeof projected)[0]['spans'][0] & {
-          status: { message: string };
-        };
+        try {
+          const projected = projectTracesForOutput(createTraces());
+          const span = projected[0].spans[0] as (typeof projected)[0]['spans'][0] & {
+            status: { message: string };
+          };
 
-        for (const key of removed) {
-          expect(span.attributes).not.toHaveProperty(key);
+          for (const key of removed) {
+            expect(span.attributes).not.toHaveProperty(key);
+          }
+          for (const key of retained) {
+            expect(span.attributes).toHaveProperty(key);
+          }
+          expect(span.attributes).toHaveProperty('safe', 'retained');
+          expect(span.attributes).toHaveProperty('codex.error', '[error details stripped]');
+          expect(span.name).toBe(expectedSearchName);
+          expect(projected[0].spans[2].name).toBe(expectedCommandName);
+          expect(span.statusMessage).toBe('[error details stripped]');
+          expect(span.status.message).toBe('[error details stripped]');
+          expect(projected[0].spans[1].statusMessage).toBe('[error details stripped]');
+        } finally {
+          restoreEnv();
         }
-        for (const key of retained) {
-          expect(span.attributes).toHaveProperty(key);
-        }
-        expect(span.attributes).toHaveProperty('safe', 'retained');
-        expect(span.attributes).toHaveProperty('codex.error', '[error details stripped]');
-        expect(span.name).toBe(expectedSearchName);
-        expect(projected[0].spans[2].name).toBe(expectedCommandName);
-        expect(span.statusMessage).toBe('[error details stripped]');
-        expect(span.status.message).toBe('[error details stripped]');
-        expect(projected[0].spans[1].statusMessage).toBe('[error details stripped]');
-      } finally {
-        restoreEnv();
-      }
-    });
+      },
+    );
 
     it.each([
       ['prompt text', { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' }],

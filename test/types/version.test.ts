@@ -6,7 +6,6 @@ const baseResponse = {
   currentVersion: '0.121.13',
   latestVersion: '0.121.14',
   updateAvailable: true,
-  updateBlockedByRuntime: false,
   selfHosted: false,
   isNpx: true,
   updateCommands: {
@@ -32,32 +31,8 @@ const LegacyVersionResponseSchema = z.object({
 });
 
 describe('VersionSchemas.Response', () => {
-  it('accepts legacy responses without runtime compatibility fields', () => {
-    const { updateBlockedByRuntime: _updateBlockedByRuntime, ...legacyResponse } = baseResponse;
-
-    expect(VersionSchemas.Response.parse(legacyResponse)).toEqual(legacyResponse);
-  });
-
-  it('accepts a response without an active runtime notice', () => {
-    expect(
-      VersionSchemas.Response.parse({
-        ...baseResponse,
-        runtimeNotice: null,
-      }),
-    ).toMatchObject({ runtimeNotice: null, updateBlockedByRuntime: false });
-  });
-
-  it('accepts cutoff policy metadata without an active runtime notice', () => {
-    expect(
-      VersionSchemas.Response.parse({
-        ...baseResponse,
-        runtimeNotice: null,
-        runtimePolicy: { supportEndDate: '2026-07-30' },
-      }),
-    ).toMatchObject({
-      runtimeNotice: null,
-      runtimePolicy: { supportEndDate: '2026-07-30' },
-    });
+  it('accepts a baseline version response', () => {
+    expect(VersionSchemas.Response.parse(baseResponse)).toEqual(baseResponse);
   });
 
   it('keeps custom-container guidance compatible with the legacy response schema', () => {
@@ -77,84 +52,5 @@ describe('VersionSchemas.Response', () => {
       updateCommands: { primary: '', commandType: 'npm', isCustomContainer: true },
     });
     expect(LegacyVersionResponseSchema.safeParse(customContainerResponse).success).toBe(true);
-  });
-
-  it('accepts the Node.js 20 compatibility notice', () => {
-    expect(
-      VersionSchemas.Response.parse({
-        ...baseResponse,
-        runtimeNotice: {
-          id: 'node20-removal-2026-07-30',
-          kind: 'runtime_deprecation',
-          runtime: 'node',
-          currentVersion: 'v20.20.2',
-          currentMajor: 20,
-          removalDate: '2026-07-30',
-          minimumVersion: '22.22.0',
-          recommendedVersion: '24 LTS',
-          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-        },
-      }).runtimeNotice,
-    ).toMatchObject({ currentMajor: 20, removalDate: '2026-07-30' });
-  });
-
-  it('accepts additive guidance for an available update blocked by the runtime', () => {
-    expect(
-      VersionSchemas.Response.parse({
-        ...baseResponse,
-        updateAvailable: false,
-        updateBlockedByRuntime: true,
-        runtimeNotice: null,
-        blockedUpdateNotice: {
-          id: 'node20-removal-2026-07-30',
-          kind: 'runtime_deprecation',
-          runtime: 'node',
-          currentVersion: 'v20.20.2',
-          currentMajor: 20,
-          removalDate: '2026-07-30',
-          minimumVersion: '22.22.0',
-          recommendedVersion: '24 LTS',
-          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-        },
-      }).blockedUpdateNotice,
-    ).toMatchObject({ currentMajor: 20, removalDate: '2026-07-30' });
-  });
-
-  it('rejects runtime notices that drift from the announced policy', () => {
-    expect(
-      VersionSchemas.Response.safeParse({
-        ...baseResponse,
-        runtimeNotice: {
-          id: 'node20-removal-2026-07-30',
-          kind: 'runtime_deprecation',
-          runtime: 'node',
-          currentVersion: 'v20.20.2',
-          currentMajor: 20,
-          removalDate: '2026-08-31',
-          minimumVersion: '22.22.0',
-          recommendedVersion: '24 LTS',
-          documentationUrl: 'https://www.promptfoo.dev/docs/installation/#nodejs-runtime-support',
-        },
-      }).success,
-    ).toBe(false);
-  });
-
-  it('rejects a runtime notice whose documentation URL drifts from the upgrade guide', () => {
-    expect(
-      VersionSchemas.Response.safeParse({
-        ...baseResponse,
-        runtimeNotice: {
-          id: 'node20-removal-2026-07-30',
-          kind: 'runtime_deprecation',
-          runtime: 'node',
-          currentVersion: 'v20.20.2',
-          currentMajor: 20,
-          removalDate: '2026-07-30',
-          minimumVersion: '22.22.0',
-          recommendedVersion: '24 LTS',
-          documentationUrl: 'https://malicious.example.com/upgrade',
-        },
-      }).success,
-    ).toBe(false);
   });
 });

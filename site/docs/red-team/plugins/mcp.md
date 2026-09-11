@@ -89,7 +89,7 @@ Here's an example configuration for testing an MCP-enabled customer support agen
 description: Red Teaming MCP with tool use
 
 providers:
-  - id: anthropic:messages:claude-3-haiku-20240307
+  - id: anthropic:messages:claude-haiku-4-5
     config:
       mcp:
         enabled: true

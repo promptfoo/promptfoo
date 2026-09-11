@@ -23,10 +23,6 @@ vi.mock('./components/ReportIndex', () => ({
   default: () => <div>ReportIndex Component</div>,
 }));
 
-vi.mock('@app/components/PylonChat', () => ({
-  default: () => null,
-}));
-
 vi.mock('@app/contexts/UserContext', () => ({
   UserProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
