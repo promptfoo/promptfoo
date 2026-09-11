@@ -635,6 +635,7 @@ describe('OpenAICodexSecurityProvider', () => {
 
       const response = await provider.callApi('Scan');
 
+      expect(response.error).toBeUndefined();
       expect(response.tokenUsage).toBeUndefined();
       expect(response.cost).toBeUndefined();
     });
