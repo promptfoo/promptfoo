@@ -197,7 +197,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/browser.test.ts',
   'providers/cloudflare-ai.test.ts',
   'providers/cloudflare-gateway.test.ts',
-  'providers/github/defaults.test.ts',
   'providers/google/ai.studio.test.ts',
   'providers/google/auth.test.ts',
   'providers/google/base.test.ts',
@@ -212,7 +211,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/http-tls.test.ts',
   'providers/huggingface.test.ts',
   'providers/index.test.ts',
-  'providers/mcp/authProvider.test.ts',
   'providers/openai-codex-sdk.test.ts',
   'providers/openai/chatkit-pool.test.ts',
   'providers/openai/chatkit.test.ts',
@@ -224,7 +222,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'providers/watsonx.test.ts',
   'redteam/commands/crossSessionLeakGenerate.test.ts',
   'redteam/commands/generate.test.ts',
-  'commands/redteam/report.test.ts',
   'redteam/extraction/entities.test.ts',
   'redteam/extraction/purpose.test.ts',
   'redteam/extraction/util.test.ts',
@@ -337,7 +334,7 @@ function isPersistentMockSetter(node: Node): boolean {
 
 // A vi.mock factory runs at module load; other function bodies are deferred.
 function findPersistentMockSetter(
-  node: Node,
+  nodes: readonly Node[],
   opts: { enterRootFunction?: boolean } = {},
 ): Node | undefined {
   let found: Node | undefined;
@@ -351,7 +348,12 @@ function findPersistentMockSetter(
     }
     forEachChild(current, (child) => visit(child, false));
   }
-  visit(node, true);
+  for (const node of nodes) {
+    visit(node, true);
+    if (found) {
+      break;
+    }
+  }
   return found;
 }
 
@@ -438,7 +440,7 @@ function findModuleScopePersistentSetter(
         ? statement.expression.expression
         : statement.expression;
     if (expression.type !== 'CallExpression' || !isViCall(expression, 'mock', namespaces)) {
-      return findPersistentMockSetter(expression);
+      return findPersistentMockSetter([expression]);
     }
     const factory = expression.arguments[1];
     if (!factory) {
@@ -446,25 +448,19 @@ function findModuleScopePersistentSetter(
     }
     const resolvedFactory =
       factory.type === 'Identifier' ? (factories.get(factory.name) ?? factory) : factory;
-    return findPersistentMockSetter(resolvedFactory, { enterRootFunction: true });
+    return findPersistentMockSetter([resolvedFactory], { enterRootFunction: true });
   }
 
   if (statement.type === 'VariableDeclaration') {
-    for (const declaration of statement.declarations) {
-      const found = declaration.init ? findPersistentMockSetter(declaration.init) : undefined;
-      if (found) {
-        return found;
-      }
-    }
+    return findPersistentMockSetter(
+      statement.declarations.flatMap((declaration) => (declaration.init ? [declaration.init] : [])),
+    );
   }
 
   if (statement.type === 'ClassDeclaration') {
-    for (const member of statement.body.body) {
-      const found = member.type === 'StaticBlock' ? findPersistentMockSetter(member) : undefined;
-      if (found) {
-        return found;
-      }
-    }
+    return findPersistentMockSetter(
+      statement.body.body.filter((member) => member.type === 'StaticBlock'),
+    );
   }
   return undefined;
 }

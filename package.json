@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.122.2",
+  "version": "0.123.0",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -135,33 +135,33 @@
       "react-dom": "^19.2.4"
     },
     "@opentelemetry/exporter-trace-otlp-http": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/otlp-exporter-base": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/otlp-transformer": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/resources": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/sdk-logs": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/sdk-metrics": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/sdk-trace-base": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/sdk-trace-node": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "serialize-javascript": ">=7.0.5",
-    "gaxios": "^7.1.4",
+    "gaxios": "^8.0.0",
     "https-proxy-agent": "^9.0.0",
-    "ip-address": "10.5.0",
+    "ip-address": "10.7.0",
     "mongoose": {
       "gcp-metadata": "^9.0.2"
     },
@@ -213,7 +213,7 @@
       ".": "0.4.4",
       "chevrotain": "11.2.0"
     },
-    "webpack": "5.109.2",
+    "webpack": "5.110.3",
     "dompurify": "3.4.14",
     "monaco-editor": {
       ".": "0.56.0",
@@ -221,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.241",
+    "@anthropic-ai/claude-agent-sdk": "0.3.252",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -231,10 +231,10 @@
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
-    "@biomejs/biome": "2.5.10",
+    "@biomejs/biome": "2.5.11",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
-    "@langfuse/client": "^5.10.1",
+    "@langfuse/client": "^5.11.0",
     "@smithy/types": "^4.13.0",
     "@types/async": "^3.2.25",
     "@types/cli-progress": "^3.11.6",
@@ -245,7 +245,6 @@
     "@types/node": "^24.12.0",
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
-    "@types/pdf-parse": "^1.1.5",
     "@types/pem": "^1.14.4",
     "@types/proxy-from-env": "^1.0.4",
     "@types/semver": "^7.7.1",
@@ -260,12 +259,9 @@
     "knip": "~6.27.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.146.0",
+    "oxc-parser": "^0.147.0",
     "pdf-parse": "^2.4.5",
-    "playwright": "^1.60.0",
-    "playwright-extra": "^4.3.6",
     "prettier": "^3.8.1",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^9.3.9",
     "shx": "^0.4.0",
     "source-map-support": "^0.5.21",
@@ -278,7 +274,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.241",
+    "@anthropic-ai/claude-agent-sdk": "0.3.252",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -286,22 +282,22 @@
     "@aws-sdk/credential-provider-sso": "^3.972.16",
     "@azure/ai-projects": "^2.1.1",
     "@azure/identity": "^4.13.0",
-    "@azure/msal-node": "^5.2.0",
+    "@azure/msal-node": "^6.0.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^14.0.0",
     "@huggingface/transformers": "^4.0.0",
     "@ibm-cloud/watsonx-ai": "^1.7.16",
-    "@langfuse/client": "^5.10.1",
+    "@langfuse/client": "^5.11.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openai/agents": "^0.11.3",
-    "@openai/codex-sdk": "^0.144.0",
+    "@openai/codex-sdk": "^0.153.2",
     "@openai/codex-security": "^0.1.18",
-    "@opencode-ai/sdk": "^1.18.21",
+    "@opencode-ai/sdk": "^1.18.23",
     "@playwright/browser-chromium": "^1.60.0",
-    "@rollup/rollup-linux-x64-gnu": "^4.62.5",
-    "@slack/web-api": "^8.0.0",
+    "@rollup/rollup-linux-x64-gnu": "^4.63.1",
+    "@slack/web-api": "^8.1.1",
     "@smithy/node-http-handler": "^4.4.14",
     "@swc/core": "^1.16.1",
     "@swc/core-darwin-arm64": "^1.16.1",
@@ -310,7 +306,7 @@
     "@swc/core-linux-x64-musl": "^1.16.1",
     "@swc/core-win32-x64-msvc": "^1.16.1",
     "google-auth-library": "^11.0.2",
-    "hono": "^4.13.3",
+    "hono": "^4.13.5",
     "ibm-cloud-sdk-core": "^5.6.0",
     "jks-js": "^1.1.5",
     "natural": "^8.1.1",
@@ -319,11 +315,12 @@
     "pem": "~1.14.8",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "read-excel-file": "^9.3.9",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.4"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.120.0",
+    "@anthropic-ai/sdk": "0.122.0",
     "@apidevtools/json-schema-ref-parser": "^16.0.0",
     "@hono/node-server": "2.1.1",
     "@inquirer/checkbox": "^5.1.0",
@@ -335,8 +332,8 @@
     "@inquirer/select": "^5.1.0",
     "@libsql/client": "^0.17.3",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/core": "2.10.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
+    "@opentelemetry/core": "2.11.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-base": "^2.6.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",
@@ -352,7 +349,7 @@
     "chokidar": "5.0.0",
     "cli-progress": "^3.12.0",
     "cli-table3": "^0.6.5",
-    "commander": "^14.0.3",
+    "commander": "^15.0.0",
     "compression": "^1.8.1",
     "cors": "^2.8.6",
     "csv-parse": "^7.0.0",
@@ -373,7 +370,7 @@
     "http-z": "^8.1.1",
     "istextorbinary": "^9.5.0",
     "js-rouge": "^3.2.0",
-    "js-yaml": "5.3.0",
+    "js-yaml": "5.4.1",
     "json5": "^2.2.3",
     "keyv": "^5.6.0",
     "keyv-file": "^5.3.3",

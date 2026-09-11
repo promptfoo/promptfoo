@@ -127,6 +127,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
     resolution: XaiImageOptions['resolution'] = '1k',
     sourceImageCount: number = 0,
     quality?: XaiImageOptions['quality'],
+    isEdit: boolean = false,
   ): number {
     // grok-imagine-image-pro is redirected to the quality model after
     // 2026-05-15; any other unrecognized grok-imagine-* slug (e.g. a future
@@ -144,12 +145,11 @@ export class XAIImageProvider extends OpenAiImageProvider {
       return 0.02 * n + 0.002 * sourceImageCount;
     }
     if (pricingModel === 'grok-imagine-image-2.0') {
-      // `auto` and an unset quality both bill at the `low` tier, matching the $0.04
-      // xAI charged for a default 1k request. Anything else (e.g. `high`, which the
-      // API rejects) falls back to the most expensive tier so an estimate never
-      // undercharges. xAI publishes no separate source-image surcharge for this
-      // model, so it mirrors the quality tier's rate.
-      const tier = !quality || quality === 'auto' || quality === 'low' ? 'low' : 'medium';
+      // `auto` (and an unset quality) currently serves low for generations but medium
+      // for edits. Anything else (e.g. `high`, which the API rejects) falls back to
+      // the most expensive tier so an estimate never undercharges.
+      const autoTier = isEdit ? 'medium' : 'low';
+      const tier = !quality || quality === 'auto' ? autoTier : quality === 'low' ? 'low' : 'medium';
       const perImage =
         IMAGINE_IMAGE_2_0_COSTS[`${tier}_${resolution}`] ?? IMAGINE_IMAGE_2_0_COSTS.medium_2k;
       return perImage * n + 0.01 * sourceImageCount;
@@ -268,6 +268,7 @@ export class XAIImageProvider extends OpenAiImageProvider {
             config.resolution,
             this.countSourceImages(config),
             config.quality,
+            isEdit,
           ));
       const images = buildStructuredImageOutputs(data);
 

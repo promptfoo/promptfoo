@@ -2,12 +2,19 @@ import * as vitest from 'vitest';
 
 const { afterEach, beforeEach, describe, expect, it } = vitest;
 
-const namespaceQualifiedMock = vitest.vi.hoisted(() =>
+const namespaceQualifiedMock = await vitest.vi.hoisted(async () =>
   vitest.vi.fn().mockReturnValue('namespace-hoisted'),
 );
 
+const cleanup = {
+  reset() {
+    namespaceQualifiedMock.mockReset();
+  },
+};
+
 beforeEach(() => {
-  namespaceQualifiedMock.mockReset().mockReturnValue('namespace-hoisted');
+  cleanup.reset();
+  namespaceQualifiedMock.mockReturnValue('namespace-hoisted');
 });
 
 afterEach(() => {

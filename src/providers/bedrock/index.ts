@@ -2339,7 +2339,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   // Nova 2 models with extended thinking support
   'amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA, // Sonic uses bidirectional streaming API
-  'anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2443,7 +2442,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'us.amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
-  'us.anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2660,6 +2658,11 @@ export function getHandlerForModel(
       'us.anthropic.claude-3-opus-20240229-v1:0',
       'anthropic.claude-opus-4-20250514-v1:0',
       'us.anthropic.claude-opus-4-20250514-v1:0',
+      // Withdrawn from Bedrock: absent from list-foundation-models in all 17 commercial
+      // regions on 2026-09-04. Listed here so it fails with a clear message instead of
+      // falling through to the `anthropic.claude` catch-all and failing at request time.
+      'anthropic.claude-3-5-haiku-20241022-v1:0',
+      'us.anthropic.claude-3-5-haiku-20241022-v1:0',
       'anthropic.claude-instant-v1',
       'anthropic.claude-v1',
       'anthropic.claude-v2',
@@ -2738,9 +2741,17 @@ export function getHandlerForModel(
     );
   }
   if (modelName.includes('openai.')) {
-    // Suggest the bare frontier id: AWS does not offer region/geo/global inference profiles for
-    // the gpt-5.x frontier models, so a prefixed id like `us.openai.gpt-5.5` is not valid.
+    // GPT-5.6 Runtime profiles support Converse, but not InvokeModel. Older frontier
+    // models retain their established Mantle Responses guidance.
     const bareFrontierId = modelName.replace(/^[a-z]+\.(?=openai\.)/, '');
+    if (/^[a-z]+\.openai\.gpt-5\.6-(?:sol|terra|luna)$/.test(modelName)) {
+      throw new Error(
+        `OpenAI model "${modelName}" is not served by Bedrock's InvokeModel API. ` +
+          `For a supported Runtime inference profile, use "bedrock:converse:${modelName}" ` +
+          `with AWS credentials, ` +
+          `or "bedrock:${bareFrontierId}" with AWS_BEARER_TOKEN_BEDROCK for Mantle Responses.`,
+      );
+    }
     throw new Error(
       `OpenAI model "${modelName}" is not served by Bedrock's InvokeModel API. Frontier ` +
         `models (gpt-5.x) use the OpenAI-compatible Responses API — use ` +
@@ -2754,8 +2765,9 @@ export function getHandlerForModel(
     // direct or prefixed ids that bypass the factory's supported bare-id route.
     throw new Error(
       `xAI model "${modelName}" is not served by Bedrock's InvokeModel API under that id. ` +
-        `Grok 4.6 is invocable through an inference profile — use "bedrock:us.xai.grok-4.6" or ` +
-        `"bedrock:global.xai.grok-4.6" with ordinary AWS credentials. Other Grok models run on ` +
+        `Grok 4.6 supports Runtime Converse through an inference profile — use ` +
+        `"bedrock:converse:us.xai.grok-4.6" or "bedrock:converse:global.xai.grok-4.6" ` +
+        `with ordinary AWS credentials. Other Grok models run on ` +
         `the OpenAI-compatible Responses API (mantle endpoint) — use the bare id such as ` +
         `"bedrock:xai.grok-4.3" and set AWS_BEARER_TOKEN_BEDROCK. See ` +
         `https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models`,
@@ -2953,10 +2965,27 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   }
 }
 
+interface BedrockEmbeddingOptions extends BedrockOptions {
+  input_type?: 'search_document' | 'search_query' | 'classification' | 'clustering';
+}
+
 export class AwsBedrockEmbeddingProvider
   extends AwsBedrockGenericProvider
   implements ApiEmbeddingProvider
 {
+  declare config: BedrockEmbeddingOptions;
+
+  constructor(
+    modelName: string,
+    options: {
+      config?: BedrockEmbeddingOptions;
+      id?: string;
+      env?: AwsBedrockGenericProvider['env'];
+    } = {},
+  ) {
+    super(modelName, options);
+  }
+
   async callApi(): Promise<ProviderEmbeddingResponse> {
     throw new Error('callApi is not implemented for embedding provider');
   }
@@ -2965,6 +2994,7 @@ export class AwsBedrockEmbeddingProvider
     const params = this.modelName.includes('cohere.embed')
       ? {
           texts: [text],
+          input_type: this.config.input_type ?? 'search_document',
         }
       : {
           inputText: text,
@@ -2993,9 +3023,16 @@ export class AwsBedrockEmbeddingProvider
       const data = JSON.parse(response.body.transformToString());
       // Titan Text API returns embeddings in the `embedding` field
       // Cohere API returns embeddings in the `embeddings` field
-      const embedding = data?.embedding || data?.embeddings;
-      if (!embedding) {
-        throw new Error('No embedding found in AWS Bedrock API response');
+      const embeddings = data?.embeddings?.float ?? data?.embeddings;
+      const embedding =
+        data?.embedding ??
+        (Array.isArray(embeddings) && embeddings.length === 1 ? embeddings[0] : undefined);
+      if (
+        !Array.isArray(embedding) ||
+        embedding.length === 0 ||
+        !embedding.every((value: unknown) => typeof value === 'number' && Number.isFinite(value))
+      ) {
+        throw new Error('No valid embedding found in AWS Bedrock API response');
       }
       return {
         embedding,
