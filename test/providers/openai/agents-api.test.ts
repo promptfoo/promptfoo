@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import { OpenAiAgentsApiProvider } from '../../../src/providers/openai/agents-api';
 import { withGenAISpan } from '../../../src/providers/tracing';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
@@ -1278,7 +1279,78 @@ describe('OpenAiAgentsApiProvider', () => {
     const result = await pending;
     expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
     expect(result.metadata).not.toHaveProperty('usageUnavailable');
+    // A single-agent root turn covers all of the session's work, so its usage is not marked.
+    expect(result.metadata).not.toHaveProperty('usageFromRootTurn');
     expect(result.metadata).toMatchObject({ sessionDeleted: true });
+  });
+
+  describe('multi-agent usage', () => {
+    const agent = { ...session.agent, multi_agent: { enabled: true } };
+
+    it('waits past the root-turn grace period for aggregate session usage', async () => {
+      vi.useFakeTimers();
+      const sessionUsage = { ...usage, input_tokens: 900, total_tokens: 920 };
+      let completedAt: number | undefined;
+      const elapsedAtLeast = (ms: number) =>
+        completedAt !== undefined && Date.now() - completedAt >= ms;
+      // Root-turn usage arrives after about 1 s and session totals after about 7 s.
+      const routes: [method: string, suffix: string, respond: () => Response][] = [
+        ['POST', '/sessions', () => json({ ...session, agent, usage: null })],
+        [
+          'GET',
+          '/turns',
+          () => {
+            completedAt ??= Date.now();
+            return json(page([{ ...turn, usage: null }]));
+          },
+        ],
+        [
+          'GET',
+          '/turns/turn_test',
+          () => json({ ...turn, usage: elapsedAtLeast(1_000) ? usage : null }),
+        ],
+        [
+          'GET',
+          '/sess_test',
+          () => json({ ...session, agent, usage: elapsedAtLeast(7_000) ? sessionUsage : null }),
+        ],
+      ];
+      mockApi((pathname, method) =>
+        routes.find(
+          ([routeMethod, suffix]) => method === routeMethod && pathname.endsWith(suffix),
+        )?.[2](),
+      );
+      const pending = provider().callApi('hi');
+      await vi.advanceTimersByTimeAsync(8_000);
+      const result = await pending;
+      expect(result.tokenUsage).toMatchObject({ prompt: 900, completion: 20, total: 920 });
+      expect(result.metadata).not.toHaveProperty('usageFromRootTurn');
+      expect(result.metadata).not.toHaveProperty('usageUnavailable');
+      expect(result.metadata).toMatchObject({ sessionDeleted: true });
+    });
+
+    it('marks root-turn usage when session totals are still missing at the usage deadline', async () => {
+      vi.useFakeTimers();
+      let sessionReads = 0;
+      mockApi((pathname, method) => {
+        if (method === 'POST' && pathname.endsWith('/sessions')) {
+          return json({ ...session, agent, usage: null });
+        }
+        if (method === 'GET' && pathname.endsWith('/sess_test')) {
+          sessionReads++;
+          return json({ ...session, agent, usage: null });
+        }
+        return undefined;
+      });
+      const pending = provider({ usageTimeoutMs: 8_000 }).callApi('hi');
+      await vi.advanceTimersByTimeAsync(8_000);
+      const result = await pending;
+      expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+      expect(result.metadata).toMatchObject({ usageFromRootTurn: true, sessionDeleted: true });
+      expect(result.metadata).not.toHaveProperty('usageUnavailable');
+      // Polling continued until the usage deadline instead of stopping after the grace period.
+      expect(sessionReads).toBeGreaterThanOrEqual(8);
+    });
   });
 
   it('skips the usage wait when usageTimeoutMs is 0', async () => {
@@ -1424,6 +1496,86 @@ describe('OpenAiAgentsApiProvider', () => {
     for (const secret of ['gateway-user-name', 'gateway-password-value', 'query+secret/value']) {
       expect(result.error).not.toContain(secret);
     }
+  });
+
+  describe('short credential redaction', () => {
+    const shortHeaderGateway = () =>
+      new OpenAiAgentsApiProvider('', {
+        config: { apiBaseUrl: 'https://gateway.example/v1', headers: { 'api-key': 's3cr3t' } },
+      });
+
+    it('redacts a short header credential echoed in an HTTP error', async () => {
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        apiError(400, 'Invalid api-key: s3cr3t in {"api-key":"s3cr3t"} and ?api-key=s3cr3t'),
+      );
+      const result = await shortHeaderGateway().callApi('hi');
+      expect(result.error).toContain('HTTP 400');
+      expect(result.error).toContain('Invalid api-key: [REDACTED] in {"api-key":"[REDACTED]"}');
+      expect(result.error).not.toContain('s3cr3t');
+    });
+
+    it('redacts a short URL password echoed in a turn error', async () => {
+      mockApi((pathname) =>
+        pathname.endsWith('/turns')
+          ? json(
+              page([
+                {
+                  ...turn,
+                  status: 'failed',
+                  error: {
+                    message: 'Gateway rejected password pa55wd for gw-user:pa55wd@gateway.example',
+                  },
+                },
+              ]),
+            )
+          : undefined,
+      );
+      const result = await new OpenAiAgentsApiProvider('', {
+        config: { apiBaseUrl: 'https://gw-user:pa55wd@gateway.example/v1' },
+      }).callApi('hi');
+      expect(result.error).toContain(
+        'Agents API turn failed: Gateway rejected password [REDACTED]',
+      );
+      expect(result.error).not.toContain('pa55wd');
+      expect(result.metadata).toMatchObject({ sessionDeleted: true });
+    });
+
+    it('redacts a short credential in provider debug logs', async () => {
+      const debug = vi.spyOn(logger, 'debug');
+      mockApi((pathname) => {
+        if (pathname.endsWith('/events')) {
+          return apiError(400, 'no active turn to cancel for api-key s3cr3t');
+        }
+        return pathname.endsWith('/turns')
+          ? json(page([{ ...turn, status: 'failed', error: { message: 'stopped' } }]))
+          : undefined;
+      });
+      const result = await shortHeaderGateway().callApi('hi');
+      expect(result.metadata).toMatchObject({ sessionDeleted: true });
+      const logged = JSON.stringify(debug.mock.calls);
+      expect(logged).toContain('Session cancellation was not accepted');
+      expect(logged).toContain('api-key [REDACTED]');
+      expect(logged).not.toContain('s3cr3t');
+    });
+
+    it('keeps Agents API response bodies out of the generic request log', async () => {
+      await shortHeaderGateway().callApi('hi');
+      const silent = vi
+        .mocked(fetchWithRetries)
+        .mock.calls.map(([, request]) => new Headers(request!.headers).get('x-promptfoo-silent'));
+      expect(silent.length).toBeGreaterThan(0);
+      expect(silent.every((value) => value === 'true')).toBe(true);
+    });
+
+    it('leaves a short credential inside unrelated words', async () => {
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        apiError(400, 's3cr3tive, xs3cr3t, and s3cr3t_id are unrelated; api-key s3cr3t is not'),
+      );
+      const result = await shortHeaderGateway().callApi('hi');
+      expect(result.error).toContain(
+        's3cr3tive, xs3cr3t, and s3cr3t_id are unrelated; api-key [REDACTED] is not',
+      );
+    });
   });
 
   it('redacts failed session errors and OpenAI-style keys', async () => {

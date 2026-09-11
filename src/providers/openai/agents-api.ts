@@ -97,8 +97,10 @@ const RETRY_MAX_DELAY_MS = 8_000;
 const CLEANUP_RETRY_MAX_DELAY_MS = 5_000;
 // Session usage normally follows root-turn usage within seconds.
 const TURN_USAGE_GRACE_MS = 5_000;
-// Redacting short values such as `x-api-key: 1` would corrupt unrelated error text.
+// Shorter credentials are redacted only as separate tokens, so words containing them stay intact.
 const MIN_CREDENTIAL_LENGTH = 8;
+// A single character is no secret, and redacting it would erase that character from diagnostics.
+const MIN_TOKEN_CREDENTIAL_LENGTH = 2;
 const CREDENTIAL_NAME =
   /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password|(?:^|[-_])key$)/i;
 
@@ -122,7 +124,7 @@ function addCredential(credentials: Set<string>, value: unknown): void {
   }
   const trimmed = value.trim();
   for (const candidate of [trimmed, trimmed.replace(/^(?:Bearer|Basic|Token)\s+/i, '')]) {
-    if (candidate.length >= MIN_CREDENTIAL_LENGTH) {
+    if (candidate.length >= MIN_TOKEN_CREDENTIAL_LENGTH) {
       credentials.add(candidate);
       credentials.add(encodeURIComponent(candidate));
     }
@@ -238,10 +240,22 @@ function sortCredentials(credentials: Set<string>): string[] {
   return [...credentials].sort((left, right) => right.length - left.length);
 }
 
+/**
+ * Match a short credential only as a separate token, not next to a character that continues one.
+ * `=` may precede a value, as in `api-key=s3cr3t`, but continues a token when it follows.
+ */
+function shortCredentialPattern(credential: string): RegExp {
+  const escaped = credential.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\w.~+/-])${escaped}(?![\\w.~+/=-])`, 'g');
+}
+
 function redactCredentials(text: string, credentials: readonly string[]): string {
   let redacted = text;
   for (const credential of credentials) {
-    redacted = redacted.split(credential).join(REDACTED);
+    redacted =
+      credential.length >= MIN_CREDENTIAL_LENGTH
+        ? redacted.split(credential).join(REDACTED)
+        : redacted.replace(shortCredentialPattern(credential), REDACTED);
   }
   return redacted
     .replace(/\bsk-[\w-]{16,}/g, REDACTED)
@@ -353,6 +367,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         30_000,
         idempotent ? this.config.maxRetries : 0,
       );
+      // Bodies stay out of debug logs; the status is enough to follow the session lifecycle.
+      logger.debug('[OpenAI Agents API] Response', { method, endpoint, status: response.status });
       if (idempotent && TRANSIENT_STATUS_CODES.has(response.status) && attempt < maxRetries) {
         await response.body?.cancel();
         await sleepWithAbort(
@@ -615,6 +631,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     }
     headers.set('Content-Type', 'application/json');
     headers.set('OpenAI-Beta', 'agents=v1');
+    // Promptfoo's generic request log records raw response bodies, which can echo credentials.
+    headers.set('x-promptfoo-silent', 'true');
 
     const timeoutMs = this.config.timeoutMs ?? 300_000;
     const deadline = Date.now() + timeoutMs;
@@ -665,17 +683,20 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         signal,
         options?.abortSignal,
       );
-      const { session: finished, turn: finishedTurn } = await this.waitForFinalUsage(
+      const {
+        session: finished,
+        usage,
+        usageMetadata,
+      } = await this.waitForFinalUsage(
         completedSession,
         turn,
         endpoint,
         headers,
         signal,
         deadline,
+        hasSubagents,
         options?.abortSignal,
       );
-      // Session usage includes subagent work, so prefer it over the root turn's usage.
-      const usage = finished.usage ?? finishedTurn.usage;
       const model = finished.agent.model;
       result.output = output;
       result.tokenUsage = usage
@@ -701,7 +722,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           ? 'unavailable for aggregate subagent usage'
           : 'model tokens only; excludes tools and sandbox charges',
         ...toolActivity,
-        ...(usage ? {} : { usageUnavailable: true }),
+        ...usageMetadata,
       });
       completed = true;
     } catch (error) {
@@ -760,7 +781,11 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     }
   }
 
-  /** Usage is attached shortly after the root turn completes; deleting the session sooner loses it. */
+  /**
+   * Usage is attached shortly after the root turn completes; deleting the session sooner loses it.
+   * Session totals are preferred. A single-agent run accepts root-turn usage after a short grace
+   * period, while a run with subagents waits until the usage deadline for session totals.
+   */
   private async waitForFinalUsage(
     session: Session,
     turn: Turn,
@@ -768,8 +793,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     headers: Headers,
     signal: AbortSignal,
     deadline: number,
+    hasSubagents: boolean,
     evalSignal?: AbortSignal,
-  ): Promise<{ session: Session; turn: Turn }> {
+  ): Promise<{ session: Session; usage?: Usage; usageMetadata: Record<string, true> }> {
     const waitUntil = Math.min(Date.now() + (this.config.usageTimeoutMs ?? 15_000), deadline);
     const pollIntervalMs = Math.min(this.config.pollIntervalMs ?? 1_000, 1_000);
     const turnEndpoint = `${endpoint}/turns/${encodeURIComponent(turn.id)}`;
@@ -777,7 +803,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     let turnUsageSeenAt: number | undefined;
     try {
       while (!latest.session.usage && Date.now() < waitUntil) {
-        if (latest.turn.usage) {
+        if (latest.turn.usage && !hasSubagents) {
           turnUsageSeenAt ??= Date.now();
           if (Date.now() - turnUsageSeenAt >= TURN_USAGE_GRACE_MS) {
             break;
@@ -807,7 +833,16 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         error: this.redact(error instanceof Error ? error.message : String(error)),
       });
     }
-    return latest;
+    const usage = latest.session.usage ?? latest.turn.usage ?? undefined;
+    if (!usage) {
+      return { session: latest.session, usageMetadata: { usageUnavailable: true } };
+    }
+    return {
+      session: latest.session,
+      usage,
+      // Without session totals, a run with subagents reports its root turn's usage and says so.
+      usageMetadata: hasSubagents && !latest.session.usage ? { usageFromRootTurn: true } : {},
+    };
   }
 
   /** Cancel unfinished work, then delete the session once the API allows it. */
