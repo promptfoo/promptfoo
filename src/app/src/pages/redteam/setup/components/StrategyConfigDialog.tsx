@@ -34,6 +34,7 @@ import {
   TEXT_MUTATION_STRATEGIES,
   type TextMutationStrategy,
 } from '@promptfoo/redteam/constants/strategies';
+import { isAttackProvider } from '@promptfoo/redteam/shared/attackProviders';
 import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
 import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 import type { StrategyConfig } from '@promptfoo/redteam/types';
@@ -441,6 +442,17 @@ export default function StrategyConfigDialog({
           : localConfig;
       onSave(strategy, strategyConfig);
     } else if (strategy === 'layer') {
+      const attackIndex = steps.findIndex((step) => isAttackProvider(getStepId(step)));
+      const hasInvalidBijection = steps.slice(attackIndex + 1).some((step) => {
+        if (getStepId(step) !== 'bijection' || typeof step === 'string') {
+          return false;
+        }
+        return typeof step.config?.n === 'number' && step.config.n > 1;
+      });
+      if (attackIndex >= 0 && hasInvalidBijection) {
+        setError('Bijection fan-out must be 1 after an attack provider');
+        return;
+      }
       const layerConfig: Partial<StrategyConfig> = {
         ...localConfig,
       };

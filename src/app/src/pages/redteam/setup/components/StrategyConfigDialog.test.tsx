@@ -1262,6 +1262,24 @@ describe('StrategyConfigDialog', () => {
       });
     });
 
+    it('rejects bijection fan-out after an attack provider', async () => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['jailbreak', { id: 'bijection', config: { n: 2 } }] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(mockOnSave).not.toHaveBeenCalled();
+    });
+
     it('should save layer strategy with specific plugins when selected', async () => {
       const user = userEvent.setup();
       renderWithProviders(

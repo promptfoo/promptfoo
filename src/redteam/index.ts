@@ -1031,11 +1031,18 @@ export async function synthesize({
     logger.info(`Max concurrency for test generation is capped at ${MAX_MAX_CONCURRENCY}.`);
   }
 
-  const explicitStrategyIds = new Set(
-    strategies
-      .filter((strategy) => !isStrategyCollection(strategy.id))
-      .map((strategy) => strategy.id),
-  );
+  const explicitStrategies = strategies.filter((strategy) => !isStrategyCollection(strategy.id));
+  const targetPlugins = (strategy: (typeof strategies)[number]) =>
+    Array.isArray(strategy.config?.plugins) ? strategy.config.plugins : [];
+  const overlaps = (left: (typeof strategies)[number], right: (typeof strategies)[number]) => {
+    const leftPlugins = targetPlugins(left);
+    const rightPlugins = targetPlugins(right);
+    return (
+      leftPlugins.length === 0 ||
+      rightPlugins.length === 0 ||
+      leftPlugins.some((plugin) => rightPlugins.includes(plugin))
+    );
+  };
   const expandedStrategies: typeof strategies = [];
   strategies.forEach((strategy) => {
     if (isStrategyCollection(strategy.id)) {
@@ -1043,7 +1050,12 @@ export async function synthesize({
       if (aliasedStrategies) {
         expandedStrategies.push(
           ...aliasedStrategies
-            .filter((strategyId) => !explicitStrategyIds.has(strategyId))
+            .filter(
+              (strategyId) =>
+                !explicitStrategies.some(
+                  (explicit) => explicit.id === strategyId && overlaps(explicit, strategy),
+                ),
+            )
             .map((strategyId) => ({
               ...strategy,
               id: strategyId,
@@ -1075,7 +1087,8 @@ export async function synthesize({
         return `layer:${steps.join('->')}`;
       }
     }
-    return s.id;
+    const plugins = targetPlugins(s);
+    return plugins.length ? `${s.id}:${plugins.sort().join(',')}` : s.id;
   };
   strategies = expandedStrategies.filter((strategy) => {
     const key = keyForStrategy(strategy);

@@ -112,6 +112,19 @@ describe('getEstimatedProbes', () => {
     expect(getEstimatedProbes(config)).toBe(8); // 2 basic + (2 * 3) bijection variants
   });
 
+  it('counts bijection fan-out before an attack provider in a layer', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: ['plugin1'],
+      strategies: [
+        { id: 'layer', config: { steps: [{ id: 'bijection', config: { n: 3 } }, 'jailbreak'] } },
+      ],
+    } as Config;
+
+    expect(getEstimatedProbes(config)).toBe(8);
+  });
+
   it('should account for every strategy in the text-mutations collection', () => {
     const config = {
       ...baseConfig,

@@ -888,6 +888,36 @@ describe('synthesize', () => {
       expect(String(zalgoTest?.vars?.query).match(/\p{M}/gu)).toHaveLength(24);
     });
 
+    it('keeps collection members when explicit targets are disjoint', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'abc' } }]),
+        key: 'mockPlugin',
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'harmful', numTests: 1 },
+          { id: 'pii', numTests: 1 },
+        ],
+        prompts: ['{{query}}'],
+        provider: mockProvider,
+        purpose: 'Test disjoint mutation targets',
+        strategies: [
+          { id: 'text-mutations', config: { plugins: ['harmful'] } },
+          { id: 'zalgo', config: { plugins: ['pii'] } },
+        ],
+        targetIds: ['test-provider'],
+      });
+
+      const pluginIds = result.testCases
+        .filter((testCase) => testCase.metadata?.strategyId === 'zalgo')
+        .map((testCase) => testCase.metadata?.pluginId);
+      expect(pluginIds.some((id) => id?.startsWith('harmful:'))).toBe(true);
+      expect(pluginIds.some((id) => id?.startsWith('pii:'))).toBe(true);
+    });
+
     it.each([
       'zero-width',
       'unicode-noise',
