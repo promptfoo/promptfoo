@@ -77,7 +77,7 @@ if [ "\${1:-}" = '--version' ]; then
     printf 'Provider or GitLab credentials reached version validation\\n' >&2
     exit 70
   fi
-  printf '0.121.19\\n'
+  printf '0.123.0\\n'
   exit 0
 fi
 printf '%s\\n' "$@" > "$PROMPTFOO_TEST_CAPTURE_DIR/promptfoo-args"
@@ -217,7 +217,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
 
   it('defines blocking, private, expiring JUnit artifacts and an isolated branch cache', () => {
     expect(job.image).toEqual({
-      name: 'ghcr.io/promptfoo/promptfoo:0.121.19@sha256:50d3a796710e4db7a5ede90bf27dc28146ef022a7ebb83914c5105608396fd96',
+      name: 'ghcr.io/promptfoo/promptfoo:0.123.0@sha256:e53a3332eee970854cfee19040e88ad9f72161c604d7262c477431af71555afd',
       entrypoint: [''],
     });
     expect(job.allow_failure).toBe(false);
@@ -248,6 +248,21 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   it('disables post-eval shells that would reintroduce GitLab credentials', () => {
     expect(job.after_script).toEqual([]);
   });
+
+  it.each(['before_script', 'after_script'] as const)(
+    'does not inherit a token-bearing comment-job %s',
+    async (phase) => {
+      // GitLab copies a default hook only when the job does not define that keyword.
+      const hooks = commentJob[phase] ?? [
+        'printf "%s" "$PROMPTFOO_GITLAB_TOKEN" > inherited-hook-token',
+      ];
+      const result = await runScript(hooks.join('\n'), {
+        PROMPTFOO_GITLAB_TOKEN: 'test-project-token',
+      });
+      expect(result.status).toBe(0);
+      expect(fs.existsSync(path.join(tempDir, 'inherited-hook-token'))).toBe(false);
+    },
+  );
 
   it.each(['missing config', 'invalid threshold'])(
     'rejects %s before starting the eval',
@@ -324,7 +339,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(fs.existsSync(path.join(tempDir, 'npm-args'))).toBe(false);
   });
 
-  it.each(['latest', '^0.121.19', '01.121.19', '0.121.19 --registry=https://example.invalid'])(
+  it.each(['latest', '^0.123.0', '01.121.19', '0.123.0 --registry=https://example.invalid'])(
     'rejects the unpinned or unsafe npm version %s',
     async (version) => {
       const result = await runScript(job.before_script[0], { PROMPTFOO_VERSION: version });

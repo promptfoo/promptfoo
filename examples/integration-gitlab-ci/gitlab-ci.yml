@@ -3,12 +3,12 @@
 # Use a container executor; Shell and SSH runners ignore the pinned image below.
 .promptfoo-eval:
   image:
-    name: ghcr.io/promptfoo/promptfoo:0.121.19@sha256:50d3a796710e4db7a5ede90bf27dc28146ef022a7ebb83914c5105608396fd96
+    name: ghcr.io/promptfoo/promptfoo:0.123.0@sha256:e53a3332eee970854cfee19040e88ad9f72161c604d7262c477431af71555afd
     entrypoint: ['']
   stage: test
   variables:
     PROMPTFOO_CONFIG: promptfooconfig.yaml
-    PROMPTFOO_VERSION: '0.121.19'
+    PROMPTFOO_VERSION: '0.123.0'
     PROMPTFOO_OUTPUT_DIR: .promptfoo-results
     PROMPTFOO_CACHE_PATH: .promptfoo/cache
     PROMPTFOO_PASS_RATE_THRESHOLD: '100'
@@ -166,7 +166,7 @@
 
 .promptfoo-comment:
   image:
-    name: ghcr.io/promptfoo/promptfoo:0.121.19@sha256:50d3a796710e4db7a5ede90bf27dc28146ef022a7ebb83914c5105608396fd96
+    name: ghcr.io/promptfoo/promptfoo:0.123.0@sha256:e53a3332eee970854cfee19040e88ad9f72161c604d7262c477431af71555afd
     entrypoint: ['']
   stage: test
   variables:
@@ -180,6 +180,9 @@
     action: verify
   when: always
   resource_group: 'promptfoo-comment-$CI_PROJECT_ID-$CI_MERGE_REQUEST_IID-$PROMPTFOO_EVAL_JOB_NAME'
+  # Global setup/teardown hooks must not receive the merge-request write token.
+  before_script: []
+  after_script: []
   script:
     - |
       if [ -z "${CI_MERGE_REQUEST_IID:-}" ] || [ -z "${PROMPTFOO_GITLAB_TOKEN:-}" ]; then

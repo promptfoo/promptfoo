@@ -24,7 +24,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-zMlQsKA3YTni3X8XebvUvyJMGRbuklqMfSa+gQ7SGb4='
+    integrity: 'sha256-7JBUNhiBDiWSySM/0HHf1YzP8LQODmVckERuH6Oeh6g='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -70,7 +70,7 @@ The template supports these job variables:
 | Variable                        | Default                | Purpose                                                                |
 | ------------------------------- | ---------------------- | ---------------------------------------------------------------------- |
 | `PROMPTFOO_CONFIG`              | `promptfooconfig.yaml` | Config file to evaluate                                                |
-| `PROMPTFOO_VERSION`             | `0.121.19`             | Exact expected version of the digest-pinned Promptfoo container        |
+| `PROMPTFOO_VERSION`             | `0.123.0`              | Exact expected version of the digest-pinned Promptfoo container        |
 | `PROMPTFOO_OUTPUT_DIR`          | `.promptfoo-results`   | Directory containing JSON and JUnit results                            |
 | `PROMPTFOO_PASS_RATE_THRESHOLD` | `100`                  | Minimum passing percentage needed for the job to succeed               |
 | `PROMPTFOO_SHARE`               | `false`                | Upload eval results only when explicitly set to `true`                 |
