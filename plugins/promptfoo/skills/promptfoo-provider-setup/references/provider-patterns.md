@@ -38,11 +38,6 @@ tests:
         value: PONG
 ```
 
-Smoke with `promptfoo eval -c promptfooconfig.yaml -o output.json --no-cache
---no-share`. Use `stateful: false` for stateless targets. If the app maintains
-conversation state, omit it and map `{{sessionId}}` into the request or configure
-`sessionParser`.
-
 ## Live HTTP GET endpoint
 
 Use `queryParams` instead of hand-building query strings when the target accepts GET parameters.
@@ -60,7 +55,11 @@ providers:
       queryParams:
         q: '{{prompt}}'
         user_id: '{{user_id}}'
-      transformResponse: json.answer
+      transformResponse: |
+        (json) => {
+          if (typeof json?.answer !== 'string') throw new Error('Expected string answer');
+          return json.answer;
+        }
 ```
 
 ## OpenAI-compatible chat endpoint
@@ -85,7 +84,12 @@ providers:
             content: Return concise answers.
           - role: user
             content: '{{prompt}}'
-      transformResponse: json.choices[0].message.content
+      transformResponse: |
+        (json) => {
+          const content = json?.choices?.[0]?.message?.content;
+          if (typeof content !== 'string') throw new Error('Expected string content');
+          return content;
+        }
 ```
 
 ## Text response endpoint
@@ -110,18 +114,24 @@ providers:
 
 Map one operation at a time: base URL to an env var, path parameters into the URL with `urlencode`, request/header/query fields into `body`/`headers`/`queryParams`, and the first successful response schema into `transformResponse` (prefer `200`, otherwise the lowest explicit `2xx` status).
 
+The helper infers a draft response selector. Before running it, wrap required answer fields in a type-checking function as below; a bare selector can hide missing fields.
+
 The self-contained `scripts/openapi-operation-to-config.mjs` helper supports local OpenAPI `$ref`s plus `allOf` and first-variant `oneOf`/`anyOf` schemas. It lets operation parameters override path parameters, URL-encodes path/form values, skips readOnly request and writeOnly response fields even through `$ref`/composed schemas, keeps wire names intact, creates safe vars, preserves headers, and maps prompt fields (`message`, `question`, `input`, `text`, `q`, `query`) to `{{prompt}}`. With `--token-env`, it infers Bearer/OAuth2/OpenID/header/query/cookie API-key auth, uses parameter/media examples (including example-only bodies), +json media, text request bodies, form-url-encoded request bodies, structured multipart request bodies with generated file parts, typed/format schema samples from const/defaults/enums, root JSON array request bodies, schema/example-derived response transforms, health/status `message` vars, and `--auth-header X-API-Key --auth-prefix none`.
 
 ```yaml
 providers:
   - id: https
     config:
-      url: '{{env.INVOICE_API_BASE_URL}}/v1/invoices/{{invoice_id}}/chat'
+      url: '{{env.INVOICE_API_BASE_URL}}/v1/invoices/{{invoice_id | urlencode}}/chat'
       method: POST
       headers:
         Authorization: 'Bearer {{env.INVOICE_API_TOKEN}}'
       body: { user_id: '{{user_id}}', message: '{{prompt}}' }
-      transformResponse: json.output
+      transformResponse: |
+        (json) => {
+          if (typeof json?.output !== 'string') throw new Error('Expected string output');
+          return json.output;
+        }
 ```
 
 ## Static-code-derived local wrappers
@@ -221,7 +231,11 @@ targets:
       body:
         invoice_id: '{{invoice_id}}'
         message: '{{message}}'
-      transformResponse: json.output
+      transformResponse: |
+        (json) => {
+          if (typeof json?.output !== 'string') throw new Error('Expected string output');
+          return json.output;
+        }
     inputs:
       invoice_id: Invoice identifier being discussed.
       message: User message to the assistant.
@@ -242,16 +256,3 @@ redteam:
 Do not set `redteam.injectVar` for multi-input mode. Define `inputs` on the
 target; Promptfoo automatically creates the internal combined `__prompt` value
 for generation and grading.
-
-## Hybrid discovery notes
-
-Use this when static code and a live endpoint are both available. Record the contract before writing YAML:
-
-- Static source: route/handler/client file and line range.
-- Expected request: method, path, headers, body/query fields, and auth env var.
-- Safe live probe: exact non-mutating payload and observed response field.
-- Promptfoo mapping: vars to request fields and `transformResponse`.
-- Open questions: mutations, session behavior, rate limits, or missing auth.
-
-Prefer a local wrapper when the static path exposes app logic directly; prefer
-`id: https` when the live endpoint contract is simple and safely probeable.

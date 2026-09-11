@@ -267,7 +267,11 @@ targets:
       body:
         invoice_id: '{{invoice_id}}'
         message: '{{message}}'
-      transformResponse: json.output
+      transformResponse: |
+        (json) => {
+          if (typeof json?.output !== 'string') throw new Error('Expected string output');
+          return json.output;
+        }
 
 redteam:
   purpose: >-

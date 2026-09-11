@@ -19,6 +19,30 @@ function reference(skill: string, file: string) {
   return fs.readFileSync(path.join(skillsRoot, skill, 'references', file), 'utf8');
 }
 
+function httpJsonTransforms(markdown: string) {
+  type ExampleProvider = string | { id: string; config?: { transformResponse?: string } };
+  const transforms: string[] = [];
+  for (const match of markdown.matchAll(/```yaml[^\r\n]*\r?\n([\s\S]*?)\r?\n```/g)) {
+    if (!/^(providers|targets):/m.test(match[1])) {
+      continue;
+    }
+    const config = yaml.load(match[1]) as {
+      providers?: ExampleProvider[];
+      targets?: ExampleProvider[];
+    };
+    for (const provider of [...(config.providers ?? []), ...(config.targets ?? [])]) {
+      if (typeof provider === 'string' || provider.id !== 'https') {
+        continue;
+      }
+      const transform = provider.config?.transformResponse;
+      if (transform && !transform.startsWith('text')) {
+        transforms.push(transform);
+      }
+    }
+  }
+  return transforms;
+}
+
 function runCli(args: string[]) {
   return promisify(execFile)(
     process.execPath,
@@ -137,29 +161,59 @@ describe('published agent skill examples', () => {
     }
   });
 
-  it('reports a missing required HTTP answer as an error with the documented transform', async () => {
-    const markdown = reference('promptfoo-provider-setup', 'provider-patterns.md');
-    const config = yaml.load(markdown.match(/```yaml\r?\n([\s\S]*?)\r?\n```/)![1]) as {
-      providers: {
-        config: { url: string; headers: Record<string, string>; maxRetries?: number };
-      }[];
-      tests: { vars: { message: string } }[];
-    };
+  it('rejects missing and wrong-type answers with every documented HTTP JSON transform', async () => {
+    const documents = [
+      reference('promptfoo-provider-setup', 'provider-patterns.md'),
+      reference('promptfoo-redteam-setup', 'redteam-setup-patterns.md'),
+      fs.readFileSync(path.join(repoRoot, 'site/docs/integrations/agent-skill.md'), 'utf8'),
+      fs.readFileSync(
+        path.join(repoRoot, '.claude/skills/promptfoo-evals/references/cheatsheet.md'),
+        'utf8',
+      ),
+    ];
+    const transforms = documents.flatMap((markdown) => {
+      const extracted = httpJsonTransforms(markdown);
+      expect(extracted.length).toBeGreaterThan(0);
+      return extracted;
+    });
     const server = http.createServer(async (request, response) => {
       let body = '';
       for await (const chunk of request) {
         body += chunk;
       }
+      const message = JSON.parse(body).message;
+      const value = message === 'good' ? 'PONG' : 42;
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify(JSON.parse(body).message === 'good' ? { output: 'PONG' } : {}));
+      response.end(
+        JSON.stringify(
+          message === 'missing'
+            ? {}
+            : { output: value, answer: value, choices: [{ message: { content: value } }] },
+        ),
+      );
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     try {
       const address = server.address() as { port: number };
-      config.providers[0].config.url = `http://127.0.0.1:${address.port}`;
-      config.providers[0].config.maxRetries = 0;
-      delete config.providers[0].config.headers.Authorization;
-      config.tests = [{ vars: { message: 'good' } }, { vars: { message: 'missing' } }];
+      const config = {
+        prompts: ['{{message}}'],
+        providers: transforms.map((transformResponse, index) => ({
+          id: 'https',
+          label: `documented-response-${index}`,
+          config: {
+            url: `http://127.0.0.1:${address.port}`,
+            method: 'POST',
+            stateful: false,
+            maxRetries: 0,
+            body: { message: '{{message}}' },
+            transformResponse,
+          },
+        })),
+        tests: ['good', 'missing', 'wrong-type'].map((message) => ({
+          vars: { message },
+          assert: [{ type: 'equals', value: 'PONG' }],
+        })),
+      };
       const configPath = path.join(tempDir, 'http-answer.yaml');
       const outputPath = path.join(tempDir, 'http-answer.json');
       fs.writeFileSync(configPath, yaml.dump(config));
@@ -174,10 +228,16 @@ describe('published agent skill examples', () => {
         '--no-progress-bar',
       ]);
       const results = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-      expect(results.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 1 });
-      expect(results.results.results.find((row: { error?: string }) => row.error)?.error).toContain(
-        'Expected string output',
-      );
+      expect(results.results.stats).toMatchObject({
+        successes: transforms.length,
+        failures: 0,
+        errors: transforms.length * 2,
+      });
+      for (const row of results.results.results) {
+        if (row.error) {
+          expect(row.error).toContain('Expected string');
+        }
+      }
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

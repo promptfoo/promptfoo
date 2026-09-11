@@ -44,10 +44,11 @@ copy credentials or private responses into configs or reports.
 ## 3. Configure the provider
 
 - Use `id: https` for simple HTTP APIs. Map query fields with `queryParams`,
-  encode path components with `urlencode`, and extract the actual response field
-  with `transformResponse` (`json.output` for JSON, `text` for plain text).
-  Throw when a required answer field is missing or has the wrong type: a bare
-  `json.output` can return `undefined` and fall back to the original envelope.
+  encode path components with `urlencode`, and use `transformResponse` to extract
+  the answer. For JSON, use the guarded function in the HTTP reference example;
+  throw when the required field is missing or has the wrong type. Bare selectors
+  such as `json.output`, including helper-generated ones, can hide missing fields.
+  Use `text` for plain-text responses.
 - Use `file://provider.js`, `file://provider.py`, or
   `file://provider.py:function_name` for app code, signing, streaming, or
   multi-step calls. Wrap the real implementation rather than duplicating it.

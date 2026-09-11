@@ -184,7 +184,11 @@ providers:
         Content-Type: application/json
       body:
         prompt: '{{prompt}}'
-      transformResponse: 'json.output'
+      transformResponse: |
+        (json) => {
+          if (typeof json?.output !== 'string') throw new Error('Expected string output');
+          return json.output;
+        }
 ```
 
 ### Python provider

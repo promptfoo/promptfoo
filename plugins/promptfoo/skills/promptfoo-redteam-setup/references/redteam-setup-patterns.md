@@ -24,7 +24,11 @@ targets:
         Authorization: 'Bearer {{env.TEST_USER_TOKEN}}'
       body:
         message: '{{prompt}}'
-      transformResponse: json.output
+      transformResponse: |
+        (json) => {
+          if (typeof json?.output !== 'string') throw new Error('Expected string output');
+          return json.output;
+        }
 
 redteam:
   purpose: >-
@@ -74,7 +78,11 @@ targets:
       body:
         invoice_id: '{{invoice_id}}'
         message: '{{message}}'
-      transformResponse: json.output
+      transformResponse: |
+        (json) => {
+          if (typeof json?.output !== 'string') throw new Error('Expected string output');
+          return json.output;
+        }
 
 redteam:
   purpose: >-
@@ -202,6 +210,8 @@ Use `--policy` to replace the inferred policy text and `--num-tests` to keep
 the first scan small. With `--token-env`, it infers Bearer/OAuth2/OpenID/header/query/cookie
 API-key auth; override with `--auth-header X-API-Key --auth-prefix none`. Treat
 generated policy as a draft and tighten it with route evidence or a safe probe.
+Wrap the inferred response selector in a required-field type check, as in the
+HTTP examples above, before testing or generating attacks.
 
 For path-parameter operations, `validate target` may use empty connectivity vars.
 Add `--smoke-test true` to include one deterministic `tests` row from
