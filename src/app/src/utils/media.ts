@@ -99,6 +99,7 @@ export function markMediaLoadSucceeded(
   }
 
   clearBlobMediaRetry(element);
+  blobMediaRefreshVersions.delete(source);
 }
 
 /** Number of items to fetch per page in the media library */

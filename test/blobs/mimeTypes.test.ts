@@ -5,6 +5,10 @@ describe('sanitizeBlobMimeType', () => {
   it('keeps allowlisted media types, normalizing case and whitespace', () => {
     expect(sanitizeBlobMimeType('image/png')).toBe('image/png');
     expect(sanitizeBlobMimeType('  IMAGE/PNG  ')).toBe('image/png');
+    expect(sanitizeBlobMimeType('image/bmp')).toBe('image/bmp');
+    expect(sanitizeBlobMimeType('image/tiff')).toBe('image/tiff');
+    expect(sanitizeBlobMimeType('image/x-icon')).toBe('image/x-icon');
+    expect(sanitizeBlobMimeType('image/heic')).toBe('image/heic');
     expect(sanitizeBlobMimeType('image/webp')).toBe('image/webp');
     expect(sanitizeBlobMimeType('video/mp4')).toBe('video/mp4');
     expect(sanitizeBlobMimeType('audio/mpeg')).toBe('audio/mpeg');
@@ -19,7 +23,5 @@ describe('sanitizeBlobMimeType', () => {
     expect(sanitizeBlobMimeType('application/vnd.promptfoo.trace+json')).toBe(
       'application/octet-stream',
     );
-    // Non-allowlisted image subtypes are downgraded too (consistent with portable imports).
-    expect(sanitizeBlobMimeType('image/bmp')).toBe('application/octet-stream');
   });
 });

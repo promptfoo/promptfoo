@@ -8,10 +8,16 @@ export const BLOB_MIME_TYPE_FALLBACK = 'application/octet-stream';
 
 export const SAFE_BLOB_MIME_TYPES = new Set([
   'image/avif',
+  'image/bmp',
   'image/gif',
+  'image/heic',
+  'image/heif',
   'image/jpeg',
   'image/png',
+  'image/tiff',
+  'image/vnd.microsoft.icon',
   'image/webp',
+  'image/x-icon',
   'video/mp4',
   'video/ogg',
   'video/webm',

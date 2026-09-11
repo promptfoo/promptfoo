@@ -282,6 +282,32 @@ describe('ChatMessages', () => {
     }
   });
 
+  it('keeps recovered blob media mounted after the next refresh', () => {
+    vi.useFakeTimers();
+    try {
+      const blobHash = 'd'.repeat(64);
+      const messages: Message[] = [
+        {
+          role: 'user',
+          content: 'Recovered blob',
+          image: { blobRef: { uri: `promptfoo://blob/${blobHash}` } },
+        },
+      ];
+      const { rerender } = render(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+      const image = screen.getByAltText('Input');
+      fireEvent.error(image);
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      fireEvent.load(image);
+
+      rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
+      expect(screen.getByAltText('Input')).toBe(image);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not let a pending retry overwrite a newly rendered blob source', () => {
     vi.useFakeTimers();
     try {

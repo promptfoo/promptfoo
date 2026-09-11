@@ -348,7 +348,7 @@ describe('share-time blob upload', () => {
     const hash = '7'.repeat(64);
     const target = {
       url: 'https://self-hosted.example/api/blobs',
-      headers: { 'X-Share-Token': 'token' },
+      authHeaders: { 'X-Share-Token': 'token' },
     };
 
     await uploadBlobRefsForShare(

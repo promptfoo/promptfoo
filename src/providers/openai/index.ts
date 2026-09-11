@@ -1,6 +1,7 @@
 import { getEnvString } from '../../envars';
+import { resolveProviderApiKey } from '../credentials';
+import { isGpt6AstraModel } from './gpt6';
 
-import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
@@ -51,6 +52,18 @@ export class OpenAiGenericProvider implements ApiProvider {
       : `openai:${this.modelName}`;
   }
 
+  /** Keep the actual backend separate from a customer-configured provider label. */
+  protected getGenAISystem(): string {
+    const providerPrototype = Object.getPrototypeOf(this) as OpenAiGenericProvider;
+    const defaultId = providerPrototype.id;
+    if (defaultId === OpenAiGenericProvider.prototype.id) {
+      return 'openai';
+    }
+
+    const providerId = defaultId.call(this);
+    return providerId.includes(':') ? providerId.split(':', 1)[0] : 'openai';
+  }
+
   toString(): string {
     return `[OpenAI Provider ${this.modelName}]`;
   }
@@ -94,13 +107,17 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    const apiHost =
-      this.config.apiHost || this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
-    if (apiHost) {
-      return `https://${apiHost}/v1`;
+    if (this.config.apiHost) {
+      return `https://${this.config.apiHost}/v1`;
+    }
+    if (this.config.apiBaseUrl) {
+      return this.config.apiBaseUrl;
+    }
+    const envApiHost = this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
+    if (envApiHost) {
+      return `https://${envApiHost}/v1`;
     }
     return (
-      this.config.apiBaseUrl ||
       this.env?.OPENAI_API_BASE_URL ||
       this.env?.OPENAI_BASE_URL ||
       getEnvString('OPENAI_API_BASE_URL') ||
@@ -110,19 +127,55 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.OPENAI_API_KEY ||
-      getEnvString('OPENAI_API_KEY')
+    return resolveProviderApiKey(
+      this.config,
+      this.env,
+      this.config.useDefaultApiKey === false ? [] : ['OPENAI_API_KEY'],
     );
   }
 
   requiresApiKey(): boolean {
     return this.config.apiKeyRequired ?? true;
+  }
+
+  /**
+   * Model id used for OpenAI capability and billing lookups. Subclasses can strip a vendor
+   * prefix while retaining the real request model in {@link modelName}.
+   */
+  protected getCapabilityModelName(): string {
+    return this.modelName;
+  }
+
+  protected isGPT5Model(modelName = this.getCapabilityModelName()): boolean {
+    const model = modelName.replace(/(^|\/)ft:/, '$1');
+    return model.startsWith('gpt-5') || model.includes('/gpt-5');
+  }
+
+  protected isReasoningModel(modelName = this.getCapabilityModelName()): boolean {
+    const model = modelName.replace(/(^|\/)ft:/, '$1');
+    return (
+      model.startsWith('o1') ||
+      model.startsWith('o3') ||
+      model.startsWith('o4') ||
+      model.includes('/o1') ||
+      model.includes('/o3') ||
+      model.includes('/o4') ||
+      /(^|\/)gpt-daybreak-(?:blue|red)-latest$/.test(model) ||
+      this.isGPT5Model(model) ||
+      isGpt6AstraModel(model)
+    );
+  }
+
+  protected supportsTemperature(modelName = this.getCapabilityModelName()): boolean {
+    return !this.isReasoningModel(modelName);
+  }
+
+  protected getBillingModelName(_config: OpenAiSharedOptions): string {
+    return this.getCapabilityModelName();
+  }
+
+  protected shouldBustCache(context?: CallApiContextParams): boolean | undefined {
+    return context?.bustCache ?? context?.debug;
   }
 
   protected getMissingApiKeyErrorMessage(): string {

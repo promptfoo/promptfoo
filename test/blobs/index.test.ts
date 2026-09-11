@@ -283,7 +283,7 @@ describe('storeBlob failure and MIME boundaries', () => {
   const evalId = `eval-${randomUUID()}`;
   const hash = '6'.repeat(64);
   let deleteCalls: string[];
-  let storeCalls: number;
+  let storeCalls = 0;
 
   beforeAll(async () => {
     await runDbMigrations();

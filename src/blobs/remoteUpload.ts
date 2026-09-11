@@ -7,7 +7,7 @@ import type { BlobStoreResult } from './types';
 
 export interface RemoteBlobUploadTarget {
   url: string;
-  headers: Record<string, string>;
+  authHeaders: Record<string, string>;
 }
 
 export interface RemoteBlobUploadContext {
@@ -24,20 +24,15 @@ function buildRemoteUploadTarget(): RemoteBlobUploadTarget | null {
   }
 
   const baseUrl = cloudConfig.getApiHost();
-  const apiKey = cloudConfig.getApiKey();
+  const authHeaders = cloudConfig.getAuthHeaders();
 
-  if (!baseUrl || !apiKey || !isLoggedIntoCloud()) {
+  if (!baseUrl || !authHeaders || !isLoggedIntoCloud()) {
     return null;
   }
 
   try {
     const url = new URL('/api/blobs', baseUrl);
-    return {
-      url: url.toString(),
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-      },
-    };
+    return { url: url.toString(), authHeaders };
   } catch (error) {
     logger.debug('[RemoteBlob] Invalid remote blob URL', {
       error: error instanceof Error ? error.message : String(error),
@@ -63,7 +58,7 @@ async function uploadBlobToRemoteTarget(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...target.headers,
+        ...target.authHeaders,
       },
       body: JSON.stringify({
         data: buffer.toString('base64'),

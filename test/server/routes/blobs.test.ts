@@ -18,17 +18,19 @@ vi.mock('../../../src/blobs', async (importOriginal) => {
   };
 });
 vi.mock('../../../src/database');
+vi.mock('../../../src/models/evalMutation');
 
 // Import after mocking
 import { getBlobByHash, getBlobUrl, storeBlob } from '../../../src/blobs';
 import { isBlobStorageEnabled } from '../../../src/blobs/extractor';
-import { getDb, signalEvaluationChanged } from '../../../src/database';
+import { getDb } from '../../../src/database';
+import { notifyEvaluationChanged } from '../../../src/models/evalMutation';
 
 const mockedIsBlobStorageEnabled = vi.mocked(isBlobStorageEnabled);
 const mockedGetBlobUrl = vi.mocked(getBlobUrl);
 const mockedGetBlobByHash = vi.mocked(getBlobByHash);
 const mockedGetDb = vi.mocked(getDb);
-const mockedSignalEvaluationChanged = vi.mocked(signalEvaluationChanged);
+const mockedSignalEvaluationChanged = vi.mocked(notifyEvaluationChanged);
 
 const mockedStoreBlob = vi.mocked(storeBlob);
 describe('Blobs Routes', () => {

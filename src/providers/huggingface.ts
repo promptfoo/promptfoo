@@ -19,6 +19,10 @@ import type {
 const HF_INFERENCE_API_URL = 'https://router.huggingface.co/hf-inference';
 const HF_CHAT_API_BASE_URL = 'https://router.huggingface.co/v1';
 
+function singleRow(data: unknown): unknown {
+  return Array.isArray(data) && data.length === 1 && Array.isArray(data[0]) ? data[0] : data;
+}
+
 interface HuggingfaceProviderOptions {
   apiKey?: string;
   apiEndpoint?: string;
@@ -202,7 +206,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       temperature: this.config.temperature,
       topP: this.config.top_p,
       maxTokens: this.config.max_new_tokens,
-      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
       traceparent: context?.traceparent,
@@ -315,17 +319,12 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
       parameters: {},
     };
 
-    interface HuggingfaceTextClassificationResponse {
-      error?: string;
-      [0]?: Array<{ label: string; score: number }>;
-    }
-
-    let response: FetchWithCacheResult<HuggingfaceTextClassificationResponse> | undefined;
+    let response: FetchWithCacheResult<unknown> | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
         : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
-      response = await fetchWithCache<HuggingfaceTextClassificationResponse>(
+      response = await fetchWithCache<unknown>(
         url,
         {
           method: 'POST',
@@ -338,19 +337,30 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
         getRequestTimeoutMs(),
       );
 
-      if (response.data.error) {
+      if (response.data && typeof response.data === 'object' && 'error' in response.data) {
         return {
           error: `API call error: ${response.data.error}`,
         };
       }
-      if (!response.data[0] || !Array.isArray(response.data[0])) {
+      const items = singleRow(response.data);
+      if (
+        !Array.isArray(items) ||
+        items.length === 0 ||
+        !items.every(
+          (item) =>
+            item &&
+            typeof item.label === 'string' &&
+            typeof item.score === 'number' &&
+            Number.isFinite(item.score),
+        )
+      ) {
         return {
           error: `Malformed response data: ${response.data}`,
         };
       }
 
       const scores: Record<string, number> = {};
-      response.data[0].forEach((item) => {
+      items.forEach((item) => {
         scores[item.label] = item.score;
       });
 
@@ -418,17 +428,13 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
       },
     };
 
-    interface HuggingfaceFeatureExtractionResponse {
-      error?: string;
-    }
-
-    let response: FetchWithCacheResult<HuggingfaceFeatureExtractionResponse | number[]> | undefined;
+    let response: FetchWithCacheResult<unknown> | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
         : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
       logger.debug('Huggingface API request', { url, params });
-      response = await fetchWithCache<HuggingfaceFeatureExtractionResponse | number[]>(
+      response = await fetchWithCache<unknown>(
         url,
         {
           method: 'POST',
@@ -441,19 +447,24 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
         getRequestTimeoutMs(),
       );
 
-      if (typeof response.data === 'object' && 'error' in response.data) {
+      if (response.data && typeof response.data === 'object' && 'error' in response.data) {
         return {
           error: `API call error: ${response.data.error}`,
         };
       }
-      if (!Array.isArray(response.data)) {
+      const embedding = singleRow(response.data);
+      if (
+        !Array.isArray(embedding) ||
+        embedding.length === 0 ||
+        !embedding.every((value) => typeof value === 'number' && Number.isFinite(value))
+      ) {
         return {
           error: `Malformed response data: ${response.data}`,
         };
       }
 
       return {
-        embedding: response.data,
+        embedding,
       };
     } catch (err) {
       return {

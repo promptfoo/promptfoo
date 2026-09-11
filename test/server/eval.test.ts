@@ -360,6 +360,20 @@ describe('eval routes', () => {
       expect(stored?.spans[0]).toMatchObject({ spanId: 'span-1', name: 'provider call' });
     });
 
+    it('keeps concurrent imports of the same trace idempotent', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const traceId = randomUUID().replaceAll('-', '');
+
+      await expect(
+        Promise.all([eval_.appendTraces([trace(traceId)]), eval_.appendTraces([trace(traceId)])]),
+      ).resolves.toEqual([true, true]);
+      expect(await getTraceStore().getTrace(traceId)).toMatchObject({
+        traceId,
+        spans: [{ spanId: 'span-1' }],
+      });
+    });
+
     it('notifies watchers after a successful append so live viewers refetch traces', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

@@ -29,7 +29,7 @@ import {
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { redactAzureBlobSasTokens } from './util/sanitizer';
+import { redactAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './util/sanitizer';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -52,6 +52,7 @@ type ChunkSizeError =
   | 'NETWORK_TIMEOUT'
   | 'UNSUPPORTED_ENDPOINT'
   | 'EVAL_NOT_FOUND'
+  | 'INVALID_TRACE'
   | 'UNKNOWN';
 
 /** Result of attempting to send a chunk */
@@ -167,7 +168,9 @@ async function sendEvalRecord(
   headers: Record<string, string>,
   traces: Awaited<ReturnType<Eval['getTraces']>>,
 ): Promise<string> {
-  const redactedConfig = redactAzureBlobSasTokens(evalRecord.config);
+  const redactedConfig = redactAzureBlobSasTokens(
+    sanitizeTracingConfigForPersistence(evalRecord.config),
+  );
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.
@@ -306,6 +309,16 @@ async function sendJsonChunk<T>(
         };
       }
 
+      if (itemName === 'trace' && response.status === 400) {
+        return {
+          success: false,
+          errorType: 'INVALID_TRACE',
+          originalError: new Error(
+            `${response.status} ${response.statusText}: ${responseBody.slice(0, 200)}`,
+          ),
+        };
+      }
+
       return {
         success: false,
         errorType: 'UNKNOWN',
@@ -381,7 +394,7 @@ async function sendChunkWithRetry<T>(
   if (
     result.errorType === 'PAYLOAD_TOO_LARGE' ||
     result.errorType === 'NETWORK_TIMEOUT' ||
-    (itemName === 'trace' && result.errorType === 'UNKNOWN')
+    (itemName === 'trace' && result.errorType === 'INVALID_TRACE')
   ) {
     // If we're already at minimum size, we cannot split further
     if (chunk.length <= config.minResultsPerChunk) {
@@ -904,10 +917,8 @@ async function sendChunkedResults(
   // Prepare headers
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...(cloudConfig.isEnabled() ? (cloudConfig.getAuthHeaders() ?? {}) : {}),
   };
-  if (isCloudEnabled) {
-    headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
-  }
 
   // Use total row count (not distinct test count) since we iterate over all result rows
   const totalResults = await evalRecord.getTotalResultRowCount();
@@ -932,7 +943,7 @@ async function sendChunkedResults(
       ? undefined
       : {
           url: new URL('../blobs', `${url}/`).toString(),
-          headers,
+          authHeaders: headers,
         };
     const traces = await evalRecord.getTraces();
     const traceIds: TraceIdMap | null = isCloudEnabled ? null : new Map();
@@ -1258,7 +1269,7 @@ export async function createShareableModelAuditUrl(
 
   const headers = {
     'Content-Type': 'application/json',
-    ...(cloudConfig.isEnabled() && { Authorization: `Bearer ${cloudConfig.getApiKey()}` }),
+    ...(cloudConfig.isEnabled() ? (cloudConfig.getAuthHeaders() ?? {}) : {}),
   };
 
   const url = `${apiBaseUrl}/api/v1/model-audits/share`;

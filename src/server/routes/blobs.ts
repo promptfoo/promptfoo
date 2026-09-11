@@ -9,7 +9,7 @@ import {
 } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
 import { BLOB_MIME_TYPE_FALLBACK, sanitizeBlobMimeType } from '../../blobs/mimeTypes';
-import { getDb, signalEvaluationChanged } from '../../database';
+import { getDb } from '../../database';
 import {
   blobAssetsTable,
   blobReferencesTable,
@@ -17,6 +17,7 @@ import {
   evalsTable,
 } from '../../database/tables';
 import logger from '../../logger';
+import { notifyEvaluationChanged } from '../../models/evalMutation';
 import { BlobsSchemas } from '../../types/api/blobs';
 import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
@@ -88,7 +89,7 @@ blobsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
     }
 
     const result = await storeBlob(data, mimeType, refContext);
-    await signalEvaluationChanged(evalId);
+    notifyEvaluationChanged(evalId);
     res.json(BlobsSchemas.Upload.Response.parse(result));
   } catch (error) {
     sendError(res, 500, 'Failed to store blob', error);
