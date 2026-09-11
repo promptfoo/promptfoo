@@ -765,6 +765,10 @@ describe('App component target selector rendering', () => {
       'href',
       '#report-vulnerabilities',
     );
+
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    await userEvent.click(screen.getByRole('link', { name: 'Overview' }));
+    expect(replaceState).toHaveBeenCalledWith(null, '', '#report-overview');
   });
 
   it('allows embedded reports to shrink within narrow result views', async () => {

@@ -936,6 +936,7 @@ describe('ResultsCharts', () => {
 
       expect(distributionA.summary).toBe(distributionB.summary);
       expect(distributionA.table).not.toBe(distributionB.table);
+      expect(distributionA.table).toContain('Prompt 1 (test-provider-1)');
     });
 
     const buildScatterTable = (

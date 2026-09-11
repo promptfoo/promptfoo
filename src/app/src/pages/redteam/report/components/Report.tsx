@@ -821,6 +821,11 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                     <a
                       key={section.id}
                       href={`#${section.id}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        window.history.replaceState(null, '', `#${section.id}`);
+                        document.getElementById(section.id)?.scrollIntoView();
+                      }}
                       className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {section.label}

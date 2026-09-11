@@ -61,15 +61,6 @@ const COLOR_PALETTE = [
 ];
 
 const getPromptLabel = (prompt: { provider?: string } | undefined, promptIdx: number): string =>
-  prompt?.provider || `Prompt ${promptIdx + 1}`;
-
-// Axis identity for the scatter comparison. The 1-based prompt index keeps each axis
-// unique even when several prompts share a provider (e.g. "echo" vs "echo"), so the
-// non-visual summary never collapses two distinct prompts into the same name.
-const getScatterAxisLabel = (
-  prompt: { provider?: string } | undefined,
-  promptIdx: number,
-): string =>
   prompt?.provider ? `Prompt ${promptIdx + 1} (${prompt.provider})` : `Prompt ${promptIdx + 1}`;
 
 const formatSummaryScore = (score: number): string =>
@@ -361,8 +352,8 @@ function ScatterChart({ table }: ChartProps) {
   const summaryId = useId();
 
   const comparisonSummary = useMemo(() => {
-    const promptXLabel = getScatterAxisLabel(table.head.prompts[xAxisPrompt], xAxisPrompt);
-    const promptYLabel = getScatterAxisLabel(table.head.prompts[yAxisPrompt], yAxisPrompt);
+    const promptXLabel = getPromptLabel(table.head.prompts[xAxisPrompt], xAxisPrompt);
+    const promptYLabel = getPromptLabel(table.head.prompts[yAxisPrompt], yAxisPrompt);
     const pairs = table.body
       .map((row) => ({
         x: row.outputs[xAxisPrompt]?.score,
