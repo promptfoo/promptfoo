@@ -99,6 +99,7 @@ After restarting your AI tool, you should see promptfoo tools available. Try ask
 - **`list_evaluations`** - Browse your evaluation runs with optional dataset filtering
 - **`get_evaluation_details`** - Get comprehensive results, metrics, and test cases for a specific evaluation
 - **`run_evaluation`** - Execute evaluations with custom parameters, test case filtering, and concurrency control
+  Filtered runs check access to the selected targets and active graders. Default assertions disabled by a selected test do not require access to their graders.
 - **`share_evaluation`** - Generate publicly shareable URLs for evaluation results
 
 ### Generation Tools
