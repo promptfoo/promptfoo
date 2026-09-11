@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 
+import { responseTransform, smokeAssertions } from '../../promptfoo-provider-setup/scripts/response-contract.mjs';
+
 import * as yaml from '../../promptfoo-provider-setup/scripts/vendor/js-yaml.mjs';
 
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
@@ -345,12 +347,6 @@ function responseOutputField(document, properties) {
     }
   }
   return Object.keys(responseProperties)[0];
-}
-
-function responseAccessor(base, field) {
-  return /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(field)
-    ? `${base}.${field}`
-    : `${base}[${JSON.stringify(field)}]`;
 }
 
 function successResponse(document, operation) {
@@ -903,6 +899,9 @@ const fields = unique([
   ...headerVars,
   ...cookieVars,
 ]);
+if (fields.length === 0) {
+  usage('Selected operation has no controllable request inputs; use provider setup for response checks.');
+}
 const numTests = Number.parseInt(args['num-tests'] || '1', 10);
 if (!Number.isInteger(numTests) || numTests < 1) {
   usage('--num-tests must be a positive integer');
@@ -974,11 +973,13 @@ if (bodyFields.length > 0) {
 if (Object.keys(queryParams).length > 0) {
   targetConfig.queryParams = queryParams;
 }
-if (responseField) {
-  targetConfig.transformResponse = responseAccessor(
-    responseIsArray ? 'json[0]' : 'json',
-    responseField,
-  );
+if (responseMediaEntry) {
+  targetConfig.transformResponse = responseTransform({
+    field: responseField,
+    array: responseIsArray,
+    schema: responseField ? responseProperties[responseField] : responseSchema,
+    resolveRef: (schema) => resolveRef(document, schema),
+  });
 }
 
 const redteam = {
@@ -1015,7 +1016,7 @@ const config = {
           {
             description: `${args['operation-id']} smoke test`,
             vars: defaultVars,
-            assert: [{ type: 'contains', value: args['smoke-assert'] || 'PONG' }],
+            assert: smokeAssertions(Boolean(responseMediaEntry), args['smoke-assert']),
           },
         ],
       }

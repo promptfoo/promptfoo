@@ -225,15 +225,15 @@ Use `--policy` to replace the inferred policy text and `--num-tests` to keep
 the first scan small. With `--token-env`, it infers Bearer/OAuth2/OpenID/header/query/cookie
 API-key auth; override with `--auth-header X-API-Key --auth-prefix none`. Treat
 generated policy as a draft and tighten it with route evidence or a safe probe.
-Wrap the inferred response selector in a required-field type check, as in the
-HTTP examples above, before testing or generating attacks.
+The helper guards missing responses and declared JSON types, serializes non-string
+values, and rejects operations with no controllable inputs. Review the selector and add domain assertions.
 The draft caps `jailbreak:meta` at two iterations per case; adjust that budget explicitly.
 
 For path-parameter operations, `validate target` may use empty connectivity vars.
 Add `--smoke-test true` to include one deterministic `tests` row from
 `defaultTest.vars` and run `npm run local -- eval -c <config> --no-cache` to
 prove the live URL, query params, body, auth, and response transform before
-generation. Use `--smoke-assert <text>` when the target should return a
-connectivity marker other than `PONG`. Omit the smoke test for the final
+generation. The default smoke checks response shape; use `--smoke-assert <text>`
+only when the target should return that text. Omit the smoke test for the final
 generation-only setup if you want to avoid `redteam generate` warning that
 custom `tests` are ignored during generation.

@@ -25,7 +25,7 @@ const expectedSkillDirs = [
   'promptfoo-redteam-run',
   'promptfoo-redteam-setup',
 ];
-const expectedPluginVersion = '0.1.2';
+const expectedPluginVersion = '0.1.3';
 const expectedFixtureDirs = [
   'evals-json-rubric',
   'evals-local-js',
@@ -1876,6 +1876,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       'skills/promptfoo-provider-setup/agents/openai.yaml',
       'skills/promptfoo-provider-setup/references/provider-patterns.md',
       'skills/promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs',
+      'skills/promptfoo-provider-setup/scripts/response-contract.mjs',
       'skills/promptfoo-provider-setup/scripts/vendor/LICENSE',
       'skills/promptfoo-provider-setup/scripts/vendor/js-yaml.mjs',
       'skills/promptfoo-redteam-run/SKILL.md',
@@ -1943,6 +1944,50 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       expect(fs.existsSync(path.join(skillRoot, 'CHANGELOG.md'))).toBe(false);
     }
   });
+
+  it.each([
+    {
+      skill: 'promptfoo-evals',
+      scope: /non-redteam.*configured target/s,
+      handoffs: ['promptfoo-provider-setup', 'redteam skills'],
+      workflow: [/known-good output must pass/s, /deliberately wrong outputs must fail/s],
+    },
+    {
+      skill: 'promptfoo-provider-setup',
+      scope: /request\/auth mapping.*response parsing/s,
+      handoffs: ['promptfoo-evals', 'promptfoo-redteam-setup'],
+      workflow: [/token-derived user\/role/, /missing or has the wrong type/],
+    },
+    {
+      skill: 'promptfoo-redteam-setup',
+      scope: /purpose, trust boundaries/,
+      handoffs: ['promptfoo-provider-setup', 'promptfoo-redteam-run'],
+      workflow: [
+        /known owned and unowned synthetic objects/,
+        /intended policy from observed enforcement/,
+      ],
+    },
+    {
+      skill: 'promptfoo-redteam-run',
+      scope: /existing Promptfoo redteam scan/,
+      handoffs: ['promptfoo-provider-setup', 'promptfoo-redteam-setup'],
+      workflow: [/failureReason/, /--filter-errors-only[^\n]*--remote/],
+    },
+  ])(
+    'preserves $skill routing and essential workflow contracts',
+    ({ skill, scope, handoffs, workflow }) => {
+      const skillRoot = path.join(pluginRoot, 'skills', skill);
+      const { description } = readSkillFrontmatter(skillRoot);
+      expect(description).toMatch(scope);
+      for (const handoff of handoffs) {
+        expect(description).toContain(handoff);
+      }
+      const body = readText(path.join(skillRoot, 'SKILL.md'));
+      for (const contract of workflow) {
+        expect(body).toMatch(contract);
+      }
+    },
+  );
 
   it('documents the shared plugin bundle on both marketplaces', () => {
     const docs = readText(path.join(repoRoot, 'site', 'docs', 'integrations', 'agent-skill.md'));
@@ -2923,7 +2968,7 @@ describe('promptfoo-provider-setup skill', () => {
       }),
     );
     expect(provider.config.body).toEqual({ user_id: '{{user_id}}', message: '{{prompt}}' });
-    expect(provider.config.transformResponse).toBe('json.output');
+    expect(provider.config.transformResponse).toContain('const value = json?.output;');
 
     const getOutput = execFileSync(
       'node',
@@ -2954,7 +2999,7 @@ describe('promptfoo-provider-setup skill', () => {
       q: '{{prompt}}',
       user_id: '{{user_id}}',
     });
-    expect(getProvider.config.transformResponse).toBe('json.answer');
+    expect(getProvider.config.transformResponse).toContain('const value = json?.answer;');
     const getTest = (generatedGet.tests as unknown[])[0];
     expectRecord(getTest, 'Generated OpenAPI GET test');
     expect(getTest.vars).toEqual({
@@ -3378,7 +3423,7 @@ describe('promptfoo-provider-setup skill', () => {
       tenant_id: '{{tenant_id}}',
       question: '{{prompt}}',
     });
-    expect(questionProvider.config.transformResponse).toBe('json.answer');
+    expect(questionProvider.config.transformResponse).toContain('const value = json?.answer;');
     const questionTest = (generatedQuestion.tests as unknown[])[0];
     expectRecord(questionTest, 'Generated OpenAPI question test');
     expect(questionTest.vars).toEqual({
@@ -3414,7 +3459,7 @@ describe('promptfoo-provider-setup skill', () => {
       tenant_id: '{{tenant_id}}',
     });
     expect(createdProvider.config.body).toEqual({ user_id: '{{user_id}}', message: '{{prompt}}' });
-    expect(createdProvider.config.transformResponse).toBe('json.output');
+    expect(createdProvider.config.transformResponse).toContain('const value = json?.output;');
     const createdTest = (generatedCreated.tests as unknown[])[0];
     expectRecord(createdTest, 'Generated OpenAPI 201 test');
     expect(createdTest.vars).toEqual({
@@ -3507,7 +3552,7 @@ describe('promptfoo-provider-setup skill', () => {
       expect(provider.config.url).toBe('{{env.HEALTH_API_BASE_URL}}/health');
       expect(provider.config.queryParams).toBeUndefined();
       expect(provider.config.body).toBeUndefined();
-      expect(provider.config.transformResponse).toBe('json.status');
+      expect(provider.config.transformResponse).toContain('const value = json?.status;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated no-prompt OpenAPI provider test');
       expect(test.vars).toEqual({
@@ -3604,7 +3649,7 @@ describe('promptfoo-provider-setup skill', () => {
         user_id: '{{user_id}}',
         message: '{{prompt}}',
       });
-      expect(provider.config.transformResponse).toBe('json.answer');
+      expect(provider.config.transformResponse).toContain('const value = json?.answer;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated vendor JSON provider test');
       expect(test.vars).toEqual({
@@ -3646,7 +3691,7 @@ describe('promptfoo-provider-setup skill', () => {
       expect(provider.config.body).toBe(
         'user_id={{user_id | urlencode}}&message={{prompt | urlencode}}&scope={{scope | urlencode}}',
       );
-      expect(provider.config.transformResponse).toBe('json.answer');
+      expect(provider.config.transformResponse).toContain('const value = json?.answer;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated form provider test');
       expect(test.vars).toEqual({
@@ -3702,7 +3747,7 @@ describe('promptfoo-provider-setup skill', () => {
           { kind: 'field', name: 'user_id', value: '{{user_id}}' },
         ],
       });
-      expect(provider.config.transformResponse).toBe('json.output');
+      expect(provider.config.transformResponse).toContain('const value = json?.output;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated multipart provider test');
       expect(test.vars).toEqual({
@@ -3743,7 +3788,7 @@ describe('promptfoo-provider-setup skill', () => {
         'Content-Type': 'text/plain',
       });
       expect(provider.config.body).toBe('{{prompt}}');
-      expect(provider.config.transformResponse).toBe('json.output');
+      expect(provider.config.transformResponse).toContain('const value = json?.output;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated text provider test');
       expect(test.vars).toEqual({
@@ -3787,7 +3832,7 @@ describe('promptfoo-provider-setup skill', () => {
           'Content-Type': contentType,
         });
         expect(provider.config.body).toBe('{{prompt}}');
-        expect(provider.config.transformResponse).toBe('json.output');
+        expect(provider.config.transformResponse).toContain('const value = json?.output;');
         const [test] = generated.tests as unknown[];
         expectRecord(test, `Generated ${operationId} provider test`);
         expect(test.vars).toEqual({
@@ -3833,7 +3878,7 @@ describe('promptfoo-provider-setup skill', () => {
           priority: '{{priority}}',
         },
       ]);
-      expect(provider.config.transformResponse).toBe('json.output');
+      expect(provider.config.transformResponse).toContain('const value = json?.output;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated array provider test');
       expect(test.vars).toEqual({
@@ -3917,7 +3962,7 @@ describe('promptfoo-provider-setup skill', () => {
         message: '{{prompt}}',
         user_id: '{{user_id}}',
       });
-      expect(provider.config.transformResponse).toBe('json[0].output');
+      expect(provider.config.transformResponse).toContain('const value = json?.[0]?.output;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated array-response provider test');
       expect(test.vars).toEqual({
@@ -3953,7 +3998,7 @@ describe('promptfoo-provider-setup skill', () => {
       const [provider] = generated.providers as unknown[];
       expectRecord(provider, 'Generated example-only array-response provider');
       expectRecord(provider.config, 'Generated example-only array-response provider config block');
-      expect(provider.config.transformResponse).toBe('json[0].output');
+      expect(provider.config.transformResponse).toContain('const value = json?.[0]?.output;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated example-only array-response provider test');
       expect(test.vars).toEqual({
@@ -3992,14 +4037,16 @@ describe('promptfoo-provider-setup skill', () => {
       const [objectProvider] = objectGenerated.providers as unknown[];
       expectRecord(objectProvider, 'Generated unsafe response field provider');
       expectRecord(objectProvider.config, 'Generated unsafe response field provider config block');
-      expect(objectProvider.config.transformResponse).toBe('json["api-version"]');
+      expect(objectProvider.config.transformResponse).toContain(
+        'const value = json?.["api-version"];',
+      );
 
       const arrayGenerated = runHelper('unsafeArrayResponseField');
       expectRecord(arrayGenerated, 'Generated unsafe array response field provider config');
       const [arrayProvider] = arrayGenerated.providers as unknown[];
       expectRecord(arrayProvider, 'Generated unsafe array response field provider');
       expectRecord(arrayProvider.config, 'Generated unsafe array response field provider config');
-      expect(arrayProvider.config.transformResponse).toBe('json[0]["200"]');
+      expect(arrayProvider.config.transformResponse).toContain('const value = json?.[0]?.["200"];');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -4034,7 +4081,7 @@ describe('promptfoo-provider-setup skill', () => {
         message: '{{prompt}}',
         note_type: '{{note_type}}',
       });
-      expect(provider.config.transformResponse).toBe('json.answer');
+      expect(provider.config.transformResponse).toContain('const value = json?.answer;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated allOf provider test');
       expect(test.vars).toEqual({
@@ -4075,7 +4122,7 @@ describe('promptfoo-provider-setup skill', () => {
         user_id: '{{user_id}}',
         message: '{{prompt}}',
       });
-      expect(provider.config.transformResponse).toBe('json.answer');
+      expect(provider.config.transformResponse).toContain('const value = json?.answer;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated repeated-ref provider test');
       expect(test.vars).toEqual({
@@ -4163,7 +4210,7 @@ describe('promptfoo-provider-setup skill', () => {
         user_id: '{{user_id}}',
         query: '{{prompt}}',
       });
-      expect(provider.config.transformResponse).toBe('json.answer');
+      expect(provider.config.transformResponse).toContain('const value = json?.answer;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated variant provider test');
       expect(test.vars).toEqual({
@@ -4207,7 +4254,7 @@ describe('promptfoo-provider-setup skill', () => {
         message: '{{prompt}}',
         note_type: '{{note_type}}',
       });
-      expect(provider.config.transformResponse).toBe('json.answer');
+      expect(provider.config.transformResponse).toContain('const value = json?.answer;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated example-only provider test');
       expect(test.vars).toEqual({
@@ -4355,7 +4402,7 @@ describe('promptfoo-provider-setup skill', () => {
       const [provider] = generated.providers as unknown[];
       expectRecord(provider, 'Generated writeOnly response provider');
       expectRecord(provider.config, 'Generated writeOnly response provider config block');
-      expect(provider.config.transformResponse).toBe('json.public_text');
+      expect(provider.config.transformResponse).toContain('const value = json?.public_text;');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -4389,7 +4436,7 @@ describe('promptfoo-provider-setup skill', () => {
         message: '{{prompt}}',
         client_note: '{{client_note}}',
       });
-      expect(provider.config.transformResponse).toBe('json.public_text');
+      expect(provider.config.transformResponse).toContain('const value = json?.public_text;');
       const [test] = generated.tests as unknown[];
       expectRecord(test, 'Generated composed visibility provider test');
       expect(test.vars).toEqual({
@@ -4916,7 +4963,7 @@ describe('promptfoo-redteam-setup skill', () => {
     );
     expect(target.config.queryParams).toEqual({ tenant_id: '{{tenant_id}}' });
     expect(target.config.body).toEqual({ user_id: '{{user_id}}', message: '{{message}}' });
-    expect(target.config.transformResponse).toBe('json.output');
+    expect(target.config.transformResponse).toContain('const value = json?.output;');
 
     expect(generated.defaultTest).toEqual({
       vars: {
@@ -4960,7 +5007,7 @@ describe('promptfoo-redteam-setup skill', () => {
     expect(searchTarget.config.headers).toEqual({
       Authorization: 'Bearer {{env.OPENAPI_INVOICE_API_TOKEN}}',
     });
-    expect(searchTarget.config.transformResponse).toBe('json.answer');
+    expect(searchTarget.config.transformResponse).toContain('const value = json?.answer;');
     expect(searchTarget.inputs).toEqual({
       q: 'User-controlled message or instruction to the target.',
       user_id: 'Caller identity or tenancy field: user_id.',
@@ -4983,7 +5030,7 @@ describe('promptfoo-redteam-setup skill', () => {
       tenant_id: '{{tenant_id}}',
       question: '{{question}}',
     });
-    expect(questionTarget.config.transformResponse).toBe('json.answer');
+    expect(questionTarget.config.transformResponse).toContain('const value = json?.answer;');
     expect(questionTarget.inputs).toEqual({
       tenant_id: 'Caller identity or tenancy field: tenant_id.',
       question: 'User-controlled message or instruction to the target.',
@@ -5592,7 +5639,7 @@ describe('promptfoo-redteam-setup skill', () => {
         user_id: '{{user_id}}',
         message: '{{message}}',
       });
-      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.config.transformResponse).toContain('const value = json?.answer;');
       expect(generated.defaultTest).toEqual({
         vars: {
           user_id: 'vendor-json-user',
@@ -5634,7 +5681,7 @@ describe('promptfoo-redteam-setup skill', () => {
       expect(target.config.body).toBe(
         'user_id={{user_id | urlencode}}&message={{message | urlencode}}&scope={{scope | urlencode}}',
       );
-      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.config.transformResponse).toContain('const value = json?.answer;');
       expect(target.inputs).toEqual({
         user_id: 'Caller identity or tenancy field: user_id.',
         message: 'User-controlled message or instruction to the target.',
@@ -5695,7 +5742,7 @@ describe('promptfoo-redteam-setup skill', () => {
           { kind: 'field', name: 'user_id', value: '{{user_id}}' },
         ],
       });
-      expect(target.config.transformResponse).toBe('json.output');
+      expect(target.config.transformResponse).toContain('const value = json?.output;');
       expect(target.inputs).toEqual({
         document: 'Target input field: document.',
         question: 'User-controlled message or instruction to the target.',
@@ -5741,7 +5788,7 @@ describe('promptfoo-redteam-setup skill', () => {
         'Content-Type': 'text/plain',
       });
       expect(target.config.body).toBe('{{message}}');
-      expect(target.config.transformResponse).toBe('json.output');
+      expect(target.config.transformResponse).toContain('const value = json?.output;');
       expect(target.inputs).toEqual({
         message: 'User-controlled message or instruction to the target.',
       });
@@ -5792,7 +5839,7 @@ describe('promptfoo-redteam-setup skill', () => {
           'Content-Type': contentType,
         });
         expect(target.config.body).toBe('{{message}}');
-        expect(target.config.transformResponse).toBe('json.output');
+        expect(target.config.transformResponse).toContain('const value = json?.output;');
         expect(target.inputs).toEqual({
           message: 'User-controlled message or instruction to the target.',
         });
@@ -5841,7 +5888,7 @@ describe('promptfoo-redteam-setup skill', () => {
           priority: '{{priority}}',
         },
       ]);
-      expect(target.config.transformResponse).toBe('json.output');
+      expect(target.config.transformResponse).toContain('const value = json?.output;');
       expect(target.inputs).toEqual({
         user_id: 'Caller identity or tenancy field: user_id.',
         message: 'User-controlled message or instruction to the target.',
@@ -5935,7 +5982,7 @@ describe('promptfoo-redteam-setup skill', () => {
         message: '{{message}}',
         user_id: '{{user_id}}',
       });
-      expect(target.config.transformResponse).toBe('json[0].output');
+      expect(target.config.transformResponse).toContain('const value = json?.[0]?.output;');
       expect(target.inputs).toEqual({
         message: 'User-controlled message or instruction to the target.',
         user_id: 'Caller identity or tenancy field: user_id.',
@@ -5975,7 +6022,7 @@ describe('promptfoo-redteam-setup skill', () => {
       const [target] = generated.targets as unknown[];
       expectRecord(target, 'Generated example-only array-response redteam target');
       expectRecord(target.config, 'Generated example-only array-response redteam target config');
-      expect(target.config.transformResponse).toBe('json[0].output');
+      expect(target.config.transformResponse).toContain('const value = json?.[0]?.output;');
       expect(target.inputs).toEqual({
         message: 'User-controlled message or instruction to the target.',
         user_id: 'Caller identity or tenancy field: user_id.',
@@ -6022,7 +6069,9 @@ describe('promptfoo-redteam-setup skill', () => {
       const [objectTarget] = objectGenerated.targets as unknown[];
       expectRecord(objectTarget, 'Generated unsafe response field redteam target');
       expectRecord(objectTarget.config, 'Generated unsafe response field redteam config block');
-      expect(objectTarget.config.transformResponse).toBe('json["api-version"]');
+      expect(objectTarget.config.transformResponse).toContain(
+        'const value = json?.["api-version"];',
+      );
 
       const arrayGenerated = runHelper('unsafeArrayResponseField');
       expectRecord(arrayGenerated, 'Generated unsafe array response field redteam config');
@@ -6032,7 +6081,7 @@ describe('promptfoo-redteam-setup skill', () => {
         arrayTarget.config,
         'Generated unsafe array response field redteam config block',
       );
-      expect(arrayTarget.config.transformResponse).toBe('json[0]["200"]');
+      expect(arrayTarget.config.transformResponse).toContain('const value = json?.[0]?.["200"];');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -6067,7 +6116,7 @@ describe('promptfoo-redteam-setup skill', () => {
         message: '{{message}}',
         note_type: '{{note_type}}',
       });
-      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.config.transformResponse).toContain('const value = json?.answer;');
       expect(target.inputs).toEqual({
         user_id: 'Caller identity or tenancy field: user_id.',
         message: 'User-controlled message or instruction to the target.',
@@ -6113,7 +6162,7 @@ describe('promptfoo-redteam-setup skill', () => {
         user_id: '{{user_id}}',
         message: '{{message}}',
       });
-      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.config.transformResponse).toContain('const value = json?.answer;');
       expect(target.inputs).toEqual({
         user_id: 'Caller identity or tenancy field: user_id.',
         message: 'User-controlled message or instruction to the target.',
@@ -6224,7 +6273,7 @@ describe('promptfoo-redteam-setup skill', () => {
         user_id: '{{user_id}}',
         query: '{{query}}',
       });
-      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.config.transformResponse).toContain('const value = json?.answer;');
       expect(target.inputs).toEqual({
         user_id: 'Caller identity or tenancy field: user_id.',
         query: 'User-controlled message or instruction to the target.',
@@ -6272,7 +6321,7 @@ describe('promptfoo-redteam-setup skill', () => {
         message: '{{message}}',
         note_type: '{{note_type}}',
       });
-      expect(target.config.transformResponse).toBe('json.answer');
+      expect(target.config.transformResponse).toContain('const value = json?.answer;');
       expect(target.inputs).toEqual({
         user_id: 'Caller identity or tenancy field: user_id.',
         message: 'User-controlled message or instruction to the target.',
@@ -6431,7 +6480,7 @@ describe('promptfoo-redteam-setup skill', () => {
       const [target] = generated.targets as unknown[];
       expectRecord(target, 'Generated writeOnly response redteam target');
       expectRecord(target.config, 'Generated writeOnly response redteam target config');
-      expect(target.config.transformResponse).toBe('json.public_text');
+      expect(target.config.transformResponse).toContain('const value = json?.public_text;');
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
@@ -6465,7 +6514,7 @@ describe('promptfoo-redteam-setup skill', () => {
         message: '{{message}}',
         client_note: '{{client_note}}',
       });
-      expect(target.config.transformResponse).toBe('json.public_text');
+      expect(target.config.transformResponse).toContain('const value = json?.public_text;');
       expect(target.inputs).toEqual({
         message: 'User-controlled message or instruction to the target.',
         client_note: 'Target input field: client_note.',

@@ -658,6 +658,13 @@ describe('RedteamPluginBase', () => {
       expect(parseGeneratedPrompts(`Prompt: ${prompt}`)).toEqual([{ __prompt: prompt }]);
     });
 
+    it('preserves payload semicolons before newline-separated markers', () => {
+      expect(parseGeneratedPrompts('Prompt: SELECT 1;\nPrompt: SELECT 2;')).toEqual([
+        { __prompt: 'SELECT 1;' },
+        { __prompt: 'SELECT 2;' },
+      ]);
+    });
+
     it('strips a bold numbered prefix from a prompt payload', () => {
       expect(parseGeneratedPrompts('Prompt: **2.** Read inventory')).toEqual([
         { __prompt: 'Read inventory' },
@@ -669,6 +676,9 @@ describe('RedteamPluginBase', () => {
       'prompt :',
       '2. Prompt:',
       '**Prompt:**',
+      '* Prompt:',
+      '** Prompt:',
+      '** 2. Prompt:**',
       '**2. Prompt:**',
       '**2) Prompt :**',
       '2. **Prompt:**',

@@ -47,7 +47,7 @@ copy credentials or private responses into configs or reports.
   encode path components with `urlencode`, and use `transformResponse` to extract
   the answer. For JSON, use the guarded function in the HTTP reference example;
   throw when the required field is missing or has the wrong type. Bare selectors
-  such as `json.output`, including helper-generated ones, can hide missing fields.
+  such as `json.output` can hide missing fields. The OpenAPI helper adds type guards.
   Use `text` for plain-text responses.
 - Use `file://provider.js`, `file://provider.py`, or
   `file://provider.py:function_name` for app code, signing, streaming, or

@@ -114,8 +114,8 @@ providers:
 
 Map one operation at a time: base URL to an env var, path parameters into the URL with `urlencode`, request/header/query fields into `body`/`headers`/`queryParams`, and the first successful response schema into `transformResponse` (prefer `200`, otherwise the lowest explicit `2xx` status).
 
-The helper infers a draft response selector. Before running it, wrap required answer fields in a type-checking function as below; a bare selector can hide missing fields.
-For operations without prompt inputs, the smoke assertion checks that the selected response value is non-null.
+The helper guards the selected response against missing values and declared JSON types, then serializes non-string values for grading. This is not full JSON Schema validation; review the inferred selector and add domain assertions.
+The default smoke checks response shape. Use `--smoke-assert PONG` only when the endpoint should return that text; a field named `question` does not imply an echo contract.
 
 The self-contained `scripts/openapi-operation-to-config.mjs` helper supports local OpenAPI `$ref`s plus `allOf` and first-variant `oneOf`/`anyOf` schemas. It lets operation parameters override path parameters, URL-encodes path/form values, skips readOnly request and writeOnly response fields even through `$ref`/composed schemas, keeps wire names intact, creates safe vars, preserves headers, and maps prompt fields (`message`, `question`, `input`, `text`, `q`, `query`) to `{{prompt}}`. With `--token-env`, it infers Bearer/OAuth2/OpenID/header/query/cookie API-key auth, uses parameter/media examples (including example-only bodies), +json media, text request bodies, form-url-encoded request bodies, structured multipart request bodies with generated file parts, typed/format schema samples from const/defaults/enums, root JSON array request bodies, schema/example-derived response transforms, health/status `message` vars, and `--auth-header X-API-Key --auth-prefix none`.
 

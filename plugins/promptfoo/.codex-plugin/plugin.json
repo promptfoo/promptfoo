@@ -1,6 +1,6 @@
 {
   "name": "promptfoo",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Agent skills for connecting, evaluating, and red teaming LLM applications with Promptfoo.",
   "author": {
     "name": "Promptfoo",

@@ -337,9 +337,10 @@ paths:
     (skill) => {
       const installed = path.join(tempDir, 'installed', skill);
       fs.cpSync(skillsRoot, installed, { recursive: true });
-      const script = fs
-        .readdirSync(path.join(installed, skill, 'scripts'))
-        .find((name) => name.endsWith('.mjs'))!;
+      const script =
+        skill === 'promptfoo-provider-setup'
+          ? 'openapi-operation-to-config.mjs'
+          : 'openapi-operation-to-redteam-config.mjs';
       const specPath = path.join(
         repoRoot,
         'test/fixtures/agent-skills/provider-setup-openapi/openapi.yaml',
