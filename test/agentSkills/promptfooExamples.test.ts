@@ -64,7 +64,7 @@ describe('published agent skill examples', () => {
     const markdown = reference('promptfoo-evals', 'eval-patterns.md');
     const config = markdown
       .split('## Calibrate Assertions')[1]
-      .match(/```yaml\n([\s\S]*?)\n```/)?.[1];
+      .match(/```yaml\r?\n([\s\S]*?)\r?\n```/)?.[1];
     expect(config).toBeDefined();
     const configPath = path.join(tempDir, 'calibration.yaml');
     const outputPath = path.join(tempDir, 'calibration.json');
@@ -112,7 +112,9 @@ describe('published agent skill examples', () => {
     );
     const exampleDir = path.join(tempDir, 'public-example');
     const written = new Set<string>();
-    for (const match of markdown.matchAll(/```(?:yaml|json) title="([^"]+)"\n([\s\S]*?)\n```/g)) {
+    for (const match of markdown.matchAll(
+      /```(?:yaml|json) title="([^"]+)"\r?\n([\s\S]*?)\r?\n```/g,
+    )) {
       if (written.has(match[1])) {
         continue;
       }
@@ -137,7 +139,7 @@ describe('published agent skill examples', () => {
 
   it('reports a missing required HTTP answer as an error with the documented transform', async () => {
     const markdown = reference('promptfoo-provider-setup', 'provider-patterns.md');
-    const config = yaml.load(markdown.match(/```yaml\n([\s\S]*?)\n```/)![1]) as {
+    const config = yaml.load(markdown.match(/```yaml\r?\n([\s\S]*?)\r?\n```/)![1]) as {
       providers: {
         config: { url: string; headers: Record<string, string>; maxRetries?: number };
       }[];

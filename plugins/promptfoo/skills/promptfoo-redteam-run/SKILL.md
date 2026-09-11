@@ -54,9 +54,10 @@ and lacks `--no-share`; set `PROMPTFOO_DISABLE_SHARING=true` for that invocation
 
 Reusing YAML preserves generated seeds and configuration. Adaptive strategies
 such as `jailbreak:meta` and `jailbreak:hydra` create new attacks while evaluating.
-For exact regression replay, save and reuse concrete attacks/transcripts. For
-adaptive comparisons, retain settings, versions, attempt counts, and transcripts
-and report variation across repeated runs.
+For exact regression replay, reuse concrete attacks/transcripts with the original
+provider config; result exports may contain redacted credentials. For adaptive
+comparisons, retain settings, versions, attempt counts, and transcripts and report
+variation across repeated runs.
 
 ## 3. Inspect and classify
 
