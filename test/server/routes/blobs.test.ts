@@ -403,15 +403,20 @@ describe('Blobs Routes', () => {
       try {
         await client.executeMultiple(`
           CREATE TABLE blob_assets (hash TEXT PRIMARY KEY, mime_type TEXT, size_bytes INTEGER, provider TEXT);
-          CREATE TABLE blob_references (blob_hash TEXT, eval_id TEXT);
+          CREATE TABLE blob_references (id TEXT, blob_hash TEXT, eval_id TEXT, kind TEXT, location TEXT);
         `);
         await client.execute({
           sql: 'INSERT INTO blob_assets VALUES (?, ?, ?, ?)',
           args: [validHash, 'image/png', 10, 's3'],
         });
         await client.execute({
-          sql: 'INSERT INTO blob_references VALUES (?, ?)',
-          args: [validHash, 'private-eval'],
+          sql: 'INSERT INTO blob_references VALUES (?, ?, ?, ?, ?)',
+          args: ['owned', validHash, 'private-eval', 'image', 'response.image'],
+        });
+        // A provider can echo another evaluation's URI; extraction records an unclassified ref.
+        await client.execute({
+          sql: 'INSERT INTO blob_references VALUES (?, ?, ?, ?, ?)',
+          args: ['copied', validHash, 'shared-eval', null, 'response.output'],
         });
         mockedIsBlobStorageEnabled.mockReturnValue(true);
         mockedGetDb.mockResolvedValue(drizzle(client));

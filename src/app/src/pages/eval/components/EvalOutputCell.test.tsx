@@ -6,7 +6,7 @@ import {
   type EvaluateTableOutput,
   ResultFailureReason,
 } from '@promptfoo/types';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
@@ -787,7 +787,7 @@ describe('EvalOutputCell', () => {
     expect(imgElement.getAttribute('src')).toMatch(/^data:image\/svg\+xml;base64,/);
   });
 
-  it('remounts blob media after a refreshed output object arrives', () => {
+  it('remounts blob media after a refreshed output object arrives', async () => {
     const blobUri = `promptfoo://blob/${'a'.repeat(64)}`;
     const propsWithBlob: MockEvalOutputCellProps = {
       ...defaultProps,
@@ -800,10 +800,15 @@ describe('EvalOutputCell', () => {
     const firstImage = container.querySelector('img');
     expect(firstImage).not.toBeNull();
     expect(firstImage).toHaveAttribute('src', `/api/blobs/${'a'.repeat(64)}`);
-    fireEvent.error(firstImage!);
-    fireEvent.click(firstImage!);
+    await userEvent.click(firstImage!);
+    const openImage = container.querySelector('img');
     const firstLightboxImage = screen.getByAltText('Lightbox');
-    fireEvent.error(firstLightboxImage);
+    act(() => {
+      openImage!.dispatchEvent(new Event('error'));
+    });
+    act(() => {
+      firstLightboxImage.dispatchEvent(new Event('error'));
+    });
 
     rerender(
       <ShiftKeyProvider>
@@ -818,7 +823,7 @@ describe('EvalOutputCell', () => {
 
     const refreshedImage = container.querySelector('img');
     expect(refreshedImage).not.toBeNull();
-    expect(refreshedImage).not.toBe(firstImage);
+    expect(refreshedImage).not.toBe(openImage);
     expect(refreshedImage).toHaveAttribute('src', `/api/blobs/${'a'.repeat(64)}`);
     const refreshedLightboxImage = screen.getByAltText('Lightbox');
     expect(refreshedLightboxImage).not.toBe(firstLightboxImage);
@@ -837,7 +842,9 @@ describe('EvalOutputCell', () => {
     const { container, rerender } = renderWithProviders(<EvalOutputCell {...propsWithImage} />);
     const firstImage = container.querySelector('img');
     expect(firstImage).not.toBeNull();
-    fireEvent.load(firstImage!);
+    act(() => {
+      firstImage!.dispatchEvent(new Event('load'));
+    });
 
     rerender(
       <ShiftKeyProvider>

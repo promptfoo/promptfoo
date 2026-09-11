@@ -5,6 +5,7 @@ import {
   BLOB_MAX_SIZE,
   getBlobByHash,
   getBlobUrl,
+  isBlobAllowedForShare,
   storeBlob,
 } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
@@ -530,13 +531,7 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
 
   // Blob references are scoped to the evaluation being viewed. Deployments with user
   // authentication must additionally verify access to that evaluation.
-  const reference = await db
-    .select({ evalId: blobReferencesTable.evalId })
-    .from(blobReferencesTable)
-    .where(and(eq(blobReferencesTable.blobHash, hash), eq(blobReferencesTable.evalId, evalId)))
-    .get();
-
-  if (!reference) {
+  if (!(await isBlobAllowedForShare(hash, evalId))) {
     logger.warn('[BlobRoute] Missing reference for blob access', { hash });
     res.status(403).json({ error: 'Not authorized to access this blob' });
     return;

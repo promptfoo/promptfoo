@@ -74,38 +74,60 @@ export async function storeBlob(
     ref: { ...result.ref, mimeType: safeMimeType },
   };
 
-  // Track asset and reference in DB for dedup/auth/cascade
-  await db.transaction(async (tx) => {
-    await tx
-      .insert(blobAssetsTable)
-      .values({
-        hash: normalizedResult.ref.hash,
-        sizeBytes: normalizedResult.ref.sizeBytes,
-        mimeType: normalizedResult.ref.mimeType,
-        provider: normalizedResult.ref.provider,
-      })
-      .onConflictDoUpdate({
-        target: blobAssetsTable.hash,
-        set: { mimeType: normalizedResult.ref.mimeType },
-      })
-      .run();
-
-    if (refContext?.evalId) {
+  try {
+    // Track asset and reference in DB for dedup/auth/cascade
+    await db.transaction(async (tx) => {
       await tx
-        .insert(blobReferencesTable)
+        .insert(blobAssetsTable)
         .values({
-          id: randomUUID(),
-          blobHash: normalizedResult.ref.hash,
-          evalId: refContext.evalId,
-          testIdx: refContext.testIdx,
-          promptIdx: refContext.promptIdx,
-          location: refContext.location,
-          kind: refContext.kind,
+          hash: normalizedResult.ref.hash,
+          sizeBytes: normalizedResult.ref.sizeBytes,
+          mimeType: normalizedResult.ref.mimeType,
+          provider: normalizedResult.ref.provider,
         })
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: blobAssetsTable.hash,
+          set: { mimeType: normalizedResult.ref.mimeType },
+        })
         .run();
+
+      if (refContext?.evalId) {
+        await tx
+          .insert(blobReferencesTable)
+          .values({
+            id: randomUUID(),
+            blobHash: normalizedResult.ref.hash,
+            evalId: refContext.evalId,
+            testIdx: refContext.testIdx,
+            promptIdx: refContext.promptIdx,
+            location: refContext.location,
+            kind: refContext.kind,
+          })
+          .onConflictDoNothing()
+          .run();
+      }
+    });
+  } catch (error) {
+    // Preserve reused objects and blobs another successful write has already registered.
+    if (!normalizedResult.deduplicated) {
+      try {
+        const tracked = await db
+          .select({ hash: blobAssetsTable.hash })
+          .from(blobAssetsTable)
+          .where(eq(blobAssetsTable.hash, normalizedResult.ref.hash))
+          .get();
+        if (!tracked) {
+          await provider.deleteByHash(normalizedResult.ref.hash);
+        }
+      } catch (cleanupError) {
+        logger.warn('[BlobStorage] Failed to roll back an untracked blob after DB error', {
+          error: cleanupError,
+          hash: normalizedResult.ref.hash,
+        });
+      }
     }
-  });
+    throw error;
+  }
 
   return normalizedResult;
 }

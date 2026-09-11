@@ -74,7 +74,7 @@ import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import { NumberInput } from '@app/components/ui/number-input';
-import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
+import { isBlobRef, isStorageRef } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import {
@@ -88,55 +88,16 @@ const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
 );
 
-/**
- * Renders an audio player for evaluation outputs that may be stored in different representations.
- *
- * This component accepts either:
- * - A storage/blob reference, which is resolved asynchronously, or
- * - Inline base64/data URL audio content, which is used immediately.
- *
- * @param data Audio payload or reference. Supported inputs:
- *   - storage ref/blob ref string understood by `isStorageRef` / `isBlobRef`
- *   - data URL (`data:audio/...`)
- *   - raw base64 audio data
- * @param format Audio MIME subtype used when constructing inline base64 sources and the `<source>` type.
- * Defaults to `'mp3'`. Typical values include `'mp3'`, `'wav'`, `'ogg'`, and `'webm'`.
- */
-function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
-  const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(isStorageRef(data) || isBlobRef(data));
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    if (isStorageRef(data) || isBlobRef(data)) {
-      setLoading(true);
-      resolveAudioUrl(data, format).then((url) => {
-        if (!cancelled) {
-          setAudioUrl(url);
-          setLoading(false);
-        }
-      });
-    } else {
-      // Inline base64
-      const url = data.startsWith('data:') ? data : `data:audio/${format};base64,${data}`;
-      setAudioUrl(url);
-      setLoading(false);
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [data, format]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 py-0.5">
-        <Spinner className="size-4" />
-        <span className="text-xs text-muted-foreground">Loading audio...</span>
-      </div>
-    );
-  }
+function StorageRefAudioPlayer({
+  data,
+  format = 'mp3',
+  evaluationId,
+}: {
+  data: string;
+  format?: string;
+  evaluationId?: string;
+}) {
+  const audioUrl = resolveAudioSource({ format }, data, evaluationId)?.src;
 
   if (!audioUrl) {
     return <span className="text-xs text-destructive">Failed to load audio</span>;
@@ -457,6 +418,7 @@ function renderDecodedVariableCell({
   injectVarName,
   maxTextLength,
   cellContent,
+  evaluationId,
 }: {
   value: string | object;
   varName: string;
@@ -464,6 +426,7 @@ function renderDecodedVariableCell({
   injectVarName: string;
   maxTextLength: number;
   cellContent: React.ReactNode;
+  evaluationId?: string;
 }): React.ReactNode {
   const testMetadata: Record<string, unknown> = row.test?.metadata || {};
   const metadataOriginal =
@@ -498,7 +461,7 @@ function renderDecodedVariableCell({
     <div className="cell" data-capture="true">
       {isAudioContent && typeof value === 'string' ? (
         <div>
-          <StorageRefAudioPlayer data={value} />
+          <StorageRefAudioPlayer data={value} evaluationId={evaluationId} />
         </div>
       ) : isImageContent ? (
         <div>
@@ -592,6 +555,7 @@ function renderVariableCell({
     injectVarName,
     maxTextLength,
     cellContent,
+    evaluationId,
   });
 }
 
@@ -1389,6 +1353,10 @@ function getImageSourceForCell({
   }
 
   const varName = getVariableNameForColumn(columnId, headVars);
+  if (varName === injectVarName && row.original.test?.metadata?.strategyId === 'audio') {
+    return undefined;
+  }
+
   const imageValue = varName
     ? getVariableCellValue({
         row: row.original,

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   getBlobByHash,
@@ -299,6 +299,7 @@ describe('storeBlob failure and MIME boundaries', () => {
   afterEach(async () => {
     resetBlobStorageProvider();
     const db = await getDb();
+    await db.run(sql`DROP TRIGGER IF EXISTS fail_blob_reference`);
     await db.delete(blobReferencesTable).where(eq(blobReferencesTable.evalId, evalId));
     await db.delete(blobAssetsTable).where(eq(blobAssetsTable.hash, hash));
     await db.delete(evalsTable).where(eq(evalsTable.id, evalId));
@@ -365,6 +366,35 @@ describe('storeBlob failure and MIME boundaries', () => {
       db.select().from(blobReferencesTable).where(eq(blobReferencesTable.evalId, evalId)).get(),
     ).resolves.toMatchObject({ blobHash: hash });
   });
+
+  it.each([
+    { deduplicated: false, tracked: false, deleted: true },
+    { deduplicated: true, tracked: false, deleted: false },
+    { deduplicated: false, tracked: true, deleted: false },
+  ])(
+    'cleans up a failed write only when its new blob is untracked ($deduplicated, $tracked)',
+    async ({ deduplicated, tracked, deleted }) => {
+      setStoreProvider(deduplicated);
+      if (tracked) {
+        await storeBlob(Buffer.from('bytes'), 'image/png', { evalId });
+      }
+      const db = await getDb();
+      await db.run(sql`CREATE TRIGGER fail_blob_reference BEFORE INSERT ON blob_references
+      WHEN NEW.location = 'fail' BEGIN SELECT RAISE(ABORT, 'fixture reference failure'); END`);
+
+      await expect(
+        storeBlob(Buffer.from('bytes'), 'image/png', { evalId, location: 'fail' }),
+      ).rejects.toThrow();
+      expect(deleteCalls).toEqual(deleted ? [hash] : []);
+      expect(storeCalls).toBe(tracked ? 2 : 1);
+      const asset = await db
+        .select()
+        .from(blobAssetsTable)
+        .where(eq(blobAssetsTable.hash, hash))
+        .get();
+      expect(Boolean(asset)).toBe(tracked);
+    },
+  );
 
   it('downgrades unsafe provider metadata on deduplication and reads', async () => {
     setStoreProvider(true, 'image/svg+xml');

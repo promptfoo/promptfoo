@@ -1,5 +1,6 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
+import { act, render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import ChatMessages, { type Message } from './ChatMessages';
 
 const FAKE_IMAGE_DATA_URL = `data:image/png;base64,${'a'.repeat(80)}`;
@@ -247,7 +248,9 @@ describe('ChatMessages', () => {
       <ChatMessages messages={messages} mediaRefreshToken={initialRefresh} />,
     );
     const firstImage = screen.getByAltText('Input');
-    fireEvent.error(firstImage);
+    act(() => {
+      firstImage.dispatchEvent(new Event('error'));
+    });
 
     rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
 
@@ -257,7 +260,7 @@ describe('ChatMessages', () => {
   });
 
   it('retries when a blob failure arrives after the eval row refresh', () => {
-    vi.useFakeTimers();
+    const timers = useTestTimers();
     try {
       const blobHash = 'c'.repeat(64);
       const messages: Message[] = [
@@ -271,19 +274,21 @@ describe('ChatMessages', () => {
       const image = screen.getByAltText('Input');
 
       rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
-      fireEvent.error(image);
       act(() => {
-        vi.advanceTimersByTime(250);
+        image.dispatchEvent(new Event('error'));
+      });
+      act(() => {
+        timers.advanceBy(250);
       });
 
       expect(image.getAttribute('src')).toContain('promptfoo_media_retry=');
     } finally {
-      vi.useRealTimers();
+      restoreTestTimers();
     }
   });
 
   it('keeps recovered blob media mounted after the next refresh', () => {
-    vi.useFakeTimers();
+    const timers = useTestTimers();
     try {
       const blobHash = 'd'.repeat(64);
       const messages: Message[] = [
@@ -295,21 +300,25 @@ describe('ChatMessages', () => {
       ];
       const { rerender } = render(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
       const image = screen.getByAltText('Input');
-      fireEvent.error(image);
       act(() => {
-        vi.advanceTimersByTime(250);
+        image.dispatchEvent(new Event('error'));
       });
-      fireEvent.load(image);
+      act(() => {
+        timers.advanceBy(250);
+      });
+      act(() => {
+        image.dispatchEvent(new Event('load'));
+      });
 
       rerender(<ChatMessages messages={messages} mediaRefreshToken={{}} />);
       expect(screen.getByAltText('Input')).toBe(image);
     } finally {
-      vi.useRealTimers();
+      restoreTestTimers();
     }
   });
 
   it('does not let a pending retry overwrite a newly rendered blob source', () => {
-    vi.useFakeTimers();
+    const timers = useTestTimers();
     try {
       const firstHash = 'e'.repeat(64);
       const secondHash = 'f'.repeat(64);
@@ -324,19 +333,21 @@ describe('ChatMessages', () => {
         <ChatMessages messages={createMessages(firstHash)} mediaRefreshToken={{}} />,
       );
       const firstImage = screen.getByAltText('Input');
-      fireEvent.error(firstImage);
+      act(() => {
+        firstImage.dispatchEvent(new Event('error'));
+      });
 
       rerender(<ChatMessages messages={createMessages(secondHash)} mediaRefreshToken={{}} />);
       const secondImage = screen.getByAltText('Input');
       expect(secondImage).not.toBe(firstImage);
       act(() => {
-        vi.advanceTimersByTime(250);
+        timers.advanceBy(250);
       });
 
       expect(secondImage).toHaveAttribute('src', `/api/blobs/${secondHash}`);
       expect(secondImage.getAttribute('src')).not.toContain(firstHash);
     } finally {
-      vi.useRealTimers();
+      restoreTestTimers();
     }
   });
 

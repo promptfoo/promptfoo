@@ -1326,7 +1326,8 @@ describe('createShareableUrl', () => {
 
     it('remaps trace ids so the local trace id never appears in any outbound payload', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
-      const localTraceId = 'local-only-trace-id';
+      const localTraceId = 'a'.repeat(32);
+      const localTraceparent = `00-${localTraceId}-${'b'.repeat(16)}-01`;
       const remoteEvalId = 'remote-only-eval-id';
       const linkedResult = {
         id: 'linked-result',
@@ -1334,9 +1335,19 @@ describe('createShareableUrl', () => {
         testIdx: 0,
         traceId: localTraceId,
         evaluationId: mockEval.id,
-        metadata: { evaluationId: mockEval.id, traceId: localTraceId },
+        metadata: {
+          evaluationId: mockEval.id,
+          traceId: localTraceId,
+          traceparent: localTraceparent,
+        },
         response: { metadata: { evaluationId: mockEval.id }, output: 'ok' },
-        testCase: { metadata: { evaluationId: mockEval.id, traceId: localTraceId } },
+        testCase: {
+          metadata: {
+            evaluationId: mockEval.id,
+            traceId: localTraceId,
+            traceparent: localTraceparent,
+          },
+        },
       } as unknown as EvalResult;
       mockEval.getTotalResultRowCount = vi.fn().mockResolvedValue(1);
       mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
@@ -1347,7 +1358,11 @@ describe('createShareableUrl', () => {
           traceId: localTraceId,
           evaluationId: mockEval.id as string,
           testCaseId: 'test-case-1',
-          metadata: { evaluationId: mockEval.id, traceId: localTraceId },
+          metadata: {
+            evaluationId: mockEval.id,
+            traceId: localTraceId,
+            traceparent: localTraceparent,
+          },
           spans: [
             {
               spanId: 'span-1',
@@ -1357,6 +1372,7 @@ describe('createShareableUrl', () => {
                 'evaluation.id': mockEval.id,
                 'promptfoo.eval.id': mockEval.id,
                 'promptfoo.trace_id': localTraceId,
+                traceparent: localTraceparent,
               },
             },
           ],
@@ -1388,6 +1404,7 @@ describe('createShareableUrl', () => {
         'evaluation.id': remoteEvalId,
         'promptfoo.eval.id': remoteEvalId,
         'promptfoo.trace_id': traceBody[0].traceId,
+        traceparent: `00-${traceBody[0].traceId}-${'b'.repeat(16)}-01`,
       });
       const resultBody = JSON.parse(mockFetch.mock.calls[1][1].body)[0];
       expect(resultBody).toMatchObject({

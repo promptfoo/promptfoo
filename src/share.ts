@@ -558,6 +558,17 @@ function remapKnownLinkage(
       remapped[key] = remoteTraceId;
     }
   }
+  const traceparent =
+    typeof remapped.traceparent === 'string'
+      ? /^([a-f0-9]{2}-)([a-f0-9]{32})(-[a-f0-9]{16}-[a-f0-9]{2})$/i.exec(remapped.traceparent)
+      : null;
+  if (
+    remoteTraceId &&
+    traceparent &&
+    traceparent[2].toLowerCase() === localTraceId?.toLowerCase()
+  ) {
+    remapped.traceparent = `${traceparent[1]}${remoteTraceId}${traceparent[3]}`;
+  }
   return remapped;
 }
 

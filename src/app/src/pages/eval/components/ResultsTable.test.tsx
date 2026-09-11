@@ -4,7 +4,7 @@ import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/ti
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
@@ -939,12 +939,18 @@ describe('ResultsTable Metrics Display', () => {
 
       const { rerender } = renderWithProviders(<ResultsTable {...defaultProps} />);
       const firstImage = screen.getByRole('img', { name: 'Input image' });
-      fireEvent.error(firstImage);
+      act(() => {
+        firstImage.dispatchEvent(new Event('error'));
+      });
       await user.click(firstImage);
       const openMainImage = screen.getByRole('img', { name: 'Input image' });
       const firstLightboxImage = screen.getByRole('img', { name: 'Lightbox' });
-      fireEvent.error(openMainImage);
-      fireEvent.error(firstLightboxImage);
+      act(() => {
+        openMainImage.dispatchEvent(new Event('error'));
+      });
+      act(() => {
+        firstLightboxImage.dispatchEvent(new Event('error'));
+      });
 
       // ResultsTable is memoized; changing a prop models the render that a real Zustand table
       // update triggers internally.
@@ -1007,6 +1013,34 @@ describe('ResultsTable Metrics Display', () => {
       expect(videoSource).toHaveAttribute('src', 'https://example.com/input.mp4');
       expect(videoSource).toHaveAttribute('type', 'video/mp4');
       expect(screen.getByText('/path/to/input.mp4 (video/mp4)')).toBeInTheDocument();
+    });
+
+    it('scopes decoded audio previews to the displayed evaluation', () => {
+      const hash = 'a'.repeat(64);
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: { redteam: { injectVar: 'audio_prompt' } },
+        evalId: 'audio-eval',
+        setTable: vi.fn(),
+        table: {
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'test output' }],
+              test: { metadata: { strategyId: 'audio', originalText: 'spoken prompt' } },
+              vars: [`promptfoo://blob/${hash}`],
+            },
+          ],
+          head: { prompts: [{}], vars: ['audio_prompt'] },
+        },
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      }));
+      const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+      expect(container.querySelector('audio source')).toHaveAttribute(
+        'src',
+        `/api/blobs/${hash}?evalId=audio-eval`,
+      );
+      expect(screen.getByText('spoken prompt')).toBeInTheDocument();
     });
 
     it('shows original image text for the injected prompt variable when image cells are rendered', () => {
