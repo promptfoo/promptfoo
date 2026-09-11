@@ -92,7 +92,7 @@ For multi-input testing, define `inputs` on the target/provider rather than unde
 
 ### Target output data handling
 
-`excludeTargetOutputFromAgenticAttackGeneration` removes target responses from the main follow-up attack prompt across strategies. GOAT failure extraction, optional unblocking (`PROMPTFOO_ENABLE_UNBLOCKING=true`), and remote graders can still send target responses remotely. For sensitive targets, disable unblocking, avoid GOAT, and use a local strategy and grader.
+`excludeTargetOutputFromAgenticAttackGeneration` removes target responses from the main follow-up attack prompt across strategies. GOAT failure extraction, optional unblocking (`PROMPTFOO_ENABLE_UNBLOCKING=true`), and remote graders can still send target responses remotely. For sensitive targets, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`, disable unblocking, avoid GOAT, and configure a local `redteam.provider` and grader.
 
 ### Framework Filtering
 

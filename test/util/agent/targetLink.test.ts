@@ -234,7 +234,8 @@ describe('attachTargetLink', () => {
       .mockResolvedValueOnce(new Response('', { status: 307, headers: { location: '/next' } }))
       .mockResolvedValueOnce(new Response('ok', { status: 200 }));
     const { attachTargetLink } = await import('../../../src/util/agent/targetLink');
-    attachTargetLink(fakeClient as any, { id: () => 'test', callApi: vi.fn() });
+    const provider = { id: () => 'test', callApi: vi.fn() };
+    attachTargetLink(fakeClient as any, provider);
 
     fakeClient._simulateEvent(TargetLinkEvents.PROBE_HTTP, {
       requestId: 'same-origin',
@@ -261,7 +262,8 @@ describe('attachTargetLink', () => {
       new Response('', { status: 307, headers: { location: 'https://other.test/next' } }),
     );
     const { attachTargetLink } = await import('../../../src/util/agent/targetLink');
-    attachTargetLink(fakeClient as any, { id: () => 'test', callApi: vi.fn() });
+    const provider = { id: () => 'test', callApi: vi.fn() };
+    attachTargetLink(fakeClient as any, provider);
 
     fakeClient._simulateEvent(TargetLinkEvents.PROBE_HTTP, {
       requestId: 'cross-origin',
