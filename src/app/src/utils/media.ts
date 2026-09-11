@@ -153,9 +153,10 @@ export function resolveImageSource(
     if (image.startsWith('data:')) {
       return image;
     }
-    // Allow base64-ish payloads that are purely non-whitespace and use common base64/url-safe chars
+    // Allow base64 payloads that are purely non-whitespace and use standard base64 characters.
     // Require a minimum length to avoid misclassifying short strings (e.g., session IDs) as images.
-    if (image.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(image)) {
+    // Ensure slug text with hyphens/underscores is not misidentified as a base64 image.
+    if (image.length >= 60 && /^[A-Za-z0-9+/]+={0,2}$/.test(image)) {
       return `data:image/png;base64,${image}`;
     }
     return undefined;

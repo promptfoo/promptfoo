@@ -12,6 +12,10 @@ export { TELEMETRY_EVENTS, TelemetryEventSchema } from './telemetryEvents';
 
 export type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 
+export function isTelemetryEnabled(): boolean {
+  return !getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
+}
+
 let posthogClient: PostHog | null = null;
 let isShuttingDown = false;
 
@@ -51,7 +55,6 @@ function getRuntimeMetadata() {
 }
 
 export class Telemetry {
-  private telemetryDisabledRecorded = false;
   private id: string | null = null;
 
   constructor(initializeImmediately: boolean = true) {
@@ -61,6 +64,9 @@ export class Telemetry {
   }
 
   initialize(): void {
+    if (this.disabled || !this.isTelemetryEnabled()) {
+      return;
+    }
     if (this.id !== null) {
       return;
     }
@@ -82,7 +88,7 @@ export class Telemetry {
   }
 
   async identify() {
-    if (this.disabled || getEnvBool('IS_TESTING')) {
+    if (this.disabled || !this.isTelemetryEnabled() || getEnvBool('IS_TESTING')) {
       return;
     }
 
@@ -107,23 +113,22 @@ export class Telemetry {
     return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
   }
 
-  private recordTelemetryDisabled() {
-    if (!this.telemetryDisabledRecorded) {
-      this.sendEvent('feature_used', { feature: 'telemetry disabled' });
-      this.telemetryDisabledRecorded = true;
-    }
+  isTelemetryEnabled(): boolean {
+    return !this.disabled;
   }
 
   record(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    this.initialize();
-    if (this.disabled) {
-      this.recordTelemetryDisabled();
-    } else {
-      this.sendEvent(eventName, properties);
+    if (this.disabled || !this.isTelemetryEnabled()) {
+      return;
     }
+    this.initialize();
+    this.sendEvent(eventName, properties);
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    if (this.disabled || !this.isTelemetryEnabled()) {
+      return;
+    }
     const ciFlag = isCI();
     const personProperties = this.getPersonProperties(ciFlag);
     const propertiesWithMetadata = {
