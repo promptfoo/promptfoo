@@ -17,7 +17,7 @@ The local `.gitlab-ci.yml` extends the hidden `.promptfoo-eval` job from `gitlab
 ```yaml
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-B0Skp12SdV3Ljn44XxzcTY0ZZM+ydjOq7biM+1PIIHg='
+    integrity: 'sha256-zMlQsKA3YTni3X8XebvUvyJMGRbuklqMfSa+gQ7SGb4='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -66,6 +66,6 @@ promptfoo-comment:
       when: always
 ```
 
-The comment runs in a fresh non-root container without a checkout; its write token is never available to the eval. Repeat any job-level `PROMPTFOO_OUTPUT_DIR` or `PROMPTFOO_SHARE` overrides from the eval job in the comment job because GitLab `needs` does not inherit job variables. The eval removes token-bearing `.git` metadata, strips job/deploy credentials from executable providers, and always fails on failed assertions. Results remain restricted to project developers with one-week artifact expiration; GitLab keeps the latest successful artifacts by default unless that project setting is disabled.
+The comment reads the eval status from GitLab's pipeline jobs API; `PROMPTFOO_EVAL_JOB_NAME` must match the eval job name. It runs in a fresh non-root container without a checkout; its write token is never available to the eval. Repeat any job-level `PROMPTFOO_OUTPUT_DIR` or `PROMPTFOO_SHARE` overrides from the eval job in the comment job because GitLab `needs` does not inherit job variables. The eval removes token-bearing `.git` metadata, strips job/deploy credentials from executable providers, and always fails on failed assertions. Results remain restricted to project developers with one-week artifact expiration; GitLab keeps the latest successful artifacts by default unless that project setting is disabled.
 
 For self-managed GitLab instances with an internal certificate authority, configure a file-type CI/CD variable containing the CA certificate and set `NODE_EXTRA_CA_CERTS` to that variable's file path. Set `PROMPTFOO_GITLAB_TRUST_PROXY: 'true'` only when the configured HTTP proxy is trusted to handle the GitLab write token. Do not disable TLS verification.

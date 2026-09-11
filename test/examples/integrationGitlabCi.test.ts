@@ -47,8 +47,10 @@ const describeUnix = process.platform === 'win32' ? describe.skip : describe;
 describeUnix('GitLab CI integration example', () => {
   let tempDir: string;
   let binDir: string;
+  let evalJobStatus: string;
 
   beforeEach(() => {
+    evalJobStatus = 'success';
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-gitlab-ci-'));
     binDir = path.join(tempDir, 'bin');
     fs.mkdirSync(binDir);
@@ -161,7 +163,9 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   }
 
   async function runEvaluation(overrides: NodeJS.ProcessEnv = {}) {
-    return runScript([...job.before_script, ...job.script].join('\n'), overrides);
+    const result = await runScript([...job.before_script, ...job.script].join('\n'), overrides);
+    evalJobStatus = result.status === 0 ? 'success' : 'failed';
+    return result;
   }
 
   async function withGitLabServer(
@@ -172,6 +176,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
       body: string,
     ) => void,
     callback: (origin: string, captured: CapturedRequest[]) => Promise<void>,
+    jobs: unknown[] | false = [{ name: 'promptfoo-eval', status: evalJobStatus }],
   ): Promise<void> {
     const captured: CapturedRequest[] = [];
     const server = createServer((request, response) => {
@@ -186,6 +191,11 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
           token: Array.isArray(token) ? token[0] : token,
           url: request.url,
         });
+        if (jobs && request.url?.startsWith('/api/v4/projects/42/pipelines/100/jobs?')) {
+          response.setHeader('Content-Type', 'application/json');
+          response.end(JSON.stringify(jobs));
+          return;
+        }
         responder(request, response, captured, body);
       });
     });
@@ -215,11 +225,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
       when: 'always',
       access: 'developer',
       expire_in: '1 week',
-      paths: [
-        '$PROMPTFOO_OUTPUT_DIR/results.json',
-        '$PROMPTFOO_OUTPUT_DIR/results.junit.xml',
-        '$PROMPTFOO_OUTPUT_DIR/job-status.txt',
-      ],
+      paths: ['$PROMPTFOO_OUTPUT_DIR/results.json', '$PROMPTFOO_OUTPUT_DIR/results.junit.xml'],
       reports: { junit: '$PROMPTFOO_OUTPUT_DIR/results.junit.xml' },
     });
     expect(job.cache.key).toContain('$CI_JOB_NAME_SLUG');
@@ -244,7 +250,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   });
 
   it.each(['missing config', 'invalid threshold'])(
-    'records failure status before rejecting %s',
+    'rejects %s before starting the eval',
     async (failure) => {
       const result = await runEvaluation(
         failure === 'missing config'
@@ -252,9 +258,6 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
           : { PROMPTFOO_PASS_RATE_THRESHOLD: 'invalid' },
       );
       expect(result.status).not.toBe(0);
-      expect(fs.readFileSync(path.join(tempDir, '.promptfoo-results/job-status.txt'), 'utf8')).toBe(
-        'failed\n',
-      );
       expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
     },
   );
@@ -426,9 +429,6 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     });
 
     expect(evaluation.status).toBe(1);
-    expect(fs.readFileSync(path.join(tempDir, '.promptfoo-results/job-status.txt'), 'utf8')).toBe(
-      'failed\n',
-    );
   });
 
   it('only enables sharing after explicit opt-in', async () => {
@@ -475,12 +475,13 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(fs.existsSync(markerPath)).toBe(false);
   });
 
-  it('preserves failing eval exit codes while still posting a failure summary', async () => {
+  it('uses GitLab job status despite a late rewrite of the eval status artifact', async () => {
     const evaluation = await runEvaluation({
       PROMPTFOO_TEST_EXIT_CODE: '100',
       PROMPTFOO_TEST_TAMPER_STATUS: 'true',
     });
     expect(evaluation.status).toBe(100);
+    fs.writeFileSync(path.join(tempDir, '.promptfoo-results/job-status.txt'), 'success\n');
 
     await withGitLabServer(
       (request, response) => {
@@ -500,10 +501,10 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         });
 
         expect(comment.status).toBe(0);
-        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'POST']);
-        expect(requests[2].token).toBe('test-project-token');
-        expect(JSON.parse(requests[2].body).body).toContain('Promptfoo eval: Failed');
-        expect(JSON.parse(requests[2].body).body).toContain('2/3 tests passed');
+        expect(JSON.parse(requests.at(-1)!.body).body).toContain('Promptfoo eval: Failed');
+        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'GET', 'POST']);
+        expect(requests.at(-1)!.token).toBe('test-project-token');
+        expect(JSON.parse(requests.at(-1)!.body).body).toContain('2/3 tests passed');
       },
     );
   });
@@ -511,7 +512,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   it('replaces an earlier summary when a failed eval writes no results', async () => {
     await runEvaluation();
     fs.rmSync(path.join(tempDir, '.promptfoo-results/results.json'));
-    fs.writeFileSync(path.join(tempDir, '.promptfoo-results/job-status.txt'), 'failed\n');
+    evalJobStatus = 'failed';
 
     await withGitLabServer(
       (request, response) => {
@@ -537,8 +538,8 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         });
 
         expect(comment.status).toBe(0);
-        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'PUT']);
-        const body = JSON.parse(requests[2].body).body;
+        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'GET', 'PUT']);
+        const body = JSON.parse(requests.at(-1)!.body).body;
         expect(body).toContain('Promptfoo eval: Failed');
         expect(body).toContain('No results were written.');
       },
@@ -576,9 +577,9 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         });
 
         expect(comment.status).toBe(0);
-        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'PUT']);
-        expect(requests[2].url).toContain('/notes/9');
-        expect(JSON.parse(requests[2].body).body).toContain(
+        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'GET', 'PUT']);
+        expect(requests.at(-1)!.url).toContain('/notes/9');
+        expect(JSON.parse(requests.at(-1)!.body).body).toContain(
           'https://custom.promptfoo.example/eval/eval-123',
         );
       },
@@ -611,7 +612,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         });
 
         expect(comment.status).toBe(0);
-        const body = JSON.parse(requests[2].body).body;
+        const body = JSON.parse(requests.at(-1)!.body).body;
         expect(body).toContain('%29@reviewer%5Btrusted-results%5D%28');
         expect(body).not.toContain(')@reviewer[trusted-results](');
       },
@@ -641,7 +642,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         });
 
         expect(comment.status).toBe(0);
-        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'POST']);
+        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'GET', 'POST']);
       },
     );
   });
@@ -673,7 +674,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         });
 
         expect(comment.status).toBe(0);
-        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'POST']);
+        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'GET', 'POST']);
       },
     );
   });
@@ -700,10 +701,11 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         });
 
         expect(comment.status).toBe(0);
-        const body = JSON.parse(requests[2].body).body;
+        const body = JSON.parse(requests.at(-1)!.body).body;
         expect(body).toContain('<!-- promptfoo-eval:trusted%20--%3E%0A%40reviewer -->');
         expect(body).not.toContain('-->\n@reviewer');
       },
+      [{ name: 'trusted -->\n@reviewer', status: 'success' }],
     );
   });
 
@@ -745,8 +747,14 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
         });
 
         expect(comment.status).toBe(0);
-        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'GET', 'PUT']);
-        expect(requests[3].url).toContain('/notes/12');
+        expect(requests.map((request) => request.method)).toEqual([
+          'GET',
+          'GET',
+          'GET',
+          'GET',
+          'PUT',
+        ]);
+        expect(requests.at(-1)!.url).toContain('/notes/12');
       },
     );
   });
@@ -778,7 +786,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
 
         expect(comment.status).toBe(0);
         expect(comment.stdout).toContain('Skipping stale');
-        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET']);
+        expect(requests.map((request) => request.method)).toEqual(['GET', 'GET', 'GET']);
       },
     );
   });
@@ -956,7 +964,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
 
         expect(comment.status).toBe(0);
         expect(comment.stderr).toContain('Skipping invalid Promptfoo share URL');
-        expect(JSON.parse(requests[2].body).body).not.toContain('not-a-url');
+        expect(JSON.parse(requests.at(-1)!.body).body).not.toContain('not-a-url');
       },
     );
   });
@@ -1050,14 +1058,84 @@ exec ${JSON.stringify(process.execPath)} "$@"
     expect(result.stderr).toContain('PROMPTFOO_GITLAB_TRUST_PROXY must be true or false');
   });
 
-  it('reports a missing eval status artifact before attempting to post a comment', async () => {
+  it.each([
+    ['missing', 'did not return the configured eval job'],
+    ['ambiguous', 'multiple eval jobs'],
+    ['malformed', 'invalid response'],
+    ['lookup error', 'HTTP 403'],
+    ['invalid page', 'invalid eval jobs page'],
+  ])('refuses to post when the GitLab job lookup is %s', async (failure, message) => {
     await runEvaluation();
-    fs.rmSync(path.join(tempDir, '.promptfoo-results/job-status.txt'));
+    await withGitLabServer(
+      (_request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        if (failure === 'lookup error') {
+          response.statusCode = 403;
+        }
+        if (failure === 'invalid page') {
+          response.setHeader('x-next-page', 'invalid');
+        }
+        response.end(
+          JSON.stringify(
+            failure === 'malformed'
+              ? {}
+              : failure === 'ambiguous'
+                ? [
+                    { name: 'promptfoo-eval', status: 'success' },
+                    { name: 'promptfoo-eval', status: 'failed' },
+                  ]
+                : [],
+          ),
+        );
+      },
+      async (origin, requests) => {
+        const result = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: `${origin}/api/v4`,
+          CI_SERVER_URL: origin,
+        });
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain(message);
+        expect(requests.every((request) => request.method === 'GET')).toBe(true);
+      },
+      false,
+    );
+  });
 
-    const result = await runScript(commentJob.script[0]);
-
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('eval job-status artifact is missing');
+  it('follows pipeline job pages and excludes retried attempts', async () => {
+    await runEvaluation();
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+        if (url.pathname.endsWith('/jobs')) {
+          expect(url.searchParams.get('include_retried')).toBe('false');
+          if (url.searchParams.get('page') === '1') {
+            response.setHeader('x-next-page', '2');
+            response.end(JSON.stringify([{ name: 'unrelated', status: 'success' }]));
+          } else {
+            response.end(JSON.stringify([{ name: 'promptfoo-eval', status: 'failed' }]));
+          }
+        } else {
+          response.end(
+            request.url === '/api/v4/user'
+              ? JSON.stringify({ id: 123 })
+              : request.method === 'GET'
+                ? '[]'
+                : '{}',
+          );
+        }
+      },
+      async (origin, requests) => {
+        const result = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: `${origin}/api/v4`,
+          CI_SERVER_URL: origin,
+        });
+        expect(result.status).toBe(0);
+        expect(requests.filter((request) => request.url?.includes('/jobs?'))).toHaveLength(2);
+        expect(JSON.parse(requests.at(-1)!.body).body).toContain('Promptfoo eval: Failed');
+      },
+      false,
+    );
   });
 
   it('runs the example when either bundled GitLab template changes', () => {

@@ -24,7 +24,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-B0Skp12SdV3Ljn44XxzcTY0ZZM+ydjOq7biM+1PIIHg='
+    integrity: 'sha256-zMlQsKA3YTni3X8XebvUvyJMGRbuklqMfSa+gQ7SGb4='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -95,7 +95,6 @@ Each job writes:
 
 - `.promptfoo-results/results.json` for the complete eval output.
 - `.promptfoo-results/results.junit.xml` for the merge request test summary and pipeline **Tests** tab.
-- `.promptfoo-results/job-status.txt` for the isolated merge request summary job.
 
 Artifacts are uploaded even when the eval fails, are configured to expire after one week, and are restricted to users with the Developer role or higher. GitLab keeps artifacts from the most recent successful pipeline on each ref indefinitely by default; disable **Keep artifacts from most recent successful jobs** when strict expiration is required. Treat all result artifacts as sensitive because they can contain prompts, model responses, and grading details.
 
@@ -174,7 +173,7 @@ GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create 
 
 Keep the comment job's `changes` rules aligned with the eval so unrelated merge requests skip both jobs. Keep the eval's inherited `after_script` empty: GitLab starts it with the original job credentials.
 
-The eval records its job status as an artifact, and `when: always` lets the isolated comment job summarize both successful and failed evals without turning failures into passing pipelines. A per-merge-request resource group serializes overlapping updates, and older pipelines cannot overwrite a newer summary.
+The comment job reads the eval status from GitLab's pipeline jobs API. Set `PROMPTFOO_EVAL_JOB_NAME` to the eval job's exact name if you rename it. With `when: always`, it summarizes successful and failed evals even when no results were written. A per-merge-request resource group serializes overlapping updates, and older pipelines cannot overwrite a newer summary.
 
 Only provide a write token to trusted pipelines. Masking does not prevent malicious executable providers, JavaScript assertions, or modified pipeline configuration from exfiltrating credentials that are otherwise exposed to a job.
 

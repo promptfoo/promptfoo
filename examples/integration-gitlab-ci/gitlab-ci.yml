@@ -21,7 +21,6 @@
     - |
       : "${PROMPTFOO_OUTPUT_DIR:?PROMPTFOO_OUTPUT_DIR must not be empty}"
       mkdir -p "$PROMPTFOO_OUTPUT_DIR"
-      printf '%s\n' failed > "$PROMPTFOO_OUTPUT_DIR/job-status.txt"
 
       if [ -n "${PROMPTFOO_GITLAB_TOKEN:-}" ]; then
         echo 'Scope PROMPTFOO_GITLAB_TOKEN to the promptfoo-review environment, not the eval job.' >&2
@@ -151,15 +150,7 @@
         -u NODE_PATH \
         -u PROMPTFOO_GITLAB_TOKEN \
         PROMPTFOO_FAILED_TEST_EXIT_CODE=1 \
-        sh -c '
-          if promptfoo "$@"; then
-            printf "%s\n" success > "$PROMPTFOO_OUTPUT_DIR/job-status.txt"
-          else
-            exit_code=$?
-            printf "%s\n" failed > "$PROMPTFOO_OUTPUT_DIR/job-status.txt"
-            exit "$exit_code"
-          fi
-        ' promptfoo "$@"
+        promptfoo "$@"
   # A Runner after_script shell would restore credentials after executable eval code ran.
   after_script: []
   artifacts:
@@ -169,7 +160,6 @@
     paths:
       - $PROMPTFOO_OUTPUT_DIR/results.json
       - $PROMPTFOO_OUTPUT_DIR/results.junit.xml
-      - $PROMPTFOO_OUTPUT_DIR/job-status.txt
     reports:
       junit: $PROMPTFOO_OUTPUT_DIR/results.junit.xml
   allow_failure: false
@@ -206,11 +196,6 @@
           exit 1
           ;;
       esac
-
-      if [ ! -s "$PROMPTFOO_OUTPUT_DIR/job-status.txt" ]; then
-        echo 'Cannot post Promptfoo merge request comment: the eval job-status artifact is missing.' >&2
-        exit 1
-      fi
 
       case "${PROMPTFOO_GITLAB_TRUST_PROXY:-false}" in
         true)
@@ -281,7 +266,39 @@
         throw new Error('Refusing to send the GitLab token to an unexpected or insecure API origin.');
       }
 
-      const jobStatus = (await readFile(`${outputDirectory}/job-status.txt`, 'utf8')).trim();
+      const apiUrl = api.href.replace(/\/$/, '');
+      const headers = { 'PRIVATE-TOKEN': token, 'Content-Type': 'application/json' };
+      let evalJob;
+      let jobPage = '1';
+      do {
+        const jobsResponse = await fetch(`${apiUrl}/projects/${encodeURIComponent(projectId)}/pipelines/${pipelineId}/jobs?include_retried=false&per_page=100&page=${jobPage}`, {
+          headers,
+          redirect: 'error',
+        });
+        if (!jobsResponse.ok) {
+          throw new Error(`GitLab eval job lookup failed with HTTP ${jobsResponse.status}.`);
+        }
+        const jobs = await jobsResponse.json();
+        if (!Array.isArray(jobs)) {
+          throw new Error('GitLab eval job lookup returned an invalid response.');
+        }
+        for (const job of jobs) {
+          if (job.name === jobName) {
+            if (evalJob) {
+              throw new Error('GitLab returned multiple eval jobs with the configured name.');
+            }
+            evalJob = job;
+          }
+        }
+        jobPage = jobsResponse.headers.get('x-next-page') ?? '';
+        if (jobPage && !/^\d+$/.test(jobPage)) {
+          throw new Error('GitLab returned an invalid eval jobs page.');
+        }
+      } while (jobPage);
+      if (!evalJob) {
+        throw new Error('GitLab did not return the configured eval job.');
+      }
+      const jobStatus = evalJob.status;
       let result = {};
       try {
         result = JSON.parse(await readFile(`${outputDirectory}/results.json`, 'utf8'));
@@ -315,9 +332,7 @@
         }
       }
 
-      const apiUrl = api.href.replace(/\/$/, '');
       const notesUrl = `${apiUrl}/projects/${encodeURIComponent(projectId)}/merge_requests/${encodeURIComponent(mergeRequestIid)}/notes`;
-      const headers = { 'PRIVATE-TOKEN': token, 'Content-Type': 'application/json' };
       const identityResponse = await fetch(`${apiUrl}/user`, { headers, redirect: 'error' });
       if (!identityResponse.ok) {
         throw new Error(`GitLab token identity lookup failed with HTTP ${identityResponse.status}.`);
