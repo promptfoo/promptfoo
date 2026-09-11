@@ -771,6 +771,23 @@ describe('App component target selector rendering', () => {
     expect(replaceState).toHaveBeenCalledWith(null, '', '#report-overview');
   });
 
+  it('scrolls to a report section from the initial URL hash', async () => {
+    const scrollIntoView = vi
+      .spyOn(Element.prototype, 'scrollIntoView')
+      .mockImplementation(() => {});
+    window.location.hash = '#report-vulnerabilities';
+    mockCallApi.mockResolvedValue({
+      json: () => Promise.resolve({ data: createComponentMockEvalData(1, []) }),
+    });
+
+    renderWithProviders(<App />);
+
+    await screen.findByTestId('report-section-nav');
+    expect(scrollIntoView).toHaveBeenCalled();
+    scrollIntoView.mockRestore();
+    window.location.hash = '';
+  });
+
   it('allows embedded reports to shrink within narrow result views', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);

@@ -161,6 +161,12 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (evalData && window.location.hash) {
+      document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
+    }
+  }, [evalData]);
+
   const failuresByPlugin = useMemo(() => {
     if (!evalData) {
       return {};

@@ -939,6 +939,11 @@ describe('ResultsCharts', () => {
       expect(distributionA.table).toContain('Prompt 1 (test-provider-1)');
     });
 
+    it('counts identical scores in the accessible histogram table', () => {
+      const histogram = renderHistogram(buildHistogramTable([1, 1], [1, 1]));
+      expect(histogram.table).toContain('4');
+    });
+
     const buildScatterTable = (
       pairs: Array<[number, number]>,
       providers: [string, string] = ['test-provider-1', 'test-provider-2'],
