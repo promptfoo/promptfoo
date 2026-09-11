@@ -41,5 +41,8 @@ describe('agentic evidence JSON extraction', () => {
     expect(parseEvidenceCandidates(`${JSON.stringify(evidence)}${'x'.repeat(100_000)}`)).toEqual([
       evidence,
     ]);
+    expect(parseEvidenceCandidates(JSON.stringify({ findings: ['x'.repeat(100_000)] }))).toEqual(
+      [],
+    );
   });
 });

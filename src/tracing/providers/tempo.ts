@@ -237,7 +237,11 @@ function transformSpan(
             {
               name: event.name,
               timestamp: event.timeUnixNano ? nanoToMs(event.timeUnixNano) : startTime,
-              attributes: attributesToRecord(event.attributes),
+              attributes: attributesToRecord(
+                event.attributes?.filter(
+                  (attribute) => attribute && typeof attribute.key === 'string' && attribute.value,
+                ),
+              ),
             },
           ]
         : [],

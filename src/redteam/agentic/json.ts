@@ -77,22 +77,26 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
       }
     } else if (typeof next === 'string' && next.trim()) {
       try {
-        pending.push(JSON.parse(next));
-      } catch {
-        let untagged = next;
-        const taggedValues: string[] = [];
-        for (const pattern of [
-          /<AgenticRuntimeEvidence>([\s\S]*?)<\/AgenticRuntimeEvidence>/gi,
-          /<AgenticEvidence>([\s\S]*?)<\/AgenticEvidence>/gi,
-          /<AgentSdkEvidence>([\s\S]*?)<\/AgentSdkEvidence>/gi,
-        ]) {
-          for (const tagged of next.matchAll(pattern)) {
-            taggedValues.push(tagged[1]);
-          }
-          untagged = untagged.replace(pattern, '');
+        if (next.length <= MAX_JSON_LENGTH) {
+          pending.push(JSON.parse(next));
+          continue;
         }
-        pending.push(...extractJsonObjects(untagged).reverse(), ...taggedValues.reverse());
+      } catch {
+        // Fall through to bounded extraction for mixed prose and JSON.
       }
+      let untagged = next;
+      const taggedValues: string[] = [];
+      for (const pattern of [
+        /<AgenticRuntimeEvidence>([\s\S]*?)<\/AgenticRuntimeEvidence>/gi,
+        /<AgenticEvidence>([\s\S]*?)<\/AgenticEvidence>/gi,
+        /<AgentSdkEvidence>([\s\S]*?)<\/AgentSdkEvidence>/gi,
+      ]) {
+        for (const tagged of next.matchAll(pattern)) {
+          taggedValues.push(tagged[1]);
+        }
+        untagged = untagged.replace(pattern, '');
+      }
+      pending.push(...extractJsonObjects(untagged).reverse(), ...taggedValues.reverse());
     }
   }
 

@@ -651,7 +651,8 @@ describe('Agentic redteam plugins', () => {
               events: [
                 {
                   attributes: {
-                    agenticEvidence: JSON.stringify({
+                    'promptfoo.agent_sdk.plugin_id': pluginId,
+                    'promptfoo.agent_sdk.evidence_json': JSON.stringify({
                       findings: [],
                       mode: 'hardened',
                       pluginId,
@@ -758,8 +759,11 @@ describe('Agentic redteam plugins', () => {
           spans: [
             {
               attributes: {
-                'promptfoo.agentic.finding.kind': 'mcp-schema-injection',
-                'promptfoo.agentic.plugin_id': 'agentic:mcp-schema-injection',
+                'promptfoo.agentic.plugin_id': pluginId,
+                'promptfoo.agentic.evidence_json': JSON.stringify({
+                  findings: [],
+                  pluginId: 'agentic:mcp-schema-injection',
+                }),
               },
               name: 'agentic unrelated finding',
               spanId: 'span-1',

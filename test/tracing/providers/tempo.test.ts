@@ -53,7 +53,10 @@ const traceResponse = {
                 {
                   name: 'tool event',
                   timeUnixNano: '1704067200500000000',
-                  attributes: [{ key: 'command', value: { stringValue: 'echo fixture' } }],
+                  attributes: [
+                    null as any,
+                    { key: 'command', value: { stringValue: 'echo fixture' } },
+                  ],
                 },
               ],
             },

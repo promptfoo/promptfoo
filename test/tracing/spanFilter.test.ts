@@ -30,6 +30,14 @@ describe('trace span relevance', () => {
       description: 'guardrail decisions',
       attributes: { 'guardrails.decision': 'blocked' },
     },
+    {
+      description: 'approval controls',
+      attributes: { 'approval.required': true },
+    },
+    {
+      description: 'agent SDK control spans',
+      attributes: { 'openai.agents.span_type': 'guardrail' },
+    },
     ...['codex.command', 'command', 'command.name', 'command_name'].map((attribute) => ({
       description: `command activity from ${attribute}`,
       attributes: { [attribute]: 'git status' },
@@ -44,6 +52,10 @@ describe('trace span relevance', () => {
 
   it('includes errors without requiring GenAI attributes', () => {
     expect(isRelevantSpan({ attributes: {}, statusCode: 2 })).toBe(true);
+  });
+
+  it('includes named approval controls without attributes', () => {
+    expect(isRelevantSpan({ attributes: {}, name: 'approval required' })).toBe(true);
   });
 
   it('excludes grader model activity and grading errors from target evidence', () => {

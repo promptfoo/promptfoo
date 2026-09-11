@@ -8,6 +8,7 @@ import {
 
 interface SpanRelevanceInput {
   attributes?: Record<string, unknown>;
+  name?: string;
   statusCode?: number;
 }
 
@@ -19,6 +20,9 @@ export function isRelevantSpan(span: SpanRelevanceInput): boolean {
 
   if (
     span.statusCode === 2 ||
+    /(?:approval|guardrail)/i.test(span.name ?? '') ||
+    span.attributes?.['approval.required'] !== undefined ||
+    span.attributes?.['openai.agents.span_type'] !== undefined ||
     getToolNameFromAttributes(span.attributes) ||
     getFirstStringAttribute(span.attributes, COMMAND_ATTRIBUTE_KEYS) ||
     getFirstStringAttribute(span.attributes, SEARCH_ATTRIBUTE_KEYS)

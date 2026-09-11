@@ -57,7 +57,9 @@ const AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS = [
 ] as const;
 const AGENTIC_RUNTIME_PLUGIN_ID_ATTRS = [
   'promptfoo.agentic.plugin_id',
+  'promptfoo.agent_sdk.plugin_id',
   'agentic.plugin_id',
+  'agent.sdk.plugin_id',
 ] as const;
 
 type TraceLikeSpan = {
@@ -656,7 +658,7 @@ function traceAttributesMatchPlugin(
     ) ||
     (normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)) === pluginId &&
       parseEvidenceCandidates(getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS)).some(
-        hasVerifierEvidence,
+        (candidate) => Boolean(normalizeEvidenceForPlugin(candidate, pluginId)),
       ))
   );
 }

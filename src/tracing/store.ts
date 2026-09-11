@@ -117,6 +117,7 @@ function serializeSpan(
       ]
     : [];
 
+  const safeEvents = events?.map((event) => ({ ...event, name: scrubEcho(event.name, secrets) }));
   return {
     spanId: span.spanId,
     parentSpanId: span.parentSpanId ?? undefined,
@@ -124,7 +125,7 @@ function serializeSpan(
     startTime: span.startTime,
     endTime: span.endTime ?? undefined,
     attributes,
-    ...(events ? { events } : {}),
+    ...(safeEvents ? { events: safeEvents } : {}),
     statusCode: span.statusCode ?? undefined,
     statusMessage: scrubEcho(span.statusMessage ?? undefined, secrets),
   };
@@ -479,17 +480,7 @@ export class TraceStore {
           continue;
         }
 
-        const spanData: SpanData = {
-          spanId: row.spanId,
-          parentSpanId: row.parentSpanId ?? undefined,
-          name: row.name,
-          startTime: row.startTime,
-          endTime: row.endTime ?? undefined,
-          attributes: shouldSanitize ? sanitizeTraceAttributes(rawAttributes) : rawAttributes,
-          ...(row.events ? { events: sanitizeEvents(row.events, shouldSanitize) } : {}),
-          statusCode: row.statusCode ?? undefined,
-          statusMessage: row.statusMessage ?? undefined,
-        };
+        const spanData = serializeSpan(row, shouldSanitize);
 
         const hasExplicitFilter = Boolean(spanFilter?.length);
 
@@ -500,7 +491,11 @@ export class TraceStore {
         if (
           !includeInternalSpans &&
           !hasExplicitFilter &&
-          !isRelevantSpan({ attributes: rawAttributes, statusCode: spanData.statusCode }) &&
+          !isRelevantSpan({
+            attributes: rawAttributes,
+            name: row.name,
+            statusCode: spanData.statusCode,
+          }) &&
           !row.events?.some((event) => isRelevantSpan({ attributes: event.attributes ?? {} }))
         ) {
           continue;

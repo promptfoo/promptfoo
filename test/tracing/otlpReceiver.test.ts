@@ -333,8 +333,10 @@ describe('OTLPReceiver', () => {
                       startTimeUnixNano: '1000000000',
                       events: [
                         null,
+                        { name: '', attributes: [] },
                         { name: 'bad attributes', attributes: {} },
                         { name: 'bad attribute entry', attributes: [null] },
+                        { name: 'missing value', attributes: [{ key: 'x' }] },
                         { name: 'valid event', attributes: [] },
                       ],
                     },

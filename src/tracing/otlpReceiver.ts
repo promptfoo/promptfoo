@@ -790,10 +790,16 @@ export class OTLPReceiver {
               events: (Array.isArray(span.events) ? span.events : []).flatMap((event) =>
                 event &&
                 typeof event === 'object' &&
+                typeof event.name === 'string' &&
+                event.name.trim() &&
                 (event.attributes === undefined ||
                   (Array.isArray(event.attributes) &&
                     event.attributes.every(
-                      (attribute) => attribute && typeof attribute === 'object',
+                      (attribute) =>
+                        attribute &&
+                        typeof attribute === 'object' &&
+                        attribute.value &&
+                        typeof attribute.value === 'object',
                     )))
                   ? [
                       {

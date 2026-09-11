@@ -607,6 +607,11 @@ describe('TraceStore', () => {
                 safe: 'ok',
               },
             },
+            {
+              name: 'echo Bearer trace-secret',
+              timestamp: 2260,
+              attributes: { safe: 'ok' },
+            },
           ],
           statusCode: 1,
           statusMessage: 'ok',
@@ -677,6 +682,11 @@ describe('TraceStore', () => {
                   authorization: '<redacted>',
                   safe: 'ok',
                 },
+              },
+              {
+                name: 'echo <redacted>',
+                timestamp: 2260,
+                attributes: { safe: 'ok' },
               },
             ],
             statusCode: 1,
