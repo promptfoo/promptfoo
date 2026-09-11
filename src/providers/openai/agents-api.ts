@@ -4,6 +4,7 @@ import { renderVarsInObject } from '../../util/render';
 import {
   isNonCredentialHeader,
   isSecretField,
+  looksLikeSecret,
   REDACTED,
   sanitizeUrlForLogging,
 } from '../../util/sanitizer';
@@ -131,7 +132,20 @@ function addCredential(credentials: Set<string>, value: unknown): void {
     return;
   }
   const trimmed = value.trim();
-  for (const candidate of [trimmed, trimmed.replace(/^(?:Bearer|Basic|Token)\s+/i, '')]) {
+  const candidates = [trimmed, trimmed.replace(/^(?:Bearer|Basic|Token)\s+/i, '')];
+  const basic = /^Basic\s+([a-z\d+/]+={0,2})$/i.exec(trimmed);
+  if (basic) {
+    const bytes = Buffer.from(basic[1], 'base64');
+    const decoded = bytes.toString('utf8');
+    const separator = decoded.indexOf(':');
+    if (
+      separator !== -1 &&
+      bytes.toString('base64').replace(/=+$/, '') === basic[1].replace(/=+$/, '')
+    ) {
+      candidates.push(decoded, decoded.slice(0, separator), decoded.slice(separator + 1));
+    }
+  }
+  for (const candidate of candidates) {
     if (candidate.length >= MIN_TOKEN_CREDENTIAL_LENGTH) {
       credentials.add(candidate);
       credentials.add(encodeURIComponent(candidate));
@@ -208,7 +222,13 @@ function getUrlCredentials(value: string): string[] {
   for (const segment of url.search.slice(1).split(/[&;]/)) {
     const separator = segment.indexOf('=');
     const [param] = new URLSearchParams(segment);
-    if (separator !== -1 && param && isCredentialName(param[0])) {
+    if (
+      separator !== -1 &&
+      param &&
+      (isCredentialName(param[0]) ||
+        looksLikeSecret(param[1]) ||
+        looksLikeSecret(segment.slice(separator + 1)))
+    ) {
       // A raw `+` decodes to a space; keep both spellings a server might echo.
       found.push(segment.slice(separator + 1), param[1]);
     }
@@ -379,6 +399,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   private credentials: string[] = [];
   // callApi creates a fresh provider instance, so all lists share one call budget.
   private listBudget = { pages: MAX_SESSION_LIST_PAGES, items: MAX_LIST_ITEMS };
+  private listItemPeaks = new Map<string, number>();
   // Provider credentials replaced by prompt settings are still redacted if an error echoes them.
   private readonly inheritedCredentials = new Set<string>();
 
@@ -523,10 +544,15 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!Array.isArray(page?.data)) {
         throw new Error('Agents API returned an invalid list response');
       }
-      if (page.data.length > this.listBudget.items) {
+      // Polls replace an endpoint's snapshot; charge only growth beyond its previous peak.
+      const previousPeak = this.listItemPeaks.get(endpoint) ?? 0;
+      const nextPeak = Math.max(previousPeak, items.length + page.data.length);
+      const growth = nextPeak - previousPeak;
+      if (growth > this.listBudget.items) {
         throw new Error(`Agents API session pagination limit exceeded (${MAX_LIST_ITEMS} items)`);
       }
-      this.listBudget.items -= page.data.length;
+      this.listBudget.items -= growth;
+      this.listItemPeaks.set(endpoint, nextPeak);
       items.push(...page.data);
       if (!page.has_more) {
         return items;
@@ -965,8 +991,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const latest = { session, turn };
     let turnUsageSeenAt: number | undefined;
     try {
-      while (!latest.session.usage && Date.now() < waitUntil) {
-        if (latest.turn.usage && !hasSubagents) {
+      while (!isUsage(latest.session.usage) && Date.now() < waitUntil) {
+        if (isUsage(latest.turn.usage) && !hasSubagents) {
           turnUsageSeenAt ??= Date.now();
           if (Date.now() - turnUsageSeenAt >= TURN_USAGE_GRACE_MS) {
             break;
@@ -996,7 +1022,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         error: this.redact(error instanceof Error ? error.message : String(error)),
       });
     }
-    const usage = latest.session.usage ?? latest.turn.usage ?? undefined;
+    const sessionUsage = isUsage(latest.session.usage) ? latest.session.usage : undefined;
+    const usage = sessionUsage ?? (isUsage(latest.turn.usage) ? latest.turn.usage : undefined);
     if (!usage) {
       return { session: latest.session, usageMetadata: { usageUnavailable: true } };
     }
@@ -1004,7 +1031,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       session: latest.session,
       usage,
       // Without session totals, a run with subagents reports its root turn's usage and says so.
-      usageMetadata: hasSubagents && !latest.session.usage ? { usageFromRootTurn: true } : {},
+      usageMetadata: hasSubagents && !sessionUsage ? { usageFromRootTurn: true } : {},
     };
   }
 

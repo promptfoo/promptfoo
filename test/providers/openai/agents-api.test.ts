@@ -1038,6 +1038,34 @@ describe('OpenAiAgentsApiProvider', () => {
     });
   });
 
+  it('does not spend the retained-item budget again on unchanged polling snapshots', async () => {
+    vi.useFakeTimers();
+    let polls = 0;
+    mockApi((pathname) => {
+      if (pathname.endsWith('/turns')) {
+        polls++;
+        return json(
+          page([
+            { ...turn, status: polls >= 101 ? 'completed' : 'in_progress' },
+            ...Array.from({ length: 100 }, (_, i) => ({
+              ...turn,
+              id: `child-turn-${i}`,
+              subagent_id: `child-${i}`,
+            })),
+          ]),
+        );
+      }
+      return undefined;
+    });
+    const pending = provider({ pollIntervalMs: 10 }).callApi('hi');
+    await vi.advanceTimersByTimeAsync(2_000);
+    const result = await pending;
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('42');
+    expect(polls).toBe(101);
+  });
+
   it.each(['items', 'requests'])(
     'shares the %s pagination budget across subagents and calls',
     async (limit) => {
@@ -1097,6 +1125,39 @@ describe('OpenAiAgentsApiProvider', () => {
       }
     },
   );
+
+  it('recognizes an opaque function key under an ordinary query name', async () => {
+    vi.stubEnv('OPENAI_API_KEY', 'ambient-openai-key');
+    const secret = 'FunctionKey0123456789'.repeat(4);
+    const agent = provider({
+      apiKey: undefined,
+      apiBaseUrl: `https://gateway.example/v1?code=${secret}`,
+    });
+    expect((await agent.callApi('hi')).output).toBe('42');
+    expect(
+      calls().every(({ options }) => !new Headers(options?.headers).has('Authorization')),
+    ).toBe(true);
+
+    vi.mocked(fetchWithRetries).mockResolvedValue(apiError(401, `Rejected ${secret}`));
+    const result = await agent.callApi('hi');
+    expect(result.error).toContain('Rejected [REDACTED]');
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+
+  it('redacts the decoded parts of a configured Basic authorization header', async () => {
+    const username = 'gateway-user-name';
+    const password = 'gateway-password-value';
+    const encoded = Buffer.from(`${username}:${password}`).toString('base64');
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      apiError(401, `Rejected ${username}:${password}, user ${username}, password ${password}`),
+    );
+    const result = await provider({ headers: { Authorization: `Basic ${encoded}` } }).callApi('hi');
+
+    expect(result.error).toContain('Rejected [REDACTED], user [REDACTED], password [REDACTED]');
+    for (const credential of [username, password, encoded]) {
+      expect(JSON.stringify(result)).not.toContain(credential);
+    }
+  });
 
   it.each(['/auth/proxy/v1', '/token/count/v1'])(
     'preserves ambient authentication for a non-credential route %s',
@@ -1595,6 +1656,38 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(result.tokenUsage).toBeUndefined();
     expect(result.cost).toBeUndefined();
   });
+
+  it.each([false, true])(
+    'uses valid root usage when session usage is malformed (subagents=%s)',
+    async (hasSubagents) => {
+      vi.useFakeTimers();
+      mockApi((pathname, method) => {
+        if (
+          method !== 'DELETE' &&
+          (pathname.endsWith('/sess_test') || pathname.endsWith('/sessions'))
+        ) {
+          return json({
+            ...session,
+            agent: { ...session.agent, multi_agent: { enabled: hasSubagents } },
+            usage: {},
+          });
+        }
+        return undefined;
+      });
+      const pending = provider({ usageTimeoutMs: 1, pollIntervalMs: 1 }).callApi('hi');
+      await vi.advanceTimersByTimeAsync(10);
+      const result = await pending;
+
+      expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+      if (hasSubagents) {
+        expect(result.cost).toBeUndefined();
+      } else {
+        expect(result.cost).toBeGreaterThan(0);
+      }
+      expect(result.metadata?.usageUnavailable).toBeUndefined();
+      expect(result.metadata?.usageFromRootTurn).toBe(hasSubagents ? true : undefined);
+    },
+  );
 
   it('falls back to root-turn usage when session totals lag', async () => {
     vi.useFakeTimers();
