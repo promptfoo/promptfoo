@@ -2,12 +2,14 @@ import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as yaml from 'js-yaml';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetConfigValidation';
 import { generateOrderedYaml } from '../../utils/yamlHelpers';
 import ProviderConfigEditor from './ProviderConfigEditor';
 import ProviderTypeSelector from './ProviderTypeSelector';
+import TargetTypeSelection from './TargetTypeSelection';
 
 import type { ProviderOptions } from '../../types';
 
@@ -96,6 +98,34 @@ describe('generated target configuration round trips', () => {
     passthrough: { chat_template_kwargs: { enable_thinking: false } },
   };
   const localId = 'openai:chat:tenant/served-model:Q4_K_M';
+
+  it.each(['llamafile', 'vllm', 'text-generation-webui', 'custom'] as const)(
+    'restores the %s editor when a saved target has no provider type',
+    (type) => {
+      const target = {
+        id: localId,
+        label: 'Saved deployment',
+        config: { ...localConfig, ...(type === 'custom' ? {} : { type }) },
+      };
+      useRedTeamConfig.setState({
+        config: { ...useRedTeamConfig.getState().config, target },
+        providerType: undefined,
+      });
+      const view = renderWithProviders(
+        <MemoryRouter>
+          <TargetTypeSelection onNext={vi.fn()} />
+        </MemoryRouter>,
+      );
+      expect(useRedTeamConfig.getState().providerType).toBe(type);
+      view.unmount();
+      renderWithProviders(<TargetEditor />);
+      expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue(localId);
+      expect(screen.getByRole('textbox', { name: 'Target configuration JSON' })).toHaveValue(
+        JSON.stringify(target.config, null, 2),
+      );
+      expect(useRedTeamConfig.getState().config.target).toEqual(target);
+    },
+  );
 
   it.each(
     localTargets.flatMap((target) =>
