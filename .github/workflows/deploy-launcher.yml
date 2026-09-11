@@ -30,9 +30,11 @@ jobs:
           node-version-file: '.nvmrc'
           package-manager-cache: false
 
-      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
+      # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
+      # allowScripts, which silently skips e.g. the Playwright browser download.
       - name: Upgrade npm
-        run: npm install -g npm@latest
+        run: npm install -g npm@11.18.0
 
       - name: Install Dependencies
         run: npm ci

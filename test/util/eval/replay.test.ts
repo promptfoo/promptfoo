@@ -316,4 +316,12 @@ describe('evaluation replay helpers', () => {
       applyPromptSelection([{ raw: 'p', label: 'P', config: { apiKey: 'new-secret' } }], selection),
     ).not.toThrow();
   });
+
+  it('keeps resolved executable prompt callbacks during replay', () => {
+    const callback = async () => 'rendered';
+    const resolved = [{ raw: 'source', label: 'Prompt', function: callback }];
+    const persisted = [{ id: generateIdFromPrompt(resolved[0]), raw: 'source', label: 'Prompt' }];
+
+    expect(getPromptsForReplay(persisted, resolved)[0].function).toBe(callback);
+  });
 });

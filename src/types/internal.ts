@@ -5,6 +5,7 @@ import type {
   EvalTestCaseSelection,
   EvaluateOptions,
 } from './index';
+import type { TokenUsage } from './shared';
 
 /**
  * Internal orchestration metadata that should not be accepted from reusable
@@ -27,4 +28,6 @@ export type InternalEvaluateOptions = EvaluateOptions & {
   providerSelection?: EvalProviderSelection;
   /** Logical prompt identities and order persisted for reproducible resume and retry. */
   promptSelection?: EvalPromptSelection;
+  generationEventId?: string;
+  generationTokenUsage?: TokenUsage;
 };

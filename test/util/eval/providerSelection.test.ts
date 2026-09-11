@@ -453,4 +453,14 @@ describe('provider selection', () => {
       ]),
     );
   });
+
+  it('treats undefined array entries like JSON nulls in fingerprints', () => {
+    const original = provider('http', 'target', { values: [undefined] });
+    const selection = createProviderSelection([original], [{ id: 'http' }], [original]);
+    const normalized = provider('http', 'target', { values: [null] });
+
+    expect(applyProviderSelection([normalized], [{ id: 'http' }], selection).providers).toEqual([
+      normalized,
+    ]);
+  });
 });

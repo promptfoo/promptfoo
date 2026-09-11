@@ -3,7 +3,7 @@ import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { getTokenUsage } from './util';
+import { appendOpenAiApiPath, assertOpenAiApiModel, getTokenUsage } from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ProviderEmbeddingResponse } from '../../types/index';
@@ -47,6 +47,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
       model: this.modelName,
       ...(this.config.passthrough || {}),
     };
+    assertOpenAiApiModel(body.model, this.getApiUrl());
 
     let data: any;
     let status: number | undefined;
@@ -57,7 +58,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
     try {
       const apiKey = this.getApiKey();
       const response = await fetchWithCache(
-        `${this.getApiUrl()}/embeddings`,
+        appendOpenAiApiPath(this.getApiUrl(), 'embeddings'),
         {
           method: 'POST',
           headers: {

@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -23,9 +23,8 @@ import { writeMultipleOutputs } from '../util/output';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
 import {
-  accumulateAssertionTokenUsage,
+  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
-  createEmptyAssertions,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 
@@ -281,7 +280,13 @@ export async function assertErrorResultsReplaced(
   }
 
   const db = await getDb();
-  const staleRows: Array<{ evalId: string; id: string; promptIdx: number; testIdx: number }> = [];
+  const staleRows: Array<{
+    evalId: string;
+    id: string;
+    promptIdx: number;
+    rowId: number;
+    testIdx: number;
+  }> = [];
   for (let offset = 0; offset < resultIds.length; offset += SQLITE_MAX_BOUND_PARAMETERS) {
     const resultIdBatch = resultIds.slice(offset, offset + SQLITE_MAX_BOUND_PARAMETERS);
     staleRows.push(
@@ -290,6 +295,7 @@ export async function assertErrorResultsReplaced(
           evalId: evalResultsTable.evalId,
           id: evalResultsTable.id,
           promptIdx: evalResultsTable.promptIdx,
+          rowId: sql<number>`rowid`,
           testIdx: evalResultsTable.testIdx,
         })
         .from(evalResultsTable)
@@ -305,8 +311,11 @@ export async function assertErrorResultsReplaced(
   // ERROR rows and every other row that already existed before the retry.
   const preexistingIds = new Set([...resultIds, ...preexistingResultIds]);
   const replacementCounts = new Map<string, number>();
+  const firstStaleRowIds = new Map<string, number>();
   const testIndicesByEval = new Map<string, Set<number>>();
   for (const row of staleRows) {
+    const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
+    firstStaleRowIds.set(key, Math.min(firstStaleRowIds.get(key) ?? row.rowId, row.rowId));
     const testIndices = testIndicesByEval.get(row.evalId) ?? new Set<number>();
     testIndices.add(row.testIdx);
     testIndicesByEval.set(row.evalId, testIndices);
@@ -321,6 +330,7 @@ export async function assertErrorResultsReplaced(
           evalId: evalResultsTable.evalId,
           id: evalResultsTable.id,
           promptIdx: evalResultsTable.promptIdx,
+          rowId: sql<number>`rowid`,
           testIdx: evalResultsTable.testIdx,
         })
         .from(evalResultsTable)
@@ -332,8 +342,11 @@ export async function assertErrorResultsReplaced(
         )
         .all();
       for (const row of candidateRows) {
-        if (!preexistingIds.has(row.id)) {
-          const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
+        const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
+        if (
+          !preexistingIds.has(row.id) ||
+          row.rowId > (firstStaleRowIds.get(key) ?? Number.MAX_SAFE_INTEGER)
+        ) {
           replacementCounts.set(key, (replacementCounts.get(key) ?? 0) + 1);
         }
       }
@@ -387,6 +400,7 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
       namedScoresCount: Record<string, number>;
       namedScoreWeights?: Record<string, number>;
       cost: number;
+      incurredCost?: number;
     }
   >();
 
@@ -438,6 +452,12 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
         // Update scores and other metrics
         metrics.score += result.score ?? 0;
         metrics.totalLatencyMs += result.latencyMs || 0;
+        const incurredCost =
+          result.response?.incurredCost ?? (result.response?.cached ? 0 : undefined);
+        if (incurredCost !== undefined || metrics.incurredCost !== undefined) {
+          metrics.incurredCost =
+            (metrics.incurredCost ?? metrics.cost) + (incurredCost ?? result.cost ?? 0);
+        }
         metrics.cost += result.cost || 0;
 
         for (const [key, value] of Object.entries(result.namedScores || {})) {
@@ -461,20 +481,14 @@ export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> 
 
         // Update token usage
         if (result.response?.tokenUsage) {
-          accumulateResponseTokenUsage(metrics.tokenUsage, {
-            tokenUsage: result.response.tokenUsage,
-          });
+          accumulateResponseTokenUsage(metrics.tokenUsage, result.response);
         }
 
         // Update assertion token usage
         if (result.gradingResult?.tokensUsed) {
-          if (!metrics.tokenUsage.assertions) {
-            metrics.tokenUsage.assertions = createEmptyAssertions();
-          }
-          accumulateAssertionTokenUsage(
-            metrics.tokenUsage.assertions,
-            result.gradingResult.tokensUsed,
-          );
+          accumulateGradingTokenUsage(metrics.tokenUsage, result.gradingResult.tokensUsed, {
+            cached: result.gradingResult.metadata?.cachedResponse,
+          });
         }
       }
 

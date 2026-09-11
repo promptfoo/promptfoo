@@ -173,6 +173,80 @@ describe('OpenAI Realtime Provider', () => {
   });
 
   describe('Basic Functionality', () => {
+    it('sends one user item after session readiness on the client-secret socket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const promise = provider.webSocketRequest('test-secret', 'hello');
+
+      mockHandlers.open.forEach((handler) => handler());
+      expect(sentWebSocketEvents(mockWs)).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'conversation.item.create' })]),
+      );
+
+      const handler = mockHandlers.message[0];
+      handler(Buffer.from(JSON.stringify({ type: 'session.created' })));
+      expect(
+        sentWebSocketEvents(mockWs).filter((event) => event.type === 'conversation.item.create'),
+      ).toHaveLength(1);
+      handler(Buffer.from(JSON.stringify({ type: 'session.ready' })));
+      expect(
+        sentWebSocketEvents(mockWs).filter((event) => event.type === 'conversation.item.create'),
+      ).toHaveLength(1);
+
+      emitOutputTextDone(handler, 'hello back');
+      emitResponseDone(handler);
+      await promise;
+    });
+
+    it('does not expose audio when usage reports tokens without audio bytes', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const promise = provider.webSocketRequest('test-secret', 'hello');
+      mockHandlers.open.forEach((handler) => handler());
+
+      const handler = mockHandlers.message[0];
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: {
+              usage: {
+                total_tokens: 2,
+                input_tokens: 1,
+                output_tokens: 1,
+                output_token_details: { audio_tokens: 1 },
+              },
+            },
+          }),
+        ),
+      );
+      const result = await promise;
+      expect(result.metadata).not.toHaveProperty('audio');
+      expect(result.output).toBe('');
+    });
+
+    it('does not expose missing audio on a direct socket response', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const promise = provider.directWebSocketRequest('hello');
+      const handler = mockHandlers.message[0];
+
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: {
+              usage: {
+                total_tokens: 2,
+                input_tokens: 1,
+                output_tokens: 1,
+                output_token_details: { audio_tokens: 1 },
+              },
+            },
+          }),
+        ),
+      );
+      const result = await promise;
+      expect(result.metadata).not.toHaveProperty('audio');
+    });
+
     it('should initialize with correct model and config', () => {
       const config = {
         modalities: ['text'],
@@ -619,18 +693,21 @@ describe('OpenAI Realtime Provider', () => {
       ['inf', 'inf'],
       [1, 1],
       [4096, 4096],
-    ] as const)('normalizes max_response_output_tokens=%s to %s in the session body', async (maxResponseOutputTokens, expected) => {
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
-        config: {
-          modalities: ['text'],
-          max_response_output_tokens: maxResponseOutputTokens as any,
-        },
-      });
+    ] as const)(
+      'normalizes max_response_output_tokens=%s to %s in the session body',
+      async (maxResponseOutputTokens, expected) => {
+        const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
+          config: {
+            modalities: ['text'],
+            max_response_output_tokens: maxResponseOutputTokens as any,
+          },
+        });
 
-      const body = await provider.getRealtimeSessionBody();
+        const body = await provider.getRealtimeSessionBody();
 
-      expect(body.max_output_tokens).toBe(expected);
-    });
+        expect(body.max_output_tokens).toBe(expected);
+      },
+    );
 
     it('should handle basic text response with persistent connection', async () => {
       const config = {
@@ -741,6 +818,48 @@ describe('OpenAI Realtime Provider', () => {
 
       // Verify that the connection is maintained
       expect(provider.persistentConnection).not.toBeNull();
+    });
+
+    it('should preserve persistent context for a numeric-zero conversation ID', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { apiKey: 'test-key', modalities: ['text'], maintainContext: true },
+      });
+      const response = {
+        output: 'hello',
+        tokenUsage: { prompt: 1, completion: 1, total: 2 },
+        metadata: { usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } },
+      };
+      const persistentRequest = vi
+        .spyOn(provider as any, 'persistentWebSocketRequest')
+        .mockResolvedValue(response);
+      const directRequest = vi.spyOn(provider as any, 'directWebSocketRequest');
+
+      await provider.callApi('hello', { test: { metadata: { conversationId: 0 } } } as any);
+
+      expect(persistentRequest).toHaveBeenCalledOnce();
+      expect(directRequest).not.toHaveBeenCalled();
+      expect(provider.config.maintainContext).toBe(true);
+    });
+
+    it('should treat an empty realtime conversation ID as stateless', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { apiKey: 'test-key', modalities: ['text'], maintainContext: true },
+      });
+      const response = {
+        output: 'hello',
+        tokenUsage: { prompt: 1, completion: 1, total: 2 },
+        metadata: { usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 } },
+      };
+      const persistentRequest = vi.spyOn(provider as any, 'persistentWebSocketRequest');
+      const directRequest = vi
+        .spyOn(provider as any, 'directWebSocketRequest')
+        .mockResolvedValue(response);
+
+      await provider.callApi('hello', { test: { metadata: { conversationId: '' } } } as any);
+
+      expect(directRequest).toHaveBeenCalledOnce();
+      expect(persistentRequest).not.toHaveBeenCalled();
+      expect(provider.config.maintainContext).toBe(false);
     });
 
     it('should maintain conversation context across multiple messages', async () => {
@@ -952,148 +1071,158 @@ describe('OpenAI Realtime Provider', () => {
       expect(provider.persistentConnection).toBeNull();
     });
 
-    it('should handle audio response in persistent connection', async () => {
-      const config = {
-        modalities: ['text', 'audio'],
-        maintainContext: true,
-        voice: 'alloy' as const,
-      };
+    it.each(['pcm16', 'g711_ulaw', 'g711_alaw'] as const)(
+      'returns the correct audio container for persistent %s output',
+      async (format) => {
+        const config = {
+          modalities: ['text', 'audio'],
+          maintainContext: true,
+          output_audio_format: format,
+          voice: 'alloy' as const,
+        };
 
-      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
+        const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', { config });
 
-      // Create mock WebSocket connection with proper type
-      provider.persistentConnection = {
-        on: vi.fn((event: string, handler: Function) => {
-          mockHandlers[event].push(handler);
-          return provider.persistentConnection;
-        }),
-        once: vi.fn((event: string, handler: Function) => {
-          mockHandlers[event].push(handler);
-          return provider.persistentConnection;
-        }),
-        send: vi.fn(),
-        close: vi.fn(),
-        removeListener: vi.fn(),
-      } as unknown as WebSocket;
-
-      // Create context with conversationId to ensure maintainContext stays true
-      const context = {
-        test: {
-          metadata: { conversationId: 'test-conv-audio' },
-        },
-      } as any;
-
-      const responsePromise = provider.callApi('Hello', context);
-
-      // Wait for microtask to process so handler is registered
-      await flushMicrotasks();
-
-      // Get the message handler
-      const messageHandlers = mockHandlers.message;
-      const lastHandler = messageHandlers[messageHandlers.length - 1];
-
-      // Simulate conversation item created
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'conversation.item.created',
-            item: { id: 'msg_1', role: 'user' },
+        // Create mock WebSocket connection with proper type
+        provider.persistentConnection = {
+          on: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
           }),
-        ),
-      );
-
-      // Simulate response created
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.created',
-            response: { id: 'resp_1' },
+          once: vi.fn((event: string, handler: Function) => {
+            mockHandlers[event].push(handler);
+            return provider.persistentConnection;
           }),
-        ),
-      );
+          send: vi.fn(),
+          close: vi.fn(),
+          removeListener: vi.fn(),
+        } as unknown as WebSocket;
 
-      // Simulate audio response
-      const audioData = Buffer.from('fake_audio_data');
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.audio.delta',
-            item_id: 'audio_1',
-            audio: audioData.toString('base64'),
-          }),
-        ),
-      );
+        // Create context with conversationId to ensure maintainContext stays true
+        const context = {
+          test: {
+            metadata: { conversationId: 'test-conv-audio' },
+          },
+        } as any;
 
-      // Simulate audio done
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.audio.done',
-            format: 'wav',
-            item_id: 'audio_1',
-          }),
-        ),
-      );
+        const responsePromise = provider.callApi('Hello', context);
 
-      // Simulate text response
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.text.delta',
-            delta: 'Hello there',
-          }),
-        ),
-      );
+        // Wait for microtask to process so handler is registered
+        await flushMicrotasks();
 
-      // Simulate text done
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.text.done',
-            text: 'Hello there',
-          }),
-        ),
-      );
+        // Get the message handler
+        const messageHandlers = mockHandlers.message;
+        const lastHandler = messageHandlers[messageHandlers.length - 1];
 
-      // Simulate response done
-      lastHandler(
-        Buffer.from(
-          JSON.stringify({
-            type: 'response.done',
-            response: {
-              usage: {
-                total_tokens: 10,
-                prompt_tokens: 5,
-                completion_tokens: 5,
+        // Simulate conversation item created
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'conversation.item.created',
+              item: { id: 'msg_1', role: 'user' },
+            }),
+          ),
+        );
+
+        // Simulate response created
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.created',
+              response: { id: 'resp_1' },
+            }),
+          ),
+        );
+
+        // Simulate audio response
+        const audioData = Buffer.from('fake_audio_data');
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.audio.delta',
+              item_id: 'audio_1',
+              audio: audioData.toString('base64'),
+            }),
+          ),
+        );
+
+        // Simulate audio done
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.audio.done',
+              format: 'wav',
+              item_id: 'audio_1',
+            }),
+          ),
+        );
+
+        // Simulate text response
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.text.delta',
+              delta: 'Hello there',
+            }),
+          ),
+        );
+
+        // Simulate text done
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.text.done',
+              text: 'Hello there',
+            }),
+          ),
+        );
+
+        // Simulate response done
+        lastHandler(
+          Buffer.from(
+            JSON.stringify({
+              type: 'response.done',
+              response: {
+                usage: {
+                  total_tokens: 10,
+                  prompt_tokens: 5,
+                  completion_tokens: 5,
+                },
               },
-            },
-          }),
-        ),
-      );
+            }),
+          ),
+        );
 
-      const response = await responsePromise;
+        const response = await responsePromise;
 
-      // Verify text response
-      expect(response.output).toBe('Hello there');
+        // Verify text response
+        expect(response.output).toBe('Hello there');
 
-      // First verify audio exists
-      expect(response.audio).toBeDefined();
-      expect(response.metadata).toBeDefined();
-      expect(response.metadata!.audio).toBeDefined();
+        // First verify audio exists
+        expect(response.audio).toBeDefined();
+        expect(response.metadata).toBeDefined();
+        expect(response.metadata!.audio).toBeDefined();
 
-      // Then verify audio properties
-      expect(response.audio!.format).toBe('wav');
-      // The audio data should be converted from PCM16 to WAV, so it will be different from the original
-      expect(response.audio!.data).toBeDefined();
-      expect(response.audio!.data!.length).toBeGreaterThanOrEqual(
-        audioData.toString('base64').length,
-      ); // WAV has headers
-      expect(response.audio!.transcript).toBe('Hello there');
+        // Then verify audio properties
+        expect(response.audio!.format).toBe(format === 'pcm16' ? 'wav' : format);
+        // The audio data should be converted from PCM16 to WAV, so it will be different from the original
+        expect(response.audio!.data).toBeDefined();
+        const wavData = Buffer.from(response.audio!.data!, 'base64');
+        if (format === 'pcm16') {
+          expect(wavData.subarray(0, 4).toString()).toBe('RIFF');
+          expect(wavData.subarray(8, 12).toString()).toBe('WAVE');
+          expect(wavData.readUInt32LE(24)).toBe(24000);
+          expect(wavData.subarray(44)).toEqual(audioData);
+        } else {
+          expect(wavData).toEqual(audioData);
+        }
+        expect(response.audio!.transcript).toBe('Hello there');
 
-      // Verify metadata
-      expect(response.metadata!.audio!.format).toBe('wav');
-      expect(response.metadata!.audio!.data).toBe(response.audio!.data); // Should match the audio data
-    });
+        // Verify metadata
+        expect(response.metadata!.audio!.format).toBe(format === 'pcm16' ? 'wav' : format);
+        expect(response.metadata!.audio!.data).toBe(response.audio!.data); // Should match the audio data
+      },
+    );
 
     it('should configure tools and handle function calls in persistent connections', async () => {
       const functionCallHandler = vi.fn().mockResolvedValue('{"call_status":"callback"}');
@@ -1232,9 +1361,8 @@ describe('OpenAI Realtime Provider', () => {
               type: 'response.done',
               response: {
                 usage: {
-                  total_tokens: 8,
-                  input_tokens: 5,
-                  output_tokens: 3,
+                  prompt_tokens: 5,
+                  completion_tokens: 3,
                 },
               },
             }),
@@ -1300,12 +1428,16 @@ describe('OpenAI Realtime Provider', () => {
       expect(response.output).not.toContain('Let me check that.');
       expect(response.metadata?.functionCallOccurred).toBe(true);
       expect(response.metadata?.functionCallResults).toEqual(['{"call_status":"callback"}']);
+      expect(response.metadata?.usageEvents).toEqual([
+        { prompt_tokens: 5, completion_tokens: 3 },
+        { total_tokens: 11, input_tokens: 7, output_tokens: 4 },
+      ]);
       expect(response.tokenUsage).toEqual({
-        total: 11,
-        prompt: 7,
-        completion: 4,
+        total: 19,
+        prompt: 12,
+        completion: 7,
         cached: 0,
-        numRequests: 1,
+        numRequests: 2,
       });
     });
 
@@ -2747,6 +2879,10 @@ describe('OpenAI Realtime Provider', () => {
         const result = await responsePromise;
         expect(result.error).toBeUndefined();
         expect(result.output).toContain('tool done');
+        expect(result.metadata?.usageEvents).toEqual([
+          { total_tokens: 1, input_tokens: 1, output_tokens: 0 },
+          { total_tokens: 2, input_tokens: 1, output_tokens: 1 },
+        ]);
       } finally {
         vi.useRealTimers();
       }
@@ -2802,6 +2938,10 @@ describe('OpenAI Realtime Provider', () => {
 
         const result = await responsePromise;
         expect(result.output).toContain('tool done');
+        expect(result.metadata?.usageEvents).toEqual([
+          { total_tokens: 1, input_tokens: 1, output_tokens: 0 },
+          { total_tokens: 2, input_tokens: 1, output_tokens: 1 },
+        ]);
       } finally {
         vi.useRealTimers();
       }
@@ -2952,6 +3092,124 @@ describe('OpenAI Realtime Provider', () => {
       });
     });
 
+    it.each(['gpt-realtime-2.1', 'gpt-realtime-2.1-mini'])(
+      'uses the GA Realtime wire shape and endpoint for %s',
+      async (model) => {
+        const provider = new OpenAiRealtimeProvider(model, {
+          config: { modalities: ['text'] },
+        });
+        const promise = provider.directWebSocketRequest('hi');
+
+        mockHandlers.open.forEach((handler) => handler());
+        await vi.waitFor(() => expect(mockWs.send).toHaveBeenCalled());
+
+        const constructedUrl = (MockWebSocket as any).mock.calls[0][0];
+        const sessionUpdate = JSON.parse(mockWs.send.mock.calls[0][0]);
+        expect(constructedUrl).toBe(
+          'wss://api.openai.com/v1/realtime?model=' + encodeURIComponent(model),
+        );
+        expect(sessionUpdate.session).toMatchObject({
+          type: 'realtime',
+          model,
+          output_modalities: ['text'],
+        });
+
+        simulateGaFlow();
+        await expect(promise).resolves.toMatchObject({ output: 'ok' });
+      },
+    );
+
+    it('does not add a bearer header when a realtime API-key header is configured', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          apiBaseUrl: 'https://example.openai.azure.com/openai/v1',
+          apiKey: 'azure-key',
+          headers: { 'api-key': 'azure-key' },
+        },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateGaFlow();
+      await promise;
+
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(wsOptions.headers['api-key']).toBe('azure-key');
+      expect(wsOptions.headers).not.toHaveProperty('Authorization');
+    });
+
+    it('does not add a bearer header for delegated Azure realtime proxies', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          apiBaseUrl: 'http://127.0.0.1:15500/azure/openai/v1',
+          apiKey: 'azure-key',
+          azureApiKeyAuth: true,
+          headers: { 'api-key': 'azure-key' },
+        },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateGaFlow();
+      await promise;
+
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(wsOptions.headers['api-key']).toBe('azure-key');
+      expect(wsOptions.headers).not.toHaveProperty('Authorization');
+    });
+
+    it('strips a user-supplied Authorization header when omitting bearer auth for Azure api-key', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: {
+          apiBaseUrl: 'https://example.openai.azure.com/openai/v1',
+          apiKey: 'azure-key',
+          headers: { 'api-key': 'azure-key', Authorization: 'Bearer stale-openai-token' },
+        },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateGaFlow();
+      await promise;
+
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(wsOptions.headers['api-key']).toBe('azure-key');
+      expect(wsOptions.headers).not.toHaveProperty('Authorization');
+    });
+
+    it('keeps the OpenAI bearer header when a gateway API-key header is configured', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { apiKey: 'openai-key', headers: { 'api-key': 'gateway-key' } },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateGaFlow();
+      await promise;
+
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(wsOptions.headers).toMatchObject({
+        'api-key': 'gateway-key',
+        Authorization: 'Bearer openai-key',
+      });
+    });
+
+    it('keeps the OpenAI bearer header for persistent gateway connections', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { apiKey: 'openai-key', headers: { 'api-key': 'gateway-key' } },
+      });
+
+      const connection = (provider as any).openPersistentConnection();
+      mockHandlers.open.forEach((h) => h());
+      await connection;
+
+      const wsOptions = (MockWebSocket as any).mock.calls[0][1];
+      expect(wsOptions.headers).toMatchObject({
+        'api-key': 'gateway-key',
+        Authorization: 'Bearer openai-key',
+      });
+    });
+
     it('rejects direct WebSocket requests if the socket closes before a tool follow-up completes', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime', {
         config: {
@@ -3030,6 +3288,10 @@ describe('OpenAI Realtime Provider', () => {
               { type: 'input_text', text: 'Describe these inputs.' },
               { type: 'input_audio', audio: 'ZmFrZS1hdWRpbw==' },
               { type: 'input_image', image_url: 'data:image/jpeg;base64,ZmFrZS1pbWFnZQ==' },
+              {
+                type: 'image_url',
+                image_url: { url: 'data:image/png;base64,c2Vjb25kLWltYWdl' },
+              },
             ],
           },
         ]),
@@ -3049,6 +3311,7 @@ describe('OpenAI Realtime Provider', () => {
             { type: 'input_text', text: 'Describe these inputs.' },
             { type: 'input_audio', audio: 'ZmFrZS1hdWRpbw==' },
             { type: 'input_image', image_url: 'data:image/jpeg;base64,ZmFrZS1pbWFnZQ==' },
+            { type: 'input_image', image_url: 'data:image/png;base64,c2Vjb25kLWltYWdl' },
           ],
         },
       });
@@ -3179,6 +3442,21 @@ describe('OpenAI Realtime Provider', () => {
       expect(wsOptions.headers.Origin).toBe('http://localhost:8080');
     });
 
+    it('preserves custom gateway query credentials for direct WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-2.1', {
+        config: { apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-secret' },
+      });
+      const promise = provider.directWebSocketRequest('hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+      await promise;
+
+      expect((MockWebSocket as any).mock.calls[0][0]).toBe(
+        'wss://gateway.example/v1/realtime?api_key=tenant-secret&model=gpt-realtime-2.1',
+      );
+    });
+
     it('uses apiBaseUrl for client-secret socket URL', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview', {
         config: { apiBaseUrl: 'https://my-custom-api.com/v1' },
@@ -3197,6 +3475,21 @@ describe('OpenAI Realtime Provider', () => {
           encodeURIComponent('secret123'),
       );
       expect(wsOptions.headers.Origin).toBe('https://my-custom-api.com');
+    });
+
+    it('preserves custom gateway query credentials for client-secret WebSocket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-realtime-2.1', {
+        config: { apiBaseUrl: 'https://gateway.example/v1?api_key=tenant-secret' },
+      });
+      const promise = provider.webSocketRequest('secret123', 'hi');
+
+      mockHandlers.open.forEach((h) => h());
+      simulateMinimalFlow();
+      await promise;
+
+      expect((MockWebSocket as any).mock.calls[0][0]).toBe(
+        'wss://gateway.example/v1/realtime/socket?api_key=tenant-secret&client_secret=secret123',
+      );
     });
 
     it('normalizes response-level tools for client-secret requests', async () => {

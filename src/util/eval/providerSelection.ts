@@ -62,13 +62,16 @@ function stableSerialize(value: unknown, seen = new WeakSet<object>()): string {
 
   try {
     if (Array.isArray(value)) {
-      return `[${value.map((item) => stableSerialize(item, seen)).join(',')}]`;
+      return `[${value
+        .map((item) => (item === undefined ? 'null' : stableSerialize(item, seen)))
+        .join(',')}]`;
     }
     if (value instanceof Date) {
       return JSON.stringify(value.toISOString());
     }
     const record = value as Record<string, unknown>;
     return `{${Object.keys(record)
+      .filter((key) => record[key] !== undefined)
       .sort()
       .map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key], seen)}`)
       .join(',')}}`;

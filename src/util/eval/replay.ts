@@ -13,6 +13,7 @@ interface ReplayPrompt {
   raw: string;
   label: string;
   config?: unknown;
+  function?: any;
 }
 
 interface PromptSelection {
@@ -136,7 +137,10 @@ export function getPromptsForReplay(
       candidates?.find((candidate) => candidate.fingerprint === getPromptFingerprint(prompt)) ??
       candidates?.[0];
     if (persistedPrompt) {
-      orderedPrompts.push(persistedPrompt.prompt);
+      orderedPrompts.push({
+        ...persistedPrompt.prompt,
+        ...(prompt.function ? { function: prompt.function } : {}),
+      });
       matchedPromptKeys.add(persistedPrompt.key);
     }
   }

@@ -268,5 +268,3 @@ export function ProviderDisplay({
     </Tooltip>
   );
 }
-
-export default ProviderDisplay;
