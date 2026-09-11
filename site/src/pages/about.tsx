@@ -194,6 +194,7 @@ const AboutPageContent = () => {
                   </Box>
                   <Typography
                     variant="subtitle1"
+                    component="p"
                     gutterBottom
                     sx={{
                       color: 'text.secondary',

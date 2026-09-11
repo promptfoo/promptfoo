@@ -1,5 +1,6 @@
 import * as path from 'path';
 
+import { isJavascriptFile } from '../../../util/fileExtensions';
 import { ConfigurationError } from './errors';
 
 /**
@@ -65,7 +66,18 @@ export function validateProviderId(providerId: string): void {
     /^https?:\/\/.+$/, // HTTP provider format
   ];
 
-  if (!validFormats.some((format) => format.test(providerId))) {
+  if (validFormats.some((format) => format.test(providerId))) {
+    return;
+  }
+
+  // Extend model selectors without widening local module, executable or HTTP formats.
+  const isModelSelector =
+    /^[a-zA-Z0-9_-]+:[a-zA-Z0-9_.-]+(?:[:/][a-zA-Z0-9_.-]+)+$/.test(providerId) &&
+    !/^(file|exec|python|golang|ruby|package|https?):/.test(providerId) &&
+    !providerId.split(/[:/]/).some((segment) => segment === '.' || segment === '..') &&
+    !isJavascriptFile(providerId);
+
+  if (!isModelSelector) {
     throw new ConfigurationError(
       `Invalid provider ID format: ${providerId}. Expected format like "openai:gpt-4" or path to provider file.`,
     );

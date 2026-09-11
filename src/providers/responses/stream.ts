@@ -392,17 +392,7 @@ function hasTerminalSafetyDecision(response: any): boolean {
   ) {
     return true;
   }
-  return (
-    Array.isArray(response?.output) &&
-    response.output.some(
-      (item: any) =>
-        item?.type === 'refusal' ||
-        (item?.type === 'message' &&
-          ((typeof item.refusal === 'string' && item.refusal.length > 0) ||
-            (Array.isArray(item.content) &&
-              item.content.some((content: any) => content?.type === 'refusal')))),
-    )
-  );
+  return hasRefusalOutput(response?.output);
 }
 
 function filterExecutableToolCalls(output: any[] | undefined, stripText = false): any[] {
@@ -469,21 +459,6 @@ function filterExecutableToolCalls(output: any[] | undefined, stripText = false)
         (Array.isArray(item.content) &&
           item.content.some((content: any) => content?.type === 'refusal')),
     );
-}
-
-function hasExecutableToolCalls(output: any[] | undefined): boolean {
-  return (
-    Array.isArray(output) &&
-    output.some(
-      (item: any) =>
-        item?.type === 'function_call' ||
-        (item?.type === 'message' &&
-          Array.isArray(item.content) &&
-          item.content.some(
-            (content: any) => content?.type === 'tool_use' || content?.type === 'function_call',
-          )),
-    )
-  );
 }
 
 function hasRefusalOutput(output: any[] | undefined): boolean {
@@ -1974,7 +1949,7 @@ export async function readResponsesStream(
   ).filter((text): text is string => text !== undefined);
   const refusalTerminalOutput = filterExecutableToolCalls(latestResponse?.output, true);
   const outputWithFinalizedText =
-    useFinalizedItems && sawFinalizedRefusal && !hasTerminalSafetyDecision(latestResponse)
+    sawFinalizedRefusal && !hasTerminalSafetyDecision(latestResponse)
       ? (recoverIncompleteOutput(
           refusalTerminalOutput,
           finalizedOutputTextByContent,
@@ -2028,26 +2003,8 @@ export async function readResponsesStream(
   }
 
   if (sawFinalizedRefusal) {
-    const terminalHadExecutableCalls = hasExecutableToolCalls(latestResponse?.output);
-    const safeOutput = filterExecutableToolCalls(
-      useFinalizedItems ? finalizedStreamOutput : latestResponse?.output,
-      true,
-    );
-    return boundedResponse(
-      getSafeRefusalResponse(
-        latestResponse,
-        useFinalizedItems || !terminalHadExecutableCalls
-          ? safeOutput
-          : [
-              ...safeOutput,
-              ...filterExecutableToolCalls(
-                Array.from(finalizedRefusalItems.values(), ({ item }) => item),
-                true,
-              ),
-            ],
-        true,
-      ),
-    );
+    const safeOutput = filterExecutableToolCalls(finalizedStreamOutput, true);
+    return boundedResponse(getSafeRefusalResponse(latestResponse, safeOutput, true));
   }
 
   if (latestResponse && isCompletedResponse) {
@@ -2094,10 +2051,6 @@ export async function readResponsesStream(
     }
 
     const remainingUnindexedOutputText = unassignedUnindexedOutputText + pendingUnindexedOutputText;
-    const finalizedInvalidOutputTexts = Array.from(
-      invalidlyIndexedOutputTextByContent,
-      ([key, text]) => (finalizedInvalidOutputTextKeys.has(key) ? text : undefined),
-    ).filter((text): text is string => text !== undefined);
     const alignedOutputTextByContent = new Map<string, string>();
     const alignedFinalizedOutputTextKeys = new Set<string>();
     for (const [key, text] of outputTextByContent) {

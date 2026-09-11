@@ -14,6 +14,7 @@ import Eval, {
 } from '../../src/models/eval';
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
+import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
@@ -106,6 +107,117 @@ describe('evaluator', () => {
       ]);
 
       expect(updateSignalFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('loadResults', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('preserves real in-memory rows across model and store reads and later appends', async () => {
+      const evaluation = new Eval({});
+      const store = new EvalEvaluationStore(evaluation);
+      await store.appendResult(createEvaluateResult({ response: { output: 'First result' } }));
+      const results = evaluation.results;
+      const firstResult = results[0];
+      const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+
+      await evaluation.loadResults();
+      expect(evaluation._resultsLoaded).toBe(true);
+      expect(await store.readResults()).toBe(results);
+      expect(evaluation.results[0]).toBe(firstResult);
+      expect(firstResult.response?.output).toBe('First result');
+
+      await store.appendResult(
+        createEvaluateResult({
+          testIdx: 1,
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          error: 'Local provider failed',
+          response: undefined,
+        }),
+      );
+      expect(await store.readResults()).toBe(results);
+      expect(results).toHaveLength(2);
+      expect(results[1]).toMatchObject({
+        testIdx: 1,
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        error: 'Local provider failed',
+      });
+      const summary = await evaluation.toEvaluateSummary();
+      expect(summary.results).toEqual(results.map((result) => result.toEvaluateResult()));
+      const batches: EvalResult[][] = [];
+      for await (const batch of evaluation.fetchResultsBatched(1)) {
+        batches.push(batch);
+      }
+      expect(batches.flat()).toEqual(results);
+      expect(findResults).not.toHaveBeenCalled();
+    });
+
+    it('preserves explicitly assigned in-memory results', async () => {
+      const evaluation = new Eval({});
+      await evaluation.addResult(createEvaluateResult());
+      const results = [evaluation.results[0]];
+      await evaluation.setResults(results);
+      const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+
+      expect(await evaluation.getResults()).toBe(results);
+      expect(await evaluation.getResults()).toBe(results);
+      expect(findResults).not.toHaveBeenCalled();
+    });
+
+    it('reads empty in-memory results and summaries without querying the database', async () => {
+      const evaluation = new Eval({});
+      const results = evaluation.results;
+      const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+
+      expect(await evaluation.getResults()).toBe(results);
+      expect(await evaluation.toEvaluateSummary()).toMatchObject({
+        results: [],
+        stats: { successes: 0, failures: 0, errors: 0 },
+      });
+      expect(evaluation._resultsLoaded).toBe(true);
+      expect(findResults).not.toHaveBeenCalled();
+    });
+
+    it('refreshes persisted results after a previous read and an independent append', async () => {
+      const evaluation = await EvalFactory.create({ numResults: 0 });
+      expect((await evaluation.toEvaluateSummary()).results).toEqual([]);
+      await evaluation.addResult(createEvaluateResult({ response: { output: 'First result' } }));
+      const reloaded = await Eval.findById(evaluation.id);
+      expect(reloaded).not.toBeNull();
+      const store = new EvalEvaluationStore(reloaded!);
+
+      await reloaded!.loadResults();
+      expect(reloaded!._resultsLoaded).toBe(true);
+      expect(await store.readResults()).toHaveLength(1);
+      await evaluation.addResult(
+        createEvaluateResult({ testIdx: 1, response: { output: 'Second result' } }),
+      );
+      expect((await store.readResults()).map((result) => result.response?.output)).toEqual([
+        'First result',
+        'Second result',
+      ]);
+    });
+
+    it('keeps legacy result and summary reads on their existing path', async () => {
+      const stored = await EvalFactory.createOldResult();
+      const evaluation = (await Eval.findById(stored.id))!;
+      const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+
+      expect(evaluation.useOldResults()).toBe(true);
+      expect(await evaluation.getResults()).toBe(evaluation.oldResults!.results);
+      expect(await evaluation.toEvaluateSummary()).toMatchObject({
+        version: 2,
+        results: evaluation.oldResults!.results,
+        table: evaluation.oldResults!.table,
+        stats: evaluation.oldResults!.stats,
+      });
+      expect(findResults).not.toHaveBeenCalled();
     });
   });
 
@@ -382,17 +494,31 @@ describe('evaluator', () => {
           table: { head: { prompts: [], vars: [] }, body: [] },
           stats: { successes: 0, failures: 0 },
         } as any,
-        { redteam: {} as any },
+        {
+          redteam: {} as any,
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: 'legacy-runtime-secret' },
+              headers: { Authorization: 'Bearer legacy-secret', 'X-Scope-OrgID': 'tenant-a' },
+            },
+          },
+        },
       );
 
       const db = await getDb();
       const stored = await db
-        .select({ isRedteam: evalsTable.isRedteam })
+        .select({ isRedteam: evalsTable.isRedteam, config: evalsTable.config })
         .from(evalsTable)
         .where(eq(evalsTable.id, evalId))
         .get();
 
       expect(stored?.isRedteam).toBe(true);
+      expect(JSON.stringify(stored?.config)).not.toContain('legacy-runtime-secret');
+      expect(JSON.stringify(stored?.config)).not.toContain('legacy-secret');
+      expect(stored?.config.tracing?.provider?.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
     });
 
     it.each([
@@ -540,6 +666,141 @@ describe('evaluator', () => {
   });
 
   describe('create', () => {
+    it('keeps trace-provider credentials in memory while removing them from persisted evals', async () => {
+      const config = {
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo' as const,
+            endpoint: 'https://tempo.example.com/traces',
+            timeout: 5_000,
+            auth: {
+              username: 'trace-reader',
+              password: 'literal-password',
+              token: 'literal-token',
+            },
+            headers: {
+              Authorization: 'Bearer literal-authorization',
+              'X-Api-Key': 'literal-api-key',
+              'X-Honeycomb-Team': 'literal-honeycomb-key',
+              'X-Tenant-Credential': 'literal-custom-credential',
+              'X-Tempo-Reader': 'short-reader-value',
+              'X-Trace-Access': 'Bearer short-secret',
+              'X-Scope-OrgID': 'tenant-a',
+            },
+          },
+        },
+      };
+
+      const evaluation = await Eval.create(config, []);
+      const persistedEvaluation = await Eval.findById(evaluation.id);
+
+      expect(evaluation.config.tracing?.provider).toEqual(config.tracing.provider);
+      expect(persistedEvaluation?.config.tracing?.provider).toEqual({
+        id: 'tempo',
+        endpoint: 'https://tempo.example.com/traces',
+        timeout: 5_000,
+        auth: { username: 'trace-reader' },
+        headers: { 'X-Scope-OrgID': 'tenant-a' },
+      });
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('literal-');
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('short-secret');
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('short-reader-value');
+
+      evaluation.config.tracing!.provider!.auth!.token = 'updated-runtime-token';
+      await evaluation.save();
+
+      const savedEvaluation = await Eval.findById(evaluation.id);
+      expect(JSON.stringify(savedEvaluation?.config)).not.toContain('updated-runtime-token');
+      expect(evaluation.config.tracing?.provider?.auth?.token).toBe('updated-runtime-token');
+    });
+
+    it('preserves safe trace-provider environment references for resumed evals', async () => {
+      const config = {
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo' as const,
+            endpoint: 'https://tempo.example.com',
+            auth: {
+              token: '{{ env.TEMPO_TOKEN }}',
+              password: '{{ env.TEMPO_PASSWORD | trim }}',
+            },
+            headers: {
+              Authorization: 'Bearer {{ env.TEMPO_HEADER_TOKEN }}',
+              'X-Api-Key': '{{ env["TEMPO_API_KEY"] }}',
+            },
+          },
+        },
+      };
+
+      const evaluation = await Eval.create(config, []);
+      const persistedEvaluation = await Eval.findById(evaluation.id);
+
+      expect(persistedEvaluation?.config.tracing?.provider).toEqual(config.tracing.provider);
+    });
+
+    it.each([
+      'https://tempo.example.com/tempo?token=endpoint-secret',
+      'https://tempo.example.com/tempo?opaque=endpoint-secret',
+      'https://tempo.example.com/tempo#token=endpoint-secret',
+      'https://reader:endpoint-secret@tempo.example.com/tempo',
+    ])('removes trace endpoint credentials before saving or exporting: %s', async (endpoint) => {
+      const evaluation = await Eval.create(
+        {
+          tracing: {
+            enabled: true,
+            provider: { id: 'tempo', endpoint },
+          },
+        },
+        [],
+      );
+      const persistedEvaluation = await Eval.findById(evaluation.id);
+      const exportedEvaluation = await evaluation.toResultsFile();
+
+      expect(evaluation.config.tracing?.provider?.endpoint).toBe(endpoint);
+      expect(persistedEvaluation?.config.tracing?.provider?.endpoint).toBe(
+        'https://tempo.example.com/tempo',
+      );
+      expect(exportedEvaluation.config.tracing?.provider?.endpoint).toBe(
+        'https://tempo.example.com/tempo',
+      );
+      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain('endpoint-secret');
+      expect(JSON.stringify(exportedEvaluation.config)).not.toContain('endpoint-secret');
+    });
+
+    it.each([
+      'token-privateTenantCredential123',
+      '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
+      '2e163f4d28e24f84b6d205e13058d6aa',
+    ])(
+      'redacts credential-like endpoint path segments before persistence: %s',
+      async (credential) => {
+        const endpoint = `https://tempo.example.com/tempo/${credential}/traces`;
+        const evaluation = await Eval.create(
+          {
+            tracing: {
+              enabled: true,
+              provider: { id: 'tempo', endpoint },
+            },
+          },
+          [],
+        );
+        const persistedEvaluation = await Eval.findById(evaluation.id);
+        const exportedEvaluation = await evaluation.toResultsFile();
+
+        expect(evaluation.config.tracing?.provider?.endpoint).toBe(endpoint);
+        expect(persistedEvaluation?.config.tracing?.provider?.endpoint).toBe(
+          'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
+        );
+        expect(exportedEvaluation.config.tracing?.provider?.endpoint).toBe(
+          'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
+        );
+        expect(JSON.stringify(persistedEvaluation?.config)).not.toContain(credential);
+        expect(JSON.stringify(exportedEvaluation.config)).not.toContain(credential);
+      },
+    );
+
     it('should use provided author when available', async () => {
       const providedAuthor = 'provided@example.com';
       // Spy must not be called — opts.author is explicit, so getAuthor() is bypassed.
@@ -671,6 +932,32 @@ describe('evaluator', () => {
   });
 
   describe('copy', () => {
+    it('removes trace-provider credentials when copying a live evaluation', async () => {
+      const evaluation = await Eval.create(
+        {
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: 'copy-runtime-secret' },
+              headers: { Authorization: 'Bearer copied-secret', 'X-Scope-OrgID': 'tenant-a' },
+            },
+          },
+        },
+        [],
+      );
+
+      const copiedEvaluation = await evaluation.copy();
+      const persistedCopy = await Eval.findById(copiedEvaluation.id);
+
+      expect(JSON.stringify(persistedCopy?.config)).not.toContain('copy-runtime-secret');
+      expect(JSON.stringify(persistedCopy?.config)).not.toContain('copied-secret');
+      expect(persistedCopy?.config.tracing?.provider?.headers).toEqual({
+        'X-Scope-OrgID': 'tenant-a',
+      });
+    });
+
     it('drops trace linkage from copied results without copied trace records', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
       await EvalResult.createFromEvaluateResult(
@@ -939,6 +1226,70 @@ describe('evaluator', () => {
   });
 
   describe('getStats', () => {
+    it('attributes generation metadata once without increasing target tokens or probes', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generationAccounting: {
+            id: 'generation-1',
+            tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+          },
+        },
+      });
+      eval1.prompts = [
+        { metrics: { tokenUsage: { total: 10, numRequests: 1 } } },
+        { metrics: { tokenUsage: { total: 20, numRequests: 1 } } },
+      ] as any;
+
+      const stats = eval1.getStats();
+
+      expect(stats.tokenUsage).toMatchObject({
+        total: 30,
+        numRequests: 2,
+        generation: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+      });
+    });
+
+    it('does not attribute historical suite generation metadata without a run charge', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generation: { id: 'old-generation', tokenUsage: { total: 40, numRequests: 4 } },
+          generationTokenUsage: { total: 40, numRequests: 4 },
+        },
+      });
+
+      expect(eval1.getStats().tokenUsage.generation).toBeUndefined();
+    });
+
+    it('preserves cached generation separately from incurred target usage', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generationAccounting: {
+            id: 'generation-1',
+            tokenUsage: {
+              total: 40,
+              prompt: 25,
+              completion: 15,
+              cached: 40,
+              numRequests: 1,
+              incurredTokenUsage: { total: 0, numRequests: 0 },
+            },
+          },
+        },
+      });
+      eval1.prompts = [{ metrics: { tokenUsage: { total: 10, numRequests: 1 } } }] as any;
+
+      expect(eval1.getStats().tokenUsage).toMatchObject({
+        total: 10,
+        numRequests: 1,
+        generation: { total: 40, cached: 40, numRequests: 1 },
+        incurredTokenUsage: {
+          total: 10,
+          numRequests: 1,
+          generation: { total: 0, numRequests: 0 },
+        },
+      });
+    });
+
     it('should accumulate assertion token usage correctly', () => {
       const eval1 = new Eval({});
       eval1.prompts = [
@@ -956,6 +1307,7 @@ describe('evaluator', () => {
                 prompt: 40,
                 completion: 50,
                 cached: 10,
+                numRequests: 3,
               },
             },
           },
@@ -974,6 +1326,7 @@ describe('evaluator', () => {
                 prompt: 80,
                 completion: 100,
                 cached: 20,
+                numRequests: 5,
               },
             },
           },
@@ -986,7 +1339,7 @@ describe('evaluator', () => {
         prompt: 120,
         completion: 150,
         cached: 30,
-        numRequests: 0,
+        numRequests: 8,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -1166,6 +1519,52 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it('drops malformed trace-provider headers when exporting older evaluations', async () => {
+      const evaluation = new Eval({
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            headers: {
+              'X-Null': null,
+              'X-Number': 42,
+              'X-Object': { malformed: true },
+              'X-Array': ['malformed'],
+              Authorization: 'Bearer legacy-secret',
+              'X-Scope-OrgID': 'tenant-a',
+            } as unknown as Record<string, string>,
+          },
+        },
+      });
+
+      const results = await evaluation.toResultsFile();
+
+      expect(results.config.tracing?.provider?.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
+      expect(JSON.stringify(results.config)).not.toContain('legacy-secret');
+    });
+
+    it('removes trace-provider credentials from exported results without mutating live config', async () => {
+      const evaluation = new Eval({
+        tracing: {
+          enabled: true,
+          provider: {
+            id: 'tempo',
+            endpoint: 'https://tempo.example.com',
+            auth: { token: 'export-runtime-secret' },
+            headers: { Authorization: 'Bearer exported-secret', 'X-Scope-OrgID': 'tenant-a' },
+          },
+        },
+      });
+
+      const results = await evaluation.toResultsFile();
+
+      expect(JSON.stringify(results.config)).not.toContain('export-runtime-secret');
+      expect(JSON.stringify(results.config)).not.toContain('exported-secret');
+      expect(results.config.tracing?.provider?.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
+      expect(evaluation.config.tracing?.provider?.auth?.token).toBe('export-runtime-secret');
+    });
+
     it('should return results file with correct version', async () => {
       const eval1 = await EvalFactory.create();
       const results = await eval1.toResultsFile();
@@ -2512,19 +2911,18 @@ describe('evaluator', () => {
 
     // The UI's ResultsFilter type is 'and' | 'or', so the server always receives
     // lowercase operators; an exact-match against 'OR' silently combined with AND.
-    it.each([
-      'or',
-      'Or',
-      'OR',
-    ])('should combine with OR for logicOperator %j', (logicOperator: string) => {
-      const result = combineFilterConditions([
-        { condition: sql`field1 = ${1}`, logicOperator },
-        { condition: sql`field2 = ${2}`, logicOperator },
-      ]);
-      const sqlText = toSqlText(result);
-      expect(sqlText).toContain('OR');
-      expect(sqlText).not.toContain('AND');
-    });
+    it.each(['or', 'Or', 'OR'])(
+      'should combine with OR for logicOperator %j',
+      (logicOperator: string) => {
+        const result = combineFilterConditions([
+          { condition: sql`field1 = ${1}`, logicOperator },
+          { condition: sql`field2 = ${2}`, logicOperator },
+        ]);
+        const sqlText = toSqlText(result);
+        expect(sqlText).toContain('OR');
+        expect(sqlText).not.toContain('AND');
+      },
+    );
 
     // Filters are unvalidated JSON from the query string, so a non-string operator
     // must fall back to AND rather than throwing (which would 500 the table route).
