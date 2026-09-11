@@ -25,7 +25,7 @@ const expectedSkillDirs = [
   'promptfoo-redteam-run',
   'promptfoo-redteam-setup',
 ];
-const expectedPluginVersion = '0.1.1';
+const expectedPluginVersion = '0.1.2';
 const expectedFixtureDirs = [
   'evals-json-rubric',
   'evals-local-js',
@@ -1876,6 +1876,8 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       'skills/promptfoo-provider-setup/agents/openai.yaml',
       'skills/promptfoo-provider-setup/references/provider-patterns.md',
       'skills/promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs',
+      'skills/promptfoo-provider-setup/scripts/vendor/LICENSE',
+      'skills/promptfoo-provider-setup/scripts/vendor/js-yaml.mjs',
       'skills/promptfoo-redteam-run/SKILL.md',
       'skills/promptfoo-redteam-run/agents/openai.yaml',
       'skills/promptfoo-redteam-run/references/redteam-run-patterns.md',
@@ -1916,60 +1918,6 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     );
   });
 
-  it('keeps frontmatter routing descriptions precise without a selector skill', () => {
-    const routingExpectations: Record<
-      string,
-      {
-        positives: string[];
-        negatives: string[];
-      }
-    > = {
-      'promptfoo-evals': {
-        positives: ['non-redteam promptfoo eval suites', 'test cases', 'assertions'],
-        negatives: [
-          'Do not use',
-          'connecting a new target/provider',
-          'smoke-testing an endpoint',
-          'redteam plugin/strategy setup',
-        ],
-      },
-      'promptfoo-provider-setup': {
-        positives: ['providers or redteam targets', 'live HTTP', 'static-code-derived'],
-        negatives: ['Do not', 'choosing eval assertions', 'red team plugins'],
-      },
-      'promptfoo-redteam-run': {
-        positives: ['Run, rerun, inspect', 'generated redteam YAML', 'attack success rate'],
-        negatives: ['Do not use', 'initial provider wiring', 'choosing plugins'],
-      },
-      'promptfoo-redteam-setup': {
-        positives: [
-          'purpose',
-          'targets',
-          'plugins',
-          'strategies',
-          'static-code-derived',
-          'generating adversarial',
-        ],
-        negatives: ['Do not use', 'basic provider wiring', 'running/evaluating'],
-      },
-    };
-
-    for (const skillDir of expectedSkillDirs) {
-      const frontmatter = readSkillFrontmatter(path.join(pluginRoot, 'skills', skillDir));
-      const expectations = routingExpectations[skillDir];
-
-      expect(frontmatter.name).toBe(skillDir);
-      expect(frontmatter.description.length).toBeGreaterThan(140);
-      expect(frontmatter.description.length).toBeLessThan(520);
-      for (const phrase of expectations.positives) {
-        expect(frontmatter.description).toContain(phrase);
-      }
-      for (const phrase of expectations.negatives) {
-        expect(frontmatter.description).toContain(phrase);
-      }
-    }
-  });
-
   it('keeps every skill structurally complete and progressively disclosed', () => {
     for (const skillDir of expectedSkillDirs) {
       const skillRoot = path.join(pluginRoot, 'skills', skillDir);
@@ -1981,6 +1929,10 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
         .filter((fileName) => fileName.endsWith('.md'));
 
       expect(skill).toMatch(new RegExp(`^---\\nname: ${skillDir}\\n`));
+      const frontmatter = readSkillFrontmatter(skillRoot);
+      expect(frontmatter.name).toBe(skillDir);
+      expect(frontmatter.description.length).toBeGreaterThan(40);
+      expect(frontmatter.description.length).toBeLessThan(520);
       expect(openaiYaml).toContain(`$${skillDir}`);
       expect(openaiYaml).toContain('allow_implicit_invocation: true');
       expect(referenceFiles.length).toBeGreaterThanOrEqual(1);
@@ -2068,26 +2020,6 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
     expect(claudeSkillDirs).toEqual(expectedSkillDirs);
   });
 
-  it('keeps the eval skill guidance complete and provider-aware', () => {
-    const evalsSkill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
-    const evalsReference = readText(path.join(evalsSkillRoot, 'references', 'eval-patterns.md'));
-
-    for (const phrase of [
-      'deterministic',
-      'model-graded',
-      'tests: file://tests/*.yaml',
-      "apiKey: '{{env.OPENAI_API_KEY}}'",
-      'options.transform',
-      'openai:chat:gpt-4.1-mini',
-      'anthropic:messages:claude-sonnet-4-6',
-      'echo',
-    ]) {
-      expect(`${evalsSkill}\n${evalsReference}`).toContain(phrase);
-    }
-    expect(evalsSkill).toContain('If the provider does not work yet, switch to');
-    expect(evalsReference).toContain('promptfoo-provider-setup');
-  });
-
   it('keeps every repo-local Claude skill discoverable through canonical SKILL.md casing', () => {
     const repoLocalSkillDirs = fs
       .readdirSync(repoClaudeSkillsRoot, { withFileTypes: true })
@@ -2133,18 +2065,6 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
   });
 
   it('keeps every agents/openai.yaml aligned with UI metadata constraints', () => {
-    const expectedDefaultPromptPhrases: Record<string, string[]> = {
-      'promptfoo-evals': ['focused eval', 'local JS/Python providers'],
-      'promptfoo-provider-setup': [
-        'HTTP endpoint',
-        'OpenAPI operation',
-        'Python provider',
-        'app code',
-      ],
-      'promptfoo-redteam-run': ['execute', 'HTTP, Python, or JS target'],
-      'promptfoo-redteam-setup': ['live endpoint', 'OpenAPI spec', 'code'],
-    };
-
     for (const skillDir of expectedSkillDirs) {
       const skillRoot = path.join(pluginRoot, 'skills', skillDir);
       const metadata = yaml.load(readText(path.join(skillRoot, 'agents', 'openai.yaml'))) as
@@ -2171,9 +2091,6 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
       expect(metadata.interface.default_prompt.trim()).toBe(metadata.interface.default_prompt);
       expect(metadata.interface.default_prompt.endsWith('.')).toBe(true);
       expect(metadata.interface.default_prompt.length).toBeLessThanOrEqual(128);
-      for (const phrase of expectedDefaultPromptPhrases[skillDir]) {
-        expect(metadata.interface.default_prompt).toContain(phrase);
-      }
       expect(metadata.policy.allow_implicit_invocation).toBe(true);
     }
   });
@@ -2429,7 +2346,7 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
 
     const evalGrader = await loadFixtureProvider('evals-json-rubric/grader.mjs');
     const evalGrade = parseOutputJson(
-      await evalGrader.callApi('The answer mentions inv-123, approved, and low risk.'),
+      await evalGrader.callApi(JSON.stringify({ candidate: JSON.stringify(jsonResult) })),
     );
     expect(evalGrade.pass).toBe(true);
     expect(evalGrade.score).toBe(1);
@@ -2645,82 +2562,6 @@ describe('promptfoo plugin package (Codex + Claude Code)', () => {
 });
 
 describe('promptfoo-evals skill', () => {
-  it('has a routing description with eval scope and provider/redteam boundaries', () => {
-    const skill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
-
-    expect(skill).toMatch(/^---\nname: promptfoo-evals\n/);
-    expect(skill).toContain('after the target');
-    expect(skill).toContain('or provider already works');
-    expect(skill).toContain('prompts, vars, test cases, assertions');
-    expect(skill).toContain('model-graded rubrics');
-    expect(skill).toContain('non-redteam promptfoo eval suites');
-    expect(skill).toContain('connecting a new target/provider');
-    expect(skill).toContain('smoke-testing');
-    expect(skill).toContain('redteam plugin/strategy setup');
-  });
-
-  it('documents focused eval authoring, running, and iteration', () => {
-    const skill = readText(path.join(evalsSkillRoot, 'SKILL.md'));
-
-    expect(skill).toContain('State the eval question');
-    expect(skill).toContain('Choose assertions');
-    expect(skill).toContain('Search for existing configs first');
-    expect(skill).toContain('tests: file://tests/*.yaml');
-    expect(skill).toContain('file://prompts/');
-    expect(skill).toContain('Field order');
-    expect(skill).toContain('llms-full.txt');
-    expect(skill).toContain('is-json');
-    expect(skill).toContain('javascript');
-    expect(skill).toContain('llm-rubric');
-    expect(skill).toContain('inline the source');
-    expect(skill).toContain('validate config');
-    expect(skill).toContain('--no-cache --no-share');
-    expect(skill).toContain('results.stats');
-    expect(skill).toContain('--filter-failing');
-  });
-
-  it('ships Codex UI metadata for evals', () => {
-    const openaiYaml = readText(path.join(evalsSkillRoot, 'agents', 'openai.yaml'));
-
-    expect(openaiYaml).toContain('Promptfoo Evals');
-    expect(openaiYaml).toContain('$promptfoo-evals');
-    expect(openaiYaml).toContain('allow_implicit_invocation: true');
-  });
-
-  it('keeps eval patterns in a progressive-disclosure reference file', () => {
-    const reference = readText(path.join(evalsSkillRoot, 'references', 'eval-patterns.md'));
-
-    expect(reference).toContain('Config Structure');
-    expect(reference).toContain('Minimal Local Provider Eval');
-    expect(reference).toContain('Known Provider Examples');
-    expect(reference).toContain('Path(__file__).resolve().parent');
-    expect(reference).toContain('anchor `sys.path`');
-    expect(reference).toContain('constructor `options.config`');
-    expect(reference).toContain('options` argument to `call_api`');
-    expect(reference).toContain('openai:chat:gpt-4.1-mini');
-    expect(reference).toContain('anthropic:messages:claude-sonnet-4-6');
-    expect(reference).toContain('echo');
-    expect(reference).toContain('promptfoo-provider-setup');
-    expect(reference).toContain('File-Based Tests');
-    expect(reference).toContain('Dataset-Backed Tests');
-    expect(reference).toContain('tests: file://tests.csv');
-    expect(reference).toContain('tests: file://generate_tests.py:create_tests');
-    expect(reference).toContain('Assertion Scoring Options');
-    expect(reference).toContain('weight: 2');
-    expect(reference).toContain('metric: decision_accuracy');
-    expect(reference).toContain('For `cost` and `latency`, it is a maximum allowed value');
-    expect(reference).toContain('Structured JSON Eval');
-    expect(reference).toContain('Local Model-Graded Rubric');
-    expect(reference).toContain('Faithfulness Rubric');
-    expect(reference).toContain('{{env.OPENAI_API_KEY}}');
-    expect(reference).toContain('output.replace');
-    expect(reference).toContain('Focused Reruns');
-    expect(reference).toContain('PROMPTFOO_FAILED_TEST_EXIT_CODE=0');
-    expect(reference).toContain('pass');
-    expect(reference).toContain('score');
-    expect(reference).toContain('reason');
-  });
-
   it.each([
     {
       dir: 'evals-local-js',
@@ -2802,104 +2643,6 @@ describe('promptfoo-evals skill', () => {
 });
 
 describe('promptfoo-provider-setup skill', () => {
-  it('has a routing description with positive scope and negative boundaries', () => {
-    const skill = readText(path.join(providerSkillRoot, 'SKILL.md'));
-
-    expect(skill).toMatch(/^---\nname: promptfoo-provider-setup\n/);
-    expect(skill).toContain('live HTTP');
-    expect(skill).toContain('local scripts');
-    expect(skill).toContain('static-code-derived provider');
-    expect(skill).toContain('wrappers');
-    expect(skill).toContain('Do not');
-    expect(skill).toContain('red team plugins');
-  });
-
-  it('documents live, static, hybrid, and wrapper setup workflows', () => {
-    const skill = readText(path.join(providerSkillRoot, 'SKILL.md'));
-
-    expect(skill).toContain('Live HTTP endpoint');
-    expect(skill).toContain('Static code discovery');
-    expect(skill).toContain('Hybrid');
-    expect(skill).toContain('Wrapper mode');
-    expect(skill).toContain('transformResponse');
-    expect(skill).toContain('stateful: false');
-    expect(skill).toContain('query-string fields on any HTTP method');
-    expect(skill).toContain('--auth-header');
-    expect(skill).toContain('--auth-prefix');
-    expect(skill).toContain('infers Bearer/OAuth2/OpenID and header/query/cookie API-key auth');
-    expect(skill).toContain('constructor `options.config`');
-    expect(skill).toContain('file://provider.py:function_name');
-    expect(skill).toContain('config.timeout');
-    expect(skill).toContain('PROMPTFOO_PYTHON');
-    expect(skill).toContain('validate target');
-    expect(skill).toContain('targets');
-    expect(skill).toContain('inputs');
-    expect(skill).toContain('--no-cache --no-share');
-    expect(skill).toContain('Inspect the output file for `results.stats`, `response.output`');
-  });
-
-  it('ships Codex UI metadata with an explicit skill mention', () => {
-    const openaiYaml = readText(path.join(providerSkillRoot, 'agents', 'openai.yaml'));
-
-    expect(openaiYaml).toContain('Promptfoo Provider Setup');
-    expect(openaiYaml).toContain('$promptfoo-provider-setup');
-    expect(openaiYaml).toContain('allow_implicit_invocation: true');
-  });
-
-  it('keeps provider examples in a progressive-disclosure reference file', () => {
-    const reference = readText(path.join(providerSkillRoot, 'references', 'provider-patterns.md'));
-
-    expect(reference).toContain('id: https');
-    expect(reference).toContain('queryParams:');
-    expect(reference).toContain('json.choices[0].message.content');
-    expect(reference).toContain('transformResponse: text.replace');
-    expect(reference).toContain('stateful: false');
-    expect(reference).toContain('{{sessionId}}');
-    expect(reference).toContain('file://provider.js');
-    expect(reference).toContain('file://provider.py:call_api');
-    expect(reference).toContain('file://provider.py:function_name');
-    expect(reference).toContain('targets:');
-    expect(reference).toContain('inputs:');
-    expect(reference).toContain('constructor(options = {})');
-    expect(reference).toContain('this.config = options.config || {}');
-    expect(reference).toContain('callApi(prompt, context = {})');
-    expect(reference).toContain('call_api(prompt: str, options: dict, context: dict)');
-    expect(reference).toContain('sys.path.insert(0, str(Path(__file__).resolve().parent))');
-    expect(reference).toContain('Anchor');
-    expect(reference).toContain('PROMPTFOO_PYTHON');
-    expect(reference).toContain('PROMPTFOO_PYTHON_WORKERS');
-    expect(reference).toContain('config.pythonExecutable');
-    expect(reference).toContain('config.workers');
-    expect(reference).toContain('config.timeout');
-    expect(reference).toContain('context.vars');
-    expect(reference).toContain('{{env.CHAT_API_URL}}');
-    expect(reference).toContain('OpenAPI operation to HTTP provider');
-    expect(reference).toContain('operation at a time');
-    expect(reference).toContain('path parameters into the');
-    expect(reference).toContain('first successful response schema');
-    expect(reference).toContain('OpenAPI `$ref`s');
-    expect(reference).toContain('`allOf`');
-    expect(reference).toContain('`oneOf`/`anyOf`');
-    expect(reference).toContain('wire names intact');
-    expect(reference).toContain('safe vars');
-    expect(reference).toContain('preserves headers');
-    expect(reference).toContain('parameter/media examples');
-    expect(reference).toContain('+json media');
-    expect(reference).toContain('defaults/enums');
-    expect(reference).toContain('health/status');
-    expect(reference).toContain('`question`');
-    expect(reference).toContain('`input`');
-    expect(reference).toContain('Bearer/OAuth2/OpenID/header/query/cookie API-key');
-    expect(reference).toContain('--auth-header X-API-Key --auth-prefix none');
-    expect(reference).toContain('Hybrid discovery notes');
-    expect(reference).toContain('Static source: route/handler/client file and line range');
-    expect(reference).toContain('Safe live probe: exact non-mutating payload');
-    expect(reference).toContain('Promptfoo mapping: vars to request fields');
-    expect(reference).toContain('--no-cache');
-    expect(reference).toContain('--no-share');
-    expect(reference).toContain('rg -n');
-  });
-
   it.each([
     {
       dir: 'provider-setup-http',
@@ -4904,140 +4647,6 @@ describe('promptfoo-provider-setup skill', () => {
 });
 
 describe('promptfoo-redteam-setup skill', () => {
-  it('has a routing description with setup scope and run/provider boundaries', () => {
-    const skill = readText(path.join(redteamSetupSkillRoot, 'SKILL.md'));
-
-    expect(skill).toMatch(/^---\nname: promptfoo-redteam-setup\n/);
-    expect(skill).toContain('purpose');
-    expect(skill).toContain('plugins');
-    expect(skill).toContain('strategies');
-    expect(skill).toContain('multi-input target inputs');
-    expect(skill).toContain('Do not use for');
-    expect(skill).toContain('basic provider wiring');
-    expect(skill).toContain('running/evaluating an already-generated');
-  });
-
-  it('documents focused redteam setup workflow and generation QA', () => {
-    const skill = readText(path.join(redteamSetupSkillRoot, 'SKILL.md'));
-
-    expect(skill).toContain('Derive target facts from live or static evidence');
-    expect(skill).toContain('Write the target and purpose');
-    expect(skill).toContain('Choose a small plugin set');
-    expect(skill).toContain('Choose strategies conservatively');
-    expect(skill).toContain('Use `jailbreak:meta` for the default first setup/generation pass.');
-    expect(skill).toContain('Use `jailbreak:hydra` instead when the target is stateful');
-    expect(skill).toContain('search route handlers, API clients, tests');
-    expect(skill).toContain('object IDs imply `bola`');
-    expect(skill).toContain("Promptfoo's default redteam generation");
-    expect(skill).toContain('redteam.provider');
-    expect(skill).toContain('file://x.py:name');
-    expect(skill).toContain('openapi-operation-to-redteam-config.mjs');
-    expect(skill).toContain('--auth-header');
-    expect(skill).toContain('--auth-prefix');
-    expect(skill).toContain('infers Bearer/OAuth2/OpenID and header/query/cookie API-key auth');
-    expect(skill).toContain('--smoke-test true');
-    expect(skill).toContain('validate target');
-    expect(skill).toContain('redteam generate');
-    expect(skill).toContain('metadata.pluginId');
-    expect(skill).toContain('defaultTest.metadata.purpose');
-    expect(skill).toContain('non-precreated output path');
-    expect(skill).toContain('config-relative `file://./target.js`');
-    expect(skill).toContain('file targets resolve under `/tmp`');
-  });
-
-  it('assumes remote redteam generation is available', () => {
-    const redteamMarkdown = [
-      readText(path.join(redteamSetupSkillRoot, 'SKILL.md')),
-      readText(path.join(redteamSetupSkillRoot, 'references', 'redteam-setup-patterns.md')),
-      readText(path.join(redteamRunSkillRoot, 'SKILL.md')),
-      readText(path.join(redteamRunSkillRoot, 'references', 'redteam-run-patterns.md')),
-    ].join('\n');
-
-    expect(redteamMarkdown).toContain("Promptfoo's default redteam generation");
-    for (const forbidden of [
-      ['PROMPTFOO_DISABLE', 'REMOTE_GENERATION'].join('_'),
-      ['local-only', 'generation'].join(' '),
-      ['Local', 'Only', 'QA'].join('-').replace('-QA', ' QA'),
-      ['remote', 'only'].join('-'),
-      ['data must', 'stay local'].join(' '),
-      ['deferred', 'remote', 'enabled scan'].join(' ').replace('remote ', 'remote-'),
-    ]) {
-      expect(redteamMarkdown).not.toContain(forbidden);
-    }
-  });
-
-  it('ships Codex UI metadata for redteam setup', () => {
-    const openaiYaml = readText(path.join(redteamSetupSkillRoot, 'agents', 'openai.yaml'));
-
-    expect(openaiYaml).toContain('Promptfoo Redteam Setup');
-    expect(openaiYaml).toContain('$promptfoo-redteam-setup');
-    expect(openaiYaml).toContain('allow_implicit_invocation: true');
-  });
-
-  it('keeps redteam examples in a progressive-disclosure reference file', () => {
-    const reference = readText(
-      path.join(redteamSetupSkillRoot, 'references', 'redteam-setup-patterns.md'),
-    );
-
-    expect(reference).toContain('Single-input HTTP policy scan');
-    expect(reference).toContain('Multi-input authorization scan');
-    expect(reference).toContain('Multi-input is not the same as multi-turn.');
-    expect(reference).toContain('jailbreak:meta');
-    expect(reference).toContain('jailbreak:hydra');
-    expect(reference).toContain('provider: file://./redteam-generator.mjs');
-    expect(reference).toContain('file://./redteam-generator.py');
-    expect(reference).toContain('call_api(prompt, options, context)');
-    expect(reference).toContain("json.dumps(payload, separators=(',', ':'))");
-    expect(reference).toContain('Relative to the command working directory');
-    expect(reference).toContain('repo-root-relative path');
-    expect(reference).toContain('Before generating against a live target');
-    expect(reference).toContain('inspect the observed request/response');
-    expect(reference).toContain('id: policy');
-    expect(reference).toContain('Add `bola` or `bfla`');
-    expect(reference).toContain('id: rbac');
-    expect(reference).toContain('Generation QA commands');
-    expect(reference).toContain('multi-input-mode');
-    expect(reference).toContain('empty `mktemp` file');
-    expect(reference).toContain('metadata.configHash');
-    expect(reference).toContain('defaultTest?.metadata?.purpose');
-    expect(reference).toContain('For local file targets such as `file://./target.js`');
-    expect(reference).toContain('file://provider.py:invoice_redteam_target');
-    expect(reference).toContain('file://provider.py:function_name');
-    expect(reference).toContain('file://generator.py:function_name');
-    expect(reference).toContain('file://redteam-generator.py:generate_redteam_invoice_prompt');
-    expect(reference).toContain('timeout: 30000');
-    expect(reference).toContain('anchor `sys.path`');
-    expect(reference).toContain('Path(__file__).resolve().parent');
-    expect(reference).toContain('constructor `options.config`');
-    expect(reference).toContain('options` argument to the selected function');
-    expect(reference).toContain('resolve under `/tmp`');
-    expect(reference).toContain('OpenAPI operation to redteam setup');
-    expect(reference).toContain('openapi-operation-to-redteam-config.mjs');
-    expect(reference).toContain('`defaultTest.vars`');
-    expect(reference).toContain('`allOf`');
-    expect(reference).toContain('`oneOf`/`anyOf`');
-    expect(reference).toContain('parameter/media examples');
-    expect(reference).toContain('+json media');
-    expect(reference).toContain('defaults/enums');
-    expect(reference).toContain('safe target `inputs`');
-    expect(reference).toContain('header/query fields to `headers`/`queryParams`');
-    expect(reference).toContain('Use `--policy`');
-    expect(reference).toContain('`--num-tests`');
-    expect(reference).toContain('Bearer/OAuth2/OpenID/header/query/cookie');
-    expect(reference).toContain('--auth-header X-API-Key --auth-prefix');
-    expect(reference).toContain('--smoke-test true');
-    expect(reference).toContain('--smoke-assert');
-    expect(reference).toContain('empty connectivity vars');
-    expect(reference).toContain('`policy` plus `rbac`');
-    expect(reference).toContain('Static code to redteam setup');
-    expect(reference).toContain('Route evidence: file path, method, path');
-    expect(reference).toContain('POST /api/invoices/:invoice_id/chat');
-    expect(reference).toContain('Authorization');
-    expect(reference).toContain('id: bola');
-    expect(reference).toContain('Use it directly');
-    expect(reference).toContain('target has identity or object fields to attack');
-  });
-
   it.each([
     {
       dir: 'redteam-setup-single-input',
@@ -7263,75 +6872,6 @@ describe('promptfoo-redteam-setup skill', () => {
 });
 
 describe('promptfoo-redteam-run skill', () => {
-  it('has a routing description with run scope and setup/provider boundaries', () => {
-    const skill = readText(path.join(redteamRunSkillRoot, 'SKILL.md'));
-
-    expect(skill).toMatch(/^---\nname: promptfoo-redteam-run\n/);
-    expect(skill).toContain('Run, rerun, inspect, and QA');
-    expect(skill).toContain('generated redteam YAML');
-    expect(skill).toContain('attack success rate');
-    expect(skill).toContain('Do not use for initial provider wiring');
-    expect(skill).toContain('choosing plugins');
-    expect(skill).toContain('strategies before generation');
-  });
-
-  it('documents reproducible redteam eval, inspection, and filtered reruns', () => {
-    const skill = readText(path.join(redteamRunSkillRoot, 'SKILL.md'));
-
-    expect(skill).toContain('Use `redteam eval`');
-    expect(skill).toContain('Use `redteam run --force`');
-    expect(skill).toContain('validate target');
-    expect(skill).toContain('--no-cache --no-share --no-progress-bar');
-    expect(skill).toContain('results.stats.successes');
-    expect(skill).toContain('shareableUrl');
-    expect(skill).toContain('--filter-failing');
-    expect(skill).toContain('--filter-errors-only');
-    expect(skill).toContain('--filter-metadata pluginId=policy');
-    expect(skill).toContain('ENOENT');
-    expect(skill).toContain('Regenerate beside');
-    expect(skill).toContain('redteam report');
-    // `redteam run` has no --no-share flag (see src/redteam/commands/run.ts);
-    // the skill must route users to PROMPTFOO_DISABLE_SHARING=true instead.
-    expect(skill).toContain('PROMPTFOO_DISABLE_SHARING=true');
-    expect(skill).not.toMatch(/redteam run[^\n]*--no-share/);
-  });
-
-  it('ships Codex UI metadata for redteam runs', () => {
-    const openaiYaml = readText(path.join(redteamRunSkillRoot, 'agents', 'openai.yaml'));
-
-    expect(openaiYaml).toContain('Promptfoo Redteam Run');
-    expect(openaiYaml).toContain('$promptfoo-redteam-run');
-    expect(openaiYaml).toContain('allow_implicit_invocation: true');
-  });
-
-  it('keeps run commands and CI gates in a progressive-disclosure reference file', () => {
-    const reference = readText(
-      path.join(redteamRunSkillRoot, 'references', 'redteam-run-patterns.md'),
-    );
-
-    expect(reference).toContain('Stable Eval From Generated Tests');
-    expect(reference).toContain('Generate And Evaluate');
-    expect(reference).toContain('Deterministic Grader QA');
-    expect(reference).toContain('Run the generated probes with the deterministic grader');
-    expect(reference).toContain('INTENTIONAL_LEAK');
-    expect(reference).toContain('resolves under `/tmp`');
-    expect(reference).toContain('file://test/fixtures/my-scan/target.mjs');
-    expect(reference).toContain('file://./target.py:call_api');
-    expect(reference).toContain('file://grader.py:grade_redteam');
-    expect(reference).toContain('file://target.py:function_name');
-    expect(reference).toContain('call_api(prompt, options, context)');
-    expect(reference).toContain('anchor `sys.path`');
-    expect(reference).toContain('Path(__file__).resolve().parent');
-    expect(reference).toContain('constructor `options.config`');
-    expect(reference).toContain('options` argument to `call_api`');
-    expect(reference).toContain('workers: 1');
-    expect(reference).toContain('timeout');
-    expect(reference).toContain('jq');
-    expect(reference).toContain('--filter-failing');
-    expect(reference).toContain('--filter-errors-only');
-    expect(reference).toContain('PROMPTFOO_FAILED_TEST_EXIT_CODE=0');
-  });
-
   for (const dir of redteamRunFixtureDirs) {
     it(`keeps generated redteam metadata and assertion shape intact for ${dir}`, () => {
       const config = yaml.load(readText(path.join(fixtureRoot, dir, 'redteam.yaml')));

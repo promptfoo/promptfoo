@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-import * as yaml from 'js-yaml';
+import * as yaml from './vendor/js-yaml.mjs';
 
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
 const PROMPT_FIELDS = new Set(['message', 'prompt', 'q', 'query', 'question', 'input', 'text']);

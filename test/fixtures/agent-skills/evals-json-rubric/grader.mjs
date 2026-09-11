@@ -4,8 +4,10 @@ export default class EvalsJsonRubricGrader {
   }
 
   async callApi(prompt) {
-    const text = String(prompt);
-    const pass = text.includes('inv-123') && text.includes('approved') && text.includes('low');
+    const { candidate } = JSON.parse(prompt);
+    const answer = JSON.parse(candidate);
+    const pass =
+      answer.invoice_id === 'inv-123' && answer.status === 'approved' && answer.risk === 'low';
     return {
       output: JSON.stringify({
         pass,

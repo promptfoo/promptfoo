@@ -23,7 +23,11 @@ providers:
         Authorization: 'Bearer {{env.CHAT_API_TOKEN}}'
       body:
         message: '{{prompt}}'
-      transformResponse: json.output
+      transformResponse: |
+        (json) => {
+          if (typeof json?.output !== 'string') throw new Error('Expected string output');
+          return json.output;
+        }
 
 tests:
   - description: endpoint returns text
@@ -106,7 +110,7 @@ providers:
 
 Map one operation at a time: base URL to an env var, path parameters into the URL with `urlencode`, request/header/query fields into `body`/`headers`/`queryParams`, and the first successful response schema into `transformResponse` (prefer `200`, otherwise the lowest explicit `2xx` status).
 
-The bundled `scripts/openapi-operation-to-config.mjs` helper supports local OpenAPI `$ref`s plus `allOf` and first-variant `oneOf`/`anyOf` schemas. It lets operation parameters override path parameters, URL-encodes path/form values, skips readOnly request and writeOnly response fields even through `$ref`/composed schemas, keeps wire names intact, creates safe vars, preserves headers, and maps prompt fields (`message`, `question`, `input`, `text`, `q`, `query`) to `{{prompt}}`. With `--token-env`, it infers Bearer/OAuth2/OpenID/header/query/cookie API-key auth, uses parameter/media examples (including example-only bodies), +json media, text request bodies, form-url-encoded request bodies, structured multipart request bodies with generated file parts, typed/format schema samples from const/defaults/enums, root JSON array request bodies, schema/example-derived response transforms, health/status `message` vars, and `--auth-header X-API-Key --auth-prefix none`.
+The self-contained `scripts/openapi-operation-to-config.mjs` helper supports local OpenAPI `$ref`s plus `allOf` and first-variant `oneOf`/`anyOf` schemas. It lets operation parameters override path parameters, URL-encodes path/form values, skips readOnly request and writeOnly response fields even through `$ref`/composed schemas, keeps wire names intact, creates safe vars, preserves headers, and maps prompt fields (`message`, `question`, `input`, `text`, `q`, `query`) to `{{prompt}}`. With `--token-env`, it infers Bearer/OAuth2/OpenID/header/query/cookie API-key auth, uses parameter/media examples (including example-only bodies), +json media, text request bodies, form-url-encoded request bodies, structured multipart request bodies with generated file parts, typed/format schema samples from const/defaults/enums, root JSON array request bodies, schema/example-derived response transforms, health/status `message` vars, and `--auth-header X-API-Key --auth-prefix none`.
 
 ```yaml
 providers:
@@ -134,6 +138,7 @@ providers:
     config:
       workers: 1
       timeout: 30000
+      testUserId: qa-user
 tests:
   - description: local provider returns text
     vars:
@@ -153,11 +158,13 @@ export default class LocalAgentProvider {
     return 'local-agent';
   }
 
-  async callApi(prompt, context = {}) {
-    const vars = context.vars || {};
+  async callApi(prompt) {
+    if (!this.config.testUserId) {
+      return { error: 'Configure a synthetic testUserId before calling the app' };
+    }
     const result = await callAgent({
       message: prompt,
-      userId: vars.user_id || this.config.defaultUserId || 'validate-user',
+      userId: this.config.testUserId,
     });
 
     return typeof result?.output === 'string'
@@ -174,8 +181,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from app.invoice_agent import call_agent  # noqa: E402
 def call_api(prompt: str, options: dict, context: dict) -> dict:
     config = options.get("config", {}) if isinstance(options, dict) else {}
-    vars = context.get("vars", {}) if isinstance(context, dict) else {}
-    user_id = vars.get("user_id") or config.get("defaultUserId") or "validate-user"
+    user_id = config.get("testUserId")
+    if not user_id:
+        return {"error": "Configure a synthetic testUserId before calling the app"}
     result = call_agent(message=prompt, user_id=user_id)
     if not isinstance(result.get("output"), str):
         return {"error": "Agent returned no string output"}
@@ -187,11 +195,13 @@ uses a custom `file://provider.py:function_name` suffix. Anchor `sys.path` to
 the provider directory before nearby app imports. Use `PROMPTFOO_PYTHON` or
 `config.pythonExecutable` for a venv, `PROMPTFOO_PYTHON_WORKERS` or
 `config.workers` for concurrency, and `config.timeout` for slow SDK calls.
-`validate target` may call providers without vars, so wrappers need harmless defaults.
+Configure an authorized synthetic test identity explicitly. Wrap the real auth
+boundary when testing authentication; direct app calls alone do not test middleware.
 
 ## Redteam target with named inputs
 
-Use `targets` and preserve the app's real input fields. This gives redteam
+Use `targets` for the caller-controlled fields. The bearer token fixes the
+authenticated vendor; object IDs and message content remain attack inputs. This gives redteam
 plugins access to the actual authorization and injection surface.
 
 ```yaml
@@ -209,12 +219,10 @@ targets:
         Content-Type: application/json
         Authorization: 'Bearer {{env.INVOICE_AGENT_TOKEN}}'
       body:
-        vendor_id: '{{vendor_id}}'
         invoice_id: '{{invoice_id}}'
         message: '{{message}}'
       transformResponse: json.output
     inputs:
-      vendor_id: Vendor identifier for the signed-in user.
       invoice_id: Invoice identifier being discussed.
       message: User message to the assistant.
 
@@ -247,11 +255,3 @@ Use this when static code and a live endpoint are both available. Record the con
 
 Prefer a local wrapper when the static path exposes app logic directly; prefer
 `id: https` when the live endpoint contract is simple and safely probeable.
-
-## Static discovery checklist
-
-```bash
-rg -n "app\\.(get|post|put|patch)|router\\.(get|post|put|patch)|fetch\\(|axios\\." .
-rg -n "openapi|swagger|routes|controller|handler|chat|completion|agent" .
-rg -n "Authorization|Bearer|apiKey|x-api-key|transformResponse|callApi" .
-```
