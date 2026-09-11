@@ -19,7 +19,6 @@ import {
   type TokenUsage,
 } from '../../types/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { isValidJson } from '../../util/json';
 import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
@@ -46,7 +45,9 @@ import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
+  collectThoughtSignatures,
   getGoogleClient,
+  getGoogleResponseServiceTier,
   loadCredentials,
   normalizeGeminiAudio,
   normalizeSafetySettings,
@@ -164,13 +165,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
    * Public for use by integrations like Adaline Gateway.
    */
   getApiHost(): string {
-    const region = this.getRegion();
-    return (
-      this.config.apiHost ||
-      this.env?.VERTEX_API_HOST ||
-      getEnvString('VERTEX_API_HOST') ||
-      getVertexApiHostForRegion(region)
-    );
+    return getVertexApiHost(this.getRegion(), this.config.apiHost, this.env);
   }
 
   /**
@@ -420,6 +415,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         cache.get(cacheKey),
         options?.abortSignal,
       );
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         logger.debug('Returning cached Vertex Claude response', {
           model: this.modelName,
@@ -468,6 +464,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
     }
 
+    let response: ProviderResponse | undefined;
     try {
       const output = outputFromMessage(data as any, showThinking);
 
@@ -498,7 +495,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         data.usage?.cache_read_input_tokens,
         data.usage?.cache_creation_input_tokens,
       );
-      const response = {
+      response = {
         cached: false,
         output,
         tokenUsage,
@@ -524,6 +521,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return response;
     } catch (err) {
       return {
+        ...response,
         error: `Claude API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
     }
@@ -588,6 +586,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     let cachedResponse;
     if (cache && cacheKey) {
       cachedResponse = await awaitProviderOperation(cache.get(cacheKey), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         const parsedCachedResponse = JSON.parse(cachedResponse as string);
         logger.debug('Returning cached Vertex Gemini response', {
@@ -599,6 +598,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
     if (response === undefined) {
       let data;
+      let responseHeaders: unknown;
       try {
         // Default to non-streaming (generateContent) since:
         // 1. Model Armor floor settings only work with non-streaming endpoint
@@ -627,6 +627,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           }
 
           data = (await res.json()) as GeminiApiResponse;
+          responseHeaders = res.headers;
         } else {
           // Standard mode: use OAuth and full endpoint
           options?.abortSignal?.throwIfAborted();
@@ -646,6 +647,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             timeout: getRequestTimeoutMs(),
           });
           data = res.data as GeminiApiResponse;
+          responseHeaders = res.headers;
         }
       } catch (err) {
         const geminiError = err as GaxiosError;
@@ -686,15 +688,22 @@ export class VertexChatProvider extends GoogleGenericProvider {
           completionTokenCount == null
             ? undefined
             : completionTokenCount + (thoughtsTokenCount ?? 0);
+        const pricingConfig = { ...config, region: this.getRegion() };
+        const actualServiceTier = getGoogleResponseServiceTier(
+          responseHeaders,
+          lastData.usageMetadata,
+        );
         const cost = calculateGoogleCostFromUsage(
           this.modelName,
-          { ...config, region: this.getRegion() },
+          pricingConfig,
           promptTokenCount,
           completionForCost,
           true,
           lastData.usageMetadata,
+          actualServiceTier,
         );
         const audio = normalizeGeminiAudio(output);
+        const thoughtSignatures = collectThoughtSignatures(dataWithResponse);
 
         response = {
           cached: false,
@@ -702,12 +711,15 @@ export class VertexChatProvider extends GoogleGenericProvider {
           ...(audio && { audio }),
           tokenUsage,
           cost,
-          metadata: {},
+          metadata: {
+            ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
+            ...(actualServiceTier && { serviceTier: actualServiceTier }),
+          },
         };
 
         const grounding = collectGroundingMetadata(dataWithResponse);
         if (Object.keys(grounding).length > 0) {
-          response.metadata = { ...grounding };
+          response.metadata = { ...response.metadata, ...grounding };
         }
 
         if (cache && cacheKey) {
@@ -720,47 +732,23 @@ export class VertexChatProvider extends GoogleGenericProvider {
         options?.abortSignal?.throwIfAborted();
       } catch (err) {
         return {
+          ...response,
           error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
         };
       }
     }
     try {
-      // Handle function tool callbacks
-      if (!toolsDisabled && config.functionToolCallbacks && isValidJson(response.output)) {
-        const structured_output = JSON.parse(response.output);
-        if (structured_output.functionCall) {
-          const results = [];
-          const functionName = structured_output.functionCall.name;
-          if (config.functionToolCallbacks[functionName]) {
-            try {
-              const functionResult = await this.executeFunctionCallback(
-                functionName,
-                JSON.stringify(
-                  typeof structured_output.functionCall.args === 'string'
-                    ? JSON.parse(structured_output.functionCall.args)
-                    : structured_output.functionCall.args,
-                ),
-                config,
-                structured_output.functionCall.id,
-                options?.abortSignal,
-              );
-              results.push(functionResult);
-            } catch (error) {
-              options?.abortSignal?.throwIfAborted();
-              logger.error(`Error executing function ${functionName}: ${error}`);
-            }
-          }
-          if (results.length > 0) {
-            response = {
-              ...response,
-              output: results.join('\n'),
-            };
-          }
-        }
-      }
-    } catch (err) {
+      response.output = await this.executeFunctionToolCallbacks(
+        response.output,
+        config,
+        toolsDisabled,
+        options?.abortSignal,
+      );
+    } catch (error) {
       return {
-        error: `Tool callback error: ${String(err)}.`,
+        ...response,
+        ...(options?.abortSignal?.aborted ? {} : { output: undefined }),
+        error: String(error),
       };
     }
     return response;
@@ -809,6 +797,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         cache.get(cacheKey),
         options?.abortSignal,
       );
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         logger.debug('Returning cached Vertex Palm2 response', {
           model: this.modelName,
@@ -849,6 +838,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
     }
 
+    let response: ProviderResponse | undefined;
     try {
       if (data.error) {
         return {
@@ -863,7 +853,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       }
       const output = prediction.candidates[0].content;
 
-      const response = {
+      response = {
         output,
         cached: false,
       };
@@ -880,6 +870,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return response;
     } catch (err) {
       return {
+        ...response,
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
@@ -970,6 +961,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         cache.get(cacheKey),
         options?.abortSignal,
       );
+      options?.abortSignal?.throwIfAborted();
       if (cachedResponse) {
         logger.debug('Returning cached Vertex Llama response', {
           model: this.modelName,
@@ -1046,6 +1038,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
     }
 
+    let response: ProviderResponse | undefined;
     try {
       // Extract the completion text from the response
       let output = '';
@@ -1067,7 +1060,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         numRequests: 1,
       };
 
-      const response = {
+      response = {
         cached: false,
         output,
         tokenUsage,
@@ -1085,6 +1078,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return response;
     } catch (err) {
       return {
+        ...response,
         error: `Llama API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
     }
@@ -1204,8 +1198,8 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 }
 
-// Gemini 3.1 Pro preview is available through Vertex AI's global endpoint.
-const DEFAULT_VERTEX_MODEL = 'gemini-3.1-pro-preview';
+// Gemini 3.6 Flash is available through Vertex AI's global endpoint.
+const DEFAULT_VERTEX_MODEL = 'gemini-3.8-flash';
 const DEFAULT_VERTEX_REGION = 'global';
 const DEFAULT_VERTEX_EMBEDDING_MODEL = 'gemini-embedding-001';
 

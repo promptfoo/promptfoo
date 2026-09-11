@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import {
   createHyperbolicAudioProvider,
@@ -10,6 +10,10 @@ vi.mock('../../../src/cache');
 
 describe('HyperbolicAudioProvider', () => {
   beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
     vi.resetAllMocks();
   });
 
@@ -89,13 +93,164 @@ describe('HyperbolicAudioProvider', () => {
       expect(result).toEqual({
         output: 'base64audio',
         cached: false,
-        cost: 0.001 * (9 / 1000), // 9 chars in 'test text'
+        cost: 0.005 * (9 / 1000), // $5 per million characters
         isBase64: true,
         audio: {
           data: 'base64audio',
-          format: 'wav',
+          format: 'mp3',
         },
       });
+    });
+
+    it.each(['hyperbolic:audio', 'hyperbolic:audio:melo', 'hyperbolic:audio:custom:model'])(
+      'sends documented audio controls without treating %s as a model selector',
+      async (id) => {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { audio: 'base64audio' },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const provider = createHyperbolicAudioProvider(id, {
+          config: {
+            apiKey: 'test-key',
+            language: 'EN',
+            speaker: 'EN-US',
+            speed: 1,
+            sdp_ratio: 0.5,
+            noise_scale: 0.5,
+            noise_scale_w: 0.5,
+          },
+        });
+
+        await provider.callApi('Hello', {
+          prompt: {
+            raw: 'Hello',
+            label: 'Hello',
+            config: {
+              speaker: 'EN-AU',
+              speed: 0.7,
+              sdp_ratio: 0,
+              noise_scale: 0,
+              noise_scale_w: 0,
+            },
+          },
+          vars: {},
+        });
+
+        const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+        expect(url).toBe('https://api.hyperbolic.xyz/v1/audio/generation');
+        expect(request).toMatchObject({ method: 'POST' });
+        expect(JSON.parse(request?.body as string)).toEqual({
+          text: 'Hello',
+          language: 'EN',
+          speaker: 'EN-AU',
+          speed: 0.7,
+          sdp_ratio: 0,
+          noise_scale: 0,
+          noise_scale_w: 0,
+        });
+      },
+    );
+
+    it.each([
+      undefined,
+      'https://api.hyperbolic.xyz/v1',
+      'https://api.hyperbolic.xyz/v1/',
+      'https://API.HYPERBOLIC.XYZ:443/v1',
+    ])('omits explicit legacy fields for native endpoint %s', async (apiBaseUrl) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { audio: 'base64audio' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = createHyperbolicAudioProvider('hyperbolic:audio:local-identity', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl,
+          model: 'legacy-model',
+          voice: 'alloy',
+          speaker: 'EN-US',
+        },
+      });
+
+      const result = await provider.callApi('Hello', {
+        prompt: {
+          raw: 'Hello',
+          label: 'Hello',
+          config: {
+            model: 'prompt-model',
+            voice: 'prompt-voice',
+            apiBaseUrl: 'https://custom.example/v2',
+            speaker: 'EN-AU',
+          },
+        },
+        vars: {},
+      });
+
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe(`${apiBaseUrl || 'https://api.hyperbolic.xyz/v1'}/audio/generation`);
+      expect(JSON.parse(request?.body as string)).toEqual({ text: 'Hello', speaker: 'EN-AU' });
+      expect(result.audio?.format).toBe('mp3');
+    });
+
+    it('preserves custom endpoint metadata and explicit legacy parameter overrides', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { audio: 'base64audio' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = createHyperbolicAudioProvider('hyperbolic:audio:local-identity', {
+        config: {
+          apiKey: 'test-key',
+          apiBaseUrl: 'https://custom.example/v2',
+          model: 'provider-model',
+          voice: 'provider-voice',
+        },
+      });
+
+      const result = await provider.callApi('Hello', {
+        prompt: {
+          raw: 'Hello',
+          label: 'Hello',
+          config: {
+            model: 'tenant:custom/model',
+            voice: 'custom-voice',
+            apiBaseUrl: 'https://api.hyperbolic.xyz/v1',
+          },
+        },
+        vars: {},
+      });
+
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://custom.example/v2/audio/generation');
+      expect(JSON.parse(request?.body as string)).toEqual({
+        text: 'Hello',
+        model: 'tenant:custom/model',
+        voice: 'custom-voice',
+      });
+      expect(provider.id()).toBe('hyperbolic:audio:local-identity');
+      expect(result.audio).toEqual({ data: 'base64audio', format: 'wav' });
+      expect(result.cost).toBe(0.001 * (5 / 1000));
+    });
+
+    it('uses native metadata when the official base URL is configured explicitly', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { audio: 'base64audio' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = createHyperbolicAudioProvider('hyperbolic:audio', {
+        config: { apiKey: 'test-key', apiBaseUrl: 'https://api.hyperbolic.xyz/v1' },
+      });
+
+      const result = await provider.callApi('Hello');
+
+      expect(result.audio).toEqual({ data: 'base64audio', format: 'mp3' });
+      expect(result.cost).toBe(0.005 * (5 / 1000));
     });
 
     it('should handle API errors', async () => {

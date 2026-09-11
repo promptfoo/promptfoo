@@ -125,7 +125,9 @@ describe.each(facades)('%s shared Gemini pipeline', (facade) => {
     );
     expect(body.generationConfig.temperature).toBe(0);
     expect(body.generationConfig.topK).toBe(2);
-    expect(body.serviceTier).toBe('priority');
+    expect(body[facade === 'vertex' ? 'serviceTier' : 'service_tier']).toBe(
+      facade === 'vertex' ? 'SERVICE_TIER_PRIORITY' : 'priority',
+    );
     expect(body.tools).toHaveLength(2);
     expect(config.temperature).toBe(0.5);
   });

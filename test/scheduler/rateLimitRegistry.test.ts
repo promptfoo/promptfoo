@@ -226,7 +226,7 @@ describe('RateLimitRegistry', () => {
   });
 
   describe('execute - calls function directly when disabled', () => {
-    it('rejects a normalized response when cancellation happens during the call', async () => {
+    it('retains a completed response when cancellation happens during the call', async () => {
       mockGetEnvBool.mockReturnValue(true);
       const registry = new RateLimitRegistry({ maxConcurrency: 10 });
       const controller = new AbortController();
@@ -235,11 +235,15 @@ describe('RateLimitRegistry', () => {
           mockProvider,
           async () => {
             controller.abort(new Error('cancelled'));
-            return { error: 'transport normalized the abort' };
+            return { error: 'callback cancelled', cost: 0.03, tokenUsage: { total: 11 } };
           },
           { abortSignal: controller.signal },
         ),
-      ).rejects.toThrow('cancelled');
+      ).resolves.toMatchObject({
+        error: 'callback cancelled',
+        cost: 0.03,
+        tokenUsage: { total: 11 },
+      });
     });
 
     it('should bypass rate limiting when disabled', async () => {

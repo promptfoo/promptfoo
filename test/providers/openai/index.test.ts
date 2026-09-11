@@ -130,6 +130,38 @@ describe('OpenAI Provider', () => {
       expect(customProvider.getApiKey()).toBe('custom-key');
     });
 
+    it.each([undefined, true, false])(
+      'respects useDefaultApiKey=%s without changing explicit key priority',
+      (useDefaultApiKey) => {
+        const restore = mockProcessEnv({
+          OPENAI_API_KEY: 'hosted-key',
+          LOCAL_MODEL_KEY: 'selected-key',
+        });
+        try {
+          const config = { useDefaultApiKey, apiKeyEnvar: 'LOCAL_MODEL_KEY', apiKey: 'inline-key' };
+          expect(new OpenAiGenericProvider('local', { config }).getApiKey()).toBe('inline-key');
+          expect(
+            new OpenAiGenericProvider('local', {
+              config: { ...config, apiKey: undefined },
+            }).getApiKey(),
+          ).toBe('selected-key');
+          expect(
+            new OpenAiGenericProvider('local', {
+              config: { useDefaultApiKey, apiKeyEnvar: 'MISSING_LOCAL_MODEL_KEY' },
+            }).getApiKey(),
+          ).toBeUndefined();
+          expect(
+            new OpenAiGenericProvider('local', {
+              config: { useDefaultApiKey },
+              env: { OPENAI_API_KEY: 'overridden-hosted-key' },
+            }).getApiKey(),
+          ).toBe(useDefaultApiKey === false ? undefined : 'overridden-hosted-key');
+        } finally {
+          restore();
+        }
+      },
+    );
+
     it('should generate correct ID', () => {
       expect(provider.id()).toBe('openai:test-model');
     });

@@ -6,7 +6,9 @@ import {
   getCandidate,
   isNonCandidateStreamChunk,
   mergeGoogleCompletionOptions,
+  mergeGoogleRequestTools,
   mergeParts,
+  normalizeGoogleServiceTier,
   normalizeSafetySettings,
   removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
@@ -50,13 +52,23 @@ export async function prepareGeminiRequest(
   const requestTools = toolsDisabled ? removeGoogleFunctionDeclarations(allTools) : allTools;
   const {
     service_tier: passthroughServiceTier,
+    serviceTier: camelCasePassthroughServiceTier,
     tools: passthroughTools,
+    toolConfig: _passthroughToolConfig,
+    tool_config: _passthroughToolConfigSnakeCase,
     ...passthrough
   } = config.passthrough || {};
+  const serviceTier = normalizeGoogleServiceTier(
+    passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
+    vertexMode,
+  );
+  const serviceTierField = vertexMode ? 'serviceTier' : 'service_tier';
   const requestPassthroughTools =
     toolsDisabled && passthroughTools !== undefined
       ? removeGoogleFunctionDeclarations(passthroughTools)
       : passthroughTools;
+
+  const mergedTools = mergeGoogleRequestTools(requestTools, requestPassthroughTools);
 
   const body: Record<string, any> = {
     contents,
@@ -85,26 +97,12 @@ export async function prepareGeminiRequest(
     },
     safetySettings: normalizeSafetySettings(config.safetySettings),
     ...(toolConfig ? { toolConfig } : {}),
-    ...(requestTools.length > 0 ? { tools: requestTools } : {}),
+    ...(mergedTools ? { tools: mergedTools } : {}),
     ...(systemInstruction
       ? { [vertexMode ? 'systemInstruction' : 'system_instruction']: systemInstruction }
       : {}),
-    ...(config.service_tier ? { serviceTier: config.service_tier } : {}),
+    ...(serviceTier ? { [serviceTierField]: serviceTier } : {}),
     ...passthrough,
-    // Normalize a single-object passthrough `tools` value to a one-element array and
-    // always merge with requestTools so config/MCP tools aren't dropped and `tools`
-    // stays the array shape the Gemini API requires.
-    ...(requestPassthroughTools === undefined
-      ? {}
-      : {
-          tools: [
-            ...requestTools,
-            ...(Array.isArray(requestPassthroughTools)
-              ? requestPassthroughTools
-              : [requestPassthroughTools]),
-          ],
-        }),
-    ...(passthroughServiceTier ? { serviceTier: passthroughServiceTier } : {}),
     ...(facade === 'vertex' &&
       config.modelArmor &&
       (config.modelArmor.promptTemplate || config.modelArmor.responseTemplate) && {
@@ -185,7 +183,7 @@ export function parseGeminiContent(
       output = mergeParts(output, formatCandidateContents(current));
     }
   }
-  if (output === undefined || candidate === undefined) {
+  if (output === undefined || output === '' || candidate === undefined) {
     if (facade === 'vertex' && chunks.every((chunk) => !chunk.candidates?.length)) {
       // Keep Vertex's facade catch responsible for the historical no-candidate error.
       getCandidate(chunks[0]);

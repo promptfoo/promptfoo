@@ -166,7 +166,7 @@ export interface OpenCodeAgentConfig {
   description: string;
   /** Agent mode: 'primary' for main assistants, 'subagent' for specialized tasks, 'all' for both */
   mode?: 'primary' | 'subagent' | 'all';
-  /** Model ID to use for this agent (overrides global model) */
+  /** Full OpenCode provider/model-id for this agent (e.g., 'anthropic/claude-sonnet-4-6') */
   model?: string;
   /** Temperature for response randomness (0.0-1.0) */
   temperature?: number;
@@ -263,8 +263,8 @@ export interface OpenCodeSDKConfig {
   provider_id?: string;
 
   /**
-   * Model ID to use (e.g., 'claude-sonnet-4-6', 'gpt-4o')
-   * Combined with provider_id to specify the exact model
+   * Model ID within provider_id (e.g., 'claude-sonnet-4-6', 'gpt-4o').
+   * Set provider_id separately; custom_agent.model uses the full provider/model-id instead.
    */
   model?: string;
 

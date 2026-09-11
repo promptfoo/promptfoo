@@ -23,7 +23,7 @@ Assertions are _optional_. Many people get value out of reviewing outputs manual
 
 ## Example
 
-Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-4.1 and Gemini, substituting `language` and `input` variables:
+Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-5 mini and Gemini, substituting `language` and `input` variables:
 
 ```yaml
 prompts:
@@ -31,7 +31,9 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-5-mini
-  - vertex:gemini-2.0-flash-exp
+  - id: vertex:gemini-3.5-flash
+    config:
+      region: global
 tests:
   - vars:
       language: French
@@ -59,7 +61,9 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-5-mini
-  - vertex:gemini-2.0-flash-exp
+  - id: vertex:gemini-3.5-flash
+    config:
+      region: global
 tests:
   - vars:
       language: French
@@ -83,7 +87,9 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-5-mini
-  - vertex:gemini-2.0-flash-exp
+  - id: vertex:gemini-3.5-flash
+    config:
+      region: global
 tests:
   - vars:
       language: French
@@ -275,7 +281,9 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-5-mini
-  - vertex:gemini-2.0-flash-exp
+  - id: vertex:gemini-3.5-flash
+    config:
+      region: global
 // highlight-start
 defaultTest:
   assert:
@@ -304,7 +312,7 @@ You can also use `defaultTest` to override the model used for each test. This ca
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-5-mini-0613
+    provider: openai:gpt-5-mini
 ```
 
 Set `options.disableDefaultAsserts: true` on a test case when that test should define its own assertions without inheriting `defaultTest.assert`. Other `defaultTest` fields, such as `vars`, `metadata`, `threshold`, and `options`, still apply:
@@ -360,7 +368,9 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-5-mini
-  - vertex:gemini-2.0-flash-exp
+  - id: vertex:gemini-3.5-flash
+    config:
+      region: global
 tests:
   - vars:
       language: French
@@ -878,7 +888,9 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-5-mini
-  - vertex:gemini-2.0-flash-exp
+  - id: vertex:gemini-3.5-flash
+    config:
+      region: global
 // highlight-next-line
 tests: file://tests.csv
 ```
@@ -891,7 +903,9 @@ prompts:
   - file://prompt2.txt
 providers:
   - openai:gpt-5-mini
-  - vertex:gemini-2.0-flash-exp
+  - id: vertex:gemini-3.5-flash
+    config:
+      region: global
 // highlight-next-line
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 ```

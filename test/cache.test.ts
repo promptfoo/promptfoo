@@ -26,7 +26,8 @@ import {
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
-import { mockProcessEnv } from './util/utils';
+import { sleep } from '../src/util/time';
+import { createDeferred, mockProcessEnv } from './util/utils';
 
 vi.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/path'),
@@ -360,6 +361,20 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache enabled', () => {
+    it('rejects a settled cache hit when cancellation precedes its continuation', async () => {
+      const controller = new AbortController();
+      const reason = new Error('cancelled after cache settled');
+      const read = createDeferred<string>();
+      vi.mocked(getCache().get).mockReturnValueOnce(read.promise);
+
+      const request = fetchWithCache(url, { signal: controller.signal }, 1000);
+      read.resolve(JSON.stringify(response));
+      queueMicrotask(() => controller.abort(reason));
+
+      await expect(request).rejects.toBe(reason);
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
+    });
+
     it('does not register an abort listener if the cache read already cancelled', async () => {
       const controller = new AbortController();
       const listener = vi.spyOn(controller.signal, 'addEventListener');
@@ -901,7 +916,7 @@ describe('fetchWithCache', () => {
       if (signaledResult.status === 'rejected') {
         expect(signaledResult.reason.name).toBe('AbortError');
       }
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
     });
 
     it('should handle request options in cache key', async () => {
@@ -1652,6 +1667,49 @@ describe('fetchWithCache', () => {
       expect(result.data).toEqual(response);
       expect(result.cached).toBe(false);
     });
+
+    it.each(['options', 'request'])(
+      'cancels a body-read retry delay from the %s signal',
+      async (source) => {
+        const controller = new AbortController();
+        const debug = vi.spyOn(logger, 'debug');
+        const delay = createDeferred<void>();
+        vi.mocked(sleep).mockReturnValueOnce(delay.promise);
+        mockFetchWithRetries.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers(),
+          text: () => Promise.reject(new Error('ECONNRESET during body read')),
+        } as Response);
+        let result: unknown;
+        const pending = fetchWithCache(
+          source === 'request' ? new Request(url, { signal: controller.signal }) : url,
+          source === 'options' ? { signal: controller.signal } : {},
+          1000,
+        ).catch((error: unknown) => {
+          result = error;
+        });
+        try {
+          await vi.waitFor(() =>
+            expect(debug).toHaveBeenCalledWith(
+              '[Cache] Body stream failed with transient error, retrying',
+              expect.any(Object),
+            ),
+          );
+          controller.abort();
+          await new Promise((resolve) => setImmediate(resolve));
+          expect(result).toMatchObject({ name: 'AbortError' });
+          expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+        } finally {
+          controller.abort();
+          delay.resolve();
+          await pending;
+          vi.mocked(sleep).mockReset().mockResolvedValue(undefined);
+          debug.mockRestore();
+        }
+      },
+    );
 
     it('should throw after exhausting body-read retries', async () => {
       // All fetches return responses whose text() fails with transient error
