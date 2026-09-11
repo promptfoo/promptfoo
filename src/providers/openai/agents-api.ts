@@ -103,6 +103,22 @@ const MIN_CREDENTIAL_LENGTH = 8;
 const MIN_TOKEN_CREDENTIAL_LENGTH = 2;
 const CREDENTIAL_NAME =
   /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password|(?:^|[-_])key$)/i;
+// Header names that never carry credentials. Every other configured header value is redacted, and
+// any other custom header may authenticate a gateway.
+const NON_CREDENTIAL_HEADERS = new Set([
+  'accept',
+  'content-type',
+  'openai-beta',
+  'openai-organization',
+  'openai-project',
+  'user-agent',
+  'x-openai-originator',
+]);
+// Prompt settings replace provider settings as groups, so a provider value cannot shadow them.
+const PROMPT_OVERRIDE_GROUPS: readonly (readonly string[])[] = [
+  ['apiHost', 'apiBaseUrl'],
+  ['apiKey', 'apiKeyEnvar'],
+];
 
 class AgentsApiHttpError extends Error {
   constructor(
@@ -202,10 +218,22 @@ function getUrlCredentials(value: string): string[] {
   return found.filter((credential) => credential.trim().length > 0);
 }
 
-/** Collect credential values from credential-named keys and credential-bearing URLs. */
-function collectConfigCredentials(value: unknown, credentials: Set<string>, key = ''): void {
+function isNonCredentialHeader(name: string): boolean {
+  return NON_CREDENTIAL_HEADERS.has(name.toLowerCase());
+}
+
+/**
+ * Collect credential values from credential-named keys, credential-bearing URLs, and every value in
+ * a `headers` map, such as provider or remote MCP tool headers, except non-credential headers.
+ */
+function collectConfigCredentials(
+  value: unknown,
+  credentials: Set<string>,
+  key = '',
+  inHeaders = false,
+): void {
   if (typeof value === 'string') {
-    if (key && isCredentialName(key)) {
+    if ((key && isCredentialName(key)) || (inHeaders && !isNonCredentialHeader(key))) {
       addCredential(credentials, value);
     }
     for (const credential of getUrlCredentials(value)) {
@@ -215,15 +243,56 @@ function collectConfigCredentials(value: unknown, credentials: Set<string>, key 
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      collectConfigCredentials(item, credentials, key);
+      collectConfigCredentials(item, credentials, key, inHeaders);
     }
     return;
   }
   if (value && typeof value === 'object') {
+    const childInHeaders = inHeaders || key.toLowerCase() === 'headers';
     for (const [childKey, item] of Object.entries(value)) {
-      collectConfigCredentials(item, credentials, childKey);
+      collectConfigCredentials(item, credentials, childKey, childInHeaders);
     }
   }
+}
+
+/**
+ * Credential-named header values are redacted and satisfy the credential requirement. Any custom
+ * header outside the non-credential allowlist may authenticate a gateway.
+ */
+function scanRequestHeaders(
+  headers: Headers,
+  credentials: Set<string>,
+): { hasHeaderCredential: boolean; hasCustomHeader: boolean } {
+  let hasHeaderCredential = false;
+  let hasCustomHeader = false;
+  headers.forEach((value, name) => {
+    const present = value.trim().length > 0;
+    if (isCredentialName(name)) {
+      hasHeaderCredential ||= present;
+      addCredential(credentials, value);
+    }
+    hasCustomHeader ||= present && name !== 'authorization' && !isNonCredentialHeader(name);
+  });
+  return { hasHeaderCredential, hasCustomHeader };
+}
+
+/** Prompt config overrides provider config, replacing endpoint and credential settings as groups. */
+function mergePromptConfig(
+  providerConfig: AgentsApiOptions,
+  promptConfig: Record<string, unknown> | undefined,
+): AgentsApiOptions {
+  const merged: Record<string, unknown> = { ...providerConfig };
+  for (const group of PROMPT_OVERRIDE_GROUPS) {
+    if (group.some((field) => promptConfig?.[field] !== undefined)) {
+      for (const field of group) {
+        delete merged[field];
+      }
+    }
+  }
+  Object.assign(merged, promptConfig);
+  // Promptfoo can attach a live provider here; do not render its methods or state.
+  delete merged.provider;
+  return merged as AgentsApiOptions;
 }
 
 /** Credentials a call can send or echo: its resolved key, effective base URL, and config values. */
@@ -333,6 +402,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   declare config: AgentsApiOptions;
   private readonly modelOverride: string;
   private credentials: string[] = [];
+  // Provider credentials replaced by prompt settings are still redacted if an error echoes them.
+  private readonly inheritedCredentials = new Set<string>();
 
   constructor(
     modelName = '',
@@ -617,10 +688,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
-    const mergedConfig = { ...this.config, ...context?.prompt?.config };
-    // Promptfoo can attach a live provider here; do not render its methods or state.
-    delete mergedConfig.provider;
-    let config = mergedConfig as AgentsApiOptions;
+    const mergedConfig = mergePromptConfig(this.config, context?.prompt?.config);
+    let config = mergedConfig;
     try {
       const vars = context?.vars;
       if (vars) {
@@ -631,6 +700,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         config,
         env: this.env,
       });
+      collectCallCredentials(this, callProvider.inheritedCredentials);
       const spanContext = buildChatSpanContext({
         system: 'openai',
         model: callProvider.modelName,
@@ -679,7 +749,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   /**
    * A configured Authorization header takes precedence over this value. An explicit key, or any
    * key sent to the OpenAI API, uses Bearer auth; otherwise URL userinfo uses decoded Basic auth.
-   * An ambient OPENAI_API_KEY never reaches a gateway that has its own header or URL credential.
+   * An ambient OPENAI_API_KEY never reaches another host that has URL credentials or any custom
+   * header outside the non-credential allowlist, because such a header may authenticate a gateway.
    */
   private getAuthorization(
     apiKey: string | undefined,
@@ -703,24 +774,17 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     options?.abortSignal?.throwIfAborted();
     const headers = new Headers(this.getOpenAiRequestHeaders());
     const apiKey = this.getApiKey();
-    const credentials = new Set<string>();
+    const credentials = new Set<string>(this.inheritedCredentials);
     collectCallCredentials(this, credentials);
-    let hasHeaderCredential = false;
     // Userinfo and credential query parameters authenticate a gateway just as headers do.
-    let hasGatewayCredential = getUrlCredentials(this.getApiUrl()).length > 0;
-    headers.forEach((value, name) => {
-      if (isCredentialName(name)) {
-        const present = value.trim().length > 0;
-        hasHeaderCredential ||= present;
-        hasGatewayCredential ||= present && name !== 'authorization';
-        addCredential(credentials, value);
-      }
-    });
+    const hasUrlCredential = getUrlCredentials(this.getApiUrl()).length > 0;
+    const { hasHeaderCredential, hasCustomHeader } = scanRequestHeaders(headers, credentials);
     this.credentials = sortCredentials(credentials);
-    if (!apiKey && !hasHeaderCredential && !hasGatewayCredential && this.requiresApiKey()) {
+    // Only a credential-named header or URL credential replaces the API key requirement.
+    if (!apiKey && !hasHeaderCredential && !hasUrlCredential && this.requiresApiKey()) {
       return { error: this.getMissingApiKeyErrorMessage() };
     }
-    const authorization = this.getAuthorization(apiKey, hasGatewayCredential);
+    const authorization = this.getAuthorization(apiKey, hasUrlCredential || hasCustomHeader);
     if (authorization && !headers.has('Authorization')) {
       headers.set('Authorization', authorization);
     }

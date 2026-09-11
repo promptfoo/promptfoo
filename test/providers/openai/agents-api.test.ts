@@ -246,6 +246,76 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(await authorizationHeaders({})).toContain('Bearer ambient-openai-key');
   });
 
+  describe('custom header gateways', () => {
+    type AgentsConfig = NonNullable<
+      NonNullable<ConstructorParameters<typeof OpenAiAgentsApiProvider>[1]>['config']
+    >;
+    const authorizationsFor = async (config: AgentsConfig) => {
+      vi.mocked(fetchWithRetries).mockClear();
+      const result = await new OpenAiAgentsApiProvider('', { config }).callApi('hi');
+      const authorizations = new Set(
+        vi
+          .mocked(fetchWithRetries)
+          .mock.calls.map(([, request]) => new Headers(request!.headers).get('Authorization')),
+      );
+      return { result, authorizations };
+    };
+
+    beforeEach(() => {
+      mockProcessEnv({
+        OPENAI_API_KEY: 'ambient-openai-key',
+        GATEWAY_OPENAI_KEY: 'explicit-gateway-key',
+      });
+    });
+
+    // X-Gateway-Auth does not look like a credential name; any custom header may still authenticate.
+    it.each(['X-Gateway-Key', 'X-Gateway-Auth'])(
+      'does not forward an ambient OpenAI key to a gateway authenticated by %s',
+      async (name) => {
+        const { result, authorizations } = await authorizationsFor({
+          apiBaseUrl: 'https://gateway.example/v1',
+          headers: { [name]: 'gateway-custom-value' },
+        });
+        expect(result.output).toBe('42');
+        expect(authorizations).toEqual(new Set([null]));
+      },
+    );
+
+    it('still sends an explicit apiKeyEnvar key to a custom header gateway', async () => {
+      const { authorizations } = await authorizationsFor({
+        apiBaseUrl: 'https://gateway.example/v1',
+        apiKeyEnvar: 'GATEWAY_OPENAI_KEY',
+        headers: { 'X-Gateway-Auth': 'gateway-custom-value' },
+      });
+      expect(authorizations).toEqual(new Set(['Bearer explicit-gateway-key']));
+    });
+
+    it('still sends the ambient key to api.openai.com with a custom header', async () => {
+      const { authorizations } = await authorizationsFor({
+        headers: { 'X-Request-Source': 'promptfoo-eval' },
+      });
+      expect(authorizations).toEqual(new Set(['Bearer ambient-openai-key']));
+    });
+
+    it('does not treat non-credential headers as gateway authentication', async () => {
+      const { authorizations } = await authorizationsFor({
+        apiBaseUrl: 'https://gateway.example/v1',
+        headers: { Accept: 'application/json', 'OpenAI-Project': 'proj_eval' },
+      });
+      expect(authorizations).toEqual(new Set(['Bearer ambient-openai-key']));
+    });
+
+    it('still requires a key when a gateway has only headers that are not credential-named', async () => {
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      const { result } = await authorizationsFor({
+        apiBaseUrl: 'https://gateway.example/v1',
+        headers: { 'X-Gateway-Auth': 'gateway-custom-value' },
+      });
+      expect(result.error).toContain('OPENAI_API_KEY');
+      expect(fetchWithRetries).not.toHaveBeenCalled();
+    });
+  });
+
   describe('URL-authenticated gateways', () => {
     const queryGatewayUrl = 'https://gateway.example/v1?api-key=gateway-query-secret';
     const userinfoGatewayUrl = 'https://gateway-user:gateway-password@gateway.example/v1';
@@ -581,6 +651,100 @@ describe('OpenAiAgentsApiProvider', () => {
         apiBaseUrl: 'https://gateway.example/v1?api-key=prompt-gateway-secret',
       }),
     ).toEqual(new Set([null]));
+  });
+
+  describe('prompt setting groups', () => {
+    const promptContext = (config: Record<string, unknown>) => ({
+      vars: {},
+      prompt: { raw: 'hi', label: 'test', config },
+    });
+    const requestAuthorizations = () =>
+      new Set(
+        vi
+          .mocked(fetchWithRetries)
+          .mock.calls.map(([, request]) => new Headers(request!.headers).get('Authorization')),
+      );
+
+    it.each([
+      {
+        name: 'a prompt apiBaseUrl replaces a provider apiHost',
+        providerConfig: { apiHost: 'provider.example' },
+        promptConfig: { apiBaseUrl: 'https://prompt.example/v1' },
+      },
+      {
+        name: 'a prompt apiHost replaces a provider apiBaseUrl',
+        providerConfig: { apiBaseUrl: 'https://provider.example/v1' },
+        promptConfig: { apiHost: 'prompt.example' },
+      },
+    ])(
+      'sends every request to the prompt endpoint when $name',
+      async ({ providerConfig, promptConfig }) => {
+        const result = await provider(providerConfig).callApi('hi', promptContext(promptConfig));
+        expect(result.output).toBe('42');
+        expect(
+          new Set(
+            vi.mocked(fetchWithRetries).mock.calls.map(([url]) => new URL(String(url)).hostname),
+          ),
+        ).toEqual(new Set(['prompt.example']));
+      },
+    );
+
+    it.each([
+      {
+        name: 'a prompt apiKeyEnvar replaces a provider apiKey',
+        providerConfig: { apiKey: 'provider-literal-key' },
+        promptConfig: { apiKeyEnvar: 'PROMPT_OPENAI_KEY' },
+        authorization: 'Bearer prompt-envar-key',
+      },
+      {
+        name: 'a prompt apiKey replaces a provider apiKeyEnvar',
+        providerConfig: { apiKeyEnvar: 'PROVIDER_OPENAI_KEY' },
+        promptConfig: { apiKey: 'prompt-literal-key' },
+        authorization: 'Bearer prompt-literal-key',
+      },
+    ])(
+      'uses the prompt credential when $name',
+      async ({ providerConfig, promptConfig, authorization }) => {
+        mockProcessEnv({
+          PROMPT_OPENAI_KEY: 'prompt-envar-key',
+          PROVIDER_OPENAI_KEY: 'provider-envar-key',
+        });
+        const agentProvider = new OpenAiAgentsApiProvider('', { config: providerConfig });
+        const result = await agentProvider.callApi('hi', promptContext(promptConfig));
+        expect(result.output).toBe('42');
+        expect(requestAuthorizations()).toEqual(new Set([authorization]));
+      },
+    );
+
+    it('redacts both provider and prompt credentials after group overrides', async () => {
+      mockProcessEnv({ PROMPT_OPENAI_KEY: 'prompt-envar-key' });
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        apiError(
+          401,
+          'Rejected prompt-envar-key; provider-literal-key and provider-user:provider-pass-value are stale',
+        ),
+      );
+      const agentProvider = new OpenAiAgentsApiProvider('', {
+        config: {
+          apiKey: 'provider-literal-key',
+          apiHost: 'provider-user:provider-pass-value@provider.example',
+        },
+      });
+      const result = await agentProvider.callApi(
+        'hi',
+        promptContext({
+          apiKeyEnvar: 'PROMPT_OPENAI_KEY',
+          apiBaseUrl: 'https://prompt.example/v1',
+        }),
+      );
+      expect(result.error).toContain('HTTP 401');
+      for (const secret of ['prompt-envar-key', 'provider-literal-key', 'provider-pass-value']) {
+        expect(result.error).not.toContain(secret);
+      }
+      const [url, request] = vi.mocked(fetchWithRetries).mock.calls[0];
+      expect(new URL(String(url)).hostname).toBe('prompt.example');
+      expect(new Headers(request!.headers).get('Authorization')).toBe('Bearer prompt-envar-key');
+    });
   });
 
   it('redacts a prompt-level key variable when request headers cannot be built', async () => {
@@ -1496,6 +1660,59 @@ describe('OpenAiAgentsApiProvider', () => {
       .mockResolvedValueOnce(json(session))
       .mockResolvedValueOnce(json(page([{ ...message, phase: null }])));
     expect(await provider().callApi('hi')).toMatchObject({ output: '42' });
+  });
+
+  describe('configured header redaction', () => {
+    const mcpTools = [
+      {
+        type: 'mcp',
+        server_label: 'docs',
+        server_url: 'https://mcp.example/sse',
+        headers: { 'X-MCP-Custom': 'opaque-value-7294', 'Content-Type': 'application/json' },
+      },
+    ];
+    const echoed =
+      'MCP rejected X-MCP-Custom: opaque-value-7294 with Content-Type application/json';
+
+    it('redacts an echoed MCP header value from HTTP errors', async () => {
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(apiError(400, echoed));
+      const result = await provider({ agent: { tools: mcpTools } }).callApi('hi');
+      expect(result.error).toContain('HTTP 400');
+      expect(result.error).not.toContain('opaque-value-7294');
+      // Values of known non-credential headers stay readable.
+      expect(result.error).toContain('Content-Type application/json');
+    });
+
+    it('redacts an echoed MCP header value from turn errors', async () => {
+      mockApi((pathname) =>
+        pathname.endsWith('/turns')
+          ? json(page([{ ...turn, status: 'failed', error: { message: echoed } }]))
+          : undefined,
+      );
+      const result = await provider({ agent: { tools: mcpTools } }).callApi('hi');
+      expect(result.error).toContain(
+        'Agents API turn failed: MCP rejected X-MCP-Custom: [REDACTED]',
+      );
+      expect(result.error).not.toContain('opaque-value-7294');
+    });
+
+    it('redacts provider and nested header values outside the allowlist', async () => {
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        apiError(
+          400,
+          'Rejected tenant-routing-value and nested-header-value for promptfoo-eval-agent',
+        ),
+      );
+      const result = await provider({
+        headers: { 'X-Tenant': 'tenant-routing-value', 'User-Agent': 'promptfoo-eval-agent' },
+        agent: {
+          tools: [{ type: 'mcp', headers: { 'X-Outer': { 'X-Inner': 'nested-header-value' } } }],
+        },
+      }).callApi('hi');
+      expect(result.error).not.toContain('tenant-routing-value');
+      expect(result.error).not.toContain('nested-header-value');
+      expect(result.error).toContain('promptfoo-eval-agent');
+    });
   });
 
   it('preserves API validation details while redacting echoed credentials', async () => {
