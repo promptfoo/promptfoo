@@ -750,8 +750,11 @@ export class GoogleProvider extends GoogleGenericProvider {
           options?.abortSignal,
         );
       } catch (error) {
-        options?.abortSignal?.throwIfAborted();
-        return { ...response, output: undefined, error: String(error) };
+        return {
+          ...response,
+          ...(options?.abortSignal?.aborted ? {} : { output: undefined }),
+          error: String(error),
+        };
       }
 
       return response;

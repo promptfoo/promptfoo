@@ -412,21 +412,27 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         }
 
         executedMcpToolCalls += toolUses.length;
-        const toolResultBlocks = await Promise.all(
-          toolUses.map((toolUse) => this.callMcpToolForAnthropic(toolUse, signal)),
-        );
+        const completedToolCalls: McpToolCallEntry[] = [];
+        let toolResultBlocks: Anthropic.Messages.ToolResultBlockParam[];
+        try {
+          toolResultBlocks = await Promise.all(
+            toolUses.map(async (toolUse, index) => {
+              const result = await this.callMcpToolForAnthropic(toolUse, signal);
+              completedToolCalls[index] = {
+                id: toolUse.id,
+                name: toolUse.name,
+                input: coerceMcpToolInput(toolUse.input),
+                output: result.content,
+                is_error: result.is_error ?? false,
+              };
+              return result;
+            }),
+          );
+        } finally {
+          // Keep completed tools in request order even if another parallel call aborts.
+          toolCalls.push(...completedToolCalls.filter(Boolean));
+        }
         signal?.throwIfAborted();
-
-        toolUses.forEach((toolUse, index) => {
-          const resultBlock = toolResultBlocks[index];
-          toolCalls.push({
-            id: toolUse.id,
-            name: toolUse.name,
-            input: coerceMcpToolInput(toolUse.input),
-            output: resultBlock.content,
-            is_error: resultBlock.is_error ?? false,
-          });
-        });
 
         messages = [
           ...messages,
