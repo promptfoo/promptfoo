@@ -41,7 +41,8 @@ function isJsonDeepEqual(
 
   const leftKeys = getEnumerableOwnKeys(leftRecord);
   const rightKeys = getEnumerableOwnKeys(rightRecord);
-  if (leftKeys.length !== rightKeys.length || !leftKeys.every((key) => rightKeys.includes(key))) {
+  const rightKeySet = new Set(rightKeys);
+  if (leftKeys.length !== rightKeys.length || !leftKeys.every((key) => rightKeySet.has(key))) {
     return false;
   }
 
