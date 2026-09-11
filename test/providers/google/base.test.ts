@@ -1597,7 +1597,10 @@ describe('GoogleGenericProvider', () => {
                       jsonPath: access === 'numeric' ? '$.items[10000]' : "$.items['10000']",
                       stringValue: 'last',
                     },
-                    { jsonPath: '$.items[0]', stringValue: 'first' },
+                    {
+                      jsonPath: access === 'numeric' ? '$.items[0]' : "$.items['0']",
+                      stringValue: 'first',
+                    },
                     { jsonPath: '$.items[10000]', stringValue: ' value' },
                   ],
                 },
@@ -1615,30 +1618,95 @@ describe('GoogleGenericProvider', () => {
         },
       );
 
-      it('keeps quoted noncanonical digit properties distinct without charging array growth', async () => {
+      it.each([false, true])(
+        'preserves noncanonical array-key input without executing callbacks: configured=%s',
+        async (configured) => {
+          const provider = new TestGoogleProvider('gemini-3.8-flash');
+          const callback = vi.fn().mockResolvedValue('unexpected callback');
+          const parts = [
+            {
+              functionCall: {
+                name: 'collect',
+                args: { items: [] },
+                partialArgs: [{ jsonPath: "$.items['01']", stringValue: 'property' }],
+              },
+            },
+          ];
+          const original = structuredClone(parts);
+          const result = await provider['executeFunctionToolCallbacks'](
+            parts,
+            {
+              ...streamConfig,
+              ...(configured ? { functionToolCallbacks: { collect: callback } } : {}),
+            },
+            false,
+          );
+          expect.soft(callback).not.toHaveBeenCalled();
+          expect(result).toBe(parts);
+          expect(parts).toEqual(original);
+        },
+      );
+
+      it('preserves a noncanonical digit key on an ordinary object through callback JSON', async () => {
+        const callback = vi.fn().mockResolvedValue('accepted');
         const provider = new TestGoogleProvider('gemini-3.8-flash');
         const result = await provider['executeFunctionToolCallbacks'](
           [
             {
               functionCall: {
                 name: 'collect',
-                args: { items: [] },
-                partialArgs: [
-                  { jsonPath: '$.items[10000]', stringValue: 'last' },
-                  { jsonPath: "$.items['01']", stringValue: 'property' },
-                ],
+                args: { items: {} },
+                partialArgs: [{ jsonPath: "$.items['01']", stringValue: 'property' }],
               },
             },
           ],
-          streamConfig,
+          { ...streamConfig, functionToolCallbacks: { collect: callback } },
           false,
         );
-        const items = (result as any)[0].functionCall.args.items;
-        expect(Array.isArray(items)).toBe(true);
-        expect(items).toHaveLength(10001);
-        expect(items['01']).toBe('property');
-        expect(items[1]).toBeUndefined();
+        expect(result).toBe('accepted');
+        expect(callback).toHaveBeenCalledExactlyOnceWith('{"items":{"01":"property"}}');
       });
+
+      it.each(
+        ['identified first', 'unnamed first'].flatMap((order) =>
+          ['all', 'partial', 'none'].map((mapping) => ({ order, mapping })),
+        ),
+      )(
+        'preserves ambiguous mixed pending fragments: $order, callbacks=$mapping',
+        async ({ order, mapping }) => {
+          const callback = vi.fn().mockResolvedValue('unexpected callback');
+          const provider = new TestGoogleProvider('gemini-3.8-flash');
+          const identified = {
+            functionCall: { id: 'a', name: 'identified', args: { value: 'A' }, willContinue: true },
+          };
+          const unnamed = {
+            functionCall: { name: 'unnamed', args: { value: 'B' }, willContinue: true },
+            thoughtSignature: 'B-start',
+          };
+          const parts = [
+            { functionCall: { name: 'ready', args: { ready: true } } },
+            ...(order === 'identified first' ? [identified, unnamed] : [unnamed, identified]),
+            {
+              functionCall: { partialArgs: [{ jsonPath: '$.value', stringValue: 'X' }] },
+              thoughtSignature: 'anonymous-signature',
+            },
+            { functionCall: { id: 'a', args: { done: true } }, thoughtSignature: 'A-close' },
+          ];
+          const original = structuredClone(parts);
+          const functionToolCallbacks: Record<string, typeof callback> =
+            mapping === 'all'
+              ? { ready: callback, identified: callback, unnamed: callback }
+              : { identified: callback };
+          const result = await provider['executeFunctionToolCallbacks'](
+            parts,
+            { ...streamConfig, ...(mapping === 'none' ? {} : { functionToolCallbacks }) },
+            false,
+          );
+          expect.soft(callback).not.toHaveBeenCalled();
+          expect(result).toBe(parts);
+          expect(parts).toEqual(original);
+        },
+      );
 
       it.each(['leaf', 'intermediate', 'completed calls', 'overwritten array'] as const)(
         'rejects cumulative expansion across %s before any callback',

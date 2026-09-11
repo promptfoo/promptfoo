@@ -112,19 +112,18 @@ function setPartialFunctionArg(
   for (let index = 0; index < segments.length; index++) {
     const segment = segments[index];
     if (Array.isArray(current)) {
-      // Quoted digit keys are supported; special properties such as length are not.
+      // Only canonical array indices are supported, including quoted indices.
       const arrayIndex = Number(segment);
       if (
         !/^\d+$/.test(String(segment)) ||
         !Number.isSafeInteger(arrayIndex) ||
+        String(arrayIndex) !== String(segment) ||
         arrayIndex > MAX_STREAMED_FUNCTION_ARG_INDEX
       ) {
         return false;
       }
       // JSON.stringify materializes sparse holes. Bound expansion across the entire response.
-      // Noncanonical digit keys such as "01" remain ordinary properties and do not grow the array.
-      const addedSlots =
-        String(arrayIndex) === String(segment) ? Math.max(0, arrayIndex + 1 - current.length) : 0;
+      const addedSlots = Math.max(0, arrayIndex + 1 - current.length);
       if (budget.arraySlots + addedSlots > MAX_STREAMED_FUNCTION_ARG_ARRAY_SLOTS) {
         return false;
       }
@@ -207,12 +206,12 @@ function assembleStreamedFunctionCalls(parts: any[]): StreamedFunctionCall[] | u
 
     const id = functionCall.id;
     let pending = id ? pendingById.get(id) : pendingUnnamed;
-    if (!pending && isAnonymousFunctionCallFragment(functionCall) && pendingById.size > 0) {
+    if (isAnonymousFunctionCallFragment(functionCall)) {
       // Vertex can omit the ID after the first chunk. Only associate an unambiguous continuation.
-      if (pendingById.size !== 1) {
+      if (pendingById.size + (pendingUnnamed ? 1 : 0) > 1) {
         return undefined;
       }
-      pending = pendingById.values().next().value;
+      pending = pendingUnnamed ?? pendingById.values().next().value;
     }
     if (!pending) {
       pending = { id, name: functionCall.name, args: {}, argsText: '' };
