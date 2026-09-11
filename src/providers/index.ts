@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import cliState from '../cliState';
+import { getEnvOverrides } from '../envOverrides';
 import logger from '../logger';
 import { isApiProvider } from '../types/providers';
 import {
@@ -376,69 +377,73 @@ export async function loadApiProviders(
 ): Promise<ApiProvider[]> {
   const { basePath } = options;
 
-  const env = {
-    ...cliState.config?.env,
-    ...options.env,
+  // An explicit suite env, including an empty one during reload, replaces the
+  // previous suite. Only inherit cliState when callers did not supply env.
+  const hasExplicitEnv = Object.prototype.hasOwnProperty.call(options, 'env');
+  const env = hasExplicitEnv ? options.env : getEnvOverrides();
+
+  const load = async () => {
+    if (typeof providerPaths === 'string') {
+      // Check if the string path points to a file
+      if (isProviderConfigFileReference(providerPaths)) {
+        return loadProvidersFromFile(providerPaths, { basePath, env });
+      }
+      return [await loadApiProvider(providerPaths, { basePath, env })];
+    } else if (typeof providerPaths === 'function') {
+      // Reuse `normalizeProviderRef` so a function with `.label = 'foo'` gets a
+      // label-derived id here too, matching the array-element branch below.
+      const descriptor = normalizeProviderRef(providerPaths);
+      return [
+        createProviderFromFunction(providerPaths as ProviderFunctionWithMetadata, descriptor.id),
+      ];
+    } else if (isApiProvider(providerPaths)) {
+      return [providerPaths];
+    } else if (Array.isArray(providerPaths)) {
+      const providersArrays = await Promise.all(
+        providerPaths.map(async (provider, idx) => {
+          if (isApiProvider(provider)) {
+            return [provider];
+          }
+          const descriptor = normalizeProviderRef(provider, { index: idx });
+          switch (descriptor.kind) {
+            case 'file':
+              return loadProvidersFromFile(descriptor.loadProviderPath, { basePath, env });
+            case 'named':
+              return [await loadApiProvider(descriptor.loadProviderPath, { basePath, env })];
+            case 'function':
+              // Use the descriptor-derived id (which honors `.label`) instead of a
+              // hardcoded `custom-function-${idx}` fallback so this branch stays
+              // symmetric with the single-function branch above and with the
+              // `getProviderIds` array branch below.
+              return [
+                createProviderFromFunction(provider as ProviderFunctionWithMetadata, descriptor.id),
+              ];
+            case 'options':
+            case 'map':
+              return [
+                await loadApiProvider(descriptor.loadProviderPath, {
+                  options: descriptor.loadOptions,
+                  basePath,
+                  env,
+                }),
+              ];
+            case 'unknown':
+              throw new Error(
+                `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap (e.g. { "openai:responses:gpt-5.4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
+              );
+            default: {
+              const _exhaustive: never = descriptor;
+              throw new Error(`Unhandled provider kind: ${(_exhaustive as any).kind}`);
+            }
+          }
+        }),
+      );
+      return providersArrays.flat();
+    }
+    throw new Error('Invalid providers list');
   };
 
-  if (typeof providerPaths === 'string') {
-    // Check if the string path points to a file
-    if (isProviderConfigFileReference(providerPaths)) {
-      return loadProvidersFromFile(providerPaths, { basePath, env });
-    }
-    return [await loadApiProvider(providerPaths, { basePath, env })];
-  } else if (typeof providerPaths === 'function') {
-    // Reuse `normalizeProviderRef` so a function with `.label = 'foo'` gets a
-    // label-derived id here too, matching the array-element branch below.
-    const descriptor = normalizeProviderRef(providerPaths);
-    return [
-      createProviderFromFunction(providerPaths as ProviderFunctionWithMetadata, descriptor.id),
-    ];
-  } else if (isApiProvider(providerPaths)) {
-    return [providerPaths];
-  } else if (Array.isArray(providerPaths)) {
-    const providersArrays = await Promise.all(
-      providerPaths.map(async (provider, idx) => {
-        if (isApiProvider(provider)) {
-          return [provider];
-        }
-        const descriptor = normalizeProviderRef(provider, { index: idx });
-        switch (descriptor.kind) {
-          case 'file':
-            return loadProvidersFromFile(descriptor.loadProviderPath, { basePath, env });
-          case 'named':
-            return [await loadApiProvider(descriptor.loadProviderPath, { basePath, env })];
-          case 'function':
-            // Use the descriptor-derived id (which honors `.label`) instead of a
-            // hardcoded `custom-function-${idx}` fallback so this branch stays
-            // symmetric with the single-function branch above and with the
-            // `getProviderIds` array branch below.
-            return [
-              createProviderFromFunction(provider as ProviderFunctionWithMetadata, descriptor.id),
-            ];
-          case 'options':
-          case 'map':
-            return [
-              await loadApiProvider(descriptor.loadProviderPath, {
-                options: descriptor.loadOptions,
-                basePath,
-                env,
-              }),
-            ];
-          case 'unknown':
-            throw new Error(
-              `Invalid provider at index ${idx}: expected a provider id string, ProviderOptions with an 'id' field, or a ProviderOptionsMap (e.g. { "openai:responses:gpt-5.4": { config: ... } }). Got: ${describeInvalidProvider(provider)}`,
-            );
-          default: {
-            const _exhaustive: never = descriptor;
-            throw new Error(`Unhandled provider kind: ${(_exhaustive as any).kind}`);
-          }
-        }
-      }),
-    );
-    return providersArrays.flat();
-  }
-  throw new Error('Invalid providers list');
+  return hasExplicitEnv ? cliState.withConfig({ env }, load) : load();
 }
 
 /**

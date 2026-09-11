@@ -7,6 +7,7 @@ import { globSync, hasMagic } from 'glob';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import { getEnvBool } from '../envars';
+import { getEnvOverrides } from '../envOverrides';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
@@ -52,7 +53,7 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
   // Add environment variables as template globals
   env.addGlobal('env', {
     ...process.env,
-    ...cliState.config?.env,
+    ...getEnvOverrides(),
   });
 
   return env;

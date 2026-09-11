@@ -1486,6 +1486,20 @@ describe('loadApiProvider', () => {
     }
   });
 
+  it('does not inherit cliState env when a suite explicitly has no env', async () => {
+    const originalConfig = cliState.config;
+    const restoreEnv = mockProcessEnv({ ABLIT_API_BASE_URL: undefined });
+    cliState.config = { env: { ABLIT_API_BASE_URL: 'https://previous.example.com/v1' } };
+
+    try {
+      const [provider] = await loadApiProviders(['abliteration:test-model'], { env: undefined });
+      expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
+    } finally {
+      cliState.config = originalConfig;
+      restoreEnv();
+    }
+  });
+
   it('passes provider env overrides through the registry to Claude Agent SDK providers', async () => {
     mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
     mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });

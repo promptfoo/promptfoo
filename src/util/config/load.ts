@@ -518,14 +518,11 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
   }
 }
 
-/**
- * Reads multiple configuration files and combines them into a single UnifiedConfig.
- *
- * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
- * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
- */
-export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+async function prepareCombinedConfig(
+  configPaths: string[],
+): Promise<{ config: UnifiedConfig; loadTests: (env: UnifiedConfig['env']) => Promise<void> }> {
   const configs: UnifiedConfig[] = [];
+  const resolvedConfigPaths: string[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
 
@@ -541,6 +538,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
       configs.push(config);
+      resolvedConfigPaths.push(globPath);
     }
   }
 
@@ -569,20 +567,22 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   });
 
   const tests: UnifiedConfig['tests'] = [];
-  for (let i = 0; i < configs.length; i++) {
-    const config = configs[i];
-    const configPath = configPaths[i];
-    if (typeof config.tests === 'string') {
-      const newTests = await readTests(config.tests, path.dirname(configPath));
-      tests.push(...newTests);
-    } else if (Array.isArray(config.tests)) {
-      tests.push(...config.tests);
-    } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
-      // Handle TestGeneratorConfig object
-      const newTests = await readTests(config.tests, path.dirname(configPath));
-      tests.push(...newTests);
+  const loadTests = async (env: UnifiedConfig['env']) => {
+    for (let i = 0; i < configs.length; i++) {
+      const config = configs[i];
+      const configPath = resolvedConfigPaths[i];
+      if (typeof config.tests === 'string') {
+        const newTests = await readTests(config.tests, path.dirname(configPath), env);
+        tests.push(...newTests);
+      } else if (Array.isArray(config.tests)) {
+        tests.push(...config.tests);
+      } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
+        // Handle TestGeneratorConfig object
+        const newTests = await readTests(config.tests, path.dirname(configPath), env);
+        tests.push(...newTests);
+      }
     }
-  }
+  };
 
   const extensions: UnifiedConfig['extensions'] = [];
   for (const config of configs) {
@@ -666,7 +666,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
+      const absolutePrompt = makeAbsolute(resolvedConfigPaths[idx], config.prompts);
       addSeenPrompt(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
@@ -677,7 +677,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
-        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
+        addSeenPrompt(makeAbsolute(resolvedConfigPaths[idx], prompt as string | Prompt));
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
@@ -758,7 +758,19 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
-  return combinedConfig;
+  return { config: combinedConfig, loadTests };
+}
+
+/**
+ * Reads multiple configuration files and combines them into a single UnifiedConfig.
+ *
+ * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
+ * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
+ */
+export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+  const { config, loadTests } = await prepareCombinedConfig(configPaths);
+  await cliState.withConfig(config, () => loadTests(config.env));
+  return config;
 }
 
 /**
@@ -780,8 +792,11 @@ export async function resolveConfigs(
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
+  let loadFileTests: ((env: UnifiedConfig['env']) => Promise<void>) | undefined;
   if (configPaths) {
-    fileConfig = await combineConfigs(configPaths);
+    const prepared = await prepareCombinedConfig(configPaths);
+    fileConfig = prepared.config;
+    loadFileTests = prepared.loadTests;
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
@@ -855,9 +870,6 @@ export async function resolveConfigs(
     sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
       ? false
       : (fileConfig.sharing ?? defaultConfig.sharing),
-    defaultTest: processedDefaultTest
-      ? await readTest(processedDefaultTest, basePath, true)
-      : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     extensions: [
@@ -911,6 +923,12 @@ export async function resolveConfigs(
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
 
+  const withSuiteConfig = <T>(fn: () => Promise<T>) => cliState.withConfig(config, fn);
+  await withSuiteConfig(async () => loadFileTests?.(config.env));
+  config.defaultTest = processedDefaultTest
+    ? await withSuiteConfig(() => readTest(processedDefaultTest, basePath, true, config.env))
+    : undefined;
+
   // Resolve provider configs: loads file:// references while preserving non-file providers.
   // This enables:
   // 1. Building the provider-prompt map with `prompts` filters from external files (#1307)
@@ -954,13 +972,14 @@ export async function resolveConfigs(
     }
   }
 
-  const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
-    env: config.env,
-    basePath,
-  });
-  const parsedTests: TestCase[] = await readTests(
-    config.tests || [],
-    cmdObj.tests ? undefined : basePath,
+  const parsedProviders = await withSuiteConfig(() =>
+    loadApiProviders(filteredProviderConfigs, {
+      env: config.env,
+      basePath,
+    }),
+  );
+  const parsedTests: TestCase[] = await withSuiteConfig(() =>
+    readTests(config.tests || [], cmdObj.tests ? undefined : basePath, config.env),
   );
 
   // Parse testCases for each scenario
@@ -984,9 +1003,8 @@ export async function resolveConfigs(
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
       if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
-        const parsedScenarioTests: TestCase[] = await readTests(
-          scenario.tests,
-          cmdObj.tests ? undefined : basePath,
+        const parsedScenarioTests: TestCase[] = await withSuiteConfig(() =>
+          readTests(scenario.tests, cmdObj.tests ? undefined : basePath, config.env),
         );
         scenario.tests = parsedScenarioTests;
       }
@@ -1081,7 +1099,6 @@ export async function resolveConfigs(
     { promptReferenceSources },
   );
 
-  cliState.config = config;
   cliState.selectedProviderConfigs = filteredProviderConfigs;
 
   // Extract commandLineOptions from either explicit config files or default config
@@ -1100,6 +1117,7 @@ export async function resolveConfigs(
     };
   }
 
+  cliState.config = config;
   return {
     config,
     testSuite,
