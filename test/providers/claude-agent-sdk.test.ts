@@ -215,7 +215,7 @@ const createMockQuery = (messages: Partial<SDKMessage> | Partial<SDKMessage>[]):
 // Helper to create mock success response
 const createMockResponse = (
   result: string,
-  usage?: { input_tokens?: number; output_tokens?: number },
+  usage?: Partial<MockUsage>,
   cost = 0.001,
   sessionId = 'test-session-123',
   terminalReason?: TerminalReason,
@@ -226,7 +226,7 @@ const createMockResponse = (
     session_id: sessionId,
     uuid: '12345678-1234-1234-1234-123456789abc' as `${string}-${string}-${string}-${string}-${string}`,
     result,
-    usage: createMockUsage(usage?.input_tokens, usage?.output_tokens),
+    usage: { ...createMockUsage(), ...usage },
     total_cost_usd: cost,
     duration_ms: 1000,
     duration_api_ms: 800,
@@ -448,6 +448,11 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 10,
             completion: 20,
             total: 30,
+            completionDetails: {
+              reasoning: 0,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+            },
           },
           cost: 0.002,
           raw: expect.stringContaining('"type":"result"'),
@@ -512,8 +517,8 @@ describe('ClaudeCodeSDKProvider', () => {
             result: 'Test response',
             usage: createMockUsage(10, 20),
             modelUsage: {
-              'claude-sonnet-4-5': createMockModelUsage(10, 20, 3, 2),
-              'claude-haiku-4-5': createMockModelUsage(40, 60, 7, 5),
+              'claude-sonnet-4-5': { ...createMockModelUsage(10, 20, 3, 2), thinkingTokens: 5 },
+              'claude-haiku-4-5': { ...createMockModelUsage(40, 60, 7, 5), thinkingTokens: 15 },
             },
             total_cost_usd: 0.002,
             duration_ms: 1000,
@@ -534,11 +539,40 @@ describe('ClaudeCodeSDKProvider', () => {
           completion: 80,
           total: 147,
           completionDetails: {
+            reasoning: 20,
             cacheReadInputTokens: 10,
             cacheCreationInputTokens: 7,
           },
         });
       });
+
+      it.each([0, 12])(
+        'should retain %i thinking tokens from result usage',
+        async (thinkingTokens) => {
+          mockQuery.mockReturnValue(
+            createMockResponse('Test response', {
+              input_tokens: 10,
+              output_tokens: 20,
+              output_tokens_details: { thinking_tokens: thinkingTokens },
+            }),
+          );
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.tokenUsage).toEqual({
+            prompt: 10,
+            completion: 20,
+            total: 30,
+            completionDetails: {
+              reasoning: thinkingTokens,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+            },
+          });
+        },
+      );
 
       it('should report no token usage when the SDK reports neither source', async () => {
         mockQuery.mockReturnValue(
@@ -577,7 +611,7 @@ describe('ClaudeCodeSDKProvider', () => {
             uuid: '87654321-4321-4321-4321-210987654321',
             usage: createMockUsage(10, 0),
             modelUsage: {
-              'claude-sonnet-4-5': createMockModelUsage(35, 0, 5),
+              'claude-sonnet-4-5': { ...createMockModelUsage(35, 0, 5), thinkingTokens: 0 },
             },
             total_cost_usd: 0.001,
             duration_ms: 500,
@@ -600,6 +634,7 @@ describe('ClaudeCodeSDKProvider', () => {
           completion: 0,
           total: 40,
           completionDetails: {
+            reasoning: 0,
             cacheReadInputTokens: 5,
             cacheCreationInputTokens: 0,
           },
@@ -648,6 +683,11 @@ describe('ClaudeCodeSDKProvider', () => {
           prompt: 10,
           completion: 0,
           total: 10,
+          completionDetails: {
+            reasoning: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+          },
         });
       });
 
@@ -763,7 +803,16 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.output).toBe('Main agent final answer');
         expect(result.sessionId).toBe('main-session');
         expect(result.cost).toBe(0.003);
-        expect(result.tokenUsage).toEqual({ prompt: 20, completion: 30, total: 50 });
+        expect(result.tokenUsage).toEqual({
+          prompt: 20,
+          completion: 30,
+          total: 50,
+          completionDetails: {
+            reasoning: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+          },
+        });
         expect(result.metadata?.numTurns).toBe(4);
         expect(result.metadata?.terminalReason).toBe('completed');
         // Raw should reflect the main agent's result, not the sub-agent's
