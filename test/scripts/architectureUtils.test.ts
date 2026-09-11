@@ -144,6 +144,21 @@ describe('extractRuntimeModuleSpecifiers', () => {
       '',
     ]);
   });
+
+  it('finds destructured createRequire and process builtin loads', () => {
+    const source = `
+      const { createRequire: makeRequire } = require('node:module');
+      const load = makeRequire(import.meta.url);
+      load('yaml');
+      process.getBuiltinModule('node:fs');
+    `;
+
+    expect(extractRuntimeModuleSpecifiers(source, 'fixture.ts')).toEqual([
+      'node:module',
+      'yaml',
+      'node:fs',
+    ]);
+  });
 });
 
 describe('computeRuntimeDependencyClosure', () => {

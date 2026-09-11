@@ -85,6 +85,35 @@ describe('package artifact readiness', () => {
     expect(() => readPackageCandidateConfig(packageRoot)).toThrow(message);
   });
 
+  it('rejects candidate entrypoints that escape through symlinks', () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'package-candidate-outside-'));
+    fs.writeFileSync(path.join(outside, 'index.ts'), 'export {};');
+    fs.mkdirSync(path.join(packageRoot, 'src'), { recursive: true });
+    fs.symlinkSync(path.join(outside, 'index.ts'), path.join(packageRoot, 'src/index.ts'));
+    write(
+      'architecture/package-candidates.json',
+      JSON.stringify({
+        candidates: [
+          {
+            name: 'fixture',
+            entrypoint: 'src/index.ts',
+            allowedExternal: [],
+            allowedBuiltins: [],
+            maxSourceFiles: 1,
+          },
+        ],
+      }),
+    );
+
+    try {
+      expect(() => readPackageCandidateConfig(packageRoot)).toThrow(
+        'entrypoint must stay inside the repo',
+      );
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
   it('measures the emitted runtime graph and reports missing or escaping imports', () => {
     write(
       'dist/index.js',
@@ -226,6 +255,22 @@ describe('package artifact readiness', () => {
       files: ['dist/chunk.js', 'dist/index.js'],
       missingFiles: [],
     });
+  });
+
+  it('keeps CommonJS URL suffixes and prefers package main over index', () => {
+    write('dist/suffix.cjs', "require('./chunk.js?cache=1');");
+    write('dist/chunk.js', 'module.exports = true;');
+    write('dist/main.cjs', "require('./plugin');");
+    write('dist/plugin/package.json', JSON.stringify({ main: 'main.js' }));
+    write('dist/plugin/main.js', 'module.exports = true;');
+    write('dist/plugin/index.js', "require('wrong-package');");
+
+    expect(computePackageArtifactClosure(packageRoot, 'dist/suffix.cjs').missingFiles).toEqual([
+      'dist/chunk.js?cache=1',
+    ]);
+    expect(computePackageArtifactClosure(packageRoot, 'dist/main.cjs').files).toContain(
+      'dist/plugin/main.js',
+    );
   });
 
   it('counts the original bytes of binary artifacts', () => {

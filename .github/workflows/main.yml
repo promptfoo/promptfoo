@@ -214,6 +214,8 @@ jobs:
 
       - name: Pack Package Artifact
         id: package-artifact
+        env:
+          PROMPTFOO_POSTHOG_KEY: ''
         run: |
           tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/package-artifact")"
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"

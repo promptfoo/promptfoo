@@ -220,6 +220,15 @@ function validatePackageCandidate(
       `Package candidate "${candidate.name}" entrypoint "${candidate.entrypoint}" does not exist.`,
     );
   }
+  const realEntrypointPath = fs.realpathSync(entrypointPath);
+  const realEntrypointRelativePath = path.relative(repoRoot, realEntrypointPath);
+  if (
+    realEntrypointRelativePath.startsWith(`..${path.sep}`) ||
+    realEntrypointRelativePath === '..' ||
+    path.isAbsolute(realEntrypointRelativePath)
+  ) {
+    throw new Error(`Package candidate "${candidate.name}" entrypoint must stay inside the repo.`);
+  }
   const packageSubpath = validatePackageSubpath(candidate, packageSubpaths);
 
   return {
@@ -355,7 +364,7 @@ function resolveArtifactImport(
     return undefined;
   }
   const resolvedPackageRoot = path.resolve(packageRoot);
-  const cleanSpecifier = specifier.replace(/[?#].*$/, '');
+  const cleanSpecifier = kind === 'import' ? specifier.replace(/[?#].*$/, '') : specifier;
   const unresolvedPath = path.resolve(
     path.dirname(path.join(resolvedPackageRoot, importer)),
     cleanSpecifier,
@@ -388,13 +397,13 @@ function resolveArtifactImport(
     ...(kind === 'require'
       ? ['.js', '.json', '.node'].map((extension) => `${unresolvedPath}${extension}`)
       : []),
+    ...(packageMain
+      ? [packageMain, ...['.js', '.json', '.node'].map((extension) => `${packageMain}${extension}`)]
+      : []),
     ...(kind === 'require'
       ? ['index.js', 'index.json', 'index.node'].map((indexFile) =>
           path.join(unresolvedPath, indexFile),
         )
-      : []),
-    ...(packageMain
-      ? [packageMain, ...['.js', '.json', '.node'].map((extension) => `${packageMain}${extension}`)]
       : []),
   ];
   const existingPath = candidates.find(

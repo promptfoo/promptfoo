@@ -296,7 +296,8 @@ function isRuntimeLoader(node: Node, aliases: Set<string>): boolean {
       node.object.type === 'Identifier' &&
       (((node.object.name === 'require' || aliases.has(node.object.name)) &&
         memberName === 'resolve') ||
-        (node.object.name === 'module' && memberName === 'require')))
+        (node.object.name === 'module' && memberName === 'require') ||
+        (node.object.name === 'process' && memberName === 'getBuiltinModule')))
   );
 }
 
@@ -338,6 +339,22 @@ function extractModuleReferences(
     VariableDeclarator(node) {
       if (node.id.type === 'Identifier' && node.init) {
         declarations.push({ name: node.id.name, init: node.init });
+      } else if (
+        node.id.type === 'ObjectPattern' &&
+        node.init?.type === 'CallExpression' &&
+        isRuntimeLoader(node.init.callee, aliases) &&
+        getStaticModuleSpecifier(node.init.arguments[0]) === 'node:module'
+      ) {
+        for (const property of node.id.properties) {
+          if (
+            property.type === 'Property' &&
+            property.key.type === 'Identifier' &&
+            property.key.name === 'createRequire' &&
+            property.value.type === 'Identifier'
+          ) {
+            createRequireFactories.add(property.value.name);
+          }
+        }
       }
     },
   }).visit(program);
