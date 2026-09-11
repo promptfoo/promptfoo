@@ -74,6 +74,9 @@ describe('resolveTracingOptions', () => {
   it.each([
     ['iterative', 'jailbreak'],
     ['iterative-meta', 'jailbreak:meta'],
+    ['jailbreak:tree', 'jailbreak:tree'],
+    ['jailbreak:hydra', 'jailbreak:hydra'],
+    ['jailbreak:goblin', 'jailbreak:goblin'],
   ])('honors public %s overrides for %s providers', (strategyId, configuredId) => {
     cliState.config = {
       redteam: {

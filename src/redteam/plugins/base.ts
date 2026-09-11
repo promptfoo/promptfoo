@@ -417,11 +417,7 @@ function redactTraceEvidence(text: string): string {
       // Trace summaries may be prose rather than serialized trajectory steps.
     }
   }
-  return text
-    .replace(
-      /-----BEGIN [^-\r\n]*PRIVATE KEY-----[\s\S]*?-----END [^-\r\n]*PRIVATE KEY-----/gi,
-      '[REDACTED]',
-    )
+  return redactPrivateKeys(text)
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/@\s"'`\\]+)@/gi, '$1[REDACTED]@')
     .replace(/\bhttps?:\/\/[^\s"'`\\]+/gi, (url) => sanitizeUrl(url))
     .replace(/(['"])([\w-]+)(\s*:\s*)[^'"]*\1/gi, (match, quote, key, separator) =>
@@ -456,7 +452,7 @@ function redactTraceEvidence(text: string): string {
     )
     .replace(/\b(authorization\s*:\s*)[^"'`\s\\;]+/gi, '$1[REDACTED]')
     .replace(
-      /(^|\s)((?:--?(?:api[-_]?key|password|proxy-user|secret|token|user)|-u)\s+)(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
+      /(^|\s)((?:--?(?:api[-_]?key|password|proxy-user|secret|token|user)|-u)(?:\s+|=))(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
       '$1$2[REDACTED]',
     )
     .replace(
@@ -476,6 +472,23 @@ function truncateTraceEvidence(text: string, limit: number): string {
   }
   const kept = Math.floor((limit - 64) / 2);
   return `${text.slice(0, kept)}\n[${text.length - kept * 2} characters omitted]\n${text.slice(-kept)}`;
+}
+
+function redactPrivateKeys(text: string): string {
+  let redacted = text;
+  let start = redacted.toUpperCase().indexOf('-----BEGIN ');
+  while (start >= 0) {
+    const searchable = redacted.toUpperCase();
+    const headerEnd = searchable.indexOf('PRIVATE KEY-----', start);
+    const footerStart = headerEnd >= 0 ? searchable.indexOf('-----END ', headerEnd) : -1;
+    const end = footerStart >= 0 ? searchable.indexOf('PRIVATE KEY-----', footerStart) : -1;
+    if (headerEnd < 0 || end < 0) {
+      break;
+    }
+    redacted = redacted.slice(0, start) + '[REDACTED]' + redacted.slice(end + 15);
+    start = redacted.toUpperCase().indexOf('-----BEGIN ', start + 10);
+  }
+  return redacted;
 }
 
 function hasTraceEvidence(context?: RedteamGradingContext): boolean {
@@ -503,8 +516,11 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
     : (gradingContext?.traceContext?.spans ?? []);
   const actions = spans.flatMap((span) => {
     const { name, attributes = {} } = span;
+    const hasToolArgs = TOOL_ARGUMENT_ATTRIBUTE_KEYS.some(
+      (key) => key !== 'input' && attributes[key] !== undefined,
+    );
     let args = TOOL_ARGUMENT_ATTRIBUTE_KEYS.map((key) => attributes[key]).find(
-      (value) => value !== undefined,
+      (value) => value !== undefined && value !== '',
     );
     if (typeof args === 'string') {
       try {
@@ -522,6 +538,8 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
       !command &&
       !url &&
       !filePath &&
+      !hasToolArgs &&
+      (!('kind' in span) || span.kind !== 'tool') &&
       !/(?:command|exec|file|mcp|tool)/i.test(name)
     ) {
       return [];

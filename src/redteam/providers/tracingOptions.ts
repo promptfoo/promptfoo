@@ -108,9 +108,13 @@ export function resolveTracingOptions({
     'iterative-meta': 'jailbreak:meta',
     'jailbreak:meta': 'iterative-meta',
   };
-  const strategyIds = [strategyId, strategyAlias[strategyId]].filter((id): id is string =>
-    Boolean(id),
-  );
+  const providerStrategyId = getAttackProviderFullId(strategyId).replace('promptfoo:redteam:', '');
+  const strategyIds = [
+    strategyId,
+    providerStrategyId,
+    providerStrategyId.replace(/^iterative/, 'jailbreak'),
+    strategyAlias[strategyId],
+  ].filter((id): id is string => Boolean(id));
   // Read redteam-specific tracing config
   const redteamConfig = cliState.config?.redteam as Record<string, unknown> | undefined;
   const globalConfig = (redteamConfig?.tracing as RawTracingConfig | undefined) ?? undefined;
