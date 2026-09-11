@@ -154,6 +154,8 @@ describe('Fallback grading contracts', () => {
 afterEach(() => {
   vi.restoreAllMocks();
   getTraceMock.mockReset();
+  flushOtelMock.mockReset().mockResolvedValue(undefined);
+  vi.useRealTimers();
 });
 
 /**
@@ -435,6 +437,65 @@ describe('Trace data is loaded only for reached assertions', () => {
       providerResponse: mockProviderResponse,
       traceId: 'trace-1',
     });
+    expect(result.pass).toBe(true);
+  });
+
+  it('waits for a sibling grader to finish before classifying its external child', async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    let markStarted!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let graderFinished = false;
+    const grader: ApiProvider = {
+      id: () => 'delayed-grader',
+      callApi: async () => {
+        markStarted();
+        await released;
+        graderFinished = true;
+        return { output: '{"pass":true,"score":1}' };
+      },
+    };
+    flushOtelMock.mockImplementationOnce(() => started);
+    getTraceMock.mockImplementation(() => ({
+      traceId: 'trace-1',
+      spans: [
+        { spanId: 'target', name: 'llm.target', startTime: 0, endTime: 1 },
+        ...(graderFinished
+          ? []
+          : [
+              {
+                spanId: 'external-child',
+                parentSpanId: 'active-grader',
+                name: 'llm.grader-child',
+                startTime: 0,
+                endTime: 1,
+              },
+            ]),
+      ],
+    }));
+    const pending = runAssertions({
+      test: createTestCase(
+        [
+          { type: 'llm-rubric', value: 'The answer is correct.' },
+          { type: 'trace-span-count', value: { pattern: 'llm*', min: 1, max: 1 } },
+        ],
+        { provider: grader },
+      ),
+      providerResponse: mockProviderResponse,
+      traceId: 'trace-1',
+    });
+    await started;
+    await vi.advanceTimersByTimeAsync(0);
+    const readWhileGrading = getTraceMock.mock.calls.length > 0;
+    release();
+    const result = await pending;
+
+    expect(readWhileGrading).toBe(false);
     expect(result.pass).toBe(true);
   });
 

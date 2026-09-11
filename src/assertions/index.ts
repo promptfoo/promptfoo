@@ -995,11 +995,12 @@ export async function runAssertions({
     return traceDataPromise;
   };
 
-  // Serialize when the grouping queue is active: concurrent dispatch can
-  // reorder provider enqueues and split same-judge groups.
-  const concurrency = getProviderCallExecutionContext()?.providerCallQueue
-    ? 1
-    : ASSERTIONS_MAX_CONCURRENCY;
+  // Preserve judge grouping and keep active grader spans out of trace snapshots.
+  const concurrency =
+    getProviderCallExecutionContext()?.providerCallQueue ||
+    (traceId && hasTraceAwareAssertions(test.assert))
+      ? 1
+      : ASSERTIONS_MAX_CONCURRENCY;
 
   const chainStartIndexes = new Set(categorized.primaryInChains);
   const assertionJobs = [...categorized.independent, ...categorized.primaryInChains].sort(
