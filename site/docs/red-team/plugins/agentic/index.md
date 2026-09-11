@@ -54,8 +54,12 @@ For a clean traced pass, emit plugin-scoped evidence with an empty findings list
 
 ```text
 promptfoo.agentic.plugin_id=agentic:approval-continuity
-promptfoo.agentic.evidence_json={"pluginId":"agentic:approval-continuity","mode":"hardened","findings":[]}
+promptfoo.agentic.evidence_json={"findings":[]}
 ```
+
+The evidence can appear on a span or a span event. When the JSON omits `pluginId`,
+the grader uses the plugin ID attribute from that span or event. An explicit
+plugin ID inside the JSON keeps its own scope.
 
 As a fallback for a trusted non-traced harness, the target provider can return JSON in provider metadata:
 
