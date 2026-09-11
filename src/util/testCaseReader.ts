@@ -21,12 +21,16 @@ import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { isProviderTypeMap } from './gradingProvider';
+import { renderEnvOnlyInObject } from './render';
 import { parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
 
 import type {
+  AssertionOrSet,
   CsvRow,
   EnvOverrides,
+  GradingConfig,
   ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
@@ -43,6 +47,16 @@ type StandaloneTestsFileMetadata = {
 type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
 
 const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
+
+// Config resolution and the programmatic API can read the same rows more than once.
+const remoteTestCases = new WeakSet<TestCase>();
+
+function preserveRemoteTests(tests: TestCase[]): TestCase[] {
+  for (const test of tests) {
+    remoteTestCases.add(test);
+  }
+  return tests;
+}
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -101,11 +115,11 @@ export async function readStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'huggingface dataset',
     });
-    return await fetchHuggingFaceDataset(varsPath);
+    return preserveRemoteTests(await fetchHuggingFaceDataset(varsPath));
   }
 
   if (varsPath.startsWith('az://')) {
-    return await readAzureBlobStandaloneTestsFile(varsPath);
+    return preserveRemoteTests(await readAzureBlobStandaloneTestsFile(varsPath));
   }
 
   let rows: CsvRow[];
@@ -123,7 +137,7 @@ export async function readStandaloneTestsFile(
     return readLocalStandaloneTestsFile(varsPath, basePath, finalConfig);
   }
 
-  return csvRowsToTestCases(rows);
+  return preserveRemoteTests(csvRowsToTestCases(rows));
 }
 
 async function readAzureBlobStandaloneTestsFile(varsPath: string): Promise<TestCase[]> {
@@ -426,12 +440,59 @@ async function loadTestWithVars(
   return ret;
 }
 
+function resolveGradingProviderPaths(
+  provider: GradingConfig['provider'],
+  basePath: string,
+  env: EnvOverrides | undefined,
+): GradingConfig['provider'] {
+  if (typeof provider === 'string') {
+    if (!provider.startsWith('file://')) {
+      return provider;
+    }
+    const rendered = renderEnvOnlyInObject(provider, env, true);
+    return rendered.includes('{{')
+      ? rendered
+      : 'file://' + path.resolve(basePath, rendered.slice('file://'.length));
+  }
+  if (isProviderTypeMap(provider)) {
+    return Object.fromEntries(
+      Object.entries(provider).map(([type, value]) => [
+        type,
+        resolveGradingProviderPaths(value, basePath, env),
+      ]),
+    );
+  }
+  if (provider && typeof provider === 'object' && typeof provider.id === 'string') {
+    return { ...provider, id: resolveGradingProviderPaths(provider.id, basePath, env) as string };
+  }
+  return provider;
+}
+
+function resolveAssertionProviderPaths<T extends AssertionOrSet>(
+  assertion: T,
+  basePath: string,
+  env: EnvOverrides | undefined,
+): T {
+  if (assertion.type === 'assert-set') {
+    return {
+      ...assertion,
+      assert: assertion.assert.map((child) => resolveAssertionProviderPaths(child, basePath, env)),
+    };
+  }
+  return assertion.provider
+    ? { ...assertion, provider: resolveGradingProviderPaths(assertion.provider, basePath, env) }
+    : assertion;
+}
+
 export async function readTest(
   test: string | TestCaseWithVarsFile,
   basePath: string = '',
   isDefaultTest: boolean = false,
   env: EnvOverrides | undefined = getEnvOverrides(),
 ): Promise<TestCase> {
+  if (typeof test === 'object' && remoteTestCases.has(test as TestCase)) {
+    return test as TestCase;
+  }
   let testCase: TestCase;
   let effectiveBasePath = basePath;
 
@@ -459,6 +520,18 @@ export async function readTest(
         env,
       });
     }
+  }
+
+  if (testCase.options?.provider) {
+    testCase.options = {
+      ...testCase.options,
+      provider: resolveGradingProviderPaths(testCase.options.provider, effectiveBasePath, env),
+    };
+  }
+  if (testCase.assert) {
+    testCase.assert = testCase.assert.map((assertion) =>
+      resolveAssertionProviderPaths(assertion, effectiveBasePath, env),
+    );
   }
 
   if (
@@ -500,7 +573,7 @@ export async function loadTestsFromGlob(
     telemetry.record('feature_used', {
       feature: 'huggingface dataset',
     });
-    return await fetchHuggingFaceDataset(loadTestsGlob);
+    return preserveRemoteTests(await fetchHuggingFaceDataset(loadTestsGlob));
   }
 
   if (loadTestsGlob.startsWith('file://')) {
@@ -648,6 +721,8 @@ export async function readTests(
           // Resolve globs for other file types
           ret.push(...(await loadTestsFromGlob(globOrTest, basePath, env)));
         }
+      } else if (remoteTestCases.has(globOrTest as TestCase)) {
+        ret.push(globOrTest as TestCase);
       } else if ('path' in globOrTest) {
         ret.push(...(await loadStandalone(globOrTest.path, globOrTest.config)));
       } else {

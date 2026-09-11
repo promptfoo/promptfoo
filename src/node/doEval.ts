@@ -70,6 +70,7 @@ import type { Command } from 'commander';
 
 import type {
   CommandLineOptions,
+  EnvOverrides,
   EvalRuntimeOptions,
   Scenario,
   TestSuite,
@@ -340,7 +341,7 @@ export async function doEval(
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
 
-  const runEvaluation = async (initialization?: boolean) => {
+  const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
     const startTime = Date.now();
     telemetry.record('command_used', {
       name: 'eval - started',
@@ -530,6 +531,8 @@ export async function doEval(
         commandLineOptions,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
+
+    Object.assign(runEnv, testSuite.env);
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
       isRetryErrors ? 'retrying errors for' : 'resuming';
@@ -792,7 +795,8 @@ export async function doEval(
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
-        basePath: cliState.basePath,
+        basePath: _basePath,
+        env: testSuite.env,
       });
       // Also update cliState.config so redteam providers can access the grader
       if (cliState.config) {
@@ -1322,6 +1326,12 @@ export async function doEval(
     }
 
     return ret;
+  };
+
+  const runEvaluation = (initialization?: boolean) => {
+    // Each watch run starts clean and retains its resolved env through output and cleanup.
+    const runEnv: EnvOverrides = {};
+    return cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization));
   };
 
   const result = await runEvaluation(true /* initialization */);

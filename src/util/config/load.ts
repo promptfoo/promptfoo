@@ -637,6 +637,22 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       throw new Error(`Invalid prompt object: ${JSON.stringify(relativePath)}`);
     }
   };
+  const makeTestAbsolute = (configPath: string, test: unknown): unknown => {
+    if (typeof test === 'string') {
+      if (test.includes('://') && !test.startsWith('file://')) {
+        return test;
+      }
+      const value = test.startsWith('file://') ? test.slice('file://'.length) : test;
+      return `${test.startsWith('file://') ? 'file://' : ''}${path.resolve(
+        path.dirname(configPath),
+        value,
+      )}`;
+    }
+    if (test && typeof test === 'object' && 'path' in test && typeof test.path === 'string') {
+      return { ...test, path: makeTestAbsolute(configPath, test.path) };
+    }
+    return test;
+  };
 
   const seenPrompts = new Set<string | Prompt>();
   const addSeenPrompt = (prompt: string | Prompt) => {
@@ -698,12 +714,35 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     prompts,
     tests: [],
     scenarios: configs.some((config) => config.scenarios !== undefined)
-      ? configs.flatMap((config) => config.scenarios || [])
+      ? configs.flatMap((config, index) =>
+          Array.isArray(config.scenarios)
+            ? config.scenarios.map((scenario) =>
+                typeof scenario === 'object' && scenario?.tests
+                  ? {
+                      ...scenario,
+                      tests: [scenario.tests]
+                        .flat()
+                        .map(
+                          (test) => makeTestAbsolute(resolvedConfigPaths[index], test) as TestCase,
+                        ),
+                    }
+                  : scenario,
+              )
+            : config.scenarios
+              ? [config.scenarios]
+              : [],
+        )
       : undefined,
-    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
+    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr, index) => {
       // If any config has a string defaultTest (file reference), preserve it
       if (typeof curr.defaultTest === 'string') {
-        return curr.defaultTest;
+        return curr.defaultTest.startsWith('file://')
+          ? 'file://' +
+              path.resolve(
+                path.dirname(resolvedConfigPaths[index]),
+                curr.defaultTest.slice('file://'.length),
+              )
+          : curr.defaultTest;
       }
       // If prev is already a string (file reference), keep it
       if (typeof prev === 'string') {
@@ -795,7 +834,7 @@ export async function resolveConfigs(
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
-    fileConfig = await combineConfigs(configPaths);
+    fileConfig = await cliState.withEnv(undefined, () => combineConfigs(configPaths));
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
@@ -860,9 +899,13 @@ async function resolveLoadedConfig(
 
   // Load defaultTest from file:// reference if needed
   let processedDefaultTest: Partial<TestCase> | undefined;
+  let defaultTestBasePath = basePath;
   if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
     const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
     processedDefaultTest = loaded as Partial<TestCase>;
+    defaultTestBasePath = path.dirname(
+      path.resolve(basePath, defaultTestRaw.slice('file://'.length)),
+    );
   } else if (defaultTestRaw) {
     processedDefaultTest = defaultTestRaw as Partial<TestCase>;
   }
@@ -932,7 +975,7 @@ async function resolveLoadedConfig(
   invariant(Array.isArray(config.providers), 'providers must be an array');
 
   config.defaultTest = processedDefaultTest
-    ? await readTest(processedDefaultTest, basePath, true, config.env)
+    ? await readTest(processedDefaultTest, defaultTestBasePath, true, config.env)
     : undefined;
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
@@ -982,11 +1025,12 @@ async function resolveLoadedConfig(
     env: config.env,
     basePath,
   });
-  const parsedTests: TestCase[] = await readTests(
-    config.tests || [],
-    cmdObj.tests ? undefined : basePath,
-    config.env,
-  );
+  // Combined file tests are already loaded. Reading them again loses remote provenance
+  // and resolves their remaining references relative to the first config.
+  const parsedTests: TestCase[] =
+    configPaths && !cmdObj.tests && !cmdObj.vars && !cmdObj.assertions
+      ? (config.tests as TestCase[])
+      : await readTests(config.tests || [], cmdObj.tests ? undefined : basePath, config.env);
 
   // Parse testCases for each scenario
   if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
@@ -1082,6 +1126,7 @@ async function resolveLoadedConfig(
     redteam: config.redteam,
     extensions: config.extensions,
     tracing: config.tracing,
+    env: config.env,
   };
 
   // Validate assertions in tests and defaultTest using Zod schema

@@ -1211,6 +1211,39 @@ describe('readTests', () => {
     expect(loadApiProvider).not.toHaveBeenCalled();
   });
 
+  it('keeps nested grading provider files relative to a standalone test file', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify([
+        {
+          options: { provider: 'file://graders/options.js' },
+          assert: [{ type: 'llm-rubric', value: 'ok', provider: 'file://graders/assert.js' }],
+        },
+      ]),
+    );
+
+    const [test] = await readTests('/suite/tests/cases.json');
+
+    expect(test.options?.provider).toBe(
+      `file://${path.resolve('/suite/tests/graders/options.js')}`,
+    );
+    const assertion = test.assert?.[0];
+    expect(assertion?.type === 'assert-set' ? undefined : assertion?.provider).toBe(
+      `file://${path.resolve('/suite/tests/graders/assert.js')}`,
+    );
+  });
+
+  it('renders absolute env-backed nested provider files before resolving paths', async () => {
+    const providerPath = path.resolve('/tmp/grader.js');
+    const test = await readTest(
+      { options: { provider: 'file://{{ env.TEST_PROVIDER }}' } },
+      '/suite/tests',
+      false,
+      { TEST_PROVIDER: providerPath },
+    );
+
+    expect(test.options?.provider).toBe(`file://${providerPath}`);
+  });
+
   it('readTests with multiple __expected in CSV', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       'var1,var2,__expected1,__expected2,__expected3\nvalue1,value2,value1,value1.2,value1.3\nvalue3,value4,fn:value5,fn:value5.2,fn:value5.3',

@@ -432,12 +432,6 @@ export function getNunjucksEngine(
   throwOnUndefined: boolean = false,
   isGrader: boolean = false,
 ): nunjucks.Environment {
-  if (!isGrader && getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
-    return {
-      renderString: (template: string) => template,
-    } as unknown as nunjucks.Environment;
-  }
-
   const env = nunjucks.configure({
     autoescape: false,
     throwOnUndefined,
@@ -446,16 +440,33 @@ export function getNunjucksEngine(
   // Configure environment variables as template globals
   // PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS now specifically controls process.env access (defaults to true in self-hosted mode)
   // Config env variables from the config file are always available
-  const processEnvVarsDisabled = getEnvBool(
-    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
-    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
-  );
-
-  const envGlobals = {
-    ...(processEnvVarsDisabled ? {} : process.env),
-    ...getEnvOverrides(),
+  const getEnvGlobals = () => {
+    const processEnvVarsDisabled = getEnvBool(
+      'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
+      getEnvBool('PROMPTFOO_SELF_HOSTED', false),
+    );
+    return {
+      ...(processEnvVarsDisabled ? {} : process.env),
+      ...getEnvOverrides(),
+    };
   };
-  env.addGlobal('env', envGlobals);
+  env.addGlobal('env', getEnvGlobals());
+  const renderString = env.renderString.bind(env);
+  env.renderString = ((
+    template: string,
+    context?: object,
+    callback?: nunjucks.TemplateCallback<string>,
+  ) => {
+    if (!isGrader && getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+      if (callback) {
+        callback(null, template);
+        return;
+      }
+      return template;
+    }
+    // Keep cached engines safe for overlapping async renders; globals are shared.
+    return renderString(template, { env: getEnvGlobals(), ...context }, callback);
+  }) as typeof env.renderString;
 
   env.addFilter('load', function (str) {
     return JSON.parse(str);
