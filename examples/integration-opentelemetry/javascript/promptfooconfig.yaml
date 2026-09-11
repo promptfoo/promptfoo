@@ -102,6 +102,9 @@ tests:
 # Default assertions that apply to all test cases
 defaultTest:
   assert:
+    - type: icontains
+      value: '{{ topic }}'
+
     # Monitor 95th percentile latency (metric only, won't fail tests)
     - type: trace-span-duration
       value:

@@ -127,6 +127,9 @@ class SimpleTracedProvider {
   }
 
   async _tracedCallApi(prompt, promptfooContext) {
+    const topic = prompt.toLowerCase().includes('quantum')
+      ? 'quantum computing'
+      : 'machine learning';
     // Use the improved runInSpan for the main workflow
     const result = await runInSpan(
       'rag_agent_workflow',
@@ -163,7 +166,7 @@ class SimpleTracedProvider {
                 : prompt.toLowerCase().includes('explain')
                   ? 'explanation'
                   : 'general',
-              entities: ['quantum computing', 'classical computing'],
+              entities: topic === 'quantum computing' ? [topic, 'classical computing'] : [topic],
               complexity: 'medium',
             };
 
@@ -322,18 +325,14 @@ class SimpleTracedProvider {
             const generationDelay = 750 + Math.random() * 200;
             await new Promise((resolve) => setTimeout(resolve, generationDelay));
 
-            // Body is hardcoded to quantum-computing content so the deterministic
-            // `contains` assertion in promptfooconfig.trace-guide.yaml stays stable.
-            // If you reuse this provider with a different `topic`, replace this
-            // string with topic-aware content before relying on output assertions.
+            const explanation =
+              topic === 'quantum computing'
+                ? 'Quantum computing uses qubits, superposition, interference, and entanglement. Unlike classical bits, qubits can represent combinations of states before measurement. Quantum algorithms use these properties to solve some problems, such as simulating quantum systems, more efficiently.'
+                : 'Machine learning finds patterns in training data instead of relying on explicitly programmed rules. Training adjusts a model to improve its predictions; evaluation on separate data checks whether those patterns generalize. Common applications include classification, forecasting, and recommendations.';
             response = {
               text:
-                `Based on my analysis of ${documents.length} technical documents, here's a comprehensive explanation:\n\n` +
-                `Quantum computing uses qubits, which can represent richer probability states than classical bits before measurement. ` +
-                `Classical computing stores information as definite 0 or 1 values, while quantum algorithms use superposition, interference, and entanglement to amplify useful answers for certain problems.\n\n` +
-                `1. Core Concepts: Qubits, gates, measurement, and entanglement define the computation model.\n` +
-                `2. Key Differences: Classical computers are deterministic at the bit level; quantum computers are probabilistic and require repeated measurement.\n` +
-                `3. Practical Applications: The clearest near-term uses are simulation, optimization research, and cryptography analysis.\n\n` +
+                `Based on my analysis of ${documents.length} technical documents, here's an explanation of ${topic}:\n\n` +
+                `${explanation}\n\n` +
                 `Citations: ${documents.map((d) => d.title).join(', ')}.`,
               citations: documents.map((d) => ({
                 id: d.id,
