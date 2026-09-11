@@ -375,7 +375,7 @@ describe('LiteLLM Provider', () => {
     it('forwards embedding request options to the wrapped provider', async () => {
       const provider = createLiteLLMProvider('litellm:embedding:text-embedding-3-small', {}) as any;
       const callEmbeddingApi = vi
-        .spyOn(provider.embeddingProvider, 'callEmbeddingApi')
+        .spyOn(provider.provider, 'callEmbeddingApi')
         .mockResolvedValue({ embedding: [1] });
       const context = { vars: {} };
       const options = { abortSignal: new AbortController().signal };
