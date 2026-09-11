@@ -1313,10 +1313,14 @@ const buildSanitizedConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedCo
 // Fail closed: if redaction throws (e.g. on a pathological config) we must
 // never let zustand persist the raw state instead. Returning the defaults
 // loses unsaved UI work but never leaks credentials.
-const omitPersistedSensitiveValues = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => {
+const omitPersistedSensitiveValues = (
+  config: Partial<UnifiedConfig>,
+  onFailure?: () => void,
+): Partial<UnifiedConfig> => {
   try {
     return buildSanitizedConfig(config);
   } catch (err) {
+    onFailure?.();
     if (typeof console !== 'undefined' && console.error) {
       console.error('[evalConfig] credential redaction failed; persisting defaults', err);
     }
@@ -1362,10 +1366,13 @@ export const useStore = create<EvalConfigState>()(
     {
       name: 'promptfoo',
       skipHydration: true,
-      partialize: (state) => ({
-        config: omitPersistedSensitiveValues(state.config),
-        sourceEvalId: state.sourceEvalId,
-      }),
+      partialize: (state) => {
+        let sourceEvalId = state.sourceEvalId;
+        const config = omitPersistedSensitiveValues(state.config, () => {
+          sourceEvalId = undefined;
+        });
+        return { config, sourceEvalId };
+      },
       merge: (persistedState, currentState) => {
         const persistedConfig = (persistedState as Partial<EvalConfigState> | undefined)?.config;
 
