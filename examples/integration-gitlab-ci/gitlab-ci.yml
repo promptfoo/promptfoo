@@ -37,7 +37,7 @@
         exit 1
       fi
 
-      actual_version="$(cd / && env -i PATH="$PATH" HOME="${HOME:-/home/promptfoo}" promptfoo --version)"
+      actual_version="$(cd / && env -i PATH="$PATH" HOME="${HOME:-/home/promptfoo}" PROMPTFOO_DISABLE_UPDATE=true promptfoo --version)"
       if [ "$actual_version" != "$PROMPTFOO_VERSION" ]; then
         echo "Pinned Promptfoo image contains $actual_version, expected $PROMPTFOO_VERSION." >&2
         exit 1
@@ -186,6 +186,9 @@
     PROMPTFOO_GITLAB_TRUST_PROXY: 'false'
     PROMPTFOO_OUTPUT_DIR: .promptfoo-results
     PROMPTFOO_SHARE: 'false'
+    PROMPTFOO_SHARING_APP_BASE_URL: https://promptfoo.app
+  # Do not re-publish downloaded eval artifacts through inherited defaults.
+  artifacts: {}
   environment:
     name: promptfoo-review
     action: verify
@@ -251,6 +254,7 @@
         PROMPTFOO_GITLAB_TOKEN="$PROMPTFOO_GITLAB_TOKEN" \
         PROMPTFOO_OUTPUT_DIR="$PROMPTFOO_OUTPUT_DIR" \
         PROMPTFOO_SHARE="${PROMPTFOO_SHARE:-false}" \
+        PROMPTFOO_SHARING_APP_BASE_URL="${PROMPTFOO_SHARING_APP_BASE_URL:-https://promptfoo.app}" \
         node --input-type=module <<'PROMPTFOO_COMMENT'
       import { readFile } from 'node:fs/promises';
 
@@ -264,6 +268,7 @@
         PROMPTFOO_GITLAB_TOKEN: token,
         PROMPTFOO_OUTPUT_DIR: outputDirectory,
         PROMPTFOO_SHARE: share,
+        PROMPTFOO_SHARING_APP_BASE_URL: sharingAppBaseUrl,
       } = process.env;
 
       if (!apiBaseUrl || !mergeRequestIid || !pipelineId || !projectId || !serverUrl || !token || !outputDirectory) {
@@ -336,7 +341,11 @@
       if (share === 'true' && typeof result.shareableUrl === 'string') {
         try {
           const shareUrl = new URL(result.shareableUrl);
-          if (shareUrl.protocol === 'https:' || shareUrl.protocol === 'http:') {
+          const sharingApp = new URL(sharingAppBaseUrl);
+          if (
+            shareUrl.origin === sharingApp.origin &&
+            (shareUrl.protocol === 'https:' || shareUrl.protocol === 'http:')
+          ) {
             const destination = shareUrl.href.replace(/[()[\]]/g, (character) =>
               ({ '(': '%28', ')': '%29', '[': '%5B', ']': '%5D' })[character]
             );

@@ -76,6 +76,7 @@ fi
       path.join(binDir, 'promptfoo'),
       `#!/bin/sh
 if [ "\${1:-}" = '--version' ]; then
+  printf '%s\\n' "\${PROMPTFOO_DISABLE_UPDATE:-}" > '${path.join(tempDir, 'version-update-disabled')}'
   printf '%s\\n' "$PWD" > '${path.join(tempDir, 'version-cwd')}'
   if [ -n "\${OPENAI_API_KEY:-}" ] || [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ]; then
     printf 'Provider or GitLab credentials reached version validation\\n' >&2
@@ -262,6 +263,8 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(commentJob.environment).toEqual({ name: 'promptfoo-review', action: 'verify' });
     expect(commentJob.variables.GIT_STRATEGY).toBe('empty');
     expect(commentJob.variables.PROMPTFOO_GITLAB_TRUST_PROXY).toBe('false');
+    expect(commentJob.variables.PROMPTFOO_SHARING_APP_BASE_URL).toBe('https://promptfoo.app');
+    expect(commentJob.artifacts).toEqual({});
     expect(commentJob.when).toBe('always');
     expect(commentJob.resource_group).toContain('$CI_MERGE_REQUEST_IID');
     expect(job.script[0]).toContain('exec env \\');
@@ -444,6 +447,9 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
 
     expect(result.status).toBe(0);
     expect(fs.readFileSync(path.join(tempDir, 'version-cwd'), 'utf8').trim()).toBe('/');
+    expect(fs.readFileSync(path.join(tempDir, 'version-update-disabled'), 'utf8').trim()).toBe(
+      'true',
+    );
   });
 
   it.each(['latest', '^0.123.0', '01.121.19', '0.123.0 --registry=https://example.invalid'])(
@@ -736,6 +742,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
           CI_API_V4_URL: `${origin}/api/v4`,
           CI_SERVER_URL: origin,
           PROMPTFOO_SHARE: 'true',
+          PROMPTFOO_SHARING_APP_BASE_URL: 'https://custom.promptfoo.example',
         });
 
         expect(comment.status).toBe(0);
@@ -771,6 +778,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
           CI_API_V4_URL: `${origin}/api/v4`,
           CI_SERVER_URL: origin,
           PROMPTFOO_SHARE: 'true',
+          PROMPTFOO_SHARING_APP_BASE_URL: 'https://share.example',
         });
 
         expect(comment.status).toBe(0);
@@ -1100,10 +1108,10 @@ exec ${JSON.stringify(process.execPath)} "$@"
     );
   });
 
-  it('omits malformed share URLs from merge request comments', async () => {
+  it('omits share URLs outside the independently configured app origin', async () => {
     await runEvaluation({
       PROMPTFOO_SHARE: 'true',
-      PROMPTFOO_TEST_SHARE_URL: 'not-a-url',
+      PROMPTFOO_TEST_SHARE_URL: 'https://attacker.example/eval/rewritten',
     });
 
     await withGitLabServer(
@@ -1125,8 +1133,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
         });
 
         expect(comment.status).toBe(0);
-        expect(comment.stderr).toContain('Skipping invalid Promptfoo share URL');
-        expect(JSON.parse(requests.at(-1)!.body).body).not.toContain('not-a-url');
+        expect(JSON.parse(requests.at(-1)!.body).body).not.toContain('attacker.example');
       },
     );
   });

@@ -17,7 +17,7 @@ The local `.gitlab-ci.yml` extends the hidden `.promptfoo-eval` job from `gitlab
 ```yaml
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-AlX7CLLc0sTAMiMOAfqHTaWe1C3L1S9Nfowts9QHHnM='
+    integrity: 'sha256-njv0R8fTNtcNFBeLLUpfyE6ToJ0GAY2zjpdAlyHRnLY='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -33,15 +33,16 @@ For Kubernetes runners, set [`automount_service_account_token = false`](https://
 
 Override job variables as needed:
 
-| Variable                        | Default                | Purpose                                                     |
-| ------------------------------- | ---------------------- | ----------------------------------------------------------- |
-| `PROMPTFOO_CONFIG`              | `promptfooconfig.yaml` | Config file to evaluate                                     |
-| `PROMPTFOO_VERSION`             | `0.123.0`              | Exact expected version of the pinned Promptfoo image        |
-| `PROMPTFOO_OUTPUT_DIR`          | `.promptfoo-results`   | JSON and JUnit artifact directory                           |
-| `PROMPTFOO_PASS_RATE_THRESHOLD` | `100`                  | Minimum passing percentage                                  |
-| `PROMPTFOO_SHARE`               | `false`                | Upload results only when explicitly set to `true`           |
-| `PROMPTFOO_GITLAB_TOKEN`        | Unset                  | Optional token scoped to the `promptfoo-review` environment |
-| `PROMPTFOO_GITLAB_TRUST_PROXY`  | `false`                | Enable GitLab API proxy settings only for a trusted network |
+| Variable                         | Default                 | Purpose                                                     |
+| -------------------------------- | ----------------------- | ----------------------------------------------------------- |
+| `PROMPTFOO_CONFIG`               | `promptfooconfig.yaml`  | Config file to evaluate                                     |
+| `PROMPTFOO_VERSION`              | `0.123.0`               | Exact expected version of the pinned Promptfoo image        |
+| `PROMPTFOO_OUTPUT_DIR`           | `.promptfoo-results`    | JSON and JUnit artifact directory                           |
+| `PROMPTFOO_PASS_RATE_THRESHOLD`  | `100`                   | Minimum passing percentage                                  |
+| `PROMPTFOO_SHARE`                | `false`                 | Upload results only when explicitly set to `true`           |
+| `PROMPTFOO_SHARING_APP_BASE_URL` | `https://promptfoo.app` | Allowed origin for shared-result links in comments          |
+| `PROMPTFOO_GITLAB_TOKEN`         | Unset                   | Optional token scoped to the `promptfoo-review` environment |
+| `PROMPTFOO_GITLAB_TRUST_PROXY`   | `false`                 | Enable GitLab API proxy settings only for a trusted network |
 
 Configure provider credentials and optional tokens as masked GitLab CI/CD variables. Use protected variables only for trusted protected branches; ordinary merge request pipelines cannot access them unless GitLab's protected-resource requirements are met. Never run fork-controlled code with parent-project secrets.
 
@@ -68,6 +69,6 @@ promptfoo-comment:
       when: always
 ```
 
-The comment reads the eval status from GitLab's pipeline jobs API; `PROMPTFOO_EVAL_JOB_NAME` must match the eval job name. It runs in a fresh non-root container without a checkout; its write token is never available to the eval. Empty setup and teardown hooks prevent it from inheriting pipeline-wide commands. Cache restoration is disabled so it reads only current eval artifacts. Both jobs disable default OIDC ID tokens and select executables only from the pinned image’s system PATH before running any commands. Repeat any job-level `PROMPTFOO_OUTPUT_DIR` or `PROMPTFOO_SHARE` overrides from the eval job in the comment job because GitLab `needs` does not inherit job variables. The eval removes token-bearing `.git` metadata, strips job/deploy credentials from executable providers, and always fails on failed assertions. Results remain restricted to project developers with one-week artifact expiration; GitLab keeps the latest successful artifacts by default unless that project setting is disabled.
+The comment reads the eval status from GitLab's pipeline jobs API; `PROMPTFOO_EVAL_JOB_NAME` must match the eval job name. It runs in a fresh non-root container without a checkout; its write token is never available to the eval. Empty setup and teardown hooks prevent it from inheriting pipeline-wide commands. Cache restoration is disabled so it reads only current eval artifacts. Shared-result links must match the independently configured `PROMPTFOO_SHARING_APP_BASE_URL` origin. Both jobs disable default OIDC ID tokens and select executables only from the pinned image’s system PATH before running any commands. Repeat any job-level `PROMPTFOO_OUTPUT_DIR` or `PROMPTFOO_SHARE` overrides from the eval job in the comment job because GitLab `needs` does not inherit job variables. The eval removes token-bearing `.git` metadata, strips job/deploy credentials from executable providers, and always fails on failed assertions. Results remain restricted to project developers with one-week artifact expiration; GitLab keeps the latest successful artifacts by default unless that project setting is disabled.
 
 For self-managed GitLab instances with an internal certificate authority, configure a file-type CI/CD variable containing the CA certificate and set `NODE_EXTRA_CA_CERTS` to that variable's file path. Set `PROMPTFOO_GITLAB_TRUST_PROXY: 'true'` only when the configured HTTP proxy is trusted to handle the GitLab write token. Do not disable TLS verification.
