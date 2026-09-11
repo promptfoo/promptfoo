@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
+import * as path from 'path';
 
 import { globSync } from 'glob';
 import * as yaml from 'js-yaml';
@@ -72,6 +73,7 @@ describe('Scenario loading with glob patterns', () => {
   });
 
   it('should flatten scenarios when loaded with glob patterns', async () => {
+    const scenarioGlob = `file://${path.resolve('scenarios/*.yaml')}`;
     const scenario1 = {
       description: 'Scenario 1',
       config: [{ vars: { name: 'Alice' } }],
@@ -104,7 +106,7 @@ describe('Scenario loading with glob patterns', () => {
 
     // Mock maybeLoadFromExternalFile to return nested array (simulating glob expansion)
     vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
-      if (Array.isArray(input) && input[0] === 'file://scenarios/*.yaml') {
+      if (Array.isArray(input) && input[0] === scenarioGlob) {
         // Return nested array as would happen with glob pattern
         return [[scenario1, scenario2]];
       }
@@ -117,7 +119,7 @@ describe('Scenario loading with glob patterns', () => {
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
     // Check if maybeLoadFromExternalFile was called with the expected argument
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios/*.yaml']);
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith([scenarioGlob]);
 
     // Verify scenarios are flattened correctly
     expect(testSuite.scenarios).toHaveLength(2);
