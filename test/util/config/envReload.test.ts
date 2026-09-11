@@ -16,6 +16,7 @@ import { readAzureBlobText } from '../../../src/util/azureBlob';
 import { combineConfigs, resolveConfigs } from '../../../src/util/config/load';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import { getNunjucksEngine } from '../../../src/util/templates';
+import { readTest } from '../../../src/util/testCaseReader';
 import { mockProcessEnv } from '../utils';
 
 import type { UnifiedConfig } from '../../../src/types/index';
@@ -452,6 +453,27 @@ describe('suite environment loading', () => {
       );
       expect((await provider.callApi('Hello')).output).toBe('process-key');
       expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
+    },
+  );
+
+  it.each([false, true])(
+    'resolves process-backed grading paths unless disabled (%j)',
+    async (disabled) => {
+      const restore = mockProcessEnv({ GRADER_PATH: 'graders/judge.js' });
+      cliState.config = { env: { GRADER_PATH: 'stale.js' } };
+      try {
+        const reference = 'file://{{ env.GRADER_PATH }}';
+        const test = await cliState.withEnv(
+          { PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: String(disabled) },
+          () =>
+            readTest({ options: { provider: { text: reference } } }, path.join(tempDir, 'tests')),
+        );
+        expect(test.options?.provider).toEqual({
+          text: disabled ? reference : `file://${path.join(tempDir, 'tests/graders/judge.js')}`,
+        });
+      } finally {
+        restore();
+      }
     },
   );
 

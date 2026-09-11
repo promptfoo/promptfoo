@@ -292,6 +292,18 @@ describe('Envoy gateway URLs', () => {
     );
   });
 
+  it.each(['config', 'env'])('identifies an invalid gateway URL from %s', async (source) => {
+    await expect(
+      loadApiProvider('envoy:route:stable', {
+        ...(source === 'config'
+          ? { options: { config: { apiBaseUrl: 'not-a-url' } } }
+          : { env: { ENVOY_API_BASE_URL: 'not-a-url' } }),
+      }),
+    ).rejects.toThrow(
+      'Envoy provider requires a valid gateway URL. Check ENVOY_API_BASE_URL or config.apiBaseUrl.',
+    );
+  });
+
   it('preserves the native URL through the public environment schema', () => {
     const env = { ENVOY_API_BASE_URL: 'https://gateway.example/v1/' };
     expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);

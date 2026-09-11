@@ -57,7 +57,14 @@ export function createEnvoyProvider(
   }
 
   // Ensure the URL ends with the correct path if not already specified
-  const parsedUrl = new URL(apiBaseUrl);
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(apiBaseUrl);
+  } catch {
+    throw new Error(
+      'Envoy provider requires a valid gateway URL. Check ENVOY_API_BASE_URL or config.apiBaseUrl.',
+    );
+  }
   const basePath = parsedUrl.pathname.replace(/\/+$/, '');
   parsedUrl.pathname = basePath.endsWith('/v1') ? basePath : `${basePath}/v1`;
   const normalizedBaseUrl = parsedUrl.toString();
