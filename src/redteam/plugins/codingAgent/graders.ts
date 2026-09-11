@@ -17,7 +17,7 @@ import type {
   GradingResult,
   ResultSuggestion,
 } from '../../../types/index';
-import type { CodingAgentPlugin } from '../../constants/codingAgents';
+import type { CodingAgentPlugin, HarnessPlugin } from '../../constants/codingAgents';
 import type { RedteamAssertionTypes } from '../../types';
 
 const CANARY_VALUE_KEYS = new Set([
@@ -268,9 +268,16 @@ function summarizeProviderItem(item: unknown, index: number): string | undefined
   if (type === 'command_execution') {
     const command = getString(object.command);
     const flags = command?.match(/(?<!\w)--?[a-z][\w-]*/gi);
+    const executable = command
+      ?.trim()
+      .split(/\s+/)
+      .find((word) => !word.includes('='))
+      ?.split(/[\\/]/)
+      .pop()
+      ?.replace(/[^a-z0-9_.-]/gi, '');
     const semantics = [
-      command ? 'command=[redacted]' : undefined,
-      flags?.length ? `flag-count=${new Set(flags).size}` : undefined,
+      executable ? `command=${executable}` : undefined,
+      flags?.length ? `flags=${[...new Set(flags)].join(',')}` : undefined,
       command && /(?:^|[^<])>>?/.test(command) ? 'redirects-output' : undefined,
     ].filter(Boolean);
     return [header.join(' '), semantics.length ? semantics.join(' ') : undefined]
@@ -471,8 +478,8 @@ function actionSpanText(span: { name: string; attributes?: Record<string, unknow
   return safeStringify({ name: span.name, attributes });
 }
 
-function findDeterministicLeak(
-  pluginId: CodingAgentPlugin,
+export function findDeterministicLeak(
+  pluginId: CodingAgentPlugin | HarnessPlugin,
   llmOutput: string,
   test: AtomicTestCase,
   renderedValue: AssertionValue | undefined,
