@@ -128,10 +128,9 @@ describe('OpenAiLiveProvider', () => {
     vi.restoreAllMocks();
   });
 
-  it('exposes its provider identity and OpenAI audio input format', () => {
+  it('exposes its provider identity', () => {
     const p = provider();
     expect(p.id()).toBe('openai:live:gpt-live-1');
-    expect(p.getAudioInputFormat()).toBe('openai');
   });
 
   it('starts Live, waits for readiness, and returns exact transcripts, WAV audio, and final duration cost', async () => {
@@ -859,7 +858,11 @@ describe('OpenAiLiveProvider', () => {
     const result = provider().callApi('Hi');
     const socket = await connect();
     start(socket);
-    emit(socket, { type: 'session.delegation.created', delegation: { id: 'd', target: 'client' } });
+    emit(socket, {
+      type: 'session.delegation.created',
+      offset_ms: 0,
+      delegation: { id: 'd', target: 'client' },
+    });
     expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
     apiError(socket, {
       type: 'invalid_request_error',
@@ -1732,6 +1735,25 @@ describe('OpenAiLiveProvider', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(socket.sent.some((event) => event.content === 'sensitive late result')).toBe(false);
   });
+
+  it.each([undefined, null, '42', -1])(
+    'rejects an invalid delegation offset %s before calling the handler',
+    async (offset) => {
+      const handler = vi.fn().mockResolvedValue('result');
+      const result = provider({ delegationHandler: handler }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      emit(socket, {
+        type: 'session.delegation.created',
+        offset_ms: offset,
+        delegation: { id: 'invalid-offset', target: 'client' },
+      });
+      await vi.advanceTimersByTimeAsync(100);
+      closed(socket);
+      expect((await result).error).toContain('Invalid GPT-Live delegation offset');
+      expect(handler).not.toHaveBeenCalled();
+    },
+  );
 
   const clientDelegation = (socket: Socket, id: string) =>
     emit(socket, {

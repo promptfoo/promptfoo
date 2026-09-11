@@ -120,6 +120,21 @@ describe('Provider Registry', () => {
     );
   });
 
+  it.each(['openai:gpt-live-transcribe', 'openai:gpt-live-transcribe-2026-09-01'])(
+    'rejects transcription shorthand despite a model override for %s',
+    async (providerPath) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath));
+      await expect(
+        factory!.create(
+          providerPath,
+          { config: { model: 'gpt-live-1' } },
+          { basePath: '.', options: {} },
+        ),
+      ).rejects.toThrow('transcription session');
+    },
+  );
+
   it.each([
     'azure:live:gpt-live-1',
     'azureopenai:live:gpt-live-1',

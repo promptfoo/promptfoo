@@ -64,10 +64,6 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     return false;
   }
 
-  getAudioInputFormat(): 'openai' {
-    return 'openai';
-  }
-
   cleanup(): void {
     for (const controller of this.activeSessions) {
       const reason = new Error('GPT-Live provider shut down.');

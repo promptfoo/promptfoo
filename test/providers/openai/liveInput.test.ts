@@ -74,6 +74,33 @@ describe('Live input', () => {
     expect(decodeWav(convertPcm16ToWav(audio)).audio).toEqual(audio);
   });
 
+  it.each([0, 2])('rejects excessive WAV chunks with %i data bytes', (size) => {
+    const chunk = Buffer.alloc(8 + size);
+    chunk.write('data', 0);
+    chunk.writeUInt32LE(size, 4);
+    const wav = Buffer.concat([
+      convertPcm16ToWav(Buffer.from([1, 0])),
+      ...Array.from({ length: 10_000 }, () => chunk),
+    ]);
+    wav.writeUInt32LE(wav.length - 8, 4);
+    const concat = vi.spyOn(Buffer, 'concat');
+
+    expect(() => decodeWav(wav)).toThrow('too many chunks');
+    expect(concat).not.toHaveBeenCalled();
+  });
+
+  it('preserves samples across data chunks and ignores empty data chunks', () => {
+    const empty = Buffer.alloc(8);
+    empty.write('data', 0);
+    const wav = Buffer.concat([
+      convertPcm16ToWav(Buffer.from([1, 0])),
+      empty,
+      convertPcm16ToWav(Buffer.from([2, 0])).subarray(36),
+    ]);
+    wav.writeUInt32LE(wav.length - 8, 4);
+    expect(decodeWav(wav).audio).toEqual(Buffer.from([1, 0, 2, 0]));
+  });
+
   it('accepts streaming WAV headers from OpenAI text-to-speech and ffmpeg pipes', () => {
     const audio = Buffer.from([1, 0, 2, 0, 3, 0]);
     expect(decodeWav(streamingWav(audio)).audio).toEqual(audio);

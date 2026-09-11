@@ -575,6 +575,13 @@ export class LiveSession {
       this.fail('Invalid GPT-Live delegation target.');
       return;
     }
+    if (
+      delegation.target === 'client' &&
+      (!Number.isFinite(event.offset_ms) || event.offset_ms < 0)
+    ) {
+      this.fail('Invalid GPT-Live delegation offset.');
+      return;
+    }
     const maxToolIterations = resolveMaxToolIterations(this.options.config.maxToolIterations);
     if (this.delegations.length >= maxToolIterations) {
       const target = delegation.target === 'responses' ? 'Responses' : 'client';

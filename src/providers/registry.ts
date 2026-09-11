@@ -1074,8 +1074,9 @@ export const providerMap: ProviderFactory[] = [
         );
       }
       if (
-        requestedApiModel === 'gpt-live-transcribe' ||
-        requestedApiModel.startsWith('gpt-live-transcribe-')
+        [modelType, requestedApiModel].some(
+          (model) => model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-'),
+        )
       ) {
         throw new Error(
           'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',

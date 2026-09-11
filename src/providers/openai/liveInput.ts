@@ -18,6 +18,7 @@ export function getLiveBytesPerSecond(format: LiveAudioFormat): number {
 }
 
 const AUDIO_DURATION_ERROR = 'GPT-Live input audio must not exceed five minutes.';
+const MAX_WAV_CHUNKS = 10_000;
 const UNKNOWN_CHUNK_SIZE = 0xffffffff;
 const WAVE_FORMAT_PCM = 1;
 const WAVE_FORMAT_EXTENSIBLE = 0xfffe;
@@ -54,7 +55,11 @@ function decodeWav(bytes: Buffer, format: LiveAudioFormat): Buffer {
   }
   let validFormat = false;
   const chunks: Buffer[] = [];
+  let chunkCount = 0;
   for (let offset = 12; offset + 8 <= bytes.length; ) {
+    if (++chunkCount > MAX_WAV_CHUNKS) {
+      throw new Error(`GPT-Live WAV input has too many chunks (maximum ${MAX_WAV_CHUNKS}).`);
+    }
     const kind = bytes.toString('ascii', offset, offset + 4);
     const declaredSize = bytes.readUInt32LE(offset + 4);
     const start = offset + 8;
@@ -69,7 +74,7 @@ function decodeWav(bytes: Buffer, format: LiveAudioFormat): Buffer {
     }
     if (kind === 'fmt ') {
       validFormat = isMonoPcm16(bytes, start, size, format.rate);
-    } else if (kind === 'data') {
+    } else if (kind === 'data' && size > 0) {
       chunks.push(bytes.subarray(start, start + size));
     }
     offset = start + size + (size % 2);
