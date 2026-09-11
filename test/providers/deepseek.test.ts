@@ -12,15 +12,13 @@ describe('DeepSeek usage boundaries', () => {
     expect(calculateDeepSeekCost('deepseek-chat', {}, 0, 0)).toBe(0);
   });
 
-  it.each([
-    undefined,
-    -1,
-    Number.NaN,
-    Number.POSITIVE_INFINITY,
-  ])('rejects invalid usage %s', (count) => {
-    expect(calculateDeepSeekCost('deepseek-chat', {}, count, 1)).toBeUndefined();
-    expect(calculateDeepSeekCost('deepseek-chat', {}, 1, count)).toBeUndefined();
-  });
+  it.each([undefined, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects invalid usage %s',
+    (count) => {
+      expect(calculateDeepSeekCost('deepseek-chat', {}, count, 1)).toBeUndefined();
+      expect(calculateDeepSeekCost('deepseek-chat', {}, 1, count)).toBeUndefined();
+    },
+  );
 });
 
 describe('calculateDeepSeekCost', () => {

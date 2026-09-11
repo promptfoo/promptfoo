@@ -75,13 +75,12 @@ describe('OpenAiModerationProvider', () => {
     );
   });
 
-  it.each([
-    'text-moderation-latest',
-    'text-moderation-stable',
-    'text-moderation-007',
-  ])('does not advertise retired moderation model %s', (model) => {
-    expect(OpenAiModerationProvider.MODERATION_MODEL_IDS).not.toContain(model);
-  });
+  it.each(['text-moderation-latest', 'text-moderation-stable', 'text-moderation-007'])(
+    'does not advertise retired moderation model %s',
+    (model) => {
+      expect(OpenAiModerationProvider.MODERATION_MODEL_IDS).not.toContain(model);
+    },
+  );
 
   describe('Basic functionality', () => {
     it('should moderate content and detect harmful content', async () => {

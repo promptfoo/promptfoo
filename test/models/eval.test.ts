@@ -773,30 +773,33 @@ describe('evaluator', () => {
       'token-privateTenantCredential123',
       '2e163f4d-28e2-4f84-b6d2-05e13058d6aa',
       '2e163f4d28e24f84b6d205e13058d6aa',
-    ])('redacts credential-like endpoint path segments before persistence: %s', async (credential) => {
-      const endpoint = `https://tempo.example.com/tempo/${credential}/traces`;
-      const evaluation = await Eval.create(
-        {
-          tracing: {
-            enabled: true,
-            provider: { id: 'tempo', endpoint },
+    ])(
+      'redacts credential-like endpoint path segments before persistence: %s',
+      async (credential) => {
+        const endpoint = `https://tempo.example.com/tempo/${credential}/traces`;
+        const evaluation = await Eval.create(
+          {
+            tracing: {
+              enabled: true,
+              provider: { id: 'tempo', endpoint },
+            },
           },
-        },
-        [],
-      );
-      const persistedEvaluation = await Eval.findById(evaluation.id);
-      const exportedEvaluation = await evaluation.toResultsFile();
+          [],
+        );
+        const persistedEvaluation = await Eval.findById(evaluation.id);
+        const exportedEvaluation = await evaluation.toResultsFile();
 
-      expect(evaluation.config.tracing?.provider?.endpoint).toBe(endpoint);
-      expect(persistedEvaluation?.config.tracing?.provider?.endpoint).toBe(
-        'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
-      );
-      expect(exportedEvaluation.config.tracing?.provider?.endpoint).toBe(
-        'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
-      );
-      expect(JSON.stringify(persistedEvaluation?.config)).not.toContain(credential);
-      expect(JSON.stringify(exportedEvaluation.config)).not.toContain(credential);
-    });
+        expect(evaluation.config.tracing?.provider?.endpoint).toBe(endpoint);
+        expect(persistedEvaluation?.config.tracing?.provider?.endpoint).toBe(
+          'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
+        );
+        expect(exportedEvaluation.config.tracing?.provider?.endpoint).toBe(
+          'https://tempo.example.com/tempo/%5BREDACTED%5D/traces',
+        );
+        expect(JSON.stringify(persistedEvaluation?.config)).not.toContain(credential);
+        expect(JSON.stringify(exportedEvaluation.config)).not.toContain(credential);
+      },
+    );
 
     it('should use provided author when available', async () => {
       const providedAuthor = 'provided@example.com';
@@ -2908,19 +2911,18 @@ describe('evaluator', () => {
 
     // The UI's ResultsFilter type is 'and' | 'or', so the server always receives
     // lowercase operators; an exact-match against 'OR' silently combined with AND.
-    it.each([
-      'or',
-      'Or',
-      'OR',
-    ])('should combine with OR for logicOperator %j', (logicOperator: string) => {
-      const result = combineFilterConditions([
-        { condition: sql`field1 = ${1}`, logicOperator },
-        { condition: sql`field2 = ${2}`, logicOperator },
-      ]);
-      const sqlText = toSqlText(result);
-      expect(sqlText).toContain('OR');
-      expect(sqlText).not.toContain('AND');
-    });
+    it.each(['or', 'Or', 'OR'])(
+      'should combine with OR for logicOperator %j',
+      (logicOperator: string) => {
+        const result = combineFilterConditions([
+          { condition: sql`field1 = ${1}`, logicOperator },
+          { condition: sql`field2 = ${2}`, logicOperator },
+        ]);
+        const sqlText = toSqlText(result);
+        expect(sqlText).toContain('OR');
+        expect(sqlText).not.toContain('AND');
+      },
+    );
 
     // Filters are unvalidated JSON from the query string, so a non-string operator
     // must fall back to AND rather than throwing (which would 500 the table route).

@@ -792,78 +792,77 @@ describe('database', () => {
   });
 
   describe('file-backed lock recovery', () => {
-    it.each([
-      'wal-failure',
-      'wal-refused',
-    ])('preserves FULL synchronization at startup and after lock recovery when %s', async (mode) => {
-      const result = await runDatabaseProbe<LockRecoveryProbeResult>(
-        'lockRecoveryProbe',
-        tempConfigDir,
-        mode,
-      );
+    it.each(['wal-failure', 'wal-refused'])(
+      'preserves FULL synchronization at startup and after lock recovery when %s',
+      async (mode) => {
+        const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+          'lockRecoveryProbe',
+          tempConfigDir,
+          mode,
+        );
 
-      expect(result.initialJournalMode).toBe('delete');
-      expect(result.initialSynchronous).toBe(2);
-      expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
-      expect(result.pragmas.synchronous).toBe(2);
-      expect(result.followupError).toBeNull();
-      expect(result.followupRowsAffected).toBe(1);
-      expect(result.beforeCloseIds).toEqual([1, 3]);
-      expect(result.afterCloseIds).toEqual([1, 3]);
-    });
+        expect(result.initialJournalMode).toBe('delete');
+        expect(result.initialSynchronous).toBe(2);
+        expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
+        expect(result.pragmas.synchronous).toBe(2);
+        expect(result.followupError).toBeNull();
+        expect(result.followupRowsAffected).toBe(1);
+        expect(result.beforeCloseIds).toEqual([1, 3]);
+        expect(result.afterCloseIds).toEqual([1, 3]);
+      },
+    );
 
     it.each([
       { mode: 'terminal', ids: [1, 3], callbackCalls: 0 },
       { mode: 'begin', ids: [1, 3], callbackCalls: 0 },
       { mode: 'root-in-transaction', ids: [1, 2, 4], callbackCalls: 1 },
       { mode: 'script', ids: [1, 2, 3], callbackCalls: 0 },
-    ])('preserves later writes after a $mode failure without replaying partial work', async ({
-      mode,
-      ids,
-      callbackCalls,
-    }) => {
-      const result = await runDatabaseProbe<LockRecoveryProbeResult>(
-        'lockRecoveryProbe',
-        tempConfigDir,
-        mode,
-      );
+    ])(
+      'preserves later writes after a $mode failure without replaying partial work',
+      async ({ mode, ids, callbackCalls }) => {
+        const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+          'lockRecoveryProbe',
+          tempConfigDir,
+          mode,
+        );
 
-      expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
-      expect(result.followupError).toBeNull();
-      expect(result.followupRowsAffected).toBe(1);
-      expect(result.callbackCalls).toBe(callbackCalls);
-      expect(result.beforeCloseIds).toEqual(ids);
-      expect(result.afterCloseIds).toEqual(ids);
-      expect(result.pragmas).toEqual({
-        busy_timeout: 0,
-        foreign_keys: 1,
-        synchronous: 1,
-        wal_autocheckpoint: 1000,
-      });
-      if (mode === 'script') {
-        expect(result.attachedRowCount).toBe(0);
-      }
-    });
+        expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
+        expect(result.followupError).toBeNull();
+        expect(result.followupRowsAffected).toBe(1);
+        expect(result.callbackCalls).toBe(callbackCalls);
+        expect(result.beforeCloseIds).toEqual(ids);
+        expect(result.afterCloseIds).toEqual(ids);
+        expect(result.pragmas).toEqual({
+          busy_timeout: 0,
+          foreign_keys: 1,
+          synchronous: 1,
+          wal_autocheckpoint: 1000,
+        });
+        if (mode === 'script') {
+          expect(result.attachedRowCount).toBe(0);
+        }
+      },
+    );
 
-    it.each([
-      'reconnect-failure',
-      'configuration-failure',
-    ])('rejects later statements and transactions after %s', async (mode) => {
-      const result = await runDatabaseProbe<LockRecoveryProbeResult>(
-        'lockRecoveryProbe',
-        tempConfigDir,
-        mode,
-      );
+    it.each(['reconnect-failure', 'configuration-failure'])(
+      'rejects later statements and transactions after %s',
+      async (mode) => {
+        const result = await runDatabaseProbe<LockRecoveryProbeResult>(
+          'lockRecoveryProbe',
+          tempConfigDir,
+          mode,
+        );
 
-      expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
-      expect(result.clientClosedAfterFailure).toBe(true);
-      expect(result.followupRowsAffected).toBeNull();
-      expect(result.followupError).toMatch(/closed/i);
-      expect(result.transactionAfterFailureError).toMatch(/closed/i);
-      expect(result.callbackCalls).toBe(0);
-      expect(result.beforeCloseIds).toEqual([1]);
-      expect(result.afterCloseIds).toEqual([1]);
-    });
+        expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
+        expect(result.clientClosedAfterFailure).toBe(true);
+        expect(result.followupRowsAffected).toBeNull();
+        expect(result.followupError).toMatch(/closed/i);
+        expect(result.transactionAfterFailureError).toMatch(/closed/i);
+        expect(result.callbackCalls).toBe(0);
+        expect(result.beforeCloseIds).toEqual([1]);
+        expect(result.afterCloseIds).toEqual([1]);
+      },
+    );
   });
 
   describe('isDbOpen', () => {

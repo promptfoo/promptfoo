@@ -189,32 +189,32 @@ describe('callProviderWithContext', () => {
     );
   });
 
-  it.each([
-    false,
-    true,
-  ])('queues provider calls while preserving cancellation, signal=%s', async (withSignal) => {
-    const abortSignal = withSignal ? new AbortController().signal : undefined;
-    const response = { output: 'queued response' };
-    const provider = createProvider(response);
-    const providerCallQueue = new ProviderGroupedCallQueue();
+  it.each([false, true])(
+    'queues provider calls while preserving cancellation, signal=%s',
+    async (withSignal) => {
+      const abortSignal = withSignal ? new AbortController().signal : undefined;
+      const response = { output: 'queued response' };
+      const provider = createProvider(response);
+      const providerCallQueue = new ProviderGroupedCallQueue();
 
-    const promise = withProviderCallExecutionContext({ providerCallQueue, abortSignal }, () =>
-      callProviderWithContext(provider, 'grade this', 'rubric', vars),
-    );
+      const promise = withProviderCallExecutionContext({ providerCallQueue, abortSignal }, () =>
+        callProviderWithContext(provider, 'grade this', 'rubric', vars),
+      );
 
-    expect(provider.callApi).not.toHaveBeenCalled();
-    const group = providerCallQueue.takeNextGroup();
-    expect(group).toHaveLength(1);
-    expect(group[0].providerId).toBe('test-grader');
+      expect(provider.callApi).not.toHaveBeenCalled();
+      const group = providerCallQueue.takeNextGroup();
+      expect(group).toHaveLength(1);
+      expect(group[0].providerId).toBe('test-grader');
 
-    await providerCallQueue.run(group[0]);
-    await expect(promise).resolves.toBe(response);
-    expect(vi.mocked(provider.callApi).mock.calls[0]).toEqual([
-      'grade this',
-      { prompt: { raw: 'grade this', label: 'rubric' }, vars },
-      ...(abortSignal ? [{ abortSignal }] : []),
-    ]);
-  });
+      await providerCallQueue.run(group[0]);
+      await expect(promise).resolves.toBe(response);
+      expect(vi.mocked(provider.callApi).mock.calls[0]).toEqual([
+        'grade this',
+        { prompt: { raw: 'grade this', label: 'rubric' }, vars },
+        ...(abortSignal ? [{ abortSignal }] : []),
+      ]);
+    },
+  );
 });
 
 describe('callGradingProvider', () => {

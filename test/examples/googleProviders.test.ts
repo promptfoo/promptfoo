@@ -186,38 +186,36 @@ describe('Google example provider contracts', () => {
     'promptfooconfig-image.yaml',
     'promptfooconfig-extension.yaml',
   ])('Google video example %s', (filename) => {
-    it.each([
-      'video',
-      'text-only',
-      'empty',
-      'wrong-type',
-    ])('grades a %s response with a supported assertion', async (outcome) => {
-      const { test, provider, prompt } = await loadExample('google-video', filename);
-      const grading = await runAssertions({
-        test,
-        provider,
-        prompt,
-        providerResponse: {
-          output: '[Video](promptfoo://blob/example)',
-          ...(outcome === 'text-only'
-            ? {}
-            : {
-                video: {
-                  id: 'test-operation',
-                  format: 'mp4',
-                  blobRef: {
-                    uri: 'promptfoo://blob/example',
-                    hash: 'example',
-                    provider: 'local',
-                    mimeType: outcome === 'wrong-type' ? 'text/plain' : 'video/mp4',
-                    sizeBytes: outcome === 'empty' ? 0 : 1024,
+    it.each(['video', 'text-only', 'empty', 'wrong-type'])(
+      'grades a %s response with a supported assertion',
+      async (outcome) => {
+        const { test, provider, prompt } = await loadExample('google-video', filename);
+        const grading = await runAssertions({
+          test,
+          provider,
+          prompt,
+          providerResponse: {
+            output: '[Video](promptfoo://blob/example)',
+            ...(outcome === 'text-only'
+              ? {}
+              : {
+                  video: {
+                    id: 'test-operation',
+                    format: 'mp4',
+                    blobRef: {
+                      uri: 'promptfoo://blob/example',
+                      hash: 'example',
+                      provider: 'local',
+                      mimeType: outcome === 'wrong-type' ? 'text/plain' : 'video/mp4',
+                      sizeBytes: outcome === 'empty' ? 0 : 1024,
+                    },
                   },
-                },
-              }),
-        },
-      });
-      expect(grading.pass).toBe(outcome === 'video');
-    });
+                }),
+          },
+        });
+        expect(grading.pass).toBe(outcome === 'video');
+      },
+    );
   });
 
   describe.each([
@@ -236,53 +234,52 @@ describe('Google example provider contracts', () => {
       }
     });
 
-    it.each([
-      'image',
-      'text-only',
-      'blocked',
-    ] as const)('routes and grades a %s response', async (outcome) => {
-      imageOutcome = outcome;
-      const { test, provider, prompt } = await loadExample('google-imagen', filename);
-      expect(checkProviderApiKeys([provider]).size).toBe(0);
-      const response = await provider.callApi(prompt, {
-        vars: test.vars ?? {},
-        prompt: { raw: prompt, label: prompt },
-      });
-      const grading = await runAssertions({ test, provider, prompt, providerResponse: response });
-      expect(grading.pass).toBe(outcome === 'image');
-      expect(grading.score).toBe(outcome === 'image' ? 1 : 0);
-      if (outcome === 'image') {
-        expect(response).toMatchObject({
-          output: 'Here is your illustration.',
-          images: [{ data: 'data:image/png;base64,aW1hZ2U=', mimeType: 'image/png' }],
-          tokenUsage: { prompt: 10, completion: 20, total: 30 },
+    it.each(['image', 'text-only', 'blocked'] as const)(
+      'routes and grades a %s response',
+      async (outcome) => {
+        imageOutcome = outcome;
+        const { test, provider, prompt } = await loadExample('google-imagen', filename);
+        expect(checkProviderApiKeys([provider]).size).toBe(0);
+        const response = await provider.callApi(prompt, {
+          vars: test.vars ?? {},
+          prompt: { raw: prompt, label: prompt },
         });
-      } else if (outcome === 'blocked') {
-        expect(response.error).toMatch(/SAFETY|blocked/i);
-      } else {
-        expect(response.output).toBe('Here is your illustration.');
-        expect(response.images ?? []).toHaveLength(0);
-      }
-      expect(requests).toHaveLength(1);
-      expect(requests[0]).toMatchObject({
-        auth: vertex ? 'oauth' : 'native',
-        url: vertex
-          ? 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.1-flash-image:generateContent'
-          : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent',
-        body: {
-          generationConfig: {
-            responseModalities: ['TEXT', 'IMAGE'],
-            imageConfig: { aspectRatio: '16:9', imageSize },
+        const grading = await runAssertions({ test, provider, prompt, providerResponse: response });
+        expect(grading.pass).toBe(outcome === 'image');
+        expect(grading.score).toBe(outcome === 'image' ? 1 : 0);
+        if (outcome === 'image') {
+          expect(response).toMatchObject({
+            output: 'Here is your illustration.',
+            images: [{ data: 'data:image/png;base64,aW1hZ2U=', mimeType: 'image/png' }],
+            tokenUsage: { prompt: 10, completion: 20, total: 30 },
+          });
+        } else if (outcome === 'blocked') {
+          expect(response.error).toMatch(/SAFETY|blocked/i);
+        } else {
+          expect(response.output).toBe('Here is your illustration.');
+          expect(response.images ?? []).toHaveLength(0);
+        }
+        expect(requests).toHaveLength(1);
+        expect(requests[0]).toMatchObject({
+          auth: vertex ? 'oauth' : 'native',
+          url: vertex
+            ? 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.1-flash-image:generateContent'
+            : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent',
+          body: {
+            generationConfig: {
+              responseModalities: ['TEXT', 'IMAGE'],
+              imageConfig: { aspectRatio: '16:9', imageSize },
+            },
           },
-        },
-      });
-      expect(new Headers(requests[0].headers).get('x-goog-api-key')).toBe(
-        vertex ? null : 'example-native-key',
-      );
-      if (grounded) {
-        expect(requests[0].body.tools).toEqual([{ googleSearch: {} }]);
-      }
-    });
+        });
+        expect(new Headers(requests[0].headers).get('x-goog-api-key')).toBe(
+          vertex ? null : 'example-native-key',
+        );
+        if (grounded) {
+          expect(requests[0].body.tools).toEqual([{ googleSearch: {} }]);
+        }
+      },
+    );
   });
 
   it('rejects the native image example without credentials before any request', async () => {
@@ -314,69 +311,69 @@ describe('Google example provider contracts', () => {
   it.each([
     { directory: 'google-aistudio-tools', vertex: false },
     { directory: 'google-vertex-tools', vertex: true },
-  ])('$directory keeps target tools and selects its configured graders', async ({
-    directory,
-    vertex,
-  }) => {
-    if (vertex) {
-      mockProcessEnv({ GOOGLE_API_KEY: undefined, GOOGLE_PROJECT_ID: 'example-project' });
-    }
-    const { provider, test, prompt } = await loadExample(directory);
-    expect(checkProviderApiKeys([provider]).size).toBe(0);
-    const response = await provider.callApi(prompt, {
-      vars: test.vars ?? {},
-      prompt: { raw: prompt, label: prompt },
-    });
-    expect(response.error).toBeUndefined();
-    expect((await runAssertions({ test, provider, prompt, providerResponse: response })).pass).toBe(
-      true,
-    );
-    expect(requests[0].body.tools).toEqual([
-      expect.objectContaining({
-        functionDeclarations: [expect.objectContaining({ name: 'get_current_weather' })],
-      }),
-    ]);
-    // Native examples currently use deterministic assertions. Exercise their
-    // declared optional graders too, without substituting any provider config.
-    const similarity = await runAssertion({
-      test,
-      provider,
-      prompt,
-      providerResponse: response,
-      assertion: {
-        type: 'similar',
-        value: 'San Francisco',
-        transform: 'output[0].functionCall.args.location',
-      },
-    });
-    expect(similarity.pass).toBe(true);
-    const rubric = await runAssertion({
-      test,
-      provider,
-      prompt,
-      providerResponse: response,
-      assertion: { type: 'llm-rubric', value: 'The output requests the weather.' },
-    });
-    expect(rubric.pass).toBe(true);
-    const embeddingRequests = requests.filter(
-      ({ url }) => url.endsWith(':embedContent') || url.endsWith(':predict'),
-    );
-    expect(embeddingRequests.length).toBeGreaterThanOrEqual(2);
-    for (const request of embeddingRequests) {
-      expect(request.url).toBe(
-        vertex
-          ? 'https://us-central1-aiplatform.googleapis.com/v1/projects/example-project/locations/us-central1/publishers/google/models/text-embedding-005:predict'
-          : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent',
+  ])(
+    '$directory keeps target tools and selects its configured graders',
+    async ({ directory, vertex }) => {
+      if (vertex) {
+        mockProcessEnv({ GOOGLE_API_KEY: undefined, GOOGLE_PROJECT_ID: 'example-project' });
+      }
+      const { provider, test, prompt } = await loadExample(directory);
+      expect(checkProviderApiKeys([provider]).size).toBe(0);
+      const response = await provider.callApi(prompt, {
+        vars: test.vars ?? {},
+        prompt: { raw: prompt, label: prompt },
+      });
+      expect(response.error).toBeUndefined();
+      expect(
+        (await runAssertions({ test, provider, prompt, providerResponse: response })).pass,
+      ).toBe(true);
+      expect(requests[0].body.tools).toEqual([
+        expect.objectContaining({
+          functionDeclarations: [expect.objectContaining({ name: 'get_current_weather' })],
+        }),
+      ]);
+      // Native examples currently use deterministic assertions. Exercise their
+      // declared optional graders too, without substituting any provider config.
+      const similarity = await runAssertion({
+        test,
+        provider,
+        prompt,
+        providerResponse: response,
+        assertion: {
+          type: 'similar',
+          value: 'San Francisco',
+          transform: 'output[0].functionCall.args.location',
+        },
+      });
+      expect(similarity.pass).toBe(true);
+      const rubric = await runAssertion({
+        test,
+        provider,
+        prompt,
+        providerResponse: response,
+        assertion: { type: 'llm-rubric', value: 'The output requests the weather.' },
+      });
+      expect(rubric.pass).toBe(true);
+      const embeddingRequests = requests.filter(
+        ({ url }) => url.endsWith(':embedContent') || url.endsWith(':predict'),
       );
-    }
-    const textRequests = requests.filter(({ url }) => url.endsWith(':generateContent'));
-    expect(textRequests).toHaveLength(2);
-    expect(textRequests[1].body.tools ?? []).toEqual([]);
-    expect(textRequests[1].url).toBe(
-      vertex
-        ? 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.8-flash:generateContent'
-        : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent',
-    );
-    expect(requests.every(({ auth }) => auth === (vertex ? 'oauth' : 'native'))).toBe(true);
-  });
+      expect(embeddingRequests.length).toBeGreaterThanOrEqual(2);
+      for (const request of embeddingRequests) {
+        expect(request.url).toBe(
+          vertex
+            ? 'https://us-central1-aiplatform.googleapis.com/v1/projects/example-project/locations/us-central1/publishers/google/models/text-embedding-005:predict'
+            : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent',
+        );
+      }
+      const textRequests = requests.filter(({ url }) => url.endsWith(':generateContent'));
+      expect(textRequests).toHaveLength(2);
+      expect(textRequests[1].body.tools ?? []).toEqual([]);
+      expect(textRequests[1].url).toBe(
+        vertex
+          ? 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.8-flash:generateContent'
+          : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent',
+      );
+      expect(requests.every(({ auth }) => auth === (vertex ? 'oauth' : 'native'))).toBe(true);
+    },
+  );
 });

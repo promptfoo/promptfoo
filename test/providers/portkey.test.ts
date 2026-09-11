@@ -266,13 +266,16 @@ describe('PortkeyChatCompletionProvider', () => {
       ['model catalog slug in the model name', '@bedrock-eu/claude', {}],
       ['model catalog slug in portkeyProvider', 'claude', { portkeyProvider: '@bedrock-eu' }],
       ['legacy virtual key', 'claude', { portkeyVirtualKey: 'bedrock-prod' }],
-    ])('should not leak OPENAI_API_KEY when Portkey holds the credential (%s)', (_, model, config) => {
-      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
-      const provider = new PortkeyChatCompletionProvider(model, {
-        config: { portkeyApiKey: 'pk-config-key', ...config },
-      });
-      expect(provider.getApiKey()).toBeUndefined();
-    });
+    ])(
+      'should not leak OPENAI_API_KEY when Portkey holds the credential (%s)',
+      (_, model, config) => {
+        vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+        const provider = new PortkeyChatCompletionProvider(model, {
+          config: { portkeyApiKey: 'pk-config-key', ...config },
+        });
+        expect(provider.getApiKey()).toBeUndefined();
+      },
+    );
   });
 
   describe('header collisions', () => {

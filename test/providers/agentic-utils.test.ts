@@ -68,13 +68,13 @@ describe('agentic-utils', () => {
       expect(isAgenticGradingProvider(provider('openai:responses:gpt-5.5'))).toBe(false);
     });
 
-    it.each([
-      'openai:codex-security',
-      'openai:codex-security:gpt-5.6-sol',
-    ])('does not classify security scanner %s as a rubric grading provider', (id) => {
-      expect(isAgenticProvider(provider(id))).toBe(true);
-      expect(isAgenticGradingProvider(provider(id))).toBe(false);
-    });
+    it.each(['openai:codex-security', 'openai:codex-security:gpt-5.6-sol'])(
+      'does not classify security scanner %s as a rubric grading provider',
+      (id) => {
+        expect(isAgenticProvider(provider(id))).toBe(true);
+        expect(isAgenticGradingProvider(provider(id))).toBe(false);
+      },
+    );
   });
 
   describe('getCachedResponse', () => {

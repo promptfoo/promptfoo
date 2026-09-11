@@ -44,33 +44,32 @@ describe.each([
     }
   });
 
-  it.each([
-    'gpt-daybreak-blue-latest',
-    'gpt-daybreak-red-latest',
-  ])('respects explicit reasoning token limits and omits temperature for %s', async (model) => {
-    const { body } = await new Provider(model, {
-      config: { [tokenLimit]: 8192, max_tokens: 100, temperature: 0.7 },
-    }).getOpenAiBody('Hello');
+  it.each(['gpt-daybreak-blue-latest', 'gpt-daybreak-red-latest'])(
+    'respects explicit reasoning token limits and omits temperature for %s',
+    async (model) => {
+      const { body } = await new Provider(model, {
+        config: { [tokenLimit]: 8192, max_tokens: 100, temperature: 0.7 },
+      }).getOpenAiBody('Hello');
 
-    expect(body[tokenLimit]).toBe(8192);
-    expect(body).not.toHaveProperty('max_tokens');
-    expect(body).not.toHaveProperty('temperature');
-  });
+      expect(body[tokenLimit]).toBe(8192);
+      expect(body).not.toHaveProperty('max_tokens');
+      expect(body).not.toHaveProperty('temperature');
+    },
+  );
 
-  it.each([
-    'gpt-4.1',
-    'gpt-daybreak-red-latest-custom',
-    'custom-gpt-daybreak-blue-latest',
-  ])('keeps standard-model defaults for %s', async (model) => {
-    const { body } = await new Provider(model, {
-      config: { reasoning_effort: 'high' },
-    }).getOpenAiBody('Hello');
+  it.each(['gpt-4.1', 'gpt-daybreak-red-latest-custom', 'custom-gpt-daybreak-blue-latest'])(
+    'keeps standard-model defaults for %s',
+    async (model) => {
+      const { body } = await new Provider(model, {
+        config: { reasoning_effort: 'high' },
+      }).getOpenAiBody('Hello');
 
-    expect(body.temperature).toBe(0);
-    expect(
-      body[Provider === OpenAiChatCompletionProvider ? 'max_tokens' : 'max_output_tokens'],
-    ).toBe(1024);
-    expect(body).not.toHaveProperty('reasoning_effort');
-    expect(body).not.toHaveProperty('reasoning');
-  });
+      expect(body.temperature).toBe(0);
+      expect(
+        body[Provider === OpenAiChatCompletionProvider ? 'max_tokens' : 'max_output_tokens'],
+      ).toBe(1024);
+      expect(body).not.toHaveProperty('reasoning_effort');
+      expect(body).not.toHaveProperty('reasoning');
+    },
+  );
 });

@@ -102,57 +102,56 @@ describe('HyperbolicAudioProvider', () => {
       });
     });
 
-    it.each([
-      'hyperbolic:audio',
-      'hyperbolic:audio:melo',
-      'hyperbolic:audio:custom:model',
-    ])('sends documented audio controls without treating %s as a model selector', async (id) => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: { audio: 'base64audio' },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-      const provider = createHyperbolicAudioProvider(id, {
-        config: {
-          apiKey: 'test-key',
-          language: 'EN',
-          speaker: 'EN-US',
-          speed: 1,
-          sdp_ratio: 0.5,
-          noise_scale: 0.5,
-          noise_scale_w: 0.5,
-        },
-      });
-
-      await provider.callApi('Hello', {
-        prompt: {
-          raw: 'Hello',
-          label: 'Hello',
+    it.each(['hyperbolic:audio', 'hyperbolic:audio:melo', 'hyperbolic:audio:custom:model'])(
+      'sends documented audio controls without treating %s as a model selector',
+      async (id) => {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { audio: 'base64audio' },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const provider = createHyperbolicAudioProvider(id, {
           config: {
-            speaker: 'EN-AU',
-            speed: 0.7,
-            sdp_ratio: 0,
-            noise_scale: 0,
-            noise_scale_w: 0,
+            apiKey: 'test-key',
+            language: 'EN',
+            speaker: 'EN-US',
+            speed: 1,
+            sdp_ratio: 0.5,
+            noise_scale: 0.5,
+            noise_scale_w: 0.5,
           },
-        },
-        vars: {},
-      });
+        });
 
-      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
-      expect(url).toBe('https://api.hyperbolic.xyz/v1/audio/generation');
-      expect(request).toMatchObject({ method: 'POST' });
-      expect(JSON.parse(request?.body as string)).toEqual({
-        text: 'Hello',
-        language: 'EN',
-        speaker: 'EN-AU',
-        speed: 0.7,
-        sdp_ratio: 0,
-        noise_scale: 0,
-        noise_scale_w: 0,
-      });
-    });
+        await provider.callApi('Hello', {
+          prompt: {
+            raw: 'Hello',
+            label: 'Hello',
+            config: {
+              speaker: 'EN-AU',
+              speed: 0.7,
+              sdp_ratio: 0,
+              noise_scale: 0,
+              noise_scale_w: 0,
+            },
+          },
+          vars: {},
+        });
+
+        const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+        expect(url).toBe('https://api.hyperbolic.xyz/v1/audio/generation');
+        expect(request).toMatchObject({ method: 'POST' });
+        expect(JSON.parse(request?.body as string)).toEqual({
+          text: 'Hello',
+          language: 'EN',
+          speaker: 'EN-AU',
+          speed: 0.7,
+          sdp_ratio: 0,
+          noise_scale: 0,
+          noise_scale_w: 0,
+        });
+      },
+    );
 
     it.each([
       undefined,

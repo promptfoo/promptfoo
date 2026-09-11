@@ -710,17 +710,17 @@ describe('OpenAiImageProvider', () => {
       expect(fetchWithCache).not.toHaveBeenCalled();
     });
 
-    it.each([
-      'gpt-image-2',
-      'gpt-image-1.5',
-    ])('keeps max quality unavailable for %s', async (model) => {
-      const provider = new OpenAiImageProvider(model, {
-        config: { apiKey: 'test-key', quality: 'max' },
-      });
+    it.each(['gpt-image-2', 'gpt-image-1.5'])(
+      'keeps max quality unavailable for %s',
+      async (model) => {
+        const provider = new OpenAiImageProvider(model, {
+          config: { apiKey: 'test-key', quality: 'max' },
+        });
 
-      expect((await provider.callApi('A blue mug')).error).toContain('Invalid quality');
-      expect(fetchWithCache).not.toHaveBeenCalled();
-    });
+        expect((await provider.callApi('A blue mug')).error).toContain('Invalid quality');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('GPT Image 2 support', () => {

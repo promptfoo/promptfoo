@@ -333,17 +333,16 @@ describe('GoogleVideoProvider', () => {
       expect(mockRequest).not.toHaveBeenCalled();
     });
 
-    it.each([
-      true,
-      false,
-      undefined,
-    ])('allows deferred authentication checks for vertexai=%s', (vertexai) => {
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
-        config: { vertexai },
-      });
-      expect(checkProviderApiKeys([provider]).size).toBe(0);
-      expect(mockGetGoogleClient).not.toHaveBeenCalled();
-    });
+    it.each([true, false, undefined])(
+      'allows deferred authentication checks for vertexai=%s',
+      (vertexai) => {
+        const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+          config: { vertexai },
+        });
+        expect(checkProviderApiKeys([provider]).size).toBe(0);
+        expect(mockGetGoogleClient).not.toHaveBeenCalled();
+      },
+    );
 
     it('should return error when Google AI Studio API key is missing', async () => {
       mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
@@ -827,188 +826,194 @@ describe('GoogleVideoProvider', () => {
     // Vertex's extend-a-video body documents only storageUri and sampleCount and fixes the added
     // length at 7s, so durationSeconds is not an extension parameter. Existing configs still
     // carry 4 or 6 (this repo's own example shipped 6), so those must not be rejected.
-    it.each([
-      4, 6,
-    ] as const)('should ignore a %s-second duration on a Vertex source-video extension instead of failing', async (durationSeconds) => {
-      const operationName = 'test-op';
-      mockRequest.mockResolvedValueOnce({ data: { name: operationName, done: false } });
-      mockRequest.mockResolvedValueOnce({
-        data: {
-          name: operationName,
-          done: true,
-          response: {
-            videos: [{ bytesBase64Encoded: Buffer.from('fake video').toString('base64') }],
-          },
-        },
-      });
-
-      const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
-        config: {
-          sourceVideo: 'gs://video-bucket/source.mp4',
-          durationSeconds,
-          pollIntervalMs: 10,
-        },
-      });
-
-      const result = await provider.callApi('Extend');
-
-      expect(result.error).toBeUndefined();
-      expect(mockRequest).toHaveBeenCalled();
-      const body = JSON.parse(mockRequest.mock.calls[0][0].body);
-      // The configured 4/6 must never reach the wire; Veo fixes the added length itself.
-      expect(body.parameters.durationSeconds).toBeUndefined();
-      expect(result.video?.duration).toBeUndefined();
-      expect(result.metadata).toMatchObject({ extensionSeconds: 7 });
-    });
-
-    it.each([
-      undefined,
-      8,
-    ] as const)('sends duration 8 for AI Studio extensions configured with %s', async (durationSeconds) => {
-      const sourceVideo = 'https://generativelanguage.googleapis.com/v1beta/files/source:download';
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
-        config: {
-          vertexai: false,
-          apiKey: 'test-api-key',
-          sourceVideo,
-          durationSeconds,
-          pollIntervalMs: 10,
-        },
-      });
-      mockFetchWithTimeout.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ name: 'models/veo-3.1-generate-preview/operations/test-extension' }),
-          { status: 200 },
-        ),
-      );
-      mockFetchWithTimeout.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            name: 'models/veo-3.1-generate-preview/operations/test-extension',
+    it.each([4, 6] as const)(
+      'should ignore a %s-second duration on a Vertex source-video extension instead of failing',
+      async (durationSeconds) => {
+        const operationName = 'test-op';
+        mockRequest.mockResolvedValueOnce({ data: { name: operationName, done: false } });
+        mockRequest.mockResolvedValueOnce({
+          data: {
+            name: operationName,
             done: true,
             response: {
-              videos: [{ bytesBase64Encoded: Buffer.from('extended video').toString('base64') }],
+              videos: [{ bytesBase64Encoded: Buffer.from('fake video').toString('base64') }],
             },
-          }),
-          { status: 200 },
-        ),
-      );
-      const result = await provider.callApi('Continue the video');
-      const body = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
-      expect(body.parameters.durationSeconds).toBe(8);
-      expect(body.instances[0].video).toEqual({
-        uri: sourceVideo,
-      });
-      expect(result.error).toBeUndefined();
-      expect(result.video?.duration).toBeUndefined();
-      expect(result.metadata).toMatchObject({ extensionSeconds: 7 });
-    });
+          },
+        });
+
+        const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
+          config: {
+            sourceVideo: 'gs://video-bucket/source.mp4',
+            durationSeconds,
+            pollIntervalMs: 10,
+          },
+        });
+
+        const result = await provider.callApi('Extend');
+
+        expect(result.error).toBeUndefined();
+        expect(mockRequest).toHaveBeenCalled();
+        const body = JSON.parse(mockRequest.mock.calls[0][0].body);
+        // The configured 4/6 must never reach the wire; Veo fixes the added length itself.
+        expect(body.parameters.durationSeconds).toBeUndefined();
+        expect(result.video?.duration).toBeUndefined();
+        expect(result.metadata).toMatchObject({ extensionSeconds: 7 });
+      },
+    );
+
+    it.each([undefined, 8] as const)(
+      'sends duration 8 for AI Studio extensions configured with %s',
+      async (durationSeconds) => {
+        const sourceVideo =
+          'https://generativelanguage.googleapis.com/v1beta/files/source:download';
+        const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+          config: {
+            vertexai: false,
+            apiKey: 'test-api-key',
+            sourceVideo,
+            durationSeconds,
+            pollIntervalMs: 10,
+          },
+        });
+        mockFetchWithTimeout.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ name: 'models/veo-3.1-generate-preview/operations/test-extension' }),
+            { status: 200 },
+          ),
+        );
+        mockFetchWithTimeout.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              name: 'models/veo-3.1-generate-preview/operations/test-extension',
+              done: true,
+              response: {
+                videos: [{ bytesBase64Encoded: Buffer.from('extended video').toString('base64') }],
+              },
+            }),
+            { status: 200 },
+          ),
+        );
+        const result = await provider.callApi('Continue the video');
+        const body = JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
+        expect(body.parameters.durationSeconds).toBe(8);
+        expect(body.instances[0].video).toEqual({
+          uri: sourceVideo,
+        });
+        expect(result.error).toBeUndefined();
+        expect(result.video?.duration).toBeUndefined();
+        expect(result.metadata).toMatchObject({ extensionSeconds: 7 });
+      },
+    );
 
     it.each([
       'file:///path/to/source.mp4',
       Buffer.from('source video').toString('base64'),
       'models/veo-3.1-generate-preview/operations/source',
-    ])('rejects unsupported AI Studio extension input %s before sending a request', async (sourceVideo) => {
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
-        config: { vertexai: false, apiKey: 'test-api-key', sourceVideo },
-      });
+    ])(
+      'rejects unsupported AI Studio extension input %s before sending a request',
+      async (sourceVideo) => {
+        const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+          config: { vertexai: false, apiKey: 'test-api-key', sourceVideo },
+        });
 
-      const result = await provider.callApi('Continue the video');
+        const result = await provider.callApi('Continue the video');
 
-      expect(result.error).toContain('original generated video URI from metadata.videoUri');
-      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
-      expect(mockRequest).not.toHaveBeenCalled();
-    });
+        expect(result.error).toContain('original generated video URI from metadata.videoUri');
+        expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+        expect(mockRequest).not.toHaveBeenCalled();
+      },
+    );
 
-    it.each([
-      4, 6,
-    ] as const)('rejects duration %s for AI Studio video extensions before sending a request', async (durationSeconds) => {
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
-        config: {
-          vertexai: false,
-          apiKey: 'test-api-key',
-          sourceVideo: Buffer.from('source video').toString('base64'),
-          durationSeconds,
-        },
-      });
-      const result = await provider.callApi('Continue the video');
-      expect(result.error).toContain('requires durationSeconds: 8');
-      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
-      expect(mockRequest).not.toHaveBeenCalled();
-    });
+    it.each([4, 6] as const)(
+      'rejects duration %s for AI Studio video extensions before sending a request',
+      async (durationSeconds) => {
+        const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+          config: {
+            vertexai: false,
+            apiKey: 'test-api-key',
+            sourceVideo: Buffer.from('source video').toString('base64'),
+            durationSeconds,
+          },
+        });
+        const result = await provider.callApi('Continue the video');
+        expect(result.error).toContain('requires durationSeconds: 8');
+        expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+        expect(mockRequest).not.toHaveBeenCalled();
+      },
+    );
 
-    it.each([
-      'gs://video-bucket/source.mp4',
-      'gs://video-bucket/operations/source.mp4',
-    ])('sends Vertex GCS input %s using gcsUri', async (sourceVideo) => {
-      const operationName = 'test-op';
-      const base64Video = Buffer.from('fake video').toString('base64');
-      mockRequest.mockResolvedValueOnce({
-        data: { name: operationName, done: false },
-      });
-      mockRequest.mockResolvedValueOnce({
-        data: {
-          name: operationName,
-          done: true,
-          response: { videos: [{ bytesBase64Encoded: base64Video }] },
-        },
-      });
+    it.each(['gs://video-bucket/source.mp4', 'gs://video-bucket/operations/source.mp4'])(
+      'sends Vertex GCS input %s using gcsUri',
+      async (sourceVideo) => {
+        const operationName = 'test-op';
+        const base64Video = Buffer.from('fake video').toString('base64');
+        mockRequest.mockResolvedValueOnce({
+          data: { name: operationName, done: false },
+        });
+        mockRequest.mockResolvedValueOnce({
+          data: {
+            name: operationName,
+            done: true,
+            response: { videos: [{ bytesBase64Encoded: base64Video }] },
+          },
+        });
 
-      const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
-        config: {
-          sourceVideo,
-          durationSeconds: 8,
-          pollIntervalMs: 10,
-        },
-      });
+        const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
+          config: {
+            sourceVideo,
+            durationSeconds: 8,
+            pollIntervalMs: 10,
+          },
+        });
 
-      const result = await provider.callApi('Extend');
+        const result = await provider.callApi('Extend');
 
-      const firstCallOptions = mockRequest.mock.calls[0][0];
-      const body = JSON.parse(firstCallOptions.body);
-      expect(result.error).toBeUndefined();
-      expect(body.parameters.durationSeconds).toBeUndefined();
-      expect(body.instances[0].video).toEqual({
-        gcsUri: sourceVideo,
-        mimeType: 'video/mp4',
-      });
-    });
+        const firstCallOptions = mockRequest.mock.calls[0][0];
+        const body = JSON.parse(firstCallOptions.body);
+        expect(result.error).toBeUndefined();
+        expect(body.parameters.durationSeconds).toBeUndefined();
+        expect(body.instances[0].video).toEqual({
+          gcsUri: sourceVideo,
+          mimeType: 'video/mp4',
+        });
+      },
+    );
 
-    it.each([
-      'file:///path/to/source.mp4',
-      'file:///path/to/operations/source.mp4',
-    ])('sends Vertex file input %s using bytesBase64Encoded', async (sourceVideo) => {
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('source video'));
-      const operationName = 'test-op';
-      const base64Video = Buffer.from('fake video').toString('base64');
-      mockRequest.mockResolvedValueOnce({
-        data: { name: operationName, done: false },
-      });
-      mockRequest.mockResolvedValueOnce({
-        data: {
-          name: operationName,
-          done: true,
-          response: { videos: [{ bytesBase64Encoded: base64Video }] },
-        },
-      });
+    it.each(['file:///path/to/source.mp4', 'file:///path/to/operations/source.mp4'])(
+      'sends Vertex file input %s using bytesBase64Encoded',
+      async (sourceVideo) => {
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('source video'));
+        const operationName = 'test-op';
+        const base64Video = Buffer.from('fake video').toString('base64');
+        mockRequest.mockResolvedValueOnce({
+          data: { name: operationName, done: false },
+        });
+        mockRequest.mockResolvedValueOnce({
+          data: {
+            name: operationName,
+            done: true,
+            response: { videos: [{ bytesBase64Encoded: base64Video }] },
+          },
+        });
 
-      const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
-        config: {
-          sourceVideo,
-          pollIntervalMs: 10,
-        },
-      });
+        const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
+          config: {
+            sourceVideo,
+            pollIntervalMs: 10,
+          },
+        });
 
-      await provider.callApi('Extend');
+        await provider.callApi('Extend');
 
-      const firstCallOptions = mockRequest.mock.calls[0][0];
-      const body = JSON.parse(firstCallOptions.body);
-      expect(body.instances[0].video).toEqual({
-        bytesBase64Encoded: Buffer.from('source video').toString('base64'),
-        mimeType: 'video/mp4',
-      });
-    });
+        const firstCallOptions = mockRequest.mock.calls[0][0];
+        const body = JSON.parse(firstCallOptions.body);
+        expect(body.instances[0].video).toEqual({
+          bytesBase64Encoded: Buffer.from('source video').toString('base64'),
+          mimeType: 'video/mp4',
+        });
+      },
+    );
 
     it('should send a Vertex base64 source video using bytesBase64Encoded', async () => {
       const operationName = 'test-op';
@@ -1092,50 +1097,52 @@ describe('GoogleVideoProvider', () => {
   });
 
   describe('image-to-video', () => {
-    it.each([
-      true,
-      false,
-    ])('encodes first, last, and reference images for vertexai=%s', async (vertexai) => {
-      const imageData = Buffer.from('image data').toString('base64');
-      const operationName = 'models/veo-3.1-generate-preview/operations/image';
-      const operation = {
-        name: operationName,
-        done: true,
-        response: { videos: [{ bytesBase64Encoded: Buffer.from('video').toString('base64') }] },
-      };
-      mockRequest.mockResolvedValue({ data: operation });
-      mockFetchWithTimeout.mockImplementation(async () => new Response(JSON.stringify(operation)));
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
-        config: {
-          vertexai,
-          apiKey: 'test-api-key',
-          image: imageData,
-          lastFrame: imageData,
-          referenceImages: [imageData],
-        },
-      });
+    it.each([true, false])(
+      'encodes first, last, and reference images for vertexai=%s',
+      async (vertexai) => {
+        const imageData = Buffer.from('image data').toString('base64');
+        const operationName = 'models/veo-3.1-generate-preview/operations/image';
+        const operation = {
+          name: operationName,
+          done: true,
+          response: { videos: [{ bytesBase64Encoded: Buffer.from('video').toString('base64') }] },
+        };
+        mockRequest.mockResolvedValue({ data: operation });
+        mockFetchWithTimeout.mockImplementation(
+          async () => new Response(JSON.stringify(operation)),
+        );
+        const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+          config: {
+            vertexai,
+            apiKey: 'test-api-key',
+            image: imageData,
+            lastFrame: imageData,
+            referenceImages: [imageData],
+          },
+        });
 
-      const result = await provider.callApi('Animate these images');
-      const body = JSON.parse(
-        vertexai ? mockRequest.mock.calls[0][0].body : mockFetchWithTimeout.mock.calls[0][1].body,
-      );
-      const image = { bytesBase64Encoded: imageData, mimeType: 'image/png' };
+        const result = await provider.callApi('Animate these images');
+        const body = JSON.parse(
+          vertexai ? mockRequest.mock.calls[0][0].body : mockFetchWithTimeout.mock.calls[0][1].body,
+        );
+        const image = { bytesBase64Encoded: imageData, mimeType: 'image/png' };
 
-      expect(result.error).toBeUndefined();
-      expect(body.instances).toEqual([
-        {
-          prompt: 'Animate these images',
-          image,
-          lastFrame: image,
-          referenceImages: [{ image, referenceType: 'asset' }],
-        },
-      ]);
-      expect(body.parameters).toMatchObject({
-        durationSeconds: 8,
-        aspectRatio: '16:9',
-        resolution: '720p',
-      });
-    });
+        expect(result.error).toBeUndefined();
+        expect(body.instances).toEqual([
+          {
+            prompt: 'Animate these images',
+            image,
+            lastFrame: image,
+            referenceImages: [{ image, referenceType: 'asset' }],
+          },
+        ]);
+        expect(body.parameters).toMatchObject({
+          durationSeconds: 8,
+          aspectRatio: '16:9',
+          resolution: '720p',
+        });
+      },
+    );
 
     it('should include image data in request', async () => {
       vi.mocked(fs.existsSync).mockImplementation((path) => {

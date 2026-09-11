@@ -44,7 +44,6 @@ import type { StrategyCardData } from './strategies/types';
 const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter(
   (s) => s !== 'layer' && s !== 'jailbreak',
 ).sort();
-const NON_ORCHESTRATING_AGENTIC_STRATEGIES = new Set(['indirect-web-pwn']);
 
 // Type for layer strategy steps (can be strings or objects with nested config)
 type StepType = string | { id: string; config?: Partial<StrategyConfig> };
@@ -114,10 +113,7 @@ export default function StrategyConfigDialog({
   // Helper functions to check strategy types
   const isAgenticStrategy = React.useCallback((step: StepType): boolean => {
     const strategyId = getStepId(step);
-    return (
-      AGENTIC_STRATEGIES_SET.has(strategyId) &&
-      !NON_ORCHESTRATING_AGENTIC_STRATEGIES.has(strategyId)
-    );
+    return AGENTIC_STRATEGIES_SET.has(strategyId) && strategyId !== 'indirect-web-pwn';
   }, []);
 
   const isMultiModalStrategy = React.useCallback((step: StepType): boolean => {

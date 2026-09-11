@@ -70,52 +70,49 @@ describe.each([
       processEnv: {},
       expected: 'fallback-token',
     },
-  ])('accepts $name without constructing an SDK client', async ({
-    config,
-    env,
-    processEnv,
-    expected,
-  }) => {
-    vi.mocked(getEnvString).mockImplementation(
-      (key) => (processEnv as Record<string, string>)[key],
-    );
-    const instance = new Provider('account/custom-model', { config, env });
+  ])(
+    'accepts $name without constructing an SDK client',
+    async ({ config, env, processEnv, expected }) => {
+      vi.mocked(getEnvString).mockImplementation(
+        (key) => (processEnv as Record<string, string>)[key],
+      );
+      const instance = new Provider('account/custom-model', { config, env });
 
-    expect(instance.requiresApiKey()).toBe(false);
-    expect(checkProviderApiKeys([instance]).size).toBe(0);
-    expect(BearerTokenAuthenticator).not.toHaveBeenCalled();
-    expect(IamAuthenticator).not.toHaveBeenCalled();
-    expect(instance.modelName).toBe('account/custom-model');
+      expect(instance.requiresApiKey()).toBe(false);
+      expect(checkProviderApiKeys([instance]).size).toBe(0);
+      expect(BearerTokenAuthenticator).not.toHaveBeenCalled();
+      expect(IamAuthenticator).not.toHaveBeenCalled();
+      expect(instance.modelName).toBe('account/custom-model');
 
-    await instance.getAuth();
-    expect(BearerTokenAuthenticator).toHaveBeenCalledWith({ bearerToken: expected });
-    expect(IamAuthenticator).not.toHaveBeenCalled();
-  });
+      await instance.getAuth();
+      expect(BearerTokenAuthenticator).toHaveBeenCalledWith({ bearerToken: expected });
+      expect(IamAuthenticator).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     { authType: undefined, requiresKey: true, authenticator: 'iam' },
     { authType: 'iam', requiresKey: true, authenticator: 'iam' },
     { authType: 'bearertoken', requiresKey: false, authenticator: 'bearer' },
-  ])('preserves auth selection with both credentials and authType=$authType', async ({
-    authType,
-    requiresKey,
-    authenticator,
-  }) => {
-    const instance = new Provider('account/custom-model', {
-      config: { apiKey: 'fixture-iam-key', apiBearerToken: 'fixture-token' },
-      env: { WATSONX_AI_AUTH_TYPE: authType },
-    });
-    expect(instance.requiresApiKey()).toBe(requiresKey);
-    expect(checkProviderApiKeys([instance]).size).toBe(0);
-    await instance.getAuth();
-    if (authenticator === 'iam') {
-      expect(IamAuthenticator).toHaveBeenCalledWith({ apikey: 'fixture-iam-key' });
-      expect(BearerTokenAuthenticator).not.toHaveBeenCalled();
-    } else {
-      expect(BearerTokenAuthenticator).toHaveBeenCalledWith({ bearerToken: 'fixture-token' });
-      expect(IamAuthenticator).not.toHaveBeenCalled();
-    }
-  });
+  ])(
+    'preserves auth selection with both credentials and authType=$authType',
+    async ({ authType, requiresKey, authenticator }) => {
+      const instance = new Provider('account/custom-model', {
+        config: { apiKey: 'fixture-iam-key', apiBearerToken: 'fixture-token' },
+        env: { WATSONX_AI_AUTH_TYPE: authType },
+      });
+      expect(instance.requiresApiKey()).toBe(requiresKey);
+      expect(checkProviderApiKeys([instance]).size).toBe(0);
+      await instance.getAuth();
+      if (authenticator === 'iam') {
+        expect(IamAuthenticator).toHaveBeenCalledWith({ apikey: 'fixture-iam-key' });
+        expect(BearerTokenAuthenticator).not.toHaveBeenCalled();
+      } else {
+        expect(BearerTokenAuthenticator).toHaveBeenCalledWith({ bearerToken: 'fixture-token' });
+        expect(IamAuthenticator).not.toHaveBeenCalled();
+      }
+    },
+  );
 
   it('recognizes a native IAM key without changing the configured model', () => {
     const processEnv: Record<string, string> = { WATSONX_AI_APIKEY: 'fixture-key' };
@@ -127,17 +124,16 @@ describe.each([
     expect(IamAuthenticator).not.toHaveBeenCalled();
   });
 
-  it.each([
-    {},
-    { apiBearerToken: '' },
-    { apiKey: '', apiBearerToken: '' },
-  ])('still reports missing authentication for %j', (config) => {
-    const instance = new Provider('account/custom-model', { config });
-    expect(instance.requiresApiKey()).toBe(true);
-    expect([...checkProviderApiKeys([instance]).values()]).toEqual([[instance.id()]]);
-    expect(BearerTokenAuthenticator).not.toHaveBeenCalled();
-    expect(IamAuthenticator).not.toHaveBeenCalled();
-  });
+  it.each([{}, { apiBearerToken: '' }, { apiKey: '', apiBearerToken: '' }])(
+    'still reports missing authentication for %j',
+    (config) => {
+      const instance = new Provider('account/custom-model', { config });
+      expect(instance.requiresApiKey()).toBe(true);
+      expect([...checkProviderApiKeys([instance]).values()]).toEqual([[instance.id()]]);
+      expect(BearerTokenAuthenticator).not.toHaveBeenCalled();
+      expect(IamAuthenticator).not.toHaveBeenCalled();
+    },
+  );
 
   it('keeps the existing IAM fallback when forced bearer auth has no token', async () => {
     const instance = new Provider('account/custom-model', {

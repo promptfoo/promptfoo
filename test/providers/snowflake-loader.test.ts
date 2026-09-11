@@ -123,39 +123,39 @@ describe('Snowflake public provider loading', () => {
     );
   });
 
-  it.each([
-    undefined,
-    'provider-token',
-  ])('merges provider and suite environment with provider key %s', async (providerKey) => {
-    const [provider] = await loadApiProviders(
-      [
-        {
-          id: providerId,
-          config: {
-            accountIdentifier: 'configured-account',
-            headers: { 'X-Suite': '{{ env.OPENAI_ORGANIZATION }}' },
+  it.each([undefined, 'provider-token'])(
+    'merges provider and suite environment with provider key %s',
+    async (providerKey) => {
+      const [provider] = await loadApiProviders(
+        [
+          {
+            id: providerId,
+            config: {
+              accountIdentifier: 'configured-account',
+              headers: { 'X-Suite': '{{ env.OPENAI_ORGANIZATION }}' },
+            },
+            env: providerKey ? { SNOWFLAKE_API_KEY: providerKey } : {},
           },
-          env: providerKey ? { SNOWFLAKE_API_KEY: providerKey } : {},
-        },
-      ],
-      { env: { SNOWFLAKE_API_KEY: 'suite-token', OPENAI_ORGANIZATION: 'suite-organization' } },
-    );
+        ],
+        { env: { SNOWFLAKE_API_KEY: 'suite-token', OPENAI_ORGANIZATION: 'suite-organization' } },
+      );
 
-    await provider.callApi('Hello', {
-      vars: {},
-      prompt: { raw: 'Hello', label: 'Hello' },
-      bustCache: true,
-    });
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://configured-account.snowflakecomputing.com/api/v2/cortex/inference:complete',
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: `Bearer ${providerKey ?? 'suite-token'}`,
-          'X-Suite': 'suite-organization',
+      await provider.callApi('Hello', {
+        vars: {},
+        prompt: { raw: 'Hello', label: 'Hello' },
+        bustCache: true,
+      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://configured-account.snowflakecomputing.com/api/v2/cortex/inference:complete',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${providerKey ?? 'suite-token'}`,
+            'X-Suite': 'suite-organization',
+          }),
         }),
-      }),
-    );
-  });
+      );
+    },
+  );
 
   it('loads a YAML provider file with caller environment overriding file defaults', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'snowflake-loader-'));
@@ -193,37 +193,40 @@ describe('Snowflake public provider loading', () => {
     [false, 2],
     [true, 0],
     [true, 2],
-  ])('honors retry budget %s/%s through the evaluation registry', async (disableScheduler, maxRetries) => {
-    const restoreSchedulerEnv = mockProcessEnv({
-      PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: String(disableScheduler),
-      SNOWFLAKE_ACCOUNT_IDENTIFIER: 'fallback-account',
-    });
-    vi.useFakeTimers();
-    fetchMock.mockImplementation(async () =>
-      Response.json({ error: 'temporarily unavailable' }, { status: 503 }),
-    );
-    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
-    try {
-      const [provider] = await loadApiProviders([
-        {
-          id: providerId,
-          config: { apiBaseUrl: 'http://localhost:1234', apiKey: 'retry-token', maxRetries },
-        },
-      ]);
-      const pending = registry.execute(provider, () =>
-        provider.callApi('Hello', {
-          vars: {},
-          prompt: { raw: 'Hello', label: 'Hello' },
-          bustCache: true,
-        }),
+  ])(
+    'honors retry budget %s/%s through the evaluation registry',
+    async (disableScheduler, maxRetries) => {
+      const restoreSchedulerEnv = mockProcessEnv({
+        PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: String(disableScheduler),
+        SNOWFLAKE_ACCOUNT_IDENTIFIER: 'fallback-account',
+      });
+      vi.useFakeTimers();
+      fetchMock.mockImplementation(async () =>
+        Response.json({ error: 'temporarily unavailable' }, { status: 503 }),
       );
-      await vi.runAllTimersAsync();
-      const result = await pending;
-      expect(result.error).toContain('503');
-      expect(fetchMock).toHaveBeenCalledTimes(Number(maxRetries) + 1);
-    } finally {
-      registry.dispose();
-      restoreSchedulerEnv();
-    }
-  });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      try {
+        const [provider] = await loadApiProviders([
+          {
+            id: providerId,
+            config: { apiBaseUrl: 'http://localhost:1234', apiKey: 'retry-token', maxRetries },
+          },
+        ]);
+        const pending = registry.execute(provider, () =>
+          provider.callApi('Hello', {
+            vars: {},
+            prompt: { raw: 'Hello', label: 'Hello' },
+            bustCache: true,
+          }),
+        );
+        await vi.runAllTimersAsync();
+        const result = await pending;
+        expect(result.error).toContain('503');
+        expect(fetchMock).toHaveBeenCalledTimes(Number(maxRetries) + 1);
+      } finally {
+        registry.dispose();
+        restoreSchedulerEnv();
+      }
+    },
+  );
 });

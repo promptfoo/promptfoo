@@ -70,20 +70,20 @@ describe('OpenRouter', () => {
       );
     });
 
-    it.each([
-      undefined,
-      'CUSTOM_OPENROUTER_KEY',
-    ])('leaves a missing selected credential unavailable (%s)', (apiKeyEnvar) => {
-      mockProcessEnv({ OPENROUTER_API_KEY: undefined, CUSTOM_OPENROUTER_KEY: undefined });
-      const provider = new OpenRouterProvider('fixture/model', {
-        config: { apiKeyEnvar },
-        env: {
-          OPENAI_API_KEY: 'unrelated-scoped-openai-key',
-          OPENROUTER_API_KEY: apiKeyEnvar ? 'nonselected-router-key' : undefined,
-        },
-      });
-      expect(provider.getApiKey()).toBeUndefined();
-    });
+    it.each([undefined, 'CUSTOM_OPENROUTER_KEY'])(
+      'leaves a missing selected credential unavailable (%s)',
+      (apiKeyEnvar) => {
+        mockProcessEnv({ OPENROUTER_API_KEY: undefined, CUSTOM_OPENROUTER_KEY: undefined });
+        const provider = new OpenRouterProvider('fixture/model', {
+          config: { apiKeyEnvar },
+          env: {
+            OPENAI_API_KEY: 'unrelated-scoped-openai-key',
+            OPENROUTER_API_KEY: apiKeyEnvar ? 'nonselected-router-key' : undefined,
+          },
+        });
+        expect(provider.getApiKey()).toBeUndefined();
+      },
+    );
   });
 
   describe('OpenRouterProvider', () => {
@@ -242,41 +242,41 @@ describe('OpenRouter', () => {
         expectedUrl:
           'https://proxy.example.com/openrouter/api/v1/chat/completions?api-version=2026-08-18',
       },
-    ])('should normalize the request URL for apiBaseUrl $apiBaseUrl', async ({
-      apiBaseUrl,
-      expectedUrl,
-    }) => {
-      const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
+    ])(
+      'should normalize the request URL for apiBaseUrl $apiBaseUrl',
+      async ({ apiBaseUrl, expectedUrl }) => {
+        const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
-      try {
-        const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
-          config: {
-            apiBaseUrl,
-          },
-        });
+        try {
+          const provider = new OpenRouterProvider('google/gemini-2.5-pro', {
+            config: {
+              apiBaseUrl,
+            },
+          });
 
-        const response = new Response(
-          JSON.stringify({
-            choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          }),
-          {
-            status: 200,
-            statusText: 'OK',
-            headers: new Headers({ 'Content-Type': 'application/json' }),
-          },
-        );
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
+          const response = new Response(
+            JSON.stringify({
+              choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+              usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+            }),
+            {
+              status: 200,
+              statusText: 'OK',
+              headers: new Headers({ 'Content-Type': 'application/json' }),
+            },
+          );
+          mockedFetchWithRetries.mockResolvedValueOnce(response);
 
-        await provider.callApi('Test prompt');
+          await provider.callApi('Test prompt');
 
-        const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
-        expect(provider.config.apiBaseUrl).toBe(apiBaseUrl);
-        expect(url).toBe(expectedUrl);
-      } finally {
-        restoreEnv();
-      }
-    });
+          const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
+          expect(provider.config.apiBaseUrl).toBe(apiBaseUrl);
+          expect(url).toBe(expectedUrl);
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
 
     it('should combine apiBaseUrl override with passthrough options on the request body', async () => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
@@ -452,18 +452,15 @@ describe('OpenRouter', () => {
           });
         });
 
-        it.each([
-          'true',
-          1,
-          null,
-          {},
-          [],
-        ])('does not coerce an invalid BYOK flag (%j)', async (flag) => {
-          mockResponse({ cost: 0.25, is_byok: flag });
-          const result = await provider().callApi('Cost prompt');
-          expect(result.cost).toBe(0.25);
-          expect(result.metadata?.openrouter).toEqual({ accountCharge: 0.25 });
-        });
+        it.each(['true', 1, null, {}, []])(
+          'does not coerce an invalid BYOK flag (%j)',
+          async (flag) => {
+            mockResponse({ cost: 0.25, is_byok: flag });
+            const result = await provider().callApi('Cost prompt');
+            expect(result.cost).toBe(0.25);
+            expect(result.metadata?.openrouter).toEqual({ accountCharge: 0.25 });
+          },
+        );
 
         it('does not add upstream or server-tool components to a non-BYOK charge', async () => {
           mockResponse({
@@ -540,19 +537,15 @@ describe('OpenRouter', () => {
           expect(result.metadata?.openrouter).toBeUndefined();
         });
 
-        it.each([
-          undefined,
-          null,
-          [],
-          'invalid',
-          true,
-          {},
-        ])('tolerates malformed cost details (%j)', async (details) => {
-          mockResponse({ cost: 0, is_byok: true, cost_details: details });
-          const result = await provider().callApi('Cost prompt');
-          expect(result.cost).toBeUndefined();
-          expect(result.metadata?.openrouter).toEqual({ accountCharge: 0, isByok: true });
-        });
+        it.each([undefined, null, [], 'invalid', true, {}])(
+          'tolerates malformed cost details (%j)',
+          async (details) => {
+            mockResponse({ cost: 0, is_byok: true, cost_details: details });
+            const result = await provider().callApi('Cost prompt');
+            expect(result.cost).toBeUndefined();
+            expect(result.metadata?.openrouter).toEqual({ accountCharge: 0, isByok: true });
+          },
+        );
 
         it('preserves valid zero and partial upstream facts independently', async () => {
           mockResponse({
@@ -576,82 +569,78 @@ describe('OpenRouter', () => {
           });
         });
 
-        it.each([
-          -1,
-          '0.02',
-          null,
-          true,
-          {},
-        ])('omits invalid upstream components (%j)', async (amount) => {
-          mockResponse({
-            cost: 0,
-            is_byok: true,
-            cost_details: {
-              upstream_inference_cost: amount,
-              upstream_inference_prompt_cost: amount,
-              upstream_inference_completions_cost: amount,
-              server_tool_cost: amount,
-            },
-          });
-          const result = await provider().callApi('Cost prompt');
-          expect(result.cost).toBeUndefined();
-          expect(result.metadata?.openrouter).toEqual({ accountCharge: 0, isByok: true });
-        });
+        it.each([-1, '0.02', null, true, {}])(
+          'omits invalid upstream components (%j)',
+          async (amount) => {
+            mockResponse({
+              cost: 0,
+              is_byok: true,
+              cost_details: {
+                upstream_inference_cost: amount,
+                upstream_inference_prompt_cost: amount,
+                upstream_inference_completions_cost: amount,
+                server_tool_cost: amount,
+              },
+            });
+            const result = await provider().callApi('Cost prompt');
+            expect(result.cost).toBeUndefined();
+            expect(result.metadata?.openrouter).toEqual({ accountCharge: 0, isByok: true });
+          },
+        );
 
         for (const imageInput of [false, true]) {
           it.each([
             { name: 'standard', byok: false, config: {}, expected: 0.25 },
             { name: 'BYOK', byok: true, config: {}, expected: undefined },
             { name: 'configured BYOK', byok: true, config: { cost: 0.01 }, expected: 0.3 },
-          ])(`preserves $name accounting on ${imageInput ? 'image-input' : 'text'} cache replay`, async ({
-            byok,
-            config,
-            expected,
-          }) => {
-            const content = [
-              { type: 'text', text: 'Describe this fixture' },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=',
+          ])(
+            `preserves $name accounting on ${imageInput ? 'image-input' : 'text'} cache replay`,
+            async ({ byok, config, expected }) => {
+              const content = [
+                { type: 'text', text: 'Describe this fixture' },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=',
+                  },
                 },
-              },
-            ];
-            const prompt = imageInput
-              ? JSON.stringify([{ role: 'user', content }])
-              : 'Cost cache prompt';
-            const wasCacheEnabled = isCacheEnabled();
-            await withCacheEnabled(true, async () => {
-              mockResponse({
-                prompt_tokens: 10,
-                completion_tokens: 20,
-                total_tokens: 30,
-                cost: 0.25,
-                is_byok: byok,
+              ];
+              const prompt = imageInput
+                ? JSON.stringify([{ role: 'user', content }])
+                : 'Cost cache prompt';
+              const wasCacheEnabled = isCacheEnabled();
+              await withCacheEnabled(true, async () => {
+                mockResponse({
+                  prompt_tokens: 10,
+                  completion_tokens: 20,
+                  total_tokens: 30,
+                  cost: 0.25,
+                  is_byok: byok,
+                });
+                const instance = provider(config);
+                const first = await instance.callApi(prompt);
+                const second = await instance.callApi(prompt);
+                if (expected === undefined) {
+                  expect(first.cost).toBeUndefined();
+                } else {
+                  expect(first.cost).toBeCloseTo(expected);
+                }
+                expect(first.cached).toBe(false);
+                expect(second.cached).toBe(true);
+                expect(second.cost).toBe(first.cost);
+                expect(first.metadata?.openrouter).toEqual({ accountCharge: 0.25, isByok: byok });
+                expect(second.metadata).toEqual(first.metadata);
+                expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+                const [url, options] = mockedFetchWithRetries.mock.calls[0];
+                expect(url).toBe(`${OPENROUTER_API_BASE}/chat/completions`);
+                expect(options?.headers).toMatchObject({ Authorization: 'Bearer test-key' });
+                if (imageInput) {
+                  expect(JSON.parse(options?.body as string).messages[0].content).toEqual(content);
+                }
               });
-              const instance = provider(config);
-              const first = await instance.callApi(prompt);
-              const second = await instance.callApi(prompt);
-              if (expected === undefined) {
-                expect(first.cost).toBeUndefined();
-              } else {
-                expect(first.cost).toBeCloseTo(expected);
-              }
-              expect(first.cached).toBe(false);
-              expect(second.cached).toBe(true);
-              expect(second.cost).toBe(first.cost);
-              expect(first.metadata?.openrouter).toEqual({ accountCharge: 0.25, isByok: byok });
-              expect(second.metadata).toEqual(first.metadata);
-              expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
-              const [url, options] = mockedFetchWithRetries.mock.calls[0];
-              expect(url).toBe(`${OPENROUTER_API_BASE}/chat/completions`);
-              expect(options?.headers).toMatchObject({ Authorization: 'Bearer test-key' });
-              if (imageInput) {
-                expect(JSON.parse(options?.body as string).messages[0].content).toEqual(content);
-              }
-            });
-            expect(isCacheEnabled()).toBe(wasCacheEnabled);
-          });
+              expect(isCacheEnabled()).toBe(wasCacheEnabled);
+            },
+          );
         }
       });
 
@@ -728,15 +717,13 @@ describe('OpenRouter', () => {
         expect(result.cost).toBeCloseTo(0.3);
       });
 
-      it.each([
-        { inputCost: 0.01 },
-        { cost: -1 },
-        { cost: Infinity },
-        { cost: NaN },
-      ])('does not invent cost for incomplete or invalid manual rates (%j)', async (config) => {
-        mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.5 });
-        expect((await provider(config, 'gpt-4o').callApi('Cost prompt')).cost).toBeUndefined();
-      });
+      it.each([{ inputCost: 0.01 }, { cost: -1 }, { cost: Infinity }, { cost: NaN }])(
+        'does not invent cost for incomplete or invalid manual rates (%j)',
+        async (config) => {
+          mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, cost: 0.5 });
+          expect((await provider(config, 'gpt-4o').callApi('Cost prompt')).cost).toBeUndefined();
+        },
+      );
 
       it('leaves a manual estimate unknown when token counts are missing', async () => {
         mockResponse({ cost: 0.5 });
@@ -786,30 +773,29 @@ describe('OpenRouter', () => {
           usage: { cost: 0.25, prompt_tokens: undefined, completion_tokens: undefined },
           expectedCost: undefined,
         },
-      ])('preserves logical cost on a promptfoo cache replay ($name)', async ({
-        config,
-        usage,
-        expectedCost,
-      }) => {
-        expect(process.env.PROMPTFOO_CACHE_TYPE).toBe('memory');
-        const wasCacheEnabled = isCacheEnabled();
-        await withCacheEnabled(true, async () => {
-          mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, ...usage });
-          const instance = provider(config);
-          const first = await instance.callApi('Cost cache prompt');
-          const second = await instance.callApi('Cost cache prompt');
-          expect(first.cached).toBe(false);
-          if (expectedCost === undefined) {
-            expect(first.cost).toBeUndefined();
-          } else {
-            expect(first.cost).toBeCloseTo(expectedCost);
-          }
-          expect(second).toMatchObject({ cached: true, tokenUsage: { cached: 30 } });
-          expect(second.cost).toBe(first.cost);
-          expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
-        });
-        expect(isCacheEnabled()).toBe(wasCacheEnabled);
-      });
+      ])(
+        'preserves logical cost on a promptfoo cache replay ($name)',
+        async ({ config, usage, expectedCost }) => {
+          expect(process.env.PROMPTFOO_CACHE_TYPE).toBe('memory');
+          const wasCacheEnabled = isCacheEnabled();
+          await withCacheEnabled(true, async () => {
+            mockResponse({ prompt_tokens: 10, completion_tokens: 20, total_tokens: 30, ...usage });
+            const instance = provider(config);
+            const first = await instance.callApi('Cost cache prompt');
+            const second = await instance.callApi('Cost cache prompt');
+            expect(first.cached).toBe(false);
+            if (expectedCost === undefined) {
+              expect(first.cost).toBeUndefined();
+            } else {
+              expect(first.cost).toBeCloseTo(expectedCost);
+            }
+            expect(second).toMatchObject({ cached: true, tokenUsage: { cached: 30 } });
+            expect(second.cost).toBe(first.cost);
+            expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
+          });
+          expect(isCacheEnabled()).toBe(wasCacheEnabled);
+        },
+      );
 
       it('preserves HTTP errors without assigning their billing metadata', async () => {
         mockResponse({ cost: 0.25 }, 400);

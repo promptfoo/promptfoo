@@ -99,23 +99,23 @@ describe('Provider override tests', () => {
     vi.resetAllMocks();
   });
 
-  it.each([
-    'process',
-    'scoped',
-  ])('ignores a GitHub Models token from %s when choosing defaults', async (source) => {
-    mockProcessEnv({ GITHUB_TOKEN: undefined });
-    const baseline = await getDefaultProviders();
-    if (source === 'process') {
-      mockProcessEnv({ GITHUB_TOKEN: 'fixture-github-token' });
-    }
-    const providers = await getDefaultProviders(
-      source === 'scoped' ? { GITHUB_TOKEN: 'fixture-github-token' } : undefined,
-    );
-    expect(providers.gradingProvider).toBe(baseline.gradingProvider);
-    expect(providers.gradingJsonProvider).toBe(baseline.gradingJsonProvider);
-    expect(providers.suggestionsProvider).toBe(baseline.suggestionsProvider);
-    expect(providers.synthesizeProvider).toBe(baseline.synthesizeProvider);
-  });
+  it.each(['process', 'scoped'])(
+    'ignores a GitHub Models token from %s when choosing defaults',
+    async (source) => {
+      mockProcessEnv({ GITHUB_TOKEN: undefined });
+      const baseline = await getDefaultProviders();
+      if (source === 'process') {
+        mockProcessEnv({ GITHUB_TOKEN: 'fixture-github-token' });
+      }
+      const providers = await getDefaultProviders(
+        source === 'scoped' ? { GITHUB_TOKEN: 'fixture-github-token' } : undefined,
+      );
+      expect(providers.gradingProvider).toBe(baseline.gradingProvider);
+      expect(providers.gradingJsonProvider).toBe(baseline.gradingJsonProvider);
+      expect(providers.suggestionsProvider).toBe(baseline.suggestionsProvider);
+      expect(providers.synthesizeProvider).toBe(baseline.synthesizeProvider);
+    },
+  );
 
   it('should override all completion providers when setDefaultCompletionProviders is called', async () => {
     const mockProvider = new MockProvider('test-completion-provider');
@@ -314,21 +314,21 @@ describe('Provider override tests', () => {
       AZURE_OPENAI_DEPLOYMENT_NAME: 'tenant-chat',
     };
 
-    it.each([
-      'process',
-      'scoped',
-    ])('uses an explicit Azure embedding deployment from %s unchanged', async (source) => {
-      const env = { ...azureEnv, AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'tenant-vectors-v1' };
-      if (source === 'process') {
-        mockProcessEnv(env);
-      }
-      const providers = await getDefaultProviders(source === 'scoped' ? env : undefined);
-      expect(providers.embeddingProvider).toBeInstanceOf(AzureEmbeddingProvider);
-      expect(providers.embeddingProvider).toHaveProperty('deploymentName', 'tenant-vectors-v1');
-      expect(providers.gradingProvider).toBeInstanceOf(AzureChatCompletionProvider);
-      expect(providers.gradingProvider).toHaveProperty('deploymentName', 'tenant-chat');
-      expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
-    });
+    it.each(['process', 'scoped'])(
+      'uses an explicit Azure embedding deployment from %s unchanged',
+      async (source) => {
+        const env = { ...azureEnv, AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'tenant-vectors-v1' };
+        if (source === 'process') {
+          mockProcessEnv(env);
+        }
+        const providers = await getDefaultProviders(source === 'scoped' ? env : undefined);
+        expect(providers.embeddingProvider).toBeInstanceOf(AzureEmbeddingProvider);
+        expect(providers.embeddingProvider).toHaveProperty('deploymentName', 'tenant-vectors-v1');
+        expect(providers.gradingProvider).toBeInstanceOf(AzureChatCompletionProvider);
+        expect(providers.gradingProvider).toHaveProperty('deploymentName', 'tenant-chat');
+        expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+      },
+    );
 
     it('preserves process precedence for the Azure embedding deployment', async () => {
       mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'process-vectors' });

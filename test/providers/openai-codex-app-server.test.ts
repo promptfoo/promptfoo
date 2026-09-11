@@ -234,31 +234,36 @@ describe('OpenAICodexAppServerProvider', () => {
   it.each([
     [['json'], 'http/json', 'json'],
     [['protobuf'], 'http/protobuf', 'binary'],
-  ])('matches app-server tracing protocol to receiver formats %j', async (acceptFormats, protocol, exporterProtocol) => {
-    const provider = new OpenAICodexAppServerProvider({ config: { deep_tracing: true } });
+  ])(
+    'matches app-server tracing protocol to receiver formats %j',
+    async (acceptFormats, protocol, exporterProtocol) => {
+      const provider = new OpenAICodexAppServerProvider({ config: { deep_tracing: true } });
 
-    await cliState.withRequestTracingConfig(
-      {
-        enabled: true,
-        otlp: {
-          http: {
-            enabled: true,
-            port: 4318,
-            acceptFormats: acceptFormats as Array<'json' | 'protobuf'>,
+      await cliState.withRequestTracingConfig(
+        {
+          enabled: true,
+          otlp: {
+            http: {
+              enabled: true,
+              port: 4318,
+              acceptFormats: acceptFormats as Array<'json' | 'protobuf'>,
+            },
           },
         },
-      },
-      async () => {
-        const env = (provider as any).prepareEnvironment({ deep_tracing: true });
-        expect(env.OTEL_EXPORTER_OTLP_PROTOCOL).toBe(protocol);
-        expect((provider as any).getResolvedCliConfig({ deep_tracing: true }, env)).toMatchObject({
-          otel: {
-            trace_exporter: { 'otlp-http': { protocol: exporterProtocol } },
-          },
-        });
-      },
-    );
-  });
+        async () => {
+          const env = (provider as any).prepareEnvironment({ deep_tracing: true });
+          expect(env.OTEL_EXPORTER_OTLP_PROTOCOL).toBe(protocol);
+          expect((provider as any).getResolvedCliConfig({ deep_tracing: true }, env)).toMatchObject(
+            {
+              otel: {
+                trace_exporter: { 'otlp-http': { protocol: exporterProtocol } },
+              },
+            },
+          );
+        },
+      );
+    },
+  );
 
   it('routes app-server telemetry to the receiver actually shared by overlapping evals', async () => {
     cliState.setActiveOtlpReceiver({
@@ -1587,92 +1592,93 @@ describe('OpenAICodexAppServerProvider', () => {
         error: { code: -32000, message: 'stale subscription already closed' },
       },
     },
-  ])('re-resumes a persistent explicit thread when stale unsubscribe is $outcome', async ({
-    unsubscribeResponse,
-  }) => {
-    const server = createMockAppServer();
-    mocks.spawn.mockReturnValue(server.proc);
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_id: 'thr_authority',
-        persist_threads: true,
-        thread_cleanup: 'none',
-      },
-    });
-    const callWithSandbox = (sandbox_mode: 'danger-full-access' | 'read-only') =>
-      provider.callApi('Check authority', {
-        prompt: {
-          raw: 'Check authority',
-          label: 'authority',
-          config: { sandbox_mode },
+  ])(
+    're-resumes a persistent explicit thread when stale unsubscribe is $outcome',
+    async ({ unsubscribeResponse }) => {
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          thread_id: 'thr_authority',
+          persist_threads: true,
+          thread_cleanup: 'none',
         },
-        vars: {},
       });
+      const callWithSandbox = (sandbox_mode: 'danger-full-access' | 'read-only') =>
+        provider.callApi('Check authority', {
+          prompt: {
+            raw: 'Check authority',
+            label: 'authority',
+            config: { sandbox_mode },
+          },
+          vars: {},
+        });
 
-    const firstResult = callWithSandbox('danger-full-access');
-    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
-    server.send({ id: initialize.id, result: {} });
-    const firstResume = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/resume',
-    );
-    expect(firstResume.params).toMatchObject({
-      threadId: 'thr_authority',
-      sandbox: 'danger-full-access',
-    });
-    server.send({ id: firstResume.id, result: { thread: { id: 'thr_authority' } } });
-    const firstTurn = await waitForMessage(server, (message) => message.method === 'turn/start');
-    server.send({
-      id: firstTurn.id,
-      result: { turn: { id: 'turn_authority_1', status: 'inProgress' } },
-    });
-    server.send({
-      method: 'turn/completed',
-      params: {
+      const firstResult = callWithSandbox('danger-full-access');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+      const firstResume = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/resume',
+      );
+      expect(firstResume.params).toMatchObject({
         threadId: 'thr_authority',
-        turn: { id: 'turn_authority_1', status: 'completed', items: [], error: null },
-      },
-    });
-    expect(await firstResult).not.toHaveProperty('error');
+        sandbox: 'danger-full-access',
+      });
+      server.send({ id: firstResume.id, result: { thread: { id: 'thr_authority' } } });
+      const firstTurn = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({
+        id: firstTurn.id,
+        result: { turn: { id: 'turn_authority_1', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_authority',
+          turn: { id: 'turn_authority_1', status: 'completed', items: [], error: null },
+        },
+      });
+      expect(await firstResult).not.toHaveProperty('error');
 
-    const secondResult = callWithSandbox('read-only');
-    const unsubscribe = await waitForMessage(
-      server,
-      (message) =>
-        message.method === 'thread/unsubscribe' && message.params?.threadId === 'thr_authority',
-    );
-    server.send({ id: unsubscribe.id, ...unsubscribeResponse });
-    const secondResume = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/resume' && message.id !== firstResume.id,
-    );
-    expect(secondResume.params).toMatchObject({
-      threadId: 'thr_authority',
-      sandbox: 'read-only',
-    });
-    server.send({ id: secondResume.id, result: { thread: { id: 'thr_authority' } } });
-    const secondTurn = await waitForMessage(
-      server,
-      (message) => message.method === 'turn/start' && message.id !== firstTurn.id,
-    );
-    server.send({
-      id: secondTurn.id,
-      result: { turn: { id: 'turn_authority_2', status: 'inProgress' } },
-    });
-    server.send({
-      method: 'turn/completed',
-      params: {
+      const secondResult = callWithSandbox('read-only');
+      const unsubscribe = await waitForMessage(
+        server,
+        (message) =>
+          message.method === 'thread/unsubscribe' && message.params?.threadId === 'thr_authority',
+      );
+      server.send({ id: unsubscribe.id, ...unsubscribeResponse });
+      const secondResume = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/resume' && message.id !== firstResume.id,
+      );
+      expect(secondResume.params).toMatchObject({
         threadId: 'thr_authority',
-        turn: { id: 'turn_authority_2', status: 'completed', items: [], error: null },
-      },
-    });
-    expect(await secondResult).not.toHaveProperty('error');
+        sandbox: 'read-only',
+      });
+      server.send({ id: secondResume.id, result: { thread: { id: 'thr_authority' } } });
+      const secondTurn = await waitForMessage(
+        server,
+        (message) => message.method === 'turn/start' && message.id !== firstTurn.id,
+      );
+      server.send({
+        id: secondTurn.id,
+        result: { turn: { id: 'turn_authority_2', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_authority',
+          turn: { id: 'turn_authority_2', status: 'completed', items: [], error: null },
+        },
+      });
+      expect(await secondResult).not.toHaveProperty('error');
 
-    expect(server.messages().filter((message) => message.method === 'thread/resume')).toHaveLength(
-      2,
-    );
-    expect((provider as any).threads.size).toBe(1);
-  });
+      expect(
+        server.messages().filter((message) => message.method === 'thread/resume'),
+      ).toHaveLength(2);
+      expect((provider as any).threads.size).toBe(1);
+    },
+  );
 
   it('reconnects before re-resuming when stale unsubscribe times out', async () => {
     vi.useFakeTimers();
@@ -5070,60 +5076,63 @@ describe('OpenAICodexAppServerProvider', () => {
   it.each([
     ['reusable', true],
     ['non-reusable', false],
-  ])('closes the active %s connection immediately when buffered turn events overflow', async (_label, reuseServer) => {
-    const server = createMockAppServer();
-    mocks.spawn.mockReturnValue(server.proc);
-    const provider = new OpenAICodexAppServerProvider({
-      config: { reuse_server: reuseServer, request_timeout_ms: 30_000 },
-    });
+  ])(
+    'closes the active %s connection immediately when buffered turn events overflow',
+    async (_label, reuseServer) => {
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({
+        config: { reuse_server: reuseServer, request_timeout_ms: 30_000 },
+      });
 
-    const resultPromise = provider.callApi('overflow');
-    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
-    server.send({ id: initialize.id, result: {} });
-    const threadStart = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/start',
-    );
-    server.send({ id: threadStart.id, result: { thread: { id: 'thr_overflow' } } });
-    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
-    server.send({
-      id: turnStart.id,
-      result: { turn: { id: 'turn_overflow', status: 'inProgress' } },
-    });
-
-    for (let index = 0; index < 2; index++) {
+      const resultPromise = provider.callApi('overflow');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_overflow' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
       server.send({
-        method: 'item/agentMessage/delta',
+        id: turnStart.id,
+        result: { turn: { id: 'turn_overflow', status: 'inProgress' } },
+      });
+
+      for (let index = 0; index < 2; index++) {
+        server.send({
+          method: 'item/agentMessage/delta',
+          params: {
+            threadId: 'thr_overflow',
+            turnId: 'turn_overflow',
+            itemId: 'stream',
+            delta: 'x'.repeat(4_000_000),
+          },
+        });
+      }
+      server.send({
+        id: 700,
+        method: 'item/commandExecution/requestApproval',
         params: {
           threadId: 'thr_overflow',
           turnId: 'turn_overflow',
-          itemId: 'stream',
-          delta: 'x'.repeat(4_000_000),
+          itemId: 'command',
+          command: 'x'.repeat(4_000_000),
         },
       });
-    }
-    server.send({
-      id: 700,
-      method: 'item/commandExecution/requestApproval',
-      params: {
-        threadId: 'thr_overflow',
-        turnId: 'turn_overflow',
-        itemId: 'command',
-        command: 'x'.repeat(4_000_000),
-      },
-    });
 
-    expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
-    expect(server.messages().some((message) => message.method === 'thread/unsubscribe')).toBe(
-      false,
-    );
-    await expect(resultPromise).resolves.toMatchObject({
-      error: expect.stringContaining('codex app-server turn events exceeded'),
-    });
-    if (reuseServer) {
-      expect((provider as any).connections.size).toBe(0);
-    }
-  });
+      expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(server.messages().some((message) => message.method === 'thread/unsubscribe')).toBe(
+        false,
+      );
+      await expect(resultPromise).resolves.toMatchObject({
+        error: expect.stringContaining('codex app-server turn events exceeded'),
+      });
+      if (reuseServer) {
+        expect((provider as any).connections.size).toBe(0);
+      }
+    },
+  );
 
   it('sanitizes sensitive command metadata', async () => {
     const server = createMockAppServer();

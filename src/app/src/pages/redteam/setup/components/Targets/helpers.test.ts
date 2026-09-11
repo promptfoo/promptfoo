@@ -18,14 +18,14 @@ describe('getProviderType', () => {
       expected: 'azure',
       description: 'a provider ID with a trailing colon',
     },
-  ])('should return the substring before the first colon for $description ("$providerId")', ({
-    providerId,
-    expected,
-  }) => {
-    const result = getProviderType(providerId);
+  ])(
+    'should return the substring before the first colon for $description ("$providerId")',
+    ({ providerId, expected }) => {
+      const result = getProviderType(providerId);
 
-    expect(result).toBe(expected);
-  });
+      expect(result).toBe(expected);
+    },
+  );
 
   it('should return "exec" for provider IDs like "exec: python script.py"', () => {
     const providerId = 'exec: python script.py';
@@ -34,12 +34,12 @@ describe('getProviderType', () => {
     expect(result).toBe(expected);
   });
 
-  it.each([
-    'openai:codex-security',
-    'openai:codex-security:gpt-5.6-luna',
-  ])('recognizes %s as Codex Security instead of a foundation OpenAI model', (providerId) => {
-    expect(getProviderType(providerId)).toBe('codex-security');
-  });
+  it.each(['openai:codex-security', 'openai:codex-security:gpt-5.6-luna'])(
+    'recognizes %s as Codex Security instead of a foundation OpenAI model',
+    (providerId) => {
+      expect(getProviderType(providerId)).toBe('codex-security');
+    },
+  );
 
   it('should return the substring before the first colon when multiple colons are present', () => {
     const providerId = 'bedrock:anthropic.claude-3-sonnet-20240229-v1:0';
@@ -73,14 +73,14 @@ describe('getProviderType', () => {
       description: 'wss URL provider',
     },
     { providerId: 'custom', expected: 'custom', description: 'custom provider' },
-  ])('should return the providerId itself for direct provider types like $description ("$providerId")', ({
-    providerId,
-    expected,
-  }) => {
-    const result = getProviderType(providerId);
+  ])(
+    'should return the providerId itself for direct provider types like $description ("$providerId")',
+    ({ providerId, expected }) => {
+      const result = getProviderType(providerId);
 
-    expect(result).toBe(expected);
-  });
+      expect(result).toBe(expected);
+    },
+  );
 
   describe('file:// path handling', () => {
     it.each([

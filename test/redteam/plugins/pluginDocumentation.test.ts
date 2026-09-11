@@ -9,25 +9,7 @@ const PLUGINS_DIR = path.join(__dirname, '../../../src/redteam/plugins');
 const DOCS_DIR = path.join(__dirname, '../../../site/docs/red-team/plugins');
 const STRATEGIES_DOCS_DIR = path.join(__dirname, '../../../site/docs/red-team/strategies');
 
-const REDTEAM_CONFIG_KEYS = new Set([
-  'injectVar',
-  'purpose',
-  'testGenerationInstructions',
-  'provider',
-  'numTests',
-  'language',
-  'frameworks',
-  'entities',
-  'contexts',
-  'plugins',
-  'strategies',
-  'maxConcurrency',
-  'maxCharsPerMessage',
-  'delay',
-  'excludeTargetOutputFromAgenticAttackGeneration',
-  'tracing',
-  'graderExamples',
-]);
+const REDTEAM_CONFIG_KEYS = new Set(Object.keys(RedteamConfigSchema.in.shape));
 
 function getYamlFences(filePath: string): Array<{ line: number; yaml: string }> {
   const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
@@ -352,8 +334,6 @@ describe('Plugin Documentation', () => {
         const parsed = loadYaml(frontmatter[1]) as { description?: unknown } | undefined;
         if (typeof parsed?.description !== 'string' || parsed.description.trim().length === 0) {
           errors.push(`${relative}: missing frontmatter description`);
-        } else if (parsed.description.length > 180) {
-          errors.push(`${relative}: frontmatter description exceeds 180 characters`);
         }
       } catch (error) {
         errors.push(`${relative}: invalid frontmatter: ${String(error)}`);

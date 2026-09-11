@@ -427,30 +427,33 @@ describe('OpenInterpreterProvider', () => {
       'cli_env.INTERPRETER_HOME',
       { cli_env: { INTERPRETER_HOME: '{% if useA %}home-a{% else %}home-b{% endif %}' } },
     ],
-  ])('renders a statement-templated %s before validating the home directory', async (_name, config) => {
-    mockProcessEnv({ OPENAI_API_KEY: undefined });
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-home-statement-'));
-    temporaryRoots.push(root);
-    const home = path.join(root, 'home-a');
-    const workspace = path.join(root, 'workspace');
-    fs.mkdirSync(home);
-    fs.mkdirSync(workspace);
-    const server = createMockAppServer();
-    mocks.spawn.mockReturnValue(server.proc);
-    const provider = new OpenInterpreterProvider({
-      config: { ...config, basePath: root, working_dir: workspace, skip_git_repo_check: true },
-    } as any);
+  ])(
+    'renders a statement-templated %s before validating the home directory',
+    async (_name, config) => {
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'openinterpreter-home-statement-'));
+      temporaryRoots.push(root);
+      const home = path.join(root, 'home-a');
+      const workspace = path.join(root, 'workspace');
+      fs.mkdirSync(home);
+      fs.mkdirSync(workspace);
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenInterpreterProvider({
+        config: { ...config, basePath: root, working_dir: workspace, skip_git_repo_check: true },
+      } as any);
 
-    const resultPromise = provider.callApi('templated home', {
-      vars: { useA: true },
-      prompt: { raw: 'templated home', label: 'home statement template' },
-    } as any);
-    await startTurn(server);
+      const resultPromise = provider.callApi('templated home', {
+        vars: { useA: true },
+        prompt: { raw: 'templated home', label: 'home statement template' },
+      } as any);
+      await startTurn(server);
 
-    expect(mocks.spawn.mock.calls[0][2].env.INTERPRETER_HOME).toBe(home);
-    completeTurn(server, 'reviewed');
-    await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
-  });
+      expect(mocks.spawn.mock.calls[0][2].env.INTERPRETER_HOME).toBe(home);
+      completeTurn(server, 'reviewed');
+      await expect(resultPromise).resolves.toMatchObject({ output: 'reviewed' });
+    },
+  );
 
   it('renders row workspace variables before validating structured input paths', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });
@@ -1186,18 +1189,21 @@ describe('OpenInterpreterProvider', () => {
     ['terminus-2', 'harness="terminus-2"'],
     ['minimal', 'harness="minimal"'],
     ['custom-harness', 'harness="custom-harness"'],
-  ])('maps the upstream %s harness without inventing a native enum value', async (harness, expected) => {
-    mockProcessEnv({ OPENAI_API_KEY: undefined });
-    const server = createMockAppServer();
-    mocks.spawn.mockReturnValue(server.proc);
-    const provider = new OpenInterpreterProvider({ config: { harness } });
+  ])(
+    'maps the upstream %s harness without inventing a native enum value',
+    async (harness, expected) => {
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenInterpreterProvider({ config: { harness } });
 
-    const resultPromise = provider.callApi('harness mapping');
-    await startTurn(server);
-    expect(mocks.spawn.mock.calls[0][1]).toContain(expected);
-    completeTurn(server, 'mapped');
-    await expect(resultPromise).resolves.toMatchObject({ output: 'mapped' });
-  });
+      const resultPromise = provider.callApi('harness mapping');
+      await startTurn(server);
+      expect(mocks.spawn.mock.calls[0][1]).toContain(expected);
+      completeTurn(server, 'mapped');
+      await expect(resultPromise).resolves.toMatchObject({ output: 'mapped' });
+    },
+  );
 
   it('accepts bounded inline image data and rejects all remote or non-data image URLs before spawn', async () => {
     mockProcessEnv({ OPENAI_API_KEY: undefined });

@@ -30,30 +30,32 @@ describe('default config discovery logging', () => {
     vi.restoreAllMocks();
   });
 
-  it.each([
-    'info',
-    'debug',
-  ] as const)('does not report missing optional configs as failures at %s level', async (level) => {
-    setLogLevel(level);
+  it.each(['info', 'debug'] as const)(
+    'does not report missing optional configs as failures at %s level',
+    async (level) => {
+      setLogLevel(level);
 
-    await expect(loadDefaultConfig(tempDir)).resolves.toEqual({
-      defaultConfig: {},
-      defaultConfigPath: undefined,
-    });
+      await expect(loadDefaultConfig(tempDir)).resolves.toEqual({
+        defaultConfig: {},
+        defaultConfigPath: undefined,
+      });
 
-    if (level === 'info') {
-      expect(logCallback).not.toHaveBeenCalled();
-    } else {
-      for (const extension of ['cjs', 'cts', 'js', 'mjs', 'mts', 'ts']) {
-        expect(logCallback).toHaveBeenCalledWith(
-          expect.stringContaining(`promptfooconfig.${extension}`),
+      if (level === 'info') {
+        expect(logCallback).not.toHaveBeenCalled();
+      } else {
+        for (const extension of ['cjs', 'cts', 'js', 'mjs', 'mts', 'ts']) {
+          expect(logCallback).toHaveBeenCalledWith(
+            expect.stringContaining(`promptfooconfig.${extension}`),
+          );
+        }
+        expect(logCallback).not.toHaveBeenCalledWith(
+          expect.stringMatching(
+            /ERR_MODULE_NOT_FOUND|Cannot find module|ESM import failed|\n\s+at /,
+          ),
         );
       }
-      expect(logCallback).not.toHaveBeenCalledWith(
-        expect.stringMatching(/ERR_MODULE_NOT_FOUND|Cannot find module|ESM import failed|\n\s+at /),
-      );
-    }
-  });
+    },
+  );
 
   it.each([
     { extension: 'mjs', source: "export default { prompts: ['hello'], providers: ['echo'] };" },

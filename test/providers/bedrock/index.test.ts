@@ -708,18 +708,21 @@ describe('AwsBedrockGenericProvider', () => {
       'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-25',
       'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-team-blue-12',
       'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-20260811',
-    ])('preserves sampling and manual thinking for Claude inference profile %s', async (modelName) => {
-      const thinking = { type: 'enabled', budget_tokens: 8192 } as const;
-      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
-        { region: 'us-east-1', temperature: 0.5, thinking },
-        'hi',
-        undefined,
-        modelName,
-      );
+    ])(
+      'preserves sampling and manual thinking for Claude inference profile %s',
+      async (modelName) => {
+        const thinking = { type: 'enabled', budget_tokens: 8192 } as const;
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5, thinking },
+          'hi',
+          undefined,
+          modelName,
+        );
 
-      expect(params.temperature).toBe(0.5);
-      expect(params.thinking).toEqual(thinking);
-    });
+        expect(params.temperature).toBe(0.5);
+        expect(params.thinking).toEqual(thinking);
+      },
+    );
 
     it('gives Claude Opus 5 thinking headroom in the default max_tokens', async () => {
       // Opus 5 spends part of max_tokens on its default adaptive thinking even with no
@@ -815,30 +818,30 @@ describe('AwsBedrockGenericProvider', () => {
       expect(disabledParams.thinking).toBeUndefined();
     });
 
-    it.each([
-      { type: 'any' as const },
-      { type: 'tool' as const, name: 'get_weather' },
-    ])('omits forced tool choice for Claude Fable 5: %j', async (tool_choice) => {
-      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
-        {
-          region: 'us-east-1',
-          tools: [
-            {
-              name: 'get_weather',
-              description: 'Get the weather',
-              input_schema: { type: 'object', properties: {} },
-            },
-          ],
-          tool_choice,
-        },
-        'hi',
-        undefined,
-        'anthropic.claude-fable-5',
-      );
+    it.each([{ type: 'any' as const }, { type: 'tool' as const, name: 'get_weather' }])(
+      'omits forced tool choice for Claude Fable 5: %j',
+      async (tool_choice) => {
+        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          {
+            region: 'us-east-1',
+            tools: [
+              {
+                name: 'get_weather',
+                description: 'Get the weather',
+                input_schema: { type: 'object', properties: {} },
+              },
+            ],
+            tool_choice,
+          },
+          'hi',
+          undefined,
+          'anthropic.claude-fable-5',
+        );
 
-      expect(params.tools).toHaveLength(1);
-      expect(params.tool_choice).toBeUndefined();
-    });
+        expect(params.tools).toHaveLength(1);
+        expect(params.tool_choice).toBeUndefined();
+      },
+    );
 
     it('keeps manual thinking enabled for non-deprecated Claude Opus 4.6 on Bedrock invokeModel', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
@@ -3909,30 +3912,33 @@ describe('AwsBedrockCompletionProvider', () => {
     ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
     ['global.anthropic.claude-mythos-5-1', 0, 0.0263],
     ['global.anthropic.claude-fable-5', 0, 0.02645],
-  ] as const)('prices Claude Runtime cache tokens once for %s', async (modelName, inputTokens, expectedCost) => {
-    const responseJson = JSON.stringify({
-      content: [{ type: 'text', text: 'ok' }],
-      usage: {
-        input_tokens: inputTokens,
-        output_tokens: 500,
-        cache_read_input_tokens: 200,
-        cache_creation_input_tokens: 100,
-      },
-    });
-    mockInvokeModel.mockResolvedValueOnce({
-      body: Object.assign(new TextEncoder().encode(responseJson), {
-        transformToString: () => responseJson,
-      }),
-    });
-    const provider = new AwsBedrockCompletionProvider(modelName, {
-      config: { region: 'us-west-2' },
-    });
+  ] as const)(
+    'prices Claude Runtime cache tokens once for %s',
+    async (modelName, inputTokens, expectedCost) => {
+      const responseJson = JSON.stringify({
+        content: [{ type: 'text', text: 'ok' }],
+        usage: {
+          input_tokens: inputTokens,
+          output_tokens: 500,
+          cache_read_input_tokens: 200,
+          cache_creation_input_tokens: 100,
+        },
+      });
+      mockInvokeModel.mockResolvedValueOnce({
+        body: Object.assign(new TextEncoder().encode(responseJson), {
+          transformToString: () => responseJson,
+        }),
+      });
+      const provider = new AwsBedrockCompletionProvider(modelName, {
+        config: { region: 'us-west-2' },
+      });
 
-    const result = await provider.callApi('hello');
+      const result = await provider.callApi('hello');
 
-    expect(result.tokenUsage?.prompt).toBe(inputTokens + 300);
-    expect(result.cost).toBeCloseTo(expectedCost, 8);
-  });
+      expect(result.tokenUsage?.prompt).toBe(inputTokens + 300);
+      expect(result.cost).toBeCloseTo(expectedCost, 8);
+    },
+  );
 
   it('calculates pricing for OpenAI-compatible Runtime responses', async () => {
     const responseJson = JSON.stringify({
@@ -5078,15 +5084,11 @@ describe('getHandlerForModel routing for OpenAI-compatible families', () => {
     expect(getHandlerForModel(modelName)).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
   });
 
-  it.each([
-    'zai',
-    'minimax',
-    'moonshot',
-    'nvidia',
-    'writer',
-    'gemma',
-  ] as const)('maps inference-profile ARN with inferenceModelType=%s to OPENAI_COMPAT', (inferenceModelType) => {
-    const arn = 'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile';
-    expect(getHandlerForModel(arn, { inferenceModelType })).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
-  });
+  it.each(['zai', 'minimax', 'moonshot', 'nvidia', 'writer', 'gemma'] as const)(
+    'maps inference-profile ARN with inferenceModelType=%s to OPENAI_COMPAT',
+    (inferenceModelType) => {
+      const arn = 'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/my-profile';
+      expect(getHandlerForModel(arn, { inferenceModelType })).toBe(BEDROCK_MODEL.OPENAI_COMPAT);
+    },
+  );
 });

@@ -75,16 +75,15 @@ describe('BraintrustProvider', () => {
     expect(() => new BraintrustProvider(value)).toThrow();
   });
 
-  it.each([
-    '../../admin',
-    'abc123',
-    '00000000000000000000000000000000',
-  ])('rejects invalid OpenTelemetry trace IDs: %s', async (traceId) => {
-    await expect(new BraintrustProvider(config).fetchTrace(traceId)).rejects.toThrow(
-      TraceProviderError,
-    );
-    expect(mockedFetch).not.toHaveBeenCalled();
-  });
+  it.each(['../../admin', 'abc123', '00000000000000000000000000000000'])(
+    'rejects invalid OpenTelemetry trace IDs: %s',
+    async (traceId) => {
+      await expect(new BraintrustProvider(config).fetchTrace(traceId)).rejects.toThrow(
+        TraceProviderError,
+      );
+      expect(mockedFetch).not.toHaveBeenCalled();
+    },
+  );
 
   it('queries full Braintrust traces using the propagated OpenTelemetry trace ID', async () => {
     const result = await new BraintrustProvider(config).fetchTrace(TRACE_ID);
@@ -256,28 +255,28 @@ describe('BraintrustProvider', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    undefined,
-    '1',
-  ])('cancels oversized streamed responses when content-length is %s', async (contentLength) => {
-    const cancel = vi.fn();
-    const body = new ReadableStream({
-      start(controller) {
-        controller.enqueue(new Uint8Array(10 * 1024 * 1024 + 1));
-      },
-      cancel,
-    });
-    mockedFetch.mockResolvedValue(
-      new Response(body, {
-        ...(contentLength && { headers: { 'content-length': contentLength } }),
-      }),
-    );
+  it.each([undefined, '1'])(
+    'cancels oversized streamed responses when content-length is %s',
+    async (contentLength) => {
+      const cancel = vi.fn();
+      const body = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(10 * 1024 * 1024 + 1));
+        },
+        cancel,
+      });
+      mockedFetch.mockResolvedValue(
+        new Response(body, {
+          ...(contentLength && { headers: { 'content-length': contentLength } }),
+        }),
+      );
 
-    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'maximum response size',
-    );
-    expect(cancel).toHaveBeenCalledOnce();
-  });
+      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
+        'maximum response size',
+      );
+      expect(cancel).toHaveBeenCalledOnce();
+    },
+  );
 
   it('filters spans by start time and caps the result count', async () => {
     const provider = new BraintrustProvider(config);

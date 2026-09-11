@@ -374,57 +374,45 @@ describe('Perplexity Provider', () => {
         );
       });
 
-      it.each([
-        'sonar',
-        'sonar-pro',
-        'sonar-reasoning-pro',
-        'sonar-deep-research',
-        'custom-model',
-      ])('leaves %s cost unknown without a provider total', async (model) => {
-        mockResponse({ prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 });
-        const result = await provider(model).callApi('Test prompt');
-        expect(result.output).toBe('Test output');
-        expect(result.cost).toBeUndefined();
-      });
+      it.each(['sonar', 'sonar-pro', 'sonar-reasoning-pro', 'sonar-deep-research', 'custom-model'])(
+        'leaves %s cost unknown without a provider total',
+        async (model) => {
+          mockResponse({ prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 });
+          const result = await provider(model).callApi('Test prompt');
+          expect(result.output).toBe('Test output');
+          expect(result.cost).toBeUndefined();
+        },
+      );
 
       it.each([0, 0.123])('accepts a reported total of %s without token counts', async (cost) => {
         mockResponse({ cost: { total_cost: cost } });
         expect((await provider('custom-model').callApi('Test prompt')).cost).toBe(cost);
       });
 
-      it.each([
-        undefined,
-        null,
-        {},
-        { total_tokens: 0 },
-        { cost: null },
-      ])('handles missing billing data (%j)', async (usage) => {
-        mockResponse(usage);
-        const result = await provider().callApi('Test prompt');
-        expect(result.output).toBe('Test output');
-        expect(result.cost).toBeUndefined();
-      });
+      it.each([undefined, null, {}, { total_tokens: 0 }, { cost: null }])(
+        'handles missing billing data (%j)',
+        async (usage) => {
+          mockResponse(usage);
+          const result = await provider().callApi('Test prompt');
+          expect(result.output).toBe('Test output');
+          expect(result.cost).toBeUndefined();
+        },
+      );
 
-      it.each([
-        -1,
-        NaN,
-        Infinity,
-        -Infinity,
-        '0.01',
-        null,
-        {},
-        true,
-      ])('leaves invalid reported total %s unknown', async (totalCost) => {
-        mockResponse({
-          prompt_tokens: 10,
-          completion_tokens: 10,
-          total_tokens: 20,
-          cost: { total_cost: totalCost },
-        });
-        const result = await provider().callApi('Test prompt');
-        expect(result.output).toBe('Test output');
-        expect(result.cost).toBeUndefined();
-      });
+      it.each([-1, NaN, Infinity, -Infinity, '0.01', null, {}, true])(
+        'leaves invalid reported total %s unknown',
+        async (totalCost) => {
+          mockResponse({
+            prompt_tokens: 10,
+            completion_tokens: 10,
+            total_tokens: 20,
+            cost: { total_cost: totalCost },
+          });
+          const result = await provider().callApi('Test prompt');
+          expect(result.output).toBe('Test output');
+          expect(result.cost).toBeUndefined();
+        },
+      );
 
       it('does not inherit OpenAI prices for a colliding model name', async () => {
         mockResponse({ prompt_tokens: 100, completion_tokens: 100, total_tokens: 200 });
@@ -467,19 +455,20 @@ describe('Perplexity Provider', () => {
         expect(result.cost).toBe(0.01018);
       });
 
-      it.each([
-        400, 429, 500,
-      ])('preserves HTTP %s errors without assigning a cost', async (status) => {
-        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
-          data: { error: { message: 'API error' }, usage: { cost: { total_cost: 0.01 } } },
-          cached: false,
-          status,
-          statusText: 'Error',
-        });
-        const result = await provider().callApi('Test prompt');
-        expect(result.error).toContain(`API error: ${status}`);
-        expect(result.cost).toBeUndefined();
-      });
+      it.each([400, 429, 500])(
+        'preserves HTTP %s errors without assigning a cost',
+        async (status) => {
+          vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+            data: { error: { message: 'API error' }, usage: { cost: { total_cost: 0.01 } } },
+            cached: false,
+            status,
+            statusText: 'Error',
+          });
+          const result = await provider().callApi('Test prompt');
+          expect(result.error).toContain(`API error: ${status}`);
+          expect(result.cost).toBeUndefined();
+        },
+      );
     });
 
     it('should prefer Perplexity authoritative total cost', () => {
@@ -736,14 +725,13 @@ describe('Perplexity Provider', () => {
       expect(calculatePerplexityCost('r1-1776', 0, 2000000)).toBe(16);
     });
 
-    it.each([
-      'unknown-model',
-      'sonar-pro-future',
-      'my-sonar',
-    ])('does not estimate unknown model %s', (model) => {
-      expect(calculatePerplexityCost(model, 1000000, 1000000)).toBeUndefined();
-      expect(calculatePerplexityCost(model)).toBeUndefined();
-    });
+    it.each(['unknown-model', 'sonar-pro-future', 'my-sonar'])(
+      'does not estimate unknown model %s',
+      (model) => {
+        expect(calculatePerplexityCost(model, 1000000, 1000000)).toBeUndefined();
+        expect(calculatePerplexityCost(model)).toBeUndefined();
+      },
+    );
 
     it('should handle case insensitivity in model names', () => {
       expect(calculatePerplexityCost('SONAR-PRO', 1000000, 1000000)).toBe(18);

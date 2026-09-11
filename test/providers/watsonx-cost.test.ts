@@ -257,54 +257,54 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it.each([
-    'failure',
-    'timeout',
-  ])('releases all shared metadata waiters after %s and permits recovery', async (failure) => {
-    vi.useFakeTimers();
-    vi.stubEnv('REQUEST_TIMEOUT_MS', '50');
-    const regionalClient = client();
-    const lookup = deferred<ReturnType<typeof metadata>>();
-    const started = deferred<void>();
-    regionalClient.listFoundationModelSpecs.mockImplementation(() => {
-      started.resolve();
-      return lookup.promise;
-    });
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    const instance = provider(chat);
-    await instance.getClient();
-    const pending = Promise.all(
-      ['First', 'Second', 'Third'].map((prompt) => instance.callApi(prompt)),
-    );
-    await started.promise;
-    await vi.advanceTimersByTimeAsync(0);
-    const signal = regionalClient.listFoundationModelSpecs.mock.calls[0][0].signal;
-    if (failure === 'timeout') {
-      await vi.advanceTimersByTimeAsync(50);
-    } else {
-      lookup.reject(new Error('Metadata unavailable'));
-    }
-    const results = await pending;
+  it.each(['failure', 'timeout'])(
+    'releases all shared metadata waiters after %s and permits recovery',
+    async (failure) => {
+      vi.useFakeTimers();
+      vi.stubEnv('REQUEST_TIMEOUT_MS', '50');
+      const regionalClient = client();
+      const lookup = deferred<ReturnType<typeof metadata>>();
+      const started = deferred<void>();
+      regionalClient.listFoundationModelSpecs.mockImplementation(() => {
+        started.resolve();
+        return lookup.promise;
+      });
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const instance = provider(chat);
+      await instance.getClient();
+      const pending = Promise.all(
+        ['First', 'Second', 'Third'].map((prompt) => instance.callApi(prompt)),
+      );
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(0);
+      const signal = regionalClient.listFoundationModelSpecs.mock.calls[0][0].signal;
+      if (failure === 'timeout') {
+        await vi.advanceTimersByTimeAsync(50);
+      } else {
+        lookup.reject(new Error('Metadata unavailable'));
+      }
+      const results = await pending;
 
-    expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(1);
-    expect(signal.aborted).toBe(failure === 'timeout');
-    for (const result of results) {
-      expect(result.output).toBe('Hello');
-      expect(result.error).toBeUndefined();
-      expect(result.cost).toBeUndefined();
-    }
-    expect(vi.getTimerCount()).toBe(0);
+      expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(1);
+      expect(signal.aborted).toBe(failure === 'timeout');
+      for (const result of results) {
+        expect(result.output).toBe('Hello');
+        expect(result.error).toBeUndefined();
+        expect(result.cost).toBeUndefined();
+      }
+      expect(vi.getTimerCount()).toBe(0);
 
-    regionalClient.listFoundationModelSpecs.mockResolvedValue(metadata());
-    const recovered = await instance.callApi('Recovered');
-    expect(recovered.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
-    if (failure === 'timeout') {
-      lookup.resolve(metadata('class_1', 'class_1'));
-      expect((await instance.callApi('After late response')).cost).toBe(recovered.cost);
-    }
-    expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
-    expect(vi.getTimerCount()).toBe(0);
-  });
+      regionalClient.listFoundationModelSpecs.mockResolvedValue(metadata());
+      const recovered = await instance.callApi('Recovered');
+      expect(recovered.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
+      if (failure === 'timeout') {
+        lookup.resolve(metadata('class_1', 'class_1'));
+        expect((await instance.callApi('After late response')).cost).toBe(recovered.cost);
+      }
+      expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 
   it('uses the generation client and effective model ID for authenticated regional metadata', async () => {
     const regionalClient = client();
@@ -334,14 +334,17 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
     ['new output tier', 'class_c1', 'future_class'],
     ['missing input tier', null, 'class_9'],
     ['missing output tier', 'class_c1', null],
-  ])('leaves cost unknown for %s while preserving the generated output', async (_name, input, output) => {
-    const regionalClient = client(input, output);
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    const result = await provider(chat).callApi('Hello');
-    expect(result.output).toBe('Hello');
-    expect(result.error).toBeUndefined();
-    expect(result.cost).toBeUndefined();
-  });
+  ])(
+    'leaves cost unknown for %s while preserving the generated output',
+    async (_name, input, output) => {
+      const regionalClient = client(input, output);
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const result = await provider(chat).callApi('Hello');
+      expect(result.output).toBe('Hello');
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeUndefined();
+    },
+  );
 
   it('keeps a metadata failure out of the generation error and retries after recovery', async () => {
     const regionalClient = client();
@@ -401,80 +404,80 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it.each([
-    false,
-    true,
-  ])('bounds SDK waits that settle after cancellation (rejects=%s)', async (rejects) => {
-    vi.useFakeTimers();
-    vi.stubEnv('REQUEST_TIMEOUT_MS', '50');
-    const regionalClient = client();
-    let onMetadataStarted!: () => void;
-    const metadataStarted = new Promise<void>((resolve) => {
-      onMetadataStarted = resolve;
-    });
-    let settleMetadata!: () => void;
-    regionalClient.listFoundationModelSpecs.mockImplementationOnce(() => {
-      onMetadataStarted();
-      return new Promise((resolve, reject) => {
-        settleMetadata = () =>
-          rejects
-            ? reject(new Error('Delayed SDK cancellation'))
-            : resolve(metadata('class_1', 'class_1'));
+  it.each([false, true])(
+    'bounds SDK waits that settle after cancellation (rejects=%s)',
+    async (rejects) => {
+      vi.useFakeTimers();
+      vi.stubEnv('REQUEST_TIMEOUT_MS', '50');
+      const regionalClient = client();
+      let onMetadataStarted!: () => void;
+      const metadataStarted = new Promise<void>((resolve) => {
+        onMetadataStarted = resolve;
       });
-    });
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    const instance = provider(chat);
-    const pending = instance.callApi('Hello');
-    await metadataStarted;
-    await vi.advanceTimersByTimeAsync(50);
-    const result = await pending;
-    expect(result.output).toBe('Hello');
-    expect(result.error).toBeUndefined();
-    expect(result.cost).toBeUndefined();
-    expect(regionalClient.listFoundationModelSpecs.mock.calls[0][0].signal.aborted).toBe(true);
-    expect(vi.getTimerCount()).toBe(0);
+      let settleMetadata!: () => void;
+      regionalClient.listFoundationModelSpecs.mockImplementationOnce(() => {
+        onMetadataStarted();
+        return new Promise((resolve, reject) => {
+          settleMetadata = () =>
+            rejects
+              ? reject(new Error('Delayed SDK cancellation'))
+              : resolve(metadata('class_1', 'class_1'));
+        });
+      });
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const instance = provider(chat);
+      const pending = instance.callApi('Hello');
+      await metadataStarted;
+      await vi.advanceTimersByTimeAsync(50);
+      const result = await pending;
+      expect(result.output).toBe('Hello');
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeUndefined();
+      expect(regionalClient.listFoundationModelSpecs.mock.calls[0][0].signal.aborted).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
 
-    // Late SDK success must not populate the cache; rejection must remain handled.
-    settleMetadata();
-    const recovered = await instance.callApi('Hello again');
-    expect(recovered.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
-    expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
-    expect(vi.getTimerCount()).toBe(0);
-  });
+      // Late SDK success must not populate the cache; rejection must remain handled.
+      settleMetadata();
+      const recovered = await instance.callApi('Hello again');
+      expect(recovered.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
+      expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(2);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 
-  it.each([
-    false,
-    true,
-  ])('clears the metadata deadline after settlement (failure=%s)', async (fails) => {
-    vi.useFakeTimers();
-    vi.stubEnv('REQUEST_TIMEOUT_MS', '50');
-    const regionalClient = client();
-    if (fails) {
-      regionalClient.listFoundationModelSpecs.mockRejectedValueOnce(new Error('Unavailable'));
-    }
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    await provider(chat).callApi('Hello');
-    const signal = regionalClient.listFoundationModelSpecs.mock.calls[0][0].signal;
-    expect(signal).toBeInstanceOf(AbortSignal);
-    expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(50);
-    expect(signal.aborted).toBe(false);
-  });
+  it.each([false, true])(
+    'clears the metadata deadline after settlement (failure=%s)',
+    async (fails) => {
+      vi.useFakeTimers();
+      vi.stubEnv('REQUEST_TIMEOUT_MS', '50');
+      const regionalClient = client();
+      if (fails) {
+        regionalClient.listFoundationModelSpecs.mockRejectedValueOnce(new Error('Unavailable'));
+      }
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      await provider(chat).callApi('Hello');
+      const signal = regionalClient.listFoundationModelSpecs.mock.calls[0][0].signal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(signal.aborted).toBe(false);
+    },
+  );
 
   it.each([
     { cost: 0.01, expected: 0.3 },
     { inputCost: 0.01, outputCost: 0.02, expected: 0.5 },
     { cost: 0.01, outputCost: 0.02, expected: 0.5 },
     { inputCost: 0, outputCost: 0, expected: 0 },
-  ])('honors explicit per-token prices without fetching metadata ($expected)', async ({
-    expected,
-    ...config
-  }) => {
-    const regionalClient = client();
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    expect((await provider(chat, config).callApi('Hello')).cost).toBeCloseTo(expected, 12);
-    expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
-  });
+  ])(
+    'honors explicit per-token prices without fetching metadata ($expected)',
+    async ({ expected, ...config }) => {
+      const regionalClient = client();
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      expect((await provider(chat, config).callApi('Hello')).cost).toBeCloseTo(expected, 12);
+      expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
+    },
+  );
 
   it('combines an explicit input price with a known output tier', async () => {
     const regionalClient = client('unknown', 'class_9');
@@ -518,44 +521,39 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
       outputTier: 'class_9',
       expected: (20 * 0.371) / 1e6,
     },
-  ])('ignores an unused $name for reported zero tokens', async ({
-    input,
-    output,
-    inputTier,
-    outputTier,
-    expected,
-  }) => {
-    const regionalClient = client(inputTier, outputTier);
-    setTokenCounts(regionalClient, input, output);
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    const result = await provider(chat).callApi('Hello');
+  ])(
+    'ignores an unused $name for reported zero tokens',
+    async ({ input, output, inputTier, outputTier, expected }) => {
+      const regionalClient = client(inputTier, outputTier);
+      setTokenCounts(regionalClient, input, output);
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const result = await provider(chat).callApi('Hello');
 
-    expect(result.output).toBe('Hello');
-    expect(result.error).toBeUndefined();
-    expect(result.cost).toBeCloseTo(expected, 12);
-    expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(1);
-  });
+      expect(result.output).toBe('Hello');
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeCloseTo(expected, 12);
+      expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it.each([
     { name: 'input override', input: 10, output: 0, config: { inputCost: 0.01 }, expected: 0.1 },
     { name: 'output override', input: 0, output: 20, config: { outputCost: 0.02 }, expected: 0.4 },
     { name: 'both counts zero', input: 0, output: 0, config: {}, expected: 0 },
-  ])('skips metadata when $name supplies every required price', async ({
-    input,
-    output,
-    config,
-    expected,
-  }) => {
-    const regionalClient = client('unknown', 'unknown');
-    setTokenCounts(regionalClient, input, output);
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    const result = await provider(chat, config).callApi('Hello');
+  ])(
+    'skips metadata when $name supplies every required price',
+    async ({ input, output, config, expected }) => {
+      const regionalClient = client('unknown', 'unknown');
+      setTokenCounts(regionalClient, input, output);
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const result = await provider(chat, config).callApi('Hello');
 
-    expect(result.output).toBe('Hello');
-    expect(result.error).toBeUndefined();
-    expect(result.cost).toBeCloseTo(expected, 12);
-    expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
-  });
+      expect(result.output).toBe('Hello');
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeCloseTo(expected, 12);
+      expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     { name: 'missing input', input: undefined, output: 0 },
@@ -566,18 +564,18 @@ describe.each([false, true])('WatsonX regional cost (chat=%s)', (chat) => {
     { name: 'NaN output', input: 0, output: Number.NaN },
     { name: 'infinite input', input: Number.POSITIVE_INFINITY, output: 0 },
     { name: 'infinite output', input: 0, output: Number.POSITIVE_INFINITY },
-  ])('keeps cost unknown for $name despite a reported zero counterpart', async ({
-    input,
-    output,
-  }) => {
-    const regionalClient = client();
-    setTokenCounts(regionalClient, input, output);
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    const result = await provider(chat, { cost: 0.01 }).callApi('Hello');
+  ])(
+    'keeps cost unknown for $name despite a reported zero counterpart',
+    async ({ input, output }) => {
+      const regionalClient = client();
+      setTokenCounts(regionalClient, input, output);
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const result = await provider(chat, { cost: 0.01 }).callApi('Hello');
 
-    expect(result.cost).toBeUndefined();
-    expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
-  });
+      expect(result.cost).toBeUndefined();
+      expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not replay old cached responses with fabricated zero costs', async () => {
     const regionalClient = client('unknown', 'unknown');
@@ -607,39 +605,39 @@ describe.each([false, true])('WatsonX caller cancellation (chat=%s)', (chat) => 
     vi.mocked(isCacheEnabled).mockReturnValue(true);
   });
 
-  it.each([
-    false,
-    true,
-  ])('returns SDK AbortErrors as ordinary failures when the caller did not cancel (signal=%s)', async (withSignal) => {
-    const regionalClient = client();
-    const generation = chat ? regionalClient.textChat : regionalClient.generateText;
-    const sdkError = Object.assign(new Error('SDK request timed out'), { name: 'AbortError' });
-    generation.mockRejectedValueOnce(sdkError);
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    const signal = withSignal ? new AbortController().signal : undefined;
-    const cache = getCache();
+  it.each([false, true])(
+    'returns SDK AbortErrors as ordinary failures when the caller did not cancel (signal=%s)',
+    async (withSignal) => {
+      const regionalClient = client();
+      const generation = chat ? regionalClient.textChat : regionalClient.generateText;
+      const sdkError = Object.assign(new Error('SDK request timed out'), { name: 'AbortError' });
+      generation.mockRejectedValueOnce(sdkError);
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const signal = withSignal ? new AbortController().signal : undefined;
+      const cache = getCache();
 
-    await expect(
-      provider(chat).callApi(
-        'SDK failure',
-        undefined,
-        signal ? { abortSignal: signal } : undefined,
-      ),
-    ).resolves.toEqual({
-      error: 'API call error: AbortError: SDK request timed out',
-      output: '',
-      tokenUsage: createEmptyTokenUsage(),
-    });
-    expect(generation).toHaveBeenCalledTimes(1);
-    expect(generation.mock.calls[0][0].signal).toBe(signal);
-    expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
-    expect(cache.set).not.toHaveBeenCalled();
-    if (signal) {
-      expect(signal.aborted).toBe(false);
-      expect(getEventListeners(signal, 'abort')).toEqual([]);
-    }
-    expect(vi.getTimerCount()).toBe(0);
-  });
+      await expect(
+        provider(chat).callApi(
+          'SDK failure',
+          undefined,
+          signal ? { abortSignal: signal } : undefined,
+        ),
+      ).resolves.toEqual({
+        error: 'API call error: AbortError: SDK request timed out',
+        output: '',
+        tokenUsage: createEmptyTokenUsage(),
+      });
+      expect(generation).toHaveBeenCalledTimes(1);
+      expect(generation.mock.calls[0][0].signal).toBe(signal);
+      expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+      if (signal) {
+        expect(signal.aborted).toBe(false);
+        expect(getEventListeners(signal, 'abort')).toEqual([]);
+      }
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 
   it('rejects pre-aborted calls before initializing the SDK or reading the response cache', async () => {
     const regionalClient = client();
@@ -709,61 +707,60 @@ describe.each([false, true])('WatsonX caller cancellation (chat=%s)', (chat) => 
     }
   });
 
-  it.each([
-    'late success',
-    'late failure',
-    'SDK cancellation',
-  ])('detaches from pending SDK work and ignores %s', async (settlement) => {
-    const regionalClient = client();
-    const generation = chat ? regionalClient.textChat : regionalClient.generateText;
-    const response = chat ? chatResult : textResult;
-    const started = deferred<void>();
-    const held = deferred<unknown>();
-    generation.mockImplementation(({ signal }: { signal?: AbortSignal }) => {
-      started.resolve();
-      if (settlement === 'SDK cancellation') {
-        signal?.addEventListener(
-          'abort',
-          () => held.reject(new Error('Network timeout: SDK request canceled')),
-          { once: true },
+  it.each(['late success', 'late failure', 'SDK cancellation'])(
+    'detaches from pending SDK work and ignores %s',
+    async (settlement) => {
+      const regionalClient = client();
+      const generation = chat ? regionalClient.textChat : regionalClient.generateText;
+      const response = chat ? chatResult : textResult;
+      const started = deferred<void>();
+      const held = deferred<unknown>();
+      generation.mockImplementation(({ signal }: { signal?: AbortSignal }) => {
+        started.resolve();
+        if (settlement === 'SDK cancellation') {
+          signal?.addEventListener(
+            'abort',
+            () => held.reject(new Error('Network timeout: SDK request canceled')),
+            { once: true },
+          );
+        }
+        return held.promise;
+      });
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const instance = provider(chat);
+      expect(await instance.getClient()).toBe(regionalClient);
+      const controller = new AbortController();
+      const cache = getCache();
+      const observed = instance
+        .callApi('Canceled SDK call', undefined, { abortSignal: controller.signal })
+        .catch((error) => error);
+      try {
+        await started.promise;
+        controller.abort(new Error('Caller network timeout'));
+        await expectCallerAbort(observed);
+        expect(generation).toHaveBeenCalledWith(
+          expect.objectContaining({ signal: controller.signal }),
         );
-      }
-      return held.promise;
-    });
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    const instance = provider(chat);
-    expect(await instance.getClient()).toBe(regionalClient);
-    const controller = new AbortController();
-    const cache = getCache();
-    const observed = instance
-      .callApi('Canceled SDK call', undefined, { abortSignal: controller.signal })
-      .catch((error) => error);
-    try {
-      await started.promise;
-      controller.abort(new Error('Caller network timeout'));
-      await expectCallerAbort(observed);
-      expect(generation).toHaveBeenCalledWith(
-        expect.objectContaining({ signal: controller.signal }),
-      );
-      expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
-      expect(cache.set).not.toHaveBeenCalled();
+        expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
+        expect(cache.set).not.toHaveBeenCalled();
 
-      if (settlement === 'late failure') {
-        held.reject(new Error('Late SDK failure'));
-      } else if (settlement === 'late success') {
+        if (settlement === 'late failure') {
+          held.reject(new Error('Late SDK failure'));
+        } else if (settlement === 'late success') {
+          held.resolve(response);
+        }
+        await vi.advanceTimersByTimeAsync(0);
+        expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
+        expect(cache.set).not.toHaveBeenCalled();
+        expect(getEventListeners(controller.signal, 'abort')).toEqual([]);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
         held.resolve(response);
+        await observed;
+        await vi.advanceTimersByTimeAsync(0);
       }
-      await vi.advanceTimersByTimeAsync(0);
-      expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
-      expect(cache.set).not.toHaveBeenCalled();
-      expect(getEventListeners(controller.signal, 'abort')).toEqual([]);
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      held.resolve(response);
-      await observed;
-      await vi.advanceTimersByTimeAsync(0);
-    }
-  });
+    },
+  );
 
   it('cancels one metadata waiter while preserving the survivor and shared cached prices', async () => {
     const regionalClient = client();
@@ -811,103 +808,103 @@ describe.each([false, true])('WatsonX caller cancellation (chat=%s)', (chat) => 
     }
   });
 
-  it.each([
-    'success',
-    'deadline',
-  ])('preserves the shared metadata %s after every caller cancels', async (settlement) => {
-    const regionalClient = client();
-    const lookup = deferred<ReturnType<typeof metadata>>();
-    const started = deferred<void>();
-    regionalClient.listFoundationModelSpecs.mockImplementation(() => {
-      started.resolve();
-      return lookup.promise;
-    });
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    const instance = provider(chat);
-    expect(await instance.getClient()).toBe(regionalClient);
-    const controllers = [new AbortController(), new AbortController()];
-    const cache = getCache();
-    const observed = controllers.map((controller, index) =>
-      instance
-        .callApi(`Canceled ${index}`, undefined, { abortSignal: controller.signal })
-        .catch((error) => error),
-    );
-    try {
-      await started.promise;
-      await vi.advanceTimersByTimeAsync(0);
-      controllers.forEach((controller) => controller.abort());
-      for (const result of observed) {
-        await expectCallerAbort(result);
-      }
-      const metadataSignal = regionalClient.listFoundationModelSpecs.mock.calls[0][0].signal;
-      expect(metadataSignal.aborted).toBe(false);
-      expect(vi.getTimerCount()).toBe(1);
-      expect(cache.set).not.toHaveBeenCalled();
-
-      if (settlement === 'success') {
-        lookup.resolve(metadata());
-        await vi.advanceTimersByTimeAsync(0);
-      } else {
-        await vi.advanceTimersByTimeAsync(50);
-        regionalClient.listFoundationModelSpecs.mockResolvedValue(metadata());
-      }
-      expect(metadataSignal.aborted).toBe(settlement === 'deadline');
-      expect(vi.getTimerCount()).toBe(0);
-      expect(cache.set).not.toHaveBeenCalled();
-      const future = await instance.callApi('Future caller');
-      expect(future.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
-      expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(
-        settlement === 'success' ? 1 : 2,
-      );
-      for (const controller of controllers) {
-        expect(getEventListeners(controller.signal, 'abort')).toEqual([]);
-      }
-    } finally {
-      lookup.resolve(metadata());
-      await Promise.allSettled(observed);
-      await vi.advanceTimersByTimeAsync(0);
-    }
-  });
-
-  it.each([
-    false,
-    true,
-  ])('detaches from a held response-cache read without continuing after abort (hit=%s)', async (hit) => {
-    const regionalClient = client();
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    const instance = provider(chat);
-    expect(await instance.getClient()).toBe(regionalClient);
-    const read = deferred<string | undefined>();
-    const started = deferred<void>();
-    const cache = {
-      get: vi.fn(() => {
+  it.each(['success', 'deadline'])(
+    'preserves the shared metadata %s after every caller cancels',
+    async (settlement) => {
+      const regionalClient = client();
+      const lookup = deferred<ReturnType<typeof metadata>>();
+      const started = deferred<void>();
+      regionalClient.listFoundationModelSpecs.mockImplementation(() => {
         started.resolve();
-        return read.promise;
-      }),
-      set: vi.fn(),
-    };
-    vi.mocked(getCache).mockReturnValue(cache as any);
-    const controller = new AbortController();
-    const observed = instance
-      .callApi('Held cache read', undefined, { abortSignal: controller.signal })
-      .catch((error) => error);
-    const cached = hit ? JSON.stringify({ output: 'Cached response', cost: 0.25 }) : undefined;
-    try {
-      await started.promise;
-      controller.abort();
-      await expectCallerAbort(observed);
-      read.resolve(cached);
-      await vi.advanceTimersByTimeAsync(0);
-      expect(regionalClient.generateText).not.toHaveBeenCalled();
-      expect(regionalClient.textChat).not.toHaveBeenCalled();
-      expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
-      expect(cache.set).not.toHaveBeenCalled();
-      expect(getEventListeners(controller.signal, 'abort')).toEqual([]);
-    } finally {
-      read.resolve(cached);
-      await observed;
-    }
-  });
+        return lookup.promise;
+      });
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const instance = provider(chat);
+      expect(await instance.getClient()).toBe(regionalClient);
+      const controllers = [new AbortController(), new AbortController()];
+      const cache = getCache();
+      const observed = controllers.map((controller, index) =>
+        instance
+          .callApi(`Canceled ${index}`, undefined, { abortSignal: controller.signal })
+          .catch((error) => error),
+      );
+      try {
+        await started.promise;
+        await vi.advanceTimersByTimeAsync(0);
+        controllers.forEach((controller) => controller.abort());
+        for (const result of observed) {
+          await expectCallerAbort(result);
+        }
+        const metadataSignal = regionalClient.listFoundationModelSpecs.mock.calls[0][0].signal;
+        expect(metadataSignal.aborted).toBe(false);
+        expect(vi.getTimerCount()).toBe(1);
+        expect(cache.set).not.toHaveBeenCalled();
+
+        if (settlement === 'success') {
+          lookup.resolve(metadata());
+          await vi.advanceTimersByTimeAsync(0);
+        } else {
+          await vi.advanceTimersByTimeAsync(50);
+          regionalClient.listFoundationModelSpecs.mockResolvedValue(metadata());
+        }
+        expect(metadataSignal.aborted).toBe(settlement === 'deadline');
+        expect(vi.getTimerCount()).toBe(0);
+        expect(cache.set).not.toHaveBeenCalled();
+        const future = await instance.callApi('Future caller');
+        expect(future.cost).toBeCloseTo((10 * 0.106 + 20 * 0.371) / 1e6, 12);
+        expect(regionalClient.listFoundationModelSpecs).toHaveBeenCalledTimes(
+          settlement === 'success' ? 1 : 2,
+        );
+        for (const controller of controllers) {
+          expect(getEventListeners(controller.signal, 'abort')).toEqual([]);
+        }
+      } finally {
+        lookup.resolve(metadata());
+        await Promise.allSettled(observed);
+        await vi.advanceTimersByTimeAsync(0);
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'detaches from a held response-cache read without continuing after abort (hit=%s)',
+    async (hit) => {
+      const regionalClient = client();
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const instance = provider(chat);
+      expect(await instance.getClient()).toBe(regionalClient);
+      const read = deferred<string | undefined>();
+      const started = deferred<void>();
+      const cache = {
+        get: vi.fn(() => {
+          started.resolve();
+          return read.promise;
+        }),
+        set: vi.fn(),
+      };
+      vi.mocked(getCache).mockReturnValue(cache as any);
+      const controller = new AbortController();
+      const observed = instance
+        .callApi('Held cache read', undefined, { abortSignal: controller.signal })
+        .catch((error) => error);
+      const cached = hit ? JSON.stringify({ output: 'Cached response', cost: 0.25 }) : undefined;
+      try {
+        await started.promise;
+        controller.abort();
+        await expectCallerAbort(observed);
+        read.resolve(cached);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(regionalClient.generateText).not.toHaveBeenCalled();
+        expect(regionalClient.textChat).not.toHaveBeenCalled();
+        expect(regionalClient.listFoundationModelSpecs).not.toHaveBeenCalled();
+        expect(cache.set).not.toHaveBeenCalled();
+        expect(getEventListeners(controller.signal, 'abort')).toEqual([]);
+      } finally {
+        read.resolve(cached);
+        await observed;
+      }
+    },
+  );
 
   it('does not write a response when cancellation wins as pricing completes', async () => {
     const regionalClient = client();
@@ -939,31 +936,31 @@ describe.each([false, true])('WatsonX caller cancellation (chat=%s)', (chat) => 
     }
   });
 
-  it.each([
-    false,
-    true,
-  ])('removes caller listeners after ordinary settlement (failure=%s)', async (fails) => {
-    const regionalClient = client();
-    if (fails) {
-      (chat ? regionalClient.textChat : regionalClient.generateText).mockRejectedValueOnce(
-        new Error('Generation unavailable'),
-      );
-    }
-    vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
-    const controller = new AbortController();
-    const result = await provider(chat).callApi('Ordinary call', undefined, {
-      abortSignal: controller.signal,
-    });
-    if (fails) {
-      expect(result.error).toContain('Generation unavailable');
-    } else {
-      expect(result.output).toBe('Hello');
-      expect(result.cost).toBeDefined();
-    }
-    expect(controller.signal.aborted).toBe(false);
-    expect(getEventListeners(controller.signal, 'abort')).toEqual([]);
-    expect(vi.getTimerCount()).toBe(0);
-  });
+  it.each([false, true])(
+    'removes caller listeners after ordinary settlement (failure=%s)',
+    async (fails) => {
+      const regionalClient = client();
+      if (fails) {
+        (chat ? regionalClient.textChat : regionalClient.generateText).mockRejectedValueOnce(
+          new Error('Generation unavailable'),
+        );
+      }
+      vi.mocked(WatsonXAI.newInstance).mockReturnValue(regionalClient as any);
+      const controller = new AbortController();
+      const result = await provider(chat).callApi('Ordinary call', undefined, {
+        abortSignal: controller.signal,
+      });
+      if (fails) {
+        expect(result.error).toContain('Generation unavailable');
+      } else {
+        expect(result.output).toBe('Hello');
+        expect(result.cost).toBeDefined();
+      }
+      expect(controller.signal.aborted).toBe(false);
+      expect(getEventListeners(controller.signal, 'abort')).toEqual([]);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 });
 
 describe('WatsonX metadata cache boundaries', () => {

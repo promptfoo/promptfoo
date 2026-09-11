@@ -49,43 +49,37 @@ describe('AbliterationProvider', () => {
     expect(provider.config.showThinking).toBe(false);
   });
 
-  it.each([
-    'abliterated-model',
-    'abliterated-model-large',
-    'abliterated-model-large-v2',
-  ])('forwards reasoning effort without changing sampling or token limits for %s', async (modelName) => {
-    const provider = new AbliterationProvider(modelName, {
-      config: { reasoning_effort: 'high', max_tokens: 16384, temperature: 0.2 },
-    });
+  it.each(['abliterated-model', 'abliterated-model-large', 'abliterated-model-large-v2'])(
+    'forwards reasoning effort without changing sampling or token limits for %s',
+    async (modelName) => {
+      const provider = new AbliterationProvider(modelName, {
+        config: { reasoning_effort: 'high', max_tokens: 16384, temperature: 0.2 },
+      });
 
-    const { body } = await provider.getOpenAiBody('Test prompt');
+      const { body } = await provider.getOpenAiBody('Test prompt');
 
-    expect(body).toMatchObject({
-      model: modelName,
-      reasoning_effort: 'high',
-      max_tokens: 16384,
-      temperature: 0.2,
-    });
-    expect(body).not.toHaveProperty('max_completion_tokens');
-  });
+      expect(body).toMatchObject({
+        model: modelName,
+        reasoning_effort: 'high',
+        max_tokens: 16384,
+        temperature: 0.2,
+      });
+      expect(body).not.toHaveProperty('max_completion_tokens');
+    },
+  );
 
-  it.each([
-    'none',
-    'minimal',
-    'low',
-    'medium',
-    'high',
-    'xhigh',
-    'max',
-  ])('forwards Large V2 reasoning effort %s without remapping it', async (reasoningEffort) => {
-    const provider = new AbliterationProvider('abliterated-model-large-v2', {
-      config: { reasoning_effort: reasoningEffort },
-    });
+  it.each(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])(
+    'forwards Large V2 reasoning effort %s without remapping it',
+    async (reasoningEffort) => {
+      const provider = new AbliterationProvider('abliterated-model-large-v2', {
+        config: { reasoning_effort: reasoningEffort },
+      });
 
-    const { body } = await provider.getOpenAiBody('Test prompt');
+      const { body } = await provider.getOpenAiBody('Test prompt');
 
-    expect(body.reasoning_effort).toBe(reasoningEffort);
-  });
+      expect(body.reasoning_effort).toBe(reasoningEffort);
+    },
+  );
 
   it('renders prompt-level reasoning effort and preserves provider configuration', async () => {
     const provider = new AbliterationProvider('abliterated-model-large-v2', {
@@ -105,34 +99,34 @@ describe('AbliterationProvider', () => {
     expect(provider.config.reasoning_effort).toBe('max');
   });
 
-  it.each([
-    undefined,
-    null,
-  ])('leaves the server reasoning default when effort is %s', async (effort) => {
-    const provider = new AbliterationProvider('abliterated-model-large-v2', {
-      config: { reasoning_effort: effort },
-    });
+  it.each([undefined, null])(
+    'leaves the server reasoning default when effort is %s',
+    async (effort) => {
+      const provider = new AbliterationProvider('abliterated-model-large-v2', {
+        config: { reasoning_effort: effort },
+      });
 
-    const { body } = await provider.getOpenAiBody('Test prompt');
+      const { body } = await provider.getOpenAiBody('Test prompt');
 
-    expect(body).not.toHaveProperty('reasoning_effort');
-  });
+      expect(body).not.toHaveProperty('reasoning_effort');
+    },
+  );
 
-  it.each<Record<string, string>>([
-    {},
-    { effort: '' },
-  ])('omits empty rendered reasoning effort for vars %j', async (vars) => {
-    const provider = new AbliterationProvider('abliterated-model-large-v2', {
-      config: { reasoning_effort: '{{effort}}' },
-    });
+  it.each<Record<string, string>>([{}, { effort: '' }])(
+    'omits empty rendered reasoning effort for vars %j',
+    async (vars) => {
+      const provider = new AbliterationProvider('abliterated-model-large-v2', {
+        config: { reasoning_effort: '{{effort}}' },
+      });
 
-    const { body } = await provider.getOpenAiBody('Test prompt', {
-      prompt: { raw: 'Test prompt', label: 'test' },
-      vars,
-    });
+      const { body } = await provider.getOpenAiBody('Test prompt', {
+        prompt: { raw: 'Test prompt', label: 'test' },
+        vars,
+      });
 
-    expect(body).not.toHaveProperty('reasoning_effort');
-  });
+      expect(body).not.toHaveProperty('reasoning_effort');
+    },
+  );
 
   it.each(['low', null])('preserves passthrough reasoning effort %s', async (reasoningEffort) => {
     const provider = new AbliterationProvider('abliterated-model-large-v2', {

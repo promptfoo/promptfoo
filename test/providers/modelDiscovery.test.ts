@@ -219,18 +219,17 @@ describe('provider-specific model identity', () => {
     ]);
   });
 
-  it.each([
-    { aliases: 'alias' },
-    { aliases: [null] },
-    { aliases: [''] },
-  ])('retries malformed AIML aliases: %j', async ({ aliases }) => {
-    vi.mocked(fetchWithCache)
-      .mockResolvedValueOnce(response({ data: [{ id: 'canonical', aliases }] }))
-      .mockResolvedValueOnce(response({ data: [{ id: 'canonical', aliases: ['alias'] }] }));
-    expect(await fetchAimlApiModels()).toEqual([]);
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(await fetchAimlApiModels()).toEqual([{ id: 'canonical', aliases: ['alias'] }]);
-  });
+  it.each([{ aliases: 'alias' }, { aliases: [null] }, { aliases: [''] }])(
+    'retries malformed AIML aliases: %j',
+    async ({ aliases }) => {
+      vi.mocked(fetchWithCache)
+        .mockResolvedValueOnce(response({ data: [{ id: 'canonical', aliases }] }))
+        .mockResolvedValueOnce(response({ data: [{ id: 'canonical', aliases: ['alias'] }] }));
+      expect(await fetchAimlApiModels()).toEqual([]);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await fetchAimlApiModels()).toEqual([{ id: 'canonical', aliases: ['alias'] }]);
+    },
+  );
 
   it('does not impose AIML alias fields on Comet models', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue(

@@ -33,73 +33,71 @@ describe('GPT-6 Astra requests', () => {
     restoreEnv();
   });
 
-  it.each([
-    'low',
-    'medium',
-    'high',
-    'xhigh',
-    'max',
-  ] as const)('preserves %s reasoning and verbosity on both OpenAI endpoints', async (effort) => {
-    const config = { reasoning_effort: effort, verbosity: 'low' as const };
-    const { body: chat } = await new OpenAiChatCompletionProvider('gpt-6-astra', {
-      config,
-    }).getOpenAiBody('Summarize the job.');
-    const { body: responses } = await new OpenAiResponsesProvider('gpt-6-astra', {
-      config,
-    }).getOpenAiBody('Summarize the job.');
+  it.each(['low', 'medium', 'high', 'xhigh', 'max'] as const)(
+    'preserves %s reasoning and verbosity on both OpenAI endpoints',
+    async (effort) => {
+      const config = { reasoning_effort: effort, verbosity: 'low' as const };
+      const { body: chat } = await new OpenAiChatCompletionProvider('gpt-6-astra', {
+        config,
+      }).getOpenAiBody('Summarize the job.');
+      const { body: responses } = await new OpenAiResponsesProvider('gpt-6-astra', {
+        config,
+      }).getOpenAiBody('Summarize the job.');
 
-    expect(chat).toMatchObject({ reasoning_effort: effort, verbosity: 'low' });
-    expect(responses).toMatchObject({ reasoning: { effort }, text: { verbosity: 'low' } });
-    for (const body of [chat, responses]) {
-      expect(body).not.toHaveProperty('temperature');
-      expect(body).not.toHaveProperty('max_tokens');
-      expect(body).not.toHaveProperty('max_completion_tokens');
-      expect(body).not.toHaveProperty('max_output_tokens');
-    }
-  });
+      expect(chat).toMatchObject({ reasoning_effort: effort, verbosity: 'low' });
+      expect(responses).toMatchObject({ reasoning: { effort }, text: { verbosity: 'low' } });
+      for (const body of [chat, responses]) {
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('max_tokens');
+        expect(body).not.toHaveProperty('max_completion_tokens');
+        expect(body).not.toHaveProperty('max_output_tokens');
+      }
+    },
+  );
 
   it.each([
     { api: 'Chat', Provider: OpenAiChatCompletionProvider },
     { api: 'Responses', Provider: OpenAiResponsesProvider },
-  ])('removes unsupported parameters after a per-prompt model override in $api', async ({
-    Provider,
-  }) => {
-    const passthrough = {
-      model: 'gpt-6-astra',
-      temperature: 0.4,
-      top_p: 0.8,
-      logprobs: true,
-      top_logprobs: 5,
-      max_tokens: 100,
-      max_completion_tokens: 321,
-      max_output_tokens: 654,
-    };
-    const { body } = await new Provider('gpt-4.1').getOpenAiBody(
-      'Summarize the job.',
-      {
-        prompt: {
-          raw: 'Summarize the job.',
-          label: 'summary',
-          config: { passthrough, reasoning_effort: 'max', verbosity: 'low' },
+  ])(
+    'removes unsupported parameters after a per-prompt model override in $api',
+    async ({ Provider }) => {
+      const passthrough = {
+        model: 'gpt-6-astra',
+        temperature: 0.4,
+        top_p: 0.8,
+        logprobs: true,
+        top_logprobs: 5,
+        max_tokens: 100,
+        max_completion_tokens: 321,
+        max_output_tokens: 654,
+      };
+      const { body } = await new Provider('gpt-4.1').getOpenAiBody(
+        'Summarize the job.',
+        {
+          prompt: {
+            raw: 'Summarize the job.',
+            label: 'summary',
+            config: { passthrough, reasoning_effort: 'max', verbosity: 'low' },
+          },
+          vars: {},
         },
-        vars: {},
-      },
-      { includeLogProbs: true },
-    );
+        { includeLogProbs: true },
+      );
 
-    expect(body.model).toBe('gpt-6-astra');
-    for (const key of ['temperature', 'top_p', 'logprobs', 'top_logprobs', 'max_tokens']) {
-      expect(body).not.toHaveProperty(key);
-    }
-    if (Provider === OpenAiChatCompletionProvider) {
-      expect(body.max_completion_tokens).toBe(321);
-      expect(body).not.toHaveProperty('max_output_tokens');
-    } else {
-      expect(body.max_output_tokens).toBe(654);
-      expect(body).not.toHaveProperty('max_completion_tokens');
-    }
-    expect(passthrough.temperature).toBe(0.4);
-  });
+      expect(body.model).toBe('gpt-6-astra');
+      for (const key of ['temperature', 'top_p', 'logprobs', 'top_logprobs', 'max_tokens']) {
+        expect(body).not.toHaveProperty(key);
+      }
+      if (Provider === OpenAiChatCompletionProvider) {
+        expect(body.max_completion_tokens).toBe(321);
+        expect(body).not.toHaveProperty('max_output_tokens');
+      } else {
+        expect(body.max_output_tokens).toBe(654);
+        expect(body).not.toHaveProperty('max_completion_tokens');
+      }
+      expect(passthrough.temperature).toBe(0.4);
+    },
+  );
 
   it.each([
     { api: 'OpenAI Chat', Provider: OpenAiChatCompletionProvider },
@@ -177,22 +175,21 @@ describe('GPT-6 Astra requests', () => {
     expect(provider.config.service_tier).toBeNull();
   });
 
-  it.each([
-    'none',
-    'minimal',
-    'ultra',
-  ])('rejects unsupported %s reasoning from the final request', async (effort) => {
-    await expect(
-      new OpenAiChatCompletionProvider('gpt-6-astra', {
-        config: { passthrough: { reasoning_effort: effort } },
-      }).getOpenAiBody('Summarize the job.'),
-    ).rejects.toThrow('GPT-6 Astra supports reasoning effort');
-    await expect(
-      new OpenAiResponsesProvider('gpt-6-astra', {
-        config: { passthrough: { reasoning: { effort } } },
-      }).getOpenAiBody('Summarize the job.'),
-    ).rejects.toThrow('GPT-6 Astra supports reasoning effort');
-  });
+  it.each(['none', 'minimal', 'ultra'])(
+    'rejects unsupported %s reasoning from the final request',
+    async (effort) => {
+      await expect(
+        new OpenAiChatCompletionProvider('gpt-6-astra', {
+          config: { passthrough: { reasoning_effort: effort } },
+        }).getOpenAiBody('Summarize the job.'),
+      ).rejects.toThrow('GPT-6 Astra supports reasoning effort');
+      await expect(
+        new OpenAiResponsesProvider('gpt-6-astra', {
+          config: { passthrough: { reasoning: { effort } } },
+        }).getOpenAiBody('Summarize the job.'),
+      ).rejects.toThrow('GPT-6 Astra supports reasoning effort');
+    },
+  );
 
   it.each([
     { tools: [statusTool] },
@@ -239,16 +236,16 @@ describe('GPT-6 Astra requests', () => {
     expect(context.prompt.config.reasoning.effort).toBe('{{effort}}');
   });
 
-  it.each([
-    'max',
-    'none',
-  ])('rejects a Chat-shaped passthrough reasoning_effort of %s on Responses', async (effort) => {
-    await expect(
-      new OpenAiResponsesProvider('gpt-6-astra', {
-        config: { passthrough: { reasoning_effort: effort } },
-      }).getOpenAiBody('Summarize the job.'),
-    ).rejects.toThrow('instead of passthrough.reasoning_effort');
-  });
+  it.each(['max', 'none'])(
+    'rejects a Chat-shaped passthrough reasoning_effort of %s on Responses',
+    async (effort) => {
+      await expect(
+        new OpenAiResponsesProvider('gpt-6-astra', {
+          config: { passthrough: { reasoning_effort: effort } },
+        }).getOpenAiBody('Summarize the job.'),
+      ).rejects.toThrow('instead of passthrough.reasoning_effort');
+    },
+  );
 
   it('preserves gateway tool routing for prefixed Astra model IDs', async () => {
     const { body } = await new OpenRouterProvider('openai/gpt-6-astra', {
@@ -275,43 +272,43 @@ describe('GPT-6 Astra requests', () => {
     { deployment: 'gpt-6-astra' },
     { deployment: 'prod-gpt-6-astra' },
     { deployment: 'production', modelName: 'gpt-6-astra' },
-  ])('prepares Azure deployment $deployment without assuming Azure pricing', async ({
-    deployment,
-    modelName,
-  }) => {
-    const config = {
-      apiKey: 'test-key',
-      modelName,
-      reasoning_effort: 'max' as const,
-      max_completion_tokens: 4096,
-      max_output_tokens: 4096,
-      top_p: 0.8,
-      verbosity: 'low' as const,
-    };
-    const { body: chat } = await new AzureChatCompletionProvider(deployment, {
-      config,
-    }).getOpenAiBody('Summarize the job.');
-    const responses = await new AzureResponsesProvider(deployment, {
-      config,
-    }).getAzureResponsesBody('Summarize the job.');
+  ])(
+    'prepares Azure deployment $deployment without assuming Azure pricing',
+    async ({ deployment, modelName }) => {
+      const config = {
+        apiKey: 'test-key',
+        modelName,
+        reasoning_effort: 'max' as const,
+        max_completion_tokens: 4096,
+        max_output_tokens: 4096,
+        top_p: 0.8,
+        verbosity: 'low' as const,
+      };
+      const { body: chat } = await new AzureChatCompletionProvider(deployment, {
+        config,
+      }).getOpenAiBody('Summarize the job.');
+      const responses = await new AzureResponsesProvider(deployment, {
+        config,
+      }).getAzureResponsesBody('Summarize the job.');
 
-    expect(chat).toMatchObject({
-      model: deployment,
-      reasoning_effort: 'max',
-      max_completion_tokens: 4096,
-    });
-    expect(responses).toMatchObject({
-      model: deployment,
-      reasoning: { effort: 'max' },
-      max_output_tokens: 4096,
-    });
-    for (const body of [chat, responses]) {
-      expect(body).not.toHaveProperty('temperature');
-      expect(body).not.toHaveProperty('top_p');
-      expect(body).not.toHaveProperty('max_tokens');
-    }
-    expect(calculateAzureCost('gpt-6-astra', config, 1000, 100)).toBeUndefined();
-  });
+      expect(chat).toMatchObject({
+        model: deployment,
+        reasoning_effort: 'max',
+        max_completion_tokens: 4096,
+      });
+      expect(responses).toMatchObject({
+        model: deployment,
+        reasoning: { effort: 'max' },
+        max_output_tokens: 4096,
+      });
+      for (const body of [chat, responses]) {
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('top_p');
+        expect(body).not.toHaveProperty('max_tokens');
+      }
+      expect(calculateAzureCost('gpt-6-astra', config, 1000, 100)).toBeUndefined();
+    },
+  );
 
   it('requires Responses for Azure tools routed through Cloudflare', async () => {
     const provider = new CloudflareGatewayOpenAiProvider('azure-openai', 'gpt-6-astra', {
@@ -390,20 +387,20 @@ describe('GPT-6 Astra requests', () => {
     ).rejects.toThrow('GPT-6 Astra supports reasoning effort');
   });
 
-  it.each([
-    'gpt-6-astra',
-    'gpt-5.6-sol',
-  ])('normalizes Azure Responses function tools and tool choice for %s', async (model) => {
-    const body = await new AzureResponsesProvider(model, {
-      config: {
-        apiKey: 'test-key',
-        tools: [statusTool],
-        tool_choice: { type: 'function', function: { name: 'get_status' } },
-      },
-    }).getAzureResponsesBody('Get the job status.');
+  it.each(['gpt-6-astra', 'gpt-5.6-sol'])(
+    'normalizes Azure Responses function tools and tool choice for %s',
+    async (model) => {
+      const body = await new AzureResponsesProvider(model, {
+        config: {
+          apiKey: 'test-key',
+          tools: [statusTool],
+          tool_choice: { type: 'function', function: { name: 'get_status' } },
+        },
+      }).getAzureResponsesBody('Get the job status.');
 
-    expect(body.tools).toEqual([{ type: 'function', ...statusTool.function }]);
-    expect(body.tool_choice).toEqual({ type: 'function', name: 'get_status' });
-    expect(statusTool).toHaveProperty('function');
-  });
+      expect(body.tools).toEqual([{ type: 'function', ...statusTool.function }]);
+      expect(body.tool_choice).toEqual({ type: 'function', name: 'get_status' });
+      expect(statusTool).toHaveProperty('function');
+    },
+  );
 });

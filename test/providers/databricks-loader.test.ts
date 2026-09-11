@@ -35,73 +35,73 @@ afterEach(() => {
 });
 
 describe('Databricks loader request configuration', () => {
-  it.each([
-    true,
-    false,
-  ])('uses Databricks chat endpoint for isPayPerToken=%s with usage metadata', async (isPayPerToken) => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: {
-        choices: [{ message: { content: 'hello' }, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
-    const provider = await loadApiProvider('databricks:customer-endpoint', {
-      options: {
-        config: {
-          workspaceUrl: 'https://workspace.example.test',
-          apiKey: 'fixture-token',
-          isPayPerToken,
-          usageContext: { project: 'fixture' },
-          passthrough: { custom_field: 'preserved' },
+  it.each([true, false])(
+    'uses Databricks chat endpoint for isPayPerToken=%s with usage metadata',
+    async (isPayPerToken) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'hello' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 },
         },
-      },
-    });
-    expect(await provider.callApi('hello')).toMatchObject({
-      output: 'hello',
-      cached: false,
-      tokenUsage: { total: 5, prompt: 3, completion: 2 },
-    });
-    const [url, init] = vi.mocked(fetchWithCache).mock.calls[0];
-    expect(url).toBe('https://workspace.example.test/serving-endpoints/chat/completions');
-    expect(JSON.parse(init?.body as string)).toMatchObject({
-      model: 'customer-endpoint',
-      usage_context: { project: 'fixture' },
-      custom_field: 'preserved',
-    });
-  });
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = await loadApiProvider('databricks:customer-endpoint', {
+        options: {
+          config: {
+            workspaceUrl: 'https://workspace.example.test',
+            apiKey: 'fixture-token',
+            isPayPerToken,
+            usageContext: { project: 'fixture' },
+            passthrough: { custom_field: 'preserved' },
+          },
+        },
+      });
+      expect(await provider.callApi('hello')).toMatchObject({
+        output: 'hello',
+        cached: false,
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      });
+      const [url, init] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://workspace.example.test/serving-endpoints/chat/completions');
+      expect(JSON.parse(init?.body as string)).toMatchObject({
+        model: 'customer-endpoint',
+        usage_context: { project: 'fixture' },
+        custom_field: 'preserved',
+      });
+    },
+  );
 
-  it.each([
-    'process',
-    'registered suite',
-  ])('keeps the provider workspace and token paired ahead of %s settings', async (source) => {
-    vi.stubEnv('DATABRICKS_WORKSPACE_URL', 'https://process.example.test');
-    vi.stubEnv('DATABRICKS_TOKEN', 'process-token');
-    if (source === 'registered suite') {
-      cliState.config = {
-        env: {
-          DATABRICKS_WORKSPACE_URL: 'https://suite.example.test',
-          DATABRICKS_TOKEN: 'suite-token',
+  it.each(['process', 'registered suite'])(
+    'keeps the provider workspace and token paired ahead of %s settings',
+    async (source) => {
+      vi.stubEnv('DATABRICKS_WORKSPACE_URL', 'https://process.example.test');
+      vi.stubEnv('DATABRICKS_TOKEN', 'process-token');
+      if (source === 'registered suite') {
+        cliState.config = {
+          env: {
+            DATABRICKS_WORKSPACE_URL: 'https://suite.example.test',
+            DATABRICKS_TOKEN: 'suite-token',
+          },
+        };
+      }
+      const provider = await loadApiProvider('databricks:customer-endpoint', {
+        options: {
+          env: {
+            DATABRICKS_WORKSPACE_URL: 'https://provider.example.test',
+            DATABRICKS_TOKEN: 'provider-token',
+          },
         },
-      };
-    }
-    const provider = await loadApiProvider('databricks:customer-endpoint', {
-      options: {
-        env: {
-          DATABRICKS_WORKSPACE_URL: 'https://provider.example.test',
-          DATABRICKS_TOKEN: 'provider-token',
-        },
-      },
-    });
+      });
 
-    expect(await provider.callApi('hello')).toMatchObject({ output: 'hello' });
-    expectRequest(
-      'https://provider.example.test/serving-endpoints/chat/completions',
-      'provider-token',
-    );
-  });
+      expect(await provider.callApi('hello')).toMatchObject({ output: 'hello' });
+      expectRequest(
+        'https://provider.example.test/serving-endpoints/chat/completions',
+        'provider-token',
+      );
+    },
+  );
 
   it('uses the registered suite workspace and token over the process pair', async () => {
     vi.stubEnv('DATABRICKS_WORKSPACE_URL', 'https://process.example.test');

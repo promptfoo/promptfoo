@@ -29,21 +29,23 @@ describe('Hugging Face task response compatibility', () => {
     { label: 'negative', score: 0.1 },
   ];
 
-  it.each(
-    [scores, [scores]].map((data) => [data]),
-  )('normalizes current and legacy classification shapes: %j', async (data) => {
-    reply(data);
-    expect(await classification.callClassificationApi('A pleasant day')).toEqual({
-      classification: { positive: 0.9, negative: 0.1 },
-    });
-  });
+  it.each([scores, [scores]].map((data) => [data]))(
+    'normalizes current and legacy classification shapes: %j',
+    async (data) => {
+      reply(data);
+      expect(await classification.callClassificationApi('A pleasant day')).toEqual({
+        classification: { positive: 0.9, negative: 0.1 },
+      });
+    },
+  );
 
-  it.each(
-    [[0.1, 0.2], [[0.1, 0.2]]].map((data) => [data]),
-  )('normalizes a single embedding vector: %j', async (data) => {
-    reply(data);
-    expect(await embedding.callEmbeddingApi('A pleasant day')).toEqual({ embedding: [0.1, 0.2] });
-  });
+  it.each([[0.1, 0.2], [[0.1, 0.2]]].map((data) => [data]))(
+    'normalizes a single embedding vector: %j',
+    async (data) => {
+      reply(data);
+      expect(await embedding.callEmbeddingApi('A pleasant day')).toEqual({ embedding: [0.1, 0.2] });
+    },
+  );
 
   it.each(
     [null, [], [{ label: 'positive', score: '0.9' }], [[scores, scores]]].map((data) => [data]),

@@ -184,17 +184,20 @@ describe('EvalOutputCell', () => {
   it.each([
     [true, 'Mark as safe', 'Mark as vulnerable', 'lucide-check', 'lucide-x'],
     [false, 'Mark test passed', 'Mark test failed', 'lucide-thumbs-up', 'lucide-thumbs-down'],
-  ])('shows the correct grading actions when isRedteam is %s', (isRedteam, passLabel, failLabel, passIcon, failIcon) => {
-    renderWithProviders(<EvalOutputCell {...defaultProps} isRedteam={isRedteam} />);
+  ])(
+    'shows the correct grading actions when isRedteam is %s',
+    (isRedteam, passLabel, failLabel, passIcon, failIcon) => {
+      renderWithProviders(<EvalOutputCell {...defaultProps} isRedteam={isRedteam} />);
 
-    const passButton = screen.getByRole('button', { name: passLabel });
-    const failButton = screen.getByRole('button', { name: failLabel });
+      const passButton = screen.getByRole('button', { name: passLabel });
+      const failButton = screen.getByRole('button', { name: failLabel });
 
-    expect(passButton.querySelector('svg')).toHaveClass(passIcon);
-    expect(failButton.querySelector('svg')).toHaveClass(failIcon);
-    expect(passButton).not.toHaveTextContent(passLabel);
-    expect(failButton).not.toHaveTextContent(failLabel);
-  });
+      expect(passButton.querySelector('svg')).toHaveClass(passIcon);
+      expect(failButton.querySelector('svg')).toHaveClass(failIcon);
+      expect(passButton).not.toHaveTextContent(passLabel);
+      expect(failButton).not.toHaveTextContent(failLabel);
+    },
+  );
 
   it('handles outputs without text without throwing', () => {
     const propsWithoutText: MockEvalOutputCellProps = {

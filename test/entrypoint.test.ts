@@ -122,25 +122,25 @@ const nodeEngineComparatorSets: NodeEngineComparator[][] = [
 ];
 describe('entrypoint version check logic', () => {
   describe('production entrypoint runtime guard', () => {
-    it.each([
-      'v20.20.0',
-      'v22.21.9',
-    ])('rejects unsupported Node.js %s before importing CLI dependencies', (version) => {
-      const result = spawnSync(
-        process.execPath,
-        ['--import', 'tsx', path.resolve(__dirname, '../src/entrypoint.ts'), '--version'],
-        {
-          cwd: path.resolve(__dirname, '..'),
-          encoding: 'utf8',
-          env: { ...process.env, ...spoofedNodeVersionEnv(version) },
-        },
-      );
+    it.each(['v20.20.0', 'v22.21.9'])(
+      'rejects unsupported Node.js %s before importing CLI dependencies',
+      (version) => {
+        const result = spawnSync(
+          process.execPath,
+          ['--import', 'tsx', path.resolve(__dirname, '../src/entrypoint.ts'), '--version'],
+          {
+            cwd: path.resolve(__dirname, '..'),
+            encoding: 'utf8',
+            env: { ...process.env, ...spoofedNodeVersionEnv(version) },
+          },
+        );
 
-      expect(result.status, result.stderr || result.stdout).toBe(1);
-      expect(result.stderr).toContain(`Detected: ${version}`);
-      expect(result.stderr).toContain('Required: >=22.22.0');
-      expect(result.stderr).toContain('Install a supported Node.js version and try again.');
-    });
+        expect(result.status, result.stderr || result.stdout).toBe(1);
+        expect(result.stderr).toContain(`Detected: ${version}`);
+        expect(result.stderr).toContain('Required: >=22.22.0');
+        expect(result.stderr).toContain('Install a supported Node.js version and try again.');
+      },
+    );
   });
 
   describe('Node.js version parsing', () => {
@@ -167,17 +167,12 @@ describe('entrypoint version check logic', () => {
   describe('engine range matching', () => {
     // A single `>=22.22.0` comparator set means retired majors and below-floor patches now
     // take the same path; there is no longer a gap between ranges to fall into.
-    it.each([
-      'v20.9.0',
-      'v20.19.0',
-      'v20.20.0',
-      'v21.0.0',
-      'v21.7.0',
-      'v22.13.0',
-      'v22.21.9',
-    ])('rejects Node.js %s below the supported range', (version) => {
-      expect(isSupportedNodeEngineVersion(version, nodeEngineComparatorSets)).toBe(false);
-    });
+    it.each(['v20.9.0', 'v20.19.0', 'v20.20.0', 'v21.0.0', 'v21.7.0', 'v22.13.0', 'v22.21.9'])(
+      'rejects Node.js %s below the supported range',
+      (version) => {
+        expect(isSupportedNodeEngineVersion(version, nodeEngineComparatorSets)).toBe(false);
+      },
+    );
 
     it('accepts Node.js versions that satisfy the exact supported range', () => {
       const supportedVersions = ['v22.22.0', 'v22.23.1', 'v24.14.1', 'v26.0.0'];

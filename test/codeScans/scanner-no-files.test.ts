@@ -222,25 +222,28 @@ describe('Scanner machine-readable output', () => {
       { format: CodeScanOutputFormat.SARIF, diffsOnly: true },
       CodeScanOutputFormat.SARIF,
     ],
-  ])('emits an empty machine-readable response when no files are available with %s', async (_label, options, expectedFormat) => {
-    mockScanner();
+  ])(
+    'emits an empty machine-readable response when no files are available with %s',
+    async (_label, options, expectedFormat) => {
+      mockScanner();
 
-    const { executeScan } = await import('../../src/codeScan/scanner/index');
-    const { displayScanResults } = await import('../../src/codeScan/scanner/output');
-    const { getLogLevel, setLogLevel } = await import('../../src/logger');
-    const setLogLevelMock = vi.mocked(setLogLevel);
+      const { executeScan } = await import('../../src/codeScan/scanner/index');
+      const { displayScanResults } = await import('../../src/codeScan/scanner/output');
+      const { getLogLevel, setLogLevel } = await import('../../src/logger');
+      const setLogLevelMock = vi.mocked(setLogLevel);
 
-    await executeScan('/test/repo', options);
+      await executeScan('/test/repo', options);
 
-    expect(displayScanResults).toHaveBeenCalledWith(
-      { success: true, comments: [], review: 'No files to scan' },
-      expect.any(Number),
-      { format: expectedFormat, githubPr: undefined },
-    );
-    expect(setLogLevelMock).toHaveBeenCalledWith('error');
-    expect(setLogLevelMock).toHaveBeenLastCalledWith('info');
-    expect(getLogLevel()).toBe('info');
-  });
+      expect(displayScanResults).toHaveBeenCalledWith(
+        { success: true, comments: [], review: 'No files to scan' },
+        expect.any(Number),
+        { format: expectedFormat, githubPr: undefined },
+      );
+      expect(setLogLevelMock).toHaveBeenCalledWith('error');
+      expect(setLogLevelMock).toHaveBeenLastCalledWith('info');
+      expect(getLogLevel()).toBe('info');
+    },
+  );
 
   it.each([
     ['CLI option', 'https://cli.example', 'https://config.example', 'https://cli.example'],

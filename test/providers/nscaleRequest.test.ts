@@ -284,11 +284,10 @@ describe.each([
       key: 'service-token',
       serviceToken: 'service-token',
     },
-  ])('preserves the $name when default fallback is disabled', async ({
-    config,
-    key,
-    serviceToken,
-  }) => {
-    await expectRequest(createProvider(config, serviceToken), key);
-  });
+  ])(
+    'preserves the $name when default fallback is disabled',
+    async ({ config, key, serviceToken }) => {
+      await expectRequest(createProvider(config, serviceToken), key);
+    },
+  );
 });

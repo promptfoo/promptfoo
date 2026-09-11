@@ -67,32 +67,32 @@ describe.each([
   { name: 'Chat', Provider: GroqProvider, responses: false, path: '/chat/completions' },
   { name: 'Responses', Provider: GroqResponsesProvider, responses: true, path: '/responses' },
 ])('Groq $name connection configuration', ({ Provider, responses, path }) => {
-  it.each([
-    undefined,
-    'explicit-key',
-  ])('honors the custom endpoint and key variable with key %s', async (apiKey) => {
-    reply(responses);
-    const provider = new Provider('private/model:version', {
-      id: 'custom-provider-id',
-      config: {
-        apiBaseUrl: 'http://127.0.0.1:9000/groq',
-        apiKeyEnvar: 'GROQ_PROXY_KEY',
-        apiKey,
-      },
-    });
-    expect(await provider.callApi('Hello')).toMatchObject({
-      output: 'Hello',
-      tokenUsage: { prompt: 5, completion: 2, total: 7 },
-    });
-    expect(provider.id()).toBe('custom-provider-id');
-    expect(request()).toMatchObject({
-      url: `http://127.0.0.1:9000/groq${path}`,
-      headers: { Authorization: `Bearer ${apiKey ?? 'proxy-process-key'}` },
-      body: { model: 'private/model:version' },
-    });
-    expect(request().body).not.toHaveProperty('apiBaseUrl');
-    expect(request().body).not.toHaveProperty('apiKeyEnvar');
-  });
+  it.each([undefined, 'explicit-key'])(
+    'honors the custom endpoint and key variable with key %s',
+    async (apiKey) => {
+      reply(responses);
+      const provider = new Provider('private/model:version', {
+        id: 'custom-provider-id',
+        config: {
+          apiBaseUrl: 'http://127.0.0.1:9000/groq',
+          apiKeyEnvar: 'GROQ_PROXY_KEY',
+          apiKey,
+        },
+      });
+      expect(await provider.callApi('Hello')).toMatchObject({
+        output: 'Hello',
+        tokenUsage: { prompt: 5, completion: 2, total: 7 },
+      });
+      expect(provider.id()).toBe('custom-provider-id');
+      expect(request()).toMatchObject({
+        url: `http://127.0.0.1:9000/groq${path}`,
+        headers: { Authorization: `Bearer ${apiKey ?? 'proxy-process-key'}` },
+        body: { model: 'private/model:version' },
+      });
+      expect(request().body).not.toHaveProperty('apiBaseUrl');
+      expect(request().body).not.toHaveProperty('apiKeyEnvar');
+    },
+  );
 
   it('resolves a configured key variable from provider-scoped environment', async () => {
     reply(responses);
@@ -145,25 +145,25 @@ describe.each([
     expect(request().url).toBe(`https://proxy.invalid/v1${path}`);
   });
 
-  it.each([
-    undefined,
-    'GROQ_MISSING_KEY',
-  ])('rejects missing key %s without sending unrelated OpenAI credentials', async (apiKeyEnvar) => {
-    const restoreGroqKey = mockProcessEnv({
-      GROQ_API_KEY: apiKeyEnvar ? 'unselected-groq-key' : undefined,
-    });
-    try {
-      const provider = new Provider('private/model', {
-        config: { apiBaseUrl: 'http://127.0.0.1:9000/groq', apiKeyEnvar },
-        env: { OPENAI_API_KEY: 'unrelated-scoped-openai-key' },
+  it.each([undefined, 'GROQ_MISSING_KEY'])(
+    'rejects missing key %s without sending unrelated OpenAI credentials',
+    async (apiKeyEnvar) => {
+      const restoreGroqKey = mockProcessEnv({
+        GROQ_API_KEY: apiKeyEnvar ? 'unselected-groq-key' : undefined,
       });
-      expect(provider.getApiKey()).toBeUndefined();
-      await expect(provider.callApi('Hello')).rejects.toThrow(
-        `Set the ${apiKeyEnvar ?? 'GROQ_API_KEY'} environment variable`,
-      );
-      expect(fetchWithCache).not.toHaveBeenCalled();
-    } finally {
-      restoreGroqKey();
-    }
-  });
+      try {
+        const provider = new Provider('private/model', {
+          config: { apiBaseUrl: 'http://127.0.0.1:9000/groq', apiKeyEnvar },
+          env: { OPENAI_API_KEY: 'unrelated-scoped-openai-key' },
+        });
+        expect(provider.getApiKey()).toBeUndefined();
+        await expect(provider.callApi('Hello')).rejects.toThrow(
+          `Set the ${apiKeyEnvar ?? 'GROQ_API_KEY'} environment variable`,
+        );
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      } finally {
+        restoreGroqKey();
+      }
+    },
+  );
 });

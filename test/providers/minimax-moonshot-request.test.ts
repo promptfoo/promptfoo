@@ -106,18 +106,21 @@ describe('Moonshot effective model policy', () => {
       { passthrough: { model: 'moonshot-v1-8k', max_tokens: 9 } },
       9,
     ],
-  ])('preserves explicit token limits for legacy model overrides', async (config, promptConfig, expected) => {
-    const { body } = await makeProvider('moonshot', {
-      ...config,
-      passthrough: { model: 'moonshot-v1-8k' },
-    }).getOpenAiBody('Hello', promptContext(promptConfig));
-    expect(body).toMatchObject({
-      model: 'moonshot-v1-8k',
-      temperature: 0,
-      max_completion_tokens: expected,
-    });
-    expect(body).not.toHaveProperty('max_tokens');
-  });
+  ])(
+    'preserves explicit token limits for legacy model overrides',
+    async (config, promptConfig, expected) => {
+      const { body } = await makeProvider('moonshot', {
+        ...config,
+        passthrough: { model: 'moonshot-v1-8k' },
+      }).getOpenAiBody('Hello', promptContext(promptConfig));
+      expect(body).toMatchObject({
+        model: 'moonshot-v1-8k',
+        temperature: 0,
+        max_completion_tokens: expected,
+      });
+      expect(body).not.toHaveProperty('max_tokens');
+    },
+  );
 
   it('does not apply Kimi sampling rules to an overridden legacy model', async () => {
     const { body } = await makeProvider('moonshot', {
@@ -159,14 +162,16 @@ describe('MiniMax effective billing', () => {
     expect(result.cost).toBeCloseTo(60 * 0.02 + (40 * 0.06) / 1e6 + (50 * 2.4) / 1e6, 10);
   });
 
-  it.each([
-    {},
-    { passthrough: { service_tier: 'priority' } },
-  ])('bills priority selected by response or request', async (config) => {
-    reply(false, Object.keys(config).length ? undefined : 'priority');
-    const result = await makeProvider('minimax', { apiKey: 'fixture', ...config }).callApi('Hello');
-    expect(result.cost).toBeCloseTo(((60 * 0.3 + 40 * 0.06 + 50 * 1.2) * 1.5) / 1e6, 12);
-  });
+  it.each([{}, { passthrough: { service_tier: 'priority' } }])(
+    'bills priority selected by response or request',
+    async (config) => {
+      reply(false, Object.keys(config).length ? undefined : 'priority');
+      const result = await makeProvider('minimax', { apiKey: 'fixture', ...config }).callApi(
+        'Hello',
+      );
+      expect(result.cost).toBeCloseTo(((60 * 0.3 + 40 * 0.06 + 50 * 1.2) * 1.5) / 1e6, 12);
+    },
+  );
 
   it('does not multiply explicit user rates by the priority tier', () => {
     expect(
@@ -210,14 +215,17 @@ describe('MiniMax effective billing', () => {
     [{ inputCost: 0.01, outputCost: 0.02 }, 40, 2],
     [{ cost: 0.0001, cacheReadCost: 0 }, 40, 0.011],
     [{ inputCost: 0, outputCost: 0, cacheReadCost: 0 }, 40, 0],
-  ])('honors custom pricing for an unlisted effective alias', async (config, cachedTokens, expected) => {
-    reply(false, 'priority', { input_tokens_details: { cached_tokens: cachedTokens } });
-    const result = await makeProvider('minimax', { apiKey: 'fixture' }).callApi(
-      'Hello',
-      promptContext({ ...config, passthrough: { model: 'private-minimax-deployment' } }),
-    );
-    expect(result.cost).toBeCloseTo(expected, 14);
-  });
+  ])(
+    'honors custom pricing for an unlisted effective alias',
+    async (config, cachedTokens, expected) => {
+      reply(false, 'priority', { input_tokens_details: { cached_tokens: cachedTokens } });
+      const result = await makeProvider('minimax', { apiKey: 'fixture' }).callApi(
+        'Hello',
+        promptContext({ ...config, passthrough: { model: 'private-minimax-deployment' } }),
+      );
+      expect(result.cost).toBeCloseTo(expected, 14);
+    },
+  );
 
   it('leaves unlisted aliases without sufficient rates unpriced', () => {
     expect(

@@ -389,22 +389,19 @@ describe('handleToolCallF1', () => {
       expect(result.score).toBe(0);
     });
 
-    it.each([
-      '{',
-      '[',
-      '{"broken":',
-      '{]',
-      '{"broken":"unfinished\\',
-    ])('recovers a complete call after an unfinished or invalid candidate: %s', (prefix) => {
-      const output = `${prefix}\n${JSON.stringify(
-        { type: 'tool_use', name: 'get_weather', input: { city: 'NYC' } },
-        null,
-        2,
-      )}`;
-      const result = handleToolCallF1(createParams(output, ['get_weather']));
+    it.each(['{', '[', '{"broken":', '{]', '{"broken":"unfinished\\'])(
+      'recovers a complete call after an unfinished or invalid candidate: %s',
+      (prefix) => {
+        const output = `${prefix}\n${JSON.stringify(
+          { type: 'tool_use', name: 'get_weather', input: { city: 'NYC' } },
+          null,
+          2,
+        )}`;
+        const result = handleToolCallF1(createParams(output, ['get_weather']));
 
-      expect(result).toMatchObject({ pass: true, score: 1 });
-    });
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      },
+    );
 
     it('keeps unindented nested tool-shaped arguments inside their enclosing call', () => {
       const output = `Calling the weather tool.\n${JSON.stringify(
@@ -450,22 +447,21 @@ describe('handleToolCallF1', () => {
       expect(result).toMatchObject({ pass: true, score: 1 });
     });
 
-    it.each([
-      '```json {"example":true} ```',
-      '```info`invalid',
-      '- ```info`invalid',
-    ])('keeps calls after an invalid backtick fence opener: %s', (example) => {
-      const output = [
-        '{"type":"tool_use","name":"get_weather"}',
-        example,
-        '{"type":"tool_use","name":"delete_account"}',
-      ].join('\n');
-      const result = handleToolCallF1(createParams(output, ['get_weather']));
+    it.each(['```json {"example":true} ```', '```info`invalid', '- ```info`invalid'])(
+      'keeps calls after an invalid backtick fence opener: %s',
+      (example) => {
+        const output = [
+          '{"type":"tool_use","name":"get_weather"}',
+          example,
+          '{"type":"tool_use","name":"delete_account"}',
+        ].join('\n');
+        const result = handleToolCallF1(createParams(output, ['get_weather']));
 
-      expect(result.pass).toBe(false);
-      expect(result.score).toBeCloseTo(2 / 3);
-      expect(result.reason).toContain('Called: [delete_account, get_weather]');
-    });
+        expect(result.pass).toBe(false);
+        expect(result.score).toBeCloseTo(2 / 3);
+        expect(result.reason).toContain('Called: [delete_account, get_weather]');
+      },
+    );
 
     it.each([
       ['Example: {\n"payload":', '}'],
@@ -503,22 +499,21 @@ describe('handleToolCallF1', () => {
       expect(result).toMatchObject({ pass: false, score: 0 });
     });
 
-    it.each([
-      '    ',
-      '      ',
-      '\t',
-    ])('ignores fenced examples nested in a Markdown list with %j indentation', (indent) => {
-      const output = [
-        '  - Example:',
-        `${indent}\`\`\`json`,
-        `${indent}{"type":"tool_use","name":"delete_account"}`,
-        `${indent}\`\`\``,
-        '{"type":"tool_use","name":"get_weather"}',
-      ].join('\n');
-      const result = handleToolCallF1(createParams(output, ['get_weather']));
+    it.each(['    ', '      ', '\t'])(
+      'ignores fenced examples nested in a Markdown list with %j indentation',
+      (indent) => {
+        const output = [
+          '  - Example:',
+          `${indent}\`\`\`json`,
+          `${indent}{"type":"tool_use","name":"delete_account"}`,
+          `${indent}\`\`\``,
+          '{"type":"tool_use","name":"get_weather"}',
+        ].join('\n');
+        const result = handleToolCallF1(createParams(output, ['get_weather']));
 
-      expect(result).toMatchObject({ pass: true, score: 1 });
-    });
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      },
+    );
 
     it.each([
       ['```json', '    ```', '', '```'],
@@ -618,30 +613,28 @@ describe('handleToolCallF1', () => {
       });
     });
 
-    it.each([
-      '{',
-      '[',
-      '}',
-      ']',
-    ])('fails explicitly when unmatched %s delimiters exceed the recovery limit', (delimiter) => {
-      const output = '{"type":"tool_use","name":"get_weather"}\n' + delimiter.repeat(200_000);
-      for (const inverse of [false, true]) {
-        const params = {
-          ...createParams(output, ['get_weather'], { threshold: 0 }),
-          inverse,
-        };
-        expect(handleToolCallF1(params)).toMatchObject({
-          pass: false,
-          score: 0,
-          reason: expect.stringContaining('delimiter limit'),
-        });
-        expect(handleToolCallF1({ ...params, output: JSON.stringify(output) })).toMatchObject({
-          pass: false,
-          score: 0,
-          reason: expect.stringContaining('delimiter limit'),
-        });
-      }
-    });
+    it.each(['{', '[', '}', ']'])(
+      'fails explicitly when unmatched %s delimiters exceed the recovery limit',
+      (delimiter) => {
+        const output = '{"type":"tool_use","name":"get_weather"}\n' + delimiter.repeat(200_000);
+        for (const inverse of [false, true]) {
+          const params = {
+            ...createParams(output, ['get_weather'], { threshold: 0 }),
+            inverse,
+          };
+          expect(handleToolCallF1(params)).toMatchObject({
+            pass: false,
+            score: 0,
+            reason: expect.stringContaining('delimiter limit'),
+          });
+          expect(handleToolCallF1({ ...params, output: JSON.stringify(output) })).toMatchObject({
+            pass: false,
+            score: 0,
+            reason: expect.stringContaining('delimiter limit'),
+          });
+        }
+      },
+    );
 
     it('recovers a call after many unmatched opening braces', () => {
       const output = `${'{\n'.repeat(10_000)}{"type":"tool_use","name":"get_weather"}`;
@@ -822,16 +815,14 @@ describe('handleToolCallF1', () => {
       );
     });
 
-    it.each([
-      '',
-      '  ',
-      ' , , ',
-      [' ', ''],
-    ])('rejects empty expected tool names from %j', (expectedTools) => {
-      expect(() => handleToolCallF1(createParams({}, expectedTools))).toThrow(
-        '"tool-call-f1" assertion requires at least one expected tool name',
-      );
-    });
+    it.each(['', '  ', ' , , ', [' ', '']])(
+      'rejects empty expected tool names from %j',
+      (expectedTools) => {
+        expect(() => handleToolCallF1(createParams({}, expectedTools))).toThrow(
+          '"tool-call-f1" assertion requires at least one expected tool name',
+        );
+      },
+    );
 
     it('should throw error when value is undefined', () => {
       const output = { tool_calls: [{ function: { name: 'get_weather', arguments: '{}' } }] };

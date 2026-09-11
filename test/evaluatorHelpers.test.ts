@@ -1820,94 +1820,77 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toContain('data:image/png;base64,');
     });
 
-    it.each([
-      'mp4',
-      'mpeg',
-      'mpg',
-      'mov',
-      'avi',
-      'flv',
-      'webm',
-      'wmv',
-      '3gp',
-      '3gpp',
-    ])('should load %s video files as raw base64', async (extension) => {
-      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-        return Buffer.from('test-video-content');
-      });
+    it.each(['mp4', 'mpeg', 'mpg', 'mov', 'avi', 'flv', 'webm', 'wmv', '3gp', '3gpp'])(
+      'should load %s video files as raw base64',
+      async (extension) => {
+        vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+          return Buffer.from('test-video-content');
+        });
 
-      const prompt = toPrompt('Test prompt with video: {{video}}');
-      const renderedPrompt = await renderPrompt(prompt, {
-        video: `file://test-video.${extension}`,
-      });
+        const prompt = toPrompt('Test prompt with video: {{video}}');
+        const renderedPrompt = await renderPrompt(prompt, {
+          video: `file://test-video.${extension}`,
+        });
 
-      // Should NOT have data: prefix for videos
-      expect(renderedPrompt).not.toContain('data:video');
-      expect(renderedPrompt).toContain('dGVzdC12aWRlby1jb250ZW50'); // base64 of 'test-video-content'
-    });
+        // Should NOT have data: prefix for videos
+        expect(renderedPrompt).not.toContain('data:video');
+        expect(renderedPrompt).toContain('dGVzdC12aWRlby1jb250ZW50'); // base64 of 'test-video-content'
+      },
+    );
 
-    it.each([
-      'mp3',
-      'wav',
-      'm4a',
-      'aif',
-      'aiff',
-      'aifc',
-      'aac',
-      'ogg',
-      'flac',
-    ])('should load %s audio files as raw base64', async (extension) => {
-      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-        return Buffer.from('test-audio-content');
-      });
+    it.each(['mp3', 'wav', 'm4a', 'aif', 'aiff', 'aifc', 'aac', 'ogg', 'flac'])(
+      'should load %s audio files as raw base64',
+      async (extension) => {
+        vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+          return Buffer.from('test-audio-content');
+        });
 
-      const prompt = toPrompt('Test prompt with audio: {{audio}}');
-      const renderedPrompt = await renderPrompt(prompt, {
-        audio: `file://test-audio.${extension}`,
-      });
+        const prompt = toPrompt('Test prompt with audio: {{audio}}');
+        const renderedPrompt = await renderPrompt(prompt, {
+          audio: `file://test-audio.${extension}`,
+        });
 
-      // Should NOT have data: prefix for audio
-      expect(renderedPrompt).not.toContain('data:audio');
-      expect(renderedPrompt).toContain('dGVzdC1hdWRpby1jb250ZW50'); // base64 of 'test-audio-content'
-    });
+        // Should NOT have data: prefix for audio
+        expect(renderedPrompt).not.toContain('data:audio');
+        expect(renderedPrompt).toContain('dGVzdC1hdWRpby1jb250ZW50'); // base64 of 'test-audio-content'
+      },
+    );
 
-    it.each([
-      'm4a',
-      'M4A',
-      'M4a',
-    ])('preserves M4A MIME type for Google providers with .%s inputs', async (extension) => {
-      vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
-      for (const provider of [
-        new AIStudioChatProvider('gemini-3.8-flash'),
-        new VertexChatProvider('gemini-3.8-flash'),
-        new AIStudioChatProvider('gemini-3.8-flash', { id: 'custom-google-id' }),
-        new VertexChatProvider('gemini-3.8-flash', { id: 'custom-vertex-id' }),
-        new AIStudioChatProvider('gemini-3.8-flash', { id: 'palm:gemini-3.8-flash' }),
-      ]) {
+    it.each(['m4a', 'M4A', 'M4a'])(
+      'preserves M4A MIME type for Google providers with .%s inputs',
+      async (extension) => {
+        vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
+        for (const provider of [
+          new AIStudioChatProvider('gemini-3.8-flash'),
+          new VertexChatProvider('gemini-3.8-flash'),
+          new AIStudioChatProvider('gemini-3.8-flash', { id: 'custom-google-id' }),
+          new VertexChatProvider('gemini-3.8-flash', { id: 'custom-vertex-id' }),
+          new AIStudioChatProvider('gemini-3.8-flash', { id: 'palm:gemini-3.8-flash' }),
+        ]) {
+          const rendered = await renderPrompt(
+            toPrompt('{{audio}}'),
+            { audio: `file://test-audio.${extension}` },
+            undefined,
+            provider,
+          );
+          expect(rendered).toBe('data:audio/mp4;base64,dGVzdC1hdWRpby1jb250ZW50');
+        }
+      },
+    );
+
+    it.each(['https://example.com/api', 'file://custom-provider.js', 'openai:gpt-5.6'])(
+      'keeps M4A variables as raw base64 for %s',
+      async (id) => {
+        vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
         const rendered = await renderPrompt(
           toPrompt('{{audio}}'),
-          { audio: `file://test-audio.${extension}` },
+          { audio: 'file://test-audio.m4a' },
           undefined,
-          provider,
+          createMockProvider({ id }),
         );
-        expect(rendered).toBe('data:audio/mp4;base64,dGVzdC1hdWRpby1jb250ZW50');
-      }
-    });
-
-    it.each([
-      'https://example.com/api',
-      'file://custom-provider.js',
-      'openai:gpt-5.6',
-    ])('keeps M4A variables as raw base64 for %s', async (id) => {
-      vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
-      const rendered = await renderPrompt(
-        toPrompt('{{audio}}'),
-        { audio: 'file://test-audio.m4a' },
-        undefined,
-        createMockProvider({ id }),
-      );
-      expect(rendered).toBe('dGVzdC1hdWRpby1jb250ZW50');
-    });
+        expect(rendered).toBe('dGVzdC1hdWRpby1jb250ZW50');
+      },
+    );
 
     it('keeps M4A variables as raw base64 for non-Gemini Google models', async () => {
       vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
