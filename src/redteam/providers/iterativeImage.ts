@@ -22,6 +22,7 @@ import {
   externalizeResponseForRedteamHistory,
   getTargetResponse,
   isTargetCallAbortError,
+  preserveSelectedError,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
@@ -586,24 +587,25 @@ async function runRedteamConversation({
     }
   }
 
-  return {
-    output:
-      bestResponse?.output ||
-      (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
-    prompt: targetPrompt || undefined,
-    metadata: {
-      ...(lastResponse?.error &&
-        lastResponse.metadata?.errorOrigin === 'tool' && { errorOrigin: 'tool' as const }),
-      finalIteration,
-      highestScore,
-      redteamHistory,
-      redteamFinalPrompt: targetPrompt || undefined,
-      bestImageUrl: bestResponse?.imageUrl,
-      bestImageDescription: bestResponse?.imageDescription,
+  return preserveSelectedError(
+    {
+      output:
+        bestResponse?.output ||
+        (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
+      prompt: targetPrompt || undefined,
+      metadata: {
+        finalIteration,
+        highestScore,
+        redteamHistory,
+        redteamFinalPrompt: targetPrompt || undefined,
+        bestImageUrl: bestResponse?.imageUrl,
+        bestImageDescription: bestResponse?.imageDescription,
+      },
+      tokenUsage: totalTokenUsage,
+      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
     },
-    tokenUsage: totalTokenUsage,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-  };
+    lastResponse,
+  );
 }
 
 class RedteamIterativeProvider implements ApiProvider {

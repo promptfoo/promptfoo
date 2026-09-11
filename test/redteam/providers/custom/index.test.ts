@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/custom/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
+import { isResponseHeadersObserverErrorResponse } from '../../../../src/scheduler/responseHeadersObserver';
+import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
 import {
   createPredispatchAbortTarget,
   createSelectedToolErrorTarget,
@@ -551,6 +554,102 @@ describe('CustomProvider', () => {
       });
     });
   });
+
+  describe.each(['normal', 'unblocking'] as const)(
+    '%s selected caller-observer provenance',
+    (path) => {
+      it.each([
+        { name: 'projects the stored observer error', later: 'none' },
+        { name: 'retains the stored observer error after success', later: 'success' },
+        { name: 'clears the stored origin when a new provider error is selected', later: 'error' },
+      ] as const)('$name', async ({ later }) => {
+        const observerError = 'metrics rate limit exceeded';
+        const laterError = 'Target inference failed: rate limit exceeded';
+        const observerResponse: ProviderResponse = {
+          output: 'Completed observer diagnostic',
+          error: observerError,
+        };
+        const responses: ProviderResponse[] = [observerResponse];
+        if (later !== 'none') {
+          responses.push({
+            output: 'Later target output',
+            ...(later === 'error' ? { error: laterError } : {}),
+          });
+        }
+        const targetResponses: ProviderResponse[] = [];
+        for (const response of responses) {
+          if (path === 'unblocking' && response.error) {
+            targetResponses.push({ output: 'Please provide the example reference number.' });
+            vi.mocked(tryUnblocking).mockResolvedValueOnce({
+              success: true,
+              unblockingPrompt: 'The example reference is 123.',
+            });
+          } else if (!response.error) {
+            vi.mocked(tryUnblocking).mockResolvedValueOnce({ success: false });
+          }
+          targetResponses.push(response);
+        }
+        for (const response of targetResponses) {
+          mockTargetProvider.callApi.mockImplementationOnce(async () => {
+            const delivered: ProviderResponse = {
+              ...response,
+              tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+            };
+            return response === observerResponse
+              ? createSelectedObserverErrorResponse(delivered)
+              : delivered;
+          });
+        }
+        mockRedTeamProvider.callApi.mockResolvedValue({
+          output: JSON.stringify({
+            generatedQuestion: 'Say hello.',
+            rationaleBehindJailbreak: 'Harmless observer result projection fixture',
+            lastResponseSummary: 'Continue the greeting.',
+          }),
+        });
+        mockScoringProvider.callApi.mockResolvedValue({
+          output: JSON.stringify({ value: false, metadata: 25, rationale: 'Continue.' }),
+        });
+        const provider = new CustomProvider({
+          injectVar: 'objective',
+          strategyText: 'Ask for a greeting.',
+          maxTurns: responses.length,
+          maxBacktracks: 0,
+          redteamProvider: mockRedTeamProvider,
+          stateful: true,
+        });
+
+        const result = await provider.callApi('Say hello.', {
+          originalProvider: mockTargetProvider,
+          vars: { objective: 'Say hello.' },
+          prompt: { raw: '{{objective}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(targetResponses.length);
+        expect(mockRedTeamProvider.callApi).toHaveBeenCalledTimes(responses.length);
+        expect(tryUnblocking).toHaveBeenCalledTimes(
+          targetResponses.length - responses.filter((response) => response.error).length,
+        );
+        expect(
+          mockScoringProvider.callApi.mock.calls.map(([, context]) => context?.prompt.label),
+        ).toEqual(later === 'success' ? ['refusal', 'eval'] : []);
+        expect(result.error).toBe(later === 'error' ? laterError : observerError);
+        expect(result.output).toBe(responses[responses.length - 1].output);
+        expect(isResponseHeadersObserverErrorResponse(result)).toBe(later !== 'error');
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(later === 'error');
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+        expect(result.metadata?.customRoundsCompleted).toBe(responses.length);
+        expect(result.metadata?.stopReason).toBe('Max rounds reached');
+        expect(result.metadata?.redteamHistory).toHaveLength(later === 'success' ? 1 : 0);
+        expect(result.tokenUsage).toMatchObject({
+          total: targetResponses.length * 5,
+          prompt: targetResponses.length * 3,
+          completion: targetResponses.length * 2,
+          numRequests: targetResponses.length,
+        });
+      });
+    },
+  );
 
   describe('Unblocking functionality', () => {
     it('should detect blocking question and send unblocking response', async () => {

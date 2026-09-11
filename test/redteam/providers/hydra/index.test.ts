@@ -5,11 +5,14 @@ import {
   neverGenerateRemote,
   shouldGenerateRemote,
 } from '../../../../src/redteam/remoteGeneration';
+import { isResponseHeadersObserverErrorResponse } from '../../../../src/scheduler/responseHeadersObserver';
+import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
 import {
   createMockProvider,
   createProviderResponse,
   type MockApiProvider,
 } from '../../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
 import { createSelectedToolErrorTarget } from '../../../util/selectedToolErrorTarget';
 
 import type { CallApiContextParams, GradingResult } from '../../../../src/types/index';
@@ -1206,6 +1209,114 @@ describe('HydraProvider', () => {
         expect(result.metadata.redteamHistory).toEqual([]);
         expect(result.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
         expect(mockGrader.getResult).not.toHaveBeenCalled();
+      },
+    );
+
+    it('preserves selected caller-observer provenance on the returned target error', async () => {
+      const targetResponse = createSelectedObserverErrorResponse({
+        tokenUsage: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
+        metadata: { targetOnly: 'private target metadata' },
+      });
+      expect(isResponseHeadersObserverErrorResponse(targetResponse)).toBe(true);
+      mockTargetProvider.callApi.mockResolvedValue(targetResponse);
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 }, providerOptions);
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Say hello' },
+        prompt: { raw: '{{input}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+      expect(result.error).toBe('metrics rate limit exceeded');
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(true);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.metadata).not.toHaveProperty('targetOnly');
+      expect(result.metadata).not.toHaveProperty('errorOrigin');
+      expect(result.metadata.redteamHistory).toEqual([]);
+      expect(result.metadata).toHaveProperty(`${providerOptions.metadataPrefix}RoundsCompleted`, 1);
+      expect(result.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+      expect(mockGrader.getResult).not.toHaveBeenCalled();
+    });
+
+    it('clears selected caller-observer provenance when a later target response succeeds', async () => {
+      const priorResponse = createSelectedObserverErrorResponse({});
+      expect(isResponseHeadersObserverErrorResponse(priorResponse)).toBe(true);
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce(priorResponse)
+        .mockResolvedValueOnce({ output: 'Hello' });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 }, providerOptions);
+
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'Say hello' },
+        prompt: { raw: '{{input}}', label: 'greeting' },
+      });
+
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.output).toBe('Hello');
+      expect(result).not.toHaveProperty('error');
+      expect(isResponseHeadersObserverErrorResponse(result)).toBe(false);
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(false);
+      expect(result.metadata.redteamHistory).toHaveLength(1);
+      expect(result.metadata).toHaveProperty(`${providerOptions.metadataPrefix}RoundsCompleted`, 2);
+      expect(result.tokenUsage?.numRequests).toBe(2);
+    });
+
+    it.each(['agent error', 'local no-probe error'] as const)(
+      'keeps selected caller-observer provenance off %s in the zero-probe builder contract',
+      async (selectedError) => {
+        // Matching diagnostic text must not transfer the prior target's provenance.
+        const agentError = 'metrics rate limit exceeded';
+        if (selectedError === 'agent error') {
+          mockAgentProvider.callApi
+            .mockResolvedValueOnce({ output: 'Say hello' })
+            .mockResolvedValueOnce({ error: agentError });
+        }
+        const priorResponse = createSelectedObserverErrorResponse({
+          tokenUsage: { numRequests: 0 },
+        });
+        expect(isResponseHeadersObserverErrorResponse(priorResponse)).toBe(true);
+        mockTargetProvider.callApi.mockResolvedValue(priorResponse);
+        const provider = new HydraProvider(
+          { injectVar: 'input', maxTurns: selectedError === 'agent error' ? 2 : 1 },
+          providerOptions,
+        );
+
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'Say hello' },
+          prompt: { raw: '{{input}}', label: 'greeting' },
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+        // The live scan sends one learning update after its attack decisions.
+        expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(
+          selectedError === 'agent error' ? 3 : 2,
+        );
+        expect(
+          mockAgentProvider.callApi.mock.calls.map(([, context]) => context?.prompt.label),
+        ).toEqual([
+          ...Array(selectedError === 'agent error' ? 2 : 1).fill(
+            `${providerOptions.metadataPrefix}-agent`,
+          ),
+          `${providerOptions.metadataPrefix}-learning-update`,
+        ]);
+        expect(result.error).toBe(
+          selectedError === 'agent error'
+            ? agentError
+            : `${providerOptions.strategyName} did not execute any target probes`,
+        );
+        expect(isResponseHeadersObserverErrorResponse(result)).toBe(false);
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(
+          selectedError === 'agent error',
+        );
+        expect(result.metadata.redteamHistory).toEqual([]);
+        expect(result.metadata).toHaveProperty(
+          `${providerOptions.metadataPrefix}RoundsCompleted`,
+          1,
+        );
+        expect(result.tokenUsage?.numRequests).toBe(0);
       },
     );
 

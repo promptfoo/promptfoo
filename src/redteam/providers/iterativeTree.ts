@@ -63,6 +63,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  preserveSelectedError,
   redteamProviderManager,
   runRedteamGrader,
 } from './shared';
@@ -633,30 +634,31 @@ async function runRedteamConversation({
   let bestFinalAttackPrompt: string | undefined;
 
   function buildFinalResponse(finalTargetResponse: ProviderResponse): RedteamTreeResponse {
-    return {
-      output:
-        bestResponse ||
-        (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
-      prompt: bestNode.prompt,
-      metadata: {
-        ...(finalTargetResponse.error &&
-          finalTargetResponse.metadata?.errorOrigin === 'tool' && { errorOrigin: 'tool' }),
-        highestScore: maxScore,
-        redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
-        messages: treeOutputs as Record<string, any>[],
-        attempts,
-        redteamTreeHistory: treeOutputs,
-        stopReason: stoppingReason,
-        storedGraderResult,
-        sessionIds: extractSessionIds(treeOutputs),
-        ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
-          transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
-        }),
+    return preserveSelectedError(
+      {
+        output:
+          bestResponse ||
+          (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
+        prompt: bestNode.prompt,
+        metadata: {
+          highestScore: maxScore,
+          redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
+          messages: treeOutputs as Record<string, any>[],
+          attempts,
+          redteamTreeHistory: treeOutputs,
+          stopReason: stoppingReason,
+          storedGraderResult,
+          sessionIds: extractSessionIds(treeOutputs),
+          ...((bestTransformDisplayVars || lastTransformDisplayVars) && {
+            transformDisplayVars: bestTransformDisplayVars || lastTransformDisplayVars,
+          }),
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: finalTargetResponse?.guardrails,
+        ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
       },
-      tokenUsage: totalTokenUsage,
-      guardrails: finalTargetResponse?.guardrails,
-      ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
-    };
+      finalTargetResponse,
+    );
   }
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {

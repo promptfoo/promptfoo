@@ -59,6 +59,7 @@ import {
   isConversationEndedResponse,
   isTargetCallAbortError,
   isValidChatMessageArray,
+  preserveSelectedError,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   runRedteamGrader,
@@ -799,35 +800,36 @@ export class CrescendoProvider implements ApiProvider {
 
     const messages = this.memory.getConversation(this.targetConversationId);
     const finalPrompt = getLastMessageContent(messages, 'user');
-    return {
-      output: lastResponse.output,
-      ...(lastResponse.error ? { error: lastResponse.error } : {}),
-      prompt: finalPrompt,
-      metadata: {
-        ...(lastResponse.error &&
-          lastResponse.metadata?.errorOrigin === 'tool' && { errorOrigin: 'tool' }),
-        sessionId: getSessionId(lastResponse, context),
-        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-        redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
-        messages: messages as Record<string, any>[],
-        crescendoRoundsCompleted: roundNum,
-        crescendoBacktrackCount: backtrackCount,
-        crescendoResult: evalFlag,
-        crescendoConfidence: evalPercentage,
-        stopReason: exitReason,
-        redteamHistory,
-        successfulAttacks: this.successfulAttacks,
-        totalSuccessfulAttacks: this.successfulAttacks.length,
-        storedGraderResult,
-        traceSnapshots:
-          traceSnapshots.length > 0
-            ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
-            : undefined,
-        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+    return preserveSelectedError(
+      {
+        output: lastResponse.output,
+        ...(lastResponse.error ? { error: lastResponse.error } : {}),
+        prompt: finalPrompt,
+        metadata: {
+          sessionId: getSessionId(lastResponse, context),
+          // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+          redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
+          messages: messages as Record<string, any>[],
+          crescendoRoundsCompleted: roundNum,
+          crescendoBacktrackCount: backtrackCount,
+          crescendoResult: evalFlag,
+          crescendoConfidence: evalPercentage,
+          stopReason: exitReason,
+          redteamHistory,
+          successfulAttacks: this.successfulAttacks,
+          totalSuccessfulAttacks: this.successfulAttacks.length,
+          storedGraderResult,
+          traceSnapshots:
+            traceSnapshots.length > 0
+              ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
+              : undefined,
+          ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+        },
+        tokenUsage: totalTokenUsage,
+        guardrails: lastResponse?.guardrails,
       },
-      tokenUsage: totalTokenUsage,
-      guardrails: lastResponse?.guardrails,
-    };
+      lastResponse,
+    );
   }
 
   private async getAttackPrompt(

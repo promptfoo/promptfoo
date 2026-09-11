@@ -111,3 +111,14 @@ export function isResponseHeadersObserverErrorResponse(response: unknown): boole
     (response as { [CALLER_ERROR_RESPONSE]?: boolean })[CALLER_ERROR_RESPONSE] === true
   );
 }
+
+/** Copy private caller-exception provenance when the same error response is projected. */
+export function preserveResponseHeadersObserverErrorResponse<T extends object>(
+  source: unknown,
+  response: T,
+): T {
+  if (isResponseHeadersObserverErrorResponse(source)) {
+    Object.defineProperty(response, CALLER_ERROR_RESPONSE, { value: true });
+  }
+  return response;
+}

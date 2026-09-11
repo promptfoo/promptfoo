@@ -4,12 +4,15 @@ import RedteamIterativeProvider, {
 } from '../../../src/redteam/providers/iterative';
 import { wrapProviderWithRateLimiting } from '../../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
+import { isResponseHeadersObserverErrorResponse } from '../../../src/scheduler/responseHeadersObserver';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import * as traceContext from '../../../src/tracing/traceContext';
 import {
   createMockProvider,
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
 import {
   createPredispatchAbortTarget,
   createSelectedToolErrorTarget,
@@ -321,6 +324,57 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('runRedteamConversation', () => {
+    it.each([
+      { label: 'actual caller observer', callerOrigin: true },
+      { label: 'independent target error with the same diagnostic', callerOrigin: false },
+    ])('selected caller-observer provenance: $label', async ({ callerOrigin }) => {
+      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+      mockRedteamProvider.callApi.mockReset().mockResolvedValue({
+        output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+      });
+      mockTargetProvider.callApi.mockImplementation(async () => {
+        const response: ProviderResponse = {
+          output: 'Completed target output',
+          error: 'metrics rate limit exceeded',
+          tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+        };
+        return callerOrigin ? createSelectedObserverErrorResponse(response) : response;
+      });
+      try {
+        const result: ProviderResponse = await runRedteamConversation({
+          prompt: { raw: '{{goal}}', label: 'greeting' },
+          filters: undefined,
+          vars: { goal: 'Say hello' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: mockTargetProvider,
+          injectVar: 'goal',
+          numIterations: 1,
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        });
+
+        expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+        expect(result.output).toBe('Completed target output');
+        expect(result.error).toBe('metrics rate limit exceeded');
+        expect(result.tokenUsage).toMatchObject({
+          prompt: 2,
+          completion: 3,
+          total: 5,
+          numRequests: 1,
+        });
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+        expect(result.metadata).not.toHaveProperty('http');
+        expect(isResponseHeadersObserverErrorResponse(result)).toBe(callerOrigin);
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(!callerOrigin);
+      } finally {
+        mockGetTargetResponse.mockReset();
+      }
+    });
+
     it.each([
       { label: 'selected tool error', error: 'lookup: downstream 429 rate limit', origin: 'tool' },
       { label: 'unmarked target error', error: 'target 429 rate limit', origin: undefined },

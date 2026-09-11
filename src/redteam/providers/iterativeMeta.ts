@@ -45,6 +45,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  preserveSelectedError,
   redteamProviderManager,
   runRedteamGrader,
   type TargetResponse,
@@ -669,36 +670,36 @@ export async function runMetaAgentRedteam({
     }
   }
 
-  return {
-    output: bestResponse || lastResponse?.output || '',
-    prompt: bestPrompt,
-    ...(failClosedError
-      ? { error: failClosedError }
-      : lastResponse?.error
-        ? { error: lastResponse.error }
-        : {}),
-    metadata: {
-      ...(!failClosedError &&
-        lastResponse?.error &&
-        lastResponse.metadata?.errorOrigin === 'tool' && { errorOrigin: 'tool' }),
-      finalIteration,
-      vulnerabilityAchieved,
-      // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
-      // This ensures UI shows what was actually sent, not the pre-transform jailbreak
-      redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
-      storedGraderResult,
-      stopReason,
-      redteamHistory,
-      sessionIds,
-      traceSnapshots:
-        traceSnapshots.length > 0
-          ? traceSnapshots.map((t) => formatTraceForMetadata(t))
-          : undefined,
-      // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
-      ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+  return preserveSelectedError(
+    {
+      output: bestResponse || lastResponse?.output || '',
+      prompt: bestPrompt,
+      ...(failClosedError
+        ? { error: failClosedError }
+        : lastResponse?.error
+          ? { error: lastResponse.error }
+          : {}),
+      metadata: {
+        finalIteration,
+        vulnerabilityAchieved,
+        // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
+        // This ensures UI shows what was actually sent, not the pre-transform jailbreak
+        redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
+        storedGraderResult,
+        stopReason,
+        redteamHistory,
+        sessionIds,
+        traceSnapshots:
+          traceSnapshots.length > 0
+            ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+            : undefined,
+        // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)
+        ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
+      },
+      tokenUsage: totalTokenUsage,
     },
-    tokenUsage: totalTokenUsage,
-  };
+    failClosedError ? undefined : lastResponse,
+  );
 }
 
 class RedteamIterativeMetaProvider implements ApiProvider {

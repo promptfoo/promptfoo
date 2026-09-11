@@ -15,6 +15,8 @@ import {
   getProviderCallTracingContext,
   getRateLimitKey,
   isRateLimitWrapped,
+  preserveResponseHeadersObserverError,
+  preserveResponseHeadersObserverErrorResponse,
   type RateLimitRegistry,
   wrapProviderWithRateLimiting,
 } from '../../scheduler';
@@ -472,6 +474,20 @@ export type TargetResponse = {
   };
 } & Omit<ProviderResponse, 'output'> & { output: string };
 
+/** Retain only the selected error's origin when a strategy rebuilds its response. */
+export function preserveSelectedError<T extends ProviderResponse>(
+  response: T,
+  selected: ProviderResponse | undefined,
+): T {
+  if (!response.error || !selected?.error) {
+    return response;
+  }
+  if (selected.metadata?.errorOrigin === 'tool') {
+    response.metadata = { ...response.metadata, errorOrigin: 'tool' };
+  }
+  return preserveResponseHeadersObserverErrorResponse(selected, response);
+}
+
 export function isConversationEndedResponse(
   response: Pick<ProviderResponse, 'conversationEnded'> | undefined,
 ): boolean {
@@ -596,14 +612,14 @@ export async function getTargetResponse(
     if (isTargetCallAbortError(error, options?.abortSignal)) {
       throw error;
     }
-    return {
+    return preserveResponseHeadersObserverError(options?.onResponseHeaders, error, {
       output: '',
       error: (error as Error).message,
       tokenUsage: {
         numRequests:
           error instanceof Error && error.message.includes('maxCharsPerMessage=') ? 0 : 1,
       },
-    };
+    });
   }
   if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
     logger.debug(`Sleeping for ${targetProvider.delay}ms`);
@@ -619,12 +635,15 @@ export async function getTargetResponse(
           ? targetRespRaw.output
           : safeJsonStringify(targetRespRaw.output)) as string)
       : '';
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output,
-      error: targetRespRaw.error,
-      tokenUsage,
-    };
+    return preserveSelectedError(
+      {
+        ...(targetRespRaw as ProviderResponse),
+        output,
+        error: targetRespRaw.error,
+        tokenUsage,
+      },
+      targetRespRaw,
+    );
   }
 
   if (hasOutput) {
@@ -641,12 +660,15 @@ export async function getTargetResponse(
   }
 
   if (targetRespRaw?.error) {
-    return {
-      ...(targetRespRaw as ProviderResponse),
-      output: '',
-      error: targetRespRaw.error,
-      tokenUsage,
-    };
+    return preserveSelectedError(
+      {
+        ...(targetRespRaw as ProviderResponse),
+        output: '',
+        error: targetRespRaw.error,
+        tokenUsage,
+      },
+      targetRespRaw,
+    );
   }
 
   if (targetRespRaw?.conversationEnded) {

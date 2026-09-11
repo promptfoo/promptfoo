@@ -3,9 +3,12 @@ import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
+import { isResponseHeadersObserverErrorResponse } from '../../../../src/scheduler/responseHeadersObserver';
+import { isProviderResponseRateLimited } from '../../../../src/scheduler/types';
 import * as traceContext from '../../../../src/tracing/traceContext';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
+import { createSelectedObserverErrorResponse } from '../../../util/selectedObserverError';
 import {
   createPredispatchAbortTarget,
   createSelectedToolErrorTarget,
@@ -636,6 +639,139 @@ describe('CrescendoProvider', () => {
       });
     });
   });
+
+  describe.each(['normal', 'unblocking'] as const)(
+    '%s selected caller-observer provenance',
+    (path) => {
+      it.each([
+        { name: 'projects the selected observer error after grading', final: 'observer error' },
+        { name: 'does not label a later selected provider error', final: 'provider error' },
+        { name: 'does not label a later selected success', final: 'success' },
+      ] as const)('$name', async ({ final }) => {
+        const events: string[] = [];
+        const observerResponse: ProviderResponse = {
+          output: 'Completed observer diagnostic',
+          error: 'metrics rate limit exceeded',
+        };
+        const selectedResponse: ProviderResponse =
+          final === 'observer error'
+            ? observerResponse
+            : {
+                output: 'Later target output',
+                ...(final === 'provider error'
+                  ? { error: 'Target inference failed: rate limit exceeded' }
+                  : {}),
+              };
+        const targetResponses =
+          path === 'unblocking'
+            ? [
+                final === 'observer error'
+                  ? { output: 'Please provide the example reference number.' }
+                  : observerResponse,
+                selectedResponse,
+              ]
+            : final === 'observer error'
+              ? [selectedResponse]
+              : [observerResponse, selectedResponse];
+        const rounds = path === 'unblocking' ? 1 : targetResponses.length;
+        for (const [index, response] of targetResponses.entries()) {
+          mockTargetProvider.callApi.mockImplementationOnce(async () => {
+            events.push(`target ${index + 1}`);
+            const delivered: ProviderResponse = {
+              ...response,
+              tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
+            };
+            return response === observerResponse
+              ? createSelectedObserverErrorResponse(delivered)
+              : delivered;
+          });
+        }
+        mockRedTeamProvider.callApi.mockImplementation(async () => {
+          events.push('attacker');
+          return {
+            output: JSON.stringify({
+              generatedQuestion: 'Say hello.',
+              rationaleBehindJailbreak: 'Harmless observer result projection fixture',
+              lastResponseSummary: 'Continue the greeting.',
+            }),
+            tokenUsage: { total: 2, prompt: 1, completion: 1, numRequests: 1 },
+          };
+        });
+        vi.mocked(tryUnblocking).mockImplementation(async () => {
+          events.push('unblocking');
+          return path === 'unblocking'
+            ? { success: true, unblockingPrompt: 'The example reference is 123.' }
+            : { success: false };
+        });
+        mockScoringProvider.callApi.mockImplementation(async (_prompt, context) => {
+          events.push(context?.prompt.label ?? 'missing scoring label');
+          return {
+            output: JSON.stringify({ value: false, metadata: 25, rationale: 'Continue.' }),
+            tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+          };
+        });
+        const provider = new CrescendoProvider({
+          injectVar: 'objective',
+          maxTurns: rounds,
+          maxBacktracks: 0,
+          redteamProvider: mockRedTeamProvider,
+          stateful: true,
+        });
+
+        const result = await provider.callApi('Say hello.', {
+          originalProvider: mockTargetProvider,
+          vars: { objective: 'Say hello.' },
+          prompt: { raw: 'Say hello.', label: 'greeting' },
+        });
+        events.push('return');
+
+        expect(events).toEqual(
+          path === 'unblocking'
+            ? ['attacker', 'target 1', 'unblocking', 'target 2', 'refusal', 'eval', 'return']
+            : [
+                ...targetResponses.flatMap((_response, index) => [
+                  'attacker',
+                  `target ${index + 1}`,
+                  'unblocking',
+                  'refusal',
+                  'eval',
+                ]),
+                'return',
+              ],
+        );
+        const gradedResponses = path === 'unblocking' ? [selectedResponse] : targetResponses;
+        expect(
+          mockScoringProvider.callApi.mock.calls.map(([body, context]) => ({
+            label: context?.prompt.label,
+            output: JSON.parse(JSON.parse(body)[1].content).responseToEvaluateInput,
+          })),
+        ).toEqual(
+          gradedResponses.flatMap((response) => [
+            { label: 'refusal', output: response.output },
+            { label: 'eval', output: response.output },
+          ]),
+        );
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(targetResponses.length);
+        expect(result.output).toBe(selectedResponse.output);
+        expect(result.error).toBe(selectedResponse.error);
+        expect(isResponseHeadersObserverErrorResponse(result)).toBe(final === 'observer error');
+        expect(isProviderResponseRateLimited(result, undefined)).toBe(final === 'provider error');
+        expect(result.metadata).not.toHaveProperty('errorOrigin');
+        expect(result.metadata?.crescendoRoundsCompleted).toBe(rounds);
+        expect(result.metadata?.crescendoConfidence).toBe(25);
+        expect(result.metadata?.stopReason).toBe('Max rounds reached');
+        expect(result.metadata?.redteamHistory).toHaveLength(rounds);
+        expect(result.tokenUsage).toMatchObject({
+          total: targetResponses.length * 5,
+          prompt: targetResponses.length * 3,
+          completion: targetResponses.length * 2,
+          numRequests: targetResponses.length,
+          attacker: { total: rounds * 2, numRequests: rounds },
+          assertions: { total: rounds * 6, numRequests: rounds * 2 },
+        });
+      });
+    },
+  );
 
   describe('Unblocking functionality', () => {
     it('should detect blocking question and send unblocking response', async () => {
