@@ -14,7 +14,7 @@ export const UploadBlobRequestSchema = z.object({
   data: z.string().min(1).max(BLOB_MAX_BASE64_SIZE),
   mimeType: z.string().max(255).regex(MIME_TYPE_REGEX, 'Invalid MIME type'),
   context: z.object({
-    evalId: z.string().min(1).max(128),
+    evalId: z.string().min(1),
     testIdx: z.number().int().nonnegative().optional(),
     promptIdx: z.number().int().nonnegative().optional(),
     location: z.string().max(512).optional(),
@@ -43,7 +43,7 @@ export const GetBlobParamsSchema = z.object({
 });
 
 export const GetBlobQuerySchema = z.object({
-  evalId: z.string().min(1).max(128),
+  evalId: z.string().min(1),
 });
 
 export const BlobBinaryResponseSchema = z.instanceof(Uint8Array);

@@ -53,16 +53,13 @@ export async function storeBlob(
   },
 ): Promise<BlobStoreResult> {
   const db = await getDb();
-  if (refContext?.evalId) {
-    const evalExists = await db
-      .select({ id: evalsTable.id })
-      .from(evalsTable)
-      .where(eq(evalsTable.id, refContext.evalId))
-      .get();
-    if (!evalExists) {
-      throw new Error(`[BlobStorage] Eval not found: ${refContext.evalId}`);
-    }
-  }
+  const evalExists = refContext?.evalId
+    ? await db
+        .select({ id: evalsTable.id })
+        .from(evalsTable)
+        .where(eq(evalsTable.id, refContext.evalId))
+        .get()
+    : undefined;
 
   const provider = getBlobStorageProvider();
   // Keep provider metadata inert too. The result is sanitized again for legacy/deduplicated
@@ -91,7 +88,7 @@ export async function storeBlob(
         })
         .run();
 
-      if (refContext?.evalId) {
+      if (refContext?.evalId && evalExists) {
         await tx
           .insert(blobReferencesTable)
           .values({
@@ -108,24 +105,8 @@ export async function storeBlob(
       }
     });
   } catch (error) {
-    // Preserve reused objects and blobs another successful write has already registered.
-    if (!normalizedResult.deduplicated) {
-      try {
-        const tracked = await db
-          .select({ hash: blobAssetsTable.hash })
-          .from(blobAssetsTable)
-          .where(eq(blobAssetsTable.hash, normalizedResult.ref.hash))
-          .get();
-        if (!tracked) {
-          await provider.deleteByHash(normalizedResult.ref.hash);
-        }
-      } catch (cleanupError) {
-        logger.warn('[BlobStorage] Failed to roll back an untracked blob after DB error', {
-          error: cleanupError,
-          hash: normalizedResult.ref.hash,
-        });
-      }
-    }
+    // A concurrent writer may register identical bytes after this transaction fails, so physical
+    // cleanup here can delete a blob that another successful result owns.
     throw error;
   }
 

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, like, or, sql } from 'drizzle-orm';
 import express from 'express';
 import {
   BLOB_MAX_BASE64_SIZE,
@@ -197,6 +197,9 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
 
     // Build WHERE conditions for filtering
     const filterConditions = [];
+    filterConditions.push(
+      or(isNotNull(blobReferencesTable.kind), eq(blobReferencesTable.location, 'import')),
+    );
 
     if (hash) {
       filterConditions.push(eq(blobAssetsTable.hash, hash));

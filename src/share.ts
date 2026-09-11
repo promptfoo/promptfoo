@@ -560,7 +560,9 @@ function remapKnownLinkage(
   }
   const traceparent =
     typeof remapped.traceparent === 'string'
-      ? /^([a-f0-9]{2}-)([a-f0-9]{32})(-[a-f0-9]{16}-[a-f0-9]{2})$/i.exec(remapped.traceparent)
+      ? /^([a-f0-9]{2}-)([a-f0-9]{32})(-[a-f0-9]{16}-[a-f0-9]{2}(?:-.*)?)$/i.exec(
+          remapped.traceparent,
+        )
       : null;
   if (
     remoteTraceId &&

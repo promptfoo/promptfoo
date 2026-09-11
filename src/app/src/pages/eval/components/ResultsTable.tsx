@@ -2275,7 +2275,7 @@ function ResultsTable({
                     rowPositionIndex={
                       output.originalRowPositionIndex ?? output.originalRowIndex ?? info.row.index
                     }
-                    promptIndex={idx}
+                    promptIndex={output.originalPromptIndex ?? idx}
                     onRating={handleRating.bind(
                       null,
                       output.originalRowIndex ?? info.row.index,

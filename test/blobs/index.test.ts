@@ -339,17 +339,17 @@ describe('storeBlob failure and MIME boundaries', () => {
     });
   }
 
-  it('rejects a missing reference eval before calling the provider', async () => {
+  it('stores blobs for non-persisted evaluations without recording provenance', async () => {
     setStoreProvider(true);
 
     await expect(
       storeBlob(Buffer.from('bytes'), 'image/png', { evalId: 'missing-eval' }),
-    ).rejects.toThrow();
-    expect(storeCalls).toBe(0);
+    ).resolves.toBeDefined();
+    expect(storeCalls).toBe(1);
     expect(deleteCalls).toEqual([]);
   });
 
-  it('does not disturb an existing reference when a later eval is missing', async () => {
+  it('does not disturb an existing reference when a later eval is not persisted', async () => {
     setStoreProvider(false);
 
     await expect(storeBlob(Buffer.from('bytes'), 'image/png', { evalId })).resolves.toBeDefined();
@@ -357,8 +357,8 @@ describe('storeBlob failure and MIME boundaries', () => {
 
     await expect(
       storeBlob(Buffer.from('bytes'), 'image/png', { evalId: 'missing-eval' }),
-    ).rejects.toThrow();
-    expect(storeCalls).toBe(1);
+    ).resolves.toBeDefined();
+    expect(storeCalls).toBe(2);
     expect(deleteCalls).toEqual([]);
 
     const db = await getDb();
@@ -368,11 +368,11 @@ describe('storeBlob failure and MIME boundaries', () => {
   });
 
   it.each([
-    { deduplicated: false, tracked: false, deleted: true },
+    { deduplicated: false, tracked: false, deleted: false },
     { deduplicated: true, tracked: false, deleted: false },
     { deduplicated: false, tracked: true, deleted: false },
   ])(
-    'cleans up a failed write only when its new blob is untracked ($deduplicated, $tracked)',
+    'preserves bytes after a failed write because another writer may own them ($deduplicated, $tracked)',
     async ({ deduplicated, tracked, deleted }) => {
       setStoreProvider(deduplicated);
       if (tracked) {
