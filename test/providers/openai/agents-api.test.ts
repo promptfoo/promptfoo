@@ -51,6 +51,9 @@ function defaultResponse(pathname: string, method?: string) {
   if (pathname.endsWith('/turns')) {
     return json(page([turn]));
   }
+  if (pathname.endsWith('/subagents')) {
+    return json(page([]));
+  }
   if (pathname.endsWith('/items')) {
     return json(page([message]));
   }
@@ -758,56 +761,215 @@ describe('OpenAiAgentsApiProvider', () => {
     ]);
   });
 
-  it('reports subagent tool calls with their turn IDs without scoring subagent messages', async () => {
-    const childTurnId = 'turn_child';
-    const childMessage = (id: string, phase: string, text: string) => ({
-      ...message,
-      id,
-      phase,
-      turn_id: childTurnId,
-      content: [{ type: 'output_text', text }],
-    });
+  it('excludes assistant, inter-agent, and reasoning messages from tool summaries', async () => {
     vi.mocked(fetchWithRetries)
       .mockResolvedValueOnce(json(session))
-      .mockResolvedValueOnce(json(page([turn, { ...turn, id: childTurnId, subagent_id: 'child' }])))
+      .mockResolvedValueOnce(json(page([turn])))
       .mockResolvedValueOnce(json(session))
-      .mockResolvedValueOnce(
-        json(
-          page(
-            [
-              { id: 'spawn', type: 'create_subagent_call', status: 'completed', turn_id: turn.id },
-              childMessage('child_note', 'commentary', 'Running Python'),
-              childMessage('child_answer', 'final_answer', '99'),
-            ],
-            true,
-            'child_answer',
-          ),
-        ),
-      )
-      // The failed subagent command arrives on the second page of session items.
       .mockResolvedValueOnce(
         json(
           page([
-            { id: 'child_cmd', type: 'command_execution', status: 'failed', turn_id: childTurnId },
-            { id: 'child_reasoning', type: 'reasoning', turn_id: childTurnId },
+            { id: 'rs_root', type: 'reasoning', status: 'completed', turn_id: turn.id },
+            {
+              id: 'amsg_child',
+              type: 'agent_message',
+              turn_id: turn.id,
+              sender_agent_id: 'agent_child',
+              recipient_agent_id: 'agent_root',
+              content: 'child result',
+            },
+            { id: 'cmd', type: 'command_execution', status: 'completed', turn_id: turn.id },
             message,
           ]),
         ),
       );
     const result = await provider().callApi('hi');
     expect(result.output).toBe('42');
-    expect(result.metadata).toMatchObject({ turnId: turn.id, sessionDeleted: true });
     expect(result.metadata?.toolCalls).toEqual([
-      { id: 'spawn', type: 'create_subagent_call', status: 'completed', turnId: turn.id },
-      { id: 'child_cmd', type: 'command_execution', status: 'failed', turnId: childTurnId },
+      { id: 'cmd', type: 'command_execution', status: 'completed', turnId: turn.id },
     ]);
-    // Observed subagents still leave aggregate usage unpriced.
-    expect(result.cost).toBeUndefined();
-    expect(
-      vi
-        .mocked(fetchWithRetries)
-        .mock.calls.some(([url]) => String(url).includes('after=child_answer')),
-    ).toBe(true);
+    // Single-agent sessions do not read subagent histories.
+    expect(calls().some((request) => request.pathname.includes('/subagents'))).toBe(false);
+  });
+
+  describe('subagent tool calls', () => {
+    // Shapes follow a live multi-agent session: session items hold only the root agent's work,
+    // while GET /subagents and GET /subagents/{id}/items hold each subagent's own history.
+    const subagentId = 'subagent_8f32a092efbe64b1';
+    const subagentTurnId = 'turn_eed94c155401f4c7';
+    const createCall = {
+      type: 'create_subagent_call',
+      id: 'call_create',
+      turn_id: turn.id,
+      status: 'completed',
+      agent_id: 'agent_root',
+      model: 'gpt-6-astra',
+    };
+    const rootItems = [
+      {
+        type: 'message',
+        id: 'msg_user',
+        turn_id: turn.id,
+        role: 'user',
+        content: [{ type: 'input_text', text: 'hi' }],
+        status: 'completed',
+        phase: null,
+      },
+      createCall,
+      {
+        type: 'agent_message',
+        id: 'amsg_to_child',
+        turn_id: turn.id,
+        sender_agent_id: 'agent_root',
+        recipient_agent_id: subagentId,
+        content: [{ type: 'output_text', text: 'Run the command' }],
+      },
+      {
+        type: 'wait_for_subagents_call',
+        id: 'call_wait',
+        turn_id: turn.id,
+        status: 'completed',
+        sender_agent_id: 'agent_root',
+        recipient_agent_ids: [subagentId],
+      },
+      {
+        type: 'agent_message',
+        id: 'amsg_from_child',
+        turn_id: turn.id,
+        sender_agent_id: subagentId,
+        recipient_agent_id: 'agent_root',
+        content: [{ type: 'output_text', text: '99' }],
+      },
+      message,
+    ];
+    const subagentMessage = (id: string, role: string, phase: string | null, text: string) => ({
+      type: 'message',
+      id,
+      turn_id: subagentTurnId,
+      role,
+      content: [{ type: role === 'user' ? 'input_text' : 'output_text', text }],
+      status: 'completed',
+      phase,
+    });
+    const subagentPages = [
+      page(
+        [
+          subagentMessage('msg_child_task', 'user', null, 'Run the command'),
+          {
+            type: 'reasoning',
+            id: 'rs_child',
+            turn_id: subagentTurnId,
+            summary: [],
+            status: 'completed',
+          },
+          {
+            type: 'mcp_call',
+            id: 'call_mcp',
+            turn_id: subagentTurnId,
+            server_label: 'codex',
+            name: 'list_mcp_resources',
+            arguments: '{}',
+            status: 'completed',
+            output: '{}',
+            error: null,
+          },
+        ],
+        true,
+        'call_mcp',
+      ),
+      page([
+        { type: 'command_execution', id: 'call_cmd', turn_id: subagentTurnId, status: 'failed' },
+        subagentMessage('msg_child_answer', 'assistant', 'final_answer', '99'),
+      ]),
+    ];
+    const rootItemsRoute = (pathname: string) =>
+      pathname.endsWith('/sess_test/items') ? json(page([createCall, message])) : undefined;
+
+    it('reports subagent tool calls from subagent histories without scoring subagent messages', async () => {
+      vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+        const { pathname, searchParams } = new URL(String(url));
+        if (pathname.endsWith('/sess_test/items')) {
+          return json(page(rootItems));
+        }
+        if (pathname.endsWith('/sess_test/subagents')) {
+          return json(
+            page([
+              {
+                id: subagentId,
+                object: 'agent.session.subagent',
+                session_id: session.id,
+                name: 'Chandrasekhar',
+                parent_agent_id: 'agent_root',
+                status: 'active',
+                opened_at: 1,
+                closed_at: null,
+              },
+            ]),
+          );
+        }
+        if (pathname.endsWith(`/subagents/${subagentId}/items`)) {
+          return json(subagentPages[searchParams.get('after') === 'call_mcp' ? 1 : 0]);
+        }
+        return defaultResponse(pathname, options?.method);
+      });
+      const result = await provider().callApi('hi');
+      expect(result.output).toBe('42');
+      expect(result.metadata).toMatchObject({ turnId: turn.id, sessionDeleted: true });
+      expect(result.metadata).not.toHaveProperty('subagentToolCallsUnavailable');
+      expect(result.metadata?.toolCalls).toEqual([
+        { id: 'call_create', type: 'create_subagent_call', status: 'completed', turnId: turn.id },
+        { id: 'call_wait', type: 'wait_for_subagents_call', status: 'completed', turnId: turn.id },
+        {
+          id: 'call_mcp',
+          type: 'mcp_call',
+          name: 'list_mcp_resources',
+          status: 'completed',
+          turnId: subagentTurnId,
+        },
+        { id: 'call_cmd', type: 'command_execution', status: 'failed', turnId: subagentTurnId },
+      ]);
+      // Observed subagents still leave aggregate usage unpriced.
+      expect(result.cost).toBeUndefined();
+      expect(
+        vi
+          .mocked(fetchWithRetries)
+          .mock.calls.filter(([url]) => String(url).includes(`/subagents/${subagentId}/items`))
+          .map(([url]) => new URL(String(url)).searchParams.get('after')),
+      ).toEqual([null, 'call_mcp']);
+    });
+
+    it('keeps the answer and flags subagent tool calls it cannot read', async () => {
+      mockApi(
+        (pathname) =>
+          rootItemsRoute(pathname) ??
+          (pathname.endsWith('/subagents') ? apiError(403, 'missing api.agents.read') : undefined),
+      );
+      const result = await provider().callApi('hi');
+      expect(result.output).toBe('42');
+      expect(result.error).toBeUndefined();
+      expect(result.metadata).toMatchObject({
+        subagentToolCallsUnavailable: true,
+        sessionDeleted: true,
+        toolCalls: [
+          { id: 'call_create', type: 'create_subagent_call', status: 'completed', turnId: turn.id },
+        ],
+      });
+    });
+
+    it('propagates eval cancellation while reading subagent tool calls', async () => {
+      const controller = new AbortController();
+      mockApi((pathname) => {
+        if (pathname.endsWith('/subagents')) {
+          controller.abort(new Error('cancel eval'));
+          return apiError(403, 'cancelled');
+        }
+        return rootItemsRoute(pathname);
+      });
+      await expect(
+        provider().callApi('hi', undefined, { abortSignal: controller.signal }),
+      ).rejects.toThrow('cancel eval');
+      expect(calls().at(-1)?.method).toBe('DELETE');
+    });
   });
 
   it('retains successful sessions only when requested and never caches executions', async () => {

@@ -73,6 +73,14 @@ interface Item {
   name?: string;
 }
 
+interface ToolCallSummary {
+  id: string | null;
+  type: string;
+  name?: string;
+  status?: string;
+  turnId: string;
+}
+
 interface Page<T> {
   data: T[];
   has_more: boolean;
@@ -82,6 +90,8 @@ interface Page<T> {
 const MAX_TIMER_MS = 2_147_483_647;
 const MAX_ERROR_DETAIL_LENGTH = 1_024;
 const TRANSIENT_STATUS_CODES = new Set([500, 502, 503, 504]);
+// Assistant messages, messages between agents, and reasoning are not tool activity.
+const MESSAGE_ITEM_TYPES = new Set(['message', 'agent_message', 'reasoning']);
 const RETRY_BASE_DELAY_MS = 1_000;
 const RETRY_MAX_DELAY_MS = 8_000;
 const CLEANUP_RETRY_MAX_DELAY_MS = 5_000;
@@ -377,6 +387,67 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     } while (true);
   }
 
+  /**
+   * Session items cover only the root agent; each subagent keeps its own item history.
+   * Returns undefined when those histories cannot be read so the gap is reported, not hidden.
+   */
+  private async listSubagentItems(
+    endpoint: string,
+    headers: Headers,
+    signal: AbortSignal,
+    evalSignal?: AbortSignal,
+  ): Promise<Item[] | undefined> {
+    try {
+      const subagents = await this.list<{ id?: unknown }>(`${endpoint}/subagents`, headers, signal);
+      const items: Item[] = [];
+      for (const { id } of subagents) {
+        if (typeof id !== 'string' || !id) {
+          throw new Error('Agents API returned an invalid subagent');
+        }
+        items.push(
+          ...(await this.list<Item>(
+            `${endpoint}/subagents/${encodeURIComponent(id)}/items`,
+            headers,
+            signal,
+          )),
+        );
+      }
+      return items;
+    } catch (error) {
+      evalSignal?.throwIfAborted();
+      // A completed answer stays successful when only subagent tool metadata cannot be read.
+      logger.debug('[OpenAI Agents API] Subagent tool items unavailable', {
+        endpoint,
+        error: this.redact(error instanceof Error ? error.message : String(error)),
+      });
+      return undefined;
+    }
+  }
+
+  /** Summarize root and subagent tool activity; messages between agents are not tool calls. */
+  private async summarizeToolCalls(
+    endpoint: string,
+    sessionItems: Item[],
+    hasSubagents: boolean,
+    headers: Headers,
+    signal: AbortSignal,
+    evalSignal?: AbortSignal,
+  ): Promise<{ toolCalls: ToolCallSummary[]; subagentToolCallsUnavailable?: true }> {
+    const subagentItems = hasSubagents
+      ? await this.listSubagentItems(endpoint, headers, signal, evalSignal)
+      : [];
+    const toolCalls = [...sessionItems, ...(subagentItems ?? [])]
+      .filter((item) => !MESSAGE_ITEM_TYPES.has(item.type))
+      .map((item) => ({
+        id: item.id,
+        type: item.type,
+        name: item.name,
+        status: item.status,
+        turnId: item.turn_id,
+      }));
+    return subagentItems ? { toolCalls } : { toolCalls, subagentToolCallsUnavailable: true };
+  }
+
   private getFinalAnswer(items: Item[]): string {
     const messages = items.filter(
       (item) => item.type === 'message' && item.role === 'assistant' && item.status === 'completed',
@@ -530,8 +601,19 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         signal,
       );
       const sessionItems = await this.list<Item>(`${endpoint}/items`, headers, signal);
-      // Only root-turn messages are scored; tool summaries also cover subagent turns.
+      // Only root-turn messages are scored.
       const output = this.getFinalAnswer(sessionItems.filter((item) => item.turn_id === turn.id));
+      const hasSubagents =
+        completedSession.agent.multi_agent?.enabled ||
+        sessionItems.some((item) => item.type === 'create_subagent_call');
+      const toolActivity = await this.summarizeToolCalls(
+        endpoint,
+        sessionItems,
+        hasSubagents,
+        headers,
+        signal,
+        options?.abortSignal,
+      );
       const { session: finished, turn: finishedTurn } = await this.waitForFinalUsage(
         completedSession,
         turn,
@@ -554,9 +636,6 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
             completionDetails: { reasoning: usage.output_tokens_details?.reasoning_tokens },
           }
         : undefined;
-      const hasSubagents =
-        finished.agent.multi_agent?.enabled ||
-        sessionItems.some((item) => item.type === 'create_subagent_call');
       // Aggregate session tokens do not identify each subagent's model or service tier.
       if (!hasSubagents) {
         result.cost = calculateOpenAIUsageCost(model, this.config, usage, {
@@ -570,15 +649,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         costScope: hasSubagents
           ? 'unavailable for aggregate subagent usage'
           : 'model tokens only; excludes tools and sandbox charges',
-        toolCalls: sessionItems
-          .filter((item) => item.type !== 'message' && item.type !== 'reasoning')
-          .map((item) => ({
-            id: item.id,
-            type: item.type,
-            name: item.name,
-            status: item.status,
-            turnId: item.turn_id,
-          })),
+        ...toolActivity,
         ...(usage ? {} : { usageUnavailable: true }),
       });
       completed = true;
