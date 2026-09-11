@@ -59,7 +59,10 @@ vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/cache')>()),
   disableCache: vi.fn(),
 }));
-vi.mock('../../src/evaluator');
+vi.mock('../../src/evaluator', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/evaluator')>()),
+  evaluate: vi.fn(),
+}));
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
   return {
@@ -2690,6 +2693,56 @@ describe('checkCloudPermissions', () => {
       { id: 'blocked-provider', config: { apiKey: 'blocked-secret' } },
     ]);
   });
+
+  it.each([
+    { indices: [1, 1], expected: 'selected-test' },
+    { indices: [2], expected: 'selected-scenario' },
+  ])(
+    'authorizes only selected logical tests and scenarios: $indices',
+    async ({ indices, expected }) => {
+      const providers = [{ id: () => 'matrix-provider', callApi: async () => ({}) }];
+      const config = {
+        providers: [{ id: 'matrix-provider' }],
+        prompts: ['Hello'],
+      } as UnifiedConfig;
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite: {
+          prompts: [],
+          providers,
+          tests: [{ provider: 'unselected-test' }, { provider: 'selected-test' }],
+          scenarios: [
+            {
+              config: [{ provider: 'selected-scenario' }],
+              tests: [{ vars: { input: 'scenario' } }],
+            },
+          ],
+        },
+        basePath: path.resolve('/'),
+        selectedProviderConfigs: config.providers,
+      });
+      vi.mocked(evaluate).mockResolvedValue(new Eval(config));
+      const providerSelection = createProviderSelection(
+        providers,
+        config.providers as any[],
+        providers,
+      );
+      await doEval(
+        { write: false, table: false },
+        config,
+        defaultConfigPath,
+        { eventSource: 'mcp' },
+        {
+          evaluateOptionOverrides: { providerSelection, testCaseIndices: indices },
+        },
+      );
+      expect(checkCloudPermissions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          providers: [{ id: 'matrix-provider' }, { id: expected }],
+        }),
+      );
+    },
+  );
 
   it('should ignore config-injected internal selection metadata', async () => {
     const tests: NonNullable<TestSuite['tests']> = [

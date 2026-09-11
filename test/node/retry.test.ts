@@ -1086,7 +1086,7 @@ describe('assertErrorResultsReplaced replacement accounting', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('credits a replacement persisted by an earlier incomplete retry', async () => {
+  it('does not infer retry provenance from insertion order', async () => {
     const staleError = { evalId: 'e', id: 'err', testIdx: 0, promptIdx: 1, rowId: 2 };
     const oldSuccess = { evalId: 'e', id: 'old-success', testIdx: 0, promptIdx: 1, rowId: 1 };
     const priorReplacement = { evalId: 'e', id: 'prior-retry', testIdx: 0, promptIdx: 1, rowId: 3 };
@@ -1096,6 +1096,6 @@ describe('assertErrorResultsReplaced replacement accounting', () => {
 
     await expect(
       assertErrorResultsReplaced(['err'], ['err', 'old-success', 'prior-retry']),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow('Retry produced no persisted replacement');
   });
 });

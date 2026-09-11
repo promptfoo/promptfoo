@@ -32,6 +32,46 @@ afterEach(() => {
 });
 
 describe('redactSecretLeaves', () => {
+  it.each(['apiBaseUrl', 'tokenUrl', 'API_BASE_URL'])(
+    'redacts credentials in %s without dropping endpoint semantics',
+    (key) => {
+      const result = redactSecretLeaves({
+        provider: {
+          config: {
+            [key]: 'https://gateway.test/v1?api_key=short-secret&tenant=alpha',
+          },
+        },
+      });
+      const url = new URL(result.provider.config[key]);
+      expect(url.searchParams.get('api_key')).toBe('[REDACTED]');
+      expect(url.searchParams.get('tenant')).toBe('alpha');
+      expect(url.pathname).toBe('/v1');
+    },
+  );
+
+  it('redacts short secrets in nested provider environment maps', () => {
+    const result = redactSecretLeaves({
+      defaultTest: {
+        options: {
+          provider: {
+            config: {
+              env: {
+                CUSTOM_TOKEN: 'short-secret',
+                SERVICE_PASSWORD: 'short-password',
+                PORT: '3000',
+              },
+            },
+          },
+        },
+      },
+    });
+    expect(result.defaultTest.options.provider.config.env).toEqual({
+      CUSTOM_TOKEN: '[REDACTED]',
+      SERVICE_PASSWORD: '[REDACTED]',
+      PORT: '3000',
+    });
+  });
+
   it('preserves non-secret auth/session structure while redacting secret leaves', () => {
     const result = redactSecretLeaves({
       url: 'https://api.test/chat',

@@ -317,6 +317,21 @@ describe('evaluation replay helpers', () => {
     ).not.toThrow();
   });
 
+  it('replays current credentials after validating selected prompt semantics', () => {
+    const original = { raw: 'p', label: 'P', config: { apiKey: 'old-secret', temperature: 0 } };
+    const current = { ...original, config: { apiKey: 'new-secret', temperature: 0 } };
+    const selected = applyPromptSelection([current], createPromptSelection([original]));
+    const persisted = createCompletedPrompt('p', {
+      ...original,
+      id: generateIdFromPrompt(original),
+      provider: 'echo',
+    });
+    expect(getPromptsForReplay([persisted], selected)[0].config).toEqual(current.config);
+    expect(
+      getPromptsForReplay([persisted], [{ ...current, config: { temperature: 1 } }])[0].config,
+    ).toEqual(original.config);
+  });
+
   it('keeps resolved executable prompt callbacks during replay', () => {
     const callback = async () => 'rendered';
     const resolved = [{ raw: 'source', label: 'Prompt', function: callback }];

@@ -12,6 +12,7 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { getTotalResultRowCount } from '../../src/models/evalPerformance';
+import EvalResult from '../../src/models/evalResult';
 import {
   assertErrorResultsReplaced,
   deleteErrorResults,
@@ -1765,23 +1766,34 @@ describe('retry command', () => {
       ]);
     }
 
-    it('fails closed when only a pre-existing duplicate success shares the retry key', async () => {
-      const evalId = uniqueEvalId();
-      await Eval.create({}, [], { id: evalId });
-      // One old duplicate success + one stale error at the SAME key 0:0.
-      await insertRow(evalId, `${evalId}-old-success`, ResultFailureReason.NONE, true);
-      await insertRow(evalId, `${evalId}-stale-error`, ResultFailureReason.ERROR, false);
+    it.each([false, true])(
+      'fails closed for a pre-existing success (inserted after error: %s)',
+      async (successAfterError) => {
+        const evalId = uniqueEvalId();
+        await Eval.create({}, [], { id: evalId });
+        // One old duplicate success + one stale error at the SAME key 0:0.
+        if (successAfterError) {
+          await insertRow(evalId, `${evalId}-stale-error`, ResultFailureReason.ERROR, false);
+          await insertRow(evalId, `${evalId}-old-success`, ResultFailureReason.NONE, true);
+        } else {
+          await insertRow(evalId, `${evalId}-old-success`, ResultFailureReason.NONE, true);
+          await insertRow(evalId, `${evalId}-stale-error`, ResultFailureReason.ERROR, false);
+        }
+        expect(
+          await EvalResult.getCompletedIndexPairs(evalId, { excludeErrors: true }),
+        ).not.toContain('0:0');
 
-      const errorResultIds = await getErrorResultIds(evalId);
-      const preexistingResultIds = await getAllResultIds(evalId);
-      expect(errorResultIds).toEqual([`${evalId}-stale-error`]);
-      expect(preexistingResultIds).toHaveLength(2);
+        const errorResultIds = await getErrorResultIds(evalId);
+        const preexistingResultIds = await getAllResultIds(evalId);
+        expect(errorResultIds).toEqual([`${evalId}-stale-error`]);
+        expect(preexistingResultIds).toHaveLength(2);
 
-      // No new row persisted by "this retry" -> must fail closed, preserving the error.
-      await expect(
-        assertErrorResultsReplaced(errorResultIds, preexistingResultIds),
-      ).rejects.toThrow('Retry produced no persisted replacement');
-    });
+        // No new row persisted by "this retry" -> must fail closed, preserving the error.
+        await expect(
+          assertErrorResultsReplaced(errorResultIds, preexistingResultIds),
+        ).rejects.toThrow('Retry produced no persisted replacement');
+      },
+    );
 
     it('passes once this retry persists a genuinely new replacement row', async () => {
       const evalId = uniqueEvalId();

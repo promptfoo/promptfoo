@@ -11,7 +11,13 @@ import { disableCache, withCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
-import { createTestCaseSelection, evaluate, PromptSuggestionsRejectedError } from '../evaluator';
+import {
+  createTestCaseSelection,
+  evaluate,
+  getTestCasesForSelection,
+  PromptSuggestionsRejectedError,
+  restoreTestCaseSelection,
+} from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -962,15 +968,23 @@ export async function doEval(
       });
     }
 
+    let permissionTests = testSuite.tests;
+    let permissionScenarios = testSuite.scenarios;
+    if (validatedProviderSelection && hasExplicitTestCaseIndices) {
+      const tests = getTestCasesForSelection(testSuite);
+      const indices = validatedTestCaseSelection
+        ? restoreTestCaseSelection(tests, validatedTestCaseSelection)
+        : createTestCaseSelection(
+            tests,
+            resumeRuntimeOptions?.testCaseIndices ?? evaluateOptions.testCaseIndices ?? [],
+          ).tests.map(({ index }) => index);
+      permissionTests = indices.map((index) => tests[index]);
+      permissionScenarios = [];
+    }
     const cloudPermissionConfig = validatedProviderSelection
       ? buildProviderPermissionConfig(config, validatedProviderSelection, {
-          // Effective providers a filtered run can still execute beyond the
-          // selected matrix: resolved per-test `provider` overrides, defaultTest
-          // and grader providers, plus the red-team provider. Without these the
-          // projected permission boundary would authorize only the top-level
-          // matrix while `callActiveProvider` runs an unauthorized override.
-          tests: testSuite.tests,
-          scenarios: testSuite.scenarios,
+          tests: permissionTests,
+          scenarios: permissionScenarios,
           defaultTest: testSuite.defaultTest,
           redteam: config.redteam,
         })

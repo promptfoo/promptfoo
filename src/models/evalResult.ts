@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -791,29 +791,32 @@ export default class EvalResult {
    * Key format: `${testIdx}:${promptIdx}`
    *
    * @param evalId - The evaluation ID to query
-   * @param opts.excludeErrors - If true, excludes results with ERROR failureReason (used in retry mode)
+   * @param opts.excludeErrors - Exclude any pair with an ERROR result so it can be retried.
    */
   static async getCompletedIndexPairs(
     evalId: string,
     opts?: { excludeErrors?: boolean },
   ): Promise<Set<string>> {
     const db = await getDb();
-    const whereClause = opts?.excludeErrors
-      ? and(
-          eq(evalResultsTable.evalId, evalId),
-          // Exclude ERROR results so they can be retried
-          // This prevents resume mode from skipping ERROR results during retry
-          ne(evalResultsTable.failureReason, ResultFailureReason.ERROR),
-        )
-      : eq(evalResultsTable.evalId, evalId);
-
     const rows = await db
-      .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
+      .select({
+        testIdx: evalResultsTable.testIdx,
+        promptIdx: evalResultsTable.promptIdx,
+        failureReason: evalResultsTable.failureReason,
+      })
       .from(evalResultsTable)
-      .where(whereClause);
+      .where(eq(evalResultsTable.evalId, evalId));
     const ret = new Set<string>();
+    const errorPairs = new Set<string>();
     for (const r of rows) {
-      ret.add(`${r.testIdx}:${r.promptIdx}`);
+      const key = `${r.testIdx}:${r.promptIdx}`;
+      ret.add(key);
+      if (opts?.excludeErrors && r.failureReason === ResultFailureReason.ERROR) {
+        errorPairs.add(key);
+      }
+    }
+    for (const key of errorPairs) {
+      ret.delete(key);
     }
     return ret;
   }

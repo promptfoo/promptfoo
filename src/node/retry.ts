@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -264,12 +264,8 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
 }
 
 /**
- * Ensure every stale ERROR row has a row NEWLY persisted by this retry for the same
- * execution index. `preexistingResultIds` is the snapshot of result IDs captured
- * before the retry ran; only rows absent from that snapshot count as replacements,
- * so an older duplicate success sharing the same (evalId, testIdx, promptIdx) key
- * (which resume can legitimately leave untouched) is never miscounted as this
- * retry's replacement.
+ * Require a newly persisted replacement for each stale ERROR row before deleting it.
+ * The pre-retry snapshot prevents older duplicate rows from counting as replacements.
  */
 export async function assertErrorResultsReplaced(
   resultIds: string[],
@@ -284,7 +280,6 @@ export async function assertErrorResultsReplaced(
     evalId: string;
     id: string;
     promptIdx: number;
-    rowId: number;
     testIdx: number;
   }> = [];
   for (let offset = 0; offset < resultIds.length; offset += SQLITE_MAX_BOUND_PARAMETERS) {
@@ -295,7 +290,6 @@ export async function assertErrorResultsReplaced(
           evalId: evalResultsTable.evalId,
           id: evalResultsTable.id,
           promptIdx: evalResultsTable.promptIdx,
-          rowId: sql<number>`rowid`,
           testIdx: evalResultsTable.testIdx,
         })
         .from(evalResultsTable)
@@ -307,15 +301,10 @@ export async function assertErrorResultsReplaced(
     throw new Error('Could not verify all original ERROR rows after retry. They were preserved.');
   }
 
-  // A replacement must be a row this retry newly persisted: exclude both the stale
-  // ERROR rows and every other row that already existed before the retry.
   const preexistingIds = new Set([...resultIds, ...preexistingResultIds]);
   const replacementCounts = new Map<string, number>();
-  const firstStaleRowIds = new Map<string, number>();
   const testIndicesByEval = new Map<string, Set<number>>();
   for (const row of staleRows) {
-    const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
-    firstStaleRowIds.set(key, Math.min(firstStaleRowIds.get(key) ?? row.rowId, row.rowId));
     const testIndices = testIndicesByEval.get(row.evalId) ?? new Set<number>();
     testIndices.add(row.testIdx);
     testIndicesByEval.set(row.evalId, testIndices);
@@ -330,7 +319,6 @@ export async function assertErrorResultsReplaced(
           evalId: evalResultsTable.evalId,
           id: evalResultsTable.id,
           promptIdx: evalResultsTable.promptIdx,
-          rowId: sql<number>`rowid`,
           testIdx: evalResultsTable.testIdx,
         })
         .from(evalResultsTable)
@@ -343,10 +331,7 @@ export async function assertErrorResultsReplaced(
         .all();
       for (const row of candidateRows) {
         const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
-        if (
-          !preexistingIds.has(row.id) ||
-          row.rowId > (firstStaleRowIds.get(key) ?? Number.MAX_SAFE_INTEGER)
-        ) {
+        if (!preexistingIds.has(row.id)) {
           replacementCounts.set(key, (replacementCounts.get(key) ?? 0) + 1);
         }
       }

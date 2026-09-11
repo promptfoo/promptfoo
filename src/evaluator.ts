@@ -2525,16 +2525,6 @@ function canonicalizeSelectionFingerprintValue(
   }
 }
 
-// Redact credentials from a per-test provider reference before fingerprinting.
-// Shares the canonical leaf-redacting sanitizer with the top-level provider
-// fingerprint so both preserve non-secret authentication/session STRUCTURE (auth
-// type, grant type, token URL, placement, scopes, session method) while redacting
-// only the secret leaves. Preserving that structure lets replay fail closed when
-// a bearer→api-key swap or token-endpoint change drifts the test provider.
-function sanitizeProviderForTestSelection(value: unknown): unknown {
-  return redactSecretLeaves(value);
-}
-
 function sanitizeAssertionProviderForSelection(assertion: unknown): unknown {
   if (!assertion || typeof assertion !== 'object' || Array.isArray(assertion)) {
     return assertion;
@@ -2544,7 +2534,7 @@ function sanitizeAssertionProviderForSelection(assertion: unknown): unknown {
     ...record,
     ...('provider' in record
       ? {
-          provider: sanitizeProviderForTestSelection(record.provider),
+          provider: redactSecretLeaves(record.provider),
         }
       : {}),
     ...(Array.isArray(record.assert)
@@ -2567,19 +2557,19 @@ function getTestCaseFingerprintInput(testCase: unknown): unknown {
     ...record,
     ...('provider' in record
       ? {
-          provider: sanitizeProviderForTestSelection(record.provider),
+          provider: redactSecretLeaves(record.provider),
         }
       : {}),
     ...('providers' in record
       ? {
-          providers: sanitizeProviderForTestSelection(record.providers),
+          providers: redactSecretLeaves(record.providers),
         }
       : {}),
     ...(options && 'provider' in options
       ? {
           options: {
             ...options,
-            provider: sanitizeProviderForTestSelection(options.provider),
+            provider: redactSecretLeaves(options.provider),
           },
         }
       : {}),

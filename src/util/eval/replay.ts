@@ -132,13 +132,14 @@ export function getPromptsForReplay(
   const matchedPromptKeys = new Set<string>();
   for (const prompt of resolvedPrompts) {
     const promptId = generateIdFromPrompt(prompt);
+    const fingerprint = getPromptFingerprint(prompt);
     const candidates = promptsById.get(promptId);
     const persistedPrompt =
-      candidates?.find((candidate) => candidate.fingerprint === getPromptFingerprint(prompt)) ??
-      candidates?.[0];
+      candidates?.find((candidate) => candidate.fingerprint === fingerprint) ?? candidates?.[0];
     if (persistedPrompt) {
       orderedPrompts.push({
         ...persistedPrompt.prompt,
+        ...(persistedPrompt.fingerprint === fingerprint ? { config: prompt.config } : {}),
         ...(prompt.function ? { function: prompt.function } : {}),
       });
       matchedPromptKeys.add(persistedPrompt.key);
