@@ -24,7 +24,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-59cmAHiLKcrimHmmSeCSKLvXSQgMFBW+4JTz3nRGu0M='
+    integrity: 'sha256-2zTTBRDDot54sCt66kUQY3yeJSzHU8sN/bxP3292uA0='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -114,7 +114,12 @@ inspect-promptfoo-results:
       optional: true
   when: always
   script:
-    - node -e 'console.log(JSON.parse(require("node:fs").readFileSync(".promptfoo-results/results.json", "utf8")).results.stats)'
+    - |
+      if [ ! -f .promptfoo-results/results.json ]; then
+        echo 'Skipping inspection: no eval results were produced.'
+        exit 0
+      fi
+      node -e 'console.log(JSON.parse(require("node:fs").readFileSync(".promptfoo-results/results.json", "utf8")).results.stats)'
 ```
 
 Do not override `script` merely to enforce failures: the template already preserves Promptfoo's exit code and defaults to a 100% pass-rate threshold.
@@ -157,10 +162,17 @@ promptfoo-comment:
       optional: true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - .gitlab-ci.yml
+        - promptfooconfig.yaml
+        - prompts/**/*
+        - tests/**/*
       when: always
 ```
 
 GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create or update them, so a project access token is required. The separate comment job starts in a fresh, unprivileged container with no checkout and accesses the write token only through its `promptfoo-review` environment scope. Repeat any job-level `PROMPTFOO_OUTPUT_DIR` or `PROMPTFOO_SHARE` overrides from the eval job in the comment job because GitLab `needs` does not inherit job variables. The eval job fails closed if that token is exposed to it, removes token-bearing Git metadata before executable providers run, and forces failed assertions to return a nonzero exit code.
+
+Keep the comment job's `changes` rules aligned with the eval so unrelated merge requests skip both jobs. Keep the eval's inherited `after_script` empty: GitLab starts it with the original job credentials.
 
 The eval records its job status as an artifact, and `when: always` lets the isolated comment job summarize both successful and failed evals without turning failures into passing pipelines. A per-merge-request resource group serializes overlapping updates, and older pipelines cannot overwrite a newer summary.
 

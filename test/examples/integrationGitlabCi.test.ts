@@ -158,12 +158,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   }
 
   async function runEvaluation(overrides: NodeJS.ProcessEnv = {}) {
-    const evaluation = await runScript(job.script[0], overrides);
-    await runScript(job.after_script[0], {
-      CI_JOB_STATUS: evaluation.status === 0 ? 'success' : 'failed',
-      ...overrides,
-    });
-    return evaluation;
+    return runScript([...job.before_script, ...job.script].join('\n'), overrides);
   }
 
   async function withGitLabServer(
@@ -241,6 +236,63 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(commentJob.script[0]).toContain('NODE_USE_ENV_PROXY="$proxy_enabled"');
   });
 
+  it('disables post-eval shells that would reintroduce GitLab credentials', () => {
+    expect(job.after_script).toEqual([]);
+  });
+
+  it.each(['missing config', 'invalid threshold'])(
+    'records failure status before rejecting %s',
+    async (failure) => {
+      const result = await runEvaluation(
+        failure === 'missing config'
+          ? { PROMPTFOO_CONFIG: 'missing.yaml' }
+          : { PROMPTFOO_PASS_RATE_THRESHOLD: 'invalid' },
+      );
+      expect(result.status).not.toBe(0);
+      expect(fs.readFileSync(path.join(tempDir, '.promptfoo-results/job-status.txt'), 'utf8')).toBe(
+        'failed\n',
+      );
+      expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
+    },
+  );
+
+  it.each(['README.md', 'site guide'])(
+    'keeps the optional comment changes rule aligned in %s',
+    (document) => {
+      const filename =
+        document === 'README.md'
+          ? path.join(exampleDir, 'README.md')
+          : path.join(rootDir, 'site/docs/integrations/gitlab-ci.md');
+      const blocks = [
+        ...fs.readFileSync(filename, 'utf8').matchAll(/```yaml[^\n]*\n([\s\S]*?)```/g),
+      ].map((match) => parse(match[1]));
+      const comment = blocks.find((block) => block['promptfoo-comment'])['promptfoo-comment'];
+      const evaluation =
+        document === 'README.md'
+          ? parse(fs.readFileSync(path.join(exampleDir, '.gitlab-ci.yml'), 'utf8'))[
+              'promptfoo-eval'
+            ]
+          : blocks.find((block) => block['promptfoo-eval'])['promptfoo-eval'];
+      expect(comment.rules[0].changes).toEqual(evaluation.rules[0].changes);
+    },
+  );
+
+  it('skips result inspection when an optional eval produced no artifacts', async () => {
+    const source = fs.readFileSync(
+      path.join(rootDir, 'site/docs/integrations/gitlab-ci.md'),
+      'utf8',
+    );
+    const blocks = [...source.matchAll(/```yaml[^\n]*\n([\s\S]*?)```/g)].map((match) =>
+      parse(match[1]),
+    );
+    const inspection = blocks.find((block) => block['inspect-promptfoo-results'])[
+      'inspect-promptfoo-results'
+    ];
+    const result = await runScript(inspection.script.join('\n'));
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Skipping');
+  });
+
   it('keeps the documented remote template integrity hashes current', () => {
     const publishedSource = templateSource.replace(/\r\n/g, '\n');
     const integrity = `sha256-${createHash('sha256').update(publishedSource).digest('base64')}`;
@@ -266,18 +318,16 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(fs.existsSync(path.join(tempDir, 'npm-args'))).toBe(false);
   });
 
-  it.each([
-    'latest',
-    '^0.121.19',
-    '01.121.19',
-    '0.121.19 --registry=https://example.invalid',
-  ])('rejects the unpinned or unsafe npm version %s', async (version) => {
-    const result = await runScript(job.before_script[0], { PROMPTFOO_VERSION: version });
+  it.each(['latest', '^0.121.19', '01.121.19', '0.121.19 --registry=https://example.invalid'])(
+    'rejects the unpinned or unsafe npm version %s',
+    async (version) => {
+      const result = await runScript(job.before_script[0], { PROMPTFOO_VERSION: version });
 
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('exact semantic version');
-    expect(fs.existsSync(path.join(tempDir, 'npm-args'))).toBe(false);
-  });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('exact semantic version');
+      expect(fs.existsSync(path.join(tempDir, 'npm-args'))).toBe(false);
+    },
+  );
 
   it('rejects a valid version that does not match the pinned container release', async () => {
     const result = await runScript(job.before_script[0], { PROMPTFOO_VERSION: '0.121.20' });
@@ -380,22 +430,16 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
   });
 
-  it.each([
-    '-1',
-    '101',
-    'NaN',
-    'Infinity',
-    '0x10',
-    '1e2',
-    ' 10 ',
-    '',
-  ])('rejects unsafe pass-rate threshold %s', async (value) => {
-    const result = await runEvaluation({ PROMPTFOO_PASS_RATE_THRESHOLD: value });
+  it.each(['-1', '101', 'NaN', 'Infinity', '0x10', '1e2', ' 10 ', ''])(
+    'rejects unsafe pass-rate threshold %s',
+    async (value) => {
+      const result = await runEvaluation({ PROMPTFOO_PASS_RATE_THRESHOLD: value });
 
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('finite decimal percentage from 0 through 100');
-    expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
-  });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain('finite decimal percentage from 0 through 100');
+      expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
+    },
+  );
 
   it('never treats an untrusted pass-rate threshold as a Node preload option', async () => {
     const preloadPath = path.join(tempDir, 'threshold-preload.cjs');

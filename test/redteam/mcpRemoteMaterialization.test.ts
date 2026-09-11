@@ -110,6 +110,34 @@ describe('materializeMcpToolCallRemote', () => {
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
+  it('preserves cache provenance from remote MCP materialization responses', async () => {
+    vi.mocked(getEnvString).mockImplementation((key: string) =>
+      key === 'PROMPTFOO_REMOTE_GENERATION_URL' ? 'https://remote.example.test/task' : '',
+    );
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: true,
+      data: {
+        result: {
+          tool: 'search_companies',
+          args: { query: 'clean energy' },
+        },
+        tokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
+      },
+      status: 200,
+      statusText: 'OK',
+    } as Awaited<ReturnType<typeof fetchWithCache>>);
+
+    await expect(
+      materializeMcpToolCallRemote({
+        tools: [searchCompaniesTool],
+        value: 'Find clean energy companies.',
+      }),
+    ).resolves.toMatchObject({
+      cached: true,
+      tokenUsage: { total: 16, prompt: 12, completion: 4, numRequests: 1 },
+    });
+  });
+
   it('returns undefined when remote generation is explicitly disabled', async () => {
     vi.mocked(getEnvBool).mockImplementation(
       (key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION',

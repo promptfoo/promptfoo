@@ -19,6 +19,10 @@
       - $PROMPTFOO_CACHE_PATH/
   before_script:
     - |
+      : "${PROMPTFOO_OUTPUT_DIR:?PROMPTFOO_OUTPUT_DIR must not be empty}"
+      mkdir -p "$PROMPTFOO_OUTPUT_DIR"
+      printf '%s\n' failed > "$PROMPTFOO_OUTPUT_DIR/job-status.txt"
+
       if [ -n "${PROMPTFOO_GITLAB_TOKEN:-}" ]; then
         echo 'Scope PROMPTFOO_GITLAB_TOKEN to the promptfoo-review environment, not the eval job.' >&2
         exit 1
@@ -107,8 +111,6 @@
       await removeGitMetadata(process.cwd());
       PROMPTFOO_CLEAN_CHECKOUT
 
-      mkdir -p "$PROMPTFOO_OUTPUT_DIR"
-
       set -- eval \
         --config "$PROMPTFOO_CONFIG" \
         --no-progress-bar \
@@ -143,12 +145,15 @@
         -u NODE_PATH \
         -u PROMPTFOO_GITLAB_TOKEN \
         PROMPTFOO_FAILED_TEST_EXIT_CODE=1 \
-        promptfoo "$@"
-  after_script:
-    - |
-      if [ -n "${PROMPTFOO_OUTPUT_DIR:-}" ] && [ -d "$PROMPTFOO_OUTPUT_DIR" ]; then
-        printf '%s\n' "${CI_JOB_STATUS:-unknown}" > "$PROMPTFOO_OUTPUT_DIR/job-status.txt"
-      fi
+        sh -c '
+          if promptfoo "$@"; then
+            printf "%s\n" success > "$PROMPTFOO_OUTPUT_DIR/job-status.txt"
+          else
+            exit "$?"
+          fi
+        ' promptfoo "$@"
+  # A Runner after_script shell would restore credentials after executable eval code ran.
+  after_script: []
   artifacts:
     when: always
     access: developer

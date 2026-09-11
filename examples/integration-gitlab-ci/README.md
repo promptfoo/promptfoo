@@ -17,7 +17,7 @@ The local `.gitlab-ci.yml` extends the hidden `.promptfoo-eval` job from `gitlab
 ```yaml
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-59cmAHiLKcrimHmmSeCSKLvXSQgMFBW+4JTz3nRGu0M='
+    integrity: 'sha256-2zTTBRDDot54sCt66kUQY3yeJSzHU8sN/bxP3292uA0='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -57,6 +57,12 @@ promptfoo-comment:
       optional: true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - .gitlab-ci.yml
+        - gitlab-ci.yml
+        - promptfooconfig.yaml
+        - prompts/**/*
+        - tests/**/*
       when: always
 ```
 

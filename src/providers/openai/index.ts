@@ -1,6 +1,7 @@
 import { getEnvString } from '../../envars';
+import { resolveProviderApiKey } from '../credentials';
+import { isGpt6AstraModel } from './gpt6';
 
-import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
@@ -49,6 +50,18 @@ export class OpenAiGenericProvider implements ApiProvider {
     return this.config.apiHost || this.config.apiBaseUrl
       ? this.modelName
       : `openai:${this.modelName}`;
+  }
+
+  /** Keep the actual backend separate from a customer-configured provider label. */
+  protected getGenAISystem(): string {
+    const providerPrototype = Object.getPrototypeOf(this) as OpenAiGenericProvider;
+    const defaultId = providerPrototype.id;
+    if (defaultId === OpenAiGenericProvider.prototype.id) {
+      return 'openai';
+    }
+
+    const providerId = defaultId.call(this);
+    return providerId.includes(':') ? providerId.split(':', 1)[0] : 'openai';
   }
 
   toString(): string {
@@ -114,14 +127,10 @@ export class OpenAiGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      (this.config?.apiKeyEnvar
-        ? getEnvString(this.config.apiKeyEnvar as EnvVarKey) ||
-          this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]
-        : undefined) ||
-      this.env?.OPENAI_API_KEY ||
-      getEnvString('OPENAI_API_KEY')
+    return resolveProviderApiKey(
+      this.config,
+      this.env,
+      this.config.useDefaultApiKey === false ? [] : ['OPENAI_API_KEY'],
     );
   }
 
@@ -137,13 +146,13 @@ export class OpenAiGenericProvider implements ApiProvider {
     return this.modelName;
   }
 
-  protected isGPT5Model(): boolean {
-    const model = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+  protected isGPT5Model(modelName = this.getCapabilityModelName()): boolean {
+    const model = modelName.replace(/(^|\/)ft:/, '$1');
     return model.startsWith('gpt-5') || model.includes('/gpt-5');
   }
 
-  protected isReasoningModel(): boolean {
-    const model = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
+  protected isReasoningModel(modelName = this.getCapabilityModelName()): boolean {
+    const model = modelName.replace(/(^|\/)ft:/, '$1');
     return (
       model.startsWith('o1') ||
       model.startsWith('o3') ||
@@ -151,12 +160,14 @@ export class OpenAiGenericProvider implements ApiProvider {
       model.includes('/o1') ||
       model.includes('/o3') ||
       model.includes('/o4') ||
-      this.isGPT5Model()
+      /(^|\/)gpt-daybreak-(?:blue|red)-latest$/.test(model) ||
+      this.isGPT5Model(model) ||
+      isGpt6AstraModel(model)
     );
   }
 
-  protected supportsTemperature(): boolean {
-    return !this.isReasoningModel();
+  protected supportsTemperature(modelName = this.getCapabilityModelName()): boolean {
+    return !this.isReasoningModel(modelName);
   }
 
   protected getBillingModelName(_config: OpenAiSharedOptions): string {
