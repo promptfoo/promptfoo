@@ -19,22 +19,6 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
-function getImageRequest(callIndex = 0) {
-  const [url, init, timeout, responseType, bustCache, maxRetries] =
-    vi.mocked(fetchWithCache).mock.calls[callIndex];
-  const requestInit = init as RequestInit & { body?: string };
-
-  return {
-    url: String(url),
-    timeout,
-    responseType,
-    bustCache,
-    maxRetries,
-    headers: new Headers(requestInit.headers),
-    body: JSON.parse(requestInit.body ?? '{}') as Record<string, unknown>,
-  };
-}
-
 describe('OpenAiImageProvider', () => {
   const mockFetchResponse = {
     data: {
@@ -60,19 +44,39 @@ describe('OpenAiImageProvider', () => {
   });
 
   describe('Basic functionality', () => {
+    it('should reject a per-prompt Codex-only image model override before dispatch', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1.5', {
+        config: { apiKey: 'test-key' },
+      });
+
+      await expect(
+        provider.callApi('Generate a cat', {
+          prompt: { config: { model: 'gpt-5.3-codex-spark' } },
+        } as any),
+      ).rejects.toThrow('only available through openai:codex-sdk');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
     it('should generate an image successfully', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: { apiKey: 'test-key' },
       });
 
       const result = await provider.callApi('Generate a cat');
-      const request = getImageRequest();
-      expect(request.url).toContain('/images/generations');
-      expect(request.body.prompt).toBe('Generate a cat');
-      expect(request.headers.get('authorization')).toBe('Bearer test-key');
-      expect(request.headers.get('x-openai-originator')).toBe('promptfoo');
-      expect(request.responseType).toBe('json');
-      expect(request.bustCache).toBe(false);
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.stringContaining('/images/generations'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer test-key',
+            'X-OpenAI-Originator': 'promptfoo',
+          }),
+          body: expect.stringContaining('"prompt":"Generate a cat"'),
+        }),
+        expect.any(Number),
+      );
 
       expect(result).toEqual({
         output: '![Generate a cat](https://example.com/image.png)',
@@ -100,6 +104,47 @@ describe('OpenAiImageProvider', () => {
         cached: true,
         cost: 0, // Cost is 0 for cached responses
       });
+    });
+
+    it('should preserve caching for the default OpenAI endpoint with an API key', async () => {
+      // Positive control for the cache-bust escape hatch: an Authorization
+      // header on api.openai.com must NOT disable caching. When caching is
+      // preserved, fetchWithCache receives exactly (url, request, timeout) —
+      // the bust path appends ('json', true).
+      const provider = new OpenAiImageProvider('dall-e-3', {
+        config: { apiKey: 'test-key' },
+      });
+
+      const result = await provider.callApi('Generate a cat');
+
+      expect(result.error).toBeUndefined();
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(callArgs?.[0]).toContain('api.openai.com');
+      expect(callArgs).toHaveLength(3);
+    });
+
+    it('should preserve caching for an unauthenticated custom gateway', async () => {
+      const originalEnv = process.env.OPENAI_API_KEY;
+      mockProcessEnv({ OPENAI_API_KEY: undefined });
+      try {
+        const provider = new OpenAiImageProvider('dall-e-3', {
+          config: { apiKeyRequired: false, apiBaseUrl: 'https://gateway.example/v1' },
+        });
+
+        const result = await provider.callApi('Generate a cat');
+
+        expect(result.error).toBeUndefined();
+        const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+        expect(callArgs?.[0]).toBe('https://gateway.example/v1/images/generations');
+        // No credential was sent, so the custom gateway stays cacheable.
+        expect((callArgs?.[1] as RequestInit | undefined)?.headers).not.toHaveProperty(
+          'Authorization',
+        );
+        expect(callArgs).toHaveLength(3);
+      } finally {
+        restoreEnvVar('OPENAI_API_KEY', originalEnv);
+      }
     });
 
     it('should include all generated URL images in images array', async () => {
@@ -204,19 +249,16 @@ describe('OpenAiImageProvider', () => {
 
   describe('Error handling', () => {
     it('should handle missing API key', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3');
-
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: { error: { message: 'OpenAI API key is not set' } },
-        cached: false,
-        status: 401,
-        statusText: 'Unauthorized',
-      });
-
-      const result = await provider.callApi('test prompt');
-
-      expect(result).toHaveProperty('error');
-      expect(result.error).toContain('OpenAI API key is not set');
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
+      try {
+        const provider = new OpenAiImageProvider('dall-e-3');
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('OPENAI_API_KEY'),
+        );
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('should handle API errors', async () => {
@@ -315,11 +357,11 @@ describe('OpenAiImageProvider', () => {
       vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           // Invalid data structure that will cause parsing to fail
+          deleteFromCache: mockDeleteFn,
         },
         cached: false,
         status: 200,
         statusText: 'OK',
-        deleteFromCache: mockDeleteFn,
       });
 
       await provider.callApi('test prompt');
@@ -346,8 +388,14 @@ describe('OpenAiImageProvider', () => {
         cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
       });
 
-      // Verify the request included the response_format parameter.
-      expect(getImageRequest().body.response_format).toBe('b64_json');
+      // Verify the request included the response_format parameter
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"response_format":"b64_json"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should handle missing base64 data in response', async () => {
@@ -412,8 +460,14 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      // Check that the default size for DALL-E 3 is correctly set.
-      expect(getImageRequest().body.size).toBe('1024x1024');
+      // Check that the default size for DALL-E 3 is correctly set
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"size":"1024x1024"'),
+        }),
+        expect.any(Number),
+      );
     });
   });
 
@@ -447,9 +501,21 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      const request = getImageRequest();
-      expect(request.body.quality).toBe('hd');
-      expect(request.body.style).toBe('vivid');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"quality":"hd"'),
+        }),
+        expect.any(Number),
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"style":"vivid"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should include organization ID in headers when provided', async () => {
@@ -462,7 +528,15 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().headers.get('openai-organization')).toBe('test-org');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'OpenAI-Organization': 'test-org',
+          }),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should include custom headers when provided', async () => {
@@ -477,7 +551,15 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().headers.get('x-custom-header')).toBe('custom-value');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-Custom-Header': 'custom-value',
+          }),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should merge prompt config with provider config', async () => {
@@ -496,7 +578,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt', context);
 
-      expect(getImageRequest().body.n).toBe(2);
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"n":2'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should use custom API URL when provided', async () => {
@@ -512,8 +600,127 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().url).toBe(`${customApiUrl}/images/generations`);
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `${customApiUrl}/images/generations`,
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+        true,
+      );
     });
+  });
+
+  describe('GPT Image 2.5 support', () => {
+    const usage = {
+      input_tokens: 12,
+      output_tokens: 34,
+      total_tokens: 46,
+      input_tokens_details: { text_tokens: 12, image_tokens: 0 },
+    };
+
+    beforeEach(() => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...mockBase64Response,
+        data: { ...mockBase64Response.data, usage },
+      });
+    });
+
+    it.each([
+      'gpt-image-2.5-sunburst',
+      'gpt-image-2.5-sunburst-2026-09-08',
+      'gpt-image-2.5-flare',
+      'gpt-image-2.5-flare-2026-09-08',
+    ])('generates transparent images and bills actual usage for %s', async (model) => {
+      const provider = new OpenAiImageProvider(model, {
+        config: {
+          apiKey: 'test-key',
+          size: '1536x864',
+          quality: 'max',
+          background: 'transparent',
+          output_format: 'webp',
+          output_compression: 80,
+        },
+      });
+
+      const result = await provider.callApi('A blue mug');
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+
+      expect(body).toMatchObject({
+        model,
+        size: '1536x864',
+        quality: 'max',
+        background: 'transparent',
+        output_format: 'webp',
+        output_compression: 80,
+      });
+      expect(body).not.toHaveProperty('response_format');
+      expect(result).toMatchObject({
+        output: 'data:image/webp;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/webp;base64,base64EncodedImageData', mimeType: 'image/webp' }],
+        tokenUsage: { prompt: 12, completion: 34, total: 46, numRequests: 1 },
+      });
+      expect(result.cost).toBeCloseTo((12 * 5 + 34 * 30) / 1e6, 12);
+    });
+
+    it('uses per-prompt model and quality overrides', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', { config: { apiKey: 'test-key' } });
+      const result = await provider.callApi('A blue mug', {
+        prompt: {
+          raw: 'A blue mug',
+          label: 'image',
+          config: { model: 'gpt-image-2.5-flare', quality: 'xhigh' },
+        },
+        vars: {},
+      });
+
+      expect(result.error).toBeUndefined();
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+      expect(body).toMatchObject({ model: 'gpt-image-2.5-flare', quality: 'xhigh' });
+      expect(body).not.toHaveProperty('response_format');
+    });
+
+    it('leaves cost unset without a usage ledger instead of reusing GPT Image 2 estimates', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue(mockBase64Response);
+      const provider = new OpenAiImageProvider('gpt-image-2.5-sunburst', {
+        config: { apiKey: 'test-key', quality: 'low', size: '1024x1024' },
+      });
+
+      expect(await provider.callApi('A blue mug')).not.toHaveProperty('cost');
+    });
+
+    it('reports a cache hit with zero cost', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({ ...mockBase64Response, cached: true });
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', {
+        config: { apiKey: 'test-key' },
+      });
+
+      expect(await provider.callApi('A blue mug')).toMatchObject({ cached: true, cost: 0 });
+    });
+
+    it.each([
+      { size: '4096x4096' },
+      { quality: 'ultra' },
+      { background: 'transparent', output_format: 'jpeg' },
+    ])('rejects unsupported settings before a request: %j', async (config) => {
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', {
+        config: { apiKey: 'test-key', ...config } as any,
+      });
+
+      expect((await provider.callApi('A blue mug')).error).toBeDefined();
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it.each(['gpt-image-2', 'gpt-image-1.5'])(
+      'keeps max quality unavailable for %s',
+      async (model) => {
+        const provider = new OpenAiImageProvider(model, {
+          config: { apiKey: 'test-key', quality: 'max' },
+        });
+
+        expect((await provider.callApi('A blue mug')).error).toContain('Invalid quality');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('GPT Image 2 support', () => {
@@ -610,6 +817,38 @@ describe('OpenAiImageProvider', () => {
         },
       });
       expect(result.cost).toBeCloseTo((12 * 5 + 34 * 30) / 1e6, 12);
+    });
+
+    it('should treat chatgpt-image-latest as a GPT Image model and price exact API usage', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        ...mockGptImage2Response,
+        data: {
+          data: [{ b64_json: 'base64EncodedImageData' }],
+          usage: {
+            total_tokens: 46,
+            input_tokens: 12,
+            output_tokens: 34,
+            input_tokens_details: { text_tokens: 12, image_tokens: 0 },
+            output_tokens_details: { text_tokens: 0, image_tokens: 34 },
+          },
+        },
+      });
+
+      const provider = new OpenAiImageProvider('chatgpt-image-latest', {
+        config: { apiKey: 'test-key', quality: 'high', output_format: 'webp' },
+      });
+      const result = await provider.callApi('test prompt');
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      expect(body).toMatchObject({
+        model: 'chatgpt-image-latest',
+        quality: 'high',
+        output_format: 'webp',
+      });
+      expect(body).not.toHaveProperty('response_format');
+      expect(result.output).toBe('data:image/webp;base64,base64EncodedImageData');
+      expect(result.cost).toBeCloseTo((12 * 5 + 34 * 32) / 1e6, 12);
     });
 
     it('should handle gpt-image-2 parameters and custom sizes', async () => {
@@ -904,7 +1143,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.quality).toBe('high');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"quality":"high"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should handle gpt-image-1 background parameter', async () => {
@@ -914,7 +1159,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.background).toBe('transparent');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"background":"transparent"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should reject transparent background with jpeg for gpt-image-1', async () => {
@@ -938,7 +1189,13 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.output_format).toBe('jpeg');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"output_format":"jpeg"'),
+        }),
+        expect.any(Number),
+      );
       expect(result).toMatchObject({
         output: 'data:image/jpeg;base64,base64EncodedImageData',
         images: [{ data: 'data:image/jpeg;base64,base64EncodedImageData', mimeType: 'image/jpeg' }],
@@ -952,7 +1209,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.output_compression).toBe(80);
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"output_compression":80'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should handle gpt-image-1 moderation parameter', async () => {
@@ -962,7 +1225,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.moderation).toBe('low');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"moderation":"low"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should validate size for gpt-image-1', async () => {
@@ -983,7 +1252,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.size).toBe('auto');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"size":"auto"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should calculate correct cost for gpt-image-1 with different quality levels', async () => {
@@ -1058,7 +1333,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.quality).toBe('high');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"quality":"high"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should handle gpt-image-1-mini background parameter', async () => {
@@ -1068,7 +1349,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.background).toBe('transparent');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"background":"transparent"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should validate size for gpt-image-1-mini', async () => {
@@ -1089,7 +1376,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.size).toBe('auto');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"size":"auto"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should calculate correct cost for gpt-image-1-mini with different quality levels', async () => {
@@ -1172,7 +1465,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.quality).toBe('high');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"quality":"high"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should handle gpt-image-1.5 background parameter', async () => {
@@ -1182,7 +1481,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.background).toBe('transparent');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"background":"transparent"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should handle gpt-image-1.5 output_format parameter', async () => {
@@ -1192,7 +1497,13 @@ describe('OpenAiImageProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.output_format).toBe('jpeg');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"output_format":"jpeg"'),
+        }),
+        expect.any(Number),
+      );
       expect(result).toMatchObject({
         output: 'data:image/jpeg;base64,base64EncodedImageData',
         images: [{ data: 'data:image/jpeg;base64,base64EncodedImageData', mimeType: 'image/jpeg' }],
@@ -1206,7 +1517,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.output_compression).toBe(80);
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"output_compression":80'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should handle gpt-image-1.5 moderation parameter', async () => {
@@ -1216,7 +1533,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.moderation).toBe('low');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"moderation":"low"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should validate size for gpt-image-1.5', async () => {
@@ -1237,7 +1560,13 @@ describe('OpenAiImageProvider', () => {
 
       await provider.callApi('test prompt');
 
-      expect(getImageRequest().body.size).toBe('auto');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('"size":"auto"'),
+        }),
+        expect.any(Number),
+      );
     });
 
     it('should calculate correct cost for gpt-image-1.5 with different quality levels', async () => {

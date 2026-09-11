@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../src/cache';
 import {
   buildStructuredImageOutputs,
   calculateImageCost,
+  callOpenAiImageApi,
   DALLE2_COSTS,
   DALLE3_COSTS,
   formatOutput,
@@ -50,6 +52,14 @@ describe('OpenAI Image Provider Functions', () => {
 
     it('should validate any size for unknown models', () => {
       expect(validateSizeForModel('any-size', 'unknown-model')).toEqual({ valid: true });
+    });
+
+    it('should validate chatgpt-image-latest using GPT Image sizes', () => {
+      expect(validateSizeForModel('1024x1024', 'chatgpt-image-latest')).toEqual({ valid: true });
+      expect(validateSizeForModel('auto', 'chatgpt-image-latest')).toEqual({ valid: true });
+      expect(validateSizeForModel('512x512', 'chatgpt-image-latest')).toMatchObject({
+        valid: false,
+      });
     });
 
     it('should validate GPT Image 2 sizes using dimensional constraints', () => {
@@ -212,6 +222,22 @@ describe('OpenAI Image Provider Functions', () => {
         moderation: 'low',
       });
     });
+
+    it('should prepare chatgpt-image-latest request body without response_format', () => {
+      expect(
+        prepareRequestBody('chatgpt-image-latest', 'prompt', '1024x1024', 'url', {
+          quality: 'high',
+          output_format: 'webp',
+        }),
+      ).toEqual({
+        model: 'chatgpt-image-latest',
+        prompt: 'prompt',
+        size: '1024x1024',
+        n: 1,
+        quality: 'high',
+        output_format: 'webp',
+      });
+    });
   });
 
   describe('calculateImageCost', () => {
@@ -268,6 +294,10 @@ describe('OpenAI Image Provider Functions', () => {
       );
     });
 
+    it('should calculate GPT Image 1.5-compatible fallback cost for chatgpt-image-latest', () => {
+      expect(calculateImageCost('chatgpt-image-latest', '1024x1024', 'low')).toBe(0.009);
+    });
+
     it('should not invent GPT Image 2 cost for auto quality or custom sizes', () => {
       expect(calculateImageCost('gpt-image-2', '1024x1024')).toBeUndefined();
       expect(calculateImageCost('gpt-image-2', '1024x1024', 'auto')).toBeUndefined();
@@ -280,11 +310,132 @@ describe('OpenAI Image Provider Functions', () => {
     });
   });
 
+  describe('callOpenAiImageApi', () => {
+    it('should call fetchWithCache with correct parameters', async () => {
+      const mockResponse = {
+        data: { some: 'data' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const url = 'https://api.openai.com/v1/images/generations';
+      const body = { model: 'dall-e-3', prompt: 'test' };
+      const headers = { 'Content-Type': 'application/json' };
+      const timeout = 30000;
+
+      const result = await callOpenAiImageApi(url, body, headers, timeout);
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        url,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        },
+        timeout,
+      );
+      expect(result).toEqual(mockResponse);
+    });
+
+    it.each([
+      ['https://gateway.example/v1/images/generations?api_key=tenant-secret', {}],
+      ['https://gateway.example/v1/token_privateTenantCredential123/images/generations', {}],
+      ['https://gateway.example/v1/images/generations', { Authorization: 'Bearer tenant-secret' }],
+      ['https://gateway.example/v1/images/generations', { 'X-Route': 'Bearer tenant-secret' }],
+    ])(
+      'should bypass persistent image caching for an authenticated custom gateway',
+      async (url, headers) => {
+        vi.mocked(fetchWithCache).mockResolvedValue({
+          data: { some: 'data' },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        await callOpenAiImageApi(
+          url,
+          { model: 'gpt-image-1', prompt: 'test' },
+          { 'Content-Type': 'application/json', ...headers },
+          30000,
+        );
+
+        expect(fetchWithCache).toHaveBeenCalledWith(
+          url,
+          expect.objectContaining({ method: 'POST' }),
+          30000,
+          'json',
+          true,
+        );
+      },
+    );
+
+    it('should bypass persistent image caching when the request body embeds a credential', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { some: 'data' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await callOpenAiImageApi(
+        'https://api.openai.com/v1/images/generations',
+        {
+          model: 'gpt-image-1',
+          prompt: 'Render this key: sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        },
+        { 'Content-Type': 'application/json' },
+        30000,
+      );
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.openai.com/v1/images/generations',
+        expect.objectContaining({ method: 'POST' }),
+        30000,
+        'json',
+        true,
+      );
+    });
+
+    it.each([
+      [
+        'api.openai.com with an Authorization header',
+        'https://api.openai.com/v1/images/generations',
+        { Authorization: 'Bearer sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      ],
+      ['a credential-free custom gateway', 'https://gateway.example/v1/images/generations', {}],
+    ])('should preserve persistent image caching for %s', async (_label, url, headers) => {
+      // Positive controls for the bypass cases above: a credential header on the
+      // DEFAULT endpoint and a clean custom gateway must both keep caching
+      // enabled. The exact three-argument call pins bust=false — the bust path
+      // appends ('json', true).
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { some: 'data' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const body = { model: 'gpt-image-1', prompt: 'test' };
+      const fullHeaders = { 'Content-Type': 'application/json', ...headers };
+
+      await callOpenAiImageApi(url, body, fullHeaders, 30000);
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        url,
+        { method: 'POST', headers: fullHeaders, body: JSON.stringify(body) },
+        30000,
+      );
+    });
+  });
+
   describe('processApiResponse', () => {
     it('should handle error in data', async () => {
       const mockDeleteFromCache = vi.fn();
       const data = {
         error: { message: 'Some API error' },
+        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -295,11 +446,6 @@ describe('OpenAI Image Provider Functions', () => {
         'dall-e-2',
         '512x512',
         undefined,
-        undefined,
-        1,
-        undefined,
-        {},
-        mockDeleteFromCache,
       );
 
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
@@ -428,6 +574,7 @@ describe('OpenAI Image Provider Functions', () => {
       const mockDeleteFromCache = vi.fn();
       const data = {
         data: undefined,
+        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -438,11 +585,6 @@ describe('OpenAI Image Provider Functions', () => {
         'dall-e-2',
         '512x512',
         undefined,
-        undefined,
-        1,
-        undefined,
-        {},
-        mockDeleteFromCache,
       );
 
       expect(result).toHaveProperty('error');
@@ -455,6 +597,7 @@ describe('OpenAI Image Provider Functions', () => {
       const mockDeleteFromCache = vi.fn();
       const data = {
         data: { data: 'not-an-array' },
+        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -465,11 +608,6 @@ describe('OpenAI Image Provider Functions', () => {
         'dall-e-2',
         '512x512',
         undefined,
-        undefined,
-        1,
-        undefined,
-        {},
-        mockDeleteFromCache,
       );
 
       expect(result).toHaveProperty('error');

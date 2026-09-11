@@ -1,36 +1,43 @@
+import {
+  claimCacheKeyOnce,
+  type FetchWithCacheResult,
+  fetchWithCache,
+  getScopedCacheKey,
+  isCacheEnabled,
+} from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { sha256 } from '../../util/createHash';
 import {
-  buildChatSpanContext,
-  extractProviderResponseAttributes,
-  withGenAISpan,
-} from '../../tracing/genaiTracer';
+  formatRateLimitErrorMessage,
+  HttpRateLimitError,
+  isAbortError,
+} from '../../util/fetch/errors';
 import { fetchWithRetries } from '../../util/fetch/index';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
   renderVarsInObject,
 } from '../../util/index';
+import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
+import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
+import { normalizeResponsesInput } from '../responses/input';
+import { readResponsesStream } from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
+import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
 import { calculateObservableOpenAIToolCost, calculateOpenAIUsageCost } from './billing';
+import { applyGpt6AstraRequestRules, isGpt6AstraModel } from './gpt6';
 import {
-  callJsonCachedOpenAi,
-  createJsonCachedOpenAiClient,
-  createOpenAiClient,
-  getOpenAiHttpMetadata,
-  getOpenAiInvalidPromptCode,
-  unwrapOpenAiTransportError,
-} from './client';
-import {
-  isAzureOpenAiEndpoint,
-  isOpenAiGpt5Model,
-  isOpenAiReasoningModel,
-} from './modelCapabilities';
-import { formatOpenAiError, getTokenUsage } from './util';
-import type OpenAI from 'openai';
+  appendOpenAiApiPath,
+  assertOpenAiApiModel,
+  formatOpenAiError,
+  getTokenUsage,
+  hasSensitiveOpenAiCachePath,
+  hasSensitiveOpenAiCacheString,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -51,33 +58,623 @@ interface OpenAIErrorResponse {
   };
 }
 
-type ResponsesTransportResult = {
-  cached: boolean;
-  data: OpenAI.Responses.Response;
-  deleteFromCache?: () => Promise<void>;
-  requestMetadata?: ReturnType<typeof createJsonCachedOpenAiClient>['requestMetadata'];
-  responseHeaders?: Record<string, string>;
+interface OpenAIResponsesResponse {
+  id?: string;
+  status?: string;
+  output?: Array<{
+    content?: Array<{
+      type: string;
+      text?: string;
+      thinking?: { reasoning_text?: string };
+      refusal?: string;
+    }>;
+    tool_calls?: Array<{
+      id: string;
+      type: string;
+      function: { name: string; arguments: string };
+    }>;
+  }>;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+  };
+  error?: {
+    code?: string;
+    message?: string;
+  };
+  incomplete_details?: { reason?: string };
+}
+
+interface BackgroundResponseResult {
+  data: OpenAIResponsesResponse;
   status: number;
   statusText: string;
-};
+  headers?: Record<string, string>;
+  error?: string;
+  retried?: boolean;
+  cancelled?: boolean;
+  shared?: boolean;
+  timedOut?: boolean;
+}
 
-type ResponsesTransportFailure = {
-  deleteFromCache?: () => Promise<void>;
-  error: unknown;
-  requestMetadata?: ReturnType<typeof createJsonCachedOpenAiClient>['requestMetadata'];
-  responseHeaders?: Record<string, string>;
+const BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS = 10_000;
+const BACKGROUND_STREAM_CREATION_GRACE_MIN_MS = 1_000;
+const BACKGROUND_STREAM_CREATION_GRACE_MAX_MS = 30_000;
+let nextBackgroundProviderScope = 0;
+
+type BackgroundRequest = {
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+  cacheScope: string;
+  hasPerPromptAuthorization: boolean;
+  signal?: AbortSignal;
 };
+const inFlightBackgroundCreations = new Map<
+  string,
+  {
+    promise: Promise<FetchWithCacheResult<OpenAIResponsesResponse>>;
+    subscribers: number;
+    billed: boolean;
+  }
+>();
+const inFlightBackgroundResponses = new Map<
+  string,
+  {
+    promise: Promise<BackgroundResponseResult>;
+    controller: AbortController;
+    subscribers: number;
+    billed: boolean;
+  }
+>();
+
+function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function isSensitiveBackgroundCacheHeader(key: string): boolean {
+  return (
+    isSecretField(key) ||
+    /(?:^|[-_])(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)(?:[-_]|$)/i.test(
+      key,
+    )
+  );
+}
+
+function hasSensitiveBackgroundCacheValue(value: unknown, fieldName?: string): boolean {
+  if (fieldName && isSensitiveBackgroundCacheHeader(fieldName)) {
+    return value !== undefined && value !== null && value !== '';
+  }
+  if (typeof value === 'string') {
+    return hasSensitiveOpenAiCacheString(value);
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => hasSensitiveBackgroundCacheValue(item, fieldName));
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(([key, nestedValue]) =>
+      hasSensitiveBackgroundCacheValue(nestedValue, key),
+    );
+  }
+  return false;
+}
+
+function canonicalizeBackgroundCacheValue(value: unknown, fieldName?: string): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => canonicalizeBackgroundCacheValue(item, fieldName));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      (fieldName === 'properties'
+        ? Object.entries(value)
+        : Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
+      ).map(([key, nestedValue]) => [key, canonicalizeBackgroundCacheValue(nestedValue, key)]),
+    );
+  }
+  return value;
+}
+
+function getBackgroundCacheIdentity(
+  url: string,
+  request: BackgroundRequest,
+  responseId?: string,
+): { key: string; cacheable: boolean; coalescable: boolean } {
+  const headerEntries = Object.entries(request.headers);
+  const cacheHeaders = headerEntries
+    .filter(
+      ([key, value]) =>
+        !isSensitiveBackgroundCacheHeader(key) && !hasSensitiveBackgroundCacheValue(value),
+    )
+    .map(([key, value]) => [key.toLowerCase(), value])
+    .sort(([left], [right]) => left.localeCompare(right));
+  const hasSensitiveHeader = headerEntries.some(
+    ([key, value]) => isSensitiveBackgroundCacheHeader(key) && value.trim().length > 0,
+  );
+  const hasSensitiveHeaderValue = headerEntries.some(
+    ([key, value]) =>
+      !isSensitiveBackgroundCacheHeader(key) && hasSensitiveBackgroundCacheValue(value),
+  );
+  const hasTenantDiscriminator = cacheHeaders.some(
+    ([key, value]) =>
+      /(?:^|[-_])(?:project|tenant|account)(?:[-_]|$)/i.test(key) && value.trim().length > 0,
+  );
+  const sanitizedUrl = sanitizeUrl(url);
+  const hasSensitiveUrlCredentials = sanitizedUrl !== url;
+  let sendsToOpenAiApi = false;
+  let hasSensitiveUrlPath = false;
+  try {
+    const parsedUrl = new URL(url);
+    hasSensitiveUrlPath = hasSensitiveOpenAiCachePath(decodeURIComponent(parsedUrl.pathname));
+    sendsToOpenAiApi = parsedUrl.hostname.toLowerCase() === 'api.openai.com';
+  } catch {
+    hasSensitiveUrlPath = true;
+  }
+  let parsedBody: unknown;
+  try {
+    parsedBody = JSON.parse(request.body);
+  } catch {
+    parsedBody = request.body;
+  }
+  const hasSensitiveBody = hasSensitiveBackgroundCacheValue(parsedBody);
+  const key = sha256(
+    JSON.stringify({
+      url: hasSensitiveUrlPath ? '[sensitive]' : sanitizedUrl,
+      method: request.method,
+      headers: cacheHeaders,
+      ...(responseId
+        ? { id: responseId }
+        : {
+            body: hasSensitiveBody ? '[sensitive]' : canonicalizeBackgroundCacheValue(parsedBody),
+          }),
+      ...(hasSensitiveHeader && !hasTenantDiscriminator ? { scope: request.cacheScope } : {}),
+    }),
+  );
+  return {
+    key,
+    cacheable:
+      !hasSensitiveBody &&
+      !hasSensitiveUrlCredentials &&
+      !hasSensitiveUrlPath &&
+      !hasSensitiveHeaderValue &&
+      (!hasSensitiveHeader || (sendsToOpenAiApi && hasTenantDiscriminator)),
+    coalescable:
+      !hasSensitiveBody &&
+      !hasSensitiveUrlCredentials &&
+      !hasSensitiveUrlPath &&
+      !hasSensitiveHeaderValue &&
+      (sendsToOpenAiApi
+        ? !request.hasPerPromptAuthorization || hasTenantDiscriminator
+        : !hasSensitiveHeader),
+  };
+}
+
+async function cancelBackgroundResponse(
+  responseId: string,
+  url: string,
+  headers: Record<string, string>,
+): Promise<void> {
+  try {
+    await fetchWithCache<OpenAIResponsesResponse>(
+      appendOpenAiApiPath(url, `${encodeURIComponent(responseId)}/cancel`),
+      { method: 'POST', headers },
+      BACKGROUND_RESPONSE_CANCEL_TIMEOUT_MS,
+      'json',
+      true,
+      0,
+    );
+  } catch (error) {
+    logger.warn(`Failed to cancel background response ${responseId}: ${String(error)}`);
+  }
+}
+
+async function pollBackgroundResponse(
+  initial: OpenAIResponsesResponse,
+  url: string,
+  headers: Record<string, string>,
+  timeout: number,
+  maxRetries?: number,
+  signal?: AbortSignal,
+  deadline = Date.now() + timeout,
+  cancelOnStop = true,
+): Promise<BackgroundResponseResult> {
+  if (!initial.id) {
+    return {
+      data: initial,
+      status: 0,
+      statusText: 'Error',
+      error: 'Background response is missing its response ID.',
+    };
+  }
+
+  let data = initial;
+  let status = 200;
+  let statusText = 'OK';
+  let responseHeaders: Record<string, string> | undefined;
+  let firstPoll = true;
+  let deadlineSignal: AbortSignal | undefined;
+
+  try {
+    while (data.status === 'queued' || data.status === 'in_progress') {
+      signal?.throwIfAborted();
+      if (!firstPoll) {
+        await sleep(Math.min(1000, Math.max(0, deadline - Date.now())));
+        signal?.throwIfAborted();
+      }
+      firstPoll = false;
+
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) {
+        if (cancelOnStop) {
+          await cancelBackgroundResponse(initial.id, url, headers);
+        }
+        return {
+          data,
+          status: 0,
+          statusText: 'Error',
+          error: `Background response ${initial.id} timed out after ${timeout}ms.`,
+          timedOut: true,
+        };
+      }
+
+      deadlineSignal = AbortSignal.timeout(remainingMs);
+      const pollSignal = signal ? AbortSignal.any([signal, deadlineSignal]) : deadlineSignal;
+      const polled = await fetchWithCache<OpenAIResponsesResponse>(
+        appendOpenAiApiPath(url, encodeURIComponent(initial.id)),
+        { method: 'GET', headers, signal: pollSignal },
+        remainingMs,
+        'json',
+        true,
+        maxRetries,
+      );
+      data = polled.data;
+      status = polled.status;
+      statusText = polled.statusText;
+      responseHeaders = polled.headers;
+      if (status < 200 || status >= 300) {
+        const shouldCancel =
+          status >= 400 && status < 500 && ![404, 408, 409, 410, 425, 429].includes(status);
+        if (shouldCancel) {
+          await cancelBackgroundResponse(initial.id, url, headers);
+        }
+        return {
+          data,
+          status,
+          statusText,
+          headers: responseHeaders,
+          error: `API error: ${status} ${statusText}\n${JSON.stringify(data)}`,
+          cancelled: shouldCancel,
+        };
+      }
+    }
+  } catch (error) {
+    if (signal?.aborted) {
+      if (cancelOnStop) {
+        await cancelBackgroundResponse(initial.id, url, headers);
+      }
+      throw error;
+    }
+    if (deadlineSignal?.aborted || Date.now() >= deadline) {
+      if (cancelOnStop) {
+        await cancelBackgroundResponse(initial.id, url, headers);
+      }
+      return {
+        data,
+        status: 0,
+        statusText: 'Error',
+        error: `Background response ${initial.id} timed out after ${timeout}ms.`,
+        timedOut: true,
+      };
+    }
+    throw error;
+  }
+
+  return { data, status, statusText, headers: responseHeaders };
+}
+
+async function createBackgroundResponseWithCancellation(
+  url: string,
+  request: BackgroundRequest,
+  timeout: number,
+  bustCache: boolean | undefined,
+  maxRetries: number | undefined,
+): Promise<FetchWithCacheResult<OpenAIResponsesResponse>> {
+  const signal = request.signal;
+  const cacheIdentity = getBackgroundCacheIdentity(url, request);
+  const canCoalesce = isCacheEnabled() && !bustCache && cacheIdentity.coalescable;
+  const effectiveCacheOptions = cacheIdentity.cacheable
+    ? { bust: bustCache, cacheKey: cacheIdentity.key }
+    : true;
+  const cacheKey = getScopedCacheKey(cacheIdentity.key);
+  let inFlight = canCoalesce ? inFlightBackgroundCreations.get(cacheKey) : undefined;
+  if (!inFlight) {
+    const promise = fetchWithCache<OpenAIResponsesResponse>(
+      url,
+      { method: request.method, headers: request.headers, body: request.body },
+      timeout,
+      'json',
+      effectiveCacheOptions,
+      maxRetries,
+    );
+    inFlight = { promise, subscribers: 0, billed: false };
+    if (canCoalesce) {
+      inFlightBackgroundCreations.set(cacheKey, inFlight);
+      void promise
+        .finally(() => {
+          if (inFlightBackgroundCreations.get(cacheKey) === inFlight) {
+            inFlightBackgroundCreations.delete(cacheKey);
+          }
+        })
+        .catch(() => {});
+    }
+  }
+
+  inFlight.subscribers++;
+  let released = false;
+  let onAbort: (() => void) | undefined;
+  const release = (aborted = false) => {
+    if (released) {
+      return;
+    }
+    released = true;
+    inFlight.subscribers--;
+    if (!aborted || inFlight.subscribers > 0) {
+      return;
+    }
+    void inFlight.promise
+      .then(async (created) => {
+        if (inFlight.subscribers > 0) {
+          return;
+        }
+        if (
+          !canCoalesce &&
+          created.data.id &&
+          (created.data.status === 'queued' || created.data.status === 'in_progress')
+        ) {
+          await cancelBackgroundResponse(created.data.id, url, request.headers);
+        }
+        await created.deleteFromCache?.();
+      })
+      .catch((error) => {
+        logger.warn(`Failed to clean up an aborted background response: ${String(error)}`);
+      });
+  };
+  const cancellation = new Promise<never>((_resolve, reject) => {
+    if (!signal) {
+      return;
+    }
+    onAbort = () => {
+      release(true);
+      reject(getAbortError(signal));
+    };
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+
+  try {
+    const created = await Promise.race([inFlight.promise, cancellation]);
+    if (
+      created.cached ||
+      created.status < 200 ||
+      created.status >= 300 ||
+      (created.data.status !== 'completed' && created.data.status !== 'incomplete')
+    ) {
+      return created;
+    }
+    const shared = inFlight.billed;
+    inFlight.billed = true;
+    return shared ? { ...created, cached: true } : created;
+  } finally {
+    if (onAbort) {
+      signal?.removeEventListener('abort', onAbort);
+    }
+    release();
+  }
+}
+
+async function resolveBackgroundResponse(
+  initial: OpenAIResponsesResponse,
+  url: string,
+  request: BackgroundRequest,
+  timeout: number,
+  maxRetries: number | undefined,
+  cached: boolean,
+  deleteFromCache: (() => Promise<void>) | undefined,
+  cancelOnStop: boolean,
+  deadline = Date.now() + timeout,
+): Promise<BackgroundResponseResult> {
+  const polled = await pollBackgroundResponse(
+    initial,
+    url,
+    request.headers,
+    timeout,
+    maxRetries,
+    request.signal,
+    deadline,
+    cancelOnStop,
+  );
+  if (!cached || !polled.error || (polled.status !== 404 && polled.status !== 410)) {
+    return polled;
+  }
+
+  await deleteFromCache?.();
+  const retried = await createBackgroundResponseWithCancellation(
+    url,
+    request,
+    Math.max(1, deadline - Date.now()),
+    cancelOnStop,
+    maxRetries,
+  );
+  if (retried.status < 200 || retried.status >= 300) {
+    return {
+      data: retried.data,
+      status: retried.status,
+      statusText: retried.statusText,
+      headers: retried.headers,
+      error: `API error: ${retried.status} ${retried.statusText}\n${JSON.stringify(retried.data)}`,
+      retried: true,
+    };
+  }
+
+  if (retried.data.status === 'queued' || retried.data.status === 'in_progress') {
+    return {
+      ...(await pollBackgroundResponse(
+        retried.data,
+        url,
+        request.headers,
+        timeout,
+        maxRetries,
+        request.signal,
+        deadline,
+        cancelOnStop,
+      )),
+      retried: true,
+    };
+  }
+
+  return {
+    data: retried.data,
+    status: retried.status,
+    statusText: retried.statusText,
+    headers: retried.headers,
+    retried: true,
+  };
+}
+
+async function coalesceBackgroundResponse(
+  initial: OpenAIResponsesResponse,
+  url: string,
+  request: BackgroundRequest,
+  timeout: number,
+  maxRetries: number | undefined,
+  cached: boolean,
+  deleteFromCache: (() => Promise<void>) | undefined,
+  cancelOnStop: boolean,
+  deadline?: number,
+): Promise<BackgroundResponseResult> {
+  const cacheIdentity = getBackgroundCacheIdentity(url, request, initial.id);
+  if (!cacheIdentity.coalescable) {
+    return resolveBackgroundResponse(
+      initial,
+      url,
+      request,
+      timeout,
+      maxRetries,
+      cached,
+      deleteFromCache,
+      cancelOnStop,
+      deadline,
+    );
+  }
+  const cacheKey = getScopedCacheKey(cacheIdentity.key);
+  let inFlight = inFlightBackgroundResponses.get(cacheKey);
+  if (!inFlight) {
+    const controller = new AbortController();
+    const promise = resolveBackgroundResponse(
+      initial,
+      url,
+      { ...request, signal: controller.signal },
+      timeout,
+      maxRetries,
+      cached,
+      deleteFromCache,
+      cancelOnStop,
+      deadline,
+    );
+    inFlight = { promise, controller, subscribers: 0, billed: false };
+    inFlightBackgroundResponses.set(cacheKey, inFlight);
+    void promise
+      .finally(() => {
+        if (inFlightBackgroundResponses.get(cacheKey) === inFlight) {
+          inFlightBackgroundResponses.delete(cacheKey);
+        }
+      })
+      .catch(() => {});
+  }
+
+  inFlight.subscribers++;
+  const callerSignal = request.signal;
+  let released = false;
+  let onAbort: (() => void) | undefined;
+  const release = (): boolean => {
+    if (released) {
+      return false;
+    }
+    released = true;
+    inFlight.subscribers--;
+    if (inFlight.subscribers === 0 && callerSignal?.aborted) {
+      inFlight.controller.abort(callerSignal.reason);
+      return true;
+    }
+    return false;
+  };
+  const cancellation = new Promise<never>((_resolve, reject) => {
+    if (!callerSignal) {
+      return;
+    }
+    onAbort = () => {
+      if (release() && cancelOnStop) {
+        void deleteFromCache?.();
+      }
+      reject(getAbortError(callerSignal));
+    };
+    if (callerSignal.aborted) {
+      onAbort();
+      return;
+    }
+    callerSignal.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    const result = await Promise.race([inFlight.promise, cancellation]);
+    if (result.timedOut && deadline !== undefined && Date.now() < deadline) {
+      if (inFlightBackgroundResponses.get(cacheKey) === inFlight) {
+        inFlightBackgroundResponses.delete(cacheKey);
+      }
+      release();
+      return await coalesceBackgroundResponse(
+        result.data,
+        url,
+        request,
+        timeout,
+        maxRetries,
+        cached,
+        deleteFromCache,
+        cancelOnStop,
+        deadline,
+      );
+    }
+    if (result.error) {
+      return result;
+    }
+    const shared = inFlight.billed;
+    inFlight.billed = true;
+    return shared ? { ...result, shared: true } : result;
+  } finally {
+    if (onAbort) {
+      callerSignal?.removeEventListener('abort', onAbort);
+    }
+    release();
+  }
+}
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   private functionCallbackHandler = new FunctionCallbackHandler();
   private processor: ResponsesProcessor;
+  private readonly backgroundCacheScope = `provider:${++nextBackgroundProviderScope}`;
 
   static OPENAI_RESPONSES_MODEL_NAMES = [
     'gpt-4o',
     'gpt-4o-2024-08-06',
     'gpt-4o-2024-11-20',
     'gpt-4o-2024-05-13',
-    'gpt-4o-2024-07-18',
     'gpt-4o-mini',
     'gpt-4o-mini-2024-07-18',
     'gpt-4.1',
@@ -89,8 +686,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5 models
     'gpt-5',
     'gpt-5-2025-08-07',
-    'gpt-5-chat',
-    'gpt-5-chat-latest',
     'gpt-5-nano',
     'gpt-5-nano-2025-08-07',
     'gpt-5-mini',
@@ -100,22 +695,20 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // GPT-5.1 models
     'gpt-5.1',
     'gpt-5.1-2025-11-13',
-    'gpt-5.1-mini',
-    'gpt-5.1-nano',
-    'gpt-5.1-codex',
-    'gpt-5.1-codex-max',
-    'gpt-5.1-chat-latest',
     // GPT-5.2 models
     'gpt-5.2',
     'gpt-5.2-2025-12-11',
-    'gpt-5.2-chat-latest',
-    'gpt-5.2-codex',
     'gpt-5.2-pro',
     'gpt-5.2-pro-2025-12-11',
     // GPT-5.3 models
-    'gpt-5.3-chat-latest',
     'gpt-5.3-codex',
-    'gpt-5.3-codex-spark',
+    // GPT-6 Astra
+    'gpt-6-astra',
+    // GPT-5.6 models
+    'gpt-5.6',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'gpt-5.6-luna',
     // GPT-5.5 models
     'gpt-5.5',
     'gpt-5.5-2026-04-23',
@@ -130,18 +723,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.4-nano-2026-03-17',
     'gpt-5.4-pro',
     'gpt-5.4-pro-2026-03-05',
-    // Computer use model
-    'computer-use-preview',
-    'computer-use-preview-2025-03-11',
     // NOTE: gpt-image-1, gpt-image-1-mini, and gpt-image-1.5 are NOT supported with the Responses API.
     // Use openai:image:gpt-image-1, openai:image:gpt-image-1-mini, or openai:image:gpt-image-1.5 instead (which uses /images/generations endpoint)
     // Reasoning models
     'o1',
     'o1-2024-12-17',
-    'o1-preview',
-    'o1-preview-2024-09-12',
-    'o1-mini',
-    'o1-mini-2024-09-12',
     'o1-pro',
     'o1-pro-2025-03-19',
     'o3-pro',
@@ -152,14 +738,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'o4-mini-2025-04-16',
     'o3-mini',
     'o3-mini-2025-01-31',
-    // GPT-4.5 models deprecated as of 2025-07-14, removed from API
-    'codex-mini-latest',
-    'gpt-5-codex',
-    // Deep research models
-    'o3-deep-research',
-    'o3-deep-research-2025-06-26',
-    'o4-mini-deep-research',
-    'o4-mini-deep-research-2025-06-26',
+    'gpt-5-codex-mini',
   ];
 
   config: OpenAiCompletionOptions;
@@ -180,32 +759,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     });
   }
 
-  /**
-   * Model id used for capability and billing lookups. Subclasses can strip a
-   * vendor prefix while preserving the actual request model in `this.modelName`.
-   */
-  protected getCapabilityModelName(): string {
-    return this.modelName;
-  }
-
-  protected isGPT5Model(): boolean {
-    return isOpenAiGpt5Model(this.getCapabilityModelName());
-  }
-
-  protected isReasoningModel(): boolean {
-    return isOpenAiReasoningModel(this.getCapabilityModelName(), {
-      includeCodexMiniLatest: true,
-    });
-  }
-
-  protected supportsTemperature(): boolean {
-    // OpenAI's o1 and o3 models don't support temperature but some 3rd
-    // party reasoning models do.
-    return !this.isReasoningModel();
-  }
-
-  protected getBillingModelName(_config: OpenAiCompletionOptions): string {
-    return this.getCapabilityModelName();
+  protected isReasoningModel(modelName = this.getCapabilityModelName()): boolean {
+    return modelName === 'codex-mini-latest' || super.isReasoningModel(modelName);
   }
 
   protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
@@ -220,13 +775,20 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   ): ProviderResponse {
     const serviceTier =
       (data as { service_tier?: string | null }).service_tier ?? config.service_tier;
-    const billingModelName = this.getBillingModelName(config);
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const modelName =
+      typeof passthroughModel === 'string' && passthroughModel !== this.modelName
+        ? passthroughModel
+        : this.getBillingModelName(config);
+    const billingModelName = modelName.split('/').pop() ?? modelName;
     const responseCost = calculateOpenAIUsageCost(
       billingModelName,
       config,
       this.getBillingUsage(data, config),
       {
+        apiUrl: this.getApiUrl(),
         cachedResponse: cached,
+        regionalProcessing: this.modelName.startsWith('openai.'),
         serviceTier,
       },
     );
@@ -240,347 +802,52 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     };
   }
 
+  private isAzureOpenAiEndpoint(value: string | undefined): boolean {
+    if (!value) {
+      return false;
+    }
+
+    const endpoint = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const hostname = new URL(endpoint).hostname.toLowerCase();
+      return hostname === 'openai.azure.com' || hostname.endsWith('.openai.azure.com');
+    } catch {
+      return false;
+    }
+  }
+
   private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
-    const hasAzureCustomDeploymentHost = [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some(
-      (endpoint) => isAzureOpenAiEndpoint(endpoint),
-    );
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    const capabilityModelName =
+      typeof passthroughModel === 'string' ? passthroughModel : this.getCapabilityModelName();
+    const isGpt6Astra = isGpt6AstraModel(capabilityModelName);
+    const hasAzureCustomDeploymentHost =
+      typeof passthroughModel !== 'string' &&
+      [config.apiHost, config.apiBaseUrl, this.getApiUrl()].some((endpoint) =>
+        this.isAzureOpenAiEndpoint(endpoint),
+      );
     const isAzureResponsesDeploymentWithReasoningConfig =
       hasAzureCustomDeploymentHost &&
       (config.reasoning !== undefined || config.reasoning_effort !== undefined);
     const isAzureResponsesDeploymentWithVerbosityConfig =
       hasAzureCustomDeploymentHost && config.verbosity !== undefined;
-    // Verbosity is a GPT-5 feature separate from reasoning; only reasoning config
+    // Verbosity is separate from reasoning; only reasoning config
     // should promote a custom deployment to "reasoning model" status, otherwise
     // max_output_tokens defaults change unexpectedly.
     const isReasoningModel =
-      this.isReasoningModel() || isAzureResponsesDeploymentWithReasoningConfig;
-    const isGPT5Model = this.isGPT5Model() || isAzureResponsesDeploymentWithVerbosityConfig;
+      this.isReasoningModel(capabilityModelName) ||
+      isGpt6Astra ||
+      isAzureResponsesDeploymentWithReasoningConfig;
+    const supportsVerbosity =
+      this.isGPT5Model(capabilityModelName) ||
+      isGpt6Astra ||
+      isAzureResponsesDeploymentWithVerbosityConfig;
 
     return {
       isAzureResponsesDeploymentWithReasoningConfig,
       isReasoningModel,
-      isGPT5Model,
-    };
-  }
-
-  private parsePromptInput(prompt: string): string | unknown[] {
-    try {
-      const parsedJson = JSON.parse(prompt);
-      return Array.isArray(parsedJson) ? parsedJson : prompt;
-    } catch {
-      return prompt;
-    }
-  }
-
-  private getMaxOutputTokens(
-    config: OpenAiCompletionOptions,
-    isReasoningModel: boolean,
-  ): number | undefined {
-    const maxOutputTokensDefault = config.omitDefaults
-      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
-        ? undefined
-        : getEnvInt('OPENAI_MAX_TOKENS')
-      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const reasoningMaxOutputTokensDefault =
-      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
-
-    return (
-      config.max_output_tokens ??
-      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault)
-    );
-  }
-
-  private getTextFormat(
-    responseFormat: ReturnType<typeof maybeLoadResponseFormatFromExternalFile>,
-    config: OpenAiCompletionOptions,
-    isGPT5Model: boolean,
-  ) {
-    let textFormat;
-
-    if (responseFormat?.type === 'json_object') {
-      textFormat = {
-        format: {
-          type: 'json_object',
-        },
-      };
-    } else if (responseFormat?.type === 'json_schema') {
-      const schema = responseFormat.schema || responseFormat.json_schema?.schema;
-      const schemaName =
-        responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
-
-      textFormat = {
-        format: {
-          type: 'json_schema',
-          name: schemaName,
-          schema,
-          strict: true,
-        },
-      };
-    } else {
-      textFormat = { format: { type: 'text' } };
-    }
-
-    return isGPT5Model && config.verbosity
-      ? { ...textFormat, verbosity: config.verbosity }
-      : textFormat;
-  }
-
-  private createRequestBody({
-    config,
-    input,
-    instructions,
-    loadedTools,
-    maxOutputTokens,
-    reasoningEffort,
-    renderedReasoning,
-    temperature,
-    textFormat,
-    isReasoningModel,
-  }: {
-    config: OpenAiCompletionOptions;
-    input: string | unknown[];
-    instructions: OpenAiCompletionOptions['instructions'];
-    loadedTools: Awaited<ReturnType<typeof maybeLoadToolsFromExternalFile>>;
-    maxOutputTokens: number | undefined;
-    reasoningEffort: ReasoningEffort | undefined;
-    renderedReasoning: OpenAiCompletionOptions['reasoning'];
-    temperature: number | undefined;
-    textFormat: ReturnType<OpenAiResponsesProvider['getTextFormat']>;
-    isReasoningModel: boolean;
-  }) {
-    const body: Record<string, any> = {
-      model: this.modelName,
-      input,
-      ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
-      ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
-      ...(temperature === undefined ? {} : { temperature }),
-      ...(instructions ? { instructions } : {}),
-      ...((!reasoningEffort || reasoningEffort === 'none') &&
-      (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
-        ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
-        : {}),
-      ...(loadedTools ? { tools: loadedTools } : {}),
-      ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
-      ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
-      ...(config.include === undefined ? {} : { include: config.include }),
-      ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
-      text: textFormat,
-      ...(config.truncation ? { truncation: config.truncation } : {}),
-      ...(config.metadata ? { metadata: config.metadata } : {}),
-      ...('parallel_tool_calls' in config
-        ? { parallel_tool_calls: Boolean(config.parallel_tool_calls) }
-        : {}),
-      ...(config.stream ? { stream: config.stream } : {}),
-      ...('store' in config ? { store: Boolean(config.store) } : {}),
-      ...(config.background ? { background: config.background } : {}),
-      ...(config.webhook_url ? { webhook_url: config.webhook_url } : {}),
-      ...(config.user ? { user: config.user } : {}),
-      ...(config.prompt_cache_key === undefined
-        ? {}
-        : { prompt_cache_key: config.prompt_cache_key }),
-      ...(config.prompt_cache_retention === undefined
-        ? {}
-        : { prompt_cache_retention: config.prompt_cache_retention }),
-      ...(config.passthrough || {}),
-    };
-
-    if (renderedReasoning && isReasoningModel) {
-      body.reasoning = { ...body.reasoning, ...renderedReasoning };
-    }
-    if ('max_tokens' in body) {
-      delete body.max_tokens;
-    }
-
-    return body;
-  }
-
-  private validateDeepResearchConfig(
-    config: OpenAiCompletionOptions,
-  ): ProviderResponse | undefined {
-    if (!this.getCapabilityModelName().includes('deep-research')) {
-      return undefined;
-    }
-
-    const hasWebSearchTool = config.tools?.some((tool: any) => tool.type === 'web_search_preview');
-    if (!hasWebSearchTool) {
-      return {
-        error: `Deep research model ${this.modelName} requires the web_search_preview tool to be configured. Add it to your provider config:\ntools:\n  - type: web_search_preview`,
-      };
-    }
-
-    const invalidMcpTool = config.tools?.find(
-      (tool: any) => tool.type === 'mcp' && tool.require_approval !== 'never',
-    );
-    return invalidMcpTool
-      ? {
-          error: `Deep research model ${this.modelName} requires MCP tools to have require_approval: 'never'. Update your MCP tool configuration:\ntools:\n  - type: mcp\n    require_approval: never`,
-        }
-      : undefined;
-  }
-
-  private getTimeoutMs(): number {
-    const capabilityModelName = this.getCapabilityModelName();
-    const isDeepResearchModel = capabilityModelName.includes('deep-research');
-    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(capabilityModelName);
-    if (!isDeepResearchModel && !isGpt5ProModel) {
-      return getRequestTimeoutMs();
-    }
-
-    const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
-    const timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
-    logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
-    return timeout;
-  }
-
-  private async createTransportResult(
-    body: Record<string, any>,
-    config: OpenAiCompletionOptions,
-    context: CallApiContextParams | undefined,
-    timeout: number,
-  ): Promise<ResponsesTransportResult> {
-    if (body.stream === true) {
-      const client = createOpenAiClient({
-        apiKey: this.getApiKey(),
-        allowMissingApiKey: !this.requiresApiKey(),
-        organization: this.getOrganization(),
-        baseURL: this.getApiUrl(),
-        headers: this.getOpenAiRequestHeaders(config.headers),
-        maxRetries: 0,
-        timeout,
-        fetch: (url, init = {}) =>
-          fetchWithRetries(
-            url instanceof URL ? url.toString() : url,
-            init,
-            timeout,
-            this.config.maxRetries,
-          ),
-      });
-      const request = client.responses.create(
-        body as OpenAI.Responses.ResponseCreateParamsStreaming,
-      );
-      const { data: stream, response } = await request.withResponse();
-      return {
-        cached: false,
-        data: await getTerminalResponsesStreamData(stream),
-        responseHeaders: Object.fromEntries(response.headers.entries()),
-        status: response.status,
-        statusText: response.statusText,
-      };
-    }
-
-    const request = await callJsonCachedOpenAi(
-      {
-        apiKey: this.getApiKey(),
-        allowMissingApiKey: !this.requiresApiKey(),
-        organization: this.getOrganization(),
-        baseURL: this.getApiUrl(),
-        headers: this.getOpenAiRequestHeaders(config.headers),
-        bustCache: context?.bustCache ?? context?.debug,
-        maxRetries: this.config.maxRetries,
-        timeout,
-      },
-      (client) =>
-        client.responses.create(
-          body as OpenAI.Responses.ResponseCreateParamsNonStreaming,
-        ) as Promise<OpenAI.Responses.Response>,
-    );
-    const { requestMetadata } = request;
-    if (!request.ok) {
-      throw {
-        deleteFromCache: requestMetadata.deleteFromCache,
-        error: request.error,
-        requestMetadata,
-        responseHeaders: requestMetadata.headers,
-      } satisfies ResponsesTransportFailure;
-    }
-
-    return {
-      cached: requestMetadata.cached,
-      data: request.data,
-      deleteFromCache: requestMetadata.deleteFromCache,
-      requestMetadata,
-      responseHeaders: requestMetadata.headers,
-      status: requestMetadata.status ?? 200,
-      statusText: requestMetadata.statusText ?? 'OK',
-    };
-  }
-
-  private getHttpErrorResponse({
-    cached,
-    data,
-    responseHeaders,
-    status,
-    statusText,
-  }: ResponsesTransportResult): ProviderResponse | undefined {
-    if (status >= 200 && status < 300) {
-      return undefined;
-    }
-
-    const errorMessage = `API error: ${status} ${statusText}\n${
-      typeof data === 'string' ? data : JSON.stringify(data)
-    }`;
-    if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
-      return {
-        output: errorMessage,
-        tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
-        isRefusal: true,
-        metadata: getOpenAiHttpMetadata({ headers: responseHeaders, status, statusText }),
-      };
-    }
-
-    return {
-      error: errorMessage,
-      metadata: getOpenAiHttpMetadata({ headers: responseHeaders, status, statusText }),
-    };
-  }
-
-  private async getTransportErrorResponse(
-    err: unknown,
-    result: Pick<
-      ResponsesTransportResult,
-      'deleteFromCache' | 'requestMetadata' | 'responseHeaders'
-    >,
-  ): Promise<ProviderResponse> {
-    const failure = isResponsesTransportFailure(err) ? err : undefined;
-    const transportError = failure?.error ?? err;
-    const requestMetadata = failure?.requestMetadata ?? result.requestMetadata;
-    const deleteFromCache = failure?.deleteFromCache ?? result.deleteFromCache;
-    const responseHeaders = failure?.responseHeaders ?? result.responseHeaders;
-    const status = requestMetadata?.status ?? getErrorStatus(transportError);
-    const statusText = requestMetadata?.statusText ?? 'Error';
-    const errorData = requestMetadata?.data ?? getErrorData(transportError);
-    const headers = responseHeaders ?? requestMetadata?.headers ?? {};
-
-    if (status && status >= 400) {
-      const errorMessage = `API error: ${status} ${statusText}\n${
-        typeof errorData === 'string' ? errorData : JSON.stringify(errorData)
-      }`;
-      return getOpenAiInvalidPromptCode(errorData) === 'invalid_prompt'
-        ? {
-            output: errorMessage,
-            tokenUsage:
-              typeof errorData === 'object' && errorData !== null && 'usage' in errorData
-                ? getTokenUsage(errorData, requestMetadata?.cached ?? false)
-                : undefined,
-            isRefusal: true,
-            metadata: getOpenAiHttpMetadata({ headers, status, statusText }),
-          }
-        : {
-            error: errorMessage,
-            metadata: getOpenAiHttpMetadata({ headers, status, statusText }),
-          };
-    }
-
-    const apiCallError = unwrapOpenAiTransportError(transportError);
-    logger.error(`API call error: ${String(apiCallError)}`);
-    await deleteFromCache?.();
-    return {
-      error: `API call error: ${String(apiCallError)}`,
-      metadata: getOpenAiHttpMetadata({
-        headers: responseHeaders,
-        status: 0,
-        statusText: 'Error',
-      }),
+      supportsVerbosity,
+      supportsTemperature: this.supportsTemperature(capabilityModelName),
     };
   }
 
@@ -594,11 +861,37 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...context?.prompt?.config,
     };
 
-    const input = this.parsePromptInput(prompt);
+    // Chat-format content parts are translated to their Responses equivalents so multimodal
+    // prompts authored for the chat API work here too (the Responses API rejects
+    // `type: "text"` / `"image_url"` outright).
+    let input;
+    try {
+      const parsedJson = JSON.parse(prompt);
+      if (Array.isArray(parsedJson)) {
+        input = normalizeResponsesInput(parsedJson);
+      } else {
+        input = prompt;
+      }
+    } catch {
+      input = prompt;
+    }
 
-    const { isAzureResponsesDeploymentWithReasoningConfig, isReasoningModel, isGPT5Model } =
-      this.getDeploymentCapabilities(config);
-    const maxOutputTokens = this.getMaxOutputTokens(config, isReasoningModel);
+    const {
+      isAzureResponsesDeploymentWithReasoningConfig,
+      isReasoningModel,
+      supportsVerbosity,
+      supportsTemperature,
+    } = this.getDeploymentCapabilities(config);
+    const maxOutputTokensDefault = config.omitDefaults
+      ? getEnvString('OPENAI_MAX_TOKENS') === undefined
+        ? undefined
+        : getEnvInt('OPENAI_MAX_TOKENS')
+      : getEnvInt('OPENAI_MAX_TOKENS', 1024);
+    const reasoningMaxOutputTokensDefault =
+      getEnvInt('OPENAI_MAX_COMPLETION_TOKENS') ?? getEnvInt('OPENAI_MAX_TOKENS');
+    const maxOutputTokens =
+      config.max_output_tokens ??
+      (isReasoningModel ? reasoningMaxOutputTokensDefault : maxOutputTokensDefault);
 
     const renderedReasoning = renderVarsInObject(
       config.reasoning,
@@ -619,7 +912,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
     const temperature =
-      this.supportsTemperature() && !hasAzureReasoningEffort
+      supportsTemperature && !hasAzureReasoningEffort
         ? (config.temperature ?? temperatureDefault)
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
@@ -632,32 +925,131 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       context?.vars,
     );
 
-    const textFormat = this.getTextFormat(responseFormat, config, isGPT5Model);
+    let textFormat;
+    if (responseFormat) {
+      if (responseFormat.type === 'json_object') {
+        textFormat = {
+          format: {
+            type: 'json_object',
+          },
+        };
+
+        // IMPORTANT: json_object format requires the word 'json' in the input prompt
+      } else if (responseFormat.type === 'json_schema') {
+        // Schema is already loaded by maybeLoadResponseFormatFromExternalFile
+        const schema = responseFormat.schema || responseFormat.json_schema?.schema;
+        const schemaName =
+          responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
+
+        textFormat = {
+          format: {
+            type: 'json_schema',
+            name: schemaName,
+            schema,
+            strict: true,
+          },
+        };
+      } else {
+        textFormat = { format: { type: 'text' } };
+      }
+    } else {
+      textFormat = { format: { type: 'text' } };
+    }
+
+    // Add verbosity for supported models if configured
+    if (supportsVerbosity && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
+    }
 
     // Load tools from external file if needed
     // Store in variable so we can include in both body and returned config
     const loadedTools = config.tools
       ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
       : undefined;
+    const responsesTools = Array.isArray(loadedTools)
+      ? loadedTools.map((tool) => {
+          if (tool?.type !== 'function' || !tool.function) {
+            return tool;
+          }
+          const { function: functionDefinition, ...rest } = tool;
+          return { ...rest, ...functionDefinition };
+        })
+      : loadedTools;
+    const toolChoice =
+      config.tool_choice &&
+      typeof config.tool_choice === 'object' &&
+      config.tool_choice.type === 'function' &&
+      config.tool_choice.function?.name
+        ? { type: 'function', name: config.tool_choice.function.name }
+        : config.tool_choice;
 
-    const body = this.createRequestBody({
-      config,
+    const body = {
+      model: this.modelName,
       input,
-      instructions,
-      loadedTools,
-      maxOutputTokens,
-      reasoningEffort,
-      renderedReasoning,
-      temperature,
-      textFormat,
-      isReasoningModel,
-    });
+      ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
+      ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
+      ...(temperature === undefined ? {} : { temperature }),
+      ...(instructions ? { instructions } : {}),
+      ...((!reasoningEffort || reasoningEffort === 'none') &&
+      (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
+        ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
+        : {}),
+      ...(responsesTools ? { tools: responsesTools } : {}),
+      ...(toolChoice ? { tool_choice: toolChoice } : {}),
+      ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
+      ...(config.include === undefined ? {} : { include: config.include }),
+      ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
+      text: textFormat,
+      ...(config.truncation ? { truncation: config.truncation } : {}),
+      ...(config.metadata ? { metadata: config.metadata } : {}),
+      ...('parallel_tool_calls' in config
+        ? { parallel_tool_calls: Boolean(config.parallel_tool_calls) }
+        : {}),
+      ...(config.stream ? { stream: config.stream } : {}),
+      ...('store' in config ? { store: Boolean(config.store) } : {}),
+      ...(config.background ? { background: config.background } : {}),
+      ...(config.webhook_url ? { webhook_url: config.webhook_url } : {}),
+      ...(config.user ? { user: config.user } : {}),
+      ...(config.service_tier ? { service_tier: config.service_tier } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_options === undefined
+        ? {}
+        : { prompt_cache_options: config.prompt_cache_options }),
+      ...(config.prompt_cache_retention === undefined
+        ? {}
+        : { prompt_cache_retention: config.prompt_cache_retention }),
+      ...(config.passthrough || {}),
+    };
+    assertOpenAiApiModel(body.model, this.getApiUrl());
+
+    // Handle reasoning parameters for reasoning models
+    // Note: reasoning_effort is deprecated and has been moved to reasoning.effort
+    // Merge with existing body.reasoning (from reasoning_effort) so that
+    // config.reasoning extra fields (e.g. summary) don't silently drop effort.
+    if (renderedReasoning && isReasoningModel) {
+      body.reasoning = { ...body.reasoning, ...renderedReasoning };
+    }
+
+    // The Responses API uses max_output_tokens, never max_tokens; strip max_tokens if it
+    // leaked in via passthrough or YAML anchors.
+    if ('max_tokens' in body) {
+      delete body.max_tokens;
+    }
+
+    applyGpt6AstraRequestRules(
+      body,
+      config.passthrough?.model ?? this.getCapabilityModelName(),
+      'responses',
+    );
 
     return {
       body,
       config: {
         ...config,
-        tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation
+        service_tier: body.service_tier,
+        tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation.
         response_format: responseFormat,
       },
     };
@@ -668,17 +1060,29 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    if (callApiOptions?.abortSignal?.aborted) {
+      throw getAbortError(callApiOptions.abortSignal);
+    }
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
+    // Resolve the effective request config first so spanContext reflects what
+    // we actually send (merged config from getOpenAiBody, not raw this.config).
+    // The Responses API uses `max_output_tokens` rather than `max_tokens`.
     const resolved = await this.getOpenAiBody(prompt, context, callApiOptions);
+    if (callApiOptions?.abortSignal?.aborted) {
+      throw getAbortError(callApiOptions.abortSignal);
+    }
     const effectiveBody = resolved.body as Record<string, any>;
-    const asNumber = (value: unknown): number | undefined =>
-      typeof value === 'number' ? value : undefined;
+    // Read request params from the resolved body (what we actually send) rather
+    // than the raw config, so defaults/env-derived values (e.g. a default
+    // temperature, OPENAI_TOP_P) are reflected on the span. The Responses API
+    // has no `stop` param, so stopSequences is only set if the body carries it.
+    const asNumber = (v: unknown): number | undefined => (typeof v === 'number' ? v : undefined);
 
     const spanContext = buildChatSpanContext({
-      system: 'openai',
+      system: this.getGenAISystem(),
       model: this.modelName,
       providerId: this.id(),
       prompt,
@@ -692,50 +1096,436 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     });
 
     return withGenAISpan(
-      spanContext,
-      () => this.callApiInternal(context, resolved),
+      { ...spanContext, openaiApiType: 'responses' },
+      () =>
+        this.callApiInternal(context, {
+          ...resolved,
+          abortSignal: callApiOptions?.abortSignal,
+        }),
       extractProviderResponseAttributes,
     );
   }
 
   private async callApiInternal(
     context: CallApiContextParams | undefined,
-    prepared: Awaited<ReturnType<OpenAiResponsesProvider['getOpenAiBody']>>,
+    // `callApi` always resolves the body once (so spanContext reflects what we
+    // send) and passes it here, avoiding a second getOpenAiBody call. The prompt
+    // is already baked into `prepared.body`, so it is not needed here.
+    prepared: { body: any; config: any; abortSignal?: AbortSignal },
   ): Promise<ProviderResponse> {
-    const { body, config } = prepared;
+    const { body, config, abortSignal } = prepared;
 
-    const deepResearchValidation = this.validateDeepResearchConfig(config);
-    if (deepResearchValidation) {
-      return deepResearchValidation;
+    // Validate deep research models have required tools. Use the capability model name so
+    // detection stays consistent with the other capability checks (isGPT5Model, isReasoningModel,
+    // the gpt-5-pro timeout regex) for subclasses that strip a vendor prefix.
+    const isDeepResearchModel = this.getCapabilityModelName().includes('deep-research');
+    if (isDeepResearchModel) {
+      const hasDataSource = config.tools?.some(
+        (tool: any) =>
+          tool.type === 'web_search' ||
+          tool.type === 'web_search_preview' ||
+          (tool.type === 'file_search' &&
+            Array.isArray(tool.vector_store_ids) &&
+            tool.vector_store_ids.length > 0) ||
+          tool.type === 'mcp',
+      );
+      if (!hasDataSource) {
+        return {
+          error: `Deep research model ${this.modelName} requires at least one data source. Configure web_search, web_search_preview, file_search with vector_store_ids, or an MCP tool.`,
+        };
+      }
+
+      // Validate MCP configuration for deep research
+      const mcpTools = config.tools?.filter((tool: any) => tool.type === 'mcp') || [];
+      for (const mcpTool of mcpTools) {
+        if (mcpTool.require_approval !== 'never') {
+          return {
+            error: `Deep research model ${this.modelName} requires MCP tools to have require_approval: 'never'. Update your MCP tool configuration:\ntools:\n  - type: mcp\n    require_approval: never`,
+          };
+        }
+      }
     }
-    const timeout = this.getTimeoutMs();
 
-    let transportResult: ResponsesTransportResult | undefined;
+    // Calculate timeout for long-running models and background responses.
+    let timeout = getRequestTimeoutMs();
+    const isGpt5ProModel = /(^|\/)gpt-5(?:\.\d+)?-pro(?:-|$)/.test(this.getCapabilityModelName());
+    const isLongRunningModel = isDeepResearchModel || isGpt5ProModel || body.background === true;
+    if (isLongRunningModel) {
+      const evalTimeout = getEnvInt('PROMPTFOO_EVAL_TIMEOUT_MS', 0);
+      timeout = evalTimeout > 0 ? evalTimeout : LONG_RUNNING_MODEL_TIMEOUT_MS;
+      logger.debug(`Using timeout of ${timeout}ms for long-running model ${this.modelName}`);
+    }
+
+    let data: OpenAIResponsesResponse;
+    let status: number;
+    let statusText: string;
+    let cached = false;
+    let deleteFromCache: (() => Promise<void>) | undefined;
+    let updateCache:
+      | ((
+          data: OpenAIResponsesResponse,
+          status: number,
+          statusText: string,
+          headers?: Record<string, string>,
+        ) => Promise<void>)
+      | undefined;
+    let responseHeaders: Record<string, string> | undefined;
+    let pollingBackground = false;
     try {
-      transportResult = await this.createTransportResult(body, config, context, timeout);
-      const httpError = this.getHttpErrorResponse(transportResult);
-      if (httpError) {
-        return httpError;
+      const url = appendOpenAiApiPath(this.getApiUrl(), 'responses');
+      const backgroundDeadline = body.background && !body.stream ? Date.now() + timeout : undefined;
+      const customHeaders = this.getOpenAiRequestHeaders(config.headers);
+      const hasCustomHeader = (name: string) =>
+        Object.keys(customHeaders).some((header) => header.toLowerCase() === name);
+      const request = {
+        method: 'POST',
+        headers: {
+          ...(hasCustomHeader('content-type') ? {} : { 'Content-Type': 'application/json' }),
+          ...(this.getApiKey() && !hasCustomHeader('authorization')
+            ? { Authorization: `Bearer ${this.getApiKey()}` }
+            : {}),
+          ...customHeaders,
+        },
+        body: JSON.stringify(body),
+        cacheScope: this.backgroundCacheScope,
+        hasPerPromptAuthorization: Object.keys(context?.prompt?.config?.headers ?? {}).some(
+          (header) => header.toLowerCase() === 'authorization',
+        ),
+        ...(abortSignal ? { signal: abortSignal } : {}),
+      };
+
+      if (body.stream && body.background) {
+        let backgroundResponseId: string | undefined;
+        let streamAccepted = false;
+        let streamTimedOut = false;
+        let streamCreationGraceHandle: ReturnType<typeof setTimeout> | undefined;
+        const controller = new AbortController();
+        let rejectPendingCreation: ((reason: Error) => void) | undefined;
+        const pendingCreationCancellation = new Promise<never>((_resolve, reject) => {
+          rejectPendingCreation = reject;
+        });
+        const startStreamCreationGrace = () => {
+          if (streamCreationGraceHandle) {
+            return;
+          }
+          streamCreationGraceHandle = setTimeout(
+            () => controller.abort(),
+            Math.min(
+              Math.max(timeout, BACKGROUND_STREAM_CREATION_GRACE_MIN_MS),
+              BACKGROUND_STREAM_CREATION_GRACE_MAX_MS,
+            ),
+          );
+        };
+        const timeoutHandle = setTimeout(() => {
+          streamTimedOut = true;
+          if (streamAccepted && !backgroundResponseId) {
+            rejectPendingCreation?.(
+              new Error(`OpenAI streaming response timed out after ${timeout}ms`),
+            );
+            startStreamCreationGrace();
+            return;
+          }
+          controller.abort();
+        }, timeout);
+        const abortStream = () => {
+          if (backgroundResponseId) {
+            controller.abort(abortSignal?.reason);
+            return;
+          }
+          const stopStreamCreation = () => {
+            if (backgroundResponseId || !streamAccepted) {
+              controller.abort(abortSignal?.reason);
+              return;
+            }
+            if (abortSignal) {
+              startStreamCreationGrace();
+              rejectPendingCreation?.(getAbortError(abortSignal));
+            }
+          };
+          if (streamAccepted) {
+            stopStreamCreation();
+          } else {
+            queueMicrotask(stopStreamCreation);
+          }
+        };
+        abortSignal?.addEventListener('abort', abortStream, { once: true });
+        const streamCompletion = (async (): Promise<{
+          data: OpenAIResponsesResponse;
+          status: number;
+          statusText: string;
+          headers: Record<string, string>;
+        }> => {
+          try {
+            const response = await fetchWithRetries(
+              url,
+              {
+                method: request.method,
+                headers: request.headers,
+                body: request.body,
+                signal: controller.signal,
+              },
+              timeout,
+              config.maxRetries,
+            );
+            let responseData: OpenAIResponsesResponse;
+            if (response.status >= 200 && response.status < 300) {
+              streamAccepted = true;
+              responseData = await readResponsesStream(
+                response,
+                'OpenAI',
+                logger,
+                (streamedResponse) => {
+                  if (typeof streamedResponse.id === 'string') {
+                    backgroundResponseId = streamedResponse.id;
+                    if (abortSignal?.aborted || streamTimedOut) {
+                      controller.abort(abortSignal?.reason);
+                    }
+                  }
+                },
+              );
+            } else {
+              const text = await response.text();
+              try {
+                responseData = JSON.parse(text);
+              } catch {
+                responseData = text as OpenAIResponsesResponse;
+              }
+            }
+            return {
+              data: responseData,
+              status: response.status,
+              statusText: response.statusText,
+              headers: Object.fromEntries(response.headers.entries()),
+            };
+          } catch (err) {
+            if (backgroundResponseId) {
+              await cancelBackgroundResponse(backgroundResponseId, url, request.headers);
+            }
+            if (controller.signal.aborted && !abortSignal?.aborted) {
+              throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
+            }
+            throw err;
+          } finally {
+            clearTimeout(timeoutHandle);
+            clearTimeout(streamCreationGraceHandle);
+            abortSignal?.removeEventListener('abort', abortStream);
+          }
+        })();
+        ({
+          data,
+          status,
+          statusText,
+          headers: responseHeaders,
+        } = await Promise.race([streamCompletion, pendingCreationCancellation]));
+      } else if (body.stream) {
+        const controller = new AbortController();
+        const timeoutHandle = setTimeout(() => controller.abort(), timeout);
+        const signal = abortSignal
+          ? AbortSignal.any([controller.signal, abortSignal])
+          : controller.signal;
+        try {
+          const response = await fetchWithCache<string>(
+            url,
+            { ...request, signal },
+            timeout,
+            'text',
+            true,
+            config.maxRetries,
+          );
+          status = response.status;
+          statusText = response.statusText;
+          responseHeaders = response.headers;
+          if (status >= 200 && status < 300) {
+            data = await readResponsesStream(new Response(response.data), 'OpenAI', logger);
+          } else {
+            try {
+              data = JSON.parse(response.data);
+            } catch {
+              data = response.data as OpenAIResponsesResponse;
+            }
+          }
+        } catch (err) {
+          if (controller.signal.aborted) {
+            throw new Error(`OpenAI streaming response timed out after ${timeout}ms`);
+          }
+          throw err;
+        } finally {
+          clearTimeout(timeoutHandle);
+        }
+      } else {
+        ({
+          data,
+          cached,
+          status,
+          statusText,
+          deleteFromCache,
+          updateCache,
+          headers: responseHeaders,
+        } = body.background
+          ? await createBackgroundResponseWithCancellation(
+              url,
+              request,
+              timeout,
+              this.shouldBustCache(context),
+              config.maxRetries,
+            )
+          : await fetchWithCache<OpenAIResponsesResponse>(
+              url,
+              {
+                method: request.method,
+                headers: request.headers,
+                body: request.body,
+                ...(request.signal ? { signal: request.signal } : {}),
+              },
+              timeout,
+              'json',
+              this.shouldBustCache(context),
+              config.maxRetries,
+            ));
+      }
+
+      if (status < 200 || status >= 300) {
+        const errorMessage = `API error: ${status} ${statusText}\n${
+          typeof data === 'string' ? data : JSON.stringify(data)
+        }`;
+
+        // Check if this is an invalid_prompt error code (indicates refusal)
+        if (typeof data === 'object' && data?.error?.code === 'invalid_prompt') {
+          return {
+            output: errorMessage,
+            tokenUsage: data?.usage ? getTokenUsage(data, cached) : undefined,
+            isRefusal: true,
+            metadata: {
+              http: {
+                status,
+                statusText,
+                headers: responseHeaders ?? {},
+              },
+            },
+          };
+        }
+
+        return {
+          error: errorMessage,
+          metadata: {
+            http: {
+              status,
+              statusText,
+              headers: responseHeaders ?? {},
+            },
+          },
+        };
+      }
+
+      if (body.background && (data.status === 'queued' || data.status === 'in_progress')) {
+        pollingBackground = true;
+        const cancelOnStop =
+          !isCacheEnabled() ||
+          Boolean(this.shouldBustCache(context)) ||
+          !getBackgroundCacheIdentity(url, request, data.id).cacheable;
+        const polled = await coalesceBackgroundResponse(
+          data,
+          url,
+          request,
+          timeout,
+          config.maxRetries,
+          cached,
+          deleteFromCache,
+          cancelOnStop,
+          backgroundDeadline,
+        );
+        if (polled.shared) {
+          cached = true;
+        } else if (
+          !polled.error &&
+          (polled.data.status === 'completed' || polled.data.status === 'incomplete')
+        ) {
+          const billingIdentity = getBackgroundCacheIdentity(url, request, polled.data.id);
+          cached =
+            billingIdentity.cacheable &&
+            isCacheEnabled() &&
+            !this.shouldBustCache(context) &&
+            !claimCacheKeyOnce(`openai:background-billing:${billingIdentity.key}`);
+        }
+        data = polled.data;
+        status = polled.status;
+        statusText = polled.statusText;
+        responseHeaders = polled.headers;
+        if (!polled.error && (data.status === 'completed' || data.status === 'incomplete')) {
+          await updateCache?.(data, status, statusText, responseHeaders);
+        }
+        if (polled.error) {
+          if ((polled.status === 0 && cancelOnStop) || polled.cancelled) {
+            await deleteFromCache?.();
+          }
+          return {
+            error: polled.error,
+            metadata: { http: { status, statusText, headers: responseHeaders ?? {} } },
+          };
+        }
+      }
+
+      if (body.background && (data.status === 'cancelled' || data.status === 'failed')) {
+        await deleteFromCache?.();
+        const upstreamError = data.error?.message;
+        return {
+          error: upstreamError
+            ? `Background response ${data.id} ${data.status}: ${upstreamError}`
+            : `Background response ${data.id} was ${data.status}.`,
+          metadata: { http: { status, statusText, headers: responseHeaders ?? {} } },
+        };
       }
     } catch (err) {
-      return this.getTransportErrorResponse(err, {
-        deleteFromCache: transportResult?.deleteFromCache,
-        requestMetadata: transportResult?.requestMetadata,
-        responseHeaders: transportResult?.responseHeaders,
-      });
+      if (isAbortError(err) || abortSignal?.aborted) {
+        throw abortSignal?.aborted ? getAbortError(abortSignal) : err;
+      }
+      if (err instanceof HttpRateLimitError) {
+        return {
+          error: formatRateLimitErrorMessage(err),
+          metadata: {
+            rateLimitKind: err.kind,
+            http: {
+              status: err.status,
+              statusText: err.statusText,
+              headers: err.headers ?? {},
+            },
+          },
+        };
+      }
+      logger.error(`API call error: ${String(err)}`);
+      if (!pollingBackground) {
+        await deleteFromCache?.();
+      }
+      return {
+        error: `API call error: ${String(err)}`,
+        metadata: {
+          http: {
+            status: 0,
+            statusText: 'Error',
+            headers: responseHeaders ?? {},
+          },
+        },
+      };
     }
 
-    const { cached, data, deleteFromCache, responseHeaders, status, statusText } = transportResult!;
     if (data.error?.message) {
       await deleteFromCache?.();
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
-        metadata: getOpenAiHttpMetadata({ headers: responseHeaders, status, statusText }),
+        metadata: {
+          http: {
+            status,
+            statusText,
+            headers: responseHeaders ?? {},
+          },
+        },
       };
     }
 
     // Use shared processor for consistent behavior with Azure
-    const result = await this.processor.processResponseOutput(data, config, cached);
+    const result = await this.processor.processResponseOutput(data, config, cached, {
+      suppressReasoningOutput: Boolean(body.stream),
+    });
     const billedResult = this.applyBilling(result, data, config, cached);
     const incompleteReason = data.incomplete_details?.reason;
     const incompleteResult =
@@ -758,49 +1548,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...incompleteResult,
       metadata: {
         ...incompleteResult.metadata,
-        ...getOpenAiHttpMetadata({ headers: responseHeaders, status, statusText }),
+        http: {
+          status,
+          statusText,
+          headers: responseHeaders ?? {},
+        },
       },
     };
   }
-}
-
-async function getTerminalResponsesStreamData(
-  stream: AsyncIterable<OpenAI.Responses.ResponseStreamEvent>,
-) {
-  let terminalResponse: OpenAI.Responses.Response | undefined;
-
-  for await (const event of stream) {
-    if (
-      event.type === 'response.completed' ||
-      event.type === 'response.failed' ||
-      event.type === 'response.incomplete'
-    ) {
-      terminalResponse = event.response;
-    }
-  }
-
-  if (!terminalResponse) {
-    throw new Error('Responses stream ended without a terminal response event');
-  }
-
-  return terminalResponse;
-}
-
-function getErrorStatus(error: unknown): number | undefined {
-  return typeof error === 'object' && error !== null && 'status' in error
-    ? Number(error.status)
-    : undefined;
-}
-
-function getErrorData(error: unknown): unknown {
-  return typeof error === 'object' && error !== null && 'error' in error ? error.error : undefined;
-}
-
-function isResponsesTransportFailure(error: unknown): error is ResponsesTransportFailure {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'error' in error &&
-    ('requestMetadata' in error || 'deleteFromCache' in error || 'responseHeaders' in error)
-  );
 }

@@ -5,7 +5,7 @@ import './setup';
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
-import * as fetchUtils from '../../../../src/util/fetch/index';
+import { mockProcessEnv } from '../../../util/utils';
 
 describe('OpenAiResponsesProvider HTTP metadata', () => {
   it('should include HTTP metadata in response', async () => {
@@ -135,22 +135,14 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
       ],
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
-    vi.mocked(fetchUtils.fetchWithRetries).mockResolvedValue(
-      new Response(
-        `event: response.completed\ndata: ${JSON.stringify({
-          type: 'response.completed',
-          sequence_number: 1,
-          response: mockApiResponse,
-        })}\n\n`,
-        {
-          status: 200,
-          statusText: 'OK',
-          headers: {
-            'content-type': 'text/event-stream',
-          },
-        },
-      ),
-    );
+
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
+      data: `event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: mockApiResponse })}\n\ndata: [DONE]\n\n`,
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'text/event-stream' },
+    });
 
     const provider = new OpenAiResponsesProvider('gpt-4o', {
       config: {
@@ -160,9 +152,61 @@ describe('OpenAiResponsesProvider HTTP metadata', () => {
     });
 
     const result = await provider.callApi('Test prompt');
-    const [, requestOptions] = vi.mocked(fetchUtils.fetchWithRetries).mock.calls[0];
-    expect(String(requestOptions?.body)).toContain('"stream":true');
+
+    expect(cache.fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: expect.stringContaining('"stream":true'),
+      }),
+      expect.any(Number),
+      'text',
+      true,
+      undefined,
+    );
     expect(result.output).toBe('Streaming response');
-    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('should time out a streaming response that stalls after headers', async () => {
+    const restoreEnv = mockProcessEnv({ REQUEST_TIMEOUT_MS: '20' });
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
+      const signal = options?.signal;
+      return new Promise((_resolve, reject) =>
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        }),
+      );
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: { apiKey: 'test-key', stream: true },
+    });
+
+    try {
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toContain('OpenAI streaming response timed out after 20ms');
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('should stop a streaming response when the eval is cancelled', async () => {
+    const controller = new AbortController();
+    vi.mocked(cache.fetchWithCache).mockImplementation(async (_url, options) => {
+      const signal = options?.signal;
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        });
+        queueMicrotask(() => controller.abort());
+      });
+    });
+
+    const provider = new OpenAiResponsesProvider('gpt-4o', {
+      config: { apiKey: 'test-key', stream: true },
+    });
+
+    await expect(
+      provider.callApi('Cancellable stream', undefined, { abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
   });
 });

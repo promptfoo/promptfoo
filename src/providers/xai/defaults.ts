@@ -4,6 +4,8 @@ import { XAIResponsesProvider } from './responses';
 import type { EnvOverrides } from '../../types/env';
 import type { DefaultProviders } from '../../types/index';
 
+// Keep automatic defaults on a model available to both US and EU accounts.
+// Grok 4.5 can still be selected explicitly where it is available.
 const DEFAULT_XAI_MODEL = 'grok-4.3';
 
 export function getXAIProviders(

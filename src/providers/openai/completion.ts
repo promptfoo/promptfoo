@@ -1,10 +1,17 @@
+import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { extractProviderResponseAttributes, withGenAISpan } from '../../tracing/genaiTracer';
+import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { callJsonCachedOpenAi, unwrapOpenAiTransportError } from './client';
-import { formatOpenAiError, getTokenUsage, OPENAI_COMPLETION_MODELS } from './util';
-import type OpenAI from 'openai';
+import {
+  appendOpenAiApiPath,
+  assertOpenAiApiModel,
+  formatOpenAiError,
+  getTokenUsage,
+  OPENAI_COMPLETION_MODELS,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -44,7 +51,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    let stop: string;
+    let stop: unknown;
     try {
       stop = getEnvString('OPENAI_STOP')
         ? JSON.parse(getEnvString('OPENAI_STOP') || '')
@@ -63,40 +70,76 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       frequency_penalty:
         this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
       best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
-      ...(callApiOptions?.includeLogProbs ? { logprobs: 1 } : {}),
+      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
       ...(this.config.passthrough || {}),
     };
+    assertOpenAiApiModel(body.model, this.getApiUrl());
+    const asNumber = (value: unknown): number | undefined =>
+      typeof value === 'number' ? value : undefined;
+    const stopSequences =
+      typeof body.stop === 'string'
+        ? [body.stop]
+        : Array.isArray(body.stop) &&
+            body.stop.every((item): item is string => typeof item === 'string')
+          ? body.stop
+          : undefined;
 
-    const request = await callJsonCachedOpenAi(
+    return withGenAISpan(
       {
-        apiKey: this.getApiKey(),
-        allowMissingApiKey: !this.requiresApiKey(),
-        organization: this.getOrganization(),
-        baseURL: this.getApiUrl(),
-        headers: this.getOpenAiRequestHeaders(this.config.headers),
-        bustCache: context?.bustCache ?? context?.debug,
-        maxRetries: this.config.maxRetries,
+        system: this.getGenAISystem(),
+        operationName: 'text_completion',
+        model: body.model,
+        providerId: this.id(),
+        maxTokens: asNumber(body.max_tokens),
+        temperature: asNumber(body.temperature),
+        topP: asNumber(body.top_p),
+        stopSequences,
+        presencePenalty: asNumber(body.presence_penalty),
+        frequencyPenalty: asNumber(body.frequency_penalty),
+        evalId: context?.evaluationId,
+        testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
+        promptLabel: context?.prompt?.label,
+        traceparent: context?.traceparent,
+        requestBody: prompt,
       },
-      (client) => client.completions.create(body as OpenAI.CompletionCreateParamsNonStreaming),
+      () => this.callApiInternal(body, context),
+      extractProviderResponseAttributes,
     );
-    const { requestMetadata } = request;
-    if (!request.ok) {
-      if (isOpenAiErrorResponse(requestMetadata.data)) {
-        return {
-          error: formatOpenAiError(requestMetadata.data),
-        };
-      }
+  }
 
-      const apiCallError = unwrapOpenAiTransportError(request.error);
-      logger.error(`API call error: ${String(apiCallError)}`);
+  private async callApiInternal(
+    body: Record<string, unknown>,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
+    let data,
+      cached = false,
+      latencyMs: number | undefined;
+    try {
+      ({ data, cached, latencyMs } = (await fetchWithCache(
+        appendOpenAiApiPath(this.getApiUrl(), 'completions'),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(this.getApiKey() ? { Authorization: `Bearer ${this.getApiKey()}` } : {}),
+            ...this.getOpenAiRequestHeaders(),
+          },
+          body: JSON.stringify(body),
+        },
+        getRequestTimeoutMs(),
+        'json',
+        context?.bustCache ?? context?.debug,
+        this.config.maxRetries,
+      )) as unknown as any);
+    } catch (err) {
+      logger.error(`API call error: ${String(err)}`);
       return {
-        error: `API call error: ${String(apiCallError)}`,
+        error: `API call error: ${String(err)}`,
       };
     }
-    const { data } = request;
 
-    if (isOpenAiErrorResponse(data)) {
+    if (data.error) {
       return {
         error: formatOpenAiError(data),
       };
@@ -104,14 +147,12 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     try {
       return {
         output: data.choices[0].text,
-        tokenUsage: getTokenUsage(data, requestMetadata.cached),
-        cached: requestMetadata.cached,
-        latencyMs: requestMetadata.latencyMs,
+        tokenUsage: getTokenUsage(data, cached),
+        cached,
+        latencyMs,
         cost: calculateOpenAIUsageCost(this.modelName, this.config, data.usage, {
-          cachedResponse: requestMetadata.cached,
-          serviceTier:
-            (data as { service_tier?: OpenAiCompletionOptions['service_tier'] }).service_tier ??
-            this.config.service_tier,
+          cachedResponse: cached,
+          serviceTier: data.service_tier ?? this.config.service_tier,
         }),
       };
     } catch (err) {
@@ -120,18 +161,4 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     }
   }
-}
-
-function isOpenAiErrorResponse(data: unknown): data is {
-  error: { message: string; type?: string; code?: string };
-} {
-  return (
-    typeof data === 'object' &&
-    data !== null &&
-    'error' in data &&
-    typeof data.error === 'object' &&
-    data.error !== null &&
-    'message' in data.error &&
-    typeof data.error.message === 'string'
-  );
 }

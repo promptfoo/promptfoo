@@ -318,15 +318,6 @@ export interface HandoffDefinition {
   description?: string;
 }
 
-/**
- * Result from loading an agent definition
- */
-export interface LoadedAgent {
-  agent: Agent<any, any>;
-  tools?: any[];
-  handoffs?: any[];
-}
-
 export type OpenAiAgentsSessionFactory = (context?: any) => Session | Promise<Session>;
 
 export type OpenAiAgentsMemorySessionDefinition = {

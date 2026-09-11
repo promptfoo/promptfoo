@@ -344,6 +344,40 @@ describe('CloudflareAi Provider', () => {
       expect(requestBody.apiBaseUrl).toBeUndefined();
     });
 
+    it('Should keep promptfoo local options out of the request body', async () => {
+      // Regression: every config key that was not Cloudflare-specific went into
+      // `passthrough`, so promptfoo's own settings — including the local config
+      // directory in `basePath` — were serialized into the JSON body, and custom
+      // `headers` were sent as model parameters instead of HTTP headers.
+      const provider = new CloudflareAiChatCompletionProvider(testModelName, {
+        config: {
+          accountId: 'test-account',
+          apiKey: 'test-key',
+          basePath: '/Users/someone/secret-project',
+          headers: { 'X-Tenant': 'acme' },
+          maxRetries: 0,
+          temperature: 0.8,
+        } as CloudflareAiConfig,
+      });
+
+      mockFetch.mockResolvedValue({
+        ...defaultMockResponse,
+        text: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ choices: [{ message: { content: 'x' } }] })),
+        ok: true,
+      });
+      await provider.callApi('Test local options');
+
+      const [, request] = mockFetch.mock.calls[0];
+      const requestBody = JSON.parse(request.body);
+      expect(requestBody).not.toHaveProperty('basePath');
+      expect(requestBody).not.toHaveProperty('headers');
+      expect(requestBody).not.toHaveProperty('maxRetries');
+      expect(requestBody.temperature).toBe(0.8);
+      expect(request.headers).toMatchObject({ 'X-Tenant': 'acme' });
+    });
+
     it('Should return proper provider identification methods', () => {
       const provider = new CloudflareAiChatCompletionProvider(testModelName, {
         config: cloudflareMinimumConfig,

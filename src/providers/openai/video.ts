@@ -46,7 +46,10 @@ const PROVIDER_NAME = 'OpenAI Video';
  */
 export const SORA_COSTS: Record<OpenAiVideoModel, number> = {
   'sora-2': 0.1,
+  'sora-2-2025-10-06': 0.1,
+  'sora-2-2025-12-08': 0.1,
   'sora-2-pro': 0.3,
+  'sora-2-pro-2025-10-06': 0.3,
 };
 
 /**
@@ -255,11 +258,13 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
     // Handle input_reference (image-to-video)
     if (config.input_reference) {
-      if (config.input_reference.startsWith('file://')) {
+      if (typeof config.input_reference !== 'string') {
+        body.input_reference = config.input_reference;
+      } else if (config.input_reference.startsWith('file://')) {
         const filePath = config.input_reference.slice(7);
         try {
           const buffer = await fs.readFile(filePath);
-          body.input_reference = new File([buffer], path.basename(filePath));
+          body.input_reference = new File([Uint8Array.from(buffer)], path.basename(filePath));
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
             throw error;
@@ -273,7 +278,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         body.input_reference = { image_url: config.input_reference };
       } else {
         body.input_reference = new File(
-          [Buffer.from(config.input_reference, 'base64')],
+          [Uint8Array.from(Buffer.from(config.input_reference, 'base64'))],
           'input-reference.png',
         );
       }
