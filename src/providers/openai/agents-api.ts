@@ -94,6 +94,7 @@ interface Page<T> {
 
 const MAX_TIMER_MS = 2_147_483_647;
 const MAX_LIST_PAGES = 100;
+const MAX_SESSION_LIST_PAGES = 1_000;
 const MAX_LIST_ITEMS = 10_000;
 const MAX_ERROR_DETAIL_LENGTH = 1_024;
 const TRANSIENT_STATUS_CODES = new Set([500, 502, 503, 504]);
@@ -376,6 +377,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   declare config: AgentsApiOptions;
   private readonly modelOverride: string;
   private credentials: string[] = [];
+  // callApi creates a fresh provider instance, so all lists share one call budget.
+  private listBudget = { pages: MAX_SESSION_LIST_PAGES, items: MAX_LIST_ITEMS };
   // Provider credentials replaced by prompt settings are still redacted if an error echoes them.
   private readonly inheritedCredentials = new Set<string>();
 
@@ -499,6 +502,12 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const cursors = new Set<string>();
     let after: string | undefined;
     for (let pageCount = 0; pageCount < MAX_LIST_PAGES; pageCount++) {
+      if (this.listBudget.pages === 0) {
+        throw new Error(
+          `Agents API session pagination limit exceeded (${MAX_SESSION_LIST_PAGES} pages)`,
+        );
+      }
+      this.listBudget.pages--;
       const query = new URLSearchParams({ order: 'asc', limit: '100' });
       if (after) {
         query.set('after', after);
@@ -514,9 +523,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!Array.isArray(page?.data)) {
         throw new Error('Agents API returned an invalid list response');
       }
-      if (items.length + page.data.length > MAX_LIST_ITEMS) {
-        throw new Error(`Agents API pagination limit exceeded (${MAX_LIST_ITEMS} items)`);
+      if (page.data.length > this.listBudget.items) {
+        throw new Error(`Agents API session pagination limit exceeded (${MAX_LIST_ITEMS} items)`);
       }
+      this.listBudget.items -= page.data.length;
       items.push(...page.data);
       if (!page.has_more) {
         return items;

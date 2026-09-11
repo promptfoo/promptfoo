@@ -1356,6 +1356,17 @@ describe('sanitizeObject', () => {
       );
     });
 
+    it.each(['/auth/proxy/v1', '/token/count/v1', '/auth/configuration/v1'])(
+      'preserves ordinary route %s',
+      (path) => {
+        const endpoint = 'https://gateway.example' + path;
+        expect(sanitizeObject({ apiBaseUrl: endpoint, apiHost: endpoint })).toEqual({
+          apiBaseUrl: endpoint,
+          apiHost: endpoint,
+        });
+      },
+    );
+
     it.each(['apiBaseUrl', 'server_url', 'apiHost'])(
       'redacts split path credentials in %s',
       (key) => {

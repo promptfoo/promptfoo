@@ -112,6 +112,7 @@ describe('OpenAiAgentsApiProvider', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     restoreEnv();
     vi.restoreAllMocks();
     vi.useRealTimers();
@@ -1036,6 +1037,80 @@ describe('OpenAiAgentsApiProvider', () => {
       error: expect.stringContaining('pagination cursor'),
     });
   });
+
+  it.each(['items', 'requests'])(
+    'shares the %s pagination budget across subagents and calls',
+    async (limit) => {
+      let listRequests = 0;
+      let childLists = 0;
+      mockApi((pathname, method) => {
+        if (method !== 'GET') {
+          return undefined;
+        }
+        if (/\/(?:turns|items|subagents)$/.test(pathname)) {
+          listRequests++;
+        }
+        if (pathname.endsWith('/sess_test/items')) {
+          return json(page([message, { id: 'create', type: 'create_subagent_call' }]));
+        }
+        if (pathname.endsWith('/subagents')) {
+          return json(
+            page(
+              Array.from({ length: limit === 'items' ? 3 : 1_100 }, (_, i) => ({
+                id: 'child_' + i,
+              })),
+            ),
+          );
+        }
+        if (/\/subagents\/child_\d+\/(?:items|turns)$/.test(pathname)) {
+          childLists++;
+          return json(
+            page(
+              limit === 'items'
+                ? Array.from({ length: 6_000 }, () => ({
+                    id: 'tool',
+                    type: 'command_execution',
+                    usage,
+                  }))
+                : [],
+            ),
+          );
+        }
+        return undefined;
+      });
+      const agent = provider();
+      for (let call = 0; call < 2; call++) {
+        listRequests = 0;
+        childLists = 0;
+        const result = await agent.callApi('hi');
+        expect(result.output).toBe('42');
+        expect(result.metadata).toMatchObject({
+          subagentToolCallsUnavailable: true,
+          usageMayExcludeSubagents: true,
+          sessionDeleted: true,
+        });
+        if (limit === 'items') {
+          expect(childLists).toBe(3);
+        } else {
+          expect(listRequests).toBe(1_000);
+        }
+      }
+    },
+  );
+
+  it.each(['/auth/proxy/v1', '/token/count/v1'])(
+    'preserves ambient authentication for a non-credential route %s',
+    async (pathname) => {
+      vi.stubEnv('OPENAI_API_KEY', 'ambient-key');
+      await provider({
+        apiKey: undefined,
+        apiBaseUrl: 'https://gateway.example' + pathname,
+      }).callApi('hi');
+      expect(new Headers(calls()[0].options?.headers).get('Authorization')).toBe(
+        'Bearer ambient-key',
+      );
+    },
+  );
 
   it('bounds pagination with unique cursors', async () => {
     let pages = 0;

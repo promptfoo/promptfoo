@@ -1323,16 +1323,21 @@ export function sanitizeUrlForLogging(url: string): string {
       .split('/')
       .map((segment, index, segments) => {
         const previous = decodeFormComponent(segments[index - 1] ?? '') ?? '';
-        if (segment && isSecretField(previous)) {
-          return '%5BREDACTED%5D';
-        }
         try {
           const decoded = decodeURIComponent(segment);
-          return OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) || looksLikeSecret(decoded)
+          // Credential routes can also contain ordinary words such as /auth/proxy.
+          const opaqueValue =
+            isSecretField(previous) &&
+            /^[a-z0-9._~+-]{12,}$/i.test(decoded) &&
+            /[a-z]/i.test(decoded) &&
+            /[0-9]/.test(decoded);
+          return opaqueValue ||
+            OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
+            looksLikeSecret(decoded)
             ? '%5BREDACTED%5D'
             : segment;
         } catch {
-          return segment;
+          return isSecretField(previous) ? '%5BREDACTED%5D' : segment;
         }
       })
       .join('/');
