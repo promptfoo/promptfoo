@@ -1298,6 +1298,7 @@ describe('OTLPTracingExporter', () => {
               multipart: 'Content-Disposition: form-data; name="password"\r\n\r\nopaque-multipart',
               envelope:
                 'request failed: {"protected":"e30","ciphertext":"opaque-cipher","tag":"opaque-tag"}',
+              xml: '<property name="password" value="opaque-xml"/>',
             },
           },
           traceMetadata: {
@@ -1336,6 +1337,7 @@ describe('OTLPTracingExporter', () => {
       expect(JSON.stringify(payload)).not.toContain('AIza' + 'a'.repeat(35));
       expect(JSON.stringify(payload)).not.toContain('opaque-multipart');
       expect(JSON.stringify(payload)).not.toContain('opaque-cipher');
+      expect(JSON.stringify(payload)).not.toContain('opaque-xml');
     },
   );
 

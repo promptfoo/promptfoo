@@ -622,12 +622,7 @@ function sanitizeCredentialText(value: string): string {
     return '<redacted>';
   }
 
-  if (
-    /content-disposition:[^\r\n]*\bname=["']?[A-Za-z_][A-Za-z\d_.-]*["']?/i.test(value) &&
-    [...value.matchAll(/\bname=["']?([A-Za-z_][A-Za-z\d_.-]*)["']?/gi)].some(([, key]) =>
-      isCredentialAttributeKey(key),
-    )
-  ) {
+  if (hasCredentialNamedPayload(value)) {
     return '<redacted>';
   }
 
@@ -748,6 +743,24 @@ function sanitizeCredentialText(value: string): string {
           : match;
       },
     );
+}
+
+function hasCredentialNamedPayload(value: string): boolean {
+  if (
+    /content-disposition:[^\r\n]*\bname=["']?[A-Za-z_][A-Za-z\d_.-]*["']?/i.test(value) &&
+    [...value.matchAll(/\bname=["']?([A-Za-z_][A-Za-z\d_.-]*)["']?/gi)].some(([, key]) =>
+      isCredentialAttributeKey(key),
+    )
+  ) {
+    return true;
+  }
+  for (const [, attributes] of value.matchAll(/<[\w.-]+\b([^>]*)>/g)) {
+    const key = attributes.match(/\b(?:name|key)=["']([A-Za-z_][A-Za-z\d_.-]*)["']/i)?.[1];
+    if (key && isCredentialAttributeKey(key) && /\bvalue=["']/i.test(attributes)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function redactQuotedCredentials(value: string): string {
