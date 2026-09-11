@@ -73,7 +73,9 @@ const mockResolveTracingOptions = vi.hoisted(() =>
 
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockFormatTraceSummary = vi.hoisted(() => vi.fn(() => 'Trace summary'));
-const mockFormatTraceForMetadata = vi.hoisted(() => vi.fn(() => ({ traceId: 'test-trace-id' })));
+const mockFormatTraceForMetadata = vi.hoisted(() =>
+  vi.fn((): Record<string, unknown> => ({ traceId: 'test-trace-id' })),
+);
 const mockExtractTraceIdFromTraceparent = vi.hoisted(() => vi.fn(() => 'test-trace-id'));
 
 vi.mock('../../../src/redteam/providers/tracingOptions', () => ({
@@ -1393,6 +1395,68 @@ describe('RedteamIterativeMetaProvider', () => {
       // Metadata should not have trace snapshots
       expect(result.metadata.traceSnapshots).toBeUndefined();
     });
+
+    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+      'keeps %s forensic traces out of attacker requests and metadata',
+      async (pluginId) => {
+        const canary = 'SYNTHETIC_META_FORENSIC_SECRET';
+        mockResolveTracingOptions.mockReturnValue({
+          enabled: true,
+          includeInAttack: true,
+          includeInGrading: true,
+          includeInternalSpans: false,
+          maxSpans: 50,
+          maxDepth: 5,
+          maxRetries: 3,
+          retryDelayMs: 500,
+          sanitizeAttributes: true,
+        });
+        mockFetchTraceContext.mockResolvedValue({
+          traceId: 'trace',
+          spans: [{ spanId: 'span', name: canary }],
+          insights: [canary],
+          fetchedAt: 0,
+        });
+        mockFormatTraceSummary.mockReturnValue(canary);
+        mockFormatTraceForMetadata.mockReturnValue({ name: canary });
+        mockGetGraderById.mockReturnValue({
+          getResult: vi.fn().mockResolvedValue({
+            grade: { pass: true, score: 1, reason: 'Continue' },
+            rubric: 'public rubric',
+          }),
+        });
+        const requests: unknown[] = [];
+        mockAgentProvider.callApi = vi.fn(async (input) => {
+          requests.push(JSON.parse(input));
+          return { output: { result: 'Inspect the public report.' } };
+        });
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'Inspect the public report.' },
+            prompt: { raw: '{{query}}', label: 'test' },
+            originalProvider: mockTargetProvider,
+            traceparent: '00-trace123-span456-01',
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 2,
+          options: undefined,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          test: {
+            metadata: { pluginId, purpose: 'Keep forensic values local.' },
+            assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+          },
+          vars: { query: 'Inspect the public report.' },
+        });
+        expect(requests).toHaveLength(2);
+        expect(JSON.stringify(requests)).not.toContain(canary);
+        expect(result.metadata.redteamHistory).toHaveLength(2);
+        expect(JSON.stringify(result.metadata)).not.toContain(canary);
+      },
+    );
 
     it('should include trace summary in cloud request when includeInAttack is true', async () => {
       const cloudRequests: any[] = [];

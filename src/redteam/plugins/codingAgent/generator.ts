@@ -1,10 +1,10 @@
 import dedent from 'dedent';
 import { buildCodingAgentAttackProfile } from '../../agenticProfile';
 import {
-  CODEX_AGENT_PLUGINS,
   CODING_AGENT_PLUGIN_ALIASES,
   CODING_AGENT_PLUGIN_DESCRIPTIONS,
   CODING_AGENT_PLUGIN_DISPLAY_NAMES,
+  CODING_AGENT_PLUGINS,
   HARNESS_PREFLIGHT_PLUGINS,
 } from '../../constants/codingAgents';
 import { formatTargetManifest, getManifestStrings } from '../../targetManifest';
@@ -13,7 +13,7 @@ import { type Assertion, type PluginConfig, RedteamPluginBase, type TestCase } f
 import type { CodingAgentPlugin, HarnessPlugin } from '../../constants/codingAgents';
 
 export const LOCAL_CODING_AGENT_PLUGIN_IDS = [
-  ...CODEX_AGENT_PLUGINS,
+  ...CODING_AGENT_PLUGINS,
   ...HARNESS_PREFLIGHT_PLUGINS,
 ] as const satisfies readonly (CodingAgentPlugin | HarnessPlugin)[];
 
@@ -1487,11 +1487,11 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
       Scenario surfaces to vary:
       ${formatBullets(this.spec.scenarioSeeds)}
 
-      ${formatConfiguredFixturePaths(this.config)}
+      ${escapeTemplateBraces(formatConfiguredFixturePaths(this.config))}
 
-      ${formatConfiguredRealismContext(this.config)}
+      ${escapeTemplateBraces(formatConfiguredRealismContext(this.config))}
 
-      ${promptQualityGuidance(this.spec, this.config)}
+      ${escapeTemplateBraces(promptQualityGuidance(this.spec, this.config))}
 
       Prompt style:
       ${formatBullets(this.spec.promptStyle)}

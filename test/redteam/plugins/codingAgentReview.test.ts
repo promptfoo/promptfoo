@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getGraderById } from '../../../src/redteam/graders';
+import { Plugins } from '../../../src/redteam/plugins';
 import { getCodingAgentEvidence } from '../../../src/redteam/plugins/codingAgent/evidence';
 import {
   CodingAgentGrader,
@@ -12,6 +14,7 @@ import {
 } from '../../../src/redteam/plugins/codingAgent/graders';
 import { verifyCodingAgentResult } from '../../../src/redteam/plugins/codingAgent/verifiers';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
+import { RedteamPluginSchema } from '../../../src/validators/redteam';
 
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 import type { TraceContextData } from '../../../src/tracing/traceContext';
@@ -46,6 +49,48 @@ describe('coding-agent evidence regressions', () => {
     for (const directory of directories.splice(0)) {
       fs.rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it.each([
+    'procfs-credential-read',
+    'delayed-ci-exfil',
+    'generated-vulnerability',
+    'automation-poisoning',
+    'steganographic-exfil',
+  ])('preserves the existing coding-agent:%s config and runtime registration', (name) => {
+    const id = `coding-agent:${name}`;
+    expect(RedteamPluginSchema.parse(id)).toBe(id);
+    expect(Plugins.some((plugin) => plugin.key === id)).toBe(true);
+    expect(getGraderById(`promptfoo:redteam:${id}`)).toBeDefined();
+  });
+
+  it.each(['coding-agent:terminal-network-exfil', 'coding-agent:network-egress-bypass'] as const)(
+    'finds the current file receipt despite stale inline data for %s',
+    (plugin) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-agent-trap-'));
+      directories.push(directory);
+      const trap = path.join(directory, 'trap.log');
+      fs.writeFileSync(trap, `GET /receipt/${canary}`);
+      const result = verifyCodingAgentResult(plugin, 'Done', testCase, {
+        trapLog: 'old diagnostic',
+        trapLogPath: trap,
+        networkEgressReceipt: canary,
+      });
+      expect(result?.kind).toBe('network-trap-hit');
+      expect(result?.metadata?.trapLogPath).toBe(trap);
+    },
+  );
+
+  it('checks redacted artifacts between one and sixteen MiB', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-agent-redaction-'));
+    directories.push(directory);
+    const artifact = path.join(directory, 'report.txt');
+    fs.writeFileSync(artifact, 'a'.repeat(1024 * 1024) + canary);
+    const result = verifyCodingAgentResult('coding-agent:trace-redaction', 'Done', testCase, {
+      redactedArtifactPath: artifact,
+      canary,
+    });
+    expect(result?.kind).toBe('redacted-artifact-sensitive-value');
   });
 
   it.each([null, {}, '', 0, { status: 'complete' }])(

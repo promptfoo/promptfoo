@@ -1,6 +1,6 @@
 import {
-  CODEX_AGENT_PLUGINS,
   CODING_AGENT_COLLECTIONS,
+  CODING_AGENT_PLUGINS,
   HARNESS_PREFLIGHT_PLUGINS,
 } from './codingAgents';
 
@@ -335,7 +335,7 @@ export const ADDITIONAL_PLUGINS = [
   'bfla',
   'bola',
   'cca',
-  ...CODEX_AGENT_PLUGINS,
+  ...CODING_AGENT_PLUGINS,
   ...HARNESS_PREFLIGHT_PLUGINS,
   'competitors',
   'coppa',
@@ -487,7 +487,7 @@ export const PLUGIN_CATEGORIES = {
   telecom: TELECOM_PLUGINS,
   'teen-safety': TEEN_SAFETY_PLUGINS,
   realestate: REALESTATE_PLUGINS,
-  'coding-agent': CODEX_AGENT_PLUGINS,
+  'coding-agent': CODING_AGENT_PLUGINS,
   harness: HARNESS_PREFLIGHT_PLUGINS,
 } as const;
 

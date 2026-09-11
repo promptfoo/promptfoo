@@ -16,6 +16,7 @@ import {
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { getAgenticAttackProfile } from '../agenticProfile';
+import { TRACE_REDACTION_ASSERTIONS } from '../constants/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -202,6 +203,11 @@ export async function runMetaAgentRedteam({
   // Generate unique test run ID
   const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
+  const assertToUse =
+    test?.assert?.find((a) => a.type && a.type.includes(test.metadata?.pluginId)) ??
+    test?.assert?.find((a) => a.type);
+  const redactTrace = TRACE_REDACTION_ASSERTIONS.has(assertToUse?.type ?? '');
+
   // Resolve tracing options
   const tracingOptions = resolveTracingOptions({
     strategyId: 'iterative-meta',
@@ -279,7 +285,7 @@ export async function runMetaAgentRedteam({
             }
           : undefined,
       // Include trace summary from previous iteration if tracing is enabled for attack generation
-      ...(tracingOptions.includeInAttack && previousTraceSummary
+      ...(!redactTrace && tracingOptions.includeInAttack && previousTraceSummary
         ? { traceSummary: previousTraceSummary }
         : {}),
     };
@@ -580,14 +586,6 @@ export async function runMetaAgentRedteam({
     // Update previous trace summary for next iteration's attack generation
     previousTraceSummary = attackTraceSummary;
 
-    let assertToUse = test?.assert?.find(
-      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
-    );
-
-    if (!assertToUse) {
-      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-    }
-
     const { getGraderById } = await import('../graders');
 
     if (test && assertToUse) {
@@ -699,8 +697,8 @@ export async function runMetaAgentRedteam({
       score: 0, // Not used in meta strategy
       graderPassed: graderResult?.pass,
       guardrails: undefined,
-      trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
-      traceSummary: computedTraceSummary,
+      trace: !redactTrace && traceContext ? formatTraceForMetadata(traceContext) : undefined,
+      traceSummary: redactTrace ? undefined : computedTraceSummary,
       // Include input vars for multi-input mode (extracted from current prompt)
       inputVars: currentRenderInputVars,
     });
@@ -749,7 +747,7 @@ export async function runMetaAgentRedteam({
       redteamHistory,
       sessionIds,
       traceSnapshots:
-        traceSnapshots.length > 0
+        !redactTrace && traceSnapshots.length > 0
           ? traceSnapshots.map((t) => formatTraceForMetadata(t))
           : undefined,
       // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)

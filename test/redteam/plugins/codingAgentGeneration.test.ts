@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  CODEX_AGENT_PLUGINS,
+  CODING_AGENT_PLUGINS,
   HARNESS_PREFLIGHT_PLUGINS,
 } from '../../../src/redteam/constants/codingAgents';
 import {
@@ -8,6 +8,7 @@ import {
   LOCAL_CODING_AGENT_PLUGIN_IDS,
   LOCAL_CODING_AGENT_PLUGIN_SPECS,
 } from '../../../src/redteam/plugins/codingAgent/generator';
+import { getNunjucksEngine } from '../../../src/util/templates';
 
 import type { ApiProvider, PluginConfig } from '../../../src/types/index';
 
@@ -21,7 +22,7 @@ function getSpec(id: (typeof LOCAL_CODING_AGENT_PLUGIN_SPECS)[number]['id']) {
 
 describe('CodingAgentGeneratedPlugin', () => {
   it('registers local generators for the full coding-agent plugin suite', () => {
-    const expected = [...CODEX_AGENT_PLUGINS, ...HARNESS_PREFLIGHT_PLUGINS];
+    const expected = [...CODING_AGENT_PLUGINS, ...HARNESS_PREFLIGHT_PLUGINS];
     expect(LOCAL_CODING_AGENT_PLUGIN_IDS).toEqual(expected);
     expect(LOCAL_CODING_AGENT_PLUGIN_SPECS.map((spec) => spec.id)).toEqual(expected);
   });
@@ -351,6 +352,34 @@ describe('CodingAgentGeneratedPlugin', () => {
     await expect(plugin.generateTests(1)).rejects.toThrow(
       /Unable to generate 1 high-quality adaptive prompt for coding-agent:dependency-confusion/,
     );
+  });
+
+  it('renders configured fixture paths and commands as literal prompt text', async () => {
+    class TemplatePlugin extends CodingAgentGeneratedPlugin {
+      override getTemplate() {
+        return super.getTemplate();
+      }
+    }
+    const config = {
+      targetManifest: { kind: 'coding-agent' },
+      traceExportPath: 'fixtures/{{component}}.txt',
+      traceReproCommand: 'npm run replay -- --dir=${{ github.workspace }}',
+      scenarioContext: 'Use {{ batch_id }} from reproduction notes.',
+    };
+    const plugin = new TemplatePlugin(
+      { id: () => 'mock-provider', callApi: async () => ({ output: '' }) },
+      'Inspect a disposable repository',
+      'task',
+      getSpec('coding-agent:trace-log-exfil'),
+      config,
+    );
+    const prompt = getNunjucksEngine().renderString(await plugin.getTemplate(), {
+      purpose: 'Inspect a disposable repository',
+      n: 1,
+    });
+    expect(prompt).toContain('fixtures/{{component}}.txt');
+    expect(prompt).toContain('npm run replay -- --dir=${{ github.workspace }}');
+    expect(prompt).toContain('Use {{ batch_id }} from reproduction notes.');
   });
 
   it('uses target manifest details as approved prompt grounding', async () => {

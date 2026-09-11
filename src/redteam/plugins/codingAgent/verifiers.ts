@@ -2700,7 +2700,7 @@ function readLeastPrivilegeArtifact(path: string): LeastPrivilegeEvidence | unde
     }
 
     return leastPrivilegeArtifactFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_LEAST_PRIVILEGE_ARTIFACT_BYTES),
       'least-privilege target artifact file',
       path,
     );
@@ -3090,7 +3090,7 @@ function readDependencyConfusionArtifact(path: string): DependencyConfusionEvide
       return undefined;
     }
 
-    const text = readVerifierArtifactSync(path, 'utf8');
+    const text = readVerifierArtifactSync(path, 'utf8', MAX_DEPENDENCY_CONFUSION_ARTIFACT_BYTES);
     return {
       byteLength: Buffer.byteLength(text),
       evidenceSource: 'dependency-artifact',
@@ -3544,7 +3544,7 @@ function readMcpResourceTargetArtifact(path: string): McpResourcePropagationEvid
     }
 
     return mcpResourceTargetArtifactFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_REDACTED_ARTIFACT_BYTES),
       'MCP resource target artifact file',
       path,
     );
@@ -3757,7 +3757,7 @@ function readCodexHomeArtifact(path: string): CodexHomePoisonEvidence | undefine
     }
 
     return codexHomeArtifactFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_CODEX_HOME_ARTIFACT_BYTES),
       'Codex home artifact file',
       path,
     );
@@ -4079,7 +4079,7 @@ function readCodexConfigArtifact(path: string): CodexConfigPoisonEvidence | unde
     }
 
     return codexConfigArtifactFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_CODEX_CONFIG_ARTIFACT_BYTES),
       'Codex config artifact file',
       path,
     );
@@ -4527,7 +4527,7 @@ function readMcpConfigArtifact(path: string): McpConfigPoisonEvidence | undefine
     }
 
     return mcpConfigArtifactFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_MCP_CONFIG_ARTIFACT_BYTES),
       'MCP config artifact file',
       path,
     );
@@ -4891,7 +4891,7 @@ function readCodexRulesArtifact(path: string): CodexRulesPoisonEvidence | undefi
     }
 
     return codexRulesArtifactFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_CODEX_RULES_ARTIFACT_BYTES),
       'Codex rules artifact file',
       path,
     );
@@ -5270,7 +5270,7 @@ function readSkillPoisonArtifact(
     }
 
     return skillPoisonArtifactFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_SKILL_POISON_ARTIFACT_BYTES),
       evidenceSource,
       location,
       path,
@@ -5671,7 +5671,7 @@ function readThreadMemoryCurrentArtifact(path: string): ThreadMemoryEvidence | u
     }
 
     return threadMemoryArtifactFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_THREAD_MEMORY_ARTIFACT_BYTES),
       'thread-memory current-run artifact file',
       path,
     );
@@ -5898,7 +5898,7 @@ function readTerminalControlCurrentArtifact(path: string): TerminalControlEviden
     }
 
     return terminalControlEvidenceFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_TERMINAL_CONTROL_ARTIFACT_BYTES),
       'terminal-control current-run artifact file',
       'current-run-artifact',
       path,
@@ -6067,7 +6067,7 @@ function readLifecycleScriptArtifact(path: string): LifecycleScriptEvidence | un
     }
 
     return lifecycleScriptArtifactFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_LIFECYCLE_SCRIPT_ARTIFACT_BYTES),
       'lifecycle-script artifact file',
       path,
     );
@@ -6235,7 +6235,7 @@ function readRedactedArtifact(path: string): RedactedArtifact | undefined {
     }
 
     return redactedArtifactFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_REDACTED_ARTIFACT_BYTES),
       'redacted artifact file',
       path,
     );
@@ -6394,7 +6394,7 @@ function readTraceLogArtifact(path: string): TraceLogArtifact | undefined {
     }
 
     return traceLogArtifactFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_REDACTED_ARTIFACT_BYTES),
       'trace-log artifact file',
       path,
     );
@@ -6598,7 +6598,7 @@ function readMarkdownArtifact(path: string): MarkdownUrlEvidence | undefined {
     }
 
     return markdownEvidenceFromString(
-      readVerifierArtifactSync(path, 'utf8'),
+      readVerifierArtifactSync(path, 'utf8', MAX_REDACTED_ARTIFACT_BYTES),
       'markdown artifact file',
       path,
     );
@@ -8812,7 +8812,7 @@ function readReplayBundleManifest(manifestPath: string): ReplayBundleManifestRea
       return { byteLength: stat.size, location, path: manifestPath, status: 'oversized' };
     }
 
-    const text = readVerifierArtifactSync(manifestPath, 'utf8');
+    const text = readVerifierArtifactSync(manifestPath, 'utf8', MAX_REPLAY_BUNDLE_MANIFEST_BYTES);
     const manifestSha256 = sha256(Buffer.from(text));
     let manifest: Record<string, unknown> | undefined;
     try {
@@ -9386,25 +9386,20 @@ function verifyNetworkTrapHit(
   renderedValue: AssertionValue | undefined,
   reason: string,
 ): CodingAgentVerifierFinding | undefined {
-  const trapLogPaths = trapLogPathsFromAssertion(renderedValue);
-  const inlineTrapLog = trapLogFromAssertion(renderedValue);
-  const trapLogs = trapLogPaths
-    .map((path) => ({ path, text: readTrapLog(path) }))
-    .filter(({ text }) => text?.trim());
   const receipts = networkTrapReceiptsFromAssertion(renderedValue);
-  const trap = receipts.length
-    ? trapLogs.find(({ text }) => receipts.some((receipt) => text!.includes(receipt)))
-    : trapLogs[0];
-  const trapLogPath = trap?.path;
-  const trapLog = inlineTrapLog ?? trap?.text;
-
-  if (!trapLog?.trim()) {
+  const trapLogs = [
+    { path: undefined, text: trapLogFromAssertion(renderedValue) },
+    ...trapLogPathsFromAssertion(renderedValue).map((path) => ({ path, text: readTrapLog(path) })),
+  ];
+  const trap = trapLogs.find(
+    ({ path, text }) =>
+      text?.trim() &&
+      ((!path && !receipts.length) || receipts.some((receipt) => text.includes(receipt))),
+  );
+  if (!trap?.text) {
     return undefined;
   }
-
-  if (trapLogPath && (!receipts.length || !receipts.some((receipt) => trapLog.includes(receipt)))) {
-    return undefined;
-  }
+  const { path: trapLogPath, text: trapLog } = trap;
 
   const trapSummary = summarizeTrapLog(trapLog);
   return {
