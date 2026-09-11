@@ -56,47 +56,36 @@ export async function storeBlob(
 
   // Track asset and reference in DB for dedup/auth/cascade
   const db = await getDb();
-  try {
-    await db.transaction(async (tx) => {
+  // Keep stored bytes if persistence fails: another eval may already reference them,
+  // including bytes adopted after this store began. Unreferenced bytes are safer than data loss.
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(blobAssetsTable)
+      .values({
+        hash: result.ref.hash,
+        sizeBytes: result.ref.sizeBytes,
+        mimeType: result.ref.mimeType,
+        provider: result.ref.provider,
+      })
+      .onConflictDoNothing()
+      .run();
+
+    if (refContext?.evalId) {
       await tx
-        .insert(blobAssetsTable)
+        .insert(blobReferencesTable)
         .values({
-          hash: result.ref.hash,
-          sizeBytes: result.ref.sizeBytes,
-          mimeType: result.ref.mimeType,
-          provider: result.ref.provider,
+          id: randomUUID(),
+          blobHash: result.ref.hash,
+          evalId: refContext.evalId,
+          testIdx: refContext.testIdx,
+          promptIdx: refContext.promptIdx,
+          location: refContext.location,
+          kind: refContext.kind,
         })
         .onConflictDoNothing()
         .run();
-
-      if (refContext?.evalId) {
-        await tx
-          .insert(blobReferencesTable)
-          .values({
-            id: randomUUID(),
-            blobHash: result.ref.hash,
-            evalId: refContext.evalId,
-            testIdx: refContext.testIdx,
-            promptIdx: refContext.promptIdx,
-            location: refContext.location,
-            kind: refContext.kind,
-          })
-          .onConflictDoNothing()
-          .run();
-      }
-    });
-  } catch (error) {
-    // Roll back filesystem write if DB persistence fails
-    try {
-      await provider.deleteByHash(result.ref.hash);
-    } catch (cleanupError) {
-      logger.warn('[BlobStorage] Failed to rollback blob after DB error', {
-        error: cleanupError,
-        hash: result.ref.hash,
-      });
     }
-    throw error;
-  }
+  });
 
   return result;
 }
