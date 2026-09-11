@@ -14,6 +14,7 @@ import {
   EmailValidationError,
   getAuthor,
   getUserEmail,
+  isLoggedIntoCloud,
   promptForEmailUnverified,
 } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
@@ -275,7 +276,9 @@ export async function doGenerateRedteam(
   options: Partial<RedteamCliGenerateOptions>,
 ): Promise<Partial<UnifiedConfig> | null> {
   setupEnv(options.envFile);
-  await runDbMigrations();
+  if (!isLoggedIntoCloud()) {
+    await runDbMigrations();
+  }
   const cacheOverride = options.cache === false ? false : undefined;
   if (cacheOverride === false) {
     logger.info('Cache is disabled');

@@ -11,6 +11,7 @@ import {
   EmailValidationError,
   getAuthor,
   getUserEmail,
+  isLoggedIntoCloud,
   promptForEmailUnverified,
 } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
@@ -61,6 +62,7 @@ type SynthesizeMockResult = {
 const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
 
 function resetCommonMocks() {
+  vi.mocked(isLoggedIntoCloud).mockReset().mockReturnValue(false);
   vi.mocked(runDbMigrations).mockReset().mockResolvedValue(undefined);
   vi.mocked(extractA2AAgentCardInfo).mockReset().mockResolvedValue('');
   vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
@@ -287,6 +289,7 @@ vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => {
     getAuthor: vi.fn(),
     getUserEmail: vi.fn(),
     getUserId: vi.fn().mockReturnValue('test-id'),
+    isLoggedIntoCloud: vi.fn().mockReturnValue(false),
     promptForEmailUnverified: vi.fn().mockResolvedValue({ emailNeedsValidation: false }),
   };
 });
@@ -327,6 +330,21 @@ describe('doGenerateRedteam', () => {
         redteam: {},
       },
     });
+  });
+
+  it('lets cloud-authenticated generation proceed without local storage', async () => {
+    vi.mocked(isLoggedIntoCloud).mockReturnValue(true);
+    vi.mocked(runDbMigrations).mockRejectedValueOnce(new Error('Cannot initialize storage'));
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [{ vars: { input: 'test' }, metadata: { pluginId: 'redteam' } }],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+    await doGenerateRedteam({ config: 'config.yaml', defaultConfig: {}, force: true });
+    expect(runDbMigrations).not.toHaveBeenCalled();
+    expect(synthesize).toHaveBeenCalled();
   });
 
   it('surfaces storage initialization failures before checking probe usage', async () => {

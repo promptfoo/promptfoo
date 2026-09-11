@@ -66,6 +66,8 @@ export type { LoadApiProvidersOptions } from './providers/index';
 export type {
   PluginConfig,
   PluginGraderExample,
+  RedteamGenerateOptions,
+  RedteamRunOptions,
   StrategyConfig,
 } from './redteam/types';
 export type { EnvOverrides } from './types/env';
