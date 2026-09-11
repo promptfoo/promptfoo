@@ -24,7 +24,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-7JBUNhiBDiWSySM/0HHf1YzP8LQODmVckERuH6Oeh6g='
+    integrity: 'sha256-4SxGfLEWEvng3UsupE+JfX9bf/xgHbrz3CWoboF7tOU='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -171,7 +171,7 @@ promptfoo-comment:
 
 GitLab's built-in `CI_JOB_TOKEN` can read merge request notes but cannot create or update them, so a project access token is required. The separate comment job starts in a fresh, unprivileged container with no checkout and accesses the write token only through its `promptfoo-review` environment scope. Repeat any job-level `PROMPTFOO_OUTPUT_DIR` or `PROMPTFOO_SHARE` overrides from the eval job in the comment job because GitLab `needs` does not inherit job variables. The eval job fails closed if that token is exposed to it, removes token-bearing Git metadata before executable providers run, and forces failed assertions to return a nonzero exit code.
 
-Keep the comment job's `changes` rules aligned with the eval so unrelated merge requests skip both jobs. Keep the eval's inherited `after_script` empty: GitLab starts it with the original job credentials.
+Keep the comment job's `changes` rules aligned with the eval so unrelated merge requests skip both jobs. Both jobs override default OIDC ID tokens with `id_tokens: {}` and set the pinned image’s system PATH before invoking executables. Keep the eval's inherited `after_script` empty: GitLab starts it with the original job credentials.
 
 The comment job reads the eval status from GitLab's pipeline jobs API. Set `PROMPTFOO_EVAL_JOB_NAME` to the eval job's exact name if you rename it. With `when: always`, it summarizes successful and failed evals even when no results were written. A per-merge-request resource group serializes overlapping updates, and older pipelines cannot overwrite a newer summary.
 

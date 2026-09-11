@@ -2,6 +2,8 @@
 # Include this file with an immutable commit SHA or GitLab's include:integrity.
 # Use a container executor; Shell and SSH runners ignore the pinned image below.
 .promptfoo-eval:
+  # Do not issue workload identity tokens inherited from the pipeline defaults.
+  id_tokens: {}
   image:
     name: ghcr.io/promptfoo/promptfoo:0.123.0@sha256:e53a3332eee970854cfee19040e88ad9f72161c604d7262c477431af71555afd
     entrypoint: ['']
@@ -19,6 +21,7 @@
       - $PROMPTFOO_CACHE_PATH/
   before_script:
     - |
+      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       : "${PROMPTFOO_OUTPUT_DIR:?PROMPTFOO_OUTPUT_DIR must not be empty}"
       mkdir -p "$PROMPTFOO_OUTPUT_DIR"
 
@@ -41,6 +44,7 @@
       fi
   script:
     - |
+      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       : "${PROMPTFOO_CONFIG:?PROMPTFOO_CONFIG must point to a Promptfoo config file}"
       : "${PROMPTFOO_OUTPUT_DIR:?PROMPTFOO_OUTPUT_DIR must not be empty}"
 
@@ -165,6 +169,7 @@
   allow_failure: false
 
 .promptfoo-comment:
+  id_tokens: {}
   image:
     name: ghcr.io/promptfoo/promptfoo:0.123.0@sha256:e53a3332eee970854cfee19040e88ad9f72161c604d7262c477431af71555afd
     entrypoint: ['']
@@ -185,6 +190,7 @@
   after_script: []
   script:
     - |
+      export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       if [ -z "${CI_MERGE_REQUEST_IID:-}" ] || [ -z "${PROMPTFOO_GITLAB_TOKEN:-}" ]; then
         echo 'Skipping optional Promptfoo merge request comment.'
         exit 0

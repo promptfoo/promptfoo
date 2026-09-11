@@ -22,6 +22,7 @@ interface GitLabJob {
   cache: { key: string; paths: string[] };
   environment?: { action: string; name: string };
   image: { entrypoint: string[]; name: string };
+  id_tokens?: Record<string, { aud: string }>;
   script: string[];
   variables: Record<string, string>;
   resource_group?: string;
@@ -42,6 +43,7 @@ const templateSource = fs.readFileSync(templatePath, 'utf8');
 const template = parse(templateSource) as Record<string, GitLabJob>;
 const job = template['.promptfoo-eval'];
 const commentJob = template['.promptfoo-comment'];
+const imagePath = '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 const describeUnix = process.platform === 'win32' ? describe.skip : describe;
 
 describeUnix('GitLab CI integration example', () => {
@@ -98,6 +100,7 @@ node -e '
     }),
   );
 fs.writeFileSync(directory + "/results.junit.xml", "<testsuites />");
+fs.writeFileSync(process.env.PROMPTFOO_TEST_CAPTURE_DIR + "/oidc-token", process.env.WORKLOAD_ID_TOKEN || "absent");
 if (process.env.PROMPTFOO_TEST_TAMPER_STATUS === "true") {
   fs.writeFileSync(directory + "/job-status.txt", "success");
 }
@@ -121,7 +124,12 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
   ): Promise<{ status: number | null; stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
       const isCommentJob = script === commentJob.script[0];
-      const child = spawn('sh', ['-ec', script], {
+      // Map the pinned image's tools to the fixture tools on the host platform.
+      const fixtureScript = script.replaceAll(
+        `export PATH=${imagePath}`,
+        `export PATH='${binDir}:${path.dirname(process.execPath)}:/usr/bin:/bin'`,
+      );
+      const child = spawn('/bin/sh', ['-ec', fixtureScript], {
         cwd: tempDir,
         env: {
           ...process.env,
@@ -247,6 +255,69 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
 
   it('disables post-eval shells that would reintroduce GitLab credentials', () => {
     expect(job.after_script).toEqual([]);
+  });
+
+  it.each(['mkdir', 'env', 'node', 'promptfoo'])(
+    'ignores a checkout-controlled %s on PATH',
+    async (executable) => {
+      const maliciousBin = path.join(tempDir, 'node_modules', '.bin');
+      fs.mkdirSync(maliciousBin, { recursive: true });
+      fs.writeFileSync(
+        path.join(maliciousBin, executable),
+        '#!/bin/sh\nprintf compromised > "$PROMPTFOO_TEST_CAPTURE_DIR/checkout-command"\nexit 1\n',
+        { mode: 0o755 },
+      );
+      const result = await runEvaluation({
+        PATH: `${maliciousBin}:${binDir}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
+      });
+
+      expect(fs.existsSync(path.join(tempDir, 'checkout-command'))).toBe(false);
+      expect(result.status, result.stderr).toBe(0);
+      expect(fs.readFileSync(path.join(tempDir, 'promptfoo-token'), 'utf8')).toBe('absent\n');
+    },
+  );
+
+  it('does not pass an inherited default ID token to executable eval code', async () => {
+    const defaultTokens = { WORKLOAD_ID_TOKEN: { aud: 'https://workload.example.test' } };
+    // GitLab uses the job keyword in place of default:id_tokens when present.
+    const issuedTokens = Object.fromEntries(
+      Object.keys(job.id_tokens ?? defaultTokens).map((name) => [name, 'test-workload-token']),
+    );
+    const result = await runEvaluation(issuedTokens);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(fs.readFileSync(path.join(tempDir, 'oidc-token'), 'utf8')).toBe('absent');
+  });
+
+  it('ignores checkout-controlled node in the credential-bearing comment job', async () => {
+    await runEvaluation();
+    const maliciousBin = path.join(tempDir, 'malicious-bin');
+    fs.mkdirSync(maliciousBin);
+    fs.writeFileSync(
+      path.join(maliciousBin, 'node'),
+      '#!/bin/sh\nprintf compromised > "$PROMPTFOO_TEST_CAPTURE_DIR/checkout-command"\nexit 1\n',
+      { mode: 0o755 },
+    );
+
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          request.url === '/api/v4/user' ? '{"id":123}' : request.method === 'GET' ? '[]' : '{}',
+        );
+      },
+      async (origin, requests) => {
+        const result = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: `${origin}/api/v4`,
+          CI_SERVER_URL: origin,
+          PATH: `${maliciousBin}:${binDir}:${path.dirname(process.execPath)}:/usr/bin:/bin`,
+        });
+        expect(fs.existsSync(path.join(tempDir, 'checkout-command'))).toBe(false);
+        expect(result.status, result.stderr).toBe(0);
+        expect(requests.at(-1)?.method).toBe('POST');
+        expect(requests.at(-1)?.token).toBe('test-project-token');
+      },
+    );
   });
 
   it.each(['before_script', 'after_script'] as const)(
