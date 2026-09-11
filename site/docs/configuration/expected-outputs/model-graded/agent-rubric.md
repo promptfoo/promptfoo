@@ -40,7 +40,7 @@ Install and authenticate the [OpenAI Codex SDK provider](/docs/providers/openai-
 
 ## Per-test-case workspaces
 
-Top-level strings in the grading provider's `config` support Nunjucks templates, including `{{ variable }}` expressions and `{% if ... %}` blocks. Templates use each test case's final `vars` and the suite's `nunjucksFilters` before the grader is created:
+Top-level strings in the grading provider's `config` support Nunjucks templates, including `{{ variable }}` expressions and `{% if ... %}` blocks. Templates use each test case's final `vars` and the suite's `nunjucksFilters` before the grader is created. The reserved `output` and `rubric` variables contain the actual grading inputs and override test variables with the same names; JSON output is parsed so properties such as `{{output.workspace}}` are available:
 
 ```yaml
 prompts:
@@ -71,7 +71,7 @@ defaultTest:
 
 Prepare an evidence directory for each case before running the eval. Interpolating an undefined variable causes an error rather than silently selecting a shared parent directory; use Nunjucks's `default` filter for intentional fallbacks.
 
-Inline provider definitions, YAML/JSON provider files, and the `provider.text` form are supported. Per-case rendering applies only to `agent-rubric` and top-level config strings. Nested objects/arrays keep the provider's existing behavior, and already-constructed provider instances are used unchanged. Rendered top-level strings must not contain remaining Nunjucks syntax (`{{`, `{%`, or `{#`); such values are rejected so provider runtimes cannot interpret test data as another template.
+Inline provider definitions (including maps keyed by provider ID), YAML/JSON provider files, and the `provider.text` form are supported. File references may use environment variables, such as `file://{{env.GRADER_FILE}}`. Per-case rendering applies only to `agent-rubric` and top-level config strings. Nested objects/arrays keep the provider's existing behavior, and already-constructed provider instances are used unchanged. Rendered top-level strings must not contain remaining Nunjucks syntax (`{{`, `{%`, or `{#`); such values are rejected so provider runtimes cannot interpret test data as another template.
 
 ## Supported agent providers
 
