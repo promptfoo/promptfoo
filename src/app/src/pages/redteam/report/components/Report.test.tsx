@@ -6,7 +6,7 @@ import { callApi } from '@app/utils/api';
 import { ResultFailureReason } from '@promptfoo/types';
 import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import App from './Report';
 import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/types';
@@ -15,19 +15,18 @@ import type { EvaluateResult, GradingResult, ResultsFile } from '@promptfoo/type
 const renderWithProviders = (ui: React.ReactElement) => {
   return render(
     <TooltipProvider>
-      <MemoryRouter>{ui}</MemoryRouter>
+      <MemoryRouter
+        initialEntries={[
+          `${window.location.pathname}${window.location.search}${window.location.hash}`,
+        ]}
+      >
+        {ui}
+      </MemoryRouter>
     </TooltipProvider>,
   );
 };
 
 vi.mock('@app/utils/api');
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: () => vi.fn(),
-  };
-});
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({
     recordEvent: vi.fn(),
@@ -890,16 +889,51 @@ describe('App component target selector rendering', () => {
     expect(nav).toHaveAttribute('aria-label', 'Report sections');
     expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute(
       'href',
-      '#report-overview',
+      expect.stringContaining('#report-overview'),
     );
     expect(screen.getByRole('link', { name: 'Vulnerabilities' })).toHaveAttribute(
       'href',
-      '#report-vulnerabilities',
+      expect.stringContaining('#report-vulnerabilities'),
     );
 
-    const replaceState = vi.spyOn(window.history, 'replaceState');
     await userEvent.click(screen.getByRole('link', { name: 'Overview' }));
-    expect(replaceState).toHaveBeenCalledWith(null, '', '#report-overview');
+    expect(document.getElementById('report-overview')).toHaveFocus();
+  });
+
+  it('preserves report query and router state when selecting a section', async () => {
+    mockCallApi.mockResolvedValue({
+      json: async () => ({ data: createComponentMockEvalData(1, []) }),
+    });
+    const state = { from: 'reports' };
+    const router = createMemoryRouter(
+      [
+        {
+          path: '*',
+          element: (
+            <TooltipProvider>
+              <App />
+            </TooltipProvider>
+          ),
+        },
+      ],
+      {
+        initialEntries: [
+          '/reports',
+          { pathname: '/reports/detail', search: '?evalId=eval%2Fone', state },
+        ],
+        initialIndex: 1,
+      },
+    );
+    render(<RouterProvider router={router} />);
+    await userEvent.click(await screen.findByRole('link', { name: 'Overview' }));
+    expect(router.state.location).toMatchObject({
+      pathname: '/reports/detail',
+      search: '?evalId=eval%2Fone',
+      hash: '#report-overview',
+      state,
+    });
+    await router.navigate(-1);
+    expect(router.state.location.pathname).toBe('/reports');
   });
 
   it('scrolls to a report section from the initial URL hash', async () => {

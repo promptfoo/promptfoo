@@ -245,32 +245,6 @@ function resolveRowDisplayMode(
   };
 }
 
-function getVirtualTableAriaMetadata({
-  hasData,
-  hasExpandedRows,
-  headerRowCount,
-  logicalDataRowCount,
-}: {
-  hasData: boolean;
-  hasExpandedRows: boolean;
-  headerRowCount: number;
-  logicalDataRowCount: number;
-}) {
-  if (!hasData || hasExpandedRows) {
-    return {
-      rowCount: undefined,
-      getHeaderRowIndex: () => undefined,
-      getDataRowIndex: () => undefined,
-    };
-  }
-
-  return {
-    rowCount: headerRowCount + logicalDataRowCount,
-    getHeaderRowIndex: (headerIndex: number) => headerIndex + 1,
-    getDataRowIndex: (dataIndex: number) => headerRowCount + dataIndex + 1,
-  };
-}
-
 export function DataTable<TData, TValue = unknown>({
   columns,
   data,
@@ -728,12 +702,7 @@ export function DataTable<TData, TValue = unknown>({
   const hasData = isServerVirtualized ? serverRowCount > 0 : table.getRowModel().rows.length > 0;
   const headerGroups = table.getHeaderGroups();
   const headerRowCount = headerGroups.length;
-  const virtualTableAria = getVirtualTableAriaMetadata({
-    hasData,
-    hasExpandedRows: Boolean(renderSubComponent),
-    headerRowCount,
-    logicalDataRowCount: virtualizerCount,
-  });
+  const hasExplicitRowIndices = hasData && !renderSubComponent;
 
   if (isLoading) {
     return (
@@ -848,7 +817,9 @@ export function DataTable<TData, TValue = unknown>({
         <tr
           data-index={virtualIndex}
           data-rowindex={virtualIndex ?? row.index}
-          aria-rowindex={virtualTableAria.getDataRowIndex(virtualIndex ?? row.index)}
+          aria-rowindex={
+            hasExplicitRowIndices ? headerRowCount + (virtualIndex ?? row.index) + 1 : undefined
+          }
           ref={virtualIndex === undefined || isPrinting ? undefined : rowVirtualizer.measureElement}
           onClick={activateRow}
           onKeyDown={(event) => {
@@ -950,7 +921,7 @@ export function DataTable<TData, TValue = unknown>({
       key={`server-skeleton-${virtualIndex}`}
       data-index={virtualIndex}
       data-rowindex={virtualIndex}
-      aria-rowindex={virtualTableAria.getDataRowIndex(virtualIndex)}
+      aria-rowindex={hasExplicitRowIndices ? headerRowCount + virtualIndex + 1 : undefined}
       ref={isPrinting ? undefined : rowVirtualizer.measureElement}
       aria-busy={serverIsRowLoading?.(virtualIndex) ?? true}
       className="border-b border-zinc-200 dark:border-zinc-800"
@@ -1074,7 +1045,7 @@ export function DataTable<TData, TValue = unknown>({
         >
           <table
             className="w-full print:text-black"
-            aria-rowcount={virtualTableAria.rowCount}
+            aria-rowcount={hasExplicitRowIndices ? headerRowCount + virtualizerCount : undefined}
             style={{
               tableLayout: 'fixed',
               ...(tableMinWidth ? { minWidth: tableMinWidth } : {}),
@@ -1084,7 +1055,7 @@ export function DataTable<TData, TValue = unknown>({
               {headerGroups.map((headerGroup, headerGroupIndex) => (
                 <tr
                   key={headerGroup.id}
-                  aria-rowindex={virtualTableAria.getHeaderRowIndex(headerGroupIndex)}
+                  aria-rowindex={hasExplicitRowIndices ? headerGroupIndex + 1 : undefined}
                   className="border-b border-zinc-200 dark:border-zinc-800 print:border-gray-300"
                 >
                   {headerGroup.headers.map((header) =>

@@ -47,7 +47,7 @@ import {
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { AlertTriangle, Filter, ListOrdered, Printer, Settings, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
 import Overview from './Overview';
@@ -71,6 +71,7 @@ interface ReportProps {
 
 const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {}) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [evalId, setEvalId] = useState<string | null>(evalIdProp ?? null);
   const [evalData, setEvalData] = useState<ResultsFile | null>(null);
   const [selectedPromptIndex, setSelectedPromptIndex] = useState(0);
@@ -168,10 +169,10 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
   }, []);
 
   useEffect(() => {
-    if (evalData && window.location.hash) {
-      document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
+    if (evalData && location.hash) {
+      document.getElementById(location.hash.slice(1))?.scrollIntoView();
     }
-  }, [evalData]);
+  }, [evalData, location.hash]);
 
   const failuresByPlugin = useMemo(() => {
     if (!evalData) {
@@ -898,18 +899,24 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
               >
                 <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-card p-3 shadow-sm">
                   {reportSections.map((section) => (
-                    <a
+                    <Link
                       key={section.id}
-                      href={`#${section.id}`}
+                      to={{ search: location.search, hash: `#${section.id}` }}
+                      replace
+                      state={location.state}
+                      preventScrollReset
                       onClick={(event) => {
-                        event.preventDefault();
-                        window.history.replaceState(null, '', `#${section.id}`);
-                        document.getElementById(section.id)?.scrollIntoView();
+                        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                          return;
+                        }
+                        const target = document.getElementById(section.id);
+                        target?.focus({ preventScroll: true });
+                        target?.scrollIntoView();
                       }}
                       className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {section.label}
-                    </a>
+                    </Link>
                   ))}
                 </div>
               </nav>
@@ -1013,14 +1020,14 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
             </Card>
           )}
 
-          <section id="report-overview" className="scroll-mt-28">
+          <section id="report-overview" tabIndex={-1} className="scroll-mt-28">
             <Overview
               categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
               plugins={evalData.config.redteam.plugins || []}
               vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
             />
           </section>
-          <section id="report-attack-methods" className="scroll-mt-28">
+          <section id="report-attack-methods" tabIndex={-1} className="scroll-mt-28">
             <StrategyStats
               strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
               failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
@@ -1028,7 +1035,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
               plugins={evalData.config.redteam.plugins || []}
             />
           </section>
-          <section id="report-risk-categories" className="scroll-mt-28">
+          <section id="report-risk-categories" tabIndex={-1} className="scroll-mt-28">
             <RiskCategories
               categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
               evalId={evalId}
@@ -1036,7 +1043,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
               passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
             />
           </section>
-          <section id="report-vulnerabilities" className="scroll-mt-28">
+          <section id="report-vulnerabilities" tabIndex={-1} className="scroll-mt-28">
             <TestSuites
               evalId={evalId}
               categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
@@ -1046,7 +1053,7 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
               vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
             />
           </section>
-          <section id="report-frameworks" className="scroll-mt-28">
+          <section id="report-frameworks" tabIndex={-1} className="scroll-mt-28">
             <FrameworkCompliance
               evalId={evalId}
               categoryStats={categoryStatsForFrameworkCompliance}

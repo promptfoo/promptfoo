@@ -63,9 +63,6 @@ const COLOR_PALETTE = [
 const getPromptLabel = (prompt: { provider?: string } | undefined, promptIdx: number): string =>
   prompt?.provider ? `Prompt ${promptIdx + 1} (${prompt.provider})` : `Prompt ${promptIdx + 1}`;
 
-const formatSummaryScore = (score: number): string =>
-  Number.isInteger(score) ? String(score) : score.toFixed(2);
-
 Chart.register(
   BarController,
   LineController,
@@ -141,11 +138,11 @@ function HistogramChart({ table }: ChartProps) {
       const isLastBin = binIdx === bins.length - 1;
       const upperBound = Number.parseFloat((bin + binSize).toFixed(2));
       const range = isLastBin
-        ? `${formatSummaryScore(bin)} and above`
-        : `${formatSummaryScore(bin)} to ${formatSummaryScore(upperBound)}`;
+        ? `${String(bin)} and above`
+        : `${String(bin)} to ${String(upperBound)}`;
       return { range, counts: datasets.map((dataset) => dataset.data[binIdx]) };
     });
-    const text = `Score distribution across ${totalScores} scored outputs from ${table.head.prompts.length} prompts. Scores range from ${formatSummaryScore(minScore)} to ${formatSummaryScore(maxScore)}. The table lists how many outputs from each prompt fall into each score range.`;
+    const text = `Score distribution across ${totalScores} scored outputs from ${table.head.prompts.length} prompts. Scores range from ${String(minScore)} to ${String(maxScore)}. The table lists how many outputs from each prompt fall into each score range.`;
 
     return { text, promptLabels, rows };
   }, [binnedData, table.head.prompts]);
@@ -376,14 +373,11 @@ function ScatterChart({ table }: ChartProps) {
     const yHigher = pairs.filter((point) => point.y > point.x).length;
     const ties = pairs.length - xHigher - yHigher;
 
-    // Include the actual plotted (x, y) score pairs so plots with identical
-    // direction counts but different coordinates (e.g. [(0, 1), (1, 0)] vs
-    // [(0.49, 0.51), (0.51, 0.49)]) produce distinct non-visual summaries.
     const summaryPairs = pairs.slice(0, 20);
     const pairSummary =
       summaryPairs.length > 0
         ? ` Plotted score pairs as (${promptXLabel}, ${promptYLabel}): ${summaryPairs
-            .map((point) => `(${formatSummaryScore(point.x)}, ${formatSummaryScore(point.y)})`)
+            .map((point) => `(${String(point.x)}, ${String(point.y)})`)
             .join(
               '; ',
             )}${pairs.length > summaryPairs.length ? `; and ${pairs.length - summaryPairs.length} more` : ''}.`

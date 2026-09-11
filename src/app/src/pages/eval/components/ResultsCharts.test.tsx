@@ -999,6 +999,17 @@ describe('ResultsCharts', () => {
       expect(plotA).not.toBe(plotB);
     });
 
+    it('preserves small score differences in scatter summaries', () => {
+      const summary = renderScatterSummary(
+        buildScatterTable([
+          [0.001, 0.002],
+          [0.123456, 0.123457],
+        ]),
+      );
+      expect(summary).toContain('(0.001, 0.002)');
+      expect(summary).toContain('(0.123456, 0.123457)');
+    });
+
     it('gives distinct axis identities when multiple prompts share a provider', () => {
       const summary = renderScatterSummary(buildScatterTable([[0.2, 0.8]], ['echo', 'echo']));
 
