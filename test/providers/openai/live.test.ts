@@ -534,6 +534,102 @@ describe('OpenAiLiveProvider', () => {
     expect(response.isRefusal).toBeUndefined();
   });
 
+  it.each(['Safety service unavailable', 'Moderation service timed out'])(
+    'reports safety infrastructure failure: %s',
+    async (message) => {
+      const result = provider().callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      apiError(socket, { code: 'server_error', message });
+      closed(socket);
+      const response = await result;
+      expect(response.error).toContain(message);
+      expect(response.guardrails).toBeUndefined();
+      expect(response.isRefusal).toBeUndefined();
+    },
+  );
+
+  it('normalizes numeric gateway credentials before redacting errors', async () => {
+    const result = provider({
+      apiBaseUrl: 'https://gateway.example/v1',
+      apiKey: undefined,
+      headers: { 'api-key': 12345678 } as unknown as Record<string, string>,
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    apiError(socket, { code: 'gateway_error', message: 'Rejected 12345678' });
+    closed(socket);
+    const response = await result;
+    expect(socket.options.headers['api-key']).toBe('12345678');
+    expect(response.error).toContain('Rejected [REDACTED]');
+    expect(JSON.stringify(response)).not.toContain('12345678');
+  });
+
+  it.each(['client', 'responses'] as const)(
+    'rejects delegation outside the configured %s mode',
+    async (mode) => {
+      const handler = vi.fn().mockResolvedValue('result');
+      const result = provider({
+        delegation:
+          mode === 'client'
+            ? { type: 'client' }
+            : { type: 'responses', responses: { model: 'gpt-4.1-mini' } },
+        delegationHandler: handler,
+      }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      emit(socket, {
+        type: 'session.delegation.created',
+        offset_ms: 0,
+        delegation: { id: 'unexpected', target: mode === 'client' ? 'responses' : 'client' },
+      });
+      closed(socket);
+      const response = await result;
+      expect(response.error).toContain('delegation target');
+      expect(handler).not.toHaveBeenCalled();
+      expect(response.metadata?.delegations).toEqual([]);
+    },
+  );
+
+  it('rejects terminal backend events without an active response', async () => {
+    const result = provider({
+      delegation: { type: 'responses', responses: { model: 'gpt-4.1-mini' } },
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    backend(socket, {
+      type: 'response.completed',
+      response: {
+        id: 'unexpected',
+        usage: { input_tokens: 100, output_tokens: 10, total_tokens: 110 },
+      },
+    });
+    closed(socket);
+    const response = await result;
+    expect(response.error).toContain('without an active response');
+    expect(response.metadata?.backendResponses).toEqual([]);
+    expect(response.tokenUsage?.numRequests).toBe(1);
+  });
+
+  it('bounds distinct backend response starts across delegations', async () => {
+    const result = provider({
+      maxToolIterations: 1,
+      delegation: { type: 'responses', responses: { model: 'gpt-4.1-mini' } },
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    for (const id of ['one', 'two', 'three']) {
+      emit(socket, {
+        type: 'response.event',
+        delegation_id: id,
+        event: { type: 'response.created', response: { id } },
+      });
+    }
+    closed(socket);
+    expect((await result).error).toContain('backend response limit');
+  });
+
   it('treats moderation interruptions as guardrail refusals without ending the capture', async () => {
     const result = provider().callApi('Hi');
     const socket = await connect();

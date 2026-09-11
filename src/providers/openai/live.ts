@@ -99,9 +99,14 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     url.password = '';
     // A prompt-level apiKey or apiKeyEnvar selects this call's credential.
     const apiKey = this.getApiKey(config);
-    const headers = this.getOpenAiRequestHeaders(config.headers, config);
+    const headers = Object.fromEntries(
+      Object.entries(this.getOpenAiRequestHeaders(config.headers, config)).map(([name, value]) => [
+        name,
+        String(value),
+      ]),
+    );
     const credentialHeaders = Object.entries(headers).filter(
-      ([name, value]) => isLiveCredentialHeader(name) && String(value).trim().length > 0,
+      ([name, value]) => isLiveCredentialHeader(name) && value.trim().length > 0,
     );
     if (!apiKey && (config.apiKeyRequired ?? true) && !credentialHeaders.length && !userinfo) {
       throw new Error(this.getMissingApiKeyErrorMessage(config));

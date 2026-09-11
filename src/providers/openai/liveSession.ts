@@ -80,7 +80,11 @@ const LATE_WORK_ERROR =
   'GPT-Live backend requested work after the capture window ended. Increase responseWindowMs.';
 const CREDENTIAL_HEADER =
   /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i;
-const GUARDRAIL_ERROR = /\b(?:moderation|content[\s_-]*(?:filter|policy)|safety|flagged)\b/i;
+const GUARDRAIL_ERROR_CODES = new Set([
+  'moderation_blocked',
+  'content_policy_violation',
+  'content_filter',
+]);
 
 /** Credential-named headers authenticate compatible gateways and are redacted from diagnostics. */
 export function isLiveCredentialHeader(name: string): boolean {
@@ -158,6 +162,7 @@ export class LiveSession {
   private pendingHandlers = 0;
   private backendTurns = new Map<string, BackendTurn>();
   private finishedResponses = new Set<string>();
+  private backendResponseCount = 0;
   private completedToolCalls = new Set<string>();
   private receivedToolCallCount = 0;
   private handlerController = new AbortController();
@@ -536,10 +541,7 @@ export class LiveSession {
     }
     const command = clientEventId ? this.commands.get(clientEventId) : undefined;
     const rejected = clientEventId ? `rejected ${command?.name ?? 'a client event'}` : undefined;
-    // Codes such as moderation_blocked name a category word by word; identifiers in messages,
-    // such as safety_identifier, don't make an error a safety intervention.
-    const labels = [apiError.code, apiError.type].map((label) => label?.replace(/_/g, ' '));
-    if (GUARDRAIL_ERROR.test([...labels, apiError.message].filter(Boolean).join(' '))) {
+    if ([apiError.code, apiError.type].some((label) => label && GUARDRAIL_ERROR_CODES.has(label))) {
       // Safety interventions are refusals, even when they reject one of promptfoo's commands.
       this.guardrailReason ??= `GPT-Live moderation ${rejected ?? 'interrupted the response'}${detail}`;
     } else if (this.closing && command?.pending) {
@@ -572,7 +574,7 @@ export class LiveSession {
     if (this.delegations.some((entry) => entry.id === delegation.id)) {
       return;
     }
-    if (delegation.target !== 'responses' && delegation.target !== 'client') {
+    if (delegation.target !== (this.options.config.delegation?.type ?? 'client')) {
       this.fail('Invalid GPT-Live delegation target.');
       return;
     }
@@ -646,11 +648,26 @@ export class LiveSession {
       this.fail('Invalid GPT-Live Responses envelope.');
       return;
     }
+    if (this.options.config.delegation?.type !== 'responses') {
+      this.fail('GPT-Live backend event contradicts the configured delegation mode.');
+      return;
+    }
+    const responseLimit = 2 * resolveMaxToolIterations(this.options.config.maxToolIterations);
     if (event.type === 'response.created') {
       if (typeof event.response?.id !== 'string') {
         this.fail('Invalid GPT-Live backend response.');
         return;
       }
+      const turn = this.backendTurns.get(delegationId);
+      if (turn?.id === event.response.id || this.finishedResponses.has(event.response.id)) {
+        return;
+      }
+      // Each accepted delegation can start one response, plus one continuation per tool call.
+      if (this.backendResponseCount >= responseLimit) {
+        this.fail('GPT-Live backend response limit exceeded.');
+        return;
+      }
+      this.backendResponseCount++;
       if (this.closing && !this.backendTurns.has(delegationId)) {
         this.setError(LATE_WORK_ERROR);
       }
@@ -684,13 +701,21 @@ export class LiveSession {
       if (this.finishedResponses.has(response.id)) {
         return;
       }
-      this.finishedResponses.add(response.id);
-      this.recordBackendUsage(response);
       const turn = this.backendTurns.get(delegationId);
-      if (turn?.id && turn.id !== response.id) {
+      if (!turn?.id) {
+        this.fail('GPT-Live terminal backend event arrived without an active response.');
+        return;
+      }
+      if (turn.id !== response.id) {
         this.fail('GPT-Live backend response ID changed unexpectedly.');
         return;
       }
+      if (this.finishedResponses.size >= responseLimit) {
+        this.fail('GPT-Live backend response limit exceeded.');
+        return;
+      }
+      this.finishedResponses.add(response.id);
+      this.recordBackendUsage(response);
       this.backendTurns.delete(delegationId);
       if (event.type !== 'response.completed') {
         this.setError(`GPT-Live backend ${event.type}.`);
