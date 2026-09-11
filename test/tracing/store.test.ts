@@ -600,7 +600,7 @@ describe('TraceStore', () => {
           },
           events: [
             {
-              name: 'tool error',
+              name: 'tool error Bearer event-secret',
               timestamp: 2250,
               attributes: {
                 authorization: 'Bearer event-secret',
@@ -671,7 +671,7 @@ describe('TraceStore', () => {
             },
             events: [
               {
-                name: 'tool error',
+                name: 'tool error <redacted>',
                 timestamp: 2250,
                 attributes: {
                   authorization: '<redacted>',

@@ -55,6 +55,10 @@ const AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS = [
   'agenticEvidence',
   'agentSdkEvidence',
 ] as const;
+const AGENTIC_RUNTIME_PLUGIN_ID_ATTRS = [
+  'promptfoo.agentic.plugin_id',
+  'agentic.plugin_id',
+] as const;
 
 type TraceLikeSpan = {
   attributes?: Record<string, unknown>;
@@ -319,7 +323,8 @@ function observationsShareSpan(a: AgentObservation, b: AgentObservation): boolea
 
 function observationsShareRoute(a: AgentObservation, b: AgentObservation): boolean {
   return Boolean(
-    (a.parentSpanId && b.parentSpanId && a.parentSpanId === b.parentSpanId) ||
+    (a.spanId && b.spanId && a.spanId === b.spanId) ||
+      (a.parentSpanId && b.parentSpanId && a.parentSpanId === b.parentSpanId) ||
       (a.spanId && b.parentSpanId && a.spanId === b.parentSpanId) ||
       (b.spanId && a.parentSpanId && b.spanId === a.parentSpanId),
   );
@@ -644,9 +649,15 @@ function traceAttributesMatchPlugin(
     return false;
   }
 
-  return evidenceCandidateMatchesPlugin(
-    getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS),
-    pluginId,
+  return (
+    evidenceCandidateMatchesPlugin(
+      getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS),
+      pluginId,
+    ) ||
+    (normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)) === pluginId &&
+      parseEvidenceCandidates(getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS)).some(
+        hasVerifierEvidence,
+      ))
   );
 }
 

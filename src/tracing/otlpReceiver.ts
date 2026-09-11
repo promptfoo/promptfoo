@@ -426,8 +426,16 @@ export class OTLPReceiver {
       }
     }
     // `redactedSourceValues` only holds strings, so an undefined statusMessage passes through.
-    const scrubEcho = <T extends string | undefined>(value: T): T =>
-      typeof value === 'string' && redactedSourceValues.has(value) ? ('[REDACTED]' as T) : value;
+    const scrubEcho = <T extends string | undefined>(value: T): T => {
+      if (typeof value !== 'string') {
+        return value;
+      }
+      let scrubbed: string = value;
+      for (const secret of redactedSourceValues) {
+        scrubbed = scrubbed.split(secret).join('[REDACTED]');
+      }
+      return scrubbed as T;
+    };
 
     return {
       ...span,
@@ -782,7 +790,11 @@ export class OTLPReceiver {
               events: (Array.isArray(span.events) ? span.events : []).flatMap((event) =>
                 event &&
                 typeof event === 'object' &&
-                (event.attributes === undefined || Array.isArray(event.attributes))
+                (event.attributes === undefined ||
+                  (Array.isArray(event.attributes) &&
+                    event.attributes.every(
+                      (attribute) => attribute && typeof attribute === 'object',
+                    )))
                   ? [
                       {
                         name: event.name,

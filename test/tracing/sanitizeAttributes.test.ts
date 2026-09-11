@@ -74,4 +74,13 @@ describe('sanitizeTraceAttributes', () => {
       nested: { customer_email: '[REDACTED]', full_input: longToolArguments },
     });
   });
+
+  it('bounds deeply nested attribute arrays', () => {
+    let nested: unknown = 'value';
+    for (let depth = 0; depth < 30; depth++) {
+      nested = [nested];
+    }
+
+    expect(JSON.stringify(sanitizeTraceAttributes({ nested }))).toContain('[TRUNCATED]');
+  });
 });

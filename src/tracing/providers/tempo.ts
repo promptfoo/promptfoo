@@ -35,6 +35,11 @@ interface TempoSpan {
   startTimeUnixNano: string;
   endTimeUnixNano?: string;
   attributes?: Array<{ key: string; value: TempoAttributeValue }>;
+  events?: Array<{
+    name: string;
+    timeUnixNano?: string;
+    attributes?: Array<{ key: string; value: TempoAttributeValue }>;
+  }>;
   status?: { code?: number | string; message?: string };
 }
 
@@ -226,6 +231,17 @@ function transformSpan(
     },
     statusCode: normalizeStatusCode(span.status?.code),
     statusMessage: span.status?.message,
+    events: span.events?.flatMap((event) =>
+      typeof event.name === 'string' && event.name.trim()
+        ? [
+            {
+              name: event.name,
+              timestamp: event.timeUnixNano ? nanoToMs(event.timeUnixNano) : startTime,
+              attributes: attributesToRecord(event.attributes),
+            },
+          ]
+        : [],
+    ),
   };
 }
 

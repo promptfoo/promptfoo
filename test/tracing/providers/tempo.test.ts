@@ -49,6 +49,13 @@ const traceResponse = {
                 },
               ],
               status: { code: 'STATUS_CODE_OK' },
+              events: [
+                {
+                  name: 'tool event',
+                  timeUnixNano: '1704067200500000000',
+                  attributes: [{ key: 'command', value: { stringValue: 'echo fixture' } }],
+                },
+              ],
             },
             {
               traceId: TRACE_ID,
@@ -104,6 +111,13 @@ describe('TempoProvider', () => {
         'gen_ai.usage.total_tokens': 42,
         nested: { enabled: true },
       },
+      events: [
+        {
+          name: 'tool event',
+          timestamp: 1704067200500,
+          attributes: { command: 'echo fixture' },
+        },
+      ],
     });
     expect(result?.spans[1]).toMatchObject({
       spanId: '1123456789abcdef',

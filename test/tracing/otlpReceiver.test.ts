@@ -334,6 +334,7 @@ describe('OTLPReceiver', () => {
                       events: [
                         null,
                         { name: 'bad attributes', attributes: {} },
+                        { name: 'bad attribute entry', attributes: [null] },
                         { name: 'valid event', attributes: [] },
                       ],
                     },

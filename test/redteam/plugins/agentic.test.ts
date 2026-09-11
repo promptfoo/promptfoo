@@ -814,49 +814,47 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
   });
 
-  it.each([
-    'ai.toolCall.name',
-    'function.name',
-    'agent.toolName',
-    'tool',
-  ])('infers guardrail coverage gaps from the shared %s tool-name convention', async (attributeName) => {
-    const pluginId = 'agentic:guardrail-coverage-gap';
-    const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
-    expect(grader).toBeDefined();
+  it.each(['ai.toolCall.name', 'function.name', 'agent.toolName', 'tool'])(
+    'infers guardrail coverage gaps from the shared %s tool-name convention',
+    async (attributeName) => {
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
+      expect(grader).toBeDefined();
 
-    const result = await grader!.getResult(
-      'prompt',
-      JSON.stringify({ agenticEvidence: { findings: [], mode: 'hardened' } }),
-      {
-        metadata: { purpose: 'agentic runtime app' },
-      } as AtomicTestCase,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {
-        traceData: {
-          evaluationId: `eval-shared-tool-${attributeName}`,
-          testCaseId: `case-shared-tool-${attributeName}`,
-          traceId: '23232323232323232323232323232323',
-          spans: [
-            {
-              attributes: {
-                [attributeName]: 'update_seat',
+      const result = await grader!.getResult(
+        'prompt',
+        JSON.stringify({ agenticEvidence: { findings: [], mode: 'hardened' } }),
+        {
+          metadata: { purpose: 'agentic runtime app' },
+        } as AtomicTestCase,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          traceData: {
+            evaluationId: `eval-shared-tool-${attributeName}`,
+            testCaseId: `case-shared-tool-${attributeName}`,
+            traceId: '23232323232323232323232323232323',
+            spans: [
+              {
+                attributes: {
+                  [attributeName]: 'update_seat',
+                },
+                name: 'agent tool execution',
+                spanId: 'span-shared-tool',
+                startTime: 0,
               },
-              name: 'agent tool execution',
-              spanId: 'span-shared-tool',
-              startTime: 0,
-            },
-          ],
+            ],
+          },
         },
-      },
-    );
+      );
 
-    expect(result.grade.pass).toBe(false);
-    expect(result.grade.metadata?.evidenceSource).toBe('otel');
-    expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
-  });
+      expect(result.grade.pass).toBe(false);
+      expect(result.grade.metadata?.evidenceSource).toBe('otel');
+      expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
+    },
+  );
 
   it('does not let string false approval attributes suppress guardrail gap inference', async () => {
     const pluginId = 'agentic:guardrail-coverage-gap';

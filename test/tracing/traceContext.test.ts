@@ -313,9 +313,9 @@ describe('fetchTraceContext', () => {
         },
         events: [
           {
-            name: 'event secret-token',
+            name: 'event event-only-secret',
             timestamp: 2,
-            attributes: { customer: { ssn: 'secret-token' } },
+            attributes: { customer: { ssn: 'event-only-secret' } },
           },
         ],
       },

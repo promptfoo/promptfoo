@@ -64,6 +64,7 @@ function isSensitiveAttributeKey(key: string): boolean {
 export function sanitizeTraceAttributes(
   attributes: Record<string, any> | null | undefined,
   options: AttributeSanitizationOptions = {},
+  depth = 0,
 ): Record<string, any> {
   if (!attributes) {
     return {};
@@ -82,15 +83,18 @@ export function sanitizeTraceAttributes(
     ),
   ];
 
-  const sanitizeValue = (value: any): any => {
+  const sanitizeValue = (value: any, valueDepth = depth): any => {
+    if (valueDepth >= 20) {
+      return '[TRUNCATED]';
+    }
     if (typeof value === 'string') {
       return truncateValues && value.length > 400 ? `${value.slice(0, 400)}…` : value;
     }
     if (Array.isArray(value)) {
-      return value.map(sanitizeValue);
+      return value.map((item) => sanitizeValue(item, valueDepth + 1));
     }
     if (value && typeof value === 'object') {
-      return sanitizeTraceAttributes(value as Record<string, any>, options);
+      return sanitizeTraceAttributes(value as Record<string, any>, options, valueDepth + 1);
     }
     return value;
   };

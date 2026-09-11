@@ -314,6 +314,14 @@ function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanDat
   const redactedValues = new Set<string>();
   const pendingValues: Array<{ original: unknown; sanitized: unknown }> = [
     { original: attributes, sanitized: sanitizedAttributes },
+    ...(span.events ?? []).map((event) => ({
+      original: event.attributes ?? {},
+      sanitized: sanitizeTraceAttributes(event.attributes ?? {}, {
+        redactAttributes,
+        sanitizeSensitiveAttributes: false,
+        truncateValues: false,
+      }),
+    })),
   ];
   while (pendingValues.length > 0) {
     const { original, sanitized } = pendingValues.pop()!;

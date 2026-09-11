@@ -52,12 +52,31 @@ function sanitizeEvents(
   events: TraceSpanEvent[] | null | undefined,
   shouldSanitizeAttributes: boolean,
 ): TraceSpanEvent[] | undefined {
-  return events?.map((event) => ({
-    ...event,
-    attributes: shouldSanitizeAttributes
+  return events?.map((event) => {
+    const attributes = shouldSanitizeAttributes
       ? sanitizeTraceAttributes(event.attributes)
-      : (event.attributes ?? undefined),
-  }));
+      : (event.attributes ?? undefined);
+    if (!shouldSanitizeAttributes || !event.attributes) {
+      return { ...event, attributes };
+    }
+    const secrets: string[] = [];
+    const pending: Array<[unknown, unknown]> = [[event.attributes, attributes]];
+    while (pending.length) {
+      const [raw, safe] = pending.pop()!;
+      if (safe === '<redacted>' && raw != null) {
+        secrets.push(String(raw));
+      } else if (raw && safe && typeof raw === 'object' && typeof safe === 'object') {
+        for (const [key, value] of Object.entries(raw)) {
+          pending.push([value, (safe as Record<string, unknown>)[key]]);
+        }
+      }
+    }
+    return {
+      ...event,
+      name: secrets.reduce((name, secret) => name.split(secret).join('<redacted>'), event.name),
+      attributes,
+    };
+  });
 }
 
 function serializeSpan(
@@ -453,7 +472,8 @@ export class TraceStore {
         if (
           !includeInternalSpans &&
           !hasExplicitFilter &&
-          !isRelevantSpan({ attributes: rawAttributes, statusCode: spanData.statusCode })
+          !isRelevantSpan({ attributes: rawAttributes, statusCode: spanData.statusCode }) &&
+          !row.events?.some((event) => isRelevantSpan({ attributes: event.attributes ?? {} }))
         ) {
           continue;
         }

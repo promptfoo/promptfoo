@@ -292,6 +292,8 @@ function traceAttributeField(
 
   if (
     normalizedAttributeName === 'codex.command' ||
+    normalizedAttributeName === 'command' ||
+    normalizedAttributeName === 'command_name' ||
     normalizedAttributeName.includes('command.line') ||
     normalizedAttributeName.includes('command.name')
   ) {
