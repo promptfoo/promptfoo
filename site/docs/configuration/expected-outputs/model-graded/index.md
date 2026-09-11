@@ -260,17 +260,19 @@ override the grader. There are several ways to do this, depending on your prefer
            provider: openai:gpt-5.6
    ```
 
-:::caution `defaultTest.provider` also sets the grader
+:::caution `defaultTest.provider` also sets the grader for output-based assertions
 
-`defaultTest.provider` is the field that pins the **target model** for every test in a suite. As a
-side-effect it is also consulted as a grader fallback — before the dedicated
-`defaultTest.options.provider` slot — when no explicit grader is configured.
+`defaultTest.provider` is the field that pins the **target model** for every test in a suite.
+For output-based model-graded assertions (`llm-rubric`, `factuality`, `g-eval`,
+`model-graded-closedqa`, `answer-relevance`, etc.) it is also consulted as a grader fallback when
+no explicit grader is configured — **after** `--grader`, `assertion.provider`, and
+`test.options.provider` / `defaultTest.options.provider` have all been checked and found absent.
 
-This means the following config generates responses **and** grades them with `gpt-4.1`:
+In practice this means the following config generates responses **and** grades them with `gpt-4.1`:
 
 ```yaml
 defaultTest:
-  provider: openai:gpt-4.1 # ← also becomes the judge
+  provider: openai:gpt-4.1 # ← also becomes the judge when no grader is set
 tests:
   - assert:
       - type: llm-rubric
@@ -278,10 +280,22 @@ tests:
 ```
 
 To use a dedicated judge while still pinning the target, set `defaultTest.options.provider`
-separately (option 2 above) or use `--grader` on the CLI. Only the
-`defaultTest.options.provider` / `test.options.provider` slots are documented grader
-configuration points; `defaultTest.provider` is an undocumented fallback that exists purely
-for backwards compatibility.
+(option 2 above) or pass `--grader` on the CLI:
+
+```yaml
+defaultTest:
+  provider: openai:gpt-4.1 # target model
+  options:
+    provider: openai:gpt-5.6 # explicit judge — takes precedence over the fallback
+```
+
+**Notes:**
+
+- This fallback applies to the output-based assertions listed above. `agent-rubric` and
+  `search-rubric` use capability-specific provider selection and are not affected.
+- For **red-team** runs (`promptfoo redteam run`), grader selection follows a separate code path
+  (`RedteamProviderManager`). Neither `defaultTest.options.provider` nor `--grader` is guaranteed
+  to override the judge there; consult the red-team configuration docs for the correct override.
 
 :::
 
