@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
-import { createSelectedToolErrorTarget } from '../../util/selectedToolErrorTarget';
+import {
+  createPredispatchAbortTarget,
+  createSelectedToolErrorTarget,
+} from '../../util/selectedToolErrorTarget';
 
 import type { CallApiContextParams, ProviderResponse } from '../../../src/types/index';
 
@@ -28,7 +31,10 @@ vi.mock('../../../src/util/time', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../../src/redteam/providers/shared', () => ({
+vi.mock('../../../src/redteam/providers/shared', async (importOriginal) => ({
+  isTargetCallAbortError: (
+    await importOriginal<typeof import('../../../src/redteam/providers/shared')>()
+  ).isTargetCallAbortError,
   redteamProviderManager: {
     getProvider: vi.fn(),
   },
@@ -72,6 +78,44 @@ describe('RedteamIterativeImageProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('preserves caller reason at target entry through the image outer catch', async () => {
+    const reason = Object.freeze(
+      Object.assign(new Error('caller stopped at target entry'), {
+        name: 'AbortException',
+      }),
+    );
+    const fixture = createPredispatchAbortTarget(reason);
+    const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+      '../../../src/redteam/providers/shared',
+    );
+    vi.mocked(getTargetResponse).mockReset().mockImplementation(shared.getTargetResponse);
+    mockRedteamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+      options?.abortSignal?.throwIfAborted();
+      fixture.events.push('attacker response');
+      return { output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }) };
+    });
+    try {
+      const provider = new RedteamIterativeProvider({ injectVar: 'goal' });
+      const outcome = await fixture.run(() =>
+        provider.callApi(
+          'Say hello',
+          {
+            originalProvider: fixture.target,
+            vars: { goal: 'Say hello' },
+            prompt: { raw: '{{goal}}', label: 'greeting' },
+          },
+          { abortSignal: fixture.controller.signal },
+        ),
+      );
+      await fixture.expectRejected(outcome);
+      expect(fixture.events).toEqual(['attacker response', 'target entered', 'caller abort']);
+      expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+    } finally {
+      await fixture.cleanup();
+      vi.mocked(getTargetResponse).mockReset();
+    }
   });
 
   it('finalizes a completed target error before another canceled image iteration', async () => {

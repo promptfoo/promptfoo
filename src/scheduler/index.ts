@@ -15,7 +15,10 @@ export {
   parseRateLimitHeaders,
   parseRetryAfter,
 } from './headerParser';
-export { getProviderCallTracingContext } from './providerCallExecutionContext';
+export {
+  getProviderCallExecutionContext,
+  getProviderCallTracingContext,
+} from './providerCallExecutionContext';
 // Provider state
 export { ProviderRateLimitState } from './providerRateLimitState';
 // Provider wrapper
@@ -29,6 +32,7 @@ export {
 export { getRateLimitKey } from './rateLimitKey';
 // Core exports
 export { createRateLimitRegistry, RateLimitRegistry } from './rateLimitRegistry';
+export { composeResponseHeadersObservers } from './responseHeadersObserver';
 // Retry policy
 export {
   DEFAULT_RETRY_POLICY,

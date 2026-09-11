@@ -2,13 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RedteamIterativeProvider, {
   runRedteamConversation,
 } from '../../../src/redteam/providers/iterative';
+import { wrapProviderWithRateLimiting } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import * as traceContext from '../../../src/tracing/traceContext';
 import {
   createMockProvider,
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
-import { createSelectedToolErrorTarget } from '../../util/selectedToolErrorTarget';
+import {
+  createPredispatchAbortTarget,
+  createSelectedToolErrorTarget,
+} from '../../util/selectedToolErrorTarget';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
@@ -148,6 +153,85 @@ describe('RedteamIterativeProvider', () => {
       }
     });
   });
+
+  it.each(['AbortException', 'AbortError', 'string'] as const)(
+    'preserves caller reason at target entry after render: %s',
+    async (kind) => {
+      const reason =
+        kind === 'string'
+          ? 'caller stopped at target render'
+          : Object.freeze(
+              Object.assign(new Error('caller stopped at target render'), { name: kind }),
+            );
+      const fixture = createPredispatchAbortTarget(reason, false);
+      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+      mockRedteamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        fixture.events.push('attacker response');
+        return {
+          output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
+        };
+      });
+      const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+      const strategy: ApiProvider = {
+        id: () => 'fixture-real-iterative-render',
+        callApi: (_prompt, _context, options) =>
+          runRedteamConversation({
+            prompt: { raw: '{{goal | stopBeforeTarget}}', label: 'greeting' },
+            filters: {
+              stopBeforeTarget: (value: string) => {
+                fixture.events.push('target render');
+                fixture.cancel();
+                return value;
+              },
+            },
+            vars: { goal: 'Say hello' },
+            redteamProvider: mockRedteamProvider,
+            gradingProvider: mockRedteamProvider,
+            targetProvider: fixture.target,
+            injectVar: 'goal',
+            numIterations: 2,
+            options,
+            excludeTargetOutputFromAgenticAttackGeneration: false,
+          }),
+      };
+      try {
+        const wrapped = wrapProviderWithRateLimiting(strategy, registry);
+        const outcome = await fixture.run(() =>
+          wrapped.callApi('', undefined, {
+            abortSignal: fixture.controller.signal,
+          }),
+        );
+        await fixture.expectRejected(outcome);
+        expect(fixture.events).toEqual([
+          'attacker response',
+          'target render',
+          'caller abort',
+          'target entered',
+        ]);
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+        expect(Object.values(registry.getMetrics())).toEqual([
+          expect.objectContaining({
+            totalRequests: 1,
+            completedRequests: 0,
+            failedRequests: 1,
+            activeRequests: 0,
+            queueDepth: 0,
+            retriedRequests: 0,
+            rateLimitHits: 0,
+          }),
+        ]);
+      } finally {
+        registry.dispose();
+        await fixture.cleanup();
+        mockGetTargetResponse.mockReset();
+      }
+    },
+  );
 
   it.each(['pending', 'success'] as const)(
     'keeps %s tool cancellation rejected instead of returning a stale target',

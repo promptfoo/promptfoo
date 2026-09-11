@@ -57,6 +57,7 @@ import {
   getLastMessageContent,
   getTargetResponse,
   isConversationEndedResponse,
+  isTargetCallAbortError,
   isValidChatMessageArray,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
@@ -762,7 +763,7 @@ export class CrescendoProvider implements ApiProvider {
         logger.debug(`[Crescendo] Continuing to round ${roundNum + 1}`);
       } catch (error) {
         // Re-throw abort errors to properly cancel the operation
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (isTargetCallAbortError(error, options?.abortSignal)) {
           logger.debug('[Crescendo] Operation aborted');
           throw error;
         }

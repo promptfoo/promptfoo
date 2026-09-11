@@ -112,6 +112,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   config: OpenAiCompletionOptions;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
+  private initializationPending = false;
   private initializationWaiters = 0;
   private lastInitializationWaitCancelled = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
@@ -127,7 +128,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     this.config = options.config ? { ...options.config } : {};
 
     if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
+      this.initializationPending = true;
+      this.initializationPromise = this.initializeMCP().finally(() => {
+        this.initializationPending = false;
+      });
       // A canceled call may return before awaiting this shared initialization.
       void this.initializationPromise.catch(() => undefined);
     }
@@ -156,7 +160,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           }
         }
       })();
-      if (this.lastInitializationWaitCancelled && this.initializationWaiters === 0) {
+      if (
+        this.initializationPending &&
+        this.lastInitializationWaitCancelled &&
+        this.initializationWaiters === 0
+      ) {
         // Teardown must not rejoin startup abandoned by its last caller. The
         // shared work still owns eventual resource cleanup, including late failure.
         this.mcpClient = null;

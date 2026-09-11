@@ -21,6 +21,7 @@ import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getTargetResponse,
+  isTargetCallAbortError,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
@@ -577,7 +578,7 @@ async function runRedteamConversation({
       }
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (isTargetCallAbortError(err, options?.abortSignal)) {
         throw err;
       }
       logger.error(`Iteration ${i + 1} failed: ${err}`);

@@ -7,8 +7,14 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import { isCallerAbortError } from '../../providers/shared';
 import {
+  composeResponseHeadersObservers,
+  createProviderRateLimitOptions,
+  getProviderCallExecutionContext,
   getProviderCallTracingContext,
+  getRateLimitKey,
+  isRateLimitWrapped,
   type RateLimitRegistry,
   wrapProviderWithRateLimiting,
 } from '../../scheduler';
@@ -497,14 +503,48 @@ export function callTargetProvider(
   context?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
+  const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  if (!tracingContext) {
-    return targetProvider.callApi(targetPrompt, context, options);
+  const invoke = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
+    const targetOptions = onResponseHeaders
+      ? {
+          ...options,
+          onResponseHeaders: composeResponseHeadersObservers(
+            onResponseHeaders,
+            options?.onResponseHeaders,
+          ),
+        }
+      : options;
+    const call = (callContext?: CallApiContextParams) =>
+      targetProvider.callApi(targetPrompt, callContext, targetOptions);
+    return tracingContext
+      ? tracingContext.withProviderSpan({ provider: targetProvider, callContext: context }, call)
+      : call(context);
+  };
+  const registry = executionContext?.rateLimitRegistry;
+  const activeProvider = executionContext?.rateLimitProvider;
+  // The evaluator already owns the slot when a same-pool override delegates.
+  // A different raw target needs its own observer; preserve the original object
+  // for rendering, tracing and the actual call receiver.
+  if (
+    registry &&
+    !isRateLimitWrapped(targetProvider) &&
+    (!activeProvider || getRateLimitKey(activeProvider) !== getRateLimitKey(targetProvider))
+  ) {
+    return registry.execute(
+      targetProvider,
+      invoke,
+      createProviderRateLimitOptions(options?.abortSignal),
+    );
   }
+  return invoke();
+}
 
-  return tracingContext.withProviderSpan(
-    { provider: targetProvider, callContext: context },
-    async (callContext) => targetProvider.callApi(targetPrompt, callContext, options),
+/** Preserve caller cancellation across target and strategy error accounting. */
+export function isTargetCallAbortError(error: unknown, signal?: AbortSignal): boolean {
+  return (
+    (error instanceof Error && error.name === 'AbortError') ||
+    isCallerAbortError(error, signal, { requireReasonMatch: true })
   );
 }
 
@@ -553,7 +593,7 @@ export async function getTargetResponse(
     targetRespRaw = await callTargetProvider(targetProvider, targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (isTargetCallAbortError(error, options?.abortSignal)) {
       throw error;
     }
     return {

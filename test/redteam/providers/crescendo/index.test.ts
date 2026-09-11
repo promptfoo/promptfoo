@@ -6,7 +6,10 @@ import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
 import * as traceContext from '../../../../src/tracing/traceContext';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
-import { createSelectedToolErrorTarget } from '../../../util/selectedToolErrorTarget';
+import {
+  createPredispatchAbortTarget,
+  createSelectedToolErrorTarget,
+} from '../../../util/selectedToolErrorTarget';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
 import type { ProviderResponse } from '../../../../src/types/providers';
@@ -380,6 +383,55 @@ describe('CrescendoProvider', () => {
 
     expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
     expect(fetchTraceContextSpy).not.toHaveBeenCalled();
+  });
+
+  it('preserves caller reason at target entry through the crescendo outer catch', async () => {
+    const reason = Object.freeze(
+      Object.assign(new Error('caller stopped at target entry'), {
+        name: 'AbortException',
+      }),
+    );
+    const fixture = createPredispatchAbortTarget(reason);
+    vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('Say hello.');
+    mockRedTeamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+      options?.abortSignal?.throwIfAborted();
+      fixture.events.push('attacker response');
+      return {
+        output: JSON.stringify({
+          generatedQuestion: 'Say hello.',
+          rationaleBehindJailbreak: 'Harmless entry fixture',
+          lastResponseSummary: 'A greeting',
+        }),
+      };
+    });
+    try {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+
+        maxTurns: 2,
+        maxBacktracks: 0,
+        redteamProvider: mockRedTeamProvider,
+        stateful: true,
+      });
+      const outcome = await fixture.run(() =>
+        provider.callApi(
+          'Say hello.',
+          {
+            originalProvider: fixture.target,
+            vars: { objective: 'Say hello.' },
+            prompt: { raw: '{{objective}}', label: 'greeting' },
+          },
+          { abortSignal: fixture.controller.signal },
+        ),
+      );
+      await fixture.expectRejected(outcome);
+      expect(fixture.events).toEqual(['attacker response', 'target entered', 'caller abort']);
+      expect(mockRedTeamProvider.callApi).toHaveBeenCalledOnce();
+      expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+      expect(tryUnblocking).not.toHaveBeenCalled();
+    } finally {
+      await fixture.cleanup();
+    }
   });
 
   it.each(['normal', 'unblocking'] as const)(
@@ -2763,7 +2815,7 @@ describe('CrescendoProvider - Chat Template Support', () => {
     "content": "You are a helpful assistant"
   },
   {
-    "role": "user", 
+    "role": "user",
     "content": "{{ user_input }}"
   }
 ]`;

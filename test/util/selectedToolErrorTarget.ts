@@ -174,3 +174,75 @@ export function createSelectedToolErrorTarget(
     },
   };
 }
+
+/** Real Chat entry and shared-catch fixture; no completed response or tool is fabricated. */
+export function createPredispatchAbortTarget(reason: Error | string, cancelOnEntry = true) {
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  const controller = new AbortController();
+  const descriptors =
+    reason instanceof Error ? Object.getOwnPropertyDescriptors(reason) : undefined;
+  const events: string[] = [];
+  const target = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+    config: {
+      apiBaseUrl: 'https://predispatch-abort.fixture.test/v1',
+      apiKey: 'fixture-key',
+      maxRetries: 0,
+    },
+  });
+  function cancel() {
+    events.push('caller abort');
+    controller.abort(reason);
+  }
+  const originalCall = target.callApi.bind(target);
+  const calls = vi.spyOn(target, 'callApi').mockImplementation((...args) => {
+    events.push('target entered');
+    if (cancelOnEntry) {
+      cancel();
+    }
+    // Preserve the actual receiver, arguments and promise. Chat owns the rejection.
+    return originalCall(...args);
+  });
+  const fetch = vi
+    .spyOn(globalThis, 'fetch')
+    .mockRejectedValue(new Error('Unexpected target HTTP'));
+  return {
+    target,
+    controller,
+    events,
+    cancel,
+    run<T>(call: () => Promise<T>) {
+      return withCacheEnabled(false, call).then(
+        (value) => ({ value, error: undefined }),
+        (error: unknown) => ({ value: undefined, error }),
+      );
+    },
+    async expectRejected(outcome: { value: unknown; error: unknown }) {
+      expect(calls).toHaveBeenCalledOnce();
+      expect(fetch).not.toHaveBeenCalled();
+      const entry = await calls.mock.results[0].value.then(
+        (value: ProviderResponse) => ({ value, error: undefined }),
+        (error: unknown) => ({ value: undefined, error }),
+      );
+      expect(entry.value).toBeUndefined();
+      if (reason instanceof Error) {
+        expect(entry.error).toBe(reason);
+        expect(Object.getOwnPropertyDescriptors(reason)).toEqual(descriptors);
+      } else {
+        expect(entry.error).toMatchObject({ name: 'AbortError', message: reason, cause: reason });
+      }
+      // A response with tokenUsage.numRequests=1 is not an acceptable cancellation.
+      expect(outcome.value, JSON.stringify(outcome.value)).toBeUndefined();
+      expect(outcome.error).toBe(entry.error);
+      expect(controller.signal.reason).toBe(reason);
+      expect(getEventListeners(controller.signal, 'abort')).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+    async cleanup() {
+      controller.abort();
+      await target.cleanup();
+      calls.mockRestore();
+      fetch.mockRestore();
+      vi.useRealTimers();
+    },
+  };
+}

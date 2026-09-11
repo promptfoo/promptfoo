@@ -488,6 +488,100 @@ describe('Chat MCP caller lifetime', () => {
     }
   });
 
+  it('awaits initialized MCP cleanup after a later pre-aborted caller', async () => {
+    vi.mocked(Client.prototype.listTools).mockResolvedValue({ tools: [] });
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            { message: { role: 'assistant', content: 'initialized' }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    const closing = createDeferred<void>();
+    const close = createDeferred<void>();
+    vi.mocked(Client.prototype.close).mockImplementation(() => {
+      closing.resolve();
+      return close.promise;
+    });
+    // Keep the original MCP cleanup promise observable even if Chat detaches it.
+    const mcpCleanup = vi.spyOn(MCPClient.prototype, 'cleanup');
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: {
+        apiKey: 'fixture-key',
+        maxRetries: 0,
+        mcp: { enabled: true, server: { command: 'fixture-mcp' } },
+      },
+    });
+    const controller = new AbortController();
+    const reason = Object.assign(new Error('second caller was already cancelled'), {
+      name: 'AbortError',
+    });
+    let cleanup: Promise<void> | undefined;
+    let cleanupSettled = false;
+    let cleanupError: unknown;
+
+    try {
+      await expect(target.callApi('first')).resolves.toMatchObject({ output: 'initialized' });
+      expect(Client.prototype.connect).toHaveBeenCalledOnce();
+      expect(Client.prototype.listTools).toHaveBeenCalledOnce();
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+
+      controller.abort(reason);
+      const stopped = observe(
+        target.callApi('second', undefined, { abortSignal: controller.signal }),
+      );
+      await stopped.done;
+      expect(stopped.state.error).toBe(reason);
+      expect(stopped.state.value).toBeUndefined();
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+
+      cleanup = target.cleanup().then(
+        () => {
+          cleanupSettled = true;
+        },
+        (error: unknown) => {
+          cleanupSettled = true;
+          cleanupError = error;
+        },
+      );
+      await closing.promise;
+      await nextTurn();
+      expect(cleanupSettled).toBe(false);
+      expect(cleanupError).toBeUndefined();
+      expect(mcpCleanup).toHaveBeenCalledOnce();
+      expect(Client.prototype.close).toHaveBeenCalledOnce();
+      expect(StdioClientTransport.prototype.close).toHaveBeenCalledOnce();
+
+      close.resolve();
+      await cleanup;
+      expect(cleanupSettled).toBe(true);
+      expect(cleanupError).toBeUndefined();
+      const cleanedClient = mcpCleanup.mock.contexts[0];
+      if (!(cleanedClient instanceof MCPClient)) {
+        throw new Error('Expected the original MCP client cleanup receiver');
+      }
+      expect(cleanedClient.connectedServers).toEqual([]);
+      expect(cleanedClient.getAllTools()).toEqual([]);
+      await expect(target.cleanup()).resolves.toBeUndefined();
+      expect(mcpCleanup).toHaveBeenCalledOnce();
+      expect(Client.prototype.connect).toHaveBeenCalledOnce();
+      expect(Client.prototype.close).toHaveBeenCalledOnce();
+      expect(StdioClientTransport.prototype.close).toHaveBeenCalledOnce();
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      expect(stopped.state.error).toBe(reason);
+    } finally {
+      close.resolve();
+      await cleanup;
+      // Join the real closure even when the old public cleanup returned too soon.
+      await mcpCleanup.mock.results[0]?.value;
+      await target.cleanup();
+    }
+  });
+
   it('releases registered resources after partial initialization fails and preserves that error', async () => {
     const connected: Array<{ client: Client; transport: unknown }> = [];
     const connectionFailure = new Error('second MCP connection failed');

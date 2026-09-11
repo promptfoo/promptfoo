@@ -36,6 +36,7 @@ import {
   getLastMessageContent,
   getTargetResponse,
   isConversationEndedResponse,
+  isTargetCallAbortError,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
   runRedteamGrader,
@@ -656,7 +657,7 @@ export class CustomProvider implements ApiProvider {
         logger.debug('[Custom] Jailbreak Unsuccessful, continuing to next round');
       } catch (error) {
         // Re-throw abort errors to properly cancel the operation
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (isTargetCallAbortError(error, options?.abortSignal)) {
           logger.debug('[Custom] Operation aborted');
           throw error;
         }

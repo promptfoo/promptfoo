@@ -1099,9 +1099,13 @@ async function callActiveProvider({
             async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
           )
         : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-    return testSuite?.tracing
-      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
-      : invoke();
+    return withProviderCallExecutionContext(
+      { abortSignal, rateLimitRegistry, rateLimitProvider: activeProvider },
+      () =>
+        testSuite?.tracing
+          ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
+          : invoke(),
+    );
   };
   const response = rateLimitRegistry
     ? await rateLimitRegistry.execute(
