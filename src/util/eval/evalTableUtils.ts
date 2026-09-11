@@ -7,6 +7,7 @@ import type {
   EnvOverrides,
   EvalResultsFilterMode,
   EvalTableDTO,
+  EvaluateTable,
   EvaluateTableRow,
   Prompt,
 } from '../../types/index';
@@ -271,7 +272,7 @@ type StreamRow = {
     gradingResult?: { reason?: string; comment?: string } | null;
     metadata?: Record<string, unknown>;
   } | null>;
-  test: { description?: string };
+  test: { description?: string; vars?: Record<string, unknown> };
 };
 
 /**
@@ -307,7 +308,7 @@ function batchToStreamRows(
           return value === undefined ? '' : String(value);
         }),
         outputs: new Array(numPrompts).fill(null),
-        test: { description: result.testCase?.description },
+        test: { description: result.testCase?.description, vars: result.testCase?.vars },
       };
       rowsByTestIdx.set(result.testIdx, row);
     }
@@ -745,6 +746,8 @@ export async function generateEvalCsv(
 export interface StreamCsvOptions {
   /** Whether this is a redteam eval */
   isRedteam?: boolean;
+  /** Optional artifact projection, applied to the header and each bounded batch. */
+  projectTable?: (table: EvaluateTable) => EvaluateTable;
   /** Callback to write a chunk of CSV data */
   write: (data: string) => void | Promise<void>;
 }
@@ -762,7 +765,7 @@ export interface StreamCsvOptions {
  * @param options - Streaming options including the write callback
  */
 export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Promise<void> {
-  const { isRedteam = false, write } = options;
+  const { isRedteam = false, write, projectTable } = options;
   const env = eval_.config?.env;
   const varNames = eval_.vars;
   const prompts = eval_.prompts;
@@ -803,7 +806,10 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
       : [];
   }
 
-  const headers = buildCsvHeaders(varNames, prompts, {
+  const headerPrompts = projectTable
+    ? projectTable({ head: { vars: varNames, prompts }, body: [] }).head.prompts
+    : prompts;
+  const headers = buildCsvHeaders(varNames, headerPrompts, {
     hasDescriptions,
     isRedteam,
     namedScoreNamesByPrompt,
@@ -812,7 +818,13 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
 
   for await (const batchResults of eval_.fetchResultsBatched()) {
     const rows = batchToStreamRows(batchResults, varNames, numPrompts);
-    const csvRows = rows.map((row) =>
+    const projectedRows = projectTable
+      ? projectTable({
+          head: { vars: varNames, prompts },
+          body: rows as unknown as EvaluateTableRow[],
+        }).body
+      : rows;
+    const csvRows = projectedRows.map((row) =>
       tableRowToCsvValues(row as unknown as EvaluateTableRow, {
         hasDescriptions,
         isRedteam,

@@ -530,6 +530,7 @@ function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
         const projectedAttributes = { ...span.attributes };
         if (shouldStripPromptText) {
           delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
+          delete projectedAttributes[PromptfooAttributes.PROMPT_LABEL];
         }
         if (shouldStripResponseOutput) {
           delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
@@ -792,7 +793,7 @@ export async function writeOutput(
   options: OutputOptions = {},
 ) {
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
-    const table = await evalRecord.getTable();
+    const table = sanitizeTableForArtifact(await evalRecord.getTable());
     invariant(table, 'Table is required');
     const rows = table.body.map((row) => {
       const csvRow: CsvRow = {};
@@ -828,6 +829,7 @@ export async function writeOutput(
     try {
       await streamEvalCsv(evalRecord, {
         isRedteam: Boolean(evalRecord.config.redteam),
+        projectTable: sanitizeTableForArtifact,
         write: async (data: string) => {
           await fileHandle.write(data);
         },

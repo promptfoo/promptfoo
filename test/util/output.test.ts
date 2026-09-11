@@ -1,6 +1,7 @@
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
+import { parse as parseCsv } from 'csv-parse/sync';
 import { XMLParser } from 'fast-xml-parser';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -272,6 +273,113 @@ describe('writeOutput', () => {
     expect(fsPromises.open).toHaveBeenCalledWith(outputPath, 'w');
     expect(mockFileHandle.write).toHaveBeenCalled(); // Headers written
     expect(mockFileHandle.close).toHaveBeenCalled();
+  });
+
+  describe.each(['csv', 'sheets'] as const)('artifact boundary %s', (format) => {
+    it.each(['none', 'prompt', 'output', 'vars', 'grading', 'metadata', 'all'])(
+      'honors independent %s flags while preserving table accounting',
+      async (flag) => {
+        const strips = (category: string) => flag === 'all' || flag === category;
+        const prompt = createCompletedPrompt('table header canary', {
+          provider: 'echo',
+          metrics: createPromptMetrics({
+            namedScores: { quality: 0.5 },
+            namedScoresCount: { quality: 1 },
+          }),
+        });
+        const eval_ = new Eval(
+          { redteam: { plugins: [], strategies: [] } },
+          { prompts: [prompt], vars: ['subject'] },
+        );
+        for (let testIdx = 0; testIdx < 2; testIdx++) {
+          await eval_.addResult(
+            createEvaluateResult({
+              testIdx,
+              prompt,
+              vars: { subject: 'table variable canary' },
+              testCase: {
+                vars: { subject: 'table variable canary' },
+                description: `Row ${testIdx}`,
+              },
+              response: { output: 'table output canary' },
+              metadata: {
+                redteamHistory: [{ prompt: 'csv history prompt', output: 'csv history output' }],
+              },
+              gradingResult: createGradingResult({ reason: 'table grade canary' }),
+              score: 0.5,
+              namedScores: { quality: 0.5 },
+            }),
+          );
+        }
+        // Force two actual model batches without changing their contents.
+        const fetchBatches = eval_.fetchResultsBatched.bind(eval_);
+        vi.spyOn(eval_, 'fetchResultsBatched').mockImplementation(() => fetchBatches(1));
+        if (format === 'sheets') {
+          eval_.oldResults = {
+            ...createLegacyV2Summary(),
+            results: [],
+            table: await eval_.getTable(),
+          } as unknown as NonNullable<Eval['oldResults']>;
+        }
+        const before = structuredClone({
+          prompts: eval_.prompts,
+          rows: eval_.results.map((r) => r.testCase),
+          table: eval_.oldResults?.table,
+        });
+        const restore = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(strips('prompt')),
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strips('output')),
+          PROMPTFOO_STRIP_TEST_VARS: String(strips('vars')),
+          PROMPTFOO_STRIP_GRADING_RESULT: String(strips('grading')),
+          PROMPTFOO_STRIP_METADATA: String(strips('metadata')),
+        });
+        try {
+          await writeOutput(
+            format === 'csv' ? 'boundary.csv' : 'https://docs.google.com/spreadsheets/d/fixture',
+            eval_,
+            null,
+          );
+          const data =
+            format === 'csv'
+              ? mockFileHandle.write.mock.calls.map(([chunk]) => chunk).join('')
+              : JSON.stringify(vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0]);
+          for (const [category, canary] of [
+            ['prompt', 'table header canary'],
+            ['vars', 'table variable canary'],
+            ['output', 'table output canary'],
+            ['grading', 'table grade canary'],
+          ]) {
+            expect(data.includes(canary)).toBe(!strips(category));
+          }
+          if (format === 'csv') {
+            const rows = parseCsv(data) as string[][];
+            expect(rows).toHaveLength(3);
+            expect(rows[0]).toContain('Metric: quality');
+            expect(rows[1][rows[0].indexOf('Metric: quality')]).toBe('0.50');
+            expect(rows[1][rows[0].indexOf('Status')]).toBe('PASS');
+            expect(data.includes('csv history prompt')).toBe(
+              !strips('prompt') && !strips('metadata'),
+            );
+            expect(data.includes('csv history output')).toBe(
+              !strips('output') && !strips('metadata'),
+            );
+            expect(mockFileHandle.close).toHaveBeenCalledOnce();
+          } else {
+            const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
+            expect(rows).toHaveLength(2);
+            expect(data).toContain('quality: 0.50');
+            expect(data).toContain('[PASS]');
+          }
+          expect({
+            prompts: eval_.prompts,
+            rows: eval_.results.map((r) => r.testCase),
+            table: eval_.oldResults?.table,
+          }).toEqual(before);
+        } finally {
+          restore();
+        }
+      },
+    );
   });
 
   it('writeOutput with JSON output', async () => {
@@ -1534,44 +1642,51 @@ describe('writeOutput', () => {
     }
   });
 
-  it('omits stripped prompt and response bodies from trace span attributes', async () => {
-    const restoreEnv = mockProcessEnv({
-      PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
-      PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
-    });
-    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
-      {
+  it.each([false, true])(
+    'omits stripped prompt and response bodies from trace span attributes: %s',
+    async (strip) => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: String(strip),
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip),
+      });
+      const attributes = {
+        'promptfoo.request.body': 'trace-prompt-secret',
+        'promptfoo.prompt.label': 'trace-label-canary',
+        'promptfoo.response.body': 'trace-response-secret',
+        operation: 'provider-call',
+      };
+      const trace = {
         traceId: 'trace-strip-bodies',
         evaluationId: 'eval-strip-bodies',
         testCaseId: 'case-strip-bodies',
-        spans: [
-          {
-            spanId: 'span-strip-bodies',
-            name: 'provider',
-            startTime: 1,
-            attributes: {
-              'promptfoo.request.body': 'trace-prompt-secret',
-              'promptfoo.response.body': 'trace-response-secret',
-              operation: 'provider-call',
-            },
-          },
-        ],
-      },
-    ]);
-
-    try {
-      await writeOutput('output.json', new Eval({}), null);
-
-      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-      const parsed = JSON.parse(written);
-      expect(parsed.traces[0].spans[0].attributes).toEqual({ operation: 'provider-call' });
-      expect(written).not.toContain('trace-prompt-secret');
-      expect(written).not.toContain('trace-response-secret');
-    } finally {
-      traceSpy.mockRestore();
-      restoreEnv();
-    }
-  });
+        spans: [{ spanId: 'span-strip-bodies', name: 'provider', startTime: 1, attributes }],
+      };
+      const before = structuredClone(trace);
+      const traceSpy = vi
+        .spyOn(getTraceStore(), 'getTracesByEvaluation')
+        .mockResolvedValue([trace]);
+      try {
+        await writeOutput('output.json', new Eval({}), null);
+        const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+        const parsed = JSON.parse(written);
+        expect(parsed.traces[0].spans[0].attributes).toEqual(
+          strip ? { operation: 'provider-call' } : attributes,
+        );
+        for (const value of [
+          'trace-prompt-secret',
+          'trace-label-canary',
+          'trace-response-secret',
+        ]) {
+          expect(written.includes(value)).toBe(!strip);
+        }
+        expect(trace).toEqual(before);
+        expect(trace.spans[0].attributes).toBe(attributes);
+      } finally {
+        traceSpy.mockRestore();
+        restoreEnv();
+      }
+    },
+  );
 
   it('preserves deep non-secret config fields in JSON output', async () => {
     const outputPath = 'output.json';

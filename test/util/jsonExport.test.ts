@@ -2,13 +2,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../src/assertions';
 import * as blobs from '../../src/blobs';
+import Eval from '../../src/models/eval';
 import EvalResult, { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
+import { EchoProvider } from '../../src/providers/echo';
 import { getTraceStore } from '../../src/tracing/store';
 import { writeOutput } from '../../src/util/index';
 import { sanitizeObject } from '../../src/util/sanitizer';
-import { createEvaluateResult } from '../factories/eval';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import { createTempDir, mockProcessEnv, removeTempDir } from './utils';
+
+import type { TreeSearchOutput } from '../../src/redteam/providers/iterativeTree';
+import type { EvaluateSummaryV2 } from '../../src/types';
 
 // Mock dependencies
 vi.mock('../../src/database', () => ({
@@ -441,7 +447,22 @@ describe('JSON export with improved error handling', () => {
           message: 'legacy attack message canary',
           response: 'legacy attack response canary',
         };
+        const treeNode: TreeSearchOutput = {
+          id: 'tree-node',
+          parentId: 'tree-parent',
+          prompt: 'tree input canary',
+          promptAudio: { data: 'tree input audio canary', format: 'wav' },
+          promptImage: { data: 'tree input image canary', format: 'png' },
+          output: 'tree output canary',
+          outputAudio: { data: 'tree output audio canary', format: 'wav' },
+          outputImage: { data: 'tree output image canary', format: 'png' },
+          score: 0.75,
+          depth: 2,
+          wasSelected: true,
+          sessionId: 'tree-session',
+        };
         const metadata = {
+          redteamTreeHistory: [treeNode, null, 'legacy tree entry'],
           redteamFinalPrompt: 'final input canary',
           redteamHistory: [
             {
@@ -467,6 +488,7 @@ describe('JSON export with improved error handling', () => {
             },
             { role: 'assistant', content: 'assistant transcript canary' },
             null,
+            structuredClone(treeNode),
           ],
           successfulAttacks: [
             successfulAttack,
@@ -536,6 +558,22 @@ describe('JSON export with improved error handling', () => {
             expect(component.metadata === undefined).toBe(strips('metadata'));
           }
         };
+        const checkTree = (treeCopy: Record<string, unknown>) => {
+          for (const key of ['prompt', 'promptAudio', 'promptImage'] as const) {
+            expect(treeCopy[key]).toEqual(kept('prompt', treeNode[key]));
+          }
+          for (const key of ['output', 'outputAudio', 'outputImage'] as const) {
+            expect(treeCopy[key]).toEqual(kept('output', treeNode[key]));
+          }
+          expect(treeCopy).toMatchObject({
+            id: 'tree-node',
+            parentId: 'tree-parent',
+            score: 0.75,
+            depth: 2,
+            wasSelected: true,
+            sessionId: 'tree-session',
+          });
+        };
         const checkMetadata = (copy: Record<string, any>) => {
           const history = copy.redteamHistory[0];
           const originalHistory = metadata.redteamHistory[0] as Record<string, unknown>;
@@ -563,13 +601,19 @@ describe('JSON export with improved error handling', () => {
           expect(copy.successfulAttacks.slice(2)).toEqual([null, 'legacy successful attack entry']);
           expect(copy.storedGraderResult).toEqual(kept('grading', grade));
           for (const [index, message] of copy.messages.slice(0, 3).entries()) {
-            expect(message.content).toEqual(kept('prompt', metadata.messages[index]?.content));
+            const input = metadata.messages[index];
+            expect(message.content).toEqual(
+              kept('prompt', input && 'content' in input ? input.content : undefined),
+            );
           }
           // Assistant turns can be reused as inputs by stateless conversation providers.
           expect(copy.messages[3].content === undefined).toBe(strips('prompt') || strips('output'));
           expect(copy.messages[2].label).toBe('keep label');
           expect(copy.messages[4]).toBeNull();
           expect(copy.redteamHistory.slice(1)).toEqual([null, 'legacy history entry']);
+          checkTree(copy.redteamTreeHistory[0]);
+          checkTree(copy.messages[5]);
+          expect(copy.redteamTreeHistory.slice(1)).toEqual([null, 'legacy tree entry']);
           expect(copy.custom).toEqual(metadata.custom);
           expect(copy.totalSuccessfulAttacks).toBe(1);
           expect(history.graderPassed).toBe(true);
@@ -595,6 +639,9 @@ describe('JSON export with improved error handling', () => {
           const canaries = {
             prompt: [
               'history input canary',
+              'tree input canary',
+              'tree input audio canary',
+              'tree input image canary',
               'input audio canary',
               'input image canary',
               'message input canary',
@@ -603,6 +650,9 @@ describe('JSON export with improved error handling', () => {
             ],
             output: [
               'history output canary',
+              'tree output canary',
+              'tree output audio canary',
+              'tree output image canary',
               'output audio canary',
               'output image canary',
               'successful output canary',
@@ -629,6 +679,34 @@ describe('JSON export with improved error handling', () => {
           const jsonlArtifact = sanitizeResultForJsonlArtifact(row);
           check(jsonlArtifact);
           checkSerialized(`${JSON.stringify(jsonlArtifact)}\n`);
+          if (flag === 'prompt' || flag === 'output') {
+            // Imported tree nodes must remain recognizable after one side was omitted.
+            const imported = JSON.parse(JSON.stringify(jsonlArtifact));
+            const restoreComplement = mockProcessEnv({
+              PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+              PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+            });
+            try {
+              const reexported = sanitizeResultForJsonlArtifact(imported);
+              for (const copy of [reexported.metadata, reexported.response!.metadata]) {
+                const tree = copy!.messages[5];
+                expect(tree).toMatchObject({ id: 'tree-node', depth: 2, wasSelected: true });
+                for (const key of [
+                  'prompt',
+                  'promptAudio',
+                  'promptImage',
+                  'output',
+                  'outputAudio',
+                  'outputImage',
+                ]) {
+                  expect(tree).not.toHaveProperty(key);
+                }
+              }
+              expect(imported).toEqual(jsonlArtifact);
+            } finally {
+              restoreComplement();
+            }
+          }
           const model = new EvalResult({
             ...row,
             response: row.response ?? null,
@@ -664,6 +742,150 @@ describe('JSON export with improved error handling', () => {
           expect(metadata.successfulAttacks[1]).toBe(legacySuccessfulAttack);
         } finally {
           restoreEnv();
+        }
+      },
+    );
+  });
+
+  describe('artifact boundary regressions', () => {
+    it.each([false, true])(
+      'projects result prompt selectors with prompt stripping=%s',
+      async (strip) => {
+        const prompt = createCompletedPrompt('selector input canary', { provider: 'echo' });
+        const selectors = [prompt.label, 'known-prompt-id'];
+        const vars = { subject: 'retained variable' };
+        const testCase = {
+          prompts: selectors,
+          vars,
+          provider: { id: 'echo', config: { prompts: ['opaque vendor option'] } },
+        };
+        const eval_ = new Eval({}, { prompts: [prompt], vars: ['subject'] });
+        await eval_.addResult(
+          createEvaluateResult({
+            prompt,
+            testCase,
+            vars,
+            response: { output: 'retained output' },
+          }),
+        );
+        const result = eval_.results[0];
+        const before = structuredClone(result.testCase);
+        const restore = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(strip),
+          PROMPTFOO_STRIP_TEST_VARS: 'false',
+        });
+        try {
+          await writeOutput(tempFilePath, eval_, null);
+          const row = JSON.parse(fs.readFileSync(tempFilePath, 'utf8')).results.results[0];
+          expect(row.testCase.prompts).toEqual(
+            strip ? selectors.map(() => '[prompt stripped]') : selectors,
+          );
+          expect(row.testCase.vars).toEqual(vars);
+          expect(row.testCase.provider.config.prompts).toEqual(['opaque vendor option']);
+          expect(result.testCase).toEqual(before);
+          expect(testCase.prompts).toBe(selectors);
+        } finally {
+          restore();
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'projects direct V2 string prompts with prompt stripping=%s',
+      async (strip) => {
+        const eval_ = new Eval({});
+        const row = { ...createEvaluateResult(), prompt: 'legacy result prompt canary' };
+        eval_.oldResults = {
+          version: 2,
+          timestamp: '2026-01-01T00:00:00Z',
+          results: [
+            row,
+            ...[null, 7, false, ['malformed array']].map((prompt, index) => ({
+              ...row,
+              testIdx: index + 1,
+              prompt,
+            })),
+          ],
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: { successes: 1, failures: 0, errors: 0, tokenUsage: {} },
+        } as unknown as EvaluateSummaryV2;
+        const before = structuredClone(eval_.oldResults);
+        const restore = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: String(strip) });
+        try {
+          for (const extension of ['json', 'yaml', 'txt', 'xml']) {
+            const file = path.join(tempDir, `legacy-string.${extension}`);
+            await writeOutput(file, eval_, null);
+            const content = fs.readFileSync(file, 'utf8');
+            expect(content.includes('legacy result prompt canary')).toBe(!strip);
+            if (extension === 'json') {
+              const results = JSON.parse(content).results.results;
+              expect(results[0].prompt).toBe(strip ? '[prompt stripped]' : row.prompt);
+              expect(results.slice(1).map((result: { prompt: unknown }) => result.prompt)).toEqual([
+                null,
+                7,
+                false,
+                ['malformed array'],
+              ]);
+            }
+          }
+          expect(eval_.oldResults).toEqual(before);
+        } finally {
+          restore();
+        }
+      },
+    );
+
+    it.each(['vars', 'metadata', 'grading'])(
+      'keeps independent %s behavior for real rendered grading text',
+      async (flag) => {
+        const vars = { subject: 'grading variable canary' };
+        const assertion = { type: 'contains' as const, value: '{{subject}}' };
+        const grade = await runAssertion({
+          prompt: 'fixed input',
+          provider: new EchoProvider(),
+          assertion,
+          test: { vars },
+          providerResponse: { output: 'unrelated response' },
+        });
+        expect(grade.pass).toBe(false);
+        expect(grade.reason).toContain(vars.subject);
+        expect(grade.metadata?.renderedAssertionValue).toBe(vars.subject);
+        const row = createEvaluateResult({
+          vars,
+          testCase: { vars, assert: [assertion] },
+          gradingResult: grade,
+          success: false,
+          score: 0,
+        });
+        const before = structuredClone(row);
+        const restore = mockProcessEnv({
+          PROMPTFOO_STRIP_TEST_VARS: String(flag === 'vars'),
+          PROMPTFOO_STRIP_METADATA: String(flag === 'metadata'),
+          PROMPTFOO_STRIP_GRADING_RESULT: String(flag === 'grading'),
+        });
+        try {
+          mockEval.toEvaluateSummary.mockResolvedValue({
+            version: 3,
+            results: [row],
+            prompts: [],
+            stats: {},
+          });
+          await writeOutput(tempFilePath, mockEval, null);
+          const actual = JSON.parse(fs.readFileSync(tempFilePath, 'utf8')).results.results[0];
+          expect(actual.vars).toEqual(flag === 'vars' ? {} : vars);
+          expect(actual.success).toBe(false);
+          expect(actual.score).toBe(0);
+          if (flag === 'grading') {
+            expect(actual.gradingResult).toBeNull();
+          } else {
+            expect(actual.gradingResult.reason).toBe(grade.reason);
+            expect(actual.gradingResult.metadata).toEqual(
+              flag === 'metadata' ? undefined : grade.metadata,
+            );
+          }
+          expect(row).toEqual(before);
+        } finally {
+          restore();
         }
       },
     );

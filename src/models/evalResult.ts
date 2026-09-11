@@ -125,36 +125,55 @@ function projectTranscriptMetadata<T>(
   if (options.stripGrading) {
     delete projected.storedGraderResult;
   }
+  const projectHistoryEntry = (entry: unknown, stripVars = false) => {
+    const record = asRecord(entry);
+    if (!record) {
+      return entry;
+    }
+    const history = { ...record };
+    if (options.stripPrompt) {
+      delete history.prompt;
+      delete history.promptAudio;
+      delete history.promptImage;
+    }
+    if (options.stripOutput) {
+      delete history.output;
+      delete history.outputAudio;
+      delete history.outputImage;
+    }
+    if (stripVars) {
+      delete history.inputVars;
+    }
+    return history;
+  };
   if (
     (options.stripPrompt || options.stripOutput || options.stripVars) &&
     Array.isArray(record.redteamHistory)
   ) {
-    projected.redteamHistory = record.redteamHistory.map((entry) => {
-      if (!asRecord(entry)) {
-        return entry;
-      }
-      const history = { ...entry };
-      if (options.stripPrompt) {
-        delete history.prompt;
-        delete history.promptAudio;
-        delete history.promptImage;
-      }
-      if (options.stripOutput) {
-        delete history.output;
-        delete history.outputAudio;
-        delete history.outputImage;
-      }
-      if (options.stripVars) {
-        delete history.inputVars;
-      }
-      return history;
-    });
+    projected.redteamHistory = record.redteamHistory.map((entry) =>
+      projectHistoryEntry(entry, options.stripVars),
+    );
+  }
+  if ((options.stripPrompt || options.stripOutput) && Array.isArray(record.redteamTreeHistory)) {
+    projected.redteamTreeHistory = record.redteamTreeHistory.map((entry) =>
+      projectHistoryEntry(entry),
+    );
   }
   if (options.stripPrompt || options.stripOutput) {
     if (Array.isArray(record.messages)) {
       projected.messages = record.messages.map((message) => {
         if (!asRecord(message)) {
           return message;
+        }
+        // Iterative-tree stores TreeSearchOutput nodes here as well as in
+        // redteamTreeHistory. These structural fields survive prior stripping.
+        if (
+          !('role' in message) &&
+          typeof message.id === 'string' &&
+          typeof message.depth === 'number' &&
+          typeof message.wasSelected === 'boolean'
+        ) {
+          return projectHistoryEntry(message);
         }
         // Stateless providers reuse the full conversation as input. Assistant
         // turns in this transcript are therefore both prompt and output copies.
@@ -220,7 +239,7 @@ export function sanitizePromptForArtifact<T extends Prompt>(
   stripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
 ): T {
   if (!asRecord(prompt)) {
-    return prompt;
+    return (typeof prompt === 'string' && stripPromptText ? '[prompt stripped]' : prompt) as T;
   }
   const sanitized = sanitizeForDbWithSecrets(prompt, true);
   const metrics = asRecord(asRecord(prompt)?.metrics);
@@ -252,9 +271,9 @@ export function sanitizePromptForArtifact<T extends Prompt>(
 
 function projectTestCase(
   testCase: AtomicTestCase,
-  options: { stripMetadata: boolean; stripVars: boolean },
+  options: { stripMetadata: boolean; stripVars: boolean; stripPrompt: boolean },
 ): AtomicTestCase {
-  if (!options.stripMetadata && !options.stripVars) {
+  if (!options.stripMetadata && !options.stripVars && !options.stripPrompt) {
     return testCase;
   }
 
@@ -264,6 +283,11 @@ function projectTestCase(
 
   if (options.stripVars) {
     projectedTestCase.vars = undefined;
+  }
+  if (options.stripPrompt && Array.isArray(testCase.prompts)) {
+    projectedTestCase.prompts = testCase.prompts.map((prompt) =>
+      typeof prompt === 'string' ? '[prompt stripped]' : prompt,
+    );
   }
 
   return projectedTestCase;
@@ -753,6 +777,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
             {
               stripMetadata: shouldStripMetadata,
               stripVars: shouldStripTestVars,
+              stripPrompt: shouldStripPromptText,
             },
           ),
         }
@@ -826,6 +851,7 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
       ? projectTestCase(sanitizeForDbWithSecrets(testCase, true), {
           stripMetadata: shouldStripMetadata,
           stripVars: shouldStripTestVars,
+          stripPrompt: shouldStripPromptText,
         })
       : testCase;
 
@@ -1309,6 +1335,7 @@ export default class EvalResult {
     const testCase = projectTestCase(this.testCase, {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
+      stripPrompt: shouldStripPromptText,
     });
     // Mirror the live accounting in the evaluator: a response counts as one provider
     // request even when it reports no token usage, and a grading result counts as one
