@@ -747,6 +747,25 @@ describe('addLayerTestCases', () => {
       expect(results).toEqual([]);
     });
 
+    it.each([{ remaining: [] }, { remaining: ['zero-width'] }])(
+      'honors attack-step targets before per-turn layers $remaining',
+      async ({ remaining }) => {
+        const result = await addLayerTestCases(
+          [
+            { vars: { input: 'private data' }, metadata: { pluginId: 'pii:direct' } },
+            { vars: { input: 'harmful request' }, metadata: { pluginId: 'harmful:hate' } },
+          ],
+          'input',
+          {
+            steps: [{ id: 'jailbreak:meta', config: { plugins: ['pii'] } }, ...remaining],
+          },
+          mockStrategies,
+          mockLoadStrategy,
+        );
+        expect(result.map((test) => test.metadata?.pluginId)).toEqual(['pii:direct']);
+      },
+    );
+
     it('should honor per-turn plugin targeting', async () => {
       const testCases: TestCaseWithPlugin[] = [
         { vars: { input: 'attack A' }, metadata: { pluginId: 'plugin-a' } },

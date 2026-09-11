@@ -135,7 +135,7 @@ export async function addLayerTestCases(
       );
       validatePerTurnMutationLayers(perTurnLayers);
       const applicableTestCases = current.filter((testCase) =>
-        perTurnLayers.every((layer) => {
+        [stepObj, ...perTurnLayers].every((layer) => {
           const layerId = typeof layer === 'string' ? layer : layer.id;
           const targetPlugins =
             (typeof layer === 'string' ? undefined : layer.config?.plugins) ?? config?.plugins;

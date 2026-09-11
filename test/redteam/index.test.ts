@@ -888,45 +888,77 @@ describe('synthesize', () => {
       expect(String(zalgoTest?.vars?.query).match(/\p{M}/gu)).toHaveLength(24);
     });
 
-    it.each([undefined, ['harmful', 'pii'], ['harmful:hate', 'pii:direct']])(
-      'preserves uncovered collection targets with scope %j',
-      async (plugins) => {
+    it.each([
+      { plugins: undefined },
+      { plugins: ['harmful', 'pii'] },
+      { plugins: ['harmful:hate', 'pii:direct'] },
+    ])('preserves uncovered collection targets with scope $plugins', async ({ plugins }) => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'abc' } }]),
+        key: 'mockPlugin',
+      });
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'harmful:hate', numTests: 1 },
+          { id: 'pii:direct', numTests: 1 },
+        ],
+        prompts: ['{{query}}'],
+        provider: mockProvider,
+        purpose: 'Test partially overridden mutation targets',
+        strategies: [
+          { id: 'text-mutations', config: { plugins } },
+          { id: 'zalgo', config: { plugins: ['pii'], intensity: 8, rate: 1 } },
+        ],
+        targetIds: ['test-provider'],
+      });
+      const mutated = result.testCases.filter((test) => test.metadata?.strategyId === 'zalgo');
+      expect(mutated.map((test) => test.metadata?.pluginId).sort()).toEqual([
+        'harmful:hate',
+        'pii:direct',
+      ]);
+      expect(
+        mutated.find((test) => test.metadata?.pluginId === 'pii:direct')?.metadata?.strategyConfig,
+      ).toMatchObject({ intensity: 8 });
+      const report = vi
+        .mocked(logger.info)
+        .mock.calls.map(([message]) => message)
+        .find(
+          (message) => typeof message === 'string' && message.includes('Test Generation Report'),
+        );
+      expect(stripAnsi(String(report))).toMatch(/zalgo\s*│\s*2\s*│\s*2\s*│/);
+    });
+
+    it.each([{ plugins: undefined }, { plugins: ['pii'] }])(
+      'deduplicates framework defaults against collection scope $plugins',
+      async ({ plugins }) => {
         vi.spyOn(Plugins, 'find').mockReturnValue({
-          action: vi.fn().mockResolvedValue([{ vars: { query: 'abc' } }]),
+          action: vi.fn(async () => [{ vars: { query: 'abc' } }]),
           key: 'mockPlugin',
         });
         const result = await synthesize({
           language: 'en',
           numTests: 1,
-          plugins: [
-            { id: 'harmful:hate', numTests: 1 },
-            { id: 'pii:direct', numTests: 1 },
-          ],
+          plugins: [{ id: 'owasp:llm:redteam:implementation', numTests: 1 }],
           prompts: ['{{query}}'],
           provider: mockProvider,
-          purpose: 'Test partially overridden mutation targets',
-          strategies: [
-            { id: 'text-mutations', config: { plugins } },
-            { id: 'zalgo', config: { plugins: ['pii'], intensity: 8, rate: 1 } },
-          ],
+          purpose: 'Test framework defaults',
+          strategies: [{ id: 'text-mutations', config: { plugins, seed: 'collection' } }],
           targetIds: ['test-provider'],
         });
-        const mutated = result.testCases.filter((test) => test.metadata?.strategyId === 'zalgo');
-        expect(mutated.map((test) => test.metadata?.pluginId).sort()).toEqual([
-          'harmful:hate',
-          'pii:direct',
-        ]);
+        const mutated = result.testCases.filter(
+          (test) => test.metadata?.strategyId === 'homoglyph',
+        );
+        const pluginIds = mutated.map((test) => test.metadata?.pluginId);
+        expect(pluginIds.length).toBeGreaterThan(1);
+        expect(pluginIds).toEqual([...new Set(pluginIds)]);
+        expect(pluginIds, JSON.stringify(pluginIds)).toContain('pii:direct');
+        expect(pluginIds).toContain('prompt-extraction');
         expect(
           mutated.find((test) => test.metadata?.pluginId === 'pii:direct')?.metadata
             ?.strategyConfig,
-        ).toMatchObject({ intensity: 8 });
-        const report = vi
-          .mocked(logger.info)
-          .mock.calls.map(([message]) => message)
-          .find(
-            (message) => typeof message === 'string' && message.includes('Test Generation Report'),
-          );
-        expect(stripAnsi(String(report))).toMatch(/zalgo\s*│\s*2\s*│\s*2\s*│/);
+        ).toMatchObject({ seed: 'collection' });
       },
     );
 

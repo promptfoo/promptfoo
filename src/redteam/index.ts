@@ -1260,6 +1260,7 @@ export async function synthesize({
   }
 
   const expandedPlugins: typeof plugins = [];
+  const frameworkStrategies = new Set<RedteamStrategyObject>();
   const expandPlugin = (
     plugin: (typeof plugins)[0],
     mapping: { plugins: string[]; strategies: string[] },
@@ -1267,7 +1268,11 @@ export async function synthesize({
     mapping.plugins.forEach((p: string) =>
       expandedPlugins.push({ id: p, numTests: plugin.numTests }),
     );
-    strategies.push(...mapping.strategies.map((s: string) => ({ id: s })));
+    for (const id of mapping.strategies) {
+      const strategy = { id };
+      frameworkStrategies.add(strategy);
+      strategies.push(strategy);
+    }
   };
 
   plugins.forEach((plugin) => {
@@ -1280,9 +1285,10 @@ export async function synthesize({
       return;
     }
 
-    const mappingKey = Object.keys(ALIASED_PLUGIN_MAPPINGS).find(
-      (key) => plugin.id === key || plugin.id.startsWith(`${key}:`),
-    );
+    const mappingKeys = Object.keys(ALIASED_PLUGIN_MAPPINGS);
+    const mappingKey =
+      mappingKeys.find((key) => ALIASED_PLUGIN_MAPPINGS[key][plugin.id]) ??
+      mappingKeys.find((key) => plugin.id === key || plugin.id.startsWith(`${key}:`));
 
     if (mappingKey) {
       const mapping =
@@ -1336,10 +1342,16 @@ export async function synthesize({
   logger.debug('Validating plugins...');
   plugins = [...new Set(expandedPlugins)].filter(validatePlugin).sort();
 
-  // Explicit members override their collection only for matching plugins.
+  // Explicit strategies override collections, which override framework defaults, only
+  // for the plugins they cover.
   strategies = strategies.flatMap((strategy) => {
-    const overrides = explicitStrategies.filter((explicit) => explicit.id === strategy.id);
-    if (!collectionMembers.has(strategy) || overrides.length === 0) {
+    const higherPriority = frameworkStrategies.has(strategy)
+      ? [...explicitStrategies, ...collectionMembers]
+      : collectionMembers.has(strategy)
+        ? explicitStrategies
+        : [];
+    const overrides = higherPriority.filter((override) => override.id === strategy.id);
+    if (overrides.length === 0) {
       return [strategy];
     }
     const remaining = plugins
@@ -1356,6 +1368,16 @@ export async function synthesize({
     return remaining.length
       ? [{ ...strategy, config: { ...strategy.config, plugins: remaining } }]
       : [];
+  });
+
+  seen.clear();
+  strategies = strategies.filter((strategy) => {
+    const key = keyForStrategy(strategy);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
   });
 
   // Check API health before proceeding
