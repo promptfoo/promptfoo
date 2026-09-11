@@ -358,6 +358,19 @@ describe('LiteLLM Provider', () => {
       expect(provider.id()).toBe('litellm:embedding:custom:embedding:model:v1');
       expect(typeof provider.callEmbeddingApi).toBe('function');
     });
+
+    it('forwards embedding request options to the wrapped provider', async () => {
+      const provider = createLiteLLMProvider('litellm:embedding:text-embedding-3-small', {}) as any;
+      const callEmbeddingApi = vi
+        .spyOn(provider.embeddingProvider, 'callEmbeddingApi')
+        .mockResolvedValue({ embedding: [1] });
+      const context = { vars: {} };
+      const options = { abortSignal: new AbortController().signal };
+
+      await provider.callEmbeddingApi('text', context, options);
+
+      expect(callEmbeddingApi).toHaveBeenCalledWith('text', context, options);
+    });
   });
 
   describe('Temperature zero handling (GitHub issue #7322)', () => {
