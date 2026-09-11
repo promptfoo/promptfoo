@@ -386,38 +386,47 @@ export abstract class RedteamPluginBase {
   }
 }
 
+function redactTraceValue(value: unknown, key = ''): unknown {
+  if (isSecretField(key) || isSecretEnvVarName(key)) {
+    return '[REDACTED]';
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry, index) => {
+      const previous = value[index - 1];
+      const option = typeof previous === 'string' ? previous.replace(/^--?/, '') : '';
+      return typeof entry === 'string' &&
+        typeof previous === 'string' &&
+        (option === 'u' || option === 'user' || option === 'proxy-user' || isSecretField(option))
+        ? '[REDACTED]'
+        : redactTraceValue(entry);
+    });
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const headerName = typeof record.name === 'string' ? record.name : undefined;
+    return Object.fromEntries(
+      Object.entries(record).map(([entryKey, entryValue]) => [
+        entryKey,
+        entryKey === 'value' &&
+        headerName &&
+        (isSecretField(headerName) || isSecretEnvVarName(headerName))
+          ? '[REDACTED]'
+          : redactTraceValue(entryValue, entryKey),
+      ]),
+    );
+  }
+  return typeof value === 'string' ? redactTraceEvidence(value) : value;
+}
+
 function redactTraceEvidence(text: string): string {
   if (/^\s*[\[{]/.test(text)) {
     try {
-      const redactJson = (value: unknown, key = ''): unknown => {
-        if (isSecretField(key) || isSecretEnvVarName(key)) {
-          return '[REDACTED]';
-        }
-        if (Array.isArray(value)) {
-          return value.map((entry) => redactJson(entry));
-        }
-        if (value && typeof value === 'object') {
-          const record = value as Record<string, unknown>;
-          const headerName = typeof record.name === 'string' ? record.name : undefined;
-          return Object.fromEntries(
-            Object.entries(record).map(([entryKey, entryValue]) => [
-              entryKey,
-              entryKey === 'value' &&
-              headerName &&
-              (isSecretField(headerName) || isSecretEnvVarName(headerName))
-                ? '[REDACTED]'
-                : redactJson(entryValue, entryKey),
-            ]),
-          );
-        }
-        return typeof value === 'string' ? redactTraceEvidence(value) : value;
-      };
-      return JSON.stringify(redactJson(JSON.parse(text)));
+      return JSON.stringify(redactTraceValue(JSON.parse(text)));
     } catch {
       // Trace summaries may be prose rather than serialized trajectory steps.
     }
   }
-  return redactPrivateKeys(text)
+  return redactPrivateKeys(text.replace(/\\\r?\n\s*/g, ' '))
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/@\s"'`\\]+)@/gi, '$1[REDACTED]@')
     .replace(/\bhttps?:\/\/[^\s"'`\\]+/gi, (url) => sanitizeUrl(url))
     .replace(/(['"])([\w-]+)(\s*:\s*)[^'"]*\1/gi, (match, quote, key, separator) =>
@@ -549,7 +558,7 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
       url,
       path: filePath,
       command,
-      args,
+      args: redactTraceValue(args),
       status:
         'status' in span ? span.status : { code: span.statusCode, message: span.statusMessage },
     });
@@ -559,6 +568,7 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
     if (typeof args === 'string') {
       action.args = args;
     } else if (args && typeof args === 'object' && action.args && typeof action.args === 'object') {
+      action.args = redactTraceValue(action.args);
       for (const key of ['command', 'cmd']) {
         const value = (args as Record<string, unknown>)[key];
         if (typeof value === 'string') {

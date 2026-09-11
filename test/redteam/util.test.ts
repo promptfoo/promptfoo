@@ -173,6 +173,11 @@ describe('classifyRefusal', () => {
       kind: 'clean_refusal',
       signals: [],
     });
+
+    expect(classifyRefusal("I won't comply with that request.")).toEqual({
+      kind: 'clean_refusal',
+      signals: [],
+    });
   });
 
   it('sends free-form refusal text to the grader even without a known risk pattern', () => {

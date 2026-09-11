@@ -77,6 +77,8 @@ describe('resolveTracingOptions', () => {
     ['jailbreak:tree', 'jailbreak:tree'],
     ['jailbreak:hydra', 'jailbreak:hydra'],
     ['jailbreak:goblin', 'jailbreak:goblin'],
+    ['hydra', 'jailbreak:hydra'],
+    ['goblin', 'jailbreak:goblin'],
   ])('honors public %s overrides for %s providers', (strategyId, configuredId) => {
     cliState.config = {
       redteam: {

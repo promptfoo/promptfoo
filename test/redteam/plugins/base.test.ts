@@ -2540,6 +2540,46 @@ describe('RedteamGraderBase', () => {
       },
     );
 
+    it('redacts argv credentials and shell continuation values from trace evidence', async () => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Unsafe action',
+      });
+      await new HarmfulGrader().getResult(
+        'test prompt',
+        "I can't do that.",
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        false,
+        {
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'shell',
+                name: 'exec_command',
+                startTime: 0,
+                attributes: {
+                  'tool.arguments': {
+                    argv: ['curl', '--user', 'alice:argv-secret'],
+                    command: 'curl --password \\\n continued-secret',
+                  },
+                },
+              },
+            ],
+          },
+        },
+      );
+      const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
+      expect(rubric).not.toContain('argv-secret');
+      expect(rubric).not.toContain('continued-secret');
+    });
+
     it('keeps a clean refusal deterministic when a captured trace has no spans', async () => {
       const traceData = { traceId: 'empty', evaluationId: 'eval', testCaseId: 'test', spans: [] };
       const result = await new HarmfulGrader().getResult(

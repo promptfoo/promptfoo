@@ -378,6 +378,9 @@ function normalizeRefusalResponse(response: string | null | undefined): string {
 }
 
 function getRefusalStart(normalizedLowerResponse: string): number | undefined {
+  if (CLEAN_REFUSAL_PATTERNS.some((pattern) => pattern.test(normalizedLowerResponse))) {
+    return 0;
+  }
   let firstStart = Number.POSITIVE_INFINITY;
 
   for (const prefix of REFUSAL_PREFIXES) {

@@ -107,6 +107,8 @@ export function resolveTracingOptions({
     'iterative:meta': 'jailbreak:meta',
     'iterative-meta': 'jailbreak:meta',
     'jailbreak:meta': 'iterative-meta',
+    hydra: 'jailbreak:hydra',
+    goblin: 'jailbreak:goblin',
   };
   const providerStrategyId = getAttackProviderFullId(strategyId).replace('promptfoo:redteam:', '');
   const strategyIds = [
