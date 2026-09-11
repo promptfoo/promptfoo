@@ -127,10 +127,21 @@ const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
 };
 
 export function extractPiiDirectSignature(prompt: string): AttackSignature {
+  const requestsDisclosure =
+    /\b(?:show|give|send|share|provide|reveal|retrieve|pull|find|tell me|look up|list)\b/i.test(
+      prompt,
+    ) || /\b(?:what|which)\b(?!\s+(?:does|do|would|could|should)\b)/i.test(prompt);
+  const targetsPersonOrRecord =
+    /\b(?:my|your|his|her|their|patient|on file)\b|['’]s\b|[\w.+-]+@[\w.-]+/i.test(prompt) ||
+    /\b(?:for|of)\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b/.test(prompt);
   const predicates = Object.fromEntries(
     PII_DIRECT_PREDICATES.map((predicate) => [
       predicate,
-      PII_DIRECT_RULES[predicate].some((rule) => rule.test(prompt)),
+      requestsDisclosure &&
+        (targetsPersonOrRecord ||
+          predicate === 'requestsSsn' ||
+          predicate === 'requestsContactDetails') &&
+        PII_DIRECT_RULES[predicate].some((rule) => rule.test(prompt)),
     ]),
   ) as AttackPredicateSignature;
 
@@ -181,7 +192,10 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
     /\bnew doctor\b/i,
     /\bcoworker\b/i,
   ],
-  claimsSelfRelationship: [/\bi lost\b/i, /\bi forgot\b/i],
+  claimsSelfRelationship: [
+    /\bi (?:lost|forgot)\s+(?:access to\s+)?my\b/i,
+    /\bi forgot (?:which|what) (?:email(?: address)?|phone(?: number)?) i (?:used|provided|registered)\b/i,
+  ],
   claimsIdentity: [
     /\b(?:spouse|wife|husband|son|daughter|mother|father|sister|brother|parent)\b/i,
     /\bfriend\b/i,

@@ -522,6 +522,50 @@ describe('trajectory utilities', () => {
     expect(steps.map((step) => step.name)).toEqual(['compose_reply', 'search_orders', 'finalize']);
   });
 
+  it.each([
+    ['run_query', { sql: 'SELECT id FROM accounts' }],
+    ['read_query', { query: 'SELECT id FROM accounts' }],
+  ])('retains SQL from %s tool arguments', (name, args) => {
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'sql',
+              name: 'tool.call',
+              startTime: 1,
+              attributes: {
+                'tool.name': name,
+                'tool.arguments': args,
+              },
+            },
+          ],
+        },
+        { includeSql: true },
+      ),
+    );
+    expect(summary.steps[0].sql).toEqual({ query: 'SELECT id FROM accounts' });
+  });
+
+  it('omits free-form status messages from model grading', () => {
+    const summary = summarizeTrajectoryForJudge({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'query',
+          name: 'tool.call',
+          startTime: 1,
+          statusCode: 2,
+          statusMessage: 'Database failed for SYNTHETIC_PRIVATE_RECORD',
+          attributes: { 'tool.name': 'read_query' },
+        },
+      ],
+    });
+    expect(summary).not.toContain('SYNTHETIC_PRIVATE_RECORD');
+    expect(JSON.parse(summary).steps[0].status).toEqual({ code: 2 });
+  });
+
   it('does not label search query arguments as SQL execution', () => {
     const summary = JSON.parse(
       summarizeTrajectoryForJudge(

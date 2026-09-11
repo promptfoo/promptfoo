@@ -54,7 +54,6 @@ const JUDGE_SUMMARY_TAIL_STEPS = 12;
 
 interface TrajectoryStepStatus {
   code: number;
-  message?: string;
 }
 
 interface JudgeTrajectoryStep {
@@ -97,7 +96,7 @@ function normalizeStructuredAttribute(value: unknown): unknown {
 }
 
 function hasSameStatus(left?: TrajectoryStepStatus, right?: TrajectoryStepStatus): boolean {
-  return left?.code === right?.code && left?.message === right?.message;
+  return left?.code === right?.code;
 }
 
 function isSearchLikeSpan(span: TraceSpan): boolean {
@@ -111,14 +110,13 @@ function isSearchLikeSpan(span: TraceSpan): boolean {
   );
 }
 
-function getTrajectoryStepStatus(step: Pick<TrajectoryStep, 'statusCode' | 'statusMessage'>) {
+function getTrajectoryStepStatus(step: Pick<TrajectoryStep, 'statusCode'>) {
   if (step.statusCode === undefined || step.statusCode === 0) {
     return undefined;
   }
 
   return {
     code: step.statusCode,
-    ...(step.statusMessage ? { message: step.statusMessage } : {}),
   };
 }
 
@@ -510,25 +508,26 @@ function getSqlExecutionDetails(
 ): JudgeTrajectoryStep['sql'] {
   const attributes = step.attributes;
   const databaseQuery = getFirstStringAttribute(attributes, ['db.query.text', 'db.statement']);
-  const toolName = getToolNameFromAttributes(attributes) ?? step.spanName;
-  const isDatabaseOperation =
-    databaseQuery !== undefined ||
-    getFirstStringAttribute(attributes, ['db.system', 'db.system.name']) !== undefined ||
-    /(^|[\s._:/-])(sql|sqlite|postgres(?:ql)?|mysql|database|db)($|[\s._:/-])/i.test(toolName);
-  if (!isDatabaseOperation) {
-    return undefined;
-  }
   const args = extractToolArgs({
     spanId: step.spanId,
     name: step.spanName,
     startTime: step.startTime,
     attributes,
   });
-  const query =
-    databaseQuery ??
-    (args && typeof args === 'object'
-      ? getFirstStringAttribute(args as Record<string, unknown>, ['query', 'sql'])
-      : undefined);
+  const argumentObject = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
+  const argumentSql = getFirstStringAttribute(argumentObject, ['sql']);
+  const toolName = getToolNameFromAttributes(attributes) ?? step.spanName;
+  const isDatabaseOperation =
+    databaseQuery !== undefined ||
+    argumentSql !== undefined ||
+    getFirstStringAttribute(attributes, ['db.system', 'db.system.name']) !== undefined ||
+    /(^|[\s._:/-])(sql|sqlite|postgres(?:ql)?|mysql|database|db|read_query)($|[\s._:/-])/i.test(
+      toolName,
+    );
+  if (!isDatabaseOperation) {
+    return undefined;
+  }
+  const query = databaseQuery ?? argumentSql ?? getFirstStringAttribute(argumentObject, ['query']);
   if (!query) {
     return undefined;
   }
