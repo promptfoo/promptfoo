@@ -103,7 +103,7 @@ To configure one member of `text-mutations`, include both the collection and the
 
 Compare each transformed result with the `basic` baseline. Check whether filters and the target model normalize the same characters, whether logs expose invisible characters, and whether normalization, whitespace, or casing changes allowlists, blocklists, routing, or other security decisions.
 
-## References
+## Implementation provenance
 
 - [Unicode Core Specification, Chapter 3](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-3/)
 - [Unicode Core Specification, Chapter 23](https://www.unicode.org/versions/Unicode17.0.0/core-spec/chapter-23/)

@@ -74,7 +74,7 @@ Per-turn layers support one variant. To use `n` greater than 1, configure `bijec
 
 Digit mappings can be harder for models to decode. Literal numbers in the request may also resemble generated tokens, so use letter mappings when those numbers matter.
 
-## References
+## Implementation provenance
 
 - [Endless Jailbreaks with Bijection Learning](https://arxiv.org/abs/2410.01294)
 
