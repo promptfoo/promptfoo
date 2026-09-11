@@ -180,23 +180,22 @@ function getSubclassCapabilityOverride(
     const capabilities = ownDeclaration.get?.call(provider) ?? ownDeclaration.value;
     if (
       capabilities !== undefined &&
-      !Object.prototype.hasOwnProperty.call(capabilities ?? [], inheritedProviderCapabilities)
+      !Object.hasOwn(capabilities ?? [], inheritedProviderCapabilities)
     ) {
       return Array.isArray(capabilities) && capabilities.includes(capability);
     }
   }
   let prototype = Object.getPrototypeOf(provider);
-  let overridden = Object.prototype.hasOwnProperty.call(provider, capability);
+  let overridden = Object.hasOwn(provider, capability);
   while (prototype && prototype !== Object.prototype) {
     const hasDeclaration =
-      prototype.constructor &&
-      Object.prototype.hasOwnProperty.call(prototype.constructor, 'declaredProviderCapabilities');
+      prototype.constructor && Object.hasOwn(prototype.constructor, 'declaredProviderCapabilities');
     // A declaring class owns its stubs; subclasses may override even a map-backed wrapper.
     const parentCapabilities = (
       Object.getPrototypeOf(prototype)?.constructor as { declaredProviderCapabilities?: unknown }
     )?.declaredProviderCapabilities;
     if (
-      Object.prototype.hasOwnProperty.call(prototype, capability) &&
+      Object.hasOwn(prototype, capability) &&
       (!hasDeclaration || parentCapabilities !== undefined)
     ) {
       overridden = true;
@@ -213,7 +212,7 @@ function getSubclassCapabilityOverride(
       return (
         (overridden &&
           Array.isArray(capabilities) &&
-          Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities)) ||
+          Object.hasOwn(capabilities, inheritedProviderCapabilities)) ||
         undefined
       );
     }
@@ -227,29 +226,40 @@ export function hasProviderCapability<K extends ProviderCapability>(
   provider: unknown,
   capability: K,
 ): provider is ProviderIdentity & Pick<ProviderOperations, K> {
-  const delegate =
-    typeof provider === 'object' && provider !== null
-      ? (provider as Record<symbol, unknown>)[Symbol.for('promptfoo.capabilityDelegate')]
-      : undefined;
+  if (
+    typeof provider !== 'object' ||
+    provider === null ||
+    !('id' in provider) ||
+    typeof provider.id !== 'function' ||
+    !(capability in provider) ||
+    typeof (provider as Record<string, unknown>)[capability] !== 'function'
+  ) {
+    return false;
+  }
+
+  const override = getSubclassCapabilityOverride(provider, capability);
+  if (override !== undefined) {
+    return override;
+  }
+  const capabilities =
+    'promptfooCapabilities' in provider ? provider.promptfooCapabilities : undefined;
+  if (capabilities === undefined) {
+    return true;
+  }
+  if (!Array.isArray(capabilities)) {
+    return false;
+  }
+  if (capabilities.includes(capability)) {
+    return true;
+  }
+
+  const delegate = (provider as Record<symbol, unknown>)[
+    Symbol.for('promptfoo.capabilityDelegate')
+  ];
   return (
-    typeof provider === 'object' &&
-    provider !== null &&
-    'id' in provider &&
-    typeof provider.id === 'function' &&
-    capability in provider &&
-    typeof (provider as Record<string, unknown>)[capability] === 'function' &&
-    (getSubclassCapabilityOverride(provider, capability) ??
-      (!('promptfooCapabilities' in provider) ||
-        provider.promptfooCapabilities === undefined ||
-        (Array.isArray(provider.promptfooCapabilities) &&
-          provider.promptfooCapabilities.includes(capability)) ||
-        (Array.isArray(provider.promptfooCapabilities) &&
-          Object.prototype.hasOwnProperty.call(
-            provider.promptfooCapabilities,
-            inheritedProviderCapabilities,
-          ) &&
-          delegate !== provider &&
-          hasProviderCapability(delegate, capability))))
+    Object.hasOwn(capabilities, inheritedProviderCapabilities) &&
+    delegate !== provider &&
+    hasProviderCapability(delegate, capability)
   );
 }
 
