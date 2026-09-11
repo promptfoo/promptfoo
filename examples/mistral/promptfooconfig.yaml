@@ -13,13 +13,6 @@ providers:
       top_p: 0.95
       max_tokens: 40960
 
-  - id: mistral:magistral-small-latest
-    label: magistral-small
-    config:
-      temperature: 0.7
-      top_p: 0.95
-      max_tokens: 40960
-
   # Traditional chat models
   - id: mistral:mistral-large-latest
     label: large

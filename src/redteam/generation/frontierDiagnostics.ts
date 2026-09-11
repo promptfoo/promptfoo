@@ -5,6 +5,11 @@ type SemanticFrontierTestCase = {
   vars?: unknown;
 };
 
+type FrontierGroup = {
+  observedFeatureIds?: Set<string>;
+  summary: SemanticFrontierSummary;
+};
+
 export type SemanticFrontierDiagnostic = {
   completeFrontierCount: number;
   frontierCount: number;
@@ -87,12 +92,27 @@ function getSemanticFrontierKey(summary: SemanticFrontierSummary): string {
   });
 }
 
-export function summarizeSemanticFrontierDiagnosticsFromTests(
-  testCases: readonly SemanticFrontierTestCase[],
-): SemanticFrontierDiagnostic[] {
-  const frontiersByPlugin = new Map<string, Map<string, SemanticFrontierSummary>>();
+function getObservedFeatureIds(value: unknown): string[] | undefined {
+  const predicates =
+    value && typeof value === 'object' ? (value as { predicates?: unknown }).predicates : undefined;
+  if (!predicates || typeof predicates !== 'object') {
+    return undefined;
+  }
+  return Object.entries(predicates)
+    .filter(([, observed]) => observed === true)
+    .map(([featureId]) => featureId);
+}
 
-  for (const testCase of testCases) {
+export function summarizeSemanticFrontierDiagnosticsFromTests(
+  testCases: readonly unknown[],
+): SemanticFrontierDiagnostic[] {
+  const frontiersByPlugin = new Map<string, Map<string, FrontierGroup>>();
+
+  for (const value of testCases) {
+    if (!value || typeof value !== 'object') {
+      continue;
+    }
+    const testCase = value as SemanticFrontierTestCase;
     const pluginId = testCase.metadata?.pluginId;
     const semanticFrontier = testCase.metadata?.semanticFrontier;
 
@@ -105,34 +125,40 @@ export function summarizeSemanticFrontierDiagnosticsFromTests(
     }
 
     const pluginFrontiers = frontiersByPlugin.get(pluginId) ?? new Map();
-    pluginFrontiers.set(
-      `${String(testCase.metadata?.contextId ?? '')}:${String(testCase.metadata?.language ?? '')}:${getSemanticFrontierKey(semanticFrontier)}`,
-      semanticFrontier,
-    );
+    const key = `${String(testCase.metadata?.contextId ?? '')}:${String(testCase.metadata?.language ?? '')}:${getSemanticFrontierKey(semanticFrontier)}`;
+    const group = pluginFrontiers.get(key) ?? { summary: semanticFrontier };
+    const observedFeatureIds = getObservedFeatureIds(testCase.metadata?.attackSignature);
+    if (observedFeatureIds) {
+      group.observedFeatureIds ??= new Set();
+      observedFeatureIds.forEach((featureId) => group.observedFeatureIds?.add(featureId));
+    }
+    pluginFrontiers.set(key, group);
     frontiersByPlugin.set(pluginId, pluginFrontiers);
   }
 
   return [...frontiersByPlugin.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([pluginId, frontierMap]) => {
-      const summaries = [...frontierMap.values()];
+      const groups = [...frontierMap.values()];
       const unreachableFeatureIds = [
         ...new Set(
-          summaries.flatMap((summary) =>
+          groups.flatMap(({ summary }) =>
             Object.values(summary.bands).flatMap((band) => band.unreachableFeatureIds),
           ),
         ),
       ].sort();
 
       return {
-        completeFrontierCount: summaries.filter((summary) =>
-          Object.values(summary.bands).every(
-            (band) =>
-              band.unreachableFeatureIds.length === 0 &&
-              band.observedFeatureCount === band.reachableFeatureCount,
+        completeFrontierCount: groups.filter(({ summary, observedFeatureIds }) =>
+          Object.values(summary.bands).every((band) =>
+            observedFeatureIds
+              ? band.unreachableFeatureIds.length === 0 &&
+                band.reachableFeatureIds.every((featureId) => observedFeatureIds.has(featureId))
+              : band.unreachableFeatureIds.length === 0 &&
+                band.observedFeatureCount === band.reachableFeatureCount,
           ),
         ).length,
-        frontierCount: summaries.length,
+        frontierCount: groups.length,
         pluginId,
         structurallyDegraded: unreachableFeatureIds.length > 0,
         unreachableFeatureIds,

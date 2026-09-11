@@ -1,3 +1,4 @@
+import { getEnvString } from '../../envars';
 import { OpenAiResponsesProvider } from '../openai/responses';
 import { groqSupportsTemperature, isGroqReasoningModel } from './util';
 
@@ -9,20 +10,25 @@ const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
  * Groq Responses API Provider
  *
  * Extends OpenAI Responses API provider with Groq-specific configuration.
- * Supports reasoning models (DeepSeek R1, GPT-OSS, Qwen) with temperature control.
+ * Supports reasoning models (GPT-OSS, Qwen) with temperature control.
  *
  * Note: Unlike the Chat Completions API, the Responses API does NOT support
  * `reasoning_format` or `include_reasoning` parameters. Reasoning is controlled
  * via the `reasoning.effort` parameter inherited from OpenAiCompletionOptions.
  *
  * Usage:
- *   groq:responses:llama-3.3-70b-versatile
  *   groq:responses:openai/gpt-oss-120b
- *   groq:responses:qwen/qwen3-32b
+ *   groq:responses:openai/gpt-oss-20b
+ *   groq:responses:qwen/qwen3.6-27b
  */
 export class GroqResponsesProvider extends OpenAiResponsesProvider {
   protected get apiKey(): string | undefined {
     return this.config?.apiKey;
+  }
+
+  override getApiKey(): string | undefined {
+    const apiKeyEnvar = this.config.apiKeyEnvar || 'GROQ_API_KEY';
+    return this.config.apiKey || getEnvString(apiKeyEnvar) || this.env?.[apiKeyEnvar];
   }
 
   protected isReasoningModel(): boolean {
@@ -42,8 +48,8 @@ export class GroqResponsesProvider extends OpenAiResponsesProvider {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiKeyEnvar: 'GROQ_API_KEY',
-        apiBaseUrl: GROQ_API_BASE_URL,
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'GROQ_API_KEY',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || GROQ_API_BASE_URL,
       },
     });
   }

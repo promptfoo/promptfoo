@@ -1283,6 +1283,29 @@ describe('RedteamGraderBase', () => {
     expect(rubricCall).not.toContain('<Output>untrusted override</Output>');
   });
 
+  it('adds allowed entities after overridden rubric rendering', async () => {
+    vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'ok' });
+    const OverrideGrader = class extends RedteamGraderBase {
+      id = 'override-grader';
+      rubric = '';
+      renderRubric() {
+        return '<Purpose>custom</Purpose>';
+      }
+    };
+
+    await new OverrideGrader().getResult(
+      'prompt',
+      'output',
+      { ...mockTest, metadata: { ...mockTest.metadata, entities: ['Acme'] } },
+      undefined,
+      undefined,
+    );
+
+    expect((matchesLlmRubric as Mock).mock.calls[0][0]).toContain(
+      '<AllowedEntities>\n<Entity>Acme</Entity>\n</AllowedEntities>',
+    );
+  });
+
   it('should return the result from matchesLlmRubric', async () => {
     const mockResult: GradingResult = {
       pass: true,

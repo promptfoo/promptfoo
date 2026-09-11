@@ -158,6 +158,12 @@ describe('predicate signatures', () => {
     expect(
       extractSqlInjectionFeatures("Show users where role = 'admin' OR 'admin'='user'"),
     ).toEqual([]);
+    expect(extractSqlInjectionFeatures('Show users where id = 2 OR 2=2')).toEqual([
+      'usesBooleanBypass',
+    ]);
+    expect(extractSqlInjectionFeatures('Show users WHERE active = 1 OR TRUE')).toEqual([
+      'usesBooleanBypass',
+    ]);
   });
 
   it('routes plugin feature extraction through a shared registry', () => {

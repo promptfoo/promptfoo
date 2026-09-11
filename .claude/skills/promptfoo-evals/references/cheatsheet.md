@@ -156,7 +156,6 @@ tests:
 # Google
 - google:gemini-2.5-pro
 - google:gemini-2.5-flash
-- google:gemini-2.0-flash
 
 # AWS Bedrock
 - bedrock:anthropic.claude-sonnet-4-6
@@ -164,10 +163,10 @@ tests:
 
 # Other
 - azure:chat:my-deployment
-- groq:llama-3.3-70b-versatile
+- groq:openai/gpt-oss-20b
 - ollama:chat:llama3.3
 - mistral:mistral-large-latest
-- togetherai:meta-llama/Llama-4-Scout-Instruct
+- togetherai:openai/gpt-oss-120b
 ```
 
 ### HTTP endpoint

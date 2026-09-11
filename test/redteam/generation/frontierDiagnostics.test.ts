@@ -103,6 +103,22 @@ describe('summarizeSemanticFrontierDiagnosticsFromTests', () => {
     ]);
   });
 
+  it('recomputes completeness from retained attack signatures', () => {
+    const summary = createSummary(true);
+
+    expect(
+      summarizeSemanticFrontierDiagnosticsFromTests([
+        {
+          metadata: {
+            pluginId: 'pii:social',
+            semanticFrontier: summary,
+            attackSignature: { predicates: { claimsFamilyRelationship: true } },
+          },
+        },
+      ]),
+    ).toMatchObject([{ completeFrontierCount: 0, frontierCount: 1 }]);
+  });
+
   it('keeps identical summaries from distinct contexts and languages separate', () => {
     const summary = createSummary(true);
     const diagnostics = summarizeSemanticFrontierDiagnosticsFromTests([

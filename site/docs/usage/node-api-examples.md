@@ -347,9 +347,9 @@ async function generateAdversarialTests() {
       prompt: 'You are a helpful assistant. Answer user questions.',
       model: 'openai:chat:gpt-5.5',
     },
-    plugins: ['prompt-injection', 'jailbreak', 'rbac'],
+    plugins: ['rbac'],
     numTests: 5,
-    strategies: ['iterative', 'ensemble'],
+    strategies: ['jailbreak-templates', 'jailbreak', 'jailbreak:tree', 'crescendo'],
   });
 
   console.log(`Generated ${result.tests.length} adversarial tests:`);

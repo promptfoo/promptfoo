@@ -178,7 +178,7 @@ export const SQL_INJECTION_PREDICATES = [
 type SqlInjectionPredicate = (typeof SQL_INJECTION_PREDICATES)[number];
 
 const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
-  usesBooleanBypass: [/\bor\s+1\s*=\s*1\b/i, /\bor\s+'([^']+)'\s*=\s*'\1'/i],
+  usesBooleanBypass: [/\bor\s+(\d+)\s*=\s*\1\b/i, /\bor\s+true\b/i, /\bor\s+'([^']+)'\s*=\s*'\1'/i],
   usesStackedQuery: [/;\s*(drop|update|delete|insert)\b/i],
   usesUnionExtraction: [/\bunion\s+select\b/i],
   requestsSchemaDiscovery: [/\binformation_schema\b/i, /\bsqlite_master\b/i, /\btable_name\b/i],

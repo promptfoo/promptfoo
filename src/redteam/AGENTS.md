@@ -8,13 +8,13 @@
 src/redteam/
 ├── plugins/      # Vulnerability-specific test generators
 │   ├── pii.ts             # PII leakage detection
-│   ├── harmful.ts         # Harmful content generation
-│   ├── sql-injection.ts   # SQL injection attempts
+│   ├── harmful/           # Harmful content generation
+│   ├── sqlInjection.ts    # SQL injection attempts
 │   └── ...
 ├── strategies/   # Attack transformation techniques
-│   ├── jailbreak.ts       # Guardrail bypass attempts
-│   ├── prompt-injection.ts
-│   ├── base64.ts         # Obfuscation strategies
+│   ├── iterative.ts       # Iterative jailbreak refinement
+│   ├── promptInjections/  # jailbreak-templates strategy
+│   ├── base64.ts          # Obfuscation strategies
 │   └── ...
 └── graders.ts    # Response evaluation logic
 ```
