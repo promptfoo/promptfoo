@@ -59,7 +59,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
     setIsTruncated(isOverLength);
   }, [isOverLength]);
 
-  const toggleTruncate = (e: React.MouseEvent<HTMLSpanElement>) => {
+  const toggleTruncate = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsTruncated((v) => !v);
@@ -113,28 +113,24 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
         {truncatedText}
 
         {isOverLength && (
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              marginLeft: '4px',
-              color: '#3b82f6',
-              fontWeight: 'bold',
-              fontSize: '0.85em',
-              padding: '1px 4px',
-              borderRadius: '4px',
-              background: 'rgba(59, 130, 246, 0.1)',
-              cursor: 'pointer',
-            }}
+          <button
+            type="button"
+            aria-controls={`eval-output-cell-text-${textId}`}
+            aria-expanded={!isTruncated}
+            aria-label={isTruncated ? 'Show full text' : 'Show less text'}
             onClick={toggleTruncate}
-            className="truncation-toggler"
+            className="truncation-toggler ml-1 inline-flex cursor-pointer items-center rounded border-0 bg-blue-500/10 px-1 py-px font-bold text-[0.85em] text-blue-500"
           >
             {isTruncated ? (
-              <span style={{ letterSpacing: '0.1rem' }}>...</span>
+              <span aria-hidden="true" className="tracking-[0.1rem]">
+                ...
+              </span>
             ) : (
               <span>Show less</span>
             )}
             <svg
+              aria-hidden="true"
+              className="ml-1"
               width="12"
               height="12"
               viewBox="0 0 24 24"
@@ -143,7 +139,6 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              style={{ marginLeft: '4px' }}
             >
               {isTruncated ? (
                 <polyline points="6 9 12 15 18 9"></polyline>
@@ -151,7 +146,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
                 <polyline points="18 15 12 9 6 15"></polyline>
               )}
             </svg>
-          </span>
+          </button>
         )}
       </div>
     </div>
