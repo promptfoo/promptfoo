@@ -7,7 +7,7 @@ description: Test GPT-Live voice conversations with paced audio input, timestamp
 
 Use `openai:live:gpt-live-1` to evaluate [OpenAI's GPT-Live API](https://developers.openai.com/api/docs/guides/live). It connects to `/v1/live/sessions` and supports full-duplex audio, where the model can listen and speak simultaneously. `openai:gpt-live-1` and `openai:live` select the same provider, and dated `openai:gpt-live-*` snapshots also use it.
 
-Set `OPENAI_API_KEY` to an OpenAI project key with Live access. For a compatible gateway, set `apiBaseUrl` and authenticate with `apiKey`, a credential header in `headers` (such as `Authorization` or `api-key`), or userinfo in `apiBaseUrl`. When a gateway uses its own credential header or URL userinfo, an `OPENAI_API_KEY` from the environment is not sent to it unless the provider or prompt config sets `apiKey` or `apiKeyEnvar`.
+Set `OPENAI_API_KEY` to an OpenAI project key with Live access. For a compatible gateway, set `apiBaseUrl` and authenticate with `apiKey`, a credential header in `headers` (such as `Authorization` or `api-key`), or userinfo in `apiBaseUrl`, which is sent as a Basic `Authorization` header. When a gateway uses its own credential header or URL userinfo, an `OPENAI_API_KEY` from the environment is not sent to it unless the provider or prompt config sets `apiKey` or `apiKeyEnvar`.
 
 ## Quickstart
 
@@ -111,11 +111,12 @@ assert:
 
 Startup failures report the server's error code and message. After startup, Live `error` events are recorded in `metadata.apiErrors` with the code, type, redacted message, parameter, and rejected client event, without ending the capture:
 
-- A rejected opening instruction ends the capture, because Live was never asked to speak.
+- Moderation and safety errors are graded as refusals, including when they reject one of promptfoo's commands or arrive while the session is closing.
+- A rejected opening instruction or commentary ends the capture, because Live was never asked to speak.
 - Other rejected commands and unattributed errors mark the result as an error and keep the full transcript.
-- Errors for pending commands that `session.close` cancels are recorded but do not change the result. Moderation and other errors received while closing are still reported.
+- Errors for pending commands that `session.close` cancels are recorded but do not change the result.
 
-Safety interventions are graded as refusals rather than errors. A moderation interruption sets `isRefusal` and `guardrails.flagged`. A session closed by the safety filter (`reason: content`) also sets `finishReason: content_filter` and `conversationEnded`, so multi-turn red team strategies stop probing. Sessions that close as `expired` or `connection_lost` remain errors.
+Safety interventions are graded as refusals rather than errors. A moderation error sets `isRefusal` and `guardrails.flagged`. A session closed by the safety filter (`reason: content`) also sets `finishReason: content_filter` and `conversationEnded`, so multi-turn red team strategies stop probing. Sessions that close as `expired` or `connection_lost` remain errors.
 
 ## Results and cost
 

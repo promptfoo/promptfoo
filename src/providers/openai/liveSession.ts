@@ -79,7 +79,7 @@ const LATE_WORK_ERROR =
   'GPT-Live backend requested work after the capture window ended. Increase responseWindowMs.';
 const CREDENTIAL_HEADER =
   /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i;
-const GUARDRAIL_ERROR = /moderation|content[\s_-]*(?:filter|policy)|safety|flagged/i;
+const GUARDRAIL_ERROR = /\b(?:moderation|content[\s_-]*(?:filter|policy)|safety|flagged)\b/i;
 
 /** Credential-named headers authenticate compatible gateways and are redacted from diagnostics. */
 export function isLiveCredentialHeader(name: string): boolean {
@@ -89,7 +89,7 @@ export function isLiveCredentialHeader(name: string): boolean {
 function collectCredentials(headers: Record<string, string>): string[] {
   return Object.entries(headers)
     .filter(([name, value]) => typeof value === 'string' && isLiveCredentialHeader(name))
-    .flatMap(([, value]) => [value, value.replace(/^(?:Bearer|Basic)\s+/i, '')])
+    .flatMap(([, value]) => credentialForms(value))
     .filter((value) => value.trim().length >= 4)
     .sort((left, right) => right.length - left.length);
 }
@@ -531,28 +531,23 @@ export class LiveSession {
       return;
     }
     const command = clientEventId ? this.commands.get(clientEventId) : undefined;
-    const guardrail = GUARDRAIL_ERROR.test(
-      [apiError.code, apiError.type, apiError.message].filter(Boolean).join(' '),
-    );
-    // session.close cancels promptfoo's pending appends and queued work; those errors don't change
-    // the result. Moderation and errors for anything else received while closing still count.
-    if (this.closing && command?.pending && !guardrail) {
+    const rejected = clientEventId ? `rejected ${command?.name ?? 'a client event'}` : undefined;
+    // Codes such as moderation_blocked name a category word by word; identifiers in messages,
+    // such as safety_identifier, don't make an error a safety intervention.
+    const labels = [apiError.code, apiError.type].map((label) => label?.replaceAll('_', ' '));
+    if (GUARDRAIL_ERROR.test([...labels, apiError.message].filter(Boolean).join(' '))) {
+      // Safety interventions are refusals, even when they reject one of promptfoo's commands.
+      this.guardrailReason ??= `GPT-Live moderation ${rejected ?? 'interrupted the response'}${detail}`;
+    } else if (this.closing && command?.pending) {
+      // session.close cancels pending appends and queued work; those errors don't change the result.
       return;
+    } else {
+      this.setError(`GPT-Live ${rejected ?? 'API error'}${detail}`);
     }
-    if (clientEventId) {
-      this.setError(`GPT-Live rejected ${command?.name ?? 'a client event'}${detail}`);
-      // Without the opening prompt, the model is never asked to speak.
-      if (clientEventId === OPENING_INSTRUCTION_ID || clientEventId === OPENING_COMMENTARY_ID) {
-        this.closeSession();
-      }
-      return;
+    // Without the opening prompt, the model is never asked to speak.
+    if (clientEventId === OPENING_INSTRUCTION_ID || clientEventId === OPENING_COMMENTARY_ID) {
+      this.closeSession();
     }
-    if (guardrail) {
-      // Moderation can interrupt the current speech without ending the session.
-      this.guardrailReason ??= `GPT-Live moderation interrupted the response${detail}`;
-      return;
-    }
-    this.setError(`GPT-Live API error${detail}`);
   }
 
   private readUsage(event: LiveEvent): boolean {
@@ -902,4 +897,15 @@ export class LiveSession {
       },
     });
   }
+}
+
+/** Redaction forms of a credential header: its value, bare token, and decoded Basic password. */
+function credentialForms(value: string): string[] {
+  const token = value.replace(/^(?:Bearer|Basic)\s+/i, '');
+  if (!/^Basic\s/i.test(value)) {
+    return [value, token];
+  }
+  // A gateway can echo the decoded user:password pair or the password alone.
+  const pair = Buffer.from(token, 'base64').toString('utf8');
+  return [value, token, pair, pair.slice(pair.indexOf(':') + 1)];
 }

@@ -561,6 +561,27 @@ describe('OpenAiLiveProvider', () => {
     expect(response.finishReason).toBeUndefined();
   });
 
+  it('reports an error naming safety_identifier as an API error, not moderation', async () => {
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket);
+    apiError(socket, {
+      type: 'invalid_request_error',
+      code: 'invalid_value',
+      message: "Invalid 'safety_identifier': string too long.",
+      param: 'safety_identifier',
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    closed(socket);
+    const response = await result;
+    expect(response.error).toBe(
+      "GPT-Live API error (invalid_value): Invalid 'safety_identifier': string too long.",
+    );
+    expect(response.isRefusal).toBeUndefined();
+    expect(response.guardrails).toBeUndefined();
+  });
+
   it('ignores errors for commands cancelled by session.close', async () => {
     const result = provider().callApi('Hi');
     const socket = await connect();
@@ -583,30 +604,52 @@ describe('OpenAiLiveProvider', () => {
     ]);
   });
 
-  it('grades moderation received while closing as a refusal', async () => {
+  it.each([
+    {
+      name: 'unattributed moderation',
+      error: {
+        type: 'invalid_request_error',
+        code: 'moderation_blocked',
+        message: 'Assistant audio was interrupted by moderation.',
+      },
+      reason:
+        'GPT-Live moderation interrupted the response (moderation_blocked): Assistant audio was interrupted by moderation.',
+    },
+    {
+      name: 'a content policy code',
+      error: {
+        type: 'invalid_request_error',
+        code: 'content_policy_violation',
+        message: 'Blocked.',
+      },
+      reason: 'GPT-Live moderation interrupted the response (content_policy_violation): Blocked.',
+    },
+    {
+      name: 'moderation rejecting a pending command',
+      error: {
+        type: 'invalid_request_error',
+        code: 'moderation_blocked',
+        message: 'Commentary blocked.',
+        client_event_id: 'promptfoo_opening',
+      },
+      reason:
+        'GPT-Live moderation rejected session.commentary.append (moderation_blocked): Commentary blocked.',
+    },
+  ])('grades $name received while closing as a refusal', async ({ error, reason }) => {
     const result = provider().callApi('Hi');
     const socket = await connect();
     start(socket);
     text(socket, 'Here is');
     await vi.advanceTimersByTimeAsync(100);
     expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
-    apiError(socket, {
-      type: 'invalid_request_error',
-      code: 'moderation_blocked',
-      message: 'Assistant audio was interrupted by moderation.',
-    });
+    apiError(socket, error);
     closed(socket);
     const response = await result;
     expect(response.error).toBeUndefined();
     expect(response).toMatchObject({
       output: 'Here is',
       isRefusal: true,
-      guardrails: {
-        flagged: true,
-        flaggedOutput: true,
-        reason:
-          'GPT-Live moderation interrupted the response (moderation_blocked): Assistant audio was interrupted by moderation.',
-      },
+      guardrails: { flagged: true, flaggedOutput: true, reason },
       metadata: { finalUsageConfirmed: true, closeReason: 'close_requested' },
     });
     expect(response.cost).toBeCloseTo(0.01);
@@ -639,17 +682,6 @@ describe('OpenAiLiveProvider', () => {
       },
       expected:
         'GPT-Live rejected session.commentary.append (append_cancelled): Pending append cancelled.',
-    },
-    {
-      name: 'moderation for a pending command',
-      error: {
-        type: 'invalid_request_error',
-        code: 'moderation_blocked',
-        message: 'Commentary blocked.',
-        client_event_id: 'promptfoo_opening',
-      },
-      expected:
-        'GPT-Live rejected session.commentary.append (moderation_blocked): Commentary blocked.',
     },
   ])('reports $name received while closing', async ({ acknowledged, error, expected }) => {
     const result = provider().callApi('Hi');
@@ -685,6 +717,35 @@ describe('OpenAiLiveProvider', () => {
     expect((await result).error).toBe(
       'GPT-Live rejected session.instructions.append (invalid_value): Instruction rejected.',
     );
+  });
+
+  it('grades moderation rejecting the opening instruction as a refusal and ends the capture', async () => {
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    start(socket, { ack: false });
+    apiError(socket, {
+      type: 'invalid_request_error',
+      code: 'moderation_blocked',
+      message: 'Instruction blocked.',
+      client_event_id: 'promptfoo_start',
+    });
+    expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+    expect(sentTypes(socket)).not.toContain('session.commentary.append');
+    closed(socket, 1);
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response).toMatchObject({
+      output: '',
+      isRefusal: true,
+      guardrails: {
+        flagged: true,
+        flaggedOutput: true,
+        reason:
+          'GPT-Live moderation rejected session.instructions.append (moderation_blocked): Instruction blocked.',
+      },
+      metadata: { finalUsageConfirmed: true, closeReason: 'close_requested' },
+    });
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('reports a rejected delegation result without ending the capture early', async () => {
@@ -972,9 +1033,10 @@ describe('OpenAiLiveProvider', () => {
     expect(sockets).toHaveLength(0);
   });
 
-  it('treats URL userinfo as a gateway credential and rejects query-string credentials', async () => {
+  it('sends URL userinfo as Basic authorization instead of an ambient key or socket URL credential', async () => {
     mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
-    const apiBaseUrl = 'http://gateway-user:gateway-secret@localhost:1234/v1';
+    const apiBaseUrl = 'http://gateway-user:gateway%21secret@localhost:1234/v1';
+    const basic = `Basic ${Buffer.from('gateway-user:gateway!secret').toString('base64')}`;
     const upgrade = async (config: OpenAiLiveOptions) => {
       const result = new OpenAiLiveProvider('gpt-live-1', {
         config: { responseWindowMs: 100, websocketTimeout: 200, closeTimeoutMs: 100, ...config },
@@ -987,21 +1049,55 @@ describe('OpenAiLiveProvider', () => {
       return socket;
     };
 
-    // ws turns the userinfo into Basic credentials when no Authorization header is supplied.
     const gateway = await upgrade({ apiBaseUrl });
-    expect(gateway.url).toBe('ws://gateway-user:gateway-secret@localhost:1234/v1/live/sessions');
-    expect(gateway.options.headers).toEqual({});
-    expect((await upgrade({ apiBaseUrl, apiKey: 'explicit-key' })).options.headers).toEqual({
-      Authorization: 'Bearer explicit-key',
-    });
+    expect(gateway.url).toBe('ws://localhost:1234/v1/live/sessions');
+    expect(gateway.options.headers).toEqual({ Authorization: basic });
+    // An explicit key or Authorization header still wins over userinfo.
+    const explicit = await upgrade({ apiBaseUrl, apiKey: 'explicit-key' });
+    expect(explicit.url).toBe('ws://localhost:1234/v1/live/sessions');
+    expect(explicit.options.headers).toEqual({ Authorization: 'Bearer explicit-key' });
+    const custom = await upgrade({ apiBaseUrl, headers: { authorization: 'Bearer custom-token' } });
+    expect(custom.options.headers).toEqual({ authorization: 'Bearer custom-token' });
     const queryCredential = await new OpenAiLiveProvider('gpt-live-1', {
       config: { apiBaseUrl: 'http://localhost:1234/v1?api-key=gateway-secret' },
     }).callApi('Hi');
     expect(queryCredential.error).toBe('GPT-Live session URLs do not accept query parameters.');
-    expect(sockets).toHaveLength(2);
+    expect(sockets).toHaveLength(3);
     // URL userinfo also satisfies the credential requirement without OPENAI_API_KEY.
     mockProcessEnv({ OPENAI_API_KEY: undefined });
-    expect((await upgrade({ apiBaseUrl })).options.headers).toEqual({});
+    expect((await upgrade({ apiBaseUrl })).options.headers).toEqual({ Authorization: basic });
+  });
+
+  it('redacts a URL userinfo credential that a rejected handshake echoes', async () => {
+    const token = Buffer.from('gateway-user:gateway!secret').toString('base64');
+    const result = new OpenAiLiveProvider('gpt-live-1', {
+      config: {
+        apiBaseUrl: 'http://gateway-user:gateway%21secret@localhost:1234/v1',
+        responseWindowMs: 100,
+        websocketTimeout: 200,
+        closeTimeoutMs: 100,
+      },
+    }).callApi('Hi');
+    await vi.advanceTimersByTimeAsync(0);
+    sockets[0].emit(
+      'unexpected-response',
+      {},
+      httpResponse(
+        401,
+        JSON.stringify({
+          error: {
+            message: `Rejected Basic ${token} (${token}) for gateway-user:gateway!secret; password gateway!secret.`,
+          },
+        }),
+      ),
+    );
+    const response = await result;
+    expect(response.error).toBe(
+      'GPT-Live WebSocket handshake failed (HTTP 401): Rejected [REDACTED] ([REDACTED]) for [REDACTED]; password [REDACTED].',
+    );
+    expect(JSON.stringify(response)).not.toMatch(/gateway!secret|gateway%21secret/);
+    expect(JSON.stringify(response)).not.toContain(token);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('uses prompt-scoped headers, including a case-insensitive authorization override', async () => {

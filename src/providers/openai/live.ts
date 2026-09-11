@@ -34,6 +34,15 @@ function positiveTimeout(value: number, name: string): number {
   return value;
 }
 
+/** Decode URL userinfo as Node's HTTP client does, keeping a malformed escape as written. */
+function decodeUserinfo(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 /** One independent, finite capture per eval. Live has no authoritative voice-turn-done event. */
 export class OpenAiLiveProvider extends OpenAiGenericProvider {
   declare config: OpenAiLiveOptions;
@@ -65,6 +74,54 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
   async shutdown(): Promise<void> {
     this.cleanup();
     providerRegistry.unregister(this);
+  }
+
+  /** Resolve the socket URL and upgrade headers, sending each credential only where it belongs. */
+  private getConnection(config: OpenAiLiveOptions): {
+    url: string;
+    headers: Record<string, string>;
+  } {
+    const url = new URL(appendOpenAiApiPath(this.getApiUrl(), 'live/sessions'));
+    url.protocol = ['http:', 'ws:'].includes(url.protocol) ? 'ws:' : 'wss:';
+    if (url.search) {
+      throw new Error('GPT-Live session URLs do not accept query parameters.');
+    }
+    // Send URL userinfo as an explicit Basic credential, which diagnostics redact, instead of
+    // leaving it in the socket URL.
+    const userinfo =
+      url.username || url.password
+        ? `${decodeUserinfo(url.username)}:${decodeUserinfo(url.password)}`
+        : undefined;
+    url.username = '';
+    url.password = '';
+    // A prompt-level apiKey or apiKeyEnvar selects this call's credential.
+    const apiKey = this.getApiKey(config);
+    const headers = this.getOpenAiRequestHeaders(config.headers);
+    const credentialHeaders = Object.entries(headers).filter(
+      ([name, value]) => isLiveCredentialHeader(name) && String(value).trim().length > 0,
+    );
+    if (!apiKey && this.requiresApiKey() && !credentialHeaders.length && !userinfo) {
+      throw new Error(this.getMissingApiKeyErrorMessage(config));
+    }
+    // Don't forward an ambient OPENAI_API_KEY to a gateway that authenticates with its own
+    // credential header or URL userinfo; an explicit apiKey or apiKeyEnvar still sends it.
+    const sendApiKey =
+      Boolean(config.apiKey || config.apiKeyEnvar) ||
+      url.hostname.toLowerCase() === 'api.openai.com' ||
+      (!userinfo && !credentialHeaders.some(([name]) => name.toLowerCase() !== 'authorization'));
+    const authorization =
+      apiKey && sendApiKey
+        ? `Bearer ${apiKey}`
+        : userinfo && `Basic ${Buffer.from(userinfo).toString('base64')}`;
+    return {
+      url: url.toString(),
+      headers: {
+        ...(authorization && !hasHeaderOverride(headers, 'Authorization')
+          ? { Authorization: authorization }
+          : {}),
+        ...headers,
+      },
+    };
   }
 
   async callApi(
@@ -129,37 +186,8 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       const delegationHandler = await resolveHandler(config.delegationHandler);
       const functionCallHandler = await resolveHandler(config.functionCallHandler);
       controller.signal.throwIfAborted();
-      const url = new URL(appendOpenAiApiPath(this.getApiUrl(), 'live/sessions'));
-      url.protocol = ['http:', 'ws:'].includes(url.protocol) ? 'ws:' : 'wss:';
-      if (url.search) {
-        throw new Error('GPT-Live session URLs do not accept query parameters.');
-      }
-      // A prompt-level apiKey or apiKeyEnvar selects this call's credential.
-      const apiKey = this.getApiKey(config);
-      const headers = this.getOpenAiRequestHeaders(config.headers);
-      const credentialHeaders = Object.entries(headers).filter(
-        ([name, value]) => isLiveCredentialHeader(name) && String(value).trim().length > 0,
-      );
-      // ws sends URL userinfo as Basic credentials unless an Authorization header is set.
-      const hasUrlCredentials = Boolean(url.username || url.password);
-      if (!apiKey && this.requiresApiKey() && !credentialHeaders.length && !hasUrlCredentials) {
-        throw new Error(this.getMissingApiKeyErrorMessage(config));
-      }
-      // Don't forward an ambient OPENAI_API_KEY to a gateway that authenticates with its own
-      // credential header or URL userinfo; an explicit apiKey or apiKeyEnvar still sends it.
-      const sendApiKey =
-        Boolean(config.apiKey || config.apiKeyEnvar) ||
-        url.hostname.toLowerCase() === 'api.openai.com' ||
-        (!hasUrlCredentials &&
-          !credentialHeaders.some(([name]) => name.toLowerCase() !== 'authorization'));
       const session = new LiveSession({
-        url: url.toString(),
-        headers: {
-          ...(apiKey && sendApiKey && !hasHeaderOverride(headers, 'Authorization')
-            ? { Authorization: `Bearer ${apiKey}` }
-            : {}),
-          ...headers,
-        },
+        ...this.getConnection(config),
         model: this.modelName,
         config,
         format,
