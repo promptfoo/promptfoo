@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: PromptFunction'
-description: 'Function form accepted anywhere the Node.js API accepts a prompt. See the supported promptfoo Node.js API imports, signatures, fields, and application examples.'
+description: "<!-- prettier-ignore --> > PromptFunction = (context) => Promise\\<PromptContent \\| PromptFunctionResult\\> See supported imports and signatures for this symbol."
 sidebar_position: 7
 ---
 
@@ -10,7 +10,8 @@ sidebar_position: 7
 import type { PromptFunction } from 'promptfoo';
 ```
 
-> **PromptFunction** = (`context`) => `Promise`\<[`PromptContent`](PromptContent.md) \| [`PromptFunctionResult`](../interfaces/PromptFunctionResult.md)>>\>
+<!-- prettier-ignore -->
+> **PromptFunction** = (`context`) => `Promise`\<[`PromptContent`](PromptContent.md) \| [`PromptFunctionResult`](../interfaces/PromptFunctionResult.md)\>
 
 Defined in: contracts/prompts.ts:122
 

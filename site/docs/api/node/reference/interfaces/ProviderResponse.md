@@ -144,7 +144,8 @@ Actual target-provider cost incurred during this run, excluding response-cache r
 
 ### inputMaterialization?
 
-> `optional` **inputMaterialization?**: `Record`\<`string`, `unknown`>>\>
+<!-- prettier-ignore -->
+> `optional` **inputMaterialization?**: `Record`\<`string`, `unknown`\>
 
 Defined in: contracts/providers.ts:247
 
@@ -206,7 +207,8 @@ for this response. When true, callers must not re-materialize locally.
 
 ### materializedVars?
 
-> `optional` **materializedVars?**: `Record`\<`string`, `string`>>\>
+<!-- prettier-ignore -->
+> `optional` **materializedVars?**: `Record`\<`string`, `string`\>
 
 Defined in: contracts/providers.ts:192
 
@@ -236,13 +238,15 @@ HTTP transport details retained by HTTP-based providers.
 
 ##### http.headers?
 
-> `optional` **headers?**: `Record`\<`string`, `string`>>\>
+<!-- prettier-ignore -->
+> `optional` **headers?**: `Record`\<`string`, `string`\>
 
 Response headers returned by the upstream HTTP service.
 
 ##### http.requestHeaders?
 
-> `optional` **requestHeaders?**: `Record`\<`string`, `string`>>\>
+<!-- prettier-ignore -->
+> `optional` **requestHeaders?**: `Record`\<`string`, `string`\>
 
 Request headers sent to the upstream HTTP service.
 

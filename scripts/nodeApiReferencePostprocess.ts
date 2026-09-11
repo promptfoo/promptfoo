@@ -224,7 +224,11 @@ function rewriteGeneratedPages() {
 
   const sidebarPositionsByDirectory = new Map([[REFERENCE_DIR, 1]]);
   generatedPages.forEach((entryPath) => {
-    const original = fs.readFileSync(entryPath, 'utf8');
+    // Prettier duplicates generic closing delimiters in Markdown blockquotes.
+    // Keep TypeDoc's linked signatures intact when formatting the surrounding page.
+    const original = fs
+      .readFileSync(entryPath, 'utf8')
+      .replace(/^> (?=.*\\<)/gm, '<!-- prettier-ignore -->\n> ');
     const firstHeading = original.match(/^# (.+)$/m);
     if (!firstHeading?.[1] || firstHeading.index === undefined) {
       return;

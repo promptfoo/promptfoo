@@ -50,7 +50,8 @@ Execute one provider request.
 
 ### cleanup?
 
-> `optional` **cleanup?**: () => `void` \| `Promise`\<`void`>>\>
+<!-- prettier-ignore -->
+> `optional` **cleanup?**: () => `void` \| `Promise`\<`void`\>
 
 Defined in: types/providers.ts:335
 
@@ -132,6 +133,7 @@ Defined in: contracts/prompts.ts:5
 
 ### inputs?
 
+<!-- prettier-ignore -->
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
 Defined in: types/providers.ts:318
@@ -186,7 +188,8 @@ Transform provider output before assertions run.
 
 ### callClassificationApi()?
 
-> `optional` **callClassificationApi**(`prompt`): `Promise`\<[`ProviderClassificationResponse`](ProviderClassificationResponse.md)>>\>
+<!-- prettier-ignore -->
+> `optional` **callClassificationApi**(`prompt`): `Promise`\<[`ProviderClassificationResponse`](ProviderClassificationResponse.md)\>
 
 Defined in: types/providers.ts:290
 
@@ -210,7 +213,8 @@ Class labels mapped to provider-reported scores.
 
 ### callEmbeddingApi()?
 
-> `optional` **callEmbeddingApi**(`input`): `Promise`\<[`ProviderEmbeddingResponse`](ProviderEmbeddingResponse.md)>>\>
+<!-- prettier-ignore -->
+> `optional` **callEmbeddingApi**(`input`): `Promise`\<[`ProviderEmbeddingResponse`](ProviderEmbeddingResponse.md)\>
 
 Defined in: types/providers.ts:297
 

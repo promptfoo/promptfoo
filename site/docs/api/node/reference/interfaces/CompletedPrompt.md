@@ -100,19 +100,22 @@ Estimated cost accumulated across provider calls for this prompt.
 
 #### namedScores
 
-> **namedScores**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> **namedScores**: `Record`\<`string`, `number`\>
 
 Aggregate values for named assertion metrics.
 
 #### namedScoresCount
 
-> **namedScoresCount**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> **namedScoresCount**: `Record`\<`string`, `number`\>
 
 Number of contributions included in each named score.
 
 #### namedScoreWeights?
 
-> `optional` **namedScoreWeights?**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
 
 Sum of assertion weights contributing to each named score.
 
@@ -124,25 +127,29 @@ Red-team pass/fail counts grouped by plugin and strategy.
 
 ##### redteam.pluginFailCount
 
-> **pluginFailCount**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> **pluginFailCount**: `Record`\<`string`, `number`\>
 
 Failing result counts by red-team plugin id.
 
 ##### redteam.pluginPassCount
 
-> **pluginPassCount**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> **pluginPassCount**: `Record`\<`string`, `number`\>
 
 Passing result counts by red-team plugin id.
 
 ##### redteam.strategyFailCount
 
-> **strategyFailCount**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> **strategyFailCount**: `Record`\<`string`, `number`\>
 
 Failing result counts by red-team strategy id.
 
 ##### redteam.strategyPassCount
 
-> **strategyPassCount**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> **strategyPassCount**: `Record`\<`string`, `number`\>
 
 Passing result counts by red-team strategy id.
 

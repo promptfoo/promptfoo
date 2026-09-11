@@ -74,7 +74,8 @@ Defined in: types/index.ts:412
 
 ### namedScores
 
-> **namedScores**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> **namedScores**: `Record`\<`string`, `number`\>
 
 Defined in: types/index.ts:392
 
@@ -84,7 +85,8 @@ Aggregate values for named assertion metrics.
 
 ### namedScoresCount
 
-> **namedScoresCount**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> **namedScoresCount**: `Record`\<`string`, `number`\>
 
 Defined in: types/index.ts:394
 
@@ -94,7 +96,8 @@ Number of contributions included in each named score.
 
 ### namedScoreWeights?
 
-> `optional` **namedScoreWeights?**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
 
 Defined in: types/index.ts:396
 
@@ -112,25 +115,29 @@ Red-team pass/fail counts grouped by plugin and strategy.
 
 #### pluginFailCount
 
-> **pluginFailCount**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> **pluginFailCount**: `Record`\<`string`, `number`\>
 
 Failing result counts by red-team plugin id.
 
 #### pluginPassCount
 
-> **pluginPassCount**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> **pluginPassCount**: `Record`\<`string`, `number`\>
 
 Passing result counts by red-team plugin id.
 
 #### strategyFailCount
 
-> **strategyFailCount**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> **strategyFailCount**: `Record`\<`string`, `number`\>
 
 Failing result counts by red-team strategy id.
 
 #### strategyPassCount
 
-> **strategyPassCount**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> **strategyPassCount**: `Record`\<`string`, `number`\>
 
 Passing result counts by red-team strategy id.
 

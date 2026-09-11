@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: EnvOverrides'
-description: 'Environment-variable overrides accepted by provider-loading APIs. See the supported promptfoo Node.js API imports, signatures, fields, and application examples.'
+description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
 sidebar_position: 3
 ---
 
@@ -10,7 +10,8 @@ sidebar_position: 3
 import type { EnvOverrides } from 'promptfoo';
 ```
 
-> **EnvOverrides** = `z.infer`\<_typeof_ `ProviderEnvOverridesSchema`> > \> & `Record`\<`string`, `string` \| `undefined`>>\>
+<!-- prettier-ignore -->
+> **EnvOverrides** = `z.infer`\<*typeof* `ProviderEnvOverridesSchema`\> & `Record`\<`string`, `string` \| `undefined`\>
 
 Defined in: contracts/env.ts:173
 

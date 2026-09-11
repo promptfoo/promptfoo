@@ -28,7 +28,8 @@ const echoProvider: CallApiFunction = async (prompt, context) => ({
 });
 ```
 
-> **CallApiFunction**(`prompt`, `context?`, `options?`): `Promise`\<[`ProviderResponse`](ProviderResponse.md)>>\>
+<!-- prettier-ignore -->
+> **CallApiFunction**(`prompt`, `context?`, `options?`): `Promise`\<[`ProviderResponse`](ProviderResponse.md)\>
 
 Defined in: types/providers.ts:384
 

@@ -39,7 +39,8 @@ Sub-assertions to run as one grouped assertion set.
 
 #### config?
 
-> `optional` **config?**: `Record`\<`string`, `any`>>\>
+<!-- prettier-ignore -->
+> `optional` **config?**: `Record`\<`string`, `any`\>
 
 Arbitrary custom config exposed to assertion callbacks through `context.config`.
 
@@ -101,7 +102,8 @@ Weight of this assertion relative to the rest of the test case. Defaults to `1`.
 
 ### config?
 
-> `optional` **config?**: `Record`\<`string`, `any`>>\>
+<!-- prettier-ignore -->
+> `optional` **config?**: `Record`\<`string`, `any`\>
 
 Defined in: types/index.ts:957
 

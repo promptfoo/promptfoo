@@ -1,6 +1,6 @@
 ---
 title: 'Function: loadApiProviders()'
-description: 'Load one or more providers from provider config input. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
+description: "<!-- prettier-ignore --> > loadApiProviders(providerPaths, options?): Promise\\<ApiProvider[]\\> See supported imports, signatures, and fields for this symbol."
 sidebar_position: 5
 ---
 
@@ -10,6 +10,7 @@ sidebar_position: 5
 import { loadApiProviders } from 'promptfoo';
 ```
 
+<!-- prettier-ignore -->
 > **loadApiProviders**(`providerPaths`, `options?`): `Promise`\<[`ApiProvider`](../interfaces/ApiProvider.md)[]\>
 
 Defined in: providers/index.ts:433

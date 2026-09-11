@@ -10,7 +10,7 @@ sidebar_position: 40
 import type { StrategyConfig } from 'promptfoo';
 ```
 
-Defined in: redteam/types.ts:482
+Defined in: redteam/types.ts:311
 
 Advanced strategy configuration carried on generated red-team test cases.
 
@@ -34,7 +34,7 @@ const strategyConfig: StrategyConfig = {
 
 > `optional` **enabled?**: `boolean`
 
-Defined in: redteam/types.ts:484
+Defined in: redteam/types.ts:313
 
 Whether the strategy should be enabled.
 
@@ -44,7 +44,7 @@ Whether the strategy should be enabled.
 
 > `optional` **numTests?**: `number`
 
-Defined in: redteam/types.ts:488
+Defined in: redteam/types.ts:317
 
 Number of tests to generate for the strategy.
 
@@ -54,6 +54,6 @@ Number of tests to generate for the strategy.
 
 > `optional` **plugins?**: `string`[]
 
-Defined in: redteam/types.ts:486
+Defined in: redteam/types.ts:315
 
 Plugin ids that this strategy should target.

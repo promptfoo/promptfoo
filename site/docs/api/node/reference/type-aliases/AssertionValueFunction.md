@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: AssertionValueFunction'
-description: 'Function form accepted by JavaScript assertions. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
+description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
 sidebar_position: 2
 ---
 
@@ -10,7 +10,8 @@ sidebar_position: 2
 import type { AssertionValueFunction } from 'promptfoo';
 ```
 
-> **AssertionValueFunction** = (`output`, `context`) => `AssertionValueFunctionResult` \| `Promise`\<`AssertionValueFunctionResult`>>\>
+<!-- prettier-ignore -->
+> **AssertionValueFunction** = (`output`, `context`) => `AssertionValueFunctionResult` \| `Promise`\<`AssertionValueFunctionResult`\>
 
 Defined in: types/index.ts:1115
 

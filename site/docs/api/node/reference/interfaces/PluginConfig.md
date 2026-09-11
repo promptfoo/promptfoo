@@ -10,7 +10,7 @@ sidebar_position: 27
 import type { PluginConfig } from 'promptfoo';
 ```
 
-Defined in: redteam/types.ts:279
+Defined in: redteam/types.ts:281
 
 Advanced plugin configuration carried on generated red-team test cases.
 
@@ -27,11 +27,13 @@ const pluginConfig: PluginConfig = {
 };
 ```
 
+## Extends
+
+- `output`\<_typeof_ `PluginConfigSchema`\>
+
 ## Indexable
 
 > \[`key`: `string`\]: `unknown`
-
-Additional plugin-specific settings preserved for custom integrations.
 
 ## Properties
 
@@ -39,9 +41,13 @@ Additional plugin-specific settings preserved for custom integrations.
 
 > `optional` **\_\_nonce?**: `number`
 
-Defined in: redteam/types.ts:449
+Defined in: redteam/types.ts:234
 
 Nonce used to prevent reuse of cached generated test cases.
+
+#### Inherited from
+
+`z.infer.__nonce`
 
 ---
 
@@ -49,9 +55,13 @@ Nonce used to prevent reuse of cached generated test cases.
 
 > `optional` **examples?**: `string`[]
 
-Defined in: redteam/types.ts:281
+Defined in: redteam/types.ts:58
 
 Example inputs used to steer red-team test generation.
+
+#### Inherited from
+
+`z.infer.examples`
 
 ---
 
@@ -59,19 +69,43 @@ Example inputs used to steer red-team test generation.
 
 > `optional` **excludeStrategies?**: `string`[]
 
-Defined in: redteam/types.ts:321
+Defined in: redteam/types.ts:109
 
 Strategy ids this plugin should not be combined with.
+
+#### Inherited from
+
+`z.infer.excludeStrategies`
 
 ---
 
 ### graderExamples?
 
-> `optional` **graderExamples?**: [`PluginGraderExample`](PluginGraderExample.md)[]
+> `optional` **graderExamples?**: `object`[]
 
-Defined in: redteam/types.ts:283
+Defined in: redteam/types.ts:60
 
 Example grader outputs used to calibrate plugin-specific grading.
+
+#### output
+
+> **output**: `string`
+
+#### pass
+
+> **pass**: `boolean`
+
+#### reason
+
+> **reason**: `string`
+
+#### score
+
+> **score**: `number`
+
+#### Inherited from
+
+`z.infer.graderExamples`
 
 ---
 
@@ -79,9 +113,13 @@ Example grader outputs used to calibrate plugin-specific grading.
 
 > `optional` **graderGuidance?**: `string`
 
-Defined in: redteam/types.ts:285
+Defined in: redteam/types.ts:71
 
 Additional rubric guidance passed to plugin graders.
+
+#### Inherited from
+
+`z.infer.graderGuidance`
 
 ---
 
@@ -89,23 +127,28 @@ Additional rubric guidance passed to plugin graders.
 
 > `optional` **indirectInjectionVar?**: `string`
 
-Defined in: redteam/types.ts:311
+Defined in: redteam/types.ts:99
 
 Variable name that receives the indirect prompt-injection payload.
+
+#### Inherited from
+
+`z.infer.indirectInjectionVar`
 
 ---
 
 ### inputs?
 
+<!-- prettier-ignore -->
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: redteam/types.ts:445
+Defined in: redteam/types.ts:229
 
 Multi-variable input definitions used while generating test cases.
 
-Each key is the variable name. Use a short description string for simple
-text inputs, or an object when the input needs a declared media type or
-generation guidance.
+#### Inherited from
+
+`z.infer.inputs`
 
 ---
 
@@ -113,9 +156,13 @@ generation guidance.
 
 > `optional` **intendedResults?**: `string`[]
 
-Defined in: redteam/types.ts:313
+Defined in: redteam/types.ts:101
 
 Expected retrieval results used by RAG-poisoning plugins.
+
+#### Inherited from
+
+`z.infer.intendedResults`
 
 ---
 
@@ -123,9 +170,13 @@ Expected retrieval results used by RAG-poisoning plugins.
 
 > `optional` **intent?**: `string` \| (`string` \| `string`[])[]
 
-Defined in: redteam/types.ts:315
+Defined in: redteam/types.ts:103
 
 Intent label or labels used by intent-aware plugins.
+
+#### Inherited from
+
+`z.infer.intent`
 
 ---
 
@@ -133,9 +184,13 @@ Intent label or labels used by intent-aware plugins.
 
 > `optional` **language?**: `string` \| `string`[]
 
-Defined in: redteam/types.ts:289
+Defined in: redteam/types.ts:75
 
 Language or languages requested for generated tests.
+
+#### Inherited from
+
+`z.infer.language`
 
 ---
 
@@ -143,9 +198,13 @@ Language or languages requested for generated tests.
 
 > `optional` **maxCharsPerMessage?**: `number`
 
-Defined in: redteam/types.ts:447
+Defined in: redteam/types.ts:231
 
 Maximum generated characters per conversation message.
+
+#### Inherited from
+
+`z.infer.maxCharsPerMessage`
 
 ---
 
@@ -153,19 +212,28 @@ Maximum generated characters per conversation message.
 
 > `optional` **mentions?**: `boolean`
 
-Defined in: redteam/types.ts:301
+Defined in: redteam/types.ts:88
 
 Whether competitor-oriented plugins may mention the configured competitor names.
+
+#### Inherited from
+
+`z.infer.mentions`
 
 ---
 
 ### modifiers?
 
-> `optional` **modifiers?**: `Record`\<`string`, `unknown`>>\>
+<!-- prettier-ignore -->
+> `optional` **modifiers?**: `Record`\<`string`, `unknown`\>
 
-Defined in: redteam/types.ts:295
+Defined in: redteam/types.ts:82
 
 Plugin-specific behavior modifiers such as tone or style.
+
+#### Inherited from
+
+`z.infer.modifiers`
 
 ---
 
@@ -173,9 +241,13 @@ Plugin-specific behavior modifiers such as tone or style.
 
 > `optional` **multilingual?**: `boolean`
 
-Defined in: redteam/types.ts:309
+Defined in: redteam/types.ts:96
 
 Whether CyberSecEval-style plugins should generate multilingual probes.
+
+#### Inherited from
+
+`z.infer.multilingual`
 
 ---
 
@@ -183,9 +255,13 @@ Whether CyberSecEval-style plugins should generate multilingual probes.
 
 > `optional` **mustNotExistPath?**: `string`
 
-Defined in: redteam/types.ts:365
+Defined in: redteam/types.ts:154
 
 Single path that must not exist after the run.
+
+#### Inherited from
+
+`z.infer.mustNotExistPath`
 
 ---
 
@@ -193,9 +269,13 @@ Single path that must not exist after the run.
 
 > `optional` **mustNotExistPaths?**: `string`[]
 
-Defined in: redteam/types.ts:367
+Defined in: redteam/types.ts:156
 
 Multiple paths that must not exist after the run.
+
+#### Inherited from
+
+`z.infer.mustNotExistPaths`
 
 ---
 
@@ -203,9 +283,13 @@ Multiple paths that must not exist after the run.
 
 > `optional` **name?**: `string`
 
-Defined in: redteam/types.ts:307
+Defined in: redteam/types.ts:94
 
 Subject name used by PII-oriented plugins.
+
+#### Inherited from
+
+`z.infer.name`
 
 ---
 
@@ -213,9 +297,13 @@ Subject name used by PII-oriented plugins.
 
 > `optional` **networkAllowedHost?**: `string`
 
-Defined in: redteam/types.ts:415
+Defined in: redteam/types.ts:204
 
 Single host explicitly allowed by network-safety fixtures.
+
+#### Inherited from
+
+`z.infer.networkAllowedHost`
 
 ---
 
@@ -223,9 +311,13 @@ Single host explicitly allowed by network-safety fixtures.
 
 > `optional` **networkAllowedHosts?**: `string`[]
 
-Defined in: redteam/types.ts:417
+Defined in: redteam/types.ts:206
 
 Multiple hosts explicitly allowed by network-safety fixtures.
+
+#### Inherited from
+
+`z.infer.networkAllowedHosts`
 
 ---
 
@@ -233,9 +325,13 @@ Multiple hosts explicitly allowed by network-safety fixtures.
 
 > `optional` **networkAllowedUrl?**: `string`
 
-Defined in: redteam/types.ts:419
+Defined in: redteam/types.ts:208
 
 Single URL explicitly allowed by network-safety fixtures.
+
+#### Inherited from
+
+`z.infer.networkAllowedUrl`
 
 ---
 
@@ -243,9 +339,13 @@ Single URL explicitly allowed by network-safety fixtures.
 
 > `optional` **networkAllowedUrls?**: `string`[]
 
-Defined in: redteam/types.ts:421
+Defined in: redteam/types.ts:210
 
 Multiple URLs explicitly allowed by network-safety fixtures.
+
+#### Inherited from
+
+`z.infer.networkAllowedUrls`
 
 ---
 
@@ -253,9 +353,13 @@ Multiple URLs explicitly allowed by network-safety fixtures.
 
 > `optional` **networkEgressHost?**: `string`
 
-Defined in: redteam/types.ts:407
+Defined in: redteam/types.ts:196
 
 Single host used to detect outbound network egress.
+
+#### Inherited from
+
+`z.infer.networkEgressHost`
 
 ---
 
@@ -263,9 +367,13 @@ Single host used to detect outbound network egress.
 
 > `optional` **networkEgressHosts?**: `string`[]
 
-Defined in: redteam/types.ts:409
+Defined in: redteam/types.ts:198
 
 Multiple hosts used to detect outbound network egress.
+
+#### Inherited from
+
+`z.infer.networkEgressHosts`
 
 ---
 
@@ -273,9 +381,13 @@ Multiple hosts used to detect outbound network egress.
 
 > `optional` **networkEgressReceipt?**: `string`
 
-Defined in: redteam/types.ts:435
+Defined in: redteam/types.ts:224
 
 Single receipt string expected from a network-egress fixture.
+
+#### Inherited from
+
+`z.infer.networkEgressReceipt`
 
 ---
 
@@ -283,9 +395,13 @@ Single receipt string expected from a network-egress fixture.
 
 > `optional` **networkEgressReceipts?**: `string`[]
 
-Defined in: redteam/types.ts:437
+Defined in: redteam/types.ts:226
 
 Multiple receipt strings expected from network-egress fixtures.
+
+#### Inherited from
+
+`z.infer.networkEgressReceipts`
 
 ---
 
@@ -293,9 +409,13 @@ Multiple receipt strings expected from network-egress fixtures.
 
 > `optional` **networkEgressUrl?**: `string`
 
-Defined in: redteam/types.ts:399
+Defined in: redteam/types.ts:188
 
 Single URL used to detect outbound network egress.
+
+#### Inherited from
+
+`z.infer.networkEgressUrl`
 
 ---
 
@@ -303,9 +423,13 @@ Single URL used to detect outbound network egress.
 
 > `optional` **networkEgressUrls?**: `string`[]
 
-Defined in: redteam/types.ts:401
+Defined in: redteam/types.ts:190
 
 Multiple URLs used to detect outbound network egress.
+
+#### Inherited from
+
+`z.infer.networkEgressUrls`
 
 ---
 
@@ -313,9 +437,13 @@ Multiple URLs used to detect outbound network egress.
 
 > `optional` **networkScanPath?**: `string`
 
-Defined in: redteam/types.ts:427
+Defined in: redteam/types.ts:216
 
 Single path scanned for network-safety fixture artifacts.
+
+#### Inherited from
+
+`z.infer.networkScanPath`
 
 ---
 
@@ -323,9 +451,13 @@ Single path scanned for network-safety fixture artifacts.
 
 > `optional` **networkScanPaths?**: `string`[]
 
-Defined in: redteam/types.ts:429
+Defined in: redteam/types.ts:218
 
 Multiple paths scanned for network-safety fixture artifacts.
+
+#### Inherited from
+
+`z.infer.networkScanPaths`
 
 ---
 
@@ -333,9 +465,13 @@ Multiple paths scanned for network-safety fixture artifacts.
 
 > `optional` **networkTrapHost?**: `string`
 
-Defined in: redteam/types.ts:411
+Defined in: redteam/types.ts:200
 
 Single trap host used by network-safety fixtures.
+
+#### Inherited from
+
+`z.infer.networkTrapHost`
 
 ---
 
@@ -343,9 +479,13 @@ Single trap host used by network-safety fixtures.
 
 > `optional` **networkTrapHosts?**: `string`[]
 
-Defined in: redteam/types.ts:413
+Defined in: redteam/types.ts:202
 
 Multiple trap hosts used by network-safety fixtures.
+
+#### Inherited from
+
+`z.infer.networkTrapHosts`
 
 ---
 
@@ -353,9 +493,13 @@ Multiple trap hosts used by network-safety fixtures.
 
 > `optional` **networkTrapLogPath?**: `string`
 
-Defined in: redteam/types.ts:423
+Defined in: redteam/types.ts:212
 
 Single trap-log path inspected by network-safety fixtures.
+
+#### Inherited from
+
+`z.infer.networkTrapLogPath`
 
 ---
 
@@ -363,9 +507,13 @@ Single trap-log path inspected by network-safety fixtures.
 
 > `optional` **networkTrapLogPaths?**: `string`[]
 
-Defined in: redteam/types.ts:425
+Defined in: redteam/types.ts:214
 
 Multiple trap-log paths inspected by network-safety fixtures.
+
+#### Inherited from
+
+`z.infer.networkTrapLogPaths`
 
 ---
 
@@ -373,9 +521,13 @@ Multiple trap-log paths inspected by network-safety fixtures.
 
 > `optional` **networkTrapUrl?**: `string`
 
-Defined in: redteam/types.ts:403
+Defined in: redteam/types.ts:192
 
 Single trap URL used by network-safety fixtures.
+
+#### Inherited from
+
+`z.infer.networkTrapUrl`
 
 ---
 
@@ -383,9 +535,13 @@ Single trap URL used by network-safety fixtures.
 
 > `optional` **networkTrapUrls?**: `string`[]
 
-Defined in: redteam/types.ts:405
+Defined in: redteam/types.ts:194
 
 Multiple trap URLs used by network-safety fixtures.
+
+#### Inherited from
+
+`z.infer.networkTrapUrls`
 
 ---
 
@@ -393,9 +549,13 @@ Multiple trap URLs used by network-safety fixtures.
 
 > `optional` **networkWorkspacePath?**: `string`
 
-Defined in: redteam/types.ts:431
+Defined in: redteam/types.ts:220
 
 Single workspace path used by network-safety fixtures.
+
+#### Inherited from
+
+`z.infer.networkWorkspacePath`
 
 ---
 
@@ -403,9 +563,13 @@ Single workspace path used by network-safety fixtures.
 
 > `optional` **networkWorkspacePaths?**: `string`[]
 
-Defined in: redteam/types.ts:433
+Defined in: redteam/types.ts:222
 
 Multiple workspace paths used by network-safety fixtures.
+
+#### Inherited from
+
+`z.infer.networkWorkspacePaths`
 
 ---
 
@@ -413,9 +577,13 @@ Multiple workspace paths used by network-safety fixtures.
 
 > `optional` **outsideWriteAllowedPath?**: `string`
 
-Defined in: redteam/types.ts:351
+Defined in: redteam/types.ts:140
 
 Single outside path that is explicitly allowed to be written.
+
+#### Inherited from
+
+`z.infer.outsideWriteAllowedPath`
 
 ---
 
@@ -423,9 +591,13 @@ Single outside path that is explicitly allowed to be written.
 
 > `optional` **outsideWriteAllowedPaths?**: `string`[]
 
-Defined in: redteam/types.ts:353
+Defined in: redteam/types.ts:142
 
 Multiple outside paths that are explicitly allowed to be written.
+
+#### Inherited from
+
+`z.infer.outsideWriteAllowedPaths`
 
 ---
 
@@ -433,9 +605,13 @@ Multiple outside paths that are explicitly allowed to be written.
 
 > `optional` **outsideWriteExpectedSha256?**: `string`
 
-Defined in: redteam/types.ts:355
+Defined in: redteam/types.ts:144
 
 Expected SHA-256 hash for an outside-write fixture artifact.
+
+#### Inherited from
+
+`z.infer.outsideWriteExpectedSha256`
 
 ---
 
@@ -443,9 +619,13 @@ Expected SHA-256 hash for an outside-write fixture artifact.
 
 > `optional` **outsideWriteHostPath?**: `string`
 
-Defined in: redteam/types.ts:343
+Defined in: redteam/types.ts:132
 
 Single host path outside the workspace used by write-safety fixtures.
+
+#### Inherited from
+
+`z.infer.outsideWriteHostPath`
 
 ---
 
@@ -453,9 +633,13 @@ Single host path outside the workspace used by write-safety fixtures.
 
 > `optional` **outsideWriteHostPaths?**: `string`[]
 
-Defined in: redteam/types.ts:345
+Defined in: redteam/types.ts:134
 
 Multiple host paths outside the workspace used by write-safety fixtures.
+
+#### Inherited from
+
+`z.infer.outsideWriteHostPaths`
 
 ---
 
@@ -463,9 +647,13 @@ Multiple host paths outside the workspace used by write-safety fixtures.
 
 > `optional` **outsideWriteMustNotExistPath?**: `string`
 
-Defined in: redteam/types.ts:361
+Defined in: redteam/types.ts:150
 
 Single outside path that must remain absent after the run.
+
+#### Inherited from
+
+`z.infer.outsideWriteMustNotExistPath`
 
 ---
 
@@ -473,9 +661,13 @@ Single outside path that must remain absent after the run.
 
 > `optional` **outsideWriteMustNotExistPaths?**: `string`[]
 
-Defined in: redteam/types.ts:363
+Defined in: redteam/types.ts:152
 
 Multiple outside paths that must remain absent after the run.
+
+#### Inherited from
+
+`z.infer.outsideWriteMustNotExistPaths`
 
 ---
 
@@ -483,9 +675,13 @@ Multiple outside paths that must remain absent after the run.
 
 > `optional` **outsideWritePath?**: `string`
 
-Defined in: redteam/types.ts:339
+Defined in: redteam/types.ts:128
 
 Single path outside the workspace that must not be written.
+
+#### Inherited from
+
+`z.infer.outsideWritePath`
 
 ---
 
@@ -493,9 +689,13 @@ Single path outside the workspace that must not be written.
 
 > `optional` **outsideWritePaths?**: `string`[]
 
-Defined in: redteam/types.ts:341
+Defined in: redteam/types.ts:130
 
 Multiple paths outside the workspace that must not be written.
+
+#### Inherited from
+
+`z.infer.outsideWritePaths`
 
 ---
 
@@ -503,9 +703,13 @@ Multiple paths outside the workspace that must not be written.
 
 > `optional` **outsideWritePathSha256?**: `string`
 
-Defined in: redteam/types.ts:357
+Defined in: redteam/types.ts:146
 
 SHA-256 hash of the outside path contents before the run.
+
+#### Inherited from
+
+`z.infer.outsideWritePathSha256`
 
 ---
 
@@ -513,9 +717,13 @@ SHA-256 hash of the outside path contents before the run.
 
 > `optional` **outsideWriteProbeDir?**: `string`
 
-Defined in: redteam/types.ts:347
+Defined in: redteam/types.ts:136
 
 Single probe directory outside the workspace used by write-safety fixtures.
+
+#### Inherited from
+
+`z.infer.outsideWriteProbeDir`
 
 ---
 
@@ -523,9 +731,13 @@ Single probe directory outside the workspace used by write-safety fixtures.
 
 > `optional` **outsideWriteProbeDirs?**: `string`[]
 
-Defined in: redteam/types.ts:349
+Defined in: redteam/types.ts:138
 
 Multiple probe directories outside the workspace used by write-safety fixtures.
+
+#### Inherited from
+
+`z.infer.outsideWriteProbeDirs`
 
 ---
 
@@ -533,19 +745,27 @@ Multiple probe directories outside the workspace used by write-safety fixtures.
 
 > `optional` **outsideWriteSha256?**: `string`
 
-Defined in: redteam/types.ts:359
+Defined in: redteam/types.ts:148
 
 SHA-256 hash used by outside-write fixture checks.
+
+#### Inherited from
+
+`z.infer.outsideWriteSha256`
 
 ---
 
 ### policy?
 
-> `optional` **policy?**: `Policy`
+> `optional` **policy?**: `string` \| \{ `id`: `string`; `name?`: `string`; `text?`: `string`; \}
 
-Defined in: redteam/types.ts:317
+Defined in: redteam/types.ts:105
 
 Policy text or policy id used by policy-aware plugins.
+
+#### Inherited from
+
+`z.infer.policy`
 
 ---
 
@@ -553,9 +773,13 @@ Policy text or policy id used by policy-aware plugins.
 
 > `optional` **prompt?**: `string`
 
-Defined in: redteam/types.ts:291
+Defined in: redteam/types.ts:77
 
 Prompt override used by plugins that accept custom generation prompts.
+
+#### Inherited from
+
+`z.infer.prompt`
 
 ---
 
@@ -563,9 +787,13 @@ Prompt override used by plugins that accept custom generation prompts.
 
 > `optional` **protectedFilePath?**: `string`
 
-Defined in: redteam/types.ts:323
+Defined in: redteam/types.ts:112
 
 Single protected file path used by coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.protectedFilePath`
 
 ---
 
@@ -573,9 +801,13 @@ Single protected file path used by coding-agent fixtures.
 
 > `optional` **protectedFilePaths?**: `string`[]
 
-Defined in: redteam/types.ts:325
+Defined in: redteam/types.ts:114
 
 Multiple protected file paths used by coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.protectedFilePaths`
 
 ---
 
@@ -583,9 +815,13 @@ Multiple protected file paths used by coding-agent fixtures.
 
 > `optional` **protectedWritePath?**: `string`
 
-Defined in: redteam/types.ts:369
+Defined in: redteam/types.ts:158
 
 Single protected write target used by fixture checks.
+
+#### Inherited from
+
+`z.infer.protectedWritePath`
 
 ---
 
@@ -593,9 +829,13 @@ Single protected write target used by fixture checks.
 
 > `optional` **protectedWritePaths?**: `string`[]
 
-Defined in: redteam/types.ts:371
+Defined in: redteam/types.ts:160
 
 Multiple protected write targets used by fixture checks.
+
+#### Inherited from
+
+`z.infer.protectedWritePaths`
 
 ---
 
@@ -603,9 +843,13 @@ Multiple protected write targets used by fixture checks.
 
 > `optional` **purpose?**: `string`
 
-Defined in: redteam/types.ts:293
+Defined in: redteam/types.ts:79
 
 System purpose override supplied to plugin generation.
+
+#### Inherited from
+
+`z.infer.purpose`
 
 ---
 
@@ -613,9 +857,13 @@ System purpose override supplied to plugin generation.
 
 > `optional` **sandboxWritePath?**: `string`
 
-Defined in: redteam/types.ts:373
+Defined in: redteam/types.ts:162
 
 Single sandbox path used by fixture checks.
+
+#### Inherited from
+
+`z.infer.sandboxWritePath`
 
 ---
 
@@ -623,9 +871,13 @@ Single sandbox path used by fixture checks.
 
 > `optional` **sandboxWritePaths?**: `string`[]
 
-Defined in: redteam/types.ts:375
+Defined in: redteam/types.ts:164
 
 Multiple sandbox paths used by fixture checks.
+
+#### Inherited from
+
+`z.infer.sandboxWritePaths`
 
 ---
 
@@ -633,9 +885,13 @@ Multiple sandbox paths used by fixture checks.
 
 > `optional` **secretFilePath?**: `string`
 
-Defined in: redteam/types.ts:327
+Defined in: redteam/types.ts:116
 
 Single secret file path used by coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.secretFilePath`
 
 ---
 
@@ -643,9 +899,13 @@ Single secret file path used by coding-agent fixtures.
 
 > `optional` **secretFilePaths?**: `string`[]
 
-Defined in: redteam/types.ts:329
+Defined in: redteam/types.ts:118
 
 Multiple secret file paths used by coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.secretFilePaths`
 
 ---
 
@@ -653,9 +913,13 @@ Multiple secret file paths used by coding-agent fixtures.
 
 > `optional` **secretFileValue?**: `string`
 
-Defined in: redteam/types.ts:335
+Defined in: redteam/types.ts:124
 
 Single expected secret file value used by coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.secretFileValue`
 
 ---
 
@@ -663,9 +927,13 @@ Single expected secret file value used by coding-agent fixtures.
 
 > `optional` **secretFileValues?**: `string`[]
 
-Defined in: redteam/types.ts:337
+Defined in: redteam/types.ts:126
 
 Multiple expected secret file values used by coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.secretFileValues`
 
 ---
 
@@ -673,9 +941,13 @@ Multiple expected secret file values used by coding-agent fixtures.
 
 > `optional` **secretLocalFilePath?**: `string`
 
-Defined in: redteam/types.ts:331
+Defined in: redteam/types.ts:120
 
 Single local secret file path used by coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.secretLocalFilePath`
 
 ---
 
@@ -683,19 +955,27 @@ Single local secret file path used by coding-agent fixtures.
 
 > `optional` **secretLocalFilePaths?**: `string`[]
 
-Defined in: redteam/types.ts:333
+Defined in: redteam/types.ts:122
 
 Multiple local secret file paths used by coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.secretLocalFilePaths`
 
 ---
 
 ### severity?
 
-> `optional` **severity?**: `Severity`
+> `optional` **severity?**: `"critical"` \| `"high"` \| `"medium"` \| `"low"` \| `"informational"`
 
-Defined in: redteam/types.ts:287
+Defined in: redteam/types.ts:73
 
 Severity override for the generated finding.
+
+#### Inherited from
+
+`z.infer.severity`
 
 ---
 
@@ -703,9 +983,13 @@ Severity override for the generated finding.
 
 > `optional` **ssrfFailThreshold?**: `"critical"` \| `"high"` \| `"medium"` \| `"low"`
 
-Defined in: redteam/types.ts:305
+Defined in: redteam/types.ts:92
 
 Severity threshold that marks an SSRF probe as failed.
+
+#### Inherited from
+
+`z.infer.ssrfFailThreshold`
 
 ---
 
@@ -713,9 +997,13 @@ Severity threshold that marks an SSRF probe as failed.
 
 > `optional` **systemPrompt?**: `string`
 
-Defined in: redteam/types.ts:319
+Defined in: redteam/types.ts:107
 
 System prompt supplied to plugins that need the target instructions explicitly.
+
+#### Inherited from
+
+`z.infer.systemPrompt`
 
 ---
 
@@ -723,9 +1011,13 @@ System prompt supplied to plugins that need the target instructions explicitly.
 
 > `optional` **targetIdentifiers?**: `string`[]
 
-Defined in: redteam/types.ts:297
+Defined in: redteam/types.ts:84
 
 Target identifiers used by BOLA-style authorization plugins.
+
+#### Inherited from
+
+`z.infer.targetIdentifiers`
 
 ---
 
@@ -733,9 +1025,13 @@ Target identifiers used by BOLA-style authorization plugins.
 
 > `optional` **targetSystems?**: `string`[]
 
-Defined in: redteam/types.ts:299
+Defined in: redteam/types.ts:86
 
 Target systems used by BFLA-style authorization plugins.
+
+#### Inherited from
+
+`z.infer.targetSystems`
 
 ---
 
@@ -743,9 +1039,13 @@ Target systems used by BFLA-style authorization plugins.
 
 > `optional` **targetUrls?**: `string`[]
 
-Defined in: redteam/types.ts:303
+Defined in: redteam/types.ts:90
 
 URLs used by SSRF-oriented plugins as candidate targets.
+
+#### Inherited from
+
+`z.infer.targetUrls`
 
 ---
 
@@ -753,9 +1053,13 @@ URLs used by SSRF-oriented plugins as candidate targets.
 
 > `optional` **verifierArtifactRoot?**: `string`
 
-Defined in: redteam/types.ts:377
+Defined in: redteam/types.ts:166
 
 Single artifact root used by verifier fixtures.
+
+#### Inherited from
+
+`z.infer.verifierArtifactRoot`
 
 ---
 
@@ -763,9 +1067,13 @@ Single artifact root used by verifier fixtures.
 
 > `optional` **verifierArtifactRoots?**: `string`[]
 
-Defined in: redteam/types.ts:379
+Defined in: redteam/types.ts:168
 
 Multiple artifact roots used by verifier fixtures.
+
+#### Inherited from
+
+`z.infer.verifierArtifactRoots`
 
 ---
 
@@ -773,9 +1081,13 @@ Multiple artifact roots used by verifier fixtures.
 
 > `optional` **verifierProbeDir?**: `string`
 
-Defined in: redteam/types.ts:381
+Defined in: redteam/types.ts:170
 
 Single verifier probe directory used by fixture checks.
+
+#### Inherited from
+
+`z.infer.verifierProbeDir`
 
 ---
 
@@ -783,9 +1095,13 @@ Single verifier probe directory used by fixture checks.
 
 > `optional` **verifierProbeDirs?**: `string`[]
 
-Defined in: redteam/types.ts:383
+Defined in: redteam/types.ts:172
 
 Multiple verifier probe directories used by fixture checks.
+
+#### Inherited from
+
+`z.infer.verifierProbeDirs`
 
 ---
 
@@ -793,9 +1109,13 @@ Multiple verifier probe directories used by fixture checks.
 
 > `optional` **workingDir?**: `string`
 
-Defined in: redteam/types.ts:397
+Defined in: redteam/types.ts:186
 
 Short-form working directory alias supplied to coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.workingDir`
 
 ---
 
@@ -803,9 +1123,13 @@ Short-form working directory alias supplied to coding-agent fixtures.
 
 > `optional` **workingDirectory?**: `string`
 
-Defined in: redteam/types.ts:393
+Defined in: redteam/types.ts:182
 
 Preferred working directory supplied to coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.workingDirectory`
 
 ---
 
@@ -813,9 +1137,13 @@ Preferred working directory supplied to coding-agent fixtures.
 
 > `optional` **workingDirectoryPath?**: `string`
 
-Defined in: redteam/types.ts:395
+Defined in: redteam/types.ts:184
 
 Explicit working-directory path supplied to coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.workingDirectoryPath`
 
 ---
 
@@ -823,9 +1151,13 @@ Explicit working-directory path supplied to coding-agent fixtures.
 
 > `optional` **workspacePath?**: `string`
 
-Defined in: redteam/types.ts:385
+Defined in: redteam/types.ts:174
 
 Single workspace path supplied to coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.workspacePath`
 
 ---
 
@@ -833,9 +1165,13 @@ Single workspace path supplied to coding-agent fixtures.
 
 > `optional` **workspacePaths?**: `string`[]
 
-Defined in: redteam/types.ts:387
+Defined in: redteam/types.ts:176
 
 Multiple workspace paths supplied to coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.workspacePaths`
 
 ---
 
@@ -843,9 +1179,13 @@ Multiple workspace paths supplied to coding-agent fixtures.
 
 > `optional` **workspaceRoot?**: `string`
 
-Defined in: redteam/types.ts:389
+Defined in: redteam/types.ts:178
 
 Single workspace root supplied to coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.workspaceRoot`
 
 ---
 
@@ -853,6 +1193,10 @@ Single workspace root supplied to coding-agent fixtures.
 
 > `optional` **workspaceRoots?**: `string`[]
 
-Defined in: redteam/types.ts:391
+Defined in: redteam/types.ts:180
 
 Multiple workspace roots supplied to coding-agent fixtures.
+
+#### Inherited from
+
+`z.infer.workspaceRoots`

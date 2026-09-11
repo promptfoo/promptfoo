@@ -24,7 +24,8 @@ promptfoo with test frameworks such as Jest or Vitest.
 
 ### matchesAnswerRelevance
 
-> **matchesAnswerRelevance**: (`input`, `output`, `threshold`, `grading?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`>>>>\>\>
+<!-- prettier-ignore -->
+> **matchesAnswerRelevance**: (`input`, `output`, `threshold`, `grading?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Score how relevant a generated answer is to the original input question.
 
@@ -114,7 +115,8 @@ Relevance grading result without the surrounding assertion payload.
 
 ### matchesClassification
 
-> **matchesClassification**: (`expected`, `output`, `threshold`, `grading?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`>>>>\>\>
+<!-- prettier-ignore -->
+> **matchesClassification**: (`expected`, `output`, `threshold`, `grading?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Score whether provider classification output meets a threshold.
 
@@ -198,7 +200,8 @@ Pass if the output matches the classification with a score greater than or equal
 
 ### matchesClosedQa
 
-> **matchesClosedQa**: (`input`, `expected`, `output`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`>>>>\>\>
+<!-- prettier-ignore -->
+> **matchesClosedQa**: (`input`, `expected`, `output`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Grade whether an answer satisfies a closed-QA criterion.
 
@@ -294,7 +297,8 @@ Closed-QA grading result without the surrounding assertion payload.
 
 ### matchesComparisonBoolean
 
-> **matchesComparisonBoolean**: (`criteria`, `outputs`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`>>\>[]\> = `matchesSelectBest`
+<!-- prettier-ignore -->
+> **matchesComparisonBoolean**: (`criteria`, `outputs`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>[]\> = `matchesSelectBest`
 
 Compare candidate outputs and mark the grader-selected best response.
 
@@ -386,7 +390,8 @@ One grading result per candidate output, in the original order.
 
 ### matchesContextFaithfulness
 
-> **matchesContextFaithfulness**: (`query`, `output`, `context`, `threshold`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`>>>>\>\>
+<!-- prettier-ignore -->
+> **matchesContextFaithfulness**: (`query`, `output`, `context`, `threshold`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Score whether the answer is faithful to the supplied context.
 
@@ -488,7 +493,8 @@ Context-faithfulness grading result without the surrounding assertion payload.
 
 ### matchesContextRecall
 
-> **matchesContextRecall**: (`context`, `groundTruth`, `threshold`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`>>>>\>\>
+<!-- prettier-ignore -->
+> **matchesContextRecall**: (`context`, `groundTruth`, `threshold`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Score how much of the ground truth is supported by the supplied context.
 
@@ -584,7 +590,8 @@ Context-recall grading result without the surrounding assertion payload.
 
 ### matchesContextRelevance
 
-> **matchesContextRelevance**: (`question`, `context`, `threshold`, `grading?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`>>>>\>\>
+<!-- prettier-ignore -->
+> **matchesContextRelevance**: (`question`, `context`, `threshold`, `grading?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Score how much of the supplied context is relevant to the question.
 
@@ -674,7 +681,8 @@ Context-relevance grading result without the surrounding assertion payload.
 
 ### matchesConversationRelevance
 
-> **matchesConversationRelevance**: (`messages`, `threshold`, `vars?`, `grading?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`>>>>\>\>
+<!-- prettier-ignore -->
+> **matchesConversationRelevance**: (`messages`, `threshold`, `vars?`, `grading?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Score whether assistant responses stay relevant across a conversation.
 
@@ -764,7 +772,8 @@ Conversation-relevance grading result without the surrounding assertion payload.
 
 ### matchesFactuality
 
-> **matchesFactuality**: (`input`, `expected`, `output`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`>>>>\>\>
+<!-- prettier-ignore -->
+> **matchesFactuality**: (`input`, `expected`, `output`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Grade whether an answer is factually consistent with a reference answer.
 
@@ -860,7 +869,8 @@ Factuality grading result without the surrounding assertion payload.
 
 ### matchesLlmRubric
 
-> **matchesLlmRubric**: (`rubric`, `llmOutput`, `grading?`, `vars?`, `assertion?`, `options?`, `providerCallContext?`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)>>\>
+<!-- prettier-ignore -->
+> **matchesLlmRubric**: (`rubric`, `llmOutput`, `grading?`, `vars?`, `assertion?`, `options?`, `providerCallContext?`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)\>
 
 Grade an output against a free-form LLM rubric.
 
@@ -1034,7 +1044,8 @@ Grading result for the rubric check.
 
 ### matchesModeration
 
-> **matchesModeration**: (`options`, `grading?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`>>>>\>\>
+<!-- prettier-ignore -->
+> **matchesModeration**: (`options`, `grading?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Check a model response with the configured moderation provider.
 
@@ -1106,7 +1117,8 @@ Moderation grading result without the surrounding assertion payload.
 
 ### matchesSimilarity
 
-> **matchesSimilarity**: (`expected`, `output`, `threshold`, `inverse`, `grading?`, `metric`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`>>>>\>\>
+<!-- prettier-ignore -->
+> **matchesSimilarity**: (`expected`, `output`, `threshold`, `inverse`, `grading?`, `metric`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Compare two texts with an embedding or similarity provider.
 
@@ -1202,7 +1214,8 @@ Similarity grading result without the surrounding assertion payload.
 
 ### runAssertion
 
-> **runAssertion**: (`options`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)>>\>
+<!-- prettier-ignore -->
+> **runAssertion**: (`options`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)\>
 
 Run one assertion against a provider response.
 
@@ -1239,7 +1252,8 @@ console.log(result.pass);
 
 ### runAssertions
 
-> **runAssertions**: (`options`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)>>\>
+<!-- prettier-ignore -->
+> **runAssertions**: (`options`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)\>
 
 Run all assertions for one test case and aggregate the grading result.
 

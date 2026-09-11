@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: EvaluateTestSuite'
-description: 'Test-suite shape accepted by the Node.js evaluate() API. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
+description: "<!-- prettier-ignore --> > EvaluateTestSuite = object & Omit\\<TestSuiteConfig, \"prompts\" \\| \"providers\"\\> See supported imports and signatures for this symbol."
 sidebar_position: 5
 ---
 
@@ -10,7 +10,8 @@ sidebar_position: 5
 import type { EvaluateTestSuite } from 'promptfoo';
 ```
 
-> **EvaluateTestSuite** = `object` & `Omit`\<`TestSuiteConfig`, `"prompts"` \| `"providers"`>>\>
+<!-- prettier-ignore -->
+> **EvaluateTestSuite** = `object` & `Omit`\<`TestSuiteConfig`, `"prompts"` \| `"providers"`\>
 
 Defined in: types/index.ts:1943
 

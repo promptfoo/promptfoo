@@ -1,6 +1,6 @@
 ---
 title: 'Function: withCacheNamespace()'
-description: 'Run an async operation inside an isolated cache namespace. See supported Node.js imports, exact signatures, fields, and application examples for this symbol.'
+description: "<!-- prettier-ignore --> > withCacheNamespace\\<T\\>(namespace, fn): Promise\\<T\\> See supported imports, signatures, fields, and examples for this symbol."
 sidebar_position: 7
 ---
 
@@ -10,7 +10,8 @@ sidebar_position: 7
 import { cache } from 'promptfoo';
 ```
 
-> **withCacheNamespace**\<`T`>>\>(`namespace`, `fn`): `Promise`\<`T`>>\>
+<!-- prettier-ignore -->
+> **withCacheNamespace**\<`T`\>(`namespace`, `fn`): `Promise`\<`T`\>
 
 Defined in: cache.ts:291
 

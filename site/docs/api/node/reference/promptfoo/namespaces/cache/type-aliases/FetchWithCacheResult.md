@@ -1,6 +1,6 @@
 ---
 title: "Type Alias: FetchWithCacheResult\\<T\\>"
-description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
+description: "<!-- prettier-ignore --> > FetchWithCacheResult\\<T\\> = object See supported Node.js imports, exact signatures, fields, and application examples for this symbol."
 sidebar_position: 1
 ---
 
@@ -12,7 +12,8 @@ import { cache } from 'promptfoo';
 type Result = cache.FetchWithCacheResult<unknown>;
 ```
 
-> **FetchWithCacheResult**\<`T`> > \> = `object`
+<!-- prettier-ignore -->
+> **FetchWithCacheResult**\<`T`\> = `object`
 
 Defined in: cache.ts:338
 
@@ -71,7 +72,8 @@ Parsed response payload.
 
 ### deleteFromCache?
 
-> `optional` **deleteFromCache?**: () => `Promise`\<`void`>>\>
+<!-- prettier-ignore -->
+> `optional` **deleteFromCache?**: () => `Promise`\<`void`\>
 
 Defined in: cache.ts:354
 
@@ -85,7 +87,8 @@ Delete this response from cache when it was cache-backed.
 
 ### headers?
 
-> `optional` **headers?**: `Record`\<`string`, `string`>>\>
+<!-- prettier-ignore -->
+> `optional` **headers?**: `Record`\<`string`, `string`\>
 
 Defined in: cache.ts:350
 
@@ -125,7 +128,8 @@ HTTP response status text.
 
 ### updateCache?
 
-> `optional` **updateCache?**: (`data`, `status`, `statusText`, `headers?`) => `Promise`\<`void`>>\>
+<!-- prettier-ignore -->
+> `optional` **updateCache?**: (`data`, `status`, `statusText`, `headers?`) => `Promise`\<`void`\>
 
 Defined in: cache.ts:355
 

@@ -28,7 +28,8 @@ const assertion: Assertion = {
 
 ### config?
 
-> `optional` **config?**: `Record`\<`string`, `any`>>\>
+<!-- prettier-ignore -->
+> `optional` **config?**: `Record`\<`string`, `any`\>
 
 Defined in: types/index.ts:989
 

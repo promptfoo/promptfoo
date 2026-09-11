@@ -1,6 +1,6 @@
 ---
 title: 'Function: loadApiProvider()'
-description: 'Load one provider by id or config-file reference. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
+description: "<!-- prettier-ignore --> > loadApiProvider(providerPath, context?): Promise\\<ApiProvider\\> See supported imports, signatures, and fields for this symbol."
 sidebar_position: 4
 ---
 
@@ -10,7 +10,8 @@ sidebar_position: 4
 import { loadApiProvider } from 'promptfoo';
 ```
 
-> **loadApiProvider**(`providerPath`, `context?`): `Promise`\<[`ApiProvider`](../interfaces/ApiProvider.md)>>\>
+<!-- prettier-ignore -->
+> **loadApiProvider**(`providerPath`, `context?`): `Promise`\<[`ApiProvider`](../interfaces/ApiProvider.md)\>
 
 Defined in: providers/index.ts:103
 

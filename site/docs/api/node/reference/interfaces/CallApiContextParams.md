@@ -185,7 +185,8 @@ W3C Trace Context `tracestate` header for downstream propagation.
 
 ### vars
 
-> **vars**: `Record`\<`string`, `VarValue`>>\>
+<!-- prettier-ignore -->
+> **vars**: `Record`\<`string`, `VarValue`\>
 
 Defined in: types/providers.ts:204
 

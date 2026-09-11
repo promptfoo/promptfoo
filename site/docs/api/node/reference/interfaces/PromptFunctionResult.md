@@ -37,7 +37,8 @@ const result: PromptFunctionResult = {
 
 ### config?
 
-> `optional` **config?**: `Record`\<`string`, `any`>>\>
+<!-- prettier-ignore -->
+> `optional` **config?**: `Record`\<`string`, `any`\>
 
 Defined in: contracts/prompts.ts:102
 

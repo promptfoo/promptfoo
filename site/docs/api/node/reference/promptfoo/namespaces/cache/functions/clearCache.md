@@ -1,6 +1,6 @@
 ---
 title: 'Function: clearCache()'
-description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
+description: "<!-- prettier-ignore --> > clearCache(): Promise\\<boolean\\> See supported Node.js imports, exact signatures, fields, and application examples for this symbol."
 sidebar_position: 1
 ---
 
@@ -10,7 +10,8 @@ sidebar_position: 1
 import { cache } from 'promptfoo';
 ```
 
-> **clearCache**(): `Promise`\<`boolean`>>\>
+<!-- prettier-ignore -->
+> **clearCache**(): `Promise`\<`boolean`\>
 
 Defined in: cache.ts:1046
 

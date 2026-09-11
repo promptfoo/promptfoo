@@ -88,7 +88,12 @@ function validateReferenceFrontmatter(rootDir: string, errors: string[]) {
     const relativePath = path.relative(rootDir, filePath);
     let frontmatter: Record<string, unknown>;
     try {
-      frontmatter = parseFrontmatter(fs.readFileSync(filePath, 'utf8'), relativePath);
+      const markdown = fs.readFileSync(filePath, 'utf8');
+      frontmatter = parseFrontmatter(markdown, relativePath);
+      // Prettier can duplicate closing generic delimiters in Markdown blockquotes.
+      if (/^>.*(?<![\\=])>+\\>/m.test(markdown)) {
+        errors.push(`${relativePath} contains malformed generic delimiters`);
+      }
     } catch (error) {
       errors.push(error instanceof Error ? error.message : String(error));
       return;

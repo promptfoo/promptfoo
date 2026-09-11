@@ -1,6 +1,6 @@
 ---
 title: 'Function: fetchWithCache()'
-description: "Fetch a URL through promptfoo's retrying cache wrapper. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol."
+description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
 sidebar_position: 4
 ---
 
@@ -10,7 +10,8 @@ sidebar_position: 4
 import { cache } from 'promptfoo';
 ```
 
-> **fetchWithCache**\<`T`>>\>(`url`, `options?`, `timeout?`, `format?`, `bustOrOptions?`, `maxRetries?`): `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`>>>>\>\>
+<!-- prettier-ignore -->
+> **fetchWithCache**\<`T`\>(`url`, `options?`, `timeout?`, `format?`, `bustOrOptions?`, `maxRetries?`): `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`\>\>
 
 Defined in: cache.ts:897
 

@@ -18,7 +18,8 @@ Response returned by classification-capable providers.
 
 ### classification?
 
-> `optional` **classification?**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> `optional` **classification?**: `Record`\<`string`, `number`\>
 
 Defined in: contracts/providers.ts:332
 

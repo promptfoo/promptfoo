@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: ScoringFunction'
-description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
+description: "<!-- prettier-ignore --> > ScoringFunction = (namedScores, context?) => Promise\\<GradingResult\\> \\| GradingResult See supported imports and signatures."
 sidebar_position: 11
 ---
 
@@ -10,7 +10,8 @@ sidebar_position: 11
 import type { ScoringFunction } from 'promptfoo';
 ```
 
-> **ScoringFunction** = (`namedScores`, `context?`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)> > \> \| [`GradingResult`](../interfaces/GradingResult.md)
+<!-- prettier-ignore -->
+> **ScoringFunction** = (`namedScores`, `context?`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)\> \| [`GradingResult`](../interfaces/GradingResult.md)
 
 Defined in: types/index.ts:1217
 

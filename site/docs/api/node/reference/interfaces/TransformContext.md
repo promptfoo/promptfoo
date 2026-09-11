@@ -34,7 +34,8 @@ const context: TransformContext = {
 
 ### metadata?
 
-> `optional` **metadata?**: `Record`\<`string`, `unknown`>>\>
+<!-- prettier-ignore -->
+> `optional` **metadata?**: `Record`\<`string`, `unknown`\>
 
 Defined in: contracts/transform.ts:23
 
@@ -44,7 +45,8 @@ Additional runtime metadata passed through the pipeline.
 
 ### prompt?
 
-> `optional` **prompt?**: `Record`\<`string`, `unknown`> > \> \| [`TransformPrompt`](TransformPrompt.md)
+<!-- prettier-ignore -->
+> `optional` **prompt?**: `Record`\<`string`, `unknown`\> \| [`TransformPrompt`](TransformPrompt.md)
 
 Defined in: contracts/transform.ts:21
 
@@ -64,7 +66,8 @@ Result identifier associated with the transform invocation, when available.
 
 ### vars?
 
-> `optional` **vars?**: `Record`\<`string`, `unknown`>>\>
+<!-- prettier-ignore -->
+> `optional` **vars?**: `Record`\<`string`, `unknown`\>
 
 Defined in: contracts/transform.ts:19
 

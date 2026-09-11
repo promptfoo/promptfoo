@@ -1,6 +1,6 @@
 ---
 title: 'Function: evaluate()'
-description: 'Run an eval from a JavaScript or TypeScript program. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
+description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
 sidebar_position: 1
 ---
 
@@ -10,7 +10,8 @@ sidebar_position: 1
 import { evaluate } from 'promptfoo';
 ```
 
-> **evaluate**(`testSuite`, `options?`): `Promise`\<`Eval`>>\>
+<!-- prettier-ignore -->
+> **evaluate**(`testSuite`, `options?`): `Promise`\<`Eval`\>
 
 Defined in: node/evaluate.ts:35
 

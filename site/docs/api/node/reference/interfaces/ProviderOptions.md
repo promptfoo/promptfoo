@@ -78,6 +78,7 @@ Provider id to instantiate, such as `openai:chat:gpt-5.5`.
 
 ### inputs?
 
+<!-- prettier-ignore -->
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
 Defined in: types/providers.ts:171

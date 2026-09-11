@@ -31,6 +31,13 @@ describe('validateNodeApiDocs', () => {
     expect(() => validateNodeApiDocs()).not.toThrow();
   });
 
+  it('rejects corrupted generic signatures', () => {
+    const root = copyContract();
+    const target = path.join(root, 'site/docs/api/node/reference/functions/evaluate.md');
+    fs.appendFileSync(target, '\n> **evaluate**(): `Promise`\\<`Eval`>>\\>\n');
+    expect(() => validateNodeApiDocs(root)).toThrow('malformed generic delimiters');
+  });
+
   it.each([
     ['malformed frontmatter', 'site/docs/api/node/reference/README.md', 'not frontmatter'],
     [

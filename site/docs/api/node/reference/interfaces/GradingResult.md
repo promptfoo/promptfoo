@@ -36,7 +36,8 @@ Assertion that produced this result, when retained by the caller.
 
 #### config?
 
-> `optional` **config?**: `Record`\<`string`, `any`>>\>
+<!-- prettier-ignore -->
+> `optional` **config?**: `Record`\<`string`, `any`\>
 
 Arbitrary custom config exposed to assertion callbacks through `context.config`.
 
@@ -156,7 +157,8 @@ meaningful when present.
 
 #### graderOutputs?
 
-> `optional` **graderOutputs?**: `Record`\<`string`, `string`>>\>
+<!-- prettier-ignore -->
+> `optional` **graderOutputs?**: `Record`\<`string`, `string`\>
 
 Raw textual responses returned by one or more LLM grader phases.
 
@@ -188,7 +190,8 @@ Red-team strategy id associated with the result, when applicable.
 
 ### namedScores?
 
-> `optional` **namedScores?**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> `optional` **namedScores?**: `Record`\<`string`, `number`\>
 
 Defined in: types/index.ts:783
 
@@ -198,7 +201,8 @@ Map of named metric values emitted by the assertion.
 
 ### namedScoreWeights?
 
-> `optional` **namedScoreWeights?**: `Record`\<`string`, `number`>>\>
+<!-- prettier-ignore -->
+> `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
 
 Defined in: types/index.ts:786
 
