@@ -1517,6 +1517,7 @@ describe('OpenAiLiveProvider', () => {
         output_tokens: 5,
         total_tokens: 15,
         input_tokens_details: { cached_tokens: 0 },
+        untrusted_metadata: { nested: ['discarded'] },
       },
     };
     backend(socket, { type: 'response.completed', response });
@@ -1553,6 +1554,11 @@ describe('OpenAiLiveProvider', () => {
     });
     expect(output.cost).toBeCloseTo(0.050024);
     expect(output.metadata?.backendResponses).toHaveLength(2);
+    expect(output.metadata?.backendResponses[0].usage).toEqual({
+      input_tokens: 10,
+      output_tokens: 5,
+      total_tokens: 15,
+    });
   });
 
   it.each(['unconfigured', 'missing-handler', 'invalid-arguments'])(

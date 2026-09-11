@@ -798,10 +798,18 @@ export class LiveSession {
   private recordBackendUsage(response: OpenAI.Responses.Response): void {
     const config = this.options.config.delegation;
     const model = response.model || (config?.type === 'responses' ? config.responses.model : '');
-    this.backendResponses.push({ id: response.id, model, usage: response.usage });
+    const usage = response.usage;
+    this.backendResponses.push({
+      id: response.id,
+      model,
+      usage: usage && {
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        total_tokens: usage.total_tokens,
+      },
+    });
     accumulateTokenUsage(this.tokenUsage, { numRequests: 1 });
-    if (response.usage) {
-      const usage = response.usage;
+    if (usage) {
       accumulateTokenUsage(this.tokenUsage, {
         total: usage.total_tokens,
         prompt: usage.input_tokens,
