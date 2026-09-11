@@ -182,10 +182,11 @@ describe('share-time blob upload', () => {
     const cache = createRemoteBlobUploadCache();
     let activeUploads = 0;
     let maxActiveUploads = 0;
+    const releaseUploads: Array<() => void> = [];
     vi.mocked(uploadBlobRemote).mockImplementation(async () => {
       activeUploads += 1;
       maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise<void>((resolve) => releaseUploads.push(resolve));
       activeUploads -= 1;
       return remoteBlobResult;
     });
@@ -197,7 +198,12 @@ describe('share-time blob upload', () => {
       });
     }
 
-    await uploadRecordedResultBlobRefsForShare(cache);
+    const uploadPromise = uploadRecordedResultBlobRefsForShare(cache);
+    await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledTimes(4));
+    releaseUploads.shift()?.();
+    await vi.waitFor(() => expect(uploadBlobRemote).toHaveBeenCalledTimes(5));
+    releaseUploads.splice(0).forEach((release) => release());
+    await uploadPromise;
     expect(uploadBlobRemote).toHaveBeenCalledTimes(5);
     expect(maxActiveUploads).toBe(4);
   });
