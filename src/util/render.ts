@@ -120,6 +120,10 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): 
     return obj;
   }
   if (typeof obj === 'string') {
+    const nativeVar = obj.match(/^\s*\{\{\s*([A-Za-z_$][\w$]*)\s*\}\}\s*$/)?.[1];
+    if (nativeVar && nativeVar in vars) {
+      return vars[nativeVar] as T;
+    }
     const nunjucksEngine = getNunjucksEngine();
     return nunjucksEngine.renderString(obj, vars) as unknown as T;
   }

@@ -173,8 +173,8 @@ function tokensUsedReadsOnlyResponse(assertion: Assertion): boolean {
     typeof value === 'object' &&
     value !== null &&
     !Array.isArray(value) &&
-    'source' in value &&
-    value.source === 'response'
+    Object.hasOwn(value, 'source') &&
+    (value as { source?: unknown }).source === 'response'
   );
 }
 

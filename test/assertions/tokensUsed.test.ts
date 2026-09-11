@@ -124,6 +124,31 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('Tokens used: 250');
   });
 
+  it('reads Promptfoo total-token trace attributes', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 9, source: 'trace' } },
+      renderedValue: { max: 9, source: 'trace' },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [
+            {
+              spanId: 's1',
+              name: 'llm.completion',
+              startTime: 0,
+              endTime: 1,
+              attributes: { 'promptfoo.usage.total_tokens': 10 },
+            },
+          ],
+        },
+      },
+    };
+
+    expect(handleTokensUsed(params).pass).toBe(false);
+  });
+
   it('uses the larger component total when an aggregate trace attribute undercounts', () => {
     const params: AssertionParams = {
       ...baseParams,

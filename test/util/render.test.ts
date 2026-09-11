@@ -47,6 +47,10 @@ describe('renderVarsInObject', () => {
     expect(rendered).toBe('Hello World!');
   });
 
+  it('preserves native values for full variable expressions', () => {
+    expect(renderVarsInObject({ limit: '{{ limit }}' }, { limit: 5 })).toEqual({ limit: 5 });
+  });
+
   it('should render variables in array objects', async () => {
     const obj = ['{{ greeting }}', '{{ name }}', 42];
     const vars = { greeting: 'Hello', name: 'World' };

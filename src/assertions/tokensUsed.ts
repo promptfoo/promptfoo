@@ -23,6 +23,7 @@ interface TraceTokenUsage {
 const TOKEN_USAGE_ATTRIBUTE_KEYS = [
   'gen_ai.usage.total_tokens',
   'llm.usage.total_tokens',
+  'promptfoo.usage.total_tokens',
   'tokens.used',
   'gen_ai.usage.input_tokens',
   'gen_ai.usage.output_tokens',
@@ -70,6 +71,7 @@ function sumTokenAttributes(attributes: Record<string, unknown> | undefined): nu
   const candidateTotals = [
     positiveTokenValue(attributes['gen_ai.usage.total_tokens']),
     positiveTokenValue(attributes['llm.usage.total_tokens']),
+    positiveTokenValue(attributes['promptfoo.usage.total_tokens']),
     positiveTokenValue(attributes['tokens.used']),
     sumTokenFamily(attributes, ['gen_ai.usage.input_tokens', 'gen_ai.usage.output_tokens']),
     sumTokenFamily(attributes, ['llm.usage.prompt_tokens', 'llm.usage.completion_tokens']),
