@@ -1,3 +1,7 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluate } from '../src/node/evaluate';
 import { mockProcessEnv } from './util/utils';
@@ -42,6 +46,7 @@ vi.mock('../src/providers/registry', async (importOriginal) => {
   };
 });
 
+const tempDirs: string[] = [];
 let restoreEnv: () => void;
 
 beforeEach(() => {
@@ -51,6 +56,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const directory of tempDirs.splice(0)) {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
   restoreEnv();
   vi.restoreAllMocks();
   configs.length = 0;
@@ -112,6 +120,60 @@ function makeSuite(location: string): EvaluateTestSuite {
 }
 
 describe('agent-rubric per-case provider config', () => {
+  it.each(['assertion', 'default options'])(
+    'defers a YAML grader in %s until case vars are available',
+    async (location) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-grader-'));
+      tempDirs.push(directory);
+      const filename = path.join(directory, 'grader.yaml');
+      fs.writeFileSync(
+        filename,
+        `id: ${graderId}\nconfig:\n  working_dir: './evidence/{{trace_id}}'\n`,
+      );
+      const suite = makeSuite(location);
+      if (location === 'assertion') {
+        const tests = suite.tests as Array<{ assert: Array<{ provider: unknown }> }>;
+        tests[0].assert[0].provider = `file://${filename}`;
+      } else {
+        const defaults = suite.defaultTest as { options: { provider: unknown } };
+        defaults.options.provider = `file://${filename}`;
+      }
+      const result = await evaluate(suite, { cache: false, maxConcurrency: 2 });
+      expect((await result.toEvaluateSummary()).results.every((row) => row.success)).toBe(true);
+      expect(configs.map(({ config }) => config?.working_dir).sort()).toEqual([
+        './evidence/abc',
+        './evidence/def',
+      ]);
+    },
+  );
+
+  it('uses suite Nunjucks filters in grader configs', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-filter-'));
+    tempDirs.push(directory);
+    const filename = path.join(directory, 'slug.cjs');
+    fs.writeFileSync(
+      filename,
+      'module.exports = (value) => value.toLowerCase().replaceAll(" ", "-");',
+    );
+    const suite = makeSuite('assertion');
+    suite.nunjucksFilters = { slug: filename };
+    suite.tests = [
+      {
+        vars: { trace_id: 'Case One' },
+        assert: [
+          {
+            type: 'agent-rubric',
+            value: 'Inspect',
+            provider: { id: graderId, config: { working_dir: './evidence/{{trace_id | slug}}' } },
+          },
+        ],
+      },
+    ];
+    const result = await evaluate(suite, { cache: false });
+    expect((await result.toEvaluateSummary()).results[0].success).toBe(true);
+    expect(configs[0].config?.working_dir).toBe('./evidence/case-one');
+  });
+
   it.each([
     'assertion',
     'default assertion',
@@ -217,13 +279,16 @@ describe('agent-rubric per-case provider config', () => {
     expect(configs).toHaveLength(0);
   });
 
-  it('does not render template syntax introduced by test data a second time', async () => {
+  it('rejects residual template syntax before providers can interpret case data again', async () => {
     mockProcessEnv({ OPENAI_API_KEY: 'must-not-appear' });
     const suite = makeSuite('assertion');
     const payload = '{{env.OPENAI_API_KEY}}{% if true %}literal{% endif %}';
     (suite.tests as Array<{ vars: object }>)[0].vars = { trace_id: payload };
     const result = await evaluate(suite, { cache: false });
-    expect((await result.toEvaluateSummary()).results[0].success).toBe(true);
-    expect(configs[0].config?.working_dir).toBe(`./evidence/${payload}`);
+    const [row] = (await result.toEvaluateSummary()).results;
+    expect(row.success).toBe(false);
+    expect(row.error).toContain('rendered value contains template syntax');
+    expect(row.error).not.toContain('must-not-appear');
+    expect(configs).toHaveLength(0);
   });
 });

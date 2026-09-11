@@ -19,6 +19,7 @@ import {
 } from './util/gradingProvider';
 import { hasProviderConfigTemplates } from './util/gradingProviderConfig';
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
+import { isProviderConfigFileReference } from './util/providerRef';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
@@ -207,6 +208,20 @@ async function resolveGradingProvider(
   context: { env?: EnvOverrides; basePath?: string },
   deferConfigTemplates = false,
 ): Promise<GradingConfig['provider']> {
+  const providerId = typeof provider === 'string' ? provider : provider?.id;
+  if (
+    deferConfigTemplates &&
+    typeof providerId === 'string' &&
+    isProviderConfigFileReference(providerId)
+  ) {
+    // The file's templates cannot be inspected until it is loaded. Keep the
+    // reference lazy too, including suite env for assertion-time construction.
+    return typeof provider === 'string'
+      ? { id: provider, ...(context.env && { env: context.env }) }
+      : context.env
+        ? { ...provider, env: { ...context.env, ...provider.env } }
+        : provider;
+  }
   if (deferConfigTemplates && hasProviderConfigTemplates(provider)) {
     // Assertion-time vars include defaults, scenarios, and expanded test rows.
     // Carry suite env forward because this provider will be constructed later.

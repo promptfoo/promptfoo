@@ -30,7 +30,7 @@ export async function matchesAgentRubric(
 
   const configuredProvider = grading.provider
     ? await getGradingProvider('text', grading.provider, null, (config, env) =>
-        renderGradingProviderConfig(config, vars, env),
+        renderGradingProviderConfig(config, vars, env, providerCallContext?.filters),
       )
     : null;
   const agentProvider = configuredProvider || getCodexDefaultProviders().llmRubricProvider;

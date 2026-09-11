@@ -6,6 +6,7 @@ import { clearCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { getDirectory, importModule, resolvePackageEntryPoint } from '../../src/esm';
 import logger from '../../src/logger';
+import { matchesAgentRubric } from '../../src/matchers/agent';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { getTraceparent } from '../../src/tracing/genaiTracer';
@@ -296,6 +297,44 @@ describe('OpenAICodexSDKProvider', () => {
   });
 
   describe('callApi', () => {
+    it.each(['{{missing}}', '{{env.OPENAI_API_KEY}}', '{% if true %}changed{% endif %}'])(
+      'rejects case data containing %s before a real Codex provider can render it again',
+      async (traceId) => {
+        await expect(
+          matchesAgentRubric(
+            'Inspect',
+            'done',
+            {
+              provider: {
+                id: 'openai:codex-sdk',
+                config: { working_dir: './evidence/{{trace_id}}' },
+              },
+            },
+            { trace_id: traceId },
+          ),
+        ).rejects.toThrow('rendered value contains template syntax');
+        expect(mockStartThread).not.toHaveBeenCalled();
+      },
+    );
+
+    it('preserves the per-case directory through real Codex config parsing and call-time rendering', async () => {
+      mockRun.mockResolvedValue(
+        createMockResponse(JSON.stringify({ pass: true, score: 1, reason: 'ok' })),
+      );
+      const result = await matchesAgentRubric(
+        'Inspect',
+        'done',
+        {
+          provider: { id: 'openai:codex-sdk', config: { working_dir: './evidence/{{trace_id}}' } },
+        },
+        { trace_id: 'abc' },
+      );
+      expect(result.pass).toBe(true);
+      expect(mockStartThread).toHaveBeenCalledWith(
+        expect.objectContaining({ workingDirectory: path.resolve('./evidence/abc') }),
+      );
+    });
+
     describe('basic functionality', () => {
       it('should successfully call API with simple prompt', async () => {
         mockRun.mockResolvedValue(
