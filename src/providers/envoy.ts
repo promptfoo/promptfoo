@@ -42,13 +42,15 @@ export function createEnvoyProvider(
   }
 
   // Filter out basePath from config to avoid passing it to the API
-  const { basePath: _, ...configWithoutBasePath } = options.config?.config || {};
+  const {
+    basePath: _,
+    apiBaseUrl: configuredBaseUrl,
+    ...configWithoutBasePath
+  } = options.config?.config || {};
 
   // Get the gateway URL from config or environment
   const apiBaseUrl =
-    configWithoutBasePath.apiBaseUrl ||
-    options.env?.ENVOY_API_BASE_URL ||
-    getEnvString('ENVOY_API_BASE_URL');
+    configuredBaseUrl || options.env?.ENVOY_API_BASE_URL || getEnvString('ENVOY_API_BASE_URL');
 
   if (!apiBaseUrl) {
     throw new Error(
@@ -60,6 +62,9 @@ export function createEnvoyProvider(
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(apiBaseUrl);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new Error('Unsupported gateway protocol');
+    }
   } catch {
     throw new Error(
       'Envoy provider requires a valid gateway URL. Check ENVOY_API_BASE_URL or config.apiBaseUrl.',
@@ -72,10 +77,8 @@ export function createEnvoyProvider(
   const envoyConfig = {
     ...options,
     config: {
-      apiBaseUrl: normalizedBaseUrl,
-      // Authentication is optional and depends on gateway configuration
-      // Users can specify apiKey, headers, or other auth in their config
       ...configWithoutBasePath,
+      apiBaseUrl: configuredBaseUrl ?? normalizedBaseUrl,
     },
   };
 

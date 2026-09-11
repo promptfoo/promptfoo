@@ -292,12 +292,30 @@ describe('Envoy gateway URLs', () => {
     );
   });
 
-  it.each(['config', 'env'])('identifies an invalid gateway URL from %s', async (source) => {
+  it('keeps the suite gateway when the explicit config URL is undefined', async () => {
+    const provider = await loadApiProvider('envoy:route:stable', {
+      options: { config: { apiBaseUrl: undefined } },
+      env: { ENVOY_API_BASE_URL: 'https://suite.example' },
+    });
+
+    expect((await provider.callApi('Hello')).output).toBe('Hello');
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(
+      'https://suite.example/v1/chat/completions',
+    );
+  });
+
+  it.each([
+    ['config', 'not-a-url'],
+    ['env', 'not-a-url'],
+    ['config', 'ftp://gateway.example'],
+    ['env', 'file:///gateway'],
+    ['env', 'mailto:gateway@example.com'],
+  ])('identifies an invalid gateway URL from %s: %s', async (source, url) => {
     await expect(
       loadApiProvider('envoy:route:stable', {
         ...(source === 'config'
-          ? { options: { config: { apiBaseUrl: 'not-a-url' } } }
-          : { env: { ENVOY_API_BASE_URL: 'not-a-url' } }),
+          ? { options: { config: { apiBaseUrl: url } } }
+          : { env: { ENVOY_API_BASE_URL: url } }),
       }),
     ).rejects.toThrow(
       'Envoy provider requires a valid gateway URL. Check ENVOY_API_BASE_URL or config.apiBaseUrl.',
