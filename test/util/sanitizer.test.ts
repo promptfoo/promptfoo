@@ -536,6 +536,22 @@ describe('sanitizeObject', () => {
       ).toEqual({ tests: [redactedUri] });
     });
 
+    it('leaves duplicate redacted URIs with different secrets redacted across fields', () => {
+      const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
+
+      expect(
+        restoreAzureBlobSasTokens(
+          { tests: [{ secondary: redactedUri }] },
+          {
+            tests: [
+              { primary: 'az://account/container/tests.yaml?sp=r&sig=first-secret' },
+              { secondary: 'az://account/container/tests.yaml?sp=r&sig=second-secret' },
+            ],
+          },
+        ),
+      ).toEqual({ tests: [{ secondary: redactedUri }] });
+    });
+
     it('restores unchanged duplicate Azure Blob SAS URIs by position', () => {
       const redactedUri = 'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D';
 
