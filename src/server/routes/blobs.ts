@@ -467,7 +467,9 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
 
   let blob: Awaited<ReturnType<typeof getBlobByHash>>;
   try {
-    const presigned = await getBlobUrl(hash);
+    // A provider URL can retain the original object's MIME after sanitized import.
+    // Proxy non-passive content so the registered MIME and download headers apply.
+    const presigned = isSafeInlineBlobMimeType(asset.mimeType) ? await getBlobUrl(hash) : null;
     if (presigned) {
       res.redirect(302, presigned);
       return;

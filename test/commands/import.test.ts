@@ -28,6 +28,7 @@ import { blobsRouter } from '../../src/server/routes/blobs';
 import { TraceStore } from '../../src/tracing/store';
 import { ResultFailureReason } from '../../src/types/index';
 import { sha256 } from '../../src/util/createHash';
+import { createOutputData } from '../../src/util/output';
 import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -478,6 +479,9 @@ describe('importCommand', () => {
         expect(fs.readFileSync(blobPath)).toEqual(data);
         expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
         await expect(getShareAuthorizedBlob(hash, sampleData.evalId)).resolves.toBeNull();
+        const evalRecord = await Eval.findById(sampleData.evalId);
+        const exported = await createOutputData(evalRecord!, null, { includeMedia: true });
+        expect(exported.blobAssets).toBeUndefined();
       } finally {
         resetBlobStorageProvider();
         restoreEnv();
@@ -491,87 +495,117 @@ describe('importCommand', () => {
         'image/svg+xml',
         '<svg xmlns="http://www.w3.org/2000/svg"><title>retained fixture</title></svg>',
       ],
-    ])('serves imported retained %s bytes as a download', async (mimeType, contents) => {
-      const blobDir = createTempDir('promptfoo-import-retained-mime-');
-      const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'false' });
-      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
-      const app = express().use('/api/blobs', blobsRouter);
+    ])(
+      'proxies imported retained %s instead of its active custom URL',
+      async (mimeType, contents) => {
+        const blobDir = createTempDir('promptfoo-import-retained-mime-');
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'false' });
+        const provider = new FilesystemBlobStorageProvider({ basePath: blobDir });
+        setBlobStorageProvider(provider);
+        const destination = express().get('/asset', (_req, res) => {
+          res.setHeader('Content-Type', mimeType);
+          res.send(Buffer.from(contents));
+        });
+        const destinationServer = destination.listen(0, '127.0.0.1');
+        await new Promise<void>((resolve, reject) => {
+          destinationServer.once('listening', resolve);
+          destinationServer.once('error', reject);
+        });
+        const address = destinationServer.address();
+        if (!address || typeof address === 'string') {
+          throw new Error('Expected local destination address');
+        }
+        const getUrl = vi
+          .spyOn(provider, 'getUrl')
+          .mockResolvedValue(`http://127.0.0.1:${address.port}/asset`);
+        const app = express().use('/api/blobs', blobsRouter);
 
-      try {
-        const data = Buffer.from(contents);
-        const hash = sha256(data);
-        const uri = `promptfoo://blob/${hash}`;
-        const db = await getDb();
-        const failure = await storeBlob(data, mimeType, {
-          evalId: 'missing-orphan-mime-eval',
-        }).catch((error: Error) => error);
-        expect(failure).toBeInstanceOf(Error);
-        expect(String((failure as Error).cause)).toMatch(/FOREIGN KEY constraint failed/);
-        const blobPath = path.join(blobDir, hash.slice(0, 2), hash.slice(2, 4), hash);
-        const metadata = fs.readFileSync(`${blobPath}.meta.json`, 'utf8');
-        expect(JSON.parse(metadata).mimeType).toBe(mimeType);
-        expect(await db.all(sql`SELECT hash FROM blob_assets WHERE hash = ${hash}`)).toEqual([]);
-        expect((await request(app).get(`/api/blobs/${hash}`)).status).toBe(404);
+        try {
+          const data = Buffer.from(contents);
+          const hash = sha256(data);
+          const uri = `promptfoo://blob/${hash}`;
+          const db = await getDb();
+          const failure = await storeBlob(data, mimeType, {
+            evalId: 'missing-orphan-mime-eval',
+          }).catch((error: Error) => error);
+          expect(failure).toBeInstanceOf(Error);
+          expect(String((failure as Error).cause)).toMatch(/FOREIGN KEY constraint failed/);
+          const blobPath = path.join(blobDir, hash.slice(0, 2), hash.slice(2, 4), hash);
+          const metadata = fs.readFileSync(`${blobPath}.meta.json`, 'utf8');
+          expect(JSON.parse(metadata).mimeType).toBe(mimeType);
+          expect(await db.all(sql`SELECT hash FROM blob_assets WHERE hash = ${hash}`)).toEqual([]);
+          expect((await request(app).get(`/api/blobs/${hash}`)).status).toBe(404);
 
-        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
-        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
-        expect(sampleData.results.version).toBe(3);
-        sampleData.results.results = [sampleData.results.results[0]];
-        sampleData.results.results[0].response = { output: uri };
-        sampleData.blobAssets = [
-          { hash, mimeType, sizeBytes: data.length, data: data.toString('base64') },
-        ];
-        const filePath = path.join(blobDir, 'retained-mime.json');
-        fs.writeFileSync(filePath, JSON.stringify(sampleData));
-        importCommand(program);
-        await program.parseAsync(['node', 'test', 'import', filePath]);
+          const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+          const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+          expect(sampleData.results.version).toBe(3);
+          sampleData.results.results = [sampleData.results.results[0]];
+          sampleData.results.results[0].response = { output: uri };
+          sampleData.blobAssets = [
+            { hash, mimeType, sizeBytes: data.length, data: data.toString('base64') },
+          ];
+          const filePath = path.join(blobDir, 'retained-mime.json');
+          fs.writeFileSync(filePath, JSON.stringify(sampleData));
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', filePath]);
 
-        expect(process.exitCode).toBeUndefined();
-        expect(logger.error).not.toHaveBeenCalled();
-        expect(await db.all(sql`SELECT mime_type FROM blob_assets WHERE hash = ${hash}`)).toEqual([
-          { mime_type: mimeType },
-        ]);
-        expect(
-          await db.all(
-            sql`SELECT eval_id, location FROM blob_references WHERE blob_hash = ${hash}`,
-          ),
-        ).toEqual([{ eval_id: sampleData.evalId, location: 'import' }]);
-        const response = await request(app)
-          .get(`/api/blobs/${hash}`)
-          .buffer(true)
-          .parse((res, callback) => {
-            const chunks: Buffer[] = [];
-            res.on('data', (chunk: Buffer) => chunks.push(chunk));
-            res.on('end', () => callback(null, Buffer.concat(chunks)));
+          expect(process.exitCode).toBeUndefined();
+          expect(logger.error).not.toHaveBeenCalled();
+          expect(await db.all(sql`SELECT mime_type FROM blob_assets WHERE hash = ${hash}`)).toEqual(
+            [{ mime_type: 'application/octet-stream' }],
+          );
+          expect(
+            await db.all(
+              sql`SELECT eval_id, location FROM blob_references WHERE blob_hash = ${hash}`,
+            ),
+          ).toEqual([{ eval_id: sampleData.evalId, location: 'import' }]);
+          const response = await request(app)
+            .get(`/api/blobs/${hash}`)
+            .redirects(1)
+            .buffer(true)
+            .parse((res, callback) => {
+              const chunks: Buffer[] = [];
+              res.on('data', (chunk: Buffer) => chunks.push(chunk));
+              res.on('end', () => callback(null, Buffer.concat(chunks)));
+            });
+          expect(response.status).toBe(200);
+          expect(response.body).toEqual(data);
+          expect(response.headers['content-type']).toBe('application/octet-stream');
+          expect(getUrl).not.toHaveBeenCalled();
+          expect(response.headers['content-disposition']).toBe('attachment');
+          expect(response.headers['x-content-type-options']).toBe('nosniff');
+          expect(fs.readFileSync(blobPath)).toEqual(data);
+          expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
+          await expect(getShareAuthorizedBlob(hash, 'unrelated-eval')).resolves.toBeNull();
+          await db.run(sql`DELETE FROM blob_references WHERE blob_hash = ${hash}`);
+          expect((await request(app).get(`/api/blobs/${hash}`)).status).toBe(403);
+          expect(fs.readFileSync(blobPath)).toEqual(data);
+        } finally {
+          getUrl.mockRestore();
+          await new Promise<void>((resolve, reject) => {
+            destinationServer.close((error) => (error ? reject(error) : resolve()));
           });
-        expect(response.status).toBe(200);
-        expect(response.body).toEqual(data);
-        expect(response.headers['content-type']).toBe(mimeType);
-        expect(response.headers['content-disposition']).toBe('attachment');
-        expect(response.headers['x-content-type-options']).toBe('nosniff');
-        expect(fs.readFileSync(blobPath)).toEqual(data);
-        expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
-        await expect(getShareAuthorizedBlob(hash, 'unrelated-eval')).resolves.toBeNull();
-        await db.run(sql`DELETE FROM blob_references WHERE blob_hash = ${hash}`);
-        expect((await request(app).get(`/api/blobs/${hash}`)).status).toBe(403);
-        expect(fs.readFileSync(blobPath)).toEqual(data);
-      } finally {
-        resetBlobStorageProvider();
-        restoreEnv();
-        removeTempDir(blobDir);
-      }
-    });
+          resetBlobStorageProvider();
+          restoreEnv();
+          removeTempDir(blobDir);
+        }
+      },
+    );
 
-    it('should downgrade active embedded blob MIME types during import', async () => {
+    it.each([false, true])('downgrades active imported MIME types (orphan=%s)', async (orphan) => {
       const blobDir = createTempDir('promptfoo-import-active-mime-blobs-');
       setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
 
       try {
         const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
         const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
-        const htmlData = Buffer.from('<script>alert(document.domain)</script>');
+        const htmlData = Buffer.from(
+          `<script>alert(document.domain) /* orphan=${orphan} */</script>`,
+        );
         const htmlHash = sha256(htmlData);
-        const svgData = Buffer.from('<svg onload="alert(document.domain)" />');
+        const svgData = Buffer.from(
+          `<svg data-orphan="${orphan}" onload="alert(document.domain)" />`,
+        );
         const svgHash = sha256(svgData);
         sampleData.results.results[0].response = {
           output: `promptfoo://blob/${htmlHash} promptfoo://blob/${svgHash}`,
@@ -591,6 +625,20 @@ describe('importCommand', () => {
           },
         ];
 
+        if (orphan) {
+          for (const asset of sampleData.blobAssets) {
+            await expect(
+              storeBlob(Buffer.from(asset.data, 'base64'), asset.mimeType, {
+                evalId: 'missing-active-mime-eval',
+              }),
+            ).rejects.toThrow();
+          }
+          const db = await getDb();
+          expect(
+            await db.all(sql`SELECT hash FROM blob_assets WHERE hash IN (${htmlHash}, ${svgHash})`),
+          ).toEqual([]);
+        }
+
         const filePath = path.join(__dirname, `temp-active-mime-blob-${Date.now()}.json`);
         fs.writeFileSync(filePath, JSON.stringify(sampleData));
         tempFilePath = filePath;
@@ -600,6 +648,25 @@ describe('importCommand', () => {
 
         expect((await getBlobByHash(htmlHash)).metadata.mimeType).toBe('application/octet-stream');
         expect((await getBlobByHash(svgHash)).metadata.mimeType).toBe('application/octet-stream');
+        const db = await getDb();
+        const assets = await db.all(
+          sql`SELECT mime_type FROM blob_assets WHERE hash IN (${htmlHash}, ${svgHash})`,
+        );
+        expect(assets).toHaveLength(2);
+        expect(assets).toEqual([
+          { mime_type: 'application/octet-stream' },
+          { mime_type: 'application/octet-stream' },
+        ]);
+        expect((await getShareAuthorizedBlob(htmlHash, sampleData.evalId))?.metadata.mimeType).toBe(
+          'application/octet-stream',
+        );
+        const evalRecord = await Eval.findById(sampleData.evalId);
+        const exported = await createOutputData(evalRecord!, null, { includeMedia: true });
+        expect(exported.blobAssets).toHaveLength(2);
+        expect(exported.blobAssets?.map((asset) => asset.mimeType)).toEqual([
+          'application/octet-stream',
+          'application/octet-stream',
+        ]);
       } finally {
         resetBlobStorageProvider();
         removeTempDir(blobDir);

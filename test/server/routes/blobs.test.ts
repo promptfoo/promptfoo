@@ -140,25 +140,28 @@ describe('Blobs Routes', () => {
       expect(response.body).toEqual({ error: 'Not authorized to access this blob' });
     });
 
-    it('should redirect 302 when presigned URL is available', async () => {
-      setupDbWithAssetAndReference({
-        hash: validHash,
-        mimeType: 'image/png',
-        sizeBytes: 1024,
-        provider: 's3',
-      });
+    it.each(['image/png', 'video/mp4', 'audio/wav'])(
+      'redirects passive %s when a custom URL is available',
+      async (mimeType) => {
+        setupDbWithAssetAndReference({
+          hash: validHash,
+          mimeType,
+          sizeBytes: 1024,
+          provider: 's3',
+        });
 
-      const presignedUrl = 'https://s3.amazonaws.com/bucket/blob?signature=xyz';
-      mockedGetBlobUrl.mockResolvedValue(presignedUrl);
+        const presignedUrl = 'https://s3.amazonaws.com/bucket/blob?signature=xyz';
+        mockedGetBlobUrl.mockResolvedValue(presignedUrl);
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+        const response = await api.get(`/api/blobs/${validHash}`);
 
-      expect(response.status).toBe(302);
-      expect(response.header.location).toBe(presignedUrl);
-      expect(mockedGetBlobUrl).toHaveBeenCalledWith(validHash);
-      expect(mockedGetBlobByHash).not.toHaveBeenCalled();
-      expect(response.header['content-disposition']).toBeUndefined();
-    });
+        expect(response.status).toBe(302);
+        expect(response.header.location).toBe(presignedUrl);
+        expect(mockedGetBlobUrl).toHaveBeenCalledWith(validHash);
+        expect(mockedGetBlobByHash).not.toHaveBeenCalled();
+        expect(response.header['content-disposition']).toBeUndefined();
+      },
+    );
 
     it('should serve blob data directly when no presigned URL', async () => {
       setupDbWithAssetAndReference({
@@ -268,14 +271,14 @@ describe('Blobs Routes', () => {
     ])(
       'serves non-passive %s metadata as a download without changing its type',
       async (mimeType) => {
-        // Custom/provider metadata remains authoritative over a different asset MIME.
+        // The real getter supplies registered MIME; the route preserves valid download types.
         setupDbWithAssetAndReference({
           hash: validHash,
-          mimeType: 'image/png',
+          mimeType,
           sizeBytes: 16,
           provider: 'custom',
         });
-        mockedGetBlobUrl.mockResolvedValue(null);
+        mockedGetBlobUrl.mockResolvedValue('https://storage.example/active-object');
         mockedGetBlobByHash.mockResolvedValue({
           ...createBlobResponse(mimeType, 16),
           data: Buffer.from('{"fixture":true}'),
@@ -287,8 +290,25 @@ describe('Blobs Routes', () => {
         expect(response.header['content-type']).toBe(mimeType);
         expect(response.header['content-disposition']).toBe('attachment');
         expect(response.header['x-content-type-options']).toBe('nosniff');
+        expect(mockedGetBlobUrl).not.toHaveBeenCalled();
       },
     );
+
+    it('returns 404 when a passive custom URL cannot be generated', async () => {
+      setupDbWithAssetAndReference({
+        hash: validHash,
+        mimeType: 'image/png',
+        sizeBytes: 16,
+        provider: 'custom',
+      });
+      mockedGetBlobUrl.mockRejectedValue(new Error('URL generation failed'));
+
+      const response = await api.get(`/api/blobs/${validHash}`);
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ error: 'Blob not found' });
+      expect(mockedGetBlobByHash).not.toHaveBeenCalled();
+    });
 
     it('should return 404 when getBlobByHash throws error', async () => {
       setupDbWithAssetAndReference(

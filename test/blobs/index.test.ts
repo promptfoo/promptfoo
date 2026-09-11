@@ -414,6 +414,33 @@ describe('storeBlob persistence failures with shared files', () => {
     expect(await snapshotFiles()).toEqual(files);
   });
 
+  it('preserves a registered MIME type when another caller deduplicates the bytes', async () => {
+    await storeBlob(data, 'image/png', { evalId: firstEvalId, location: 'import' });
+    const files = await snapshotFiles();
+
+    const stored = await storeBlob(data, 'audio/wav', { evalId: secondEvalId, location: 'import' });
+
+    expect(stored.deduplicated).toBe(true);
+    expect(stored.ref.mimeType).toBe('image/png');
+    expect((await snapshotRows()).assets[0].mimeType).toBe('image/png');
+    expect((await getShareAuthorizedBlob(hash, secondEvalId))?.metadata.mimeType).toBe('image/png');
+    expect(await snapshotFiles()).toEqual(files);
+  });
+
+  it('uses provider metadata when registering newly created bytes', async () => {
+    const store = provider.store.bind(provider);
+    vi.spyOn(provider, 'store').mockImplementation((bytes) => store(bytes, 'image/png'));
+
+    const stored = await storeBlob(data, 'application/octet-stream', {
+      evalId: firstEvalId,
+      location: 'import',
+    });
+
+    expect(stored.deduplicated).toBe(false);
+    expect(stored.ref.mimeType).toBe('image/png');
+    expect((await snapshotRows()).assets[0].mimeType).toBe('image/png');
+  });
+
   it('preserves asset-first import storage without granting unclassified access', async () => {
     const stored = await storeBlob(data, mimeType);
     const files = await snapshotFiles();

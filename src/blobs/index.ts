@@ -78,13 +78,15 @@ export async function storeBlob(
   const db = await getDb();
   // Keep stored bytes if persistence fails: another eval may already reference them,
   // including bytes adopted after this store began. Unreferenced bytes are safer than data loss.
-  await db.transaction(async (tx) => {
+  const registeredMimeType = await db.transaction(async (tx) => {
     await tx
       .insert(blobAssetsTable)
       .values({
         hash: result.ref.hash,
         sizeBytes: result.ref.sizeBytes,
-        mimeType: result.ref.mimeType,
+        // A deduplicated file may be an orphan from a failed transaction.
+        // Adopt it with the current caller's MIME type, which imports sanitize.
+        mimeType: result.deduplicated ? mimeType : result.ref.mimeType,
         provider: result.ref.provider,
       })
       .onConflictDoNothing()
@@ -105,14 +107,29 @@ export async function storeBlob(
         .onConflictDoNothing()
         .run();
     }
+
+    const asset = await tx
+      .select({ mimeType: blobAssetsTable.mimeType })
+      .from(blobAssetsTable)
+      .where(eq(blobAssetsTable.hash, result.ref.hash))
+      .get();
+    return asset!.mimeType;
   });
 
-  return result;
+  return { ...result, ref: { ...result.ref, mimeType: registeredMimeType } };
 }
 
 export async function getBlobByHash(hash: string): Promise<StoredBlob> {
   const provider = getBlobStorageProvider();
-  return provider.getByHash(hash);
+  const blob = await provider.getByHash(hash);
+  const db = await getDb();
+  const asset = await db
+    .select({ mimeType: blobAssetsTable.mimeType })
+    .from(blobAssetsTable)
+    .where(eq(blobAssetsTable.hash, hash))
+    .get();
+  // Registered metadata takes precedence over sidecars retained from failed stores.
+  return asset ? { ...blob, metadata: { ...blob.metadata, mimeType: asset.mimeType } } : blob;
 }
 
 export async function isBlobAllowedForShare(hash: string, evalId: string): Promise<boolean> {
