@@ -1,54 +1,26 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { splitLocalOptions } from './openai/localOptions';
 
 import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
-import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
-
-// These are consumed by promptfoo or its transport, not TogetherAI's model endpoint.
-// Requiring every shared option here keeps future connection settings out of passthrough.
-const localOptions = {
-  apiKey: true,
-  apiKeyEnvar: true,
-  apiKeyRequired: true,
-  useDefaultApiKey: true,
-  apiHost: true,
-  apiBaseUrl: true,
-  organization: true,
-  headers: true,
-  maxRetries: true,
-  cost: true,
-  inputCost: true,
-  outputCost: true,
-  audioCost: true,
-  audioInputCost: true,
-  audioOutputCost: true,
-  passthrough: true,
-  mcp: true,
-  functionToolCallbacks: true,
-  showThinking: true,
-  omitDefaults: true,
-  basePath: true,
-  linkedTargetId: true,
-} satisfies Record<keyof OpenAiSharedOptions, boolean> &
-  Partial<Record<keyof OpenAiCompletionOptions | 'basePath' | 'linkedTargetId', boolean>>;
-const localOptionNames = new Set(Object.keys(localOptions));
+import type { OpenAiCompletionOptions } from './openai/types';
 
 // The chat provider resolves these itself: it loads `file://` references, renders Nunjucks
 // vars, merges in MCP tools and normalizes tool shapes. `passthrough` is spread into the
 // body last, so a raw copy of one of them would clobber the resolved value. It emits each
 // of these whenever it is configured, so dropping the raw copy cannot lose a parameter.
-// `reasoning_effort` is deliberately absent: the chat provider only emits it for models it
-// recognizes as reasoning models, which no TogetherAI model name but `gpt-oss` matches, so
-// passthrough has to keep carrying it. The completion and embedding providers resolve
-// nothing and only spread `passthrough`, so the filter applies to chat alone.
-const chatResolvedOptionNames = new Set<string>([
+// `reasoning_effort` is deliberately absent: the chat provider only renders and emits it
+// for recognized reasoning model patterns or names containing `gpt-oss`, so passthrough
+// has to keep carrying it for other models. The completion and embedding providers do not
+// resolve these four options, so the filter applies to chat alone.
+const chatResolvedOptionNames = [
   'functions',
   'response_format',
   'tool_choice',
   'tools',
-] satisfies (keyof OpenAiCompletionOptions)[]);
+] satisfies (keyof OpenAiCompletionOptions)[];
 
 // A Map, not an object literal, so a route segment naming an Object prototype member
 // (`constructor`, `toString`) does not resolve to that member.
@@ -87,11 +59,7 @@ export function createTogetherAiProvider(
 
   const config = options.config?.config || {};
   const isChat = Provider === OpenAiChatCompletionProvider;
-  const modelParameters = Object.fromEntries(
-    Object.entries(config).filter(
-      ([key]) => !localOptionNames.has(key) && !(isChat && chatResolvedOptionNames.has(key)),
-    ),
-  );
+  const { modelParameters } = splitLocalOptions(config, isChat ? chatResolvedOptionNames : []);
   const togetherAiConfig = {
     ...options.config,
     id: options.id ?? options.config?.id,
