@@ -1,7 +1,12 @@
 import { AnthropicMessagesProvider } from './messages';
 
 import type { EnvOverrides } from '../../types/env';
-import type { DefaultProviders, ProviderResponse } from '../../types/index';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  DefaultProviders,
+  ProviderResponse,
+} from '../../types/index';
 
 // Default model to use for all default providers
 export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6';
@@ -70,8 +75,15 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
     });
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
-    const result = await super.callApi(prompt);
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    const result = await super.callApi(prompt, context, options);
+    if (result.error) {
+      return result;
+    }
     if (typeof result.output !== 'string') {
       return {
         error: `Anthropic LLM rubric grader - malformed non-string output\n\n${JSON.stringify(result.output)}`,

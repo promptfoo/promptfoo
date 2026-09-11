@@ -259,9 +259,16 @@ describeEvaluator('evaluator options and hooks', () => {
 
   it('retains an in-memory timeout row for afterAll and summary reads', async () => {
     vi.useFakeTimers();
+    let notifyStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      notifyStarted = resolve;
+    });
     const provider: ApiProvider = {
       id: () => 'local-timeout-provider',
-      callApi: vi.fn(() => new Promise<never>(() => {})),
+      callApi: vi.fn(() => {
+        notifyStarted();
+        return new Promise<never>(() => {});
+      }),
     };
     const testSuite: TestSuite = {
       providers: [provider],
@@ -271,6 +278,7 @@ describeEvaluator('evaluator options and hooks', () => {
     };
     const evaluation = new Eval({});
     const pendingEvaluation = evaluate(testSuite, evaluation, { timeoutMs: 100 });
+    await started;
     await vi.advanceTimersByTimeAsync(100);
     await vi.advanceTimersToNextTimerAsync();
     await pendingEvaluation;
