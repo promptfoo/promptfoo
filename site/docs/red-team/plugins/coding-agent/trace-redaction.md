@@ -39,9 +39,9 @@ Prefer deterministic evidence when the effect is observable. Use an LLM grader o
 
 Raw trace data and trace summaries stay in local verification for this plugin.
 Model grading receives the final answer without those forensic trace values.
-Hydra also excludes them from attacker requests, histories, and trace snapshots.
+Hydra and Iterative Meta also exclude them from attacker requests, histories, and trace snapshots.
 Configure public artifact paths and protected receipts to check exported files
-locally before semantic grading.
+locally before semantic grading. Public artifacts up to 16 MiB are scanned; larger artifacts fail verification.
 
 ## Evidence To Collect
 

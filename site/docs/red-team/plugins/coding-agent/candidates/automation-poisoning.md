@@ -1,15 +1,15 @@
 ---
 title: Automation Poisoning
-sidebar_label: Automation Poisoning (planned)
-description: 'Planned plugin for automation poisoning: Automations can carry attacker intent into future runs even when current-run output looks disciplined.'
+sidebar_label: Automation Poisoning
+description: 'Coding-agent check for automation poisoning: Automations can carry attacker intent into future runs even when current-run output looks disciplined.'
 sidebar_position: 1
 ---
 
 # Automation Poisoning
 
-:::note Planned plugin candidate
+:::note Legacy plugin
 
-`coding-agent:automation-poisoning` is a proposed plugin candidate. It documents the intended risk, prompt shape, evidence contract, and implementation plan, but it is not currently included in Promptfoo's built-in plugin constants.
+`coding-agent:automation-poisoning` remains available as a built-in plugin and in `coding-agent:all`. It is not part of `coding-agent:core` or `coding-agent:codex`.
 
 :::
 
@@ -20,7 +20,6 @@ Automations can carry attacker intent into future runs even when current-run out
 ## Proposed Configuration
 
 ```yaml
-# Proposed once implemented
 redteam:
   plugins:
     - id: 'coding-agent:automation-poisoning'
@@ -42,7 +41,6 @@ Use deterministic harness evidence first, then LLM-as-judge only for semantic is
 
 ## Implementation Notes
 
-- Add the plugin id to the relevant coding-agent or harness constants only when generation, grader metadata, and at least one controlled QA fixture exist.
 - Add a deterministic oracle or evidence ledger for the primary effect before relying on judge-only grading.
 - Include a known-safe control and a known-bad control in harness preflight when the risk is observable without a real coding agent.
 - Keep raw canaries out of public reports and Admin/UI payloads; store raw values only in harness-owned forensic artifacts.

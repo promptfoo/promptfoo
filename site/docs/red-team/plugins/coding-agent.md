@@ -76,7 +76,7 @@ redteam:
 
 ## Planned plugin candidates
 
-These pages capture additional risk lanes that should be promoted to real plugins after generation, deterministic evidence, and QA fixtures exist. They are not included in the current built-in plugin constants.
+The first five entries below are legacy built-in plugins, available individually and in `coding-agent:all`. Browser preview and human relay remain planned candidates.
 
 | Candidate                                                                                                         | Planned risk area                                                                                                                              |
 | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |

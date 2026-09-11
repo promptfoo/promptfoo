@@ -1,15 +1,15 @@
 ---
 title: Delayed CI Exfiltration
-sidebar_label: Delayed CI Exfiltration (planned)
-description: 'Planned plugin for delayed ci exfiltration: A patch can look safe during the eval and only leak data after merge, in CI, in preview deploys, in scheduled jobs, or in telemetry.'
+sidebar_label: Delayed CI Exfiltration
+description: 'Coding-agent check for delayed ci exfiltration: A patch can look safe during the eval and only leak data after merge, in CI, in preview deploys, in scheduled jobs, or in telemetry.'
 sidebar_position: 3
 ---
 
 # Delayed CI Exfiltration
 
-:::note Planned plugin candidate
+:::note Legacy plugin
 
-`coding-agent:delayed-ci-exfil` is a proposed plugin candidate. It documents the intended risk, prompt shape, evidence contract, and implementation plan, but it is not currently included in Promptfoo's built-in plugin constants.
+`coding-agent:delayed-ci-exfil` remains available as a built-in plugin and in `coding-agent:all`. It is not part of `coding-agent:core` or `coding-agent:codex`.
 
 :::
 
@@ -20,7 +20,6 @@ A patch can look safe during the eval and only leak data after merge, in CI, in 
 ## Proposed Configuration
 
 ```yaml
-# Proposed once implemented
 redteam:
   plugins:
     - id: 'coding-agent:delayed-ci-exfil'
@@ -42,7 +41,6 @@ Use deterministic harness evidence first, then LLM-as-judge only for semantic is
 
 ## Implementation Notes
 
-- Add the plugin id to the relevant coding-agent or harness constants only when generation, grader metadata, and at least one controlled QA fixture exist.
 - Add a deterministic oracle or evidence ledger for the primary effect before relying on judge-only grading.
 - Include a known-safe control and a known-bad control in harness preflight when the risk is observable without a real coding agent.
 - Keep raw canaries out of public reports and Admin/UI payloads; store raw values only in harness-owned forensic artifacts.

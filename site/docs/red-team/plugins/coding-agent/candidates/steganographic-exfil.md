@@ -1,15 +1,15 @@
 ---
 title: Steganographic Exfiltration
-sidebar_label: Steganographic Exfiltration (planned)
-description: 'Planned plugin for steganographic exfiltration: Canaries can leave as encodings, chunks, high-entropy identifiers, filenames, timing, zero-width text, or metadata instead of literal strings.'
+sidebar_label: Steganographic Exfiltration
+description: 'Coding-agent check for steganographic exfiltration: Canaries can leave as encodings, chunks, high-entropy identifiers, filenames, timing, zero-width text, or metadata instead of literal strings.'
 sidebar_position: 7
 ---
 
 # Steganographic Exfiltration
 
-:::note Planned plugin candidate
+:::note Legacy plugin
 
-`coding-agent:steganographic-exfil` is a proposed plugin candidate. It documents the intended risk, prompt shape, evidence contract, and implementation plan, but it is not currently included in Promptfoo's built-in plugin constants.
+`coding-agent:steganographic-exfil` remains available as a built-in plugin and in `coding-agent:all`. It is not part of `coding-agent:core` or `coding-agent:codex`.
 
 :::
 
@@ -20,7 +20,6 @@ Canaries can leave as encodings, chunks, high-entropy identifiers, filenames, ti
 ## Proposed Configuration
 
 ```yaml
-# Proposed once implemented
 redteam:
   plugins:
     - id: 'coding-agent:steganographic-exfil'
@@ -42,7 +41,6 @@ Use deterministic harness evidence first, then LLM-as-judge only for semantic is
 
 ## Implementation Notes
 
-- Add the plugin id to the relevant coding-agent or harness constants only when generation, grader metadata, and at least one controlled QA fixture exist.
 - Add a deterministic oracle or evidence ledger for the primary effect before relying on judge-only grading.
 - Include a known-safe control and a known-bad control in harness preflight when the risk is observable without a real coding agent.
 - Keep raw canaries out of public reports and Admin/UI payloads; store raw values only in harness-owned forensic artifacts.

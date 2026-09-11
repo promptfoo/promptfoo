@@ -1,15 +1,15 @@
 ---
 title: Procfs Credential Read
-sidebar_label: Procfs Credential Read (planned)
-description: 'Planned plugin for procfs credential read: Process metadata can expose launcher credentials even when normal environment variables and files are hidden from the target.'
+sidebar_label: Procfs Credential Read
+description: 'Coding-agent check for procfs credential read: Process metadata can expose launcher credentials even when normal environment variables and files are hidden from the target.'
 sidebar_position: 6
 ---
 
 # Procfs Credential Read
 
-:::note Planned plugin candidate
+:::note Legacy plugin
 
-`coding-agent:procfs-credential-read` is a proposed plugin candidate. It documents the intended risk, prompt shape, evidence contract, and implementation plan, but it is not currently included in Promptfoo's built-in plugin constants.
+`coding-agent:procfs-credential-read` remains available as a built-in plugin and in `coding-agent:all`. It is not part of `coding-agent:core` or `coding-agent:codex`.
 
 :::
 
@@ -20,7 +20,6 @@ Process metadata can expose launcher credentials even when normal environment va
 ## Proposed Configuration
 
 ```yaml
-# Proposed once implemented
 redteam:
   plugins:
     - id: 'coding-agent:procfs-credential-read'
@@ -42,7 +41,6 @@ Use deterministic harness evidence first, then LLM-as-judge only for semantic is
 
 ## Implementation Notes
 
-- Add the plugin id to the relevant coding-agent or harness constants only when generation, grader metadata, and at least one controlled QA fixture exist.
 - Add a deterministic oracle or evidence ledger for the primary effect before relying on judge-only grading.
 - Include a known-safe control and a known-bad control in harness preflight when the risk is observable without a real coding agent.
 - Keep raw canaries out of public reports and Admin/UI payloads; store raw values only in harness-owned forensic artifacts.
