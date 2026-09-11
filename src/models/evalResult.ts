@@ -48,6 +48,7 @@ function projectProviderResponse(
     stripOutput: boolean;
     stripPrompt: boolean;
     stripVars: boolean;
+    stripGrading: boolean;
   },
 ): ProviderResponse | undefined {
   if (!response) {
@@ -58,7 +59,8 @@ function projectProviderResponse(
     !options.stripMetadata &&
     !options.stripOutput &&
     !options.stripPrompt &&
-    !options.stripVars
+    !options.stripVars &&
+    !options.stripGrading
   ) {
     return response;
   }
@@ -74,18 +76,11 @@ function projectProviderResponse(
     delete projectedResponse.video;
     delete projectedResponse.raw;
     delete projectedResponse.providerTransformedOutput;
-    if (projectedResponse.metadata) {
-      const { blobUris: _blobUris, ...metadata } = projectedResponse.metadata;
-      projectedResponse.metadata = metadata;
-    }
   }
 
   if (options.stripPrompt) {
     // A display marker must not become provider-reported input on a later import.
     delete projectedResponse.prompt;
-    if (projectedResponse.metadata) {
-      projectedResponse.metadata = projectPromptMetadata(projectedResponse.metadata, true);
-    }
   }
 
   if (options.stripVars) {
@@ -93,16 +88,115 @@ function projectProviderResponse(
     delete projectedResponse.inputMaterialization;
   }
 
+  if (projectedResponse.metadata) {
+    projectedResponse.metadata = projectTranscriptMetadata(projectedResponse.metadata, options);
+  }
+
   return projectedResponse;
 }
 
-function projectPromptMetadata<T>(metadata: T, stripPromptText: boolean): T {
+// Only visit documented transcript slots; arbitrary user metadata stays opaque.
+function projectTranscriptMetadata<T>(
+  metadata: T,
+  options: {
+    stripPrompt: boolean;
+    stripOutput: boolean;
+    stripVars: boolean;
+    stripGrading: boolean;
+  },
+): T {
   const record = asRecord(metadata);
-  if (!stripPromptText || !record || !('redteamFinalPrompt' in record)) {
+  if (
+    !record ||
+    (!options.stripPrompt && !options.stripOutput && !options.stripVars && !options.stripGrading)
+  ) {
     return metadata;
   }
-  const { redteamFinalPrompt: _redteamFinalPrompt, ...rest } = record;
-  return rest as T;
+  const projected = { ...record };
+  if (options.stripPrompt) {
+    delete projected.redteamFinalPrompt;
+  }
+  if (options.stripOutput) {
+    delete projected.blobUris;
+  }
+  if (options.stripVars) {
+    delete projected.transformDisplayVars;
+  }
+  if (options.stripGrading) {
+    delete projected.storedGraderResult;
+  }
+  if (
+    (options.stripPrompt || options.stripOutput || options.stripVars) &&
+    Array.isArray(record.redteamHistory)
+  ) {
+    projected.redteamHistory = record.redteamHistory.map((entry) => {
+      if (!asRecord(entry)) {
+        return entry;
+      }
+      const history = { ...entry };
+      if (options.stripPrompt) {
+        delete history.prompt;
+        delete history.promptAudio;
+        delete history.promptImage;
+      }
+      if (options.stripOutput) {
+        delete history.output;
+        delete history.outputAudio;
+        delete history.outputImage;
+      }
+      if (options.stripVars) {
+        delete history.inputVars;
+      }
+      return history;
+    });
+  }
+  if (options.stripPrompt || options.stripOutput) {
+    if (Array.isArray(record.messages)) {
+      projected.messages = record.messages.map((message) => {
+        if (!asRecord(message)) {
+          return message;
+        }
+        // Stateless providers reuse the full conversation as input. Assistant
+        // turns in this transcript are therefore both prompt and output copies.
+        if (options.stripPrompt || message.role === 'assistant') {
+          const { content: _content, ...rest } = message;
+          return rest;
+        }
+        return message;
+      });
+    }
+    if (Array.isArray(record.successfulAttacks)) {
+      projected.successfulAttacks = record.successfulAttacks.map((entry) => {
+        if (!asRecord(entry)) {
+          return entry;
+        }
+        const attack = { ...entry };
+        if (options.stripPrompt) {
+          delete attack.message;
+        }
+        if (options.stripOutput) {
+          delete attack.response;
+        }
+        return attack;
+      });
+    }
+  }
+  return projected as T;
+}
+
+// Metadata stripping follows the grading schema, not arbitrary assertion/output objects.
+function projectGradingResult<T>(gradingResult: T, stripMetadata: boolean): T {
+  const record = asRecord(gradingResult);
+  if (!stripMetadata || !record) {
+    return gradingResult;
+  }
+  const { metadata: _metadata, ...projected } = record;
+  if (Array.isArray(record.componentResults)) {
+    projected.componentResults = record.componentResults.map((component) =>
+      projectGradingResult(component, stripMetadata),
+    );
+  }
+  return projected as T;
 }
 
 function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
@@ -646,6 +740,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     stripOutput: shouldStripResponseOutput,
     stripPrompt: shouldStripPromptText,
     stripVars: shouldStripTestVars,
+    stripGrading: shouldStripGradingResult,
   });
 
   return {
@@ -680,11 +775,18 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
         }
       : {}),
     response,
-    gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
+    gradingResult: shouldStripGradingResult
+      ? null
+      : projectGradingResult(redacted.gradingResult, shouldStripMetadata),
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata: shouldStripMetadata
       ? {}
-      : projectPromptMetadata(redacted.metadata, shouldStripPromptText),
+      : projectTranscriptMetadata(redacted.metadata, {
+          stripPrompt: shouldStripPromptText,
+          stripOutput: shouldStripResponseOutput,
+          stripVars: shouldStripTestVars,
+          stripGrading: shouldStripGradingResult,
+        }),
   } as T;
 }
 
@@ -782,11 +884,19 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
         stripOutput: shouldStripResponseOutput,
         stripPrompt: shouldStripPromptText,
         stripVars: shouldStripTestVars,
+        stripGrading: shouldStripGradingResult,
       }),
-      gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
+      gradingResult: shouldStripGradingResult
+        ? null
+        : projectGradingResult(redacted.gradingResult, shouldStripMetadata),
       metadata: shouldStripMetadata
         ? {}
-        : projectPromptMetadata(redacted.metadata, shouldStripPromptText),
+        : projectTranscriptMetadata(redacted.metadata, {
+            stripPrompt: shouldStripPromptText,
+            stripOutput: shouldStripResponseOutput,
+            stripVars: shouldStripTestVars,
+            stripGrading: shouldStripGradingResult,
+          }),
       testCase: sanitizeTestCase(output.testCase) as AtomicTestCase,
     } as EvaluateTableOutput;
   };
@@ -1190,6 +1300,7 @@ export default class EvalResult {
       stripOutput: shouldStripResponseOutput,
       stripPrompt: shouldStripPromptText,
       stripVars: shouldStripTestVars,
+      stripGrading: shouldStripGradingResult,
     });
 
     const prompt = projectPrompt(this.prompt, shouldStripPromptText);
@@ -1218,7 +1329,9 @@ export default class EvalResult {
       }),
       description: this.description || undefined,
       error: this.error || undefined,
-      gradingResult: shouldStripGradingResult ? null : this.gradingResult,
+      gradingResult: shouldStripGradingResult
+        ? null
+        : projectGradingResult(this.gradingResult, shouldStripMetadata),
       id: this.id,
       latencyMs: this.latencyMs,
       namedScores: this.namedScores,
@@ -1237,7 +1350,12 @@ export default class EvalResult {
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
       metadata: shouldStripMetadata
         ? {}
-        : projectPromptMetadata(this.metadata, shouldStripPromptText),
+        : projectTranscriptMetadata(this.metadata, {
+            stripPrompt: shouldStripPromptText,
+            stripOutput: shouldStripResponseOutput,
+            stripVars: shouldStripTestVars,
+            stripGrading: shouldStripGradingResult,
+          }),
       failureReason: this.failureReason,
     };
   }

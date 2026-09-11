@@ -436,6 +436,9 @@ function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as OutputFile['config'];
+  if (!isRecord(sanitized)) {
+    return sanitized;
+  }
   const projected = sanitized as Record<string, unknown>;
   const stripPrompt = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
   const stripVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);

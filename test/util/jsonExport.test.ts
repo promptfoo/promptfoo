@@ -3,9 +3,11 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as blobs from '../../src/blobs';
+import EvalResult, { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
 import { getTraceStore } from '../../src/tracing/store';
 import { writeOutput } from '../../src/util/index';
 import { sanitizeObject } from '../../src/util/sanitizer';
+import { createEvaluateResult } from '../factories/eval';
 import { createTempDir, mockProcessEnv, removeTempDir } from './utils';
 
 // Mock dependencies
@@ -309,12 +311,18 @@ describe('JSON export with improved error handling', () => {
       'aggregate prompt config',
       'provider config',
     ])('never writes unsanitized serializable %s when recursive sanitation fails', async (slot) => {
-      let nested: Record<string, unknown> = { apiKey: 'deep-credential-must-not-be-exported' };
-      for (let i = 0; i < 4000; i++) {
-        nested = { child: nested };
+      const depth = 4000;
+      // Build JSON without recursively stringifying the fixture: that can overflow
+      // Node's stack on Windows before the real export sanitizer is exercised.
+      const original =
+        '{"child":'.repeat(depth) +
+        '{"apiKey":"deep-credential-must-not-be-exported"}' +
+        '}'.repeat(depth);
+      const nested = JSON.parse(original);
+      let originalLeaf = nested;
+      for (let i = 0; i < depth; i++) {
+        originalLeaf = originalLeaf.child;
       }
-      // This is serializable input, not a mocked sanitizer failure or a cyclic object.
-      const original = JSON.stringify(nested);
       expect(original).toContain('deep-credential-must-not-be-exported');
       const row: Record<string, unknown> = { success: true, score: 1 };
       const prompts: unknown[] = [];
@@ -348,7 +356,13 @@ describe('JSON export with improved error handling', () => {
         const content = fs.readFileSync(tempFilePath, 'utf8');
         expect(content.includes('deep-credential-must-not-be-exported')).toBe(false);
       }
-      expect(JSON.stringify(nested)).toBe(original);
+      let leaf = nested;
+      for (let i = 0; i < depth; i++) {
+        expect(Object.keys(leaf)).toEqual(['child']);
+        leaf = leaf.child;
+      }
+      expect(leaf).toBe(originalLeaf);
+      expect(leaf).toEqual({ apiKey: 'deep-credential-must-not-be-exported' });
     });
 
     it('redacts deep aggregate configuration and preserves its safe sibling and source object', async () => {
@@ -375,6 +389,252 @@ describe('JSON export with improved error handling', () => {
       expect(content).not.toContain('aggregate credential');
       expect(prompt).toEqual(original);
     });
+  });
+
+  describe.each([2, 3])('known transcript projection in V%s artifacts', (version) => {
+    it.each(['none', 'prompt', 'output', 'vars', 'grading', 'metadata', 'all'])(
+      'honors independent %s stripping across schema copies without mutating inputs',
+      async (flag) => {
+        const strips = (category: string) => flag === category || flag === 'all';
+        const restoreEnv = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(strips('prompt')),
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strips('output')),
+          PROMPTFOO_STRIP_TEST_VARS: String(strips('vars')),
+          PROMPTFOO_STRIP_GRADING_RESULT: String(strips('grading')),
+          PROMPTFOO_STRIP_METADATA: String(strips('metadata')),
+        });
+        const grade = {
+          pass: true,
+          score: 0.75,
+          reason: 'grade reason',
+          tokensUsed: { total: 3 },
+          metadata: { note: 'grading metadata canary' },
+          opaque: {
+            metadata: { note: 'opaque grading data' },
+            content: 'keep opaque grade content',
+          },
+          componentResults: [
+            {
+              pass: true,
+              score: 0.5,
+              reason: 'component reason',
+              metadata: { note: 'component metadata canary' },
+              componentResults: [
+                {
+                  pass: true,
+                  score: 1,
+                  reason: 'leaf',
+                  metadata: { note: 'leaf metadata canary' },
+                },
+              ],
+            },
+          ],
+        };
+        const metadata = {
+          redteamFinalPrompt: 'final input canary',
+          redteamHistory: [
+            {
+              prompt: 'history input canary',
+              promptAudio: { data: 'input audio canary', format: 'wav' },
+              promptImage: { data: 'input image canary', format: 'png' },
+              output: 'history output canary',
+              outputAudio: { data: 'output audio canary', format: 'wav' },
+              outputImage: { data: 'output image canary', format: 'png' },
+              inputVars: { topic: 'turn vars canary' },
+              graderPassed: true,
+            },
+            null,
+            'legacy history entry',
+          ],
+          messages: [
+            { role: 'system', content: 'system input canary' },
+            { role: 'developer', content: 'developer input canary' },
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'message input canary' }],
+              label: 'keep label',
+            },
+            { role: 'assistant', content: 'assistant transcript canary' },
+            null,
+          ],
+          successfulAttacks: [
+            { turn: 2, message: 'successful input canary', response: 'successful output canary' },
+          ],
+          transformDisplayVars: { topic: 'display vars canary' },
+          storedGraderResult: grade,
+          totalSuccessfulAttacks: 1,
+          custom: {
+            prompt: 'opaque prompt',
+            output: 'opaque output',
+            content: 'opaque content',
+            metadata: { note: 'opaque metadata' },
+          },
+        };
+        const row = createEvaluateResult({
+          provider: { id: 'raw/provider:model-id', label: 'raw model label' },
+          response: { output: { http: { output: 'opaque model value' } }, metadata },
+          metadata,
+          gradingResult: grade,
+          namedScores: { quality: 0.75 },
+        });
+        const original = structuredClone(row);
+        const cell = {
+          prompt: 'table prompt',
+          text: 'table output',
+          response: row.response,
+          metadata,
+          gradingResult: grade,
+          testCase: {},
+        };
+        const originalCell = structuredClone(cell);
+        const makeSummary = () => ({
+          version,
+          results: [row],
+          stats: { successes: 1, failures: 0, errors: 0, tokenUsage: {} },
+          ...(version === 2
+            ? {
+                table: {
+                  head: { prompts: [], vars: [] },
+                  body: [{ vars: [], test: {}, outputs: [cell] }],
+                },
+              }
+            : { prompts: [] }),
+        });
+        const kept = (category: string, value: unknown) => (strips(category) ? undefined : value);
+        const checkGrade = (result: Record<string, any> | null) => {
+          if (strips('grading')) {
+            expect(result).toBeNull();
+            return;
+          }
+          expect(result).toMatchObject({
+            pass: true,
+            score: 0.75,
+            reason: 'grade reason',
+            tokensUsed: { total: 3 },
+          });
+          expect(result!.opaque).toEqual(grade.opaque);
+          for (const component of [
+            result!,
+            result!.componentResults[0],
+            result!.componentResults[0].componentResults[0],
+          ]) {
+            expect(component.metadata === undefined).toBe(strips('metadata'));
+          }
+        };
+        const checkMetadata = (copy: Record<string, any>) => {
+          const history = copy.redteamHistory[0];
+          const originalHistory = metadata.redteamHistory[0] as Record<string, unknown>;
+          for (const key of ['prompt', 'promptAudio', 'promptImage']) {
+            expect(history[key]).toEqual(kept('prompt', originalHistory[key]));
+          }
+          for (const key of ['output', 'outputAudio', 'outputImage']) {
+            expect(history[key]).toEqual(kept('output', originalHistory[key]));
+          }
+          expect(copy.redteamFinalPrompt).toEqual(kept('prompt', metadata.redteamFinalPrompt));
+          expect(history.inputVars).toEqual(kept('vars', originalHistory.inputVars));
+          expect(copy.transformDisplayVars).toEqual(kept('vars', metadata.transformDisplayVars));
+          expect(copy.successfulAttacks[0].message).toEqual(
+            kept('prompt', metadata.successfulAttacks[0].message),
+          );
+          expect(copy.successfulAttacks[0].response).toEqual(
+            kept('output', metadata.successfulAttacks[0].response),
+          );
+          expect(copy.storedGraderResult).toEqual(kept('grading', grade));
+          for (const [index, message] of copy.messages.slice(0, 3).entries()) {
+            expect(message.content).toEqual(kept('prompt', metadata.messages[index]?.content));
+          }
+          // Assistant turns can be reused as inputs by stateless conversation providers.
+          expect(copy.messages[3].content === undefined).toBe(strips('prompt') || strips('output'));
+          expect(copy.messages[2].label).toBe('keep label');
+          expect(copy.messages[4]).toBeNull();
+          expect(copy.redteamHistory.slice(1)).toEqual([null, 'legacy history entry']);
+          expect(copy.custom).toEqual(metadata.custom);
+          expect(copy.totalSuccessfulAttacks).toBe(1);
+          expect(history.graderPassed).toBe(true);
+          if (flag === 'none') {
+            expect(copy).toEqual(metadata);
+          }
+        };
+        const check = (projected: Record<string, any>) => {
+          expect(projected.namedScores ?? row.namedScores).toEqual({ quality: 0.75 });
+          checkGrade(projected.gradingResult);
+          if (strips('metadata')) {
+            expect(projected.metadata).toEqual({});
+            expect(projected.response.metadata).toBeUndefined();
+          } else {
+            checkMetadata(projected.metadata);
+            checkMetadata(projected.response.metadata);
+          }
+          expect(projected.response.output).toEqual(
+            strips('output') ? '[output stripped]' : row.response!.output,
+          );
+        };
+        const checkSerialized = (content: string) => {
+          const canaries = {
+            prompt: [
+              'history input canary',
+              'input audio canary',
+              'input image canary',
+              'message input canary',
+              'successful input canary',
+            ],
+            output: [
+              'history output canary',
+              'output audio canary',
+              'output image canary',
+              'successful output canary',
+            ],
+            vars: ['turn vars canary', 'display vars canary'],
+            grading: ['grade reason', 'component reason'],
+            metadata: [
+              'grading metadata canary',
+              'component metadata canary',
+              'leaf metadata canary',
+            ],
+          };
+          for (const [category, values] of Object.entries(canaries)) {
+            if (strips(category) || (strips('metadata') && category !== 'grading')) {
+              for (const value of values) {
+                expect(content).not.toContain(value);
+              }
+            }
+          }
+        };
+        try {
+          // Exercise JSONL and model projections as well as the real format writers.
+          check(sanitizeResultForJsonlArtifact(row));
+          const model = new EvalResult({
+            ...row,
+            response: row.response ?? null,
+            gradingResult: row.gradingResult ?? null,
+            id: 'fixture-result',
+            evalId: 'fixture-eval',
+          });
+          check(model.toEvaluateResult());
+          for (const extension of ['json', 'yaml', 'txt', 'xml']) {
+            mockEval.toEvaluateSummary.mockImplementation(async () => makeSummary());
+            const file = path.join(tempDir, `transcript.${extension}`);
+            await writeOutput(file, mockEval, null);
+            const content = fs.readFileSync(file, 'utf8');
+            checkSerialized(content);
+            if (extension === 'json') {
+              const exported = JSON.parse(content);
+              check(exported.results.results[0]);
+              expect(exported.results.results[0].provider).toEqual(row.provider);
+              if (version === 2) {
+                check(exported.results.table.body[0].outputs[0]);
+              }
+            }
+          }
+          expect(row).toEqual(original);
+          expect(cell).toEqual(originalCell);
+          expect(model.response).toBe(row.response);
+          expect(model.gradingResult).toBe(grade);
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
   });
 
   describe('memory limit error handling', () => {

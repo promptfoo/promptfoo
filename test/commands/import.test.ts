@@ -804,6 +804,58 @@ describe('importCommand', () => {
       }
     });
 
+    it.each([
+      { config: 'legacy-config' },
+      { config: 42 },
+      { config: true },
+      { config: ['legacy-array'] },
+    ])(
+      're-exports imported non-record legacy config $config under independent strip flags',
+      async ({ config }) => {
+        const dir = createTempDir();
+        const fixture = {
+          id: 'eval-legacy-primitive-config',
+          config,
+          results: {
+            version: 2,
+            results: [],
+            table: { head: { prompts: [], vars: [] }, body: [] },
+            stats: { successes: 0, failures: 0 },
+          },
+        };
+        try {
+          const input = path.join(dir, 'input.json');
+          fs.writeFileSync(input, JSON.stringify(fixture));
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', input]);
+          expect(process.exitCode).toBeUndefined();
+          const reopened = await Eval.findById(fixture.id);
+          expect(reopened!.config).toEqual(config);
+          for (const [prompt, vars] of [
+            [false, false],
+            [true, false],
+            [false, true],
+            [true, true],
+          ]) {
+            const restoreEnv = mockProcessEnv({
+              PROMPTFOO_STRIP_PROMPT_TEXT: String(prompt),
+              PROMPTFOO_STRIP_TEST_VARS: String(vars),
+            });
+            try {
+              const output = path.join(dir, `output-${prompt}-${vars}.json`);
+              await writeOutput(output, reopened!, null);
+              expect(JSON.parse(fs.readFileSync(output, 'utf8')).config).toEqual(config);
+              expect(reopened!.config).toEqual(config);
+            } finally {
+              restoreEnv();
+            }
+          }
+        } finally {
+          removeTempDir(dir);
+        }
+      },
+    );
+
     it('should import legacy table-backed eval exports', async () => {
       const evalId = 'eval-legacy-table-backed';
       const filePath = path.join(__dirname, `temp-legacy-v2-${Date.now()}.json`);
