@@ -104,6 +104,8 @@ describe('file utilities', () => {
       expect(isImageFile('anim.gif')).toBe(true);
       expect(isImageFile('image.bmp')).toBe(true);
       expect(isImageFile('photo.webp')).toBe(true);
+      expect(isImageFile('photo.heic')).toBe(true);
+      expect(isImageFile('photo.heif')).toBe(true);
       expect(isImageFile('icon.svg')).toBe(true);
       expect(isImageFile('doc.pdf')).toBe(false);
       expect(isImageFile('noextension')).toBe(false);
@@ -120,6 +122,11 @@ describe('file utilities', () => {
       expect(isVideoFile('clip.wmv')).toBe(true);
       expect(isVideoFile('movie.mkv')).toBe(true);
       expect(isVideoFile('video.m4v')).toBe(true);
+      expect(isVideoFile('video.mpeg')).toBe(true);
+      expect(isVideoFile('video.mpg')).toBe(true);
+      expect(isVideoFile('video.flv')).toBe(true);
+      expect(isVideoFile('video.3gp')).toBe(true);
+      expect(isVideoFile('video.3gpp')).toBe(true);
       expect(isVideoFile('doc.pdf')).toBe(false);
       expect(isVideoFile('noextension')).toBe(false);
     });
@@ -135,6 +142,8 @@ describe('file utilities', () => {
       expect(isAudioFile('audio.flac')).toBe(true);
       expect(isAudioFile('sound.wma')).toBe(true);
       expect(isAudioFile('music.aiff')).toBe(true);
+      expect(isAudioFile('music.aif')).toBe(true);
+      expect(isAudioFile('music.aifc')).toBe(true);
       expect(isAudioFile('voice.opus')).toBe(true);
       expect(isAudioFile('doc.pdf')).toBe(false);
       expect(isAudioFile('noextension')).toBe(false);

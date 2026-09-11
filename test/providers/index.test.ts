@@ -852,9 +852,9 @@ describe('loadApiProvider', () => {
   });
 
   it('loadApiProvider with vertex:video:modelname', async () => {
-    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-preview');
+    const provider = await loadApiProvider('vertex:video:veo-3.1-generate-001');
     expect(provider).toBeInstanceOf(GoogleVideoProvider);
-    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-preview');
+    expect(provider.id()).toBe('vertex:video:veo-3.1-generate-001');
   });
 
   it('loadApiProvider with replicate:modelname', async () => {
@@ -1488,17 +1488,15 @@ describe('loadApiProvider', () => {
 
   it('does not inherit cliState env when a suite explicitly has no env', async () => {
     const originalConfig = cliState.config;
-    const originalGateway = process.env.ENVOY_API_BASE_URL;
-    cliState.config = { env: { ENVOY_API_BASE_URL: 'https://previous.example.com/v1' } };
-    mockProcessEnv({ ENVOY_API_BASE_URL: undefined });
+    const restoreEnv = mockProcessEnv({ ABLIT_API_BASE_URL: undefined });
+    cliState.config = { env: { ABLIT_API_BASE_URL: 'https://previous.example.com/v1' } };
 
     try {
-      await expect(loadApiProviders(['envoy:test-model'], { env: undefined })).rejects.toThrow(
-        'Envoy provider requires a gateway URL',
-      );
+      const [provider] = await loadApiProviders(['abliteration:test-model'], { env: undefined });
+      expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
     } finally {
       cliState.config = originalConfig;
-      mockProcessEnv({ ENVOY_API_BASE_URL: originalGateway });
+      restoreEnv();
     }
   });
 

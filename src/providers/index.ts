@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import cliState from '../cliState';
+import { getEnvOverrides } from '../envOverrides';
 import logger from '../logger';
 import { isApiProvider } from '../types/providers';
 import {
@@ -379,7 +380,7 @@ export async function loadApiProviders(
   // An explicit suite env, including an empty one during reload, replaces the
   // previous suite. Only inherit cliState when callers did not supply env.
   const hasExplicitEnv = Object.prototype.hasOwnProperty.call(options, 'env');
-  const env = hasExplicitEnv ? options.env : cliState.config?.env;
+  const env = hasExplicitEnv ? options.env : getEnvOverrides();
 
   const load = async () => {
     if (typeof providerPaths === 'string') {

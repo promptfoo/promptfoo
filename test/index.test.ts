@@ -1167,10 +1167,10 @@ describe('evaluate function', () => {
           env: { OPENAI_API_KEY: 'suite-key' },
           prompts: ['Test prompt'],
           providers: ['echo'],
-          tests: [{ provider: 'envoy:route:stable', vars: { input: 'hello' } }],
+          tests: [{ provider: 'openai:chat:test-model', vars: { input: 'hello' } }],
         });
 
-        expect(loadApiProviderSpy).toHaveBeenCalledWith('envoy:route:stable', {
+        expect(loadApiProviderSpy).toHaveBeenCalledWith('openai:chat:test-model', {
           basePath: '',
           env: { OPENAI_API_KEY: 'suite-key' },
         });

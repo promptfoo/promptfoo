@@ -1,6 +1,6 @@
 import nunjucks from 'nunjucks';
-import cliState from '../cliState';
 import { getEnvBool } from '../envars';
+import { getEnvOverrides } from '../envOverrides';
 import logger from '../logger';
 
 import type { NunjucksFilterMap } from '../types/index';
@@ -453,7 +453,7 @@ export function getNunjucksEngine(
 
   const envGlobals = {
     ...(processEnvVarsDisabled ? {} : process.env),
-    ...cliState.config?.env,
+    ...getEnvOverrides(),
   };
   env.addGlobal('env', envGlobals);
 
