@@ -104,6 +104,30 @@ describe.each(facades)('%s shared Gemini pipeline', (facade) => {
     }
   });
 
+  it('keeps terminal candidate state bounded while retaining content and safety', () => {
+    const content = { parts: [{ text: 'partial' }] };
+    const safetyRatings = [
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', probability: 'HIGH', blocked: false },
+    ];
+    const data = [
+      { candidates: [{ content, safetyRatings }] },
+      ...Array.from({ length: 200 }, (_, i) => ({
+        candidates: [{ finishReason: 'STOP', [`extra${i}`]: i }],
+      })),
+    ] as GeminiApiResponse;
+    const parsed = parseGeminiContent(data, facade);
+
+    expect(parsed).toMatchObject({
+      kind: 'content',
+      output: 'partial',
+      candidate: { content, safetyRatings, finishReason: 'STOP' },
+    });
+    if (parsed.kind === 'content') {
+      expect(Object.keys(parsed.candidate)).toHaveLength(4);
+      expect(parsed.candidate).not.toHaveProperty('extra0');
+    }
+  });
+
   it('merges prompt overrides and built-in tools without mutating defaults', async () => {
     const config = Object.freeze({
       temperature: 0.5,

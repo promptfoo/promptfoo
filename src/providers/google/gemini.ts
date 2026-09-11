@@ -172,7 +172,11 @@ export function parseGeminiContent(
       return respond(failure);
     }
     if (!current.content?.parts && ['STOP', 'MAX_TOKENS'].includes(current.finishReason ?? '')) {
-      candidate = { ...candidate, ...current, content: candidate?.content ?? current.content };
+      candidate = {
+        ...current,
+        content: candidate?.content ?? current.content,
+        safetyRatings: current.safetyRatings ?? candidate?.safetyRatings,
+      };
       continue;
     }
     if (facade === 'vertex' && !current.content?.parts) {
