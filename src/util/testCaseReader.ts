@@ -76,7 +76,7 @@ export async function readTestFiles(
 
     for (const p of paths) {
       const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
-      const yamlData = maybeLoadConfigFromExternalFile(rawData);
+      const yamlData = maybeLoadConfigFromExternalFile(rawData, undefined, path.dirname(p));
       Object.assign(ret, yamlData);
     }
   }
@@ -109,7 +109,9 @@ export async function readStandaloneTestsFile(
   basePath: string = '',
   config?: Record<string, any>,
 ): Promise<TestCase[]> {
-  const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
+  const finalConfig = config
+    ? maybeLoadConfigFromExternalFile(config, undefined, basePath)
+    : config;
 
   if (varsPath.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -242,7 +244,11 @@ async function readLocalStandaloneTestsFile(
       feature: 'yaml tests file',
     });
     const rawContent = loadYaml(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
-    const rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as CsvRow[];
+    const rows = maybeLoadConfigFromExternalFile(
+      rawContent,
+      undefined,
+      path.dirname(resolvedVarsPath),
+    ) as unknown as CsvRow[];
     return csvRowsToTestCases(rows);
   }
 
@@ -512,7 +518,11 @@ async function readTestWithEnv(
     const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
-    const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
+    const rawTestCase = maybeLoadConfigFromExternalFile(
+      rawContent,
+      undefined,
+      effectiveBasePath,
+    ) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
@@ -633,6 +643,7 @@ async function loadTestsFromGlobWithEnv(
   }
   for (const testFile of testFiles) {
     let testCases: TestCase[] | undefined;
+    const testBasePath = path.dirname(testFile);
     // Extract path without function name (Windows-aware)
     const lastColonIndex = testFile.lastIndexOf(':');
     const pathWithoutFunction: string =
@@ -651,12 +662,16 @@ async function loadTestsFromGlobWithEnv(
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
       const rawContent = loadYaml(await fsPromises.readFile(testFile, 'utf-8'));
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = maybeLoadConfigFromExternalFile(
+        rawContent,
+        undefined,
+        testBasePath,
+      ) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
       const rawCases = parseJsonlLines(fileContent, testFile);
-      testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
+      testCases = maybeLoadConfigFromExternalFile(rawCases, undefined, testBasePath) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf8');
@@ -664,7 +679,11 @@ async function loadTestsFromGlobWithEnv(
         fileContent,
         `Failed to parse JSON test file ${testFile}`,
       );
-      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
+      testCases = maybeLoadConfigFromExternalFile(
+        rawContent,
+        undefined,
+        testBasePath,
+      ) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
@@ -675,7 +694,7 @@ async function loadTestsFromGlobWithEnv(
         testCases = [testCases];
       }
       for (const testCase of testCases) {
-        ret.push(await readTest(testCase, path.dirname(testFile), false, env));
+        ret.push(await readTest(testCase, testBasePath, false, env));
       }
     }
   }

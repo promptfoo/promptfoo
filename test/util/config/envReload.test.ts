@@ -603,6 +603,59 @@ describe('suite environment loading', () => {
     expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['first', 'second']);
   });
 
+  it.each(['yaml', 'json', 'jsonl'])(
+    'resolves nested provider files from each %s test source',
+    async (extension) => {
+      cliState.basePath = tempDir;
+      fs.writeFileSync(path.join(tempDir, 'grader.yaml'), 'id: echo\nlabel: stale\n');
+      const paths = ['first', 'second'].map((name) => {
+        const configPath = writeConfig(name, { tests: [`nested/cases.${extension}`] });
+        const sourceDir = path.join(path.dirname(configPath), 'nested');
+        fs.mkdirSync(sourceDir);
+        fs.writeFileSync(path.join(sourceDir, 'grader.yaml'), `id: echo\nlabel: ${name}\n`);
+        const test = { provider: 'file://grader.yaml', vars: {} };
+        fs.writeFileSync(
+          path.join(sourceDir, `cases.${extension}`),
+          extension === 'yaml'
+            ? '- provider: file://grader.yaml\n  vars: {}\n'
+            : JSON.stringify(extension === 'json' ? [test] : test),
+        );
+        return configPath;
+      });
+      const { testSuite } = await resolveConfigs({ config: paths }, {});
+      expect(
+        testSuite.tests?.map((test) => isApiProvider(test.provider) && test.provider.label),
+      ).toEqual(['first', 'second']);
+    },
+  );
+
+  it('expands nested vars references relative to the vars file', async () => {
+    cliState.basePath = tempDir;
+    fs.writeFileSync(path.join(tempDir, 'value.json'), JSON.stringify('stale'));
+    fs.mkdirSync(path.join(tempDir, 'nested'));
+    fs.writeFileSync(path.join(tempDir, 'nested/value.json'), JSON.stringify('selected'));
+    fs.writeFileSync(path.join(tempDir, 'nested/vars.yaml'), 'source: file://value.json\n');
+    const test = await readTest({ vars: 'nested/vars.yaml' }, tempDir);
+    expect(test.vars).toEqual({ source: 'selected' });
+  });
+
+  it('resolves generator config files from the supplied base path', async () => {
+    cliState.basePath = tempDir;
+    fs.writeFileSync(path.join(tempDir, 'value.json'), JSON.stringify('stale'));
+    const sourceDir = path.join(tempDir, 'source');
+    fs.mkdirSync(sourceDir);
+    fs.writeFileSync(path.join(sourceDir, 'value.json'), JSON.stringify('selected'));
+    fs.writeFileSync(
+      path.join(sourceDir, 'cases.cjs'),
+      'module.exports = (config) => [{ vars: { source: config.value } }];',
+    );
+    const [test] = await readTests(
+      { path: 'cases.cjs', config: { value: 'file://value.json' } },
+      sourceDir,
+    );
+    expect(test.vars).toEqual({ source: 'selected' });
+  });
+
   it('loads nested default test files relative to their own directory', async () => {
     const firstConfigPath = writeConfig('first-default', {});
     const configPath = writeConfig('nested-default', {
