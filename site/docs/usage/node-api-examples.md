@@ -9,12 +9,14 @@ import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';
 
 # Node.js API examples
 
-<LegacyHeadingAnchors page="examples" />
+<LegacyHeadingAnchors page="examples" section="Node.js API examples" />
 
 These examples complement the [Node.js API guide](/docs/usage/node-api-reference)
 and the generated [Node.js API reference](/docs/api/node/).
 
 ## Run an eval
+
+<LegacyHeadingAnchors page="examples" section="Run an eval" />
 
 ```ts
 import { evaluate } from 'promptfoo';
@@ -36,6 +38,8 @@ console.log(summary.stats);
 
 ## Compare several providers
 
+<LegacyHeadingAnchors page="examples" section="Compare several providers" />
+
 ```ts
 import { evaluate } from 'promptfoo';
 
@@ -55,6 +59,8 @@ console.log(summary.stats);
 ```
 
 ## Build providers before an eval
+
+<LegacyHeadingAnchors page="examples" section="Build providers before an eval" />
 
 ```ts
 import { loadApiProviders } from 'promptfoo';
@@ -76,6 +82,8 @@ for (const provider of providers) {
 
 ## Use an inline provider
 
+<LegacyHeadingAnchors page="examples" section="Use an inline provider" />
+
 ```ts
 import { evaluate } from 'promptfoo';
 
@@ -91,6 +99,8 @@ await evaluate({
 ```
 
 ## Generate prompts from code
+
+<LegacyHeadingAnchors page="examples" section="Generate prompts from code" />
 
 ```ts
 import { evaluate, type PromptFunction } from 'promptfoo';
@@ -108,6 +118,8 @@ await evaluate({
 ```
 
 ## Add a custom assertion
+
+<LegacyHeadingAnchors page="examples" section="Add a custom assertion" />
 
 ```ts
 import { evaluate } from 'promptfoo';
@@ -135,6 +147,8 @@ await evaluate({
 
 ## Reuse assertion logic
 
+<LegacyHeadingAnchors page="examples" section="Reuse assertion logic" />
+
 ```ts
 import { assertions } from 'promptfoo';
 
@@ -148,6 +162,8 @@ console.log(result.pass);
 ```
 
 ## Run a batch of assertions
+
+<LegacyHeadingAnchors page="examples" section="Run a batch of assertions" />
 
 ```ts
 import { assertions } from 'promptfoo';
@@ -168,6 +184,8 @@ console.log(result.pass, result.score);
 
 ## Track progress
 
+<LegacyHeadingAnchors page="examples" section="Track progress" />
+
 ```ts
 import { evaluate } from 'promptfoo';
 
@@ -185,6 +203,8 @@ await evaluate(testSuite, {
 aggregate [`PromptMetrics`](/docs/configuration/reference#promptmetrics).
 
 ## Isolate caches
+
+<LegacyHeadingAnchors page="examples" section="Isolate caches" />
 
 ```ts
 import { cache, evaluate } from 'promptfoo';
@@ -204,3 +224,33 @@ const [baselineSummary, candidateSummary] = await Promise.all([
 
 console.log(baselineSummary.results.length, candidateSummary.results.length);
 ```
+
+## Red team integrations
+
+<LegacyHeadingAnchors page="examples" section="Red team integrations" />
+
+Use [red team orchestration](/docs/usage/node-api-reference#red-team-orchestration)
+to generate and run tests. The same namespace exposes plugin and grader base
+classes for custom integrations.
+
+## Format results
+
+<LegacyHeadingAnchors page="examples" section="Format results" />
+
+Use `generateTable(await evalRecord.getTable())` to format a completed eval as a
+text table, or `await evalRecord.toEvaluateSummary()` to inspect its results.
+
+## Handle errors
+
+<LegacyHeadingAnchors page="examples" section="Handle errors" />
+
+Catch rejected API calls for configuration and runtime failures. Also inspect
+each result's `error` and `success` fields: a completed eval can contain failed
+tests or provider errors.
+
+## Related docs
+
+<LegacyHeadingAnchors page="examples" section="Related docs" />
+
+- [Node.js API guide](/docs/usage/node-api-reference)
+- [Node.js API quick reference](/docs/usage/node-api-quick-reference)

@@ -20,7 +20,7 @@ const LEGACY_ANCHOR_COUNTS = {
 } as const;
 
 type GuidePage = keyof typeof GUIDE_PAGES;
-type LegacyAnchorManifest = Record<GuidePage, string[]>;
+type LegacyAnchorManifest = Record<GuidePage, Record<string, string[]>>;
 
 function comparePaths(left: string, right: string) {
   return left < right ? -1 : left > right ? 1 : 0;
@@ -132,11 +132,12 @@ function validateLegacyAnchorContract(rootDir: string, errors: string[]) {
   }
 
   for (const page of expectedPages as GuidePage[]) {
-    const anchors = manifest[page];
-    if (!Array.isArray(anchors) || anchors.length === 0) {
-      errors.push(`Legacy anchor manifest entry ${page} must contain at least one anchor`);
+    const sections = manifest[page];
+    if (!sections || typeof sections !== 'object' || Array.isArray(sections)) {
+      errors.push(`Legacy anchor manifest entry ${page} must map sections to anchors`);
       continue;
     }
+    const anchors = Object.values(sections).flat();
     if (anchors.length !== LEGACY_ANCHOR_COUNTS[page]) {
       errors.push(
         `Legacy anchor manifest entry ${page} must contain ${LEGACY_ANCHOR_COUNTS[page]} anchors; found ${anchors.length}`,
@@ -158,13 +159,20 @@ function validateLegacyAnchorContract(rootDir: string, errors: string[]) {
     const markdown = fs.readFileSync(guidePath, 'utf8');
     const expectedImport =
       "import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';";
-    const expectedUsage = `<LegacyHeadingAnchors page="${page}" />`;
-
     if (!markdown.includes(expectedImport)) {
       errors.push(`${GUIDE_PAGES[page]} must import LegacyHeadingAnchors`);
     }
-    if (!markdown.includes(expectedUsage)) {
-      errors.push(`${GUIDE_PAGES[page]} must render ${expectedUsage}`);
+    for (const [section, sectionAnchors] of Object.entries(sections)) {
+      if (!Array.isArray(sectionAnchors) || sectionAnchors.length === 0) {
+        errors.push(`Legacy anchor section ${page}/${section} must contain anchors`);
+      }
+      const usage = `<LegacyHeadingAnchors page="${page}" section="${section}" />`;
+      const precedingHeading = markdown
+        .slice(0, markdown.indexOf(usage))
+        .match(/(?:^|\n)#{1,6} ([^\n]+)\n\s*$/)?.[1];
+      if (precedingHeading !== section || markdown.split(usage).length !== 2) {
+        errors.push(`${GUIDE_PAGES[page]} must render ${usage} immediately after its heading`);
+      }
     }
   }
 }

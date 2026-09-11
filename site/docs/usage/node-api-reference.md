@@ -9,7 +9,7 @@ import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';
 
 # Node.js API guide
 
-<LegacyHeadingAnchors page="reference" />
+<LegacyHeadingAnchors page="reference" section="Node.js API guide" />
 
 This page is the hand-written companion to the generated
 [Node.js API reference](/docs/api/node/). Use this guide for orientation and the
@@ -19,6 +19,8 @@ The root `promptfoo` package entrypoint is the supported public boundary. Do not
 import deep files from `dist/` or `src/`.
 
 ## Start by goal
+
+<LegacyHeadingAnchors page="reference" section="Start by goal" />
 
 | Goal                                       | Best first stop                                                              |
 | ------------------------------------------ | ---------------------------------------------------------------------------- |
@@ -30,6 +32,8 @@ import deep files from `dist/` or `src/`.
 | Tune execution rather than config          | [`EvaluateOptions`](/docs/api/node/reference/interfaces/EvaluateOptions)     |
 
 ## API map
+
+<LegacyHeadingAnchors page="reference" section="API map" />
 
 | API                                                                               | Stability | Use it for                                              |
 | --------------------------------------------------------------------------------- | --------- | ------------------------------------------------------- |
@@ -49,6 +53,8 @@ calling directly.
 
 ## Core types
 
+<LegacyHeadingAnchors page="reference" section="Core types" />
+
 | Type                                                                                     | What it tells you                                   |
 | ---------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | [`EvaluateTestSuite`](/docs/api/node/reference/type-aliases/EvaluateTestSuite)           | Config shape accepted by `evaluate()`               |
@@ -60,6 +66,8 @@ calling directly.
 | [`TransformFunction`](/docs/api/node/reference/type-aliases/TransformFunction)           | Inline transform callback                           |
 
 ## How the pieces fit
+
+<LegacyHeadingAnchors page="reference" section="How the pieces fit" />
 
 `evaluate()` takes an [`EvaluateTestSuite`](/docs/api/node/reference/type-aliases/EvaluateTestSuite)
 plus runtime-only [`EvaluateOptions`](/docs/api/node/reference/interfaces/EvaluateOptions).
@@ -101,6 +109,8 @@ outside a full eval run.
 
 ## Guardrails
 
+<LegacyHeadingAnchors page="reference" section="Guardrails" />
+
 The beta `guardrails` helpers call the configured promptfoo guardrail service.
 They use your cloud host when logged in, or `PROMPTFOO_REMOTE_API_BASE_URL` when
 set. These are remote checks, so the input is sent to that service.
@@ -129,6 +139,8 @@ annotating application code. Service or network failures reject the promise.
 
 ## Red team orchestration
 
+<LegacyHeadingAnchors page="reference" section="Red team orchestration" />
+
 The beta `redteam` API lets Node.js applications generate tests and run red team
 evals. Use the same [red team configuration](/docs/red-team/configuration/) as
 the CLI:
@@ -136,36 +148,34 @@ the CLI:
 ```ts
 import { redteam } from 'promptfoo';
 
-const generated = await redteam.generate({
+const evalRecord = await redteam.run({
   config: 'promptfooconfig.yaml',
-  output: 'redteam.yaml',
   cache: false,
 });
 
-if (generated) {
-  const evalRecord = await redteam.run({
-    config: 'redteam.yaml',
-    cache: false,
-  });
-  if (evalRecord) {
-    console.log(await evalRecord.toEvaluateSummary());
-  }
+if (evalRecord) {
+  console.log(await evalRecord.toEvaluateSummary());
 }
 ```
 
-`generate(options)` accepts `RedteamGenerateOptions` and returns
+`run()` generates tests from the source config before evaluating them. To save
+tests without running the target, use `generate(options)`. It accepts
+`RedteamGenerateOptions` and returns
 `Promise<Partial<UnifiedConfig> | null>`. Options include `config`, `output`,
 `numTests`, `plugins`, `strategies`, and `envFile`.
 
 `run(options?)` returns `Promise<Eval | undefined>`. Options include `config`,
 `target`, `output`, `maxConcurrency`, and `envPath`. Generation uses `envFile`
-for an environment file; running uses `envPath`.
+for an environment file; running uses `envPath` for both phases. Set `cache: false`
+to disable caching during generation and evaluation.
 
 The `redteam` namespace also exposes `Plugins`, `Strategies`, `Graders`,
 `Extractors`, and `Base.Plugin` / `Base.Grader` for advanced integrations. These
 extension points are beta and may change between releases.
 
 ## Related docs
+
+<LegacyHeadingAnchors page="reference" section="Related docs" />
 
 - [Using the Node.js API](/docs/usage/node-package)
 - [Node API examples](/docs/usage/node-api-examples)

@@ -9,9 +9,11 @@ import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';
 
 # Node.js API quick reference
 
-<LegacyHeadingAnchors page="quickReference" />
+<LegacyHeadingAnchors page="quickReference" section="Node.js API quick reference" />
 
 ## Import
+
+<LegacyHeadingAnchors page="quickReference" section="Import" />
 
 ```ts
 import {
@@ -43,6 +45,8 @@ import type {
 
 ## Most-used calls
 
+<LegacyHeadingAnchors page="quickReference" section="Most-used calls" />
+
 | Task                        | API                                                                                                              |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | Run an eval                 | [`evaluate()`](/docs/api/node/reference/functions/evaluate)                                                      |
@@ -62,6 +66,8 @@ For the beta APIs, see [guardrails](/docs/usage/node-api-reference#guardrails)
 
 ## Core types
 
+<LegacyHeadingAnchors page="quickReference" section="Core types" />
+
 | Type                                                                                     | Meaning                                      |
 | ---------------------------------------------------------------------------------------- | -------------------------------------------- |
 | [`EvaluateTestSuite`](/docs/api/node/reference/type-aliases/EvaluateTestSuite)           | First argument to `evaluate()`               |
@@ -73,6 +79,8 @@ For the beta APIs, see [guardrails](/docs/usage/node-api-reference#guardrails)
 | [`TransformFunction`](/docs/api/node/reference/type-aliases/TransformFunction)           | Inline transform callback signature          |
 
 ## Runtime options
+
+<LegacyHeadingAnchors page="quickReference" section="Runtime options" />
 
 Pass runtime-only options as the second argument to `evaluate()`:
 
@@ -90,6 +98,8 @@ the test suite itself; see
 [`EvaluateTestSuite`](/docs/api/node/reference/type-aliases/EvaluateTestSuite).
 
 ## Common snippets
+
+<LegacyHeadingAnchors page="quickReference" section="Common snippets" />
 
 ```ts
 const provider = await loadApiProvider('openai:chat:gpt-5.5');
@@ -113,6 +123,8 @@ const text = generateTable(await evalRecord.getTable());
 ```
 
 ## Where to go next
+
+<LegacyHeadingAnchors page="quickReference" section="Where to go next" />
 
 - [Node.js API guide](/docs/usage/node-api-reference)
 - [Node.js API examples](/docs/usage/node-api-examples)

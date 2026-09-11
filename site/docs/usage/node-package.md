@@ -9,7 +9,7 @@ import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';
 
 # Using the Node.js API
 
-<LegacyHeadingAnchors page="package" />
+<LegacyHeadingAnchors page="package" section="Using the Node.js API" />
 
 The Node.js API is for cases where a static YAML config is not enough: generating
 tests from code, composing providers dynamically, reusing promptfoo assertions in
@@ -33,6 +33,8 @@ the supported public boundary; do not import deep files from `dist/` or `src/`.
 
 ## Install
 
+<LegacyHeadingAnchors page="package" section="Install" />
+
 ```sh
 npm install promptfoo
 ```
@@ -45,6 +47,8 @@ promptfoo requires Node.js `22.22.0` or newer. Node.js 24 LTS is recommended. Se
 :::
 
 ## Quickstart
+
+<LegacyHeadingAnchors page="package" section="Quickstart" />
 
 ```ts
 import { evaluate } from 'promptfoo';
@@ -118,6 +122,8 @@ the supported Node.js API, even if they exist in the repository source.
 
 ## Providers
 
+<LegacyHeadingAnchors page="package" section="Providers" />
+
 Provider functions let you call any model or service directly from code:
 
 ```ts
@@ -148,6 +154,8 @@ objects, inline functions, or `file://` provider config references before you
 call them or pass them into another workflow.
 
 ## Assertions
+
+<LegacyHeadingAnchors page="package" section="Assertions" />
 
 For inline custom logic, use an assertion value function:
 
@@ -245,6 +253,8 @@ need a stored eval to be fully reproducible later.
 
 ## Caching and persistence
 
+<LegacyHeadingAnchors page="package" section="Caching and persistence" />
+
 Disable response caching per eval with runtime options:
 
 ```ts
@@ -275,6 +285,8 @@ To create a shareable URL, combine `writeLatestResults: true` with
 `sharing: true`. See [sharing results](/docs/usage/sharing).
 
 ## Examples
+
+<LegacyHeadingAnchors page="package" section="Examples" />
 
 - [JavaScript example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-node-package)
 - [TypeScript example](https://github.com/promptfoo/promptfoo/tree/main/examples/config-node-package-typescript)

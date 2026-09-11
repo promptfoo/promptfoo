@@ -38,6 +38,15 @@ describe('validateNodeApiDocs', () => {
     expect(() => validateNodeApiDocs(root)).toThrow('malformed generic delimiters');
   });
 
+  it('rejects aliases moved away from their destination section', () => {
+    const root = copyContract();
+    const target = path.join(root, 'site/docs/usage/node-api-examples.md');
+    const usage = '<LegacyHeadingAnchors page="examples" section="Isolate caches" />';
+    const contents = fs.readFileSync(target, 'utf8');
+    fs.writeFileSync(target, `${usage}\n${contents.replace(usage, '')}`);
+    expect(() => validateNodeApiDocs(root)).toThrow('immediately after its heading');
+  });
+
   it.each([
     ['malformed frontmatter', 'site/docs/api/node/reference/README.md', 'not frontmatter'],
     [
