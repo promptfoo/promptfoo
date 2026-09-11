@@ -40,7 +40,7 @@ Install and authenticate the [OpenAI Codex SDK provider](/docs/providers/openai-
 
 ## Per-test-case workspaces
 
-Top-level strings in the grading provider's `config` support Nunjucks templates, including `{{ variable }}` expressions and `{% if ... %}` blocks. Templates use each test case's final `vars` and the suite's `nunjucksFilters` before the grader is created. The reserved `output` and `rubric` variables contain the actual grading inputs and override test variables with the same names; JSON output is parsed into an object:
+Top-level strings in the grading provider's `config` support Nunjucks templates, including `{{ variable }}` expressions and `{% if ... %}` blocks. Templates use each test case's final `vars` and the suite's `nunjucksFilters` before the grader is created. The reserved `output` and `rubric` variables contain the actual grading inputs and override test variables with the same names; JSON output is parsed before it is exposed to templates:
 
 ```yaml
 prompts:
@@ -74,6 +74,8 @@ Prepare an evidence directory for each case before running the eval. Interpolati
 Use trusted, validated case identifiers for workspace paths. Model output is untrusted: do not use it directly to select `working_dir` or other filesystem paths. If a path must depend on external data, validate it against your chosen evidence root, including traversal and symlink handling, before evaluation or in a custom Nunjucks filter. `working_dir` selects the starting directory; it does not itself restrict filesystem access. Configure the provider's sandbox and permissions for the access limits you require.
 
 Inline provider definitions (including maps keyed by provider ID), YAML/JSON provider files, and the `provider.text` form are supported. File references may use environment variables, such as `file://{{env.GRADER_FILE}}`. Per-case rendering applies only to `agent-rubric` and top-level config strings. Nested objects/arrays keep the provider's existing behavior, and already-constructed provider instances are used unchanged. Rendered top-level strings must not contain remaining Nunjucks syntax (`{{`, `{%`, or `{#`); such values are rejected so provider runtimes cannot interpret test data as another template.
+
+Per-case grader construction requires a provider definition on the assertion or in the test/default grading options. A reference to a provider in the suite's top-level `providers` list reuses its already-constructed target instance; those shared instances are not reconfigured per case. Use a separate grader definition when its workspace must vary.
 
 ## Supported agent providers
 
