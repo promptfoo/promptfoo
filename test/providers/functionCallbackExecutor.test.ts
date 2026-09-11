@@ -175,6 +175,38 @@ describe('callback execution records', () => {
     },
   );
 
+  it.each(['constructor', 'toString', '__proto__'])(
+    'requires a configured reference for %s',
+    async (name) => {
+      const result = await executeCallback({
+        ...identity,
+        name,
+        reference: undefined,
+        cache: {},
+        loadFile: vi.fn(),
+      });
+      expect(result).toMatchObject({
+        isError: true,
+        error: new Error(`No callback found for function '${name}'`),
+      });
+    },
+  );
+
+  it('caches a configured __proto__ callback without changing the cache prototype', async () => {
+    const cache = {};
+    const callback = vi.fn().mockReturnValue('configured tool');
+    const result = await executeCallback({
+      ...identity,
+      name: '__proto__',
+      reference: callback,
+      cache,
+      loadFile: vi.fn(),
+    });
+    expect(result).toMatchObject({ isError: false, output: 'configured tool' });
+    expect(Object.getPrototypeOf(cache)).toBe(Object.prototype);
+    expect(Object.hasOwn(cache, '__proto__')).toBe(true);
+  });
+
   it('does not load an already-cancelled callback', async () => {
     const loadFile = vi.fn();
     await expect(
