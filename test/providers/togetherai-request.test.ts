@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { AzureGenericProvider } from '../../src/providers/azure/generic';
 import { OpenAiGenericProvider } from '../../src/providers/openai';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { createTogetherAiProvider } from '../../src/providers/togetherai';
 import { ProviderOptionsSchema } from '../../src/validators/providers';
 import { mockProcessEnv } from '../util/utils';
@@ -111,6 +112,54 @@ describe.each([
       await provider.ensureInitialized();
     }
   });
+});
+
+it('sends the model parameters the OpenAI provider resolved, not their raw copies', async () => {
+  const provider = createTogetherAiProvider('togetherai:chat:fixture-model', {
+    config: {
+      config: {
+        apiKey: 'configured-key',
+        tools: [{ type: 'function', function: { name: '{{ toolName }}' } }],
+        response_format: { type: 'json_schema', json_schema: { name: '{{ schemaName }}' } },
+      },
+    },
+  });
+  const response = await provider.callApi('fixture prompt', {
+    prompt: { raw: 'fixture prompt', label: 'fixture' },
+    vars: { toolName: 'get_weather', schemaName: 'weather' },
+  });
+  expect(response.error).toBeUndefined();
+  const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+  expect(body.tools).toEqual([{ type: 'function', function: { name: 'get_weather' } }]);
+  expect(body.response_format).toEqual({ type: 'json_schema', json_schema: { name: 'weather' } });
+});
+
+it('still sends model parameters the chat provider only emits for reasoning models', async () => {
+  const provider = createTogetherAiProvider('togetherai:chat:deepseek-ai/DeepSeek-R1', {
+    config: { config: { apiKey: 'configured-key', reasoning_effort: 'high' } },
+  });
+  const response = await provider.callApi('fixture prompt');
+  expect(response.error).toBeUndefined();
+  const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+  expect(body.reasoning_effort).toBe('high');
+});
+
+it('still sends model parameters the completion provider does not resolve', async () => {
+  const provider = createTogetherAiProvider('togetherai:completion:meta-llama/Llama-3-8b-hf', {
+    config: {
+      config: { apiKey: 'configured-key', response_format: { type: 'json_object' } },
+    },
+  });
+  const response = await provider.callApi('fixture prompt');
+  expect(response.error).toBeUndefined();
+  const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]?.body as string);
+  expect(body.response_format).toEqual({ type: 'json_object' });
+});
+
+it('routes an Object prototype key to the default chat provider', () => {
+  const provider = createTogetherAiProvider('togetherai:constructor:fixture-model');
+  expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+  expect(provider.id()).toBe('constructor:fixture-model');
 });
 
 it('preserves the normalized provider environment over the factory context', () => {
