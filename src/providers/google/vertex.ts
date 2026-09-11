@@ -423,7 +423,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           model: this.modelName,
           cacheKey,
         });
-        return { ...parsedCachedResponse, cached: true, cost: undefined };
+        return { ...parsedCachedResponse, cached: true };
       }
     }
 
@@ -686,7 +686,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           model: this.modelName,
           cacheKey,
         });
-        response = { ...parsedCachedResponse, cached: true, cost: undefined };
+        response = { ...parsedCachedResponse, cached: true };
       }
     }
     if (response === undefined) {
