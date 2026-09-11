@@ -51,7 +51,8 @@ vi.mock('@app/utils/api', async (importOriginal) => ({
         path = path.replace(`:${name}`, encodeURIComponent(String(value)));
       }
       const search = options.query?.toString();
-      const response = await vi.mocked(callApi)(search ? `${path}?${search}` : path, options);
+      const { params: _params, query: _query, ...requestInit } = options;
+      const response = await vi.mocked(callApi)(search ? `${path}?${search}` : path, requestInit);
       return response.json();
     },
   ),

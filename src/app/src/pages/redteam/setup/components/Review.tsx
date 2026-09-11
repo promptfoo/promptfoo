@@ -82,6 +82,9 @@ interface IntentPluginRef {
 }
 
 function getTerminalPollingErrorMessage(error: unknown): string | null {
+  if (error && typeof error === 'object' && 'name' in error && error.name === 'AbortError') {
+    return null;
+  }
   if (error instanceof TypeError) {
     return null;
   }
@@ -481,12 +484,15 @@ export default function Review({
       const generation = pollingGenerationRef.current;
 
       const poll = async () => {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 10_000);
         try {
           const status = await callApiJson(
             ApiRoutes.Eval.GetJob,
             EvalResponseSchemas.GetJob.Response,
             {
               params: { id: jobId },
+              signal: controller.signal,
             },
           );
 
@@ -543,6 +549,8 @@ export default function Review({
             showToast(errorMessage, 'error');
             return;
           }
+        } finally {
+          window.clearTimeout(timeout);
         }
         if (pollingGenerationRef.current === generation) {
           pollIntervalRef.current = window.setTimeout(poll, 1000);

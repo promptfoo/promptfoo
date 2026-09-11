@@ -69,13 +69,16 @@ export async function callApiResponse(
 
 async function readErrorResponse(response: Response): Promise<ApiResponseError> {
   let body: ErrorResponse = { error: `Request failed (${response.status})` };
+  const text = await response.text();
   try {
-    const parsed = ErrorResponseSchema.safeParse(await response.json());
+    const parsed = ErrorResponseSchema.safeParse(JSON.parse(text));
     if (parsed.success) {
       body = parsed.data;
     }
   } catch {
-    // Some legacy/non-JSON upstream failures have no typed envelope.
+    if (text.trim()) {
+      body = { error: text.trim() };
+    }
   }
   return new ApiResponseError(response.status, body, response);
 }

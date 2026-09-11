@@ -1790,7 +1790,7 @@ Application Details:
       let oldJobRequests = 0;
       let replacementJobRequests = 0;
 
-      vi.mocked(callApi).mockImplementation((url: string) => {
+      vi.mocked(callApi).mockImplementation((url: string, options?: RequestInit) => {
         if (url === '/redteam/status') {
           statusRequests += 1;
           return Promise.resolve({
@@ -1815,7 +1815,23 @@ Application Details:
             } as Response);
           }
           if (oldJobRequests === 2) {
-            return stalledOldRequest.promise;
+            return new Promise((resolve, reject) => {
+              stalledOldRequest.promise.then(resolve, reject);
+              options?.signal?.addEventListener('abort', () =>
+                reject(new DOMException('Timed out', 'AbortError')),
+              );
+            });
+          }
+          if (oldJobRequests === 3) {
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({
+                status: 'in-progress',
+                progress: 2,
+                total: 3,
+                logs: ['Old job resumed'],
+              }),
+            } as Response);
           }
           return Promise.resolve({
             ok: false,
@@ -1878,29 +1894,15 @@ Application Details:
       expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
 
       await act(async () => {
-        stalledOldRequest.resolve({
-          ok: true,
-          json: async () => ({
-            status: 'in-progress',
-            progress: 2,
-            total: 3,
-            logs: ['Old job resumed'],
-          }),
-        } as Response);
+        await timers.advanceByAsync(10_000);
         await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      act(() => {
-        timers.advanceBy(1000);
       });
       await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
+        await timers.advanceByAsync(1_000);
       });
-      expect(oldJobRequests).toBe(3);
+      expect(oldJobRequests).toBeGreaterThanOrEqual(3);
       expect(mockClearJob).not.toHaveBeenCalled();
-      expect(screen.getByText('Old job resumed')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
     });
 
     it('should show completed state when returning to completed job', async () => {

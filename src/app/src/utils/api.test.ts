@@ -194,6 +194,17 @@ describe('typed route API helpers', () => {
       expect(result.error.body).toEqual({ error: 'No access', success: false });
     }
   });
+
+  it('preserves plain-text error details', async () => {
+    mockFetch.mockResolvedValue(new Response('Upstream unavailable', { status: 502 }));
+
+    const result = await callApiResult(ApiRoutes.User.Get, UserSchemas.Get.Response);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('Upstream unavailable');
+    }
+  });
 });
 
 describe('fetchUserEmail', () => {

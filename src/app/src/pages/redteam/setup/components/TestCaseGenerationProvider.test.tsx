@@ -52,7 +52,8 @@ vi.mock('@app/utils/api', async (importOriginal) => ({
         path = path.replace(`:${name}`, encodeURIComponent(String(value)));
       }
       const query = options.query?.toString();
-      const response = await vi.mocked(callApi)(query ? `${path}?${query}` : path, options);
+      const { params: _params, query: _query, ...requestInit } = options;
+      const response = await vi.mocked(callApi)(query ? `${path}?${query}` : path, requestInit);
       if (!response.ok) {
         const body = await response.json();
         throw new Error(body.error ?? 'Request failed');
