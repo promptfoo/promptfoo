@@ -19,7 +19,6 @@ import {
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
-import { providerRegistry } from './providerRegistry';
 import { getProviderFactory } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -205,9 +204,6 @@ export async function loadApiProvider(
     ret.delay = options.delay;
     ret.inputs = options.inputs;
     ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
-    if (ret.cleanup) {
-      providerRegistry.register(ret as ApiProvider & { cleanup: () => void | Promise<void> });
-    }
     return ret;
   }
 

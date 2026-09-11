@@ -404,7 +404,7 @@ pure.runPureAssertion({ assertion: { type: 'llm-rubric' }, providerResponse: { o
   // The full host entry still exposes upstream Drizzle declarations that need skipLibCheck.
   // Keep the dependency-light contracts/pure consumers above on strict declaration checks.
   fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.host-assertions.json'),
+    path.join(consumerDir, 'tsconfig.host.json'),
     JSON.stringify({
       compilerOptions: {
         module: 'NodeNext',
@@ -413,7 +413,12 @@ pure.runPureAssertion({ assertion: { type: 'llm-rubric' }, providerResponse: { o
         strict: true,
         skipLibCheck: true,
       },
-      include: ['import-assertions.mts', 'require-assertions.cts'],
+      include: [
+        'import-assertions.mts',
+        'require-assertions.cts',
+        'import-provider-plugin.mts',
+        'require-provider-plugin.cts',
+      ],
     }),
   );
   const customAssertionConsumer = `
@@ -452,6 +457,31 @@ pure.runPureAssertion({ assertion: { type: 'llm-rubric' }, providerResponse: { o
 }
 
 function writeConsumerScripts(consumerDir: string): void {
+  const pluginConsumer = `
+const registry = new plugin.ProviderPluginRegistry();
+const manifest: plugin.ProviderPluginManifest = {
+  apiVersion: plugin.PROVIDER_PLUGIN_API_VERSION,
+  name: 'consumer',
+  canHandle: (providerPath) => providerPath.startsWith('consumer:'),
+  load: async () => [{
+    test: (providerPath) => providerPath.startsWith('consumer:'),
+    create: async (providerPath, options, context) => ({
+      id: () => options.id ?? providerPath,
+      callApi: async () => ({ output: context.basePath ?? 'consumer output' }),
+    }),
+  }],
+};
+registry.register(manifest);
+`;
+  fs.writeFileSync(
+    path.join(consumerDir, 'import-provider-plugin.mts'),
+    "import * as plugin from 'promptfoo/provider-plugin';\n" + pluginConsumer,
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'require-provider-plugin.cts'),
+    "import plugin = require('promptfoo/provider-plugin');\n" + pluginConsumer,
+  );
+
   fs.writeFileSync(
     path.join(consumerDir, 'import-package.mjs'),
     [
@@ -560,8 +590,6 @@ function writeConsumerScripts(consumerDir: string): void {
     [
       "import { GetUserResponseSchema, PromptSchema, hasFunctionToolCallValidator, isTransformFunction } from 'promptfoo/contracts';",
       "import type { BlobRef, FunctionToolCallValidator, GetUserResponse, Prompt, ProviderResponse, TransformFunction } from 'promptfoo/contracts';",
-      "import { PROVIDER_PLUGIN_API_VERSION, ProviderPluginRegistry } from 'promptfoo/provider-plugin';",
-      "import type { ProviderPluginManifest } from 'promptfoo/provider-plugin';",
       '',
       "const prompt: Prompt = { label: 'Greeting', raw: 'Hello, world!' };",
       'const transform: TransformFunction<string, string> = (output) => output;',
@@ -573,9 +601,6 @@ function writeConsumerScripts(consumerDir: string): void {
       'GetUserResponseSchema.parse(user);',
       'PromptSchema.parse(prompt);',
       'void response;',
-      'const registry = new ProviderPluginRegistry();',
-      "const manifest: ProviderPluginManifest = { apiVersion: PROVIDER_PLUGIN_API_VERSION, name: 'consumer', canHandle: () => false, load: async () => [] };",
-      'registry.register(manifest);',
       'if (!isTransformFunction(transform) || !hasFunctionToolCallValidator(validator)) {',
       "  throw new Error('Missing expected TypeScript contracts export');",
       '}',
@@ -839,11 +864,7 @@ async function main(): Promise<void> {
     run(process.execPath, ['require-package.cjs'], consumerDir);
     run(process.execPath, ['mixed-provider-plugin.mjs'], consumerDir);
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of [
-      'tsconfig.json',
-      'tsconfig.node16-cjs.json',
-      'tsconfig.host-assertions.json',
-    ]) {
+    for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json', 'tsconfig.host.json']) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
