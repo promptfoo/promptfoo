@@ -1291,9 +1291,7 @@ function sanitizeBaseUrl(value: string): string {
     // the literal userinfo/query fragments that follow it before saving the config.
     collectRawUrlCredentials(`https://placeholder${literalUrl}`, collect);
   }
-  return hasLiteralCredentials || collectEnvCredentials({}, literalUrl).length
-    ? REDACTED
-    : sanitizeUrl(value);
+  return hasLiteralCredentials || collectEnvCredentials({}, literalUrl).length ? REDACTED : value;
 }
 
 /**

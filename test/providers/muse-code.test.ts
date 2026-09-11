@@ -679,6 +679,23 @@ describe('MuseCodeProvider', () => {
     expect(response.raw).toBeUndefined();
   });
 
+  it('omits split raw journal credentials repeated in the terminal event', async () => {
+    const apiKey = 'split-secret';
+    const events = structuredClone(fixtureEvents);
+    events.at(-2)!.payload.text = 'split-';
+    events.at(-1)!.payload.text = apiKey;
+    onSpawn = (child) => {
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+
+    const response = await provider({
+      config: { apiKey, muse_path: path.join(binDir, executableName('muse')) },
+    }).callApi(prompt);
+
+    expect(response.raw).toBeUndefined();
+  });
+
   it.each(['PROMPTFOO_STRIP_PROMPT_TEXT', 'PROMPTFOO_STRIP_RESPONSE_OUTPUT'])(
     'omits raw journal data when %s is enabled',
     async (name) => {

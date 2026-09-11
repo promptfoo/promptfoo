@@ -289,6 +289,11 @@ describe('sanitizeObject', () => {
     expect(sanitizeObject({ base_url: baseUrl })).toEqual({ base_url: baseUrl });
   });
 
+  it('preserves a baseUrl without a trailing slash', () => {
+    const baseUrl = 'http://localhost:8080';
+    expect(sanitizeObject({ baseUrl })).toEqual({ baseUrl });
+  });
+
   it.each([
     ['base_url', 'https://example.test/v1?api_key={{ env.META_API_KEY }}'],
     ['baseUrl', 'https://example.test/v1?github_pat={{ env.GITHUB_PAT }}'],

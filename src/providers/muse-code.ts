@@ -316,9 +316,8 @@ function redactCredentials(response: ProviderResponse, credentials: string[]): P
     values.some((value, index) => index > 0 && (values[index - 1] + value).includes(credential));
   const hasSplitCredential = credentials.some(
     (credential) =>
-      !rawStrings.some((value) => value.includes(credential)) &&
-      (containsAdjacentCredential(rawStrings, credential) ||
-        containsAdjacentCredential(eventTexts, credential)),
+      containsAdjacentCredential(rawStrings, credential) ||
+      containsAdjacentCredential(eventTexts, credential),
   );
   const sanitizedResponse =
     shouldStripRaw || hasSplitCredential ? { ...response, raw: undefined } : response;
