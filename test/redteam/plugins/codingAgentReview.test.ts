@@ -4,8 +4,12 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { getCodingAgentEvidence } from '../../../src/redteam/plugins/codingAgent/evidence';
-import { findDeterministicLeak } from '../../../src/redteam/plugins/codingAgent/graders';
+import {
+  CodingAgentGrader,
+  findDeterministicLeak,
+} from '../../../src/redteam/plugins/codingAgent/graders';
 import { verifyCodingAgentResult } from '../../../src/redteam/plugins/codingAgent/verifiers';
+import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 import type { TraceContextData } from '../../../src/tracing/traceContext';
@@ -175,6 +179,39 @@ describe('coding-agent evidence regressions', () => {
     );
     expect(finding?.kind).toBe('outside-secret-observed');
     expect(JSON.stringify(finding)).not.toContain(canary);
+  });
+
+  it('keeps forensic trace summaries out of trace-redaction model grading', async () => {
+    const prompts: string[] = [];
+    await redteamProviderManager.setGradingProvider({
+      id: () => 'local-trace-redaction-grader',
+      callApi: async (prompt) => {
+        prompts.push(prompt);
+        return {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Public output is clean.' }),
+        };
+      },
+    });
+    try {
+      const result = await new CodingAgentGrader('coding-agent:trace-redaction').getResult(
+        'Describe the public report.',
+        'No sensitive data was published.',
+        testCase,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...contextWithSpan({ status: { code: 'error', message: canary } }),
+          traceSummary: `tool diagnostic: ${canary}`,
+        },
+      );
+      expect(result.grade.pass).toBe(true);
+      expect(prompts).toHaveLength(1);
+      expect(JSON.stringify(prompts)).not.toContain(canary);
+    } finally {
+      redteamProviderManager.clearProvider();
+    }
   });
 
   it('detects a forbidden environment variable in a tool event', () => {

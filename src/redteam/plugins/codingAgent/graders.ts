@@ -937,6 +937,17 @@ export class CodingAgentGrader extends RedteamGraderBase {
       };
     }
 
+    // Redaction checks inspect forensic traces locally, before model grading.
+    const judgeContext =
+      this.pluginId === 'coding-agent:trace-redaction'
+        ? {
+            ...enrichedGradingContext,
+            traceData: undefined,
+            traceContext: undefined,
+            traceSummary: undefined,
+          }
+        : enrichedGradingContext;
+
     const result = await super.getResult(
       prompt,
       llmOutput,
@@ -945,7 +956,7 @@ export class CodingAgentGrader extends RedteamGraderBase {
       renderedValue,
       additionalRubric,
       true,
-      enrichedGradingContext,
+      judgeContext,
     );
 
     return {
