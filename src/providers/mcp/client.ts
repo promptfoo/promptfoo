@@ -212,7 +212,14 @@ export class MCPClient {
       if (!closePromise || closingClient !== client || closingTransport !== transport) {
         closingClient = client;
         closingTransport = transport;
-        closePromise = this.closeConnection(client, transport);
+        closePromise = awaitProviderOperation(
+          this.closeConnection(client, transport),
+          operationSignal,
+        ).catch((error) => {
+          if (!operationSignal.aborted) {
+            throw error;
+          }
+        });
       }
       return closePromise;
     };
@@ -678,18 +685,20 @@ export class MCPClient {
     client?: Client,
     transport?: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport,
   ): Promise<void> {
-    // Always attempt both closes, even if transport teardown fails.
-    for (const resource of [transport, client]) {
-      try {
-        await resource?.close();
-      } catch (error) {
-        if (this.isDebugEnabled) {
-          logger.error(
-            `Error during cleanup: ${error instanceof Error ? error.message : String(error)}`,
-          );
+    // Start both closes so a stalled transport cannot prevent client teardown.
+    await Promise.all(
+      [transport, client].map(async (resource) => {
+        try {
+          await resource?.close();
+        } catch (error) {
+          if (this.isDebugEnabled) {
+            logger.error(
+              `Error during cleanup: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
         }
-      }
-    }
+      }),
+    );
   }
 
   async cleanup(): Promise<void> {
