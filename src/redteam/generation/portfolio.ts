@@ -124,7 +124,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       .slice(-3)
       .map(
         (candidate) =>
-          `- ${candidate.prompt.replaceAll('{', '{{ "{" }}')}\n  Observed predicates: ${this.describeObservedPredicates(candidate)}`,
+          `- ${candidate.prompt.replace(/{/g, '{{ "{" }}')}\n  Observed predicates: ${this.describeObservedPredicates(candidate)}`,
       )
       .join('\n');
 
