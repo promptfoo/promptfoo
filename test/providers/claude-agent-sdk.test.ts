@@ -311,6 +311,66 @@ describe('ClaudeCodeSDKProvider', () => {
     await clearCache();
   });
 
+  it('reports installation guidance for an asynchronously rejected SDK import', async () => {
+    vi.mocked(importModule).mockRejectedValueOnce(new Error('module initialization failed'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+    const result = await provider.callApi('Import failure');
+    expect(result.error).toContain('Failed to load @anthropic-ai/claude-agent-sdk');
+    expect(result.error).toContain('npm install @anthropic-ai/claude-agent-sdk');
+  });
+
+  it('honors an explicitly empty system prompt', async () => {
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({
+      config: { apiKey: 'test-key', custom_system_prompt: '' },
+    });
+    await provider.callApi('Empty system prompt');
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({ systemPrompt: '' }),
+      }),
+    );
+  });
+
+  it('uses prompt API keys without reusing responses across credentials', async () => {
+    mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+    enableCache();
+    const provider = new ClaudeCodeSDKProvider();
+    for (const key of ['prompt-key-one', 'prompt-key-two']) {
+      mockQuery.mockReturnValue(createMockResponse(key));
+      const result = await provider.callApi('Same prompt', {
+        vars: {},
+        prompt: { raw: 'Same prompt', label: 'test', config: { apiKey: key } },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(key);
+      expect(mockQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            env: expect.objectContaining({ ANTHROPIC_API_KEY: key }),
+          }),
+        }),
+      );
+    }
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives the merged prompt API key precedence over the provider key', async () => {
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'provider-key' } });
+    await provider.callApi('Override', {
+      vars: {},
+      prompt: { raw: 'Override', label: 'test', config: { apiKey: 'prompt-key' } },
+    });
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          env: expect.objectContaining({ ANTHROPIC_API_KEY: 'prompt-key' }),
+        }),
+      }),
+    );
+  });
+
   describe('constructor', () => {
     it('should initialize with default config', () => {
       const provider = new ClaudeCodeSDKProvider();
