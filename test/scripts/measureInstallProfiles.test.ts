@@ -151,6 +151,8 @@ describe('measurement environment preflight', () => {
   it.each([
     ['HTTP_PROXY', 'http://user:fixture-secret@proxy.example:8080'],
     ['HTTPS_PROXY', 'http://:fixture-secret@proxy.example'],
+    ['HTTP_PROXY', 'http:/user:fixture-secret@proxy.example'],
+    ['HTTPS_PROXY', String.raw`http:\user:fixture-secret@proxy.example`],
     ['ALL_PROXY', 'socks5://user:fixture%2Dsecret@proxy.example'],
     ['http_proxy', 'user:fixture-secret@proxy.example:8080'],
     ['https_proxy', 'https://proxy.example/?token=fixture-secret'],
@@ -175,6 +177,26 @@ describe('measurement environment preflight', () => {
       expect(mkdir).not.toHaveBeenCalled();
     },
   );
+
+  it('bounds registry lookup and hides npm failure details', async () => {
+    vi.stubGlobal('process', { ...process, platform: 'linux', env: {} });
+    const command = vi.spyOn(childProcess, 'execFileSync').mockImplementation(() => {
+      throw Object.assign(new Error('fixture registry credential'), { code: 'ETIMEDOUT' });
+    });
+    const mkdir = vi.spyOn(fs, 'mkdirSync');
+
+    await expect(
+      measureInstallProfiles(['--tarball', '/unused.tgz', '--output', '/unused-output']),
+    ).rejects.toThrow(
+      new Error('Unable to read npm registry; use --registry with a credential-free URL'),
+    );
+    expect(command).toHaveBeenCalledExactlyOnceWith(
+      'npm',
+      ['--workspaces=false', 'config', 'get', 'registry'],
+      expect.objectContaining({ timeout: 10_000, killSignal: 'SIGKILL' }),
+    );
+    expect(mkdir).not.toHaveBeenCalled();
+  });
 
   it('allows a plain proxy and NO_PROXY host list through to artifact validation', async () => {
     vi.stubGlobal('process', {

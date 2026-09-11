@@ -26,7 +26,7 @@ runs lifecycle scripts by default, including supported native/browser downloads.
 `--no-install-scripts` is an explicit inventory experiment and must not be reported
 as normal installation acceptance. `--profiles default` or
 `--profiles omit-optional` selects one profile. The default registry comes from the invoking npm configuration; `--registry URL`
-selects one explicitly. Npm workspace discovery is disabled so an ancestor workspace cannot redirect installs. Other user npm settings and credentials are not inherited. Registry URLs containing
+selects one explicitly. Registry discovery stops after ten seconds if npm does not return. Npm workspace discovery is disabled so an ancestor workspace cannot redirect installs. Other user npm settings and credentials are not inherited. Registry URLs containing
 userinfo, query strings, or fragments are rejected before evidence is written.
 
 The tool retains its temporary consumers and cache; their path is recorded in
@@ -79,7 +79,7 @@ nonzero. Every command timeout is a failure, including a timeout that races with
 an expected exit code. Measurement requires POSIX process groups; Windows is
 rejected before running commands because successful command descendants cannot
 be contained there. Timeout, interruption, and ordinary-exit cleanup terminate
-surviving group members. Unsuccessful cleanup stops measurement before inventory.
+surviving group members. Descendants that create a new session or process group escape this cleanup. Run packages with daemonizing lifecycle scripts in a disposable container or VM, and do not treat a measurement as a stable inventory while those processes can still modify it. The tool cannot detect or contain them. Unsuccessful group cleanup stops measurement before inventory.
 SIGINT or SIGTERM stops measurement after the active command closes. Completed
 evidence remains available. Partial inventories after install
 failure are diagnostic; they cannot establish a smaller usable profile.

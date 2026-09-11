@@ -1,6 +1,6 @@
 /** Measure an already-built tarball in fresh consumers, independently of the repository graph. */
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import childProcess from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -340,7 +340,8 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
     }
     let proxy: URL;
     try {
-      proxy = new URL(value.includes('://') ? value : `http://${value}`);
+      const parsed = URL.canParse(value) ? new URL(value) : undefined;
+      proxy = parsed?.hostname ? parsed : new URL(`http://${value}`);
     } catch {
       throw new Error(`${key} must be a credential-free proxy URL`);
     }
@@ -353,13 +354,22 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
   const npm = npmInvocation();
   // Respect a configured registry (e.g. a company mirror) without copying any
   // other npm configuration or credentials into the isolated consumer.
-  const registry = parseRegistryUrl(
-    values.registry ??
-      execFileSync(npm.command, [...npm.prefix, 'config', 'get', 'registry'], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }).trim(),
-  );
+  let registryUrl = values.registry;
+  if (registryUrl === undefined) {
+    try {
+      registryUrl = childProcess
+        .execFileSync(npm.command, [...npm.prefix, 'config', 'get', 'registry'], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 10_000,
+          killSignal: 'SIGKILL',
+        })
+        .trim();
+    } catch {
+      throw new Error('Unable to read npm registry; use --registry with a credential-free URL');
+    }
+  }
+  const registry = parseRegistryUrl(registryUrl);
   const tarball = path.resolve(values.tarball);
   assert(fs.statSync(tarball).isFile(), 'Tarball must be a file');
   const output = path.resolve(values.output);
