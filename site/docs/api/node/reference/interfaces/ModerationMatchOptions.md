@@ -10,7 +10,7 @@ sidebar_position: 26
 import type { ModerationMatchOptions } from 'promptfoo';
 ```
 
-Defined in: matchers/moderation.ts:33
+Defined in: [src/matchers/moderation.ts:33](https://github.com/promptfoo/promptfoo/blob/main/src/matchers/moderation.ts#L33)
 
 Input passed to `assertions.matchesModeration()`.
 
@@ -34,7 +34,7 @@ const options: ModerationMatchOptions = {
 
 > **assistantResponse**: `string`
 
-Defined in: matchers/moderation.ts:37
+Defined in: [src/matchers/moderation.ts:37](https://github.com/promptfoo/promptfoo/blob/main/src/matchers/moderation.ts#L37)
 
 Assistant response to moderate.
 
@@ -44,7 +44,7 @@ Assistant response to moderate.
 
 > `optional` **categories?**: `string`[]
 
-Defined in: matchers/moderation.ts:39
+Defined in: [src/matchers/moderation.ts:39](https://github.com/promptfoo/promptfoo/blob/main/src/matchers/moderation.ts#L39)
 
 Optional subset of moderation categories that should count as failures.
 
@@ -54,6 +54,6 @@ Optional subset of moderation categories that should count as failures.
 
 > **userPrompt**: `string`
 
-Defined in: matchers/moderation.ts:35
+Defined in: [src/matchers/moderation.ts:35](https://github.com/promptfoo/promptfoo/blob/main/src/matchers/moderation.ts#L35)
 
 User prompt that led to the assistant response.

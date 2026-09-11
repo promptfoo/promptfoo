@@ -10,7 +10,7 @@ sidebar_position: 21
 import type { GradingResult } from 'promptfoo';
 ```
 
-Defined in: types/index.ts:772
+Defined in: [src/types/index.ts:772](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L772)
 
 Result returned by assertions and matcher helpers.
 
@@ -30,7 +30,7 @@ const result: GradingResult = {
 
 > `optional` **assertion?**: `object`
 
-Defined in: types/index.ts:795
+Defined in: [src/types/index.ts:795](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L795)
 
 Assertion that produced this result, when retained by the caller.
 
@@ -101,7 +101,7 @@ Weight of this assertion relative to the rest of the test case. Defaults to `1`.
 
 > `optional` **comment?**: `string`
 
-Defined in: types/index.ts:798
+Defined in: [src/types/index.ts:798](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L798)
 
 Optional user-authored comment attached to the result.
 
@@ -111,7 +111,7 @@ Optional user-authored comment attached to the result.
 
 > `optional` **componentResults?**: `GradingResult`[]
 
-Defined in: types/index.ts:792
+Defined in: [src/types/index.ts:792](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L792)
 
 Component results for compound assertions such as assertion sets.
 
@@ -121,7 +121,7 @@ Component results for compound assertions such as assertion sets.
 
 > `optional` **metadata?**: `object`
 
-Defined in: types/index.ts:804
+Defined in: [src/types/index.ts:804](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L804)
 
 Additional assertion-specific metadata.
 
@@ -193,7 +193,7 @@ Red-team strategy id associated with the result, when applicable.
 <!-- prettier-ignore -->
 > `optional` **namedScores?**: `Record`\<`string`, `number`\>
 
-Defined in: types/index.ts:783
+Defined in: [src/types/index.ts:783](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L783)
 
 Map of named metric values emitted by the assertion.
 
@@ -204,7 +204,7 @@ Map of named metric values emitted by the assertion.
 <!-- prettier-ignore -->
 > `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
 
-Defined in: types/index.ts:786
+Defined in: [src/types/index.ts:786](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L786)
 
 Total weight contributing to each named score.
 
@@ -214,7 +214,7 @@ Total weight contributing to each named score.
 
 > **pass**: `boolean`
 
-Defined in: types/index.ts:774
+Defined in: [src/types/index.ts:774](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L774)
 
 Whether the test passed or failed.
 
@@ -224,7 +224,7 @@ Whether the test passed or failed.
 
 > **reason**: `string`
 
-Defined in: types/index.ts:780
+Defined in: [src/types/index.ts:780](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L780)
 
 Plain-text explanation suitable for logs and reports.
 
@@ -234,7 +234,7 @@ Plain-text explanation suitable for logs and reports.
 
 > **score**: `number`
 
-Defined in: types/index.ts:777
+Defined in: [src/types/index.ts:777](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L777)
 
 Test score, typically between 0 and 1.
 
@@ -244,7 +244,7 @@ Test score, typically between 0 and 1.
 
 > `optional` **suggestions?**: `ResultSuggestion`[]
 
-Defined in: types/index.ts:801
+Defined in: [src/types/index.ts:801](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L801)
 
 Follow-up suggestions produced by some graders.
 
@@ -254,7 +254,7 @@ Follow-up suggestions produced by some graders.
 
 > `optional` **tokensUsed?**: `object`
 
-Defined in: types/index.ts:789
+Defined in: [src/types/index.ts:789](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L789)
 
 Token usage attributed to the assertion or grader.
 

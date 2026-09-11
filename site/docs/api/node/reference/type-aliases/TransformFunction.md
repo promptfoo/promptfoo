@@ -13,7 +13,7 @@ import type { TransformFunction } from 'promptfoo';
 <!-- prettier-ignore -->
 > **TransformFunction**\<`TIn`, `TOut`\> = (`output`, `context`) => `TOut` \| `Promise`\<`TOut`\>
 
-Defined in: contracts/transform.ts:76
+Defined in: [src/contracts/transform.ts:76](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/transform.ts#L76)
 
 A function that transforms output or vars at various stages of the evaluation pipeline.
 Function-valued transforms are only reachable via the Node.js package API; YAML configs

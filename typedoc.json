@@ -3,6 +3,8 @@
   "entryPoints": ["scripts/nodeApiReference.ts"],
   "plugin": ["typedoc-plugin-markdown"],
   "out": "site/docs/api/node/reference",
+  "disableGit": true,
+  "displayBasePath": ".",
   "gitRevision": "main",
   "sourceLinkTemplate": "https://github.com/promptfoo/promptfoo/blob/{gitRevision}/{path}#L{line}",
   "readme": "none",

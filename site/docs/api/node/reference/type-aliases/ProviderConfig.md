@@ -12,7 +12,7 @@ import type { ProviderConfig } from 'promptfoo';
 
 > **ProviderConfig** = `ProviderId` \| [`ProviderFunction`](ProviderFunction.md) \| [`ApiProvider`](../interfaces/ApiProvider.md) \| [`ProviderOptions`](../interfaces/ProviderOptions.md) \| `ProviderOptionsMap`
 
-Defined in: types/providers.ts:67
+Defined in: [src/types/providers.ts:67](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L67)
 
 Provider override accepted anywhere a single provider configuration is allowed.
 

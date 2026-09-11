@@ -10,7 +10,7 @@ sidebar_position: 44
 import type { TokenUsage } from 'promptfoo';
 ```
 
-Defined in: contracts/shared.ts:81
+Defined in: [src/contracts/shared.ts:81](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L81)
 
 Provider usage with independent generation, attacker, grading, and incurred breakdowns.
 
@@ -20,7 +20,7 @@ Provider usage with independent generation, attacker, grading, and incurred brea
 
 > `optional` **assertions?**: `object`
 
-Defined in: contracts/shared.ts:57
+Defined in: [src/contracts/shared.ts:57](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L57)
 
 #### cached?
 
@@ -82,7 +82,7 @@ Prediction tokens rejected by speculative decoding, when reported.
 
 > `optional` **attacker?**: `object`
 
-Defined in: contracts/shared.ts:56
+Defined in: [src/contracts/shared.ts:56](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L56)
 
 #### cached?
 
@@ -144,7 +144,7 @@ Prediction tokens rejected by speculative decoding, when reported.
 
 > `optional` **cached?**: `number`
 
-Defined in: contracts/shared.ts:48
+Defined in: [src/contracts/shared.ts:48](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L48)
 
 ---
 
@@ -152,7 +152,7 @@ Defined in: contracts/shared.ts:48
 
 > `optional` **completion?**: `number`
 
-Defined in: contracts/shared.ts:47
+Defined in: [src/contracts/shared.ts:47](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L47)
 
 ---
 
@@ -160,7 +160,7 @@ Defined in: contracts/shared.ts:47
 
 > `optional` **completionDetails?**: `object`
 
-Defined in: contracts/shared.ts:51
+Defined in: [src/contracts/shared.ts:51](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L51)
 
 #### acceptedPrediction?
 
@@ -198,7 +198,7 @@ Prediction tokens rejected by speculative decoding, when reported.
 
 > `optional` **generation?**: `object`
 
-Defined in: contracts/shared.ts:58
+Defined in: [src/contracts/shared.ts:58](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L58)
 
 #### cached?
 
@@ -260,7 +260,7 @@ Prediction tokens rejected by speculative decoding, when reported.
 
 > `optional` **incurredTokenUsage?**: `object`
 
-Defined in: contracts/shared.ts:66
+Defined in: [src/contracts/shared.ts:66](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L66)
 
 #### assertions?
 
@@ -496,7 +496,7 @@ Prediction tokens rejected by speculative decoding, when reported.
 
 > `optional` **numRequests?**: `number`
 
-Defined in: contracts/shared.ts:50
+Defined in: [src/contracts/shared.ts:50](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L50)
 
 ---
 
@@ -504,7 +504,7 @@ Defined in: contracts/shared.ts:50
 
 > `optional` **prompt?**: `number`
 
-Defined in: contracts/shared.ts:46
+Defined in: [src/contracts/shared.ts:46](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L46)
 
 ---
 
@@ -512,4 +512,4 @@ Defined in: contracts/shared.ts:46
 
 > `optional` **total?**: `number`
 
-Defined in: contracts/shared.ts:49
+Defined in: [src/contracts/shared.ts:49](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L49)

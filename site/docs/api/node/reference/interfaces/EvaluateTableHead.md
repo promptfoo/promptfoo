@@ -10,7 +10,7 @@ sidebar_position: 18
 import type { EvaluateTableHead } from 'promptfoo';
 ```
 
-Defined in: types/index.ts:658
+Defined in: [src/types/index.ts:658](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L658)
 
 Header metadata for an eval table.
 
@@ -38,7 +38,7 @@ const head: EvaluateTableHead = {
 
 > **prompts**: `object`[]
 
-Defined in: types/index.ts:660
+Defined in: [src/types/index.ts:660](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L660)
 
 Completed prompts rendered as provider columns.
 
@@ -661,6 +661,6 @@ Sum of provider latency for this prompt in milliseconds.
 
 > **vars**: `string`[]
 
-Defined in: types/index.ts:662
+Defined in: [src/types/index.ts:662](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L662)
 
 Variable names rendered before provider columns.

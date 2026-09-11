@@ -10,7 +10,7 @@ sidebar_position: 31
 import type { PromptFunctionResult } from 'promptfoo';
 ```
 
-Defined in: contracts/prompts.ts:98
+Defined in: [src/contracts/prompts.ts:98](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L98)
 
 Result type for prompt functions.
 
@@ -40,7 +40,7 @@ const result: PromptFunctionResult = {
 <!-- prettier-ignore -->
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: contracts/prompts.ts:102
+Defined in: [src/contracts/prompts.ts:102](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L102)
 
 Provider config overrides to merge for this rendered prompt.
 
@@ -50,6 +50,6 @@ Provider config overrides to merge for this rendered prompt.
 
 > **prompt**: `any`
 
-Defined in: contracts/prompts.ts:100
+Defined in: [src/contracts/prompts.ts:100](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L100)
 
 Prompt content to send to the provider.

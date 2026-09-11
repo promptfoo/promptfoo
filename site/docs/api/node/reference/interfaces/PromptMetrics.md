@@ -10,7 +10,7 @@ sidebar_position: 32
 import type { PromptMetrics } from 'promptfoo';
 ```
 
-Defined in: types/index.ts:437
+Defined in: [src/types/index.ts:437](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L437)
 
 Aggregate metrics tracked for one completed prompt.
 
@@ -38,7 +38,7 @@ const metrics: PromptMetrics = {
 
 > **assertFailCount**: `number`
 
-Defined in: types/index.ts:386
+Defined in: [src/types/index.ts:386](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L386)
 
 Number of individual assertions that failed.
 
@@ -48,7 +48,7 @@ Number of individual assertions that failed.
 
 > **assertPassCount**: `number`
 
-Defined in: types/index.ts:384
+Defined in: [src/types/index.ts:384](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L384)
 
 Number of individual assertions that passed.
 
@@ -58,7 +58,7 @@ Number of individual assertions that passed.
 
 > **cost**: `number`
 
-Defined in: types/index.ts:411
+Defined in: [src/types/index.ts:411](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L411)
 
 Estimated cost accumulated across provider calls for this prompt.
 
@@ -68,7 +68,7 @@ Estimated cost accumulated across provider calls for this prompt.
 
 > `optional` **incurredCost?**: `number`
 
-Defined in: types/index.ts:412
+Defined in: [src/types/index.ts:412](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L412)
 
 ---
 
@@ -77,7 +77,7 @@ Defined in: types/index.ts:412
 <!-- prettier-ignore -->
 > **namedScores**: `Record`\<`string`, `number`\>
 
-Defined in: types/index.ts:392
+Defined in: [src/types/index.ts:392](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L392)
 
 Aggregate values for named assertion metrics.
 
@@ -88,7 +88,7 @@ Aggregate values for named assertion metrics.
 <!-- prettier-ignore -->
 > **namedScoresCount**: `Record`\<`string`, `number`\>
 
-Defined in: types/index.ts:394
+Defined in: [src/types/index.ts:394](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L394)
 
 Number of contributions included in each named score.
 
@@ -99,7 +99,7 @@ Number of contributions included in each named score.
 <!-- prettier-ignore -->
 > `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
 
-Defined in: types/index.ts:396
+Defined in: [src/types/index.ts:396](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L396)
 
 Sum of assertion weights contributing to each named score.
 
@@ -109,7 +109,7 @@ Sum of assertion weights contributing to each named score.
 
 > `optional` **redteam?**: `object`
 
-Defined in: types/index.ts:398
+Defined in: [src/types/index.ts:398](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L398)
 
 Red-team pass/fail counts grouped by plugin and strategy.
 
@@ -147,7 +147,7 @@ Passing result counts by red-team strategy id.
 
 > **score**: `number`
 
-Defined in: types/index.ts:376
+Defined in: [src/types/index.ts:376](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L376)
 
 Aggregate normalized score across outputs for this prompt.
 
@@ -157,7 +157,7 @@ Aggregate normalized score across outputs for this prompt.
 
 > **testErrorCount**: `number`
 
-Defined in: types/index.ts:382
+Defined in: [src/types/index.ts:382](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L382)
 
 Number of test rows that errored before normal grading completed.
 
@@ -167,7 +167,7 @@ Number of test rows that errored before normal grading completed.
 
 > **testFailCount**: `number`
 
-Defined in: types/index.ts:380
+Defined in: [src/types/index.ts:380](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L380)
 
 Number of test rows that failed assertions for this prompt.
 
@@ -177,7 +177,7 @@ Number of test rows that failed assertions for this prompt.
 
 > **testPassCount**: `number`
 
-Defined in: types/index.ts:378
+Defined in: [src/types/index.ts:378](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L378)
 
 Number of test rows that passed for this prompt.
 
@@ -187,7 +187,7 @@ Number of test rows that passed for this prompt.
 
 > **tokenUsage**: `object` = `BaseTokenUsageSchema`
 
-Defined in: types/index.ts:390
+Defined in: [src/types/index.ts:390](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L390)
 
 Token usage accumulated across provider calls for this prompt.
 
@@ -657,6 +657,6 @@ Prediction tokens rejected by speculative decoding, when reported.
 
 > **totalLatencyMs**: `number`
 
-Defined in: types/index.ts:388
+Defined in: [src/types/index.ts:388](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L388)
 
 Sum of provider latency for this prompt in milliseconds.

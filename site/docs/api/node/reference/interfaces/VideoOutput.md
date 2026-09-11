@@ -10,7 +10,7 @@ sidebar_position: 47
 import type { VideoOutput } from 'promptfoo';
 ```
 
-Defined in: contracts/providers.ts:130
+Defined in: [src/contracts/providers.ts:130](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L130)
 
 Video attachment returned by providers that produce video.
 
@@ -31,7 +31,7 @@ const video: VideoOutput = {
 
 > `optional` **aspectRatio?**: `string`
 
-Defined in: contracts/providers.ts:152
+Defined in: [src/contracts/providers.ts:152](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L152)
 
 Aspect ratio such as `16:9`.
 
@@ -41,7 +41,7 @@ Aspect ratio such as `16:9`.
 
 > `optional` **blobRef?**: [`BlobRef`](BlobRef.md)
 
-Defined in: contracts/providers.ts:134
+Defined in: [src/contracts/providers.ts:134](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L134)
 
 External blob reference for video data.
 
@@ -51,7 +51,7 @@ External blob reference for video data.
 
 > `optional` **duration?**: `number`
 
-Defined in: contracts/providers.ts:144
+Defined in: [src/contracts/providers.ts:144](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L144)
 
 Video duration in seconds.
 
@@ -61,7 +61,7 @@ Video duration in seconds.
 
 > `optional` **format?**: `string`
 
-Defined in: contracts/providers.ts:140
+Defined in: [src/contracts/providers.ts:140](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L140)
 
 Container or codec name such as `mp4`.
 
@@ -71,7 +71,7 @@ Container or codec name such as `mp4`.
 
 > `optional` **id?**: `string`
 
-Defined in: contracts/providers.ts:132
+Defined in: [src/contracts/providers.ts:132](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L132)
 
 Provider video id, such as a job or operation identifier.
 
@@ -81,7 +81,7 @@ Provider video id, such as a job or operation identifier.
 
 > `optional` **model?**: `string`
 
-Defined in: contracts/providers.ts:150
+Defined in: [src/contracts/providers.ts:150](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L150)
 
 Model that produced the video.
 
@@ -91,7 +91,7 @@ Model that produced the video.
 
 > `optional` **resolution?**: `string`
 
-Defined in: contracts/providers.ts:154
+Defined in: [src/contracts/providers.ts:154](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L154)
 
 Resolution tier such as `720p` or `1080p`.
 
@@ -101,7 +101,7 @@ Resolution tier such as `720p` or `1080p`.
 
 > `optional` **size?**: `string`
 
-Defined in: contracts/providers.ts:142
+Defined in: [src/contracts/providers.ts:142](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L142)
 
 Provider-reported output dimensions, for example `1280x720`.
 
@@ -111,7 +111,7 @@ Provider-reported output dimensions, for example `1280x720`.
 
 > `optional` **spritesheet?**: `string`
 
-Defined in: contracts/providers.ts:148
+Defined in: [src/contracts/providers.ts:148](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L148)
 
 URL or storage URI for a provider-generated spritesheet.
 
@@ -121,7 +121,7 @@ URL or storage URI for a provider-generated spritesheet.
 
 > `optional` **storageRef?**: `object`
 
-Defined in: contracts/providers.ts:136
+Defined in: [src/contracts/providers.ts:136](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L136)
 
 Storage reference used by providers that persist generated media.
 
@@ -135,7 +135,7 @@ Storage reference used by providers that persist generated media.
 
 > `optional` **thumbnail?**: `string`
 
-Defined in: contracts/providers.ts:146
+Defined in: [src/contracts/providers.ts:146](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L146)
 
 URL or storage URI for a representative thumbnail.
 
@@ -145,6 +145,6 @@ URL or storage URI for a representative thumbnail.
 
 > `optional` **url?**: `string`
 
-Defined in: contracts/providers.ts:138
+Defined in: [src/contracts/providers.ts:138](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L138)
 
 URL or storage URI for the generated video.

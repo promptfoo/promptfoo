@@ -10,7 +10,7 @@ sidebar_position: 23
 import type { ImageOutput } from 'promptfoo';
 ```
 
-Defined in: contracts/providers.ts:70
+Defined in: [src/contracts/providers.ts:70](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L70)
 
 Image attachment returned by providers that produce images.
 
@@ -23,7 +23,7 @@ already been externalized out of the result row.
 
 > `optional` **blobRef?**: [`BlobRef`](BlobRef.md)
 
-Defined in: contracts/providers.ts:74
+Defined in: [src/contracts/providers.ts:74](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L74)
 
 External blob reference when image data is stored outside the result row.
 
@@ -33,7 +33,7 @@ External blob reference when image data is stored outside the result row.
 
 > `optional` **data?**: `string`
 
-Defined in: contracts/providers.ts:72
+Defined in: [src/contracts/providers.ts:72](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L72)
 
 Inline data URI or base64 payload.
 
@@ -43,6 +43,6 @@ Inline data URI or base64 payload.
 
 > `optional` **mimeType?**: `string`
 
-Defined in: contracts/providers.ts:76
+Defined in: [src/contracts/providers.ts:76](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L76)
 
 MIME type such as `image/png`.

@@ -12,7 +12,7 @@ import type { EvaluateProgressCallback } from 'promptfoo';
 
 > **EvaluateProgressCallback** = (`completed`, `total`, `index`, `evalStep`, `metrics`) => `void`
 
-Defined in: types/index.ts:1265
+Defined in: [src/types/index.ts:1265](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1265)
 
 Progress callback invoked as rows finish during evaluation.
 

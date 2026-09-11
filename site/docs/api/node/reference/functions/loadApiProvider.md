@@ -13,7 +13,7 @@ import { loadApiProvider } from 'promptfoo';
 <!-- prettier-ignore -->
 > **loadApiProvider**(`providerPath`, `context?`): `Promise`\<[`ApiProvider`](../interfaces/ApiProvider.md)\>
 
-Defined in: providers/index.ts:103
+Defined in: [src/providers/index.ts:103](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L103)
 
 Load one provider by id or config-file reference.
 

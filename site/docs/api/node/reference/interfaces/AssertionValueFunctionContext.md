@@ -10,7 +10,7 @@ sidebar_position: 5
 import type { AssertionValueFunctionContext } from 'promptfoo';
 ```
 
-Defined in: types/index.ts:1074
+Defined in: [src/types/index.ts:1074](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1074)
 
 Runtime context passed to function-valued assertions.
 
@@ -31,7 +31,7 @@ const assertion: AssertionValueFunction = (output, context) => ({
 <!-- prettier-ignore -->
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: types/index.ts:1084
+Defined in: [src/types/index.ts:1084](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1084)
 
 Assertion-specific config copied from `assert[].config`.
 
@@ -41,7 +41,7 @@ Assertion-specific config copied from `assert[].config`.
 
 > **logProbs**: `number`[] \| `undefined`
 
-Defined in: types/index.ts:1082
+Defined in: [src/types/index.ts:1082](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1082)
 
 Provider log probabilities, when available.
 
@@ -51,7 +51,7 @@ Provider log probabilities, when available.
 
 > `optional` **metadata?**: `object`
 
-Defined in: types/index.ts:1092
+Defined in: [src/types/index.ts:1092](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1092)
 
 Shortcut to providerResponse?.metadata for convenience
 
@@ -103,7 +103,7 @@ Final prompt sent by some red team flows after mutation or wrapping.
 
 > **prompt**: `string` \| `undefined`
 
-Defined in: types/index.ts:1076
+Defined in: [src/types/index.ts:1076](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1076)
 
 Rendered prompt for the current result, when available.
 
@@ -113,7 +113,7 @@ Rendered prompt for the current result, when available.
 
 > **provider**: [`ApiProvider`](ApiProvider.md) \| `undefined`
 
-Defined in: types/index.ts:1086
+Defined in: [src/types/index.ts:1086](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1086)
 
 Provider used for the current result, when available.
 
@@ -123,7 +123,7 @@ Provider used for the current result, when available.
 
 > **providerResponse**: [`ProviderResponse`](ProviderResponse.md) \| `undefined`
 
-Defined in: types/index.ts:1088
+Defined in: [src/types/index.ts:1088](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1088)
 
 Full provider response for the current result.
 
@@ -133,7 +133,7 @@ Full provider response for the current result.
 
 > **test**: `object`
 
-Defined in: types/index.ts:1080
+Defined in: [src/types/index.ts:1080](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1080)
 
 Test case currently being graded.
 
@@ -341,7 +341,7 @@ Flattened variables used for this exact eval row.
 
 > `optional` **trace?**: `TraceData`
 
-Defined in: types/index.ts:1090
+Defined in: [src/types/index.ts:1090](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1090)
 
 Trace data for trace-aware assertions when tracing is enabled.
 
@@ -352,6 +352,6 @@ Trace data for trace-aware assertions when tracing is enabled.
 <!-- prettier-ignore -->
 > **vars**: `Record`\<`string`, `VarValue`\>
 
-Defined in: types/index.ts:1078
+Defined in: [src/types/index.ts:1078](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1078)
 
 Rendered variables for the current test case.

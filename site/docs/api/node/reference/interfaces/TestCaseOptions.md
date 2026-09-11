@@ -10,7 +10,7 @@ sidebar_position: 43
 import type { TestCaseOptions } from 'promptfoo';
 ```
 
-Defined in: types/index.ts:1371
+Defined in: [src/types/index.ts:1371](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1371)
 
 Additional per-test options merged with prompt, output, and grading behavior.
 
@@ -36,7 +36,7 @@ const options: TestCaseOptions = {
 
 > `optional` **disableConversationVar?**: `boolean`
 
-Defined in: types/index.ts:1321
+Defined in: [src/types/index.ts:1321](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1321)
 
 Do not include the implicit `_conversation` variable.
 
@@ -46,7 +46,7 @@ Do not include the implicit `_conversation` variable.
 
 > `optional` **disableDefaultAsserts?**: `boolean`
 
-Defined in: types/index.ts:1323
+Defined in: [src/types/index.ts:1323](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1323)
 
 Skip `defaultTest` assertions while still inheriting other defaults.
 
@@ -56,7 +56,7 @@ Skip `defaultTest` assertions while still inheriting other defaults.
 
 > `optional` **disableVarExpansion?**: `boolean`
 
-Defined in: types/index.ts:1319
+Defined in: [src/types/index.ts:1319](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1319)
 
 Do not expand array-valued vars into multiple eval cases.
 
@@ -66,7 +66,7 @@ Do not expand array-valued vars into multiple eval cases.
 
 > `optional` **factuality?**: `object`
 
-Defined in: types/index.ts:185
+Defined in: [src/types/index.ts:185](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L185)
 
 Score mapping used by factuality-oriented graders.
 
@@ -106,7 +106,7 @@ Score awarded when the answer is a factual superset of the expected answer.
 
 > `optional` **postprocess?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: types/index.ts:207
+Defined in: [src/types/index.ts:207](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L207)
 
 #### Deprecated
 
@@ -118,7 +118,7 @@ in > 0.38.0. Use `transform` instead.
 
 > `optional` **prefix?**: `string`
 
-Defined in: contracts/validators/prompts.ts:7
+Defined in: [src/contracts/validators/prompts.ts:7](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L7)
 
 ---
 
@@ -126,7 +126,7 @@ Defined in: contracts/validators/prompts.ts:7
 
 > `optional` **provider?**: `any`
 
-Defined in: types/index.ts:181
+Defined in: [src/types/index.ts:181](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L181)
 
 Provider override used by model-graded assertions.
 
@@ -136,7 +136,7 @@ Provider override used by model-graded assertions.
 
 > `optional` **repeat?**: `number`
 
-Defined in: types/index.ts:1328
+Defined in: [src/types/index.ts:1328](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1328)
 
 ---
 
@@ -144,7 +144,7 @@ Defined in: types/index.ts:1328
 
 > `optional` **rubricPrompt?**: `string` \| `string`[] \| `object`[]
 
-Defined in: types/index.ts:168
+Defined in: [src/types/index.ts:168](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L168)
 
 Rubric prompt override used by model-graded assertions.
 
@@ -154,7 +154,7 @@ Rubric prompt override used by model-graded assertions.
 
 > `optional` **runSerially?**: `boolean`
 
-Defined in: types/index.ts:1325
+Defined in: [src/types/index.ts:1325](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1325)
 
 Run this test serially even when the eval otherwise uses concurrency.
 
@@ -164,7 +164,7 @@ Run this test serially even when the eval otherwise uses concurrency.
 
 > `optional` **storeOutputAs?**: `string`
 
-Defined in: types/index.ts:214
+Defined in: [src/types/index.ts:214](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L214)
 
 Name of the variable that should receive this test case's output.
 
@@ -174,7 +174,7 @@ Name of the variable that should receive this test case's output.
 
 > `optional` **suffix?**: `string`
 
-Defined in: contracts/validators/prompts.ts:8
+Defined in: [src/contracts/validators/prompts.ts:8](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L8)
 
 ---
 
@@ -182,7 +182,7 @@ Defined in: contracts/validators/prompts.ts:8
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: types/index.ts:209
+Defined in: [src/types/index.ts:209](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L209)
 
 Transform provider output before assertions run.
 
@@ -192,6 +192,6 @@ Transform provider output before assertions run.
 
 > `optional` **transformVars?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: types/index.ts:211
+Defined in: [src/types/index.ts:211](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L211)
 
 Transform vars before prompt rendering.

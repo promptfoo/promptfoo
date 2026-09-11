@@ -10,7 +10,7 @@ sidebar_position: 1
 import type { ApiProvider } from 'promptfoo';
 ```
 
-Defined in: types/providers.ts:281
+Defined in: [src/types/providers.ts:281](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L281)
 
 Provider object shape accepted by the Node.js API.
 
@@ -38,7 +38,7 @@ const provider: ApiProvider = {
 
 > **callApi**: [`CallApiFunction`](CallApiFunction.md)
 
-Defined in: types/providers.ts:283
+Defined in: [src/types/providers.ts:283](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L283)
 
 Execute one provider request.
 
@@ -53,7 +53,7 @@ Execute one provider request.
 <!-- prettier-ignore -->
 > `optional` **cleanup?**: () => `void` \| `Promise`\<`void`\>
 
-Defined in: types/providers.ts:335
+Defined in: [src/types/providers.ts:335](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L335)
 
 Provider-wide cleanup hook for releasing long-lived resources such as worker
 processes, browser sessions, or pooled connections at eval shutdown.
@@ -69,7 +69,7 @@ Request-scoped cancellation should be implemented with `abortSignal`.
 
 > `optional` **config?**: `any`
 
-Defined in: types/providers.ts:304
+Defined in: [src/types/providers.ts:304](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L304)
 
 Provider-specific configuration retained for later calls and serialization.
 The shape mirrors [ProviderOptions.config](ProviderOptions.md#config); consult the documentation
@@ -81,7 +81,7 @@ for the specific provider for the supported keys.
 
 > `optional` **delay?**: `number`
 
-Defined in: types/providers.ts:306
+Defined in: [src/types/providers.ts:306](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L306)
 
 Delay in milliseconds before provider calls.
 
@@ -91,7 +91,7 @@ Delay in milliseconds before provider calls.
 
 > `optional` **getAudioInputFormat?**: () => `"openai"` \| `"google"` \| `undefined`
 
-Defined in: types/providers.ts:310
+Defined in: [src/types/providers.ts:310](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L310)
 
 Native audio input content format accepted by this provider and its configured model.
 
@@ -105,7 +105,7 @@ Native audio input content format accepted by this provider and its configured m
 
 > `optional` **getSessionId?**: () => `string`
 
-Defined in: types/providers.ts:308
+Defined in: [src/types/providers.ts:308](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L308)
 
 Optional stable session id for conversational providers.
 
@@ -119,7 +119,7 @@ Optional stable session id for conversational providers.
 
 > **id**: () => `string`
 
-Defined in: contracts/prompts.ts:5
+Defined in: [src/contracts/prompts.ts:5](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L5)
 
 #### Returns
 
@@ -136,7 +136,7 @@ Defined in: contracts/prompts.ts:5
 <!-- prettier-ignore -->
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: types/providers.ts:318
+Defined in: [src/types/providers.ts:318](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L318)
 
 Named provider inputs used by multi-input targets.
 
@@ -150,7 +150,7 @@ generation guidance.
 
 > `optional` **label?**: `string`
 
-Defined in: types/providers.ts:320
+Defined in: [src/types/providers.ts:320](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L320)
 
 Human-readable label shown in reports.
 
@@ -164,7 +164,7 @@ Human-readable label shown in reports.
 
 > `optional` **toJSON?**: () => `any`
 
-Defined in: types/providers.ts:329
+Defined in: [src/types/providers.ts:329](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L329)
 
 Custom JSON serialization hook used when persisting the provider on an eval
 record. Implementations should return a value that is structurally
@@ -180,7 +180,7 @@ serializable (no functions or circular references).
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: types/providers.ts:322
+Defined in: [src/types/providers.ts:322](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L322)
 
 Transform provider output before assertions run.
 
@@ -191,7 +191,7 @@ Transform provider output before assertions run.
 <!-- prettier-ignore -->
 > `optional` **callClassificationApi**(`prompt`): `Promise`\<[`ProviderClassificationResponse`](ProviderClassificationResponse.md)\>
 
-Defined in: types/providers.ts:290
+Defined in: [src/types/providers.ts:290](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L290)
 
 Optional classification-specific entrypoint for compatible providers.
 
@@ -216,7 +216,7 @@ Class labels mapped to provider-reported scores.
 <!-- prettier-ignore -->
 > `optional` **callEmbeddingApi**(`input`): `Promise`\<[`ProviderEmbeddingResponse`](ProviderEmbeddingResponse.md)\>
 
-Defined in: types/providers.ts:297
+Defined in: [src/types/providers.ts:297](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L297)
 
 Optional embedding-specific entrypoint for compatible providers.
 

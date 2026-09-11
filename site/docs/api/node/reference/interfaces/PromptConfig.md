@@ -10,7 +10,7 @@ sidebar_position: 30
 import type { PromptConfig } from 'promptfoo';
 ```
 
-Defined in: contracts/prompts.ts:43
+Defined in: [src/contracts/prompts.ts:43](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L43)
 
 Prompt-local text decoration applied before provider execution.
 
@@ -32,7 +32,7 @@ const config: PromptConfig = {
 
 > `optional` **prefix?**: `string`
 
-Defined in: contracts/prompts.ts:45
+Defined in: [src/contracts/prompts.ts:45](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L45)
 
 Text prepended to the rendered prompt before it is sent to the provider.
 
@@ -42,6 +42,6 @@ Text prepended to the rendered prompt before it is sent to the provider.
 
 > `optional` **suffix?**: `string`
 
-Defined in: contracts/prompts.ts:47
+Defined in: [src/contracts/prompts.ts:47](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L47)
 
 Text appended to the rendered prompt before it is sent to the provider.

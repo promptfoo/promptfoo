@@ -10,7 +10,7 @@ sidebar_position: 4
 import type { AssertionTokenUsage } from 'promptfoo';
 ```
 
-Defined in: contracts/shared.ts:74
+Defined in: [src/contracts/shared.ts:74](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L74)
 
 Token accounting attributed to model-graded assertions.
 
@@ -20,7 +20,7 @@ Token accounting attributed to model-graded assertions.
 
 > `optional` **cached?**: `number`
 
-Defined in: contracts/shared.ts:48
+Defined in: [src/contracts/shared.ts:48](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L48)
 
 ---
 
@@ -28,7 +28,7 @@ Defined in: contracts/shared.ts:48
 
 > `optional` **completion?**: `number`
 
-Defined in: contracts/shared.ts:47
+Defined in: [src/contracts/shared.ts:47](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L47)
 
 ---
 
@@ -36,7 +36,7 @@ Defined in: contracts/shared.ts:47
 
 > `optional` **completionDetails?**: `object`
 
-Defined in: contracts/shared.ts:51
+Defined in: [src/contracts/shared.ts:51](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L51)
 
 #### acceptedPrediction?
 
@@ -74,7 +74,7 @@ Prediction tokens rejected by speculative decoding, when reported.
 
 > `optional` **numRequests?**: `number`
 
-Defined in: contracts/shared.ts:50
+Defined in: [src/contracts/shared.ts:50](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L50)
 
 ---
 
@@ -82,7 +82,7 @@ Defined in: contracts/shared.ts:50
 
 > `optional` **prompt?**: `number`
 
-Defined in: contracts/shared.ts:46
+Defined in: [src/contracts/shared.ts:46](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L46)
 
 ---
 
@@ -90,4 +90,4 @@ Defined in: contracts/shared.ts:46
 
 > `optional` **total?**: `number`
 
-Defined in: contracts/shared.ts:49
+Defined in: [src/contracts/shared.ts:49](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L49)

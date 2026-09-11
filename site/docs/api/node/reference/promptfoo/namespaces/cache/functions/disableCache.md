@@ -12,7 +12,7 @@ import { cache } from 'promptfoo';
 
 > **disableCache**(): `void`
 
-Defined in: cache.ts:1025
+Defined in: [src/cache.ts:1025](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L1025)
 
 Disable the shared promptfoo cache for future calls.
 

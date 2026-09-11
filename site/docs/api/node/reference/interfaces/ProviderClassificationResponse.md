@@ -10,7 +10,7 @@ sidebar_position: 33
 import type { ProviderClassificationResponse } from 'promptfoo';
 ```
 
-Defined in: contracts/providers.ts:328
+Defined in: [src/contracts/providers.ts:328](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L328)
 
 Response returned by classification-capable providers.
 
@@ -21,7 +21,7 @@ Response returned by classification-capable providers.
 <!-- prettier-ignore -->
 > `optional` **classification?**: `Record`\<`string`, `number`\>
 
-Defined in: contracts/providers.ts:332
+Defined in: [src/contracts/providers.ts:332](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L332)
 
 Class labels mapped to provider-reported scores.
 
@@ -31,6 +31,6 @@ Class labels mapped to provider-reported scores.
 
 > `optional` **error?**: `string`
 
-Defined in: contracts/providers.ts:330
+Defined in: [src/contracts/providers.ts:330](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L330)
 
 Error message when the classification call failed without throwing.

@@ -12,7 +12,7 @@ import { isTransformFunction } from 'promptfoo';
 
 > **isTransformFunction**(`value`): `value is TransformFunction<unknown, unknown>`
 
-Defined in: contracts/transform.ts:96
+Defined in: [src/contracts/transform.ts:96](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/transform.ts#L96)
 
 Runtime type guard for `TransformFunction` values.
 

@@ -10,7 +10,7 @@ sidebar_position: 13
 import type { CompletedPrompt } from 'promptfoo';
 ```
 
-Defined in: types/index.ts:460
+Defined in: [src/types/index.ts:460](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L460)
 
 Prompt metadata attached to completed eval results.
 
@@ -30,7 +30,7 @@ const prompt: CompletedPrompt = {
 
 > `optional` **config?**: `any`
 
-Defined in: contracts/validators/prompts.ts:25
+Defined in: [src/contracts/validators/prompts.ts:25](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L25)
 
 ---
 
@@ -38,7 +38,7 @@ Defined in: contracts/validators/prompts.ts:25
 
 > `optional` **display?**: `string`
 
-Defined in: contracts/validators/prompts.ts:20
+Defined in: [src/contracts/validators/prompts.ts:20](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L20)
 
 #### Deprecated
 
@@ -50,7 +50,7 @@ in > 0.59.0. Use `label` instead.
 
 > `optional` **function?**: [`PromptFunction`](../type-aliases/PromptFunction.md)
 
-Defined in: contracts/validators/prompts.ts:22
+Defined in: [src/contracts/validators/prompts.ts:22](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L22)
 
 ---
 
@@ -58,7 +58,7 @@ Defined in: contracts/validators/prompts.ts:22
 
 > `optional` **id?**: `string`
 
-Defined in: contracts/validators/prompts.ts:14
+Defined in: [src/contracts/validators/prompts.ts:14](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L14)
 
 ---
 
@@ -66,7 +66,7 @@ Defined in: contracts/validators/prompts.ts:14
 
 > **label**: `string`
 
-Defined in: contracts/validators/prompts.ts:21
+Defined in: [src/contracts/validators/prompts.ts:21](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L21)
 
 ---
 
@@ -74,7 +74,7 @@ Defined in: contracts/validators/prompts.ts:21
 
 > `optional` **metrics?**: `object`
 
-Defined in: types/index.ts:442
+Defined in: [src/types/index.ts:442](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L442)
 
 #### assertFailCount
 
@@ -655,7 +655,7 @@ Sum of provider latency for this prompt in milliseconds.
 
 > **provider**: `string`
 
-Defined in: types/index.ts:441
+Defined in: [src/types/index.ts:441](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L441)
 
 ---
 
@@ -663,7 +663,7 @@ Defined in: types/index.ts:441
 
 > **raw**: `string`
 
-Defined in: contracts/validators/prompts.ts:15
+Defined in: [src/contracts/validators/prompts.ts:15](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L15)
 
 ---
 
@@ -671,4 +671,4 @@ Defined in: contracts/validators/prompts.ts:15
 
 > `optional` **template?**: `string`
 
-Defined in: contracts/validators/prompts.ts:16
+Defined in: [src/contracts/validators/prompts.ts:16](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L16)

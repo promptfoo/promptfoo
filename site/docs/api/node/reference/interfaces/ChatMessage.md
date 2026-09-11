@@ -10,7 +10,7 @@ sidebar_position: 12
 import type { ChatMessage } from 'promptfoo';
 ```
 
-Defined in: contracts/providers.ts:17
+Defined in: [src/contracts/providers.ts:17](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L17)
 
 Chat message reported by providers for multi-turn prompts and transcripts.
 
@@ -29,7 +29,7 @@ const message: ChatMessage = {
 
 > **content**: `string`
 
-Defined in: contracts/providers.ts:21
+Defined in: [src/contracts/providers.ts:21](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L21)
 
 Text content sent or received for the turn.
 
@@ -39,6 +39,6 @@ Text content sent or received for the turn.
 
 > **role**: `"function"` \| `"system"` \| `"user"` \| `"assistant"` \| `"tool"`
 
-Defined in: contracts/providers.ts:19
+Defined in: [src/contracts/providers.ts:19](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L19)
 
 Speaker role for the message.

@@ -12,7 +12,7 @@ import { generateTable } from 'promptfoo';
 
 > **generateTable**(`evaluateTable`, `tableCellMaxLength?`, `maxRows?`): `string`
 
-Defined in: table.ts:29
+Defined in: [src/table.ts:29](https://github.com/promptfoo/promptfoo/blob/main/src/table.ts#L29)
 
 Render eval table data as terminal-friendly text.
 

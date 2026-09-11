@@ -15,7 +15,7 @@ type Result = cache.FetchWithCacheResult<unknown>;
 <!-- prettier-ignore -->
 > **FetchWithCacheResult**\<`T`\> = `object`
 
-Defined in: cache.ts:338
+Defined in: [src/cache.ts:338](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L338)
 
 Metadata returned by `fetchWithCache()`.
 
@@ -44,7 +44,7 @@ Parsed response payload type.
 
 > **cached**: `boolean`
 
-Defined in: cache.ts:342
+Defined in: [src/cache.ts:342](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L342)
 
 Whether the response was served from cache.
 
@@ -54,7 +54,7 @@ Whether the response was served from cache.
 
 > `optional` **coalesced?**: `boolean`
 
-Defined in: cache.ts:344
+Defined in: [src/cache.ts:344](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L344)
 
 Another concurrent caller owns the upstream request that produced this response.
 
@@ -64,7 +64,7 @@ Another concurrent caller owns the upstream request that produced this response.
 
 > **data**: `T`
 
-Defined in: cache.ts:340
+Defined in: [src/cache.ts:340](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L340)
 
 Parsed response payload.
 
@@ -75,7 +75,7 @@ Parsed response payload.
 <!-- prettier-ignore -->
 > `optional` **deleteFromCache?**: () => `Promise`\<`void`\>
 
-Defined in: cache.ts:354
+Defined in: [src/cache.ts:354](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L354)
 
 Delete this response from cache when it was cache-backed.
 
@@ -90,7 +90,7 @@ Delete this response from cache when it was cache-backed.
 <!-- prettier-ignore -->
 > `optional` **headers?**: `Record`\<`string`, `string`\>
 
-Defined in: cache.ts:350
+Defined in: [src/cache.ts:350](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L350)
 
 Response headers normalized to string values.
 
@@ -100,7 +100,7 @@ Response headers normalized to string values.
 
 > `optional` **latencyMs?**: `number`
 
-Defined in: cache.ts:352
+Defined in: [src/cache.ts:352](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L352)
 
 End-to-end fetch latency in milliseconds.
 
@@ -110,7 +110,7 @@ End-to-end fetch latency in milliseconds.
 
 > **status**: `number`
 
-Defined in: cache.ts:346
+Defined in: [src/cache.ts:346](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L346)
 
 HTTP response status code.
 
@@ -120,7 +120,7 @@ HTTP response status code.
 
 > **statusText**: `string`
 
-Defined in: cache.ts:348
+Defined in: [src/cache.ts:348](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L348)
 
 HTTP response status text.
 
@@ -131,7 +131,7 @@ HTTP response status text.
 <!-- prettier-ignore -->
 > `optional` **updateCache?**: (`data`, `status`, `statusText`, `headers?`) => `Promise`\<`void`\>
 
-Defined in: cache.ts:355
+Defined in: [src/cache.ts:355](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L355)
 
 #### Parameters
 

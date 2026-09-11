@@ -10,7 +10,7 @@ sidebar_position: 27
 import type { PluginConfig } from 'promptfoo';
 ```
 
-Defined in: redteam/types.ts:281
+Defined in: [src/redteam/types.ts:281](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L281)
 
 Advanced plugin configuration carried on generated red-team test cases.
 
@@ -41,7 +41,7 @@ const pluginConfig: PluginConfig = {
 
 > `optional` **\_\_nonce?**: `number`
 
-Defined in: redteam/types.ts:234
+Defined in: [src/redteam/types.ts:234](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L234)
 
 Nonce used to prevent reuse of cached generated test cases.
 
@@ -55,7 +55,7 @@ Nonce used to prevent reuse of cached generated test cases.
 
 > `optional` **examples?**: `string`[]
 
-Defined in: redteam/types.ts:58
+Defined in: [src/redteam/types.ts:58](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L58)
 
 Example inputs used to steer red-team test generation.
 
@@ -69,7 +69,7 @@ Example inputs used to steer red-team test generation.
 
 > `optional` **excludeStrategies?**: `string`[]
 
-Defined in: redteam/types.ts:109
+Defined in: [src/redteam/types.ts:109](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L109)
 
 Strategy ids this plugin should not be combined with.
 
@@ -83,7 +83,7 @@ Strategy ids this plugin should not be combined with.
 
 > `optional` **graderExamples?**: `object`[]
 
-Defined in: redteam/types.ts:60
+Defined in: [src/redteam/types.ts:60](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L60)
 
 Example grader outputs used to calibrate plugin-specific grading.
 
@@ -113,7 +113,7 @@ Example grader outputs used to calibrate plugin-specific grading.
 
 > `optional` **graderGuidance?**: `string`
 
-Defined in: redteam/types.ts:71
+Defined in: [src/redteam/types.ts:71](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L71)
 
 Additional rubric guidance passed to plugin graders.
 
@@ -127,7 +127,7 @@ Additional rubric guidance passed to plugin graders.
 
 > `optional` **indirectInjectionVar?**: `string`
 
-Defined in: redteam/types.ts:99
+Defined in: [src/redteam/types.ts:99](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L99)
 
 Variable name that receives the indirect prompt-injection payload.
 
@@ -142,7 +142,7 @@ Variable name that receives the indirect prompt-injection payload.
 <!-- prettier-ignore -->
 > `optional` **inputs?**: `Record`\<`string`, `string` \| \{ `config?`: \{ `benign?`: `boolean`; `injectionPlacements?`: `string`[]; `inputPurpose?`: `string`; \}; `description`: `string`; `type?`: `"text"` \| `"pdf"` \| `"docx"` \| `"image"`; \}\>
 
-Defined in: redteam/types.ts:229
+Defined in: [src/redteam/types.ts:229](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L229)
 
 Multi-variable input definitions used while generating test cases.
 
@@ -156,7 +156,7 @@ Multi-variable input definitions used while generating test cases.
 
 > `optional` **intendedResults?**: `string`[]
 
-Defined in: redteam/types.ts:101
+Defined in: [src/redteam/types.ts:101](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L101)
 
 Expected retrieval results used by RAG-poisoning plugins.
 
@@ -170,7 +170,7 @@ Expected retrieval results used by RAG-poisoning plugins.
 
 > `optional` **intent?**: `string` \| (`string` \| `string`[])[]
 
-Defined in: redteam/types.ts:103
+Defined in: [src/redteam/types.ts:103](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L103)
 
 Intent label or labels used by intent-aware plugins.
 
@@ -184,7 +184,7 @@ Intent label or labels used by intent-aware plugins.
 
 > `optional` **language?**: `string` \| `string`[]
 
-Defined in: redteam/types.ts:75
+Defined in: [src/redteam/types.ts:75](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L75)
 
 Language or languages requested for generated tests.
 
@@ -198,7 +198,7 @@ Language or languages requested for generated tests.
 
 > `optional` **maxCharsPerMessage?**: `number`
 
-Defined in: redteam/types.ts:231
+Defined in: [src/redteam/types.ts:231](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L231)
 
 Maximum generated characters per conversation message.
 
@@ -212,7 +212,7 @@ Maximum generated characters per conversation message.
 
 > `optional` **mentions?**: `boolean`
 
-Defined in: redteam/types.ts:88
+Defined in: [src/redteam/types.ts:88](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L88)
 
 Whether competitor-oriented plugins may mention the configured competitor names.
 
@@ -227,7 +227,7 @@ Whether competitor-oriented plugins may mention the configured competitor names.
 <!-- prettier-ignore -->
 > `optional` **modifiers?**: `Record`\<`string`, `unknown`\>
 
-Defined in: redteam/types.ts:82
+Defined in: [src/redteam/types.ts:82](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L82)
 
 Plugin-specific behavior modifiers such as tone or style.
 
@@ -241,7 +241,7 @@ Plugin-specific behavior modifiers such as tone or style.
 
 > `optional` **multilingual?**: `boolean`
 
-Defined in: redteam/types.ts:96
+Defined in: [src/redteam/types.ts:96](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L96)
 
 Whether CyberSecEval-style plugins should generate multilingual probes.
 
@@ -255,7 +255,7 @@ Whether CyberSecEval-style plugins should generate multilingual probes.
 
 > `optional` **mustNotExistPath?**: `string`
 
-Defined in: redteam/types.ts:154
+Defined in: [src/redteam/types.ts:154](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L154)
 
 Single path that must not exist after the run.
 
@@ -269,7 +269,7 @@ Single path that must not exist after the run.
 
 > `optional` **mustNotExistPaths?**: `string`[]
 
-Defined in: redteam/types.ts:156
+Defined in: [src/redteam/types.ts:156](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L156)
 
 Multiple paths that must not exist after the run.
 
@@ -283,7 +283,7 @@ Multiple paths that must not exist after the run.
 
 > `optional` **name?**: `string`
 
-Defined in: redteam/types.ts:94
+Defined in: [src/redteam/types.ts:94](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L94)
 
 Subject name used by PII-oriented plugins.
 
@@ -297,7 +297,7 @@ Subject name used by PII-oriented plugins.
 
 > `optional` **networkAllowedHost?**: `string`
 
-Defined in: redteam/types.ts:204
+Defined in: [src/redteam/types.ts:204](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L204)
 
 Single host explicitly allowed by network-safety fixtures.
 
@@ -311,7 +311,7 @@ Single host explicitly allowed by network-safety fixtures.
 
 > `optional` **networkAllowedHosts?**: `string`[]
 
-Defined in: redteam/types.ts:206
+Defined in: [src/redteam/types.ts:206](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L206)
 
 Multiple hosts explicitly allowed by network-safety fixtures.
 
@@ -325,7 +325,7 @@ Multiple hosts explicitly allowed by network-safety fixtures.
 
 > `optional` **networkAllowedUrl?**: `string`
 
-Defined in: redteam/types.ts:208
+Defined in: [src/redteam/types.ts:208](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L208)
 
 Single URL explicitly allowed by network-safety fixtures.
 
@@ -339,7 +339,7 @@ Single URL explicitly allowed by network-safety fixtures.
 
 > `optional` **networkAllowedUrls?**: `string`[]
 
-Defined in: redteam/types.ts:210
+Defined in: [src/redteam/types.ts:210](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L210)
 
 Multiple URLs explicitly allowed by network-safety fixtures.
 
@@ -353,7 +353,7 @@ Multiple URLs explicitly allowed by network-safety fixtures.
 
 > `optional` **networkEgressHost?**: `string`
 
-Defined in: redteam/types.ts:196
+Defined in: [src/redteam/types.ts:196](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L196)
 
 Single host used to detect outbound network egress.
 
@@ -367,7 +367,7 @@ Single host used to detect outbound network egress.
 
 > `optional` **networkEgressHosts?**: `string`[]
 
-Defined in: redteam/types.ts:198
+Defined in: [src/redteam/types.ts:198](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L198)
 
 Multiple hosts used to detect outbound network egress.
 
@@ -381,7 +381,7 @@ Multiple hosts used to detect outbound network egress.
 
 > `optional` **networkEgressReceipt?**: `string`
 
-Defined in: redteam/types.ts:224
+Defined in: [src/redteam/types.ts:224](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L224)
 
 Single receipt string expected from a network-egress fixture.
 
@@ -395,7 +395,7 @@ Single receipt string expected from a network-egress fixture.
 
 > `optional` **networkEgressReceipts?**: `string`[]
 
-Defined in: redteam/types.ts:226
+Defined in: [src/redteam/types.ts:226](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L226)
 
 Multiple receipt strings expected from network-egress fixtures.
 
@@ -409,7 +409,7 @@ Multiple receipt strings expected from network-egress fixtures.
 
 > `optional` **networkEgressUrl?**: `string`
 
-Defined in: redteam/types.ts:188
+Defined in: [src/redteam/types.ts:188](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L188)
 
 Single URL used to detect outbound network egress.
 
@@ -423,7 +423,7 @@ Single URL used to detect outbound network egress.
 
 > `optional` **networkEgressUrls?**: `string`[]
 
-Defined in: redteam/types.ts:190
+Defined in: [src/redteam/types.ts:190](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L190)
 
 Multiple URLs used to detect outbound network egress.
 
@@ -437,7 +437,7 @@ Multiple URLs used to detect outbound network egress.
 
 > `optional` **networkScanPath?**: `string`
 
-Defined in: redteam/types.ts:216
+Defined in: [src/redteam/types.ts:216](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L216)
 
 Single path scanned for network-safety fixture artifacts.
 
@@ -451,7 +451,7 @@ Single path scanned for network-safety fixture artifacts.
 
 > `optional` **networkScanPaths?**: `string`[]
 
-Defined in: redteam/types.ts:218
+Defined in: [src/redteam/types.ts:218](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L218)
 
 Multiple paths scanned for network-safety fixture artifacts.
 
@@ -465,7 +465,7 @@ Multiple paths scanned for network-safety fixture artifacts.
 
 > `optional` **networkTrapHost?**: `string`
 
-Defined in: redteam/types.ts:200
+Defined in: [src/redteam/types.ts:200](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L200)
 
 Single trap host used by network-safety fixtures.
 
@@ -479,7 +479,7 @@ Single trap host used by network-safety fixtures.
 
 > `optional` **networkTrapHosts?**: `string`[]
 
-Defined in: redteam/types.ts:202
+Defined in: [src/redteam/types.ts:202](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L202)
 
 Multiple trap hosts used by network-safety fixtures.
 
@@ -493,7 +493,7 @@ Multiple trap hosts used by network-safety fixtures.
 
 > `optional` **networkTrapLogPath?**: `string`
 
-Defined in: redteam/types.ts:212
+Defined in: [src/redteam/types.ts:212](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L212)
 
 Single trap-log path inspected by network-safety fixtures.
 
@@ -507,7 +507,7 @@ Single trap-log path inspected by network-safety fixtures.
 
 > `optional` **networkTrapLogPaths?**: `string`[]
 
-Defined in: redteam/types.ts:214
+Defined in: [src/redteam/types.ts:214](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L214)
 
 Multiple trap-log paths inspected by network-safety fixtures.
 
@@ -521,7 +521,7 @@ Multiple trap-log paths inspected by network-safety fixtures.
 
 > `optional` **networkTrapUrl?**: `string`
 
-Defined in: redteam/types.ts:192
+Defined in: [src/redteam/types.ts:192](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L192)
 
 Single trap URL used by network-safety fixtures.
 
@@ -535,7 +535,7 @@ Single trap URL used by network-safety fixtures.
 
 > `optional` **networkTrapUrls?**: `string`[]
 
-Defined in: redteam/types.ts:194
+Defined in: [src/redteam/types.ts:194](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L194)
 
 Multiple trap URLs used by network-safety fixtures.
 
@@ -549,7 +549,7 @@ Multiple trap URLs used by network-safety fixtures.
 
 > `optional` **networkWorkspacePath?**: `string`
 
-Defined in: redteam/types.ts:220
+Defined in: [src/redteam/types.ts:220](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L220)
 
 Single workspace path used by network-safety fixtures.
 
@@ -563,7 +563,7 @@ Single workspace path used by network-safety fixtures.
 
 > `optional` **networkWorkspacePaths?**: `string`[]
 
-Defined in: redteam/types.ts:222
+Defined in: [src/redteam/types.ts:222](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L222)
 
 Multiple workspace paths used by network-safety fixtures.
 
@@ -577,7 +577,7 @@ Multiple workspace paths used by network-safety fixtures.
 
 > `optional` **outsideWriteAllowedPath?**: `string`
 
-Defined in: redteam/types.ts:140
+Defined in: [src/redteam/types.ts:140](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L140)
 
 Single outside path that is explicitly allowed to be written.
 
@@ -591,7 +591,7 @@ Single outside path that is explicitly allowed to be written.
 
 > `optional` **outsideWriteAllowedPaths?**: `string`[]
 
-Defined in: redteam/types.ts:142
+Defined in: [src/redteam/types.ts:142](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L142)
 
 Multiple outside paths that are explicitly allowed to be written.
 
@@ -605,7 +605,7 @@ Multiple outside paths that are explicitly allowed to be written.
 
 > `optional` **outsideWriteExpectedSha256?**: `string`
 
-Defined in: redteam/types.ts:144
+Defined in: [src/redteam/types.ts:144](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L144)
 
 Expected SHA-256 hash for an outside-write fixture artifact.
 
@@ -619,7 +619,7 @@ Expected SHA-256 hash for an outside-write fixture artifact.
 
 > `optional` **outsideWriteHostPath?**: `string`
 
-Defined in: redteam/types.ts:132
+Defined in: [src/redteam/types.ts:132](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L132)
 
 Single host path outside the workspace used by write-safety fixtures.
 
@@ -633,7 +633,7 @@ Single host path outside the workspace used by write-safety fixtures.
 
 > `optional` **outsideWriteHostPaths?**: `string`[]
 
-Defined in: redteam/types.ts:134
+Defined in: [src/redteam/types.ts:134](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L134)
 
 Multiple host paths outside the workspace used by write-safety fixtures.
 
@@ -647,7 +647,7 @@ Multiple host paths outside the workspace used by write-safety fixtures.
 
 > `optional` **outsideWriteMustNotExistPath?**: `string`
 
-Defined in: redteam/types.ts:150
+Defined in: [src/redteam/types.ts:150](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L150)
 
 Single outside path that must remain absent after the run.
 
@@ -661,7 +661,7 @@ Single outside path that must remain absent after the run.
 
 > `optional` **outsideWriteMustNotExistPaths?**: `string`[]
 
-Defined in: redteam/types.ts:152
+Defined in: [src/redteam/types.ts:152](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L152)
 
 Multiple outside paths that must remain absent after the run.
 
@@ -675,7 +675,7 @@ Multiple outside paths that must remain absent after the run.
 
 > `optional` **outsideWritePath?**: `string`
 
-Defined in: redteam/types.ts:128
+Defined in: [src/redteam/types.ts:128](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L128)
 
 Single path outside the workspace that must not be written.
 
@@ -689,7 +689,7 @@ Single path outside the workspace that must not be written.
 
 > `optional` **outsideWritePaths?**: `string`[]
 
-Defined in: redteam/types.ts:130
+Defined in: [src/redteam/types.ts:130](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L130)
 
 Multiple paths outside the workspace that must not be written.
 
@@ -703,7 +703,7 @@ Multiple paths outside the workspace that must not be written.
 
 > `optional` **outsideWritePathSha256?**: `string`
 
-Defined in: redteam/types.ts:146
+Defined in: [src/redteam/types.ts:146](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L146)
 
 SHA-256 hash of the outside path contents before the run.
 
@@ -717,7 +717,7 @@ SHA-256 hash of the outside path contents before the run.
 
 > `optional` **outsideWriteProbeDir?**: `string`
 
-Defined in: redteam/types.ts:136
+Defined in: [src/redteam/types.ts:136](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L136)
 
 Single probe directory outside the workspace used by write-safety fixtures.
 
@@ -731,7 +731,7 @@ Single probe directory outside the workspace used by write-safety fixtures.
 
 > `optional` **outsideWriteProbeDirs?**: `string`[]
 
-Defined in: redteam/types.ts:138
+Defined in: [src/redteam/types.ts:138](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L138)
 
 Multiple probe directories outside the workspace used by write-safety fixtures.
 
@@ -745,7 +745,7 @@ Multiple probe directories outside the workspace used by write-safety fixtures.
 
 > `optional` **outsideWriteSha256?**: `string`
 
-Defined in: redteam/types.ts:148
+Defined in: [src/redteam/types.ts:148](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L148)
 
 SHA-256 hash used by outside-write fixture checks.
 
@@ -759,7 +759,7 @@ SHA-256 hash used by outside-write fixture checks.
 
 > `optional` **policy?**: `string` \| \{ `id`: `string`; `name?`: `string`; `text?`: `string`; \}
 
-Defined in: redteam/types.ts:105
+Defined in: [src/redteam/types.ts:105](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L105)
 
 Policy text or policy id used by policy-aware plugins.
 
@@ -773,7 +773,7 @@ Policy text or policy id used by policy-aware plugins.
 
 > `optional` **prompt?**: `string`
 
-Defined in: redteam/types.ts:77
+Defined in: [src/redteam/types.ts:77](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L77)
 
 Prompt override used by plugins that accept custom generation prompts.
 
@@ -787,7 +787,7 @@ Prompt override used by plugins that accept custom generation prompts.
 
 > `optional` **protectedFilePath?**: `string`
 
-Defined in: redteam/types.ts:112
+Defined in: [src/redteam/types.ts:112](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L112)
 
 Single protected file path used by coding-agent fixtures.
 
@@ -801,7 +801,7 @@ Single protected file path used by coding-agent fixtures.
 
 > `optional` **protectedFilePaths?**: `string`[]
 
-Defined in: redteam/types.ts:114
+Defined in: [src/redteam/types.ts:114](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L114)
 
 Multiple protected file paths used by coding-agent fixtures.
 
@@ -815,7 +815,7 @@ Multiple protected file paths used by coding-agent fixtures.
 
 > `optional` **protectedWritePath?**: `string`
 
-Defined in: redteam/types.ts:158
+Defined in: [src/redteam/types.ts:158](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L158)
 
 Single protected write target used by fixture checks.
 
@@ -829,7 +829,7 @@ Single protected write target used by fixture checks.
 
 > `optional` **protectedWritePaths?**: `string`[]
 
-Defined in: redteam/types.ts:160
+Defined in: [src/redteam/types.ts:160](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L160)
 
 Multiple protected write targets used by fixture checks.
 
@@ -843,7 +843,7 @@ Multiple protected write targets used by fixture checks.
 
 > `optional` **purpose?**: `string`
 
-Defined in: redteam/types.ts:79
+Defined in: [src/redteam/types.ts:79](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L79)
 
 System purpose override supplied to plugin generation.
 
@@ -857,7 +857,7 @@ System purpose override supplied to plugin generation.
 
 > `optional` **sandboxWritePath?**: `string`
 
-Defined in: redteam/types.ts:162
+Defined in: [src/redteam/types.ts:162](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L162)
 
 Single sandbox path used by fixture checks.
 
@@ -871,7 +871,7 @@ Single sandbox path used by fixture checks.
 
 > `optional` **sandboxWritePaths?**: `string`[]
 
-Defined in: redteam/types.ts:164
+Defined in: [src/redteam/types.ts:164](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L164)
 
 Multiple sandbox paths used by fixture checks.
 
@@ -885,7 +885,7 @@ Multiple sandbox paths used by fixture checks.
 
 > `optional` **secretFilePath?**: `string`
 
-Defined in: redteam/types.ts:116
+Defined in: [src/redteam/types.ts:116](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L116)
 
 Single secret file path used by coding-agent fixtures.
 
@@ -899,7 +899,7 @@ Single secret file path used by coding-agent fixtures.
 
 > `optional` **secretFilePaths?**: `string`[]
 
-Defined in: redteam/types.ts:118
+Defined in: [src/redteam/types.ts:118](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L118)
 
 Multiple secret file paths used by coding-agent fixtures.
 
@@ -913,7 +913,7 @@ Multiple secret file paths used by coding-agent fixtures.
 
 > `optional` **secretFileValue?**: `string`
 
-Defined in: redteam/types.ts:124
+Defined in: [src/redteam/types.ts:124](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L124)
 
 Single expected secret file value used by coding-agent fixtures.
 
@@ -927,7 +927,7 @@ Single expected secret file value used by coding-agent fixtures.
 
 > `optional` **secretFileValues?**: `string`[]
 
-Defined in: redteam/types.ts:126
+Defined in: [src/redteam/types.ts:126](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L126)
 
 Multiple expected secret file values used by coding-agent fixtures.
 
@@ -941,7 +941,7 @@ Multiple expected secret file values used by coding-agent fixtures.
 
 > `optional` **secretLocalFilePath?**: `string`
 
-Defined in: redteam/types.ts:120
+Defined in: [src/redteam/types.ts:120](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L120)
 
 Single local secret file path used by coding-agent fixtures.
 
@@ -955,7 +955,7 @@ Single local secret file path used by coding-agent fixtures.
 
 > `optional` **secretLocalFilePaths?**: `string`[]
 
-Defined in: redteam/types.ts:122
+Defined in: [src/redteam/types.ts:122](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L122)
 
 Multiple local secret file paths used by coding-agent fixtures.
 
@@ -969,7 +969,7 @@ Multiple local secret file paths used by coding-agent fixtures.
 
 > `optional` **severity?**: `"critical"` \| `"high"` \| `"medium"` \| `"low"` \| `"informational"`
 
-Defined in: redteam/types.ts:73
+Defined in: [src/redteam/types.ts:73](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L73)
 
 Severity override for the generated finding.
 
@@ -983,7 +983,7 @@ Severity override for the generated finding.
 
 > `optional` **ssrfFailThreshold?**: `"critical"` \| `"high"` \| `"medium"` \| `"low"`
 
-Defined in: redteam/types.ts:92
+Defined in: [src/redteam/types.ts:92](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L92)
 
 Severity threshold that marks an SSRF probe as failed.
 
@@ -997,7 +997,7 @@ Severity threshold that marks an SSRF probe as failed.
 
 > `optional` **systemPrompt?**: `string`
 
-Defined in: redteam/types.ts:107
+Defined in: [src/redteam/types.ts:107](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L107)
 
 System prompt supplied to plugins that need the target instructions explicitly.
 
@@ -1011,7 +1011,7 @@ System prompt supplied to plugins that need the target instructions explicitly.
 
 > `optional` **targetIdentifiers?**: `string`[]
 
-Defined in: redteam/types.ts:84
+Defined in: [src/redteam/types.ts:84](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L84)
 
 Target identifiers used by BOLA-style authorization plugins.
 
@@ -1025,7 +1025,7 @@ Target identifiers used by BOLA-style authorization plugins.
 
 > `optional` **targetSystems?**: `string`[]
 
-Defined in: redteam/types.ts:86
+Defined in: [src/redteam/types.ts:86](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L86)
 
 Target systems used by BFLA-style authorization plugins.
 
@@ -1039,7 +1039,7 @@ Target systems used by BFLA-style authorization plugins.
 
 > `optional` **targetUrls?**: `string`[]
 
-Defined in: redteam/types.ts:90
+Defined in: [src/redteam/types.ts:90](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L90)
 
 URLs used by SSRF-oriented plugins as candidate targets.
 
@@ -1053,7 +1053,7 @@ URLs used by SSRF-oriented plugins as candidate targets.
 
 > `optional` **verifierArtifactRoot?**: `string`
 
-Defined in: redteam/types.ts:166
+Defined in: [src/redteam/types.ts:166](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L166)
 
 Single artifact root used by verifier fixtures.
 
@@ -1067,7 +1067,7 @@ Single artifact root used by verifier fixtures.
 
 > `optional` **verifierArtifactRoots?**: `string`[]
 
-Defined in: redteam/types.ts:168
+Defined in: [src/redteam/types.ts:168](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L168)
 
 Multiple artifact roots used by verifier fixtures.
 
@@ -1081,7 +1081,7 @@ Multiple artifact roots used by verifier fixtures.
 
 > `optional` **verifierProbeDir?**: `string`
 
-Defined in: redteam/types.ts:170
+Defined in: [src/redteam/types.ts:170](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L170)
 
 Single verifier probe directory used by fixture checks.
 
@@ -1095,7 +1095,7 @@ Single verifier probe directory used by fixture checks.
 
 > `optional` **verifierProbeDirs?**: `string`[]
 
-Defined in: redteam/types.ts:172
+Defined in: [src/redteam/types.ts:172](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L172)
 
 Multiple verifier probe directories used by fixture checks.
 
@@ -1109,7 +1109,7 @@ Multiple verifier probe directories used by fixture checks.
 
 > `optional` **workingDir?**: `string`
 
-Defined in: redteam/types.ts:186
+Defined in: [src/redteam/types.ts:186](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L186)
 
 Short-form working directory alias supplied to coding-agent fixtures.
 
@@ -1123,7 +1123,7 @@ Short-form working directory alias supplied to coding-agent fixtures.
 
 > `optional` **workingDirectory?**: `string`
 
-Defined in: redteam/types.ts:182
+Defined in: [src/redteam/types.ts:182](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L182)
 
 Preferred working directory supplied to coding-agent fixtures.
 
@@ -1137,7 +1137,7 @@ Preferred working directory supplied to coding-agent fixtures.
 
 > `optional` **workingDirectoryPath?**: `string`
 
-Defined in: redteam/types.ts:184
+Defined in: [src/redteam/types.ts:184](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L184)
 
 Explicit working-directory path supplied to coding-agent fixtures.
 
@@ -1151,7 +1151,7 @@ Explicit working-directory path supplied to coding-agent fixtures.
 
 > `optional` **workspacePath?**: `string`
 
-Defined in: redteam/types.ts:174
+Defined in: [src/redteam/types.ts:174](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L174)
 
 Single workspace path supplied to coding-agent fixtures.
 
@@ -1165,7 +1165,7 @@ Single workspace path supplied to coding-agent fixtures.
 
 > `optional` **workspacePaths?**: `string`[]
 
-Defined in: redteam/types.ts:176
+Defined in: [src/redteam/types.ts:176](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L176)
 
 Multiple workspace paths supplied to coding-agent fixtures.
 
@@ -1179,7 +1179,7 @@ Multiple workspace paths supplied to coding-agent fixtures.
 
 > `optional` **workspaceRoot?**: `string`
 
-Defined in: redteam/types.ts:178
+Defined in: [src/redteam/types.ts:178](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L178)
 
 Single workspace root supplied to coding-agent fixtures.
 
@@ -1193,7 +1193,7 @@ Single workspace root supplied to coding-agent fixtures.
 
 > `optional` **workspaceRoots?**: `string`[]
 
-Defined in: redteam/types.ts:180
+Defined in: [src/redteam/types.ts:180](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L180)
 
 Multiple workspace roots supplied to coding-agent fixtures.
 

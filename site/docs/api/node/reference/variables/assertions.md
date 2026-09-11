@@ -12,7 +12,7 @@ import { assertions } from 'promptfoo';
 
 > **assertions**: `object`
 
-Defined in: assertions/index.ts:943
+Defined in: [src/assertions/index.ts:943](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L943)
 
 Assertion helpers exposed through the Node.js package.
 

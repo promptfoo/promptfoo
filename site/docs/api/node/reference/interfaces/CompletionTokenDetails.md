@@ -10,7 +10,7 @@ sidebar_position: 14
 import type { CompletionTokenDetails } from 'promptfoo';
 ```
 
-Defined in: contracts/shared.ts:43
+Defined in: [src/contracts/shared.ts:43](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L43)
 
 Detailed completion-token breakdown reported by reasoning-capable models.
 
@@ -29,7 +29,7 @@ const details: CompletionTokenDetails = {
 
 > `optional` **acceptedPrediction?**: `number`
 
-Defined in: contracts/shared.ts:20
+Defined in: [src/contracts/shared.ts:20](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L20)
 
 Prediction tokens accepted by speculative decoding, when reported.
 
@@ -39,7 +39,7 @@ Prediction tokens accepted by speculative decoding, when reported.
 
 > `optional` **cacheCreationInputTokens?**: `number`
 
-Defined in: contracts/shared.ts:26
+Defined in: [src/contracts/shared.ts:26](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L26)
 
 Input tokens written into a provider cache.
 
@@ -49,7 +49,7 @@ Input tokens written into a provider cache.
 
 > `optional` **cacheReadInputTokens?**: `number`
 
-Defined in: contracts/shared.ts:24
+Defined in: [src/contracts/shared.ts:24](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L24)
 
 Input tokens read from a provider cache.
 
@@ -59,7 +59,7 @@ Input tokens read from a provider cache.
 
 > `optional` **reasoning?**: `number`
 
-Defined in: contracts/shared.ts:18
+Defined in: [src/contracts/shared.ts:18](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L18)
 
 Tokens spent on hidden model reasoning when the provider reports them.
 
@@ -69,6 +69,6 @@ Tokens spent on hidden model reasoning when the provider reports them.
 
 > `optional` **rejectedPrediction?**: `number`
 
-Defined in: contracts/shared.ts:22
+Defined in: [src/contracts/shared.ts:22](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L22)
 
 Prediction tokens rejected by speculative decoding, when reported.

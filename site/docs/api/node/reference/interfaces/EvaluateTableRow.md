@@ -10,7 +10,7 @@ sidebar_position: 20
 import type { EvaluateTableRow } from 'promptfoo';
 ```
 
-Defined in: types/index.ts:623
+Defined in: [src/types/index.ts:623](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L623)
 
 One row in an eval table.
 
@@ -46,7 +46,7 @@ const row: EvaluateTableRow = {
 
 > `optional` **description?**: `string`
 
-Defined in: types/index.ts:625
+Defined in: [src/types/index.ts:625](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L625)
 
 Optional human-readable description for the row's test case.
 
@@ -56,7 +56,7 @@ Optional human-readable description for the row's test case.
 
 > **outputs**: [`EvaluateTableOutput`](EvaluateTableOutput.md)[]
 
-Defined in: types/index.ts:627
+Defined in: [src/types/index.ts:627](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L627)
 
 Provider outputs rendered across this row.
 
@@ -66,7 +66,7 @@ Provider outputs rendered across this row.
 
 > **test**: `object`
 
-Defined in: types/index.ts:631
+Defined in: [src/types/index.ts:631](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L631)
 
 Test case represented by this row.
 
@@ -274,7 +274,7 @@ Flattened variables used for this exact eval row.
 
 > **testIdx**: `number`
 
-Defined in: types/index.ts:633
+Defined in: [src/types/index.ts:633](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L633)
 
 Zero-based index of the test case in the eval.
 
@@ -284,6 +284,6 @@ Zero-based index of the test case in the eval.
 
 > **vars**: `string`[]
 
-Defined in: types/index.ts:629
+Defined in: [src/types/index.ts:629](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L629)
 
 Rendered variable values shown in the table row.

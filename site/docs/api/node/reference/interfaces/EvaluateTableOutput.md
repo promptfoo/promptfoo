@@ -10,7 +10,7 @@ sidebar_position: 19
 import type { EvaluateTableOutput } from 'promptfoo';
 ```
 
-Defined in: types/index.ts:552
+Defined in: [src/types/index.ts:552](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L552)
 
 One provider output cell in an eval table.
 
@@ -39,7 +39,7 @@ const output: EvaluateTableOutput = {
 
 > `optional` **audio?**: [`AudioOutput`](AudioOutput.md)
 
-Defined in: types/index.ts:586
+Defined in: [src/types/index.ts:586](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L586)
 
 Audio attachment associated with this output, when present.
 
@@ -49,7 +49,7 @@ Audio attachment associated with this output, when present.
 
 > **cost**: `number`
 
-Defined in: types/index.ts:554
+Defined in: [src/types/index.ts:554](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L554)
 
 Estimated cost attributed to this provider result.
 
@@ -59,7 +59,7 @@ Estimated cost attributed to this provider result.
 
 > `optional` **error?**: `string` \| `null`
 
-Defined in: types/index.ts:584
+Defined in: [src/types/index.ts:584](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L584)
 
 Error message when this output failed before normal grading.
 
@@ -69,7 +69,7 @@ Error message when this output failed before normal grading.
 
 > **failureReason**: `ResultFailureReason`
 
-Defined in: types/index.ts:556
+Defined in: [src/types/index.ts:556](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L556)
 
 Failure category used when rendering an error or failed assertion.
 
@@ -79,7 +79,7 @@ Failure category used when rendering an error or failed assertion.
 
 > `optional` **gradingResult?**: [`GradingResult`](GradingResult.md) \| `null`
 
-Defined in: types/index.ts:558
+Defined in: [src/types/index.ts:558](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L558)
 
 Assertion result for this provider output, when grading has run.
 
@@ -89,7 +89,7 @@ Assertion result for this provider output, when grading has run.
 
 > **id**: `string`
 
-Defined in: types/index.ts:560
+Defined in: [src/types/index.ts:560](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L560)
 
 Stable result id.
 
@@ -99,7 +99,7 @@ Stable result id.
 
 > `optional` **images?**: [`ImageOutput`](ImageOutput.md)[]
 
-Defined in: types/index.ts:590
+Defined in: [src/types/index.ts:590](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L590)
 
 Image attachments associated with this output, when present.
 
@@ -109,7 +109,7 @@ Image attachments associated with this output, when present.
 
 > **latencyMs**: `number`
 
-Defined in: types/index.ts:562
+Defined in: [src/types/index.ts:562](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L562)
 
 Provider latency in milliseconds.
 
@@ -120,7 +120,7 @@ Provider latency in milliseconds.
 <!-- prettier-ignore -->
 > `optional` **metadata?**: `Record`\<`string`, `any`\>
 
-Defined in: types/index.ts:564
+Defined in: [src/types/index.ts:564](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L564)
 
 Additional result metadata preserved for advanced consumers.
 
@@ -131,7 +131,7 @@ Additional result metadata preserved for advanced consumers.
 <!-- prettier-ignore -->
 > **namedScores**: `Record`\<`string`, `number`\>
 
-Defined in: types/index.ts:566
+Defined in: [src/types/index.ts:566](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L566)
 
 Named metric scores emitted by assertions for this output.
 
@@ -141,7 +141,7 @@ Named metric scores emitted by assertions for this output.
 
 > **pass**: `boolean`
 
-Defined in: types/index.ts:568
+Defined in: [src/types/index.ts:568](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L568)
 
 Whether this output passed all configured assertions.
 
@@ -151,7 +151,7 @@ Whether this output passed all configured assertions.
 
 > **prompt**: `string`
 
-Defined in: types/index.ts:570
+Defined in: [src/types/index.ts:570](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L570)
 
 Rendered prompt associated with this provider output.
 
@@ -161,7 +161,7 @@ Rendered prompt associated with this provider output.
 
 > `optional` **provider?**: `string`
 
-Defined in: types/index.ts:572
+Defined in: [src/types/index.ts:572](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L572)
 
 Provider id or label shown for this output.
 
@@ -171,7 +171,7 @@ Provider id or label shown for this output.
 
 > `optional` **response?**: [`ProviderResponse`](ProviderResponse.md)
 
-Defined in: types/index.ts:574
+Defined in: [src/types/index.ts:574](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L574)
 
 Raw provider response returned before table normalization.
 
@@ -181,7 +181,7 @@ Raw provider response returned before table normalization.
 
 > **score**: `number`
 
-Defined in: types/index.ts:576
+Defined in: [src/types/index.ts:576](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L576)
 
 Aggregate score for this output.
 
@@ -191,7 +191,7 @@ Aggregate score for this output.
 
 > **testCase**: `object`
 
-Defined in: types/index.ts:578
+Defined in: [src/types/index.ts:578](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L578)
 
 Test case associated with this output.
 
@@ -399,7 +399,7 @@ Flattened variables used for this exact eval row.
 
 > **text**: `string`
 
-Defined in: types/index.ts:580
+Defined in: [src/types/index.ts:580](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L580)
 
 Rendered output text shown in table views.
 
@@ -410,7 +410,7 @@ Rendered output text shown in table views.
 <!-- prettier-ignore -->
 > `optional` **tokenUsage?**: `Partial`\<\{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `attacker?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `generation?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `incurredTokenUsage?`: \{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `attacker?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `generation?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}\>
 
-Defined in: types/index.ts:582
+Defined in: [src/types/index.ts:582](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L582)
 
 Token usage attributed to this output.
 
@@ -420,6 +420,6 @@ Token usage attributed to this output.
 
 > `optional` **video?**: [`VideoOutput`](VideoOutput.md)
 
-Defined in: types/index.ts:588
+Defined in: [src/types/index.ts:588](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L588)
 
 Video attachment associated with this output, when present.

@@ -10,7 +10,7 @@ sidebar_position: 38
 import type { RunAssertionOptions } from 'promptfoo';
 ```
 
-Defined in: assertions/index.ts:385
+Defined in: [src/assertions/index.ts:385](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L385)
 
 Options for `runAssertion()`.
 
@@ -30,7 +30,7 @@ const options: RunAssertionOptions = {
 
 > **assertion**: `object`
 
-Defined in: assertions/index.ts:391
+Defined in: [src/assertions/index.ts:391](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L391)
 
 Assertion to run against the response.
 
@@ -101,7 +101,7 @@ Weight of this assertion relative to the rest of the test case. Defaults to `1`.
 
 > `optional` **latencyMs?**: `number`
 
-Defined in: assertions/index.ts:399
+Defined in: [src/assertions/index.ts:399](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L399)
 
 Latency for latency-based assertions, in milliseconds.
 
@@ -111,7 +111,7 @@ Latency for latency-based assertions, in milliseconds.
 
 > `optional` **prompt?**: `string`
 
-Defined in: assertions/index.ts:387
+Defined in: [src/assertions/index.ts:387](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L387)
 
 Rendered prompt for the response being graded, when available.
 
@@ -121,7 +121,7 @@ Rendered prompt for the response being graded, when available.
 
 > `optional` **provider?**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: assertions/index.ts:389
+Defined in: [src/assertions/index.ts:389](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L389)
 
 Provider that produced the response, when model-graded assertions need it.
 
@@ -131,7 +131,7 @@ Provider that produced the response, when model-graded assertions need it.
 
 > **providerResponse**: [`ProviderResponse`](ProviderResponse.md)
 
-Defined in: assertions/index.ts:397
+Defined in: [src/assertions/index.ts:397](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L397)
 
 Response to grade.
 
@@ -141,7 +141,7 @@ Response to grade.
 
 > **test**: `object`
 
-Defined in: assertions/index.ts:393
+Defined in: [src/assertions/index.ts:393](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L393)
 
 Test case context associated with the response.
 
@@ -349,7 +349,7 @@ Flattened variables used for this exact eval row.
 
 > `optional` **traceId?**: `string`
 
-Defined in: assertions/index.ts:401
+Defined in: [src/assertions/index.ts:401](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L401)
 
 Trace identifier for trace-aware assertions, when tracing is enabled.
 
@@ -360,6 +360,6 @@ Trace identifier for trace-aware assertions, when tracing is enabled.
 <!-- prettier-ignore -->
 > `optional` **vars?**: `Record`\<`string`, `VarValue`\>
 
-Defined in: assertions/index.ts:395
+Defined in: [src/assertions/index.ts:395](https://github.com/promptfoo/promptfoo/blob/main/src/assertions/index.ts#L395)
 
 Rendered variables to use instead of `test.vars`, when already resolved.

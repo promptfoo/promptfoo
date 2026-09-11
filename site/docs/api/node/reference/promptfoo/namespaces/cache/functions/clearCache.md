@@ -13,7 +13,7 @@ import { cache } from 'promptfoo';
 <!-- prettier-ignore -->
 > **clearCache**(): `Promise`\<`boolean`\>
 
-Defined in: cache.ts:1046
+Defined in: [src/cache.ts:1046](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L1046)
 
 Clear the shared promptfoo cache.
 

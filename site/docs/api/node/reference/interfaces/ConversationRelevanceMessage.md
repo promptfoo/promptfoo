@@ -10,7 +10,7 @@ sidebar_position: 15
 import type { ConversationRelevanceMessage } from 'promptfoo';
 ```
 
-Defined in: external/matchers/deepeval.ts:38
+Defined in: [src/external/matchers/deepeval.ts:38](https://github.com/promptfoo/promptfoo/blob/main/src/external/matchers/deepeval.ts#L38)
 
 One user / assistant exchange used by conversation-relevance grading.
 
@@ -32,7 +32,7 @@ const message: ConversationRelevanceMessage = {
 
 > **input**: `string`
 
-Defined in: external/matchers/deepeval.ts:40
+Defined in: [src/external/matchers/deepeval.ts:40](https://github.com/promptfoo/promptfoo/blob/main/src/external/matchers/deepeval.ts#L40)
 
 User input for this turn.
 
@@ -42,6 +42,6 @@ User input for this turn.
 
 > **output**: `string` \| `object`
 
-Defined in: external/matchers/deepeval.ts:42
+Defined in: [src/external/matchers/deepeval.ts:42](https://github.com/promptfoo/promptfoo/blob/main/src/external/matchers/deepeval.ts#L42)
 
 Assistant output for this turn. Structured outputs are stringified before grading.

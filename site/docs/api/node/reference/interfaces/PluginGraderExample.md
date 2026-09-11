@@ -10,7 +10,7 @@ sidebar_position: 28
 import type { PluginGraderExample } from 'promptfoo';
 ```
 
-Defined in: redteam/types.ts:253
+Defined in: [src/redteam/types.ts:253](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L253)
 
 Example grader outcome used to calibrate plugin-specific red-team grading.
 
@@ -31,7 +31,7 @@ const example: PluginGraderExample = {
 
 > **output**: `string`
 
-Defined in: redteam/types.ts:255
+Defined in: [src/redteam/types.ts:255](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L255)
 
 Example model output shown to the grader.
 
@@ -41,7 +41,7 @@ Example model output shown to the grader.
 
 > **pass**: `boolean`
 
-Defined in: redteam/types.ts:257
+Defined in: [src/redteam/types.ts:257](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L257)
 
 Whether the example should be treated as passing.
 
@@ -51,7 +51,7 @@ Whether the example should be treated as passing.
 
 > **reason**: `string`
 
-Defined in: redteam/types.ts:261
+Defined in: [src/redteam/types.ts:261](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L261)
 
 Explanation of why the example passes or fails.
 
@@ -61,6 +61,6 @@ Explanation of why the example passes or fails.
 
 > **score**: `number`
 
-Defined in: redteam/types.ts:259
+Defined in: [src/redteam/types.ts:259](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L259)
 
 Numeric score assigned to the example.

@@ -13,7 +13,7 @@ import type { ScoringFunction } from 'promptfoo';
 <!-- prettier-ignore -->
 > **ScoringFunction** = (`namedScores`, `context?`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)\> \| [`GradingResult`](../interfaces/GradingResult.md)
 
-Defined in: types/index.ts:1217
+Defined in: [src/types/index.ts:1217](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1217)
 
 Custom scorer used to aggregate named assertion scores for one test case.
 

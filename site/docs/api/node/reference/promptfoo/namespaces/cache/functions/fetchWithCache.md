@@ -13,7 +13,7 @@ import { cache } from 'promptfoo';
 <!-- prettier-ignore -->
 > **fetchWithCache**\<`T`\>(`url`, `options?`, `timeout?`, `format?`, `bustOrOptions?`, `maxRetries?`): `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`\>\>
 
-Defined in: cache.ts:897
+Defined in: [src/cache.ts:897](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L897)
 
 Fetch a URL through promptfoo's retrying cache wrapper.
 

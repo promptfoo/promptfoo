@@ -13,7 +13,7 @@ import type { EnvOverrides } from 'promptfoo';
 <!-- prettier-ignore -->
 > **EnvOverrides** = `z.infer`\<*typeof* `ProviderEnvOverridesSchema`\> & `Record`\<`string`, `string` \| `undefined`\>
 
-Defined in: contracts/env.ts:173
+Defined in: [src/contracts/env.ts:173](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/env.ts#L173)
 
 Environment-variable overrides accepted by provider-loading APIs.
 

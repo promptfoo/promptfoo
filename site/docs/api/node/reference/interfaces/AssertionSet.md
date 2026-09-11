@@ -10,7 +10,7 @@ sidebar_position: 3
 import type { AssertionSet } from 'promptfoo';
 ```
 
-Defined in: types/index.ts:978
+Defined in: [src/types/index.ts:978](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L978)
 
 Grouped assertions evaluated under one shared threshold.
 
@@ -33,7 +33,7 @@ const assertionSet: AssertionSet = {
 
 > **assert**: `object`[]
 
-Defined in: types/index.ts:948
+Defined in: [src/types/index.ts:948](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L948)
 
 Sub-assertions to run as one grouped assertion set.
 
@@ -105,7 +105,7 @@ Weight of this assertion relative to the rest of the test case. Defaults to `1`.
 <!-- prettier-ignore -->
 > `optional` **config?**: `Record`\<`string`, `any`\>
 
-Defined in: types/index.ts:957
+Defined in: [src/types/index.ts:957](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L957)
 
 Shared custom config passed into every assertion in the set.
 
@@ -115,7 +115,7 @@ Shared custom config passed into every assertion in the set.
 
 > `optional` **metric?**: `string`
 
-Defined in: types/index.ts:952
+Defined in: [src/types/index.ts:952](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L952)
 
 Optional metric name used to expose the grouped score.
 
@@ -125,7 +125,7 @@ Optional metric name used to expose the grouped score.
 
 > `optional` **threshold?**: `number`
 
-Defined in: types/index.ts:954
+Defined in: [src/types/index.ts:954](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L954)
 
 Required score for the set; without one, the set is graded pass/fail.
 
@@ -135,7 +135,7 @@ Required score for the set; without one, the set is graded pass/fail.
 
 > **type**: `"assert-set"`
 
-Defined in: types/index.ts:946
+Defined in: [src/types/index.ts:946](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L946)
 
 ---
 
@@ -143,6 +143,6 @@ Defined in: types/index.ts:946
 
 > `optional` **weight?**: `number`
 
-Defined in: types/index.ts:950
+Defined in: [src/types/index.ts:950](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L950)
 
 Weight of this assertion set relative to other assertions. Defaults to `1`.

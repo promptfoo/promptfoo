@@ -10,7 +10,7 @@ sidebar_position: 17
 import type { EvaluateTable } from 'promptfoo';
 ```
 
-Defined in: types/index.ts:707
+Defined in: [src/types/index.ts:707](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L707)
 
 Table-shaped eval output used by `generateTable()` and the web UI.
 
@@ -58,7 +58,7 @@ const table: EvaluateTable = {
 
 > **body**: [`EvaluateTableRow`](EvaluateTableRow.md)[]
 
-Defined in: types/index.ts:711
+Defined in: [src/types/index.ts:711](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L711)
 
 Ordered table rows, one per evaluated test case.
 
@@ -68,6 +68,6 @@ Ordered table rows, one per evaluated test case.
 
 > **head**: [`EvaluateTableHead`](EvaluateTableHead.md)
 
-Defined in: types/index.ts:709
+Defined in: [src/types/index.ts:709](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L709)
 
 Prompt and variable headers rendered above the table body.

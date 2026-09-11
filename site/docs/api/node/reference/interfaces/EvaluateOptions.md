@@ -10,7 +10,7 @@ sidebar_position: 16
 import type { EvaluateOptions } from 'promptfoo';
 ```
 
-Defined in: types/index.ts:361
+Defined in: [src/types/index.ts:361](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L361)
 
 Runtime-only options accepted by `evaluate()`.
 
@@ -30,7 +30,7 @@ const options: EvaluateOptions = {
 
 > `optional` **abortSignal?**: `AbortSignal`
 
-Defined in: types/index.ts:365
+Defined in: [src/types/index.ts:365](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L365)
 
 Signal used to cancel the eval and pass cancellation through to providers.
 
@@ -40,7 +40,7 @@ Signal used to cancel the eval and pass cancellation through to providers.
 
 > `optional` **cache?**: `boolean`
 
-Defined in: types/index.ts:280
+Defined in: [src/types/index.ts:280](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L280)
 
 Whether to reuse cached provider responses during the eval.
 
@@ -50,7 +50,7 @@ Whether to reuse cached provider responses during the eval.
 
 > `optional` **delay?**: `number`
 
-Defined in: types/index.ts:284
+Defined in: [src/types/index.ts:284](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L284)
 
 Delay in milliseconds between provider calls.
 
@@ -60,7 +60,7 @@ Delay in milliseconds between provider calls.
 
 > `optional` **filterRange?**: `string` = `FilterRangeSchema`
 
-Defined in: types/index.ts:344
+Defined in: [src/types/index.ts:344](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L344)
 
 Zero-based test index range in start:end format (end exclusive).
 Persisted on the eval record so resume runs reproduce the original slice.
@@ -71,7 +71,7 @@ Persisted on the eval record so resume runs reproduce the original slice.
 
 > `optional` **generateSuggestions?**: `boolean`
 
-Defined in: types/index.ts:289
+Defined in: [src/types/index.ts:289](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L289)
 
 Whether promptfoo should generate follow-up prompt improvement suggestions
 after the eval completes.
@@ -82,7 +82,7 @@ after the eval completes.
 
 > `optional` **interactiveProviders?**: `boolean`
 
-Defined in: types/index.ts:299
+Defined in: [src/types/index.ts:299](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L299)
 
 #### Deprecated
 
@@ -102,7 +102,7 @@ mldangelo
 
 > `optional` **isRedteam?**: `boolean`
 
-Defined in: types/index.ts:334
+Defined in: [src/types/index.ts:334](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L334)
 
 Marks the eval as a red team run for downstream behavior and reporting.
 
@@ -112,7 +112,7 @@ Marks the eval as a red team run for downstream behavior and reporting.
 
 > `optional` **maxConcurrency?**: `number`
 
-Defined in: types/index.ts:303
+Defined in: [src/types/index.ts:303](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L303)
 
 Maximum number of provider calls to run concurrently.
 
@@ -122,7 +122,7 @@ Maximum number of provider calls to run concurrently.
 
 > `optional` **maxEvalTimeMs?**: `number`
 
-Defined in: types/index.ts:330
+Defined in: [src/types/index.ts:330](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L330)
 
 Maximum total runtime in milliseconds for the entire evaluation process.
 When reached, all remaining tests are marked as errors and the evaluation ends.
@@ -134,7 +134,7 @@ Default is 0 (no limit).
 
 > `optional` **progressCallback?**: [`EvaluateProgressCallback`](../type-aliases/EvaluateProgressCallback.md)
 
-Defined in: types/index.ts:310
+Defined in: [src/types/index.ts:310](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L310)
 
 Callback invoked as rows finish during evaluation.
 
@@ -147,7 +147,7 @@ the current eval step, and aggregate metrics so far.
 
 > `optional` **repeat?**: `number`
 
-Defined in: types/index.ts:314
+Defined in: [src/types/index.ts:314](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L314)
 
 Number of times to repeat each test case.
 
@@ -157,7 +157,7 @@ Number of times to repeat each test case.
 
 > `optional` **showProgressBar?**: `boolean`
 
-Defined in: types/index.ts:318
+Defined in: [src/types/index.ts:318](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L318)
 
 Whether CLI-oriented callers should render a progress bar.
 
@@ -167,7 +167,7 @@ Whether CLI-oriented callers should render a progress bar.
 
 > `optional` **silent?**: `boolean`
 
-Defined in: types/index.ts:339
+Defined in: [src/types/index.ts:339](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L339)
 
 When true, suppresses informational output like "Starting evaluation" messages.
 Useful for internal evaluations like provider validation.
@@ -178,7 +178,7 @@ Useful for internal evaluations like provider validation.
 
 > `optional` **suggestionsCount?**: `number`
 
-Defined in: types/index.ts:293
+Defined in: [src/types/index.ts:293](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L293)
 
 Maximum number of prompt improvement suggestions to generate.
 
@@ -188,7 +188,7 @@ Maximum number of prompt improvement suggestions to generate.
 
 > `optional` **timeoutMs?**: `number`
 
-Defined in: types/index.ts:324
+Defined in: [src/types/index.ts:324](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L324)
 
 Timeout in milliseconds for each individual test case/provider API call.
 When reached, that specific test is marked as an error.
