@@ -940,12 +940,14 @@ export async function doEval(
     // Run the evaluation!!!!!!
     let ret;
     try {
-      ret = await evaluate(testSuite, evalRecord, {
-        ...options,
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        abortSignal: evaluateOptions.abortSignal,
-        isRedteam: Boolean(config.redteam),
-      });
+      ret = await cliState.withEnv(testSuite!.env, () =>
+        evaluate(testSuite!, evalRecord, {
+          ...options,
+          filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+          abortSignal: evaluateOptions.abortSignal,
+          isRedteam: Boolean(config?.redteam),
+        }),
+      );
 
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics

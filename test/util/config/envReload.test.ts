@@ -223,11 +223,12 @@ describe('suite environment loading', () => {
   );
 
   it('uses the scoped environment for regular and file-path templates', async () => {
+    const cachedEngine = getNunjucksEngine();
     const result = await cliState.withEnv({ OPENAI_API_KEY: 'scoped-key' }, async () => {
       await Promise.resolve();
       return [
         getEnvString('OPENAI_API_KEY'),
-        getNunjucksEngine().renderString('{{ env.OPENAI_API_KEY }}', {}),
+        cachedEngine.renderString('{{ env.OPENAI_API_KEY }}', {}),
         getNunjucksEngineForFilePath().renderString('{{ env.OPENAI_API_KEY }}', {}),
       ];
     });
@@ -251,6 +252,15 @@ describe('suite environment loading', () => {
       await expectRequest(provider, 'suite');
     },
   );
+
+  it('retains loader env for function providers', async () => {
+    const [provider] = await loadApiProviders(
+      [async () => ({ output: getEnvString('OPENAI_API_KEY') })],
+      { env: { OPENAI_API_KEY: 'suite-key' } },
+    );
+
+    expect((await provider.callApi('Hello')).output).toBe('suite-key');
+  });
 
   it('keeps concurrent evaluations scoped through runtime rendering and provider calls', async () => {
     const results = await Promise.all(
@@ -321,6 +331,24 @@ describe('suite environment loading', () => {
     });
     const { testSuite } = await resolveConfigs({ config: paths }, {});
     expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['first', 'second']);
+  });
+
+  it('loads nested default test files relative to their own directory', async () => {
+    const firstConfigPath = writeConfig('first-default', {});
+    const configPath = writeConfig('nested-default', {
+      defaultTest: 'file://defaults/test.yaml',
+      tests: [{ vars: { input: 'hello' } }],
+    });
+    const defaultsDir = path.join(path.dirname(configPath), 'defaults');
+    fs.mkdirSync(defaultsDir);
+    fs.writeFileSync(path.join(defaultsDir, 'test.yaml'), 'vars: vars.yaml\n');
+    fs.writeFileSync(path.join(defaultsDir, 'vars.yaml'), 'source: nested\n');
+
+    const { testSuite } = await resolveConfigs({ config: [firstConfigPath, configPath] }, {});
+
+    expect(
+      typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest.vars : undefined,
+    ).toEqual({ source: 'nested' });
   });
 
   it('keeps labeled prompt files from different config directories distinct', async () => {

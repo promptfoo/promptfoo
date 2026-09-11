@@ -451,11 +451,16 @@ export function getNunjucksEngine(
     getEnvBool('PROMPTFOO_SELF_HOSTED', false),
   );
 
-  const envGlobals = {
+  const getEnvGlobals = () => ({
     ...(processEnvVarsDisabled ? {} : process.env),
     ...getEnvOverrides(),
-  };
-  env.addGlobal('env', envGlobals);
+  });
+  env.addGlobal('env', getEnvGlobals());
+  const renderString = env.renderString.bind(env);
+  env.renderString = ((template: string, context?: object, callback?: unknown) => {
+    env.addGlobal('env', getEnvGlobals());
+    return renderString(template, context ?? {}, callback as never);
+  }) as typeof env.renderString;
 
   env.addFilter('load', function (str) {
     return JSON.parse(str);

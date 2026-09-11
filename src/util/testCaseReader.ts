@@ -25,6 +25,8 @@ import { parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
 
 import type {
+  Assertion,
+  AssertionOrSet,
   CsvRow,
   EnvOverrides,
   ProviderOptions,
@@ -443,6 +445,42 @@ export async function readTest(
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
+  }
+
+  const resolveNestedProviderPath = (provider: unknown): unknown => {
+    if (typeof provider === 'string' && provider.startsWith('file://')) {
+      return `file://${path.resolve(effectiveBasePath, provider.slice('file://'.length))}`;
+    }
+    if (
+      provider &&
+      typeof provider === 'object' &&
+      'id' in provider &&
+      typeof provider.id === 'string' &&
+      provider.id.startsWith('file://')
+    ) {
+      return {
+        ...provider,
+        id: `file://${path.resolve(effectiveBasePath, provider.id.slice('file://'.length))}`,
+      };
+    }
+    return provider;
+  };
+  const resolveAssertionProviderPath = (assertion: Assertion): Assertion => {
+    const provider = resolveNestedProviderPath(assertion.provider);
+    return provider === assertion.provider ? assertion : { ...assertion, provider };
+  };
+  const resolveAssertionProviderPaths = (assertion: AssertionOrSet): AssertionOrSet =>
+    assertion.type === 'assert-set'
+      ? { ...assertion, assert: assertion.assert.map(resolveAssertionProviderPath) }
+      : resolveAssertionProviderPath(assertion);
+  if (testCase.options?.provider) {
+    const provider = resolveNestedProviderPath(testCase.options.provider);
+    if (provider !== testCase.options.provider) {
+      testCase.options = { ...testCase.options, provider };
+    }
+  }
+  if (testCase.assert) {
+    testCase.assert = testCase.assert.map(resolveAssertionProviderPaths);
   }
 
   if (testCase.provider && typeof testCase.provider !== 'function') {

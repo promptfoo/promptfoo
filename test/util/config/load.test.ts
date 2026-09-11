@@ -1097,8 +1097,8 @@ describe('combineConfigs', () => {
 
     const result = await combineConfigs(['config.json']);
 
-    // combineConfigs should preserve the string reference, not load it
-    expect(result.defaultTest).toBe('file://path/to/defaultTest.yaml');
+    // combineConfigs should preserve the reference while retaining its source directory.
+    expect(result.defaultTest).toBe('file:///mock/cwd/path/to/defaultTest.yaml');
   });
 
   it('should preserve string defaultTest when combining configs with file:// reference', async () => {
@@ -1122,8 +1122,8 @@ describe('combineConfigs', () => {
 
     const result = await combineConfigs(['config1.json', 'config2.json']);
 
-    // Should preserve the file:// reference from the second config
-    expect(result.defaultTest).toBe('file://external/defaultTest.yaml');
+    // Should preserve the file:// reference from the second config with its source directory.
+    expect(result.defaultTest).toBe('file:///mock/cwd/external/defaultTest.yaml');
   });
 
   it('should merge inline defaultTest objects when combining configs', async () => {
@@ -2591,7 +2591,9 @@ describe('resolveConfigs with external defaultTest', () => {
 
     const result = await resolveConfigs({ config: ['config.json'] }, {});
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://shared/defaultTest.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      `file://${path.resolve('shared/defaultTest.yaml')}`,
+    );
     expect(result.testSuite.defaultTest).toEqual(
       expect.objectContaining({
         assert: externalDefaultTest.assert,

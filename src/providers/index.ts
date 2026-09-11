@@ -46,10 +46,11 @@ const FORWARDED_PROVIDER_METADATA_KEYS = [
 function createProviderFromFunction(
   provider: ProviderFunctionWithMetadata,
   id: string,
+  env?: EnvOverrides,
 ): ApiProvider {
   const apiProvider: ApiProvider = {
     id: () => provider.label ?? id,
-    callApi: provider,
+    callApi: env ? (...args) => cliState.withEnv(env, () => provider(...args)) : provider,
   };
   // Only forward defined metadata so we don't overwrite downstream defaults
   // (e.g. a `config ?? {}` merge) with an explicit `undefined` key.
@@ -407,7 +408,11 @@ export async function loadApiProviders(
       // label-derived id here too, matching the array-element branch below.
       const descriptor = normalizeProviderRef(providerPaths);
       return [
-        createProviderFromFunction(providerPaths as ProviderFunctionWithMetadata, descriptor.id),
+        createProviderFromFunction(
+          providerPaths as ProviderFunctionWithMetadata,
+          descriptor.id,
+          env,
+        ),
       ];
     } else if (isApiProvider(providerPaths)) {
       return [providerPaths];
@@ -429,7 +434,11 @@ export async function loadApiProviders(
               // symmetric with the single-function branch above and with the
               // `getProviderIds` array branch below.
               return [
-                createProviderFromFunction(provider as ProviderFunctionWithMetadata, descriptor.id),
+                createProviderFromFunction(
+                  provider as ProviderFunctionWithMetadata,
+                  descriptor.id,
+                  env,
+                ),
               ];
             case 'options':
             case 'map':
