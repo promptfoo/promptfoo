@@ -140,14 +140,18 @@ describe.runIf(process.platform !== 'win32')('Computer Use runner recovery', () 
     }
   });
 
-  it('rejects configs that redirect runner-owned Promptfoo state', async () => {
+  it.each([
+    ['config', ['eval', '-c', 'escape.yaml']],
+    ['equals-form env file', ['eval', '--env-file=escape.yaml']],
+    ['equals-form env path', ['eval', '--env-path=escape.yaml']],
+  ])('rejects %s that redirects runner-owned Promptfoo state', async (_name, args) => {
     const fixture = createFixture();
     fs.writeFileSync(
       path.join(fixture.example, 'escape.yaml'),
       'env:\n  PROMPTFOO_CONFIG_DIR: /tmp/outside\n',
     );
 
-    const result = await fixture.run({}, ['eval', '-c', 'escape.yaml']);
+    const result = await fixture.run({}, args);
 
     expect(result.code).not.toBe(0);
     expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');

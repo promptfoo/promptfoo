@@ -19,15 +19,28 @@ require_command() {
 }
 
 reject_state_overrides() {
-  local config
-  for config in "$@"; do
-    [[ "$config" == --config=* ]] && config="${config#*=}"
-    [[ "$config" = /* ]] || config="$EXAMPLE_DIR/$config"
-    if [[ -f "$config" ]] &&
-      grep -Eq 'PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH)' "$config"; then
-      echo "Refusing config that overrides runner-owned Promptfoo state: $config" >&2
-      exit 1
-    fi
+  local arg config index
+  local -a configs
+  for ((index = 1; index <= $#; index++)); do
+    arg="${!index}"
+    case "$arg" in
+      --config=* | --env-file=* | --env-path=*) config="${arg#*=}" ;;
+      -c | --config | --env-file | --env-path)
+        ((index++))
+        config="${!index:-}"
+        ;;
+      *) continue ;;
+    esac
+    [[ "$config" == -* ]] && continue
+    IFS=, read -ra configs <<<"$config"
+    for config in "${configs[@]}"; do
+      [[ "$config" = /* ]] || config="$EXAMPLE_DIR/$config"
+      if [[ -f "$config" ]] &&
+        grep -Eq 'PROMPTFOO_(CONFIG_DIR|LOG_DIR|CACHE_PATH|MEDIA_PATH)' "$config"; then
+        echo "Refusing config that overrides runner-owned Promptfoo state: $config" >&2
+        exit 1
+      fi
+    done
   done
 }
 
