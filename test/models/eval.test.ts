@@ -3813,6 +3813,18 @@ describe('evaluator', () => {
       expect(Object.getPrototypeOf(projectedVars)).toBe(Object.prototype);
     });
 
+    it('falls back from malformed persisted inject variables', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+      eval1.config = { redteam: { injectVar: {} } } as any;
+      await eval1.addResult(
+        createEvaluateResult({ testCase: { vars: { prompt: 'safe prompt' } } }),
+      );
+
+      const projected = await eval1.toResultsFile({ resultProjection: 'redteamReport' });
+
+      expect(projected.results.results[0].vars).toEqual({ prompt: 'safe prompt' });
+    });
+
     it('drops response metadata entirely when no report-relevant fields remain', async () => {
       const eval1 = await EvalFactory.create({ numResults: 0 });
       await eval1.addResult(

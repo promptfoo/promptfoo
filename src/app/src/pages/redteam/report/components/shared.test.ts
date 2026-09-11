@@ -14,6 +14,16 @@ describe('getReportPrompt', () => {
 
     expect(getReportPrompt(result, 'prompt')).toBe('');
   });
+
+  it('falls back from an empty array variable', () => {
+    const result = {
+      response: {},
+      vars: { prompt: [] },
+      prompt: { raw: 'raw fallback prompt' },
+    } as unknown as Parameters<typeof getReportPrompt>[0];
+
+    expect(getReportPrompt(result, 'prompt')).toBe('raw fallback prompt');
+  });
 });
 
 describe('getPluginIdFromResult', () => {

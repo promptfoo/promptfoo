@@ -27,6 +27,9 @@ function stringifyReportValue(value: unknown): string | undefined {
   if (value === undefined || value === null || value === '') {
     return undefined;
   }
+  if (Array.isArray(value) && value.length === 0) {
+    return undefined;
+  }
   if (typeof value === 'string') {
     return value;
   }

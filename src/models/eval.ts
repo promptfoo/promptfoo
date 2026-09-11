@@ -2653,7 +2653,8 @@ export default class Eval {
     resultProjection = 'full',
   }: ResultsFileOptions = {}): Promise<ResultsFile> {
     const traces = includeTraces ? projectTracesForOutput(await this.getTraces()) : [];
-    const injectVar = this.config.redteam?.injectVar ?? 'prompt';
+    const injectVar =
+      typeof this.config.redteam?.injectVar === 'string' ? this.config.redteam.injectVar : 'prompt';
     const outputStripFlags = getOutputStripFlags();
     const stripFlags = resultProjection === 'redteamReport' ? outputStripFlags : undefined;
     const results = stripFlags
