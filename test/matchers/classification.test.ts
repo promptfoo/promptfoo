@@ -164,4 +164,24 @@ describe('matchesClassification', () => {
 
     mockCallApi.mockRestore();
   });
+
+  it('tags the result with metadata.graderError when the API returns an error', async () => {
+    // This is a matcher-level test that exercises the real graderFail() path in
+    // classification.ts — unlike the handler tests which mock matchesClassification()
+    // directly, this test verifies that the two halves of the fix cannot silently
+    // drift apart: if graderFail() is removed from the error branch, this test fails.
+    const grading: GradingConfig = {
+      provider: Object.assign(createMockProvider({ id: 'error-classification-provider' }), {
+        callClassificationApi: vi.fn().mockResolvedValue({ error: 'Simulated API timeout' }),
+      }),
+    };
+
+    const result = await matchesClassification('harmful', 'some output', 0.5, grading);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('Simulated API timeout');
+    // The key assertion: the error must be tagged so isGraderFailure() detects it.
+    expect(result.metadata?.graderError).toBe(true);
+  });
 });
