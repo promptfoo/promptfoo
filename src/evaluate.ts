@@ -3,6 +3,7 @@ import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
 import { getAuthor } from './globalConfig/accounts';
 import logger from './logger';
+import { withGradingProviderTracker } from './matchers/providers';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { sanitizeProvider } from './models/evalResult';
@@ -242,10 +243,36 @@ async function resolveNestedProviders(
   providerMap: Record<string, ApiProvider>,
   ownedProviders: Set<ApiProvider>,
 ): Promise<void> {
-  const track = async (provider: Promise<ApiProvider>) => {
+  const callerOwnedProviders = new Set<ApiProvider>();
+  const collectCallerOwned = (provider: GradingConfig['provider']) => {
+    if (isApiProvider(provider)) {
+      callerOwnedProviders.add(provider);
+    } else if (isProviderTypeMap(provider)) {
+      Object.values(provider).forEach(collectCallerOwned);
+    }
+  };
+  if (typeof constructedTestSuite.defaultTest === 'object') {
+    collectCallerOwned(constructedTestSuite.defaultTest?.options?.provider);
+  }
+  for (const test of constructedTestSuite.tests || []) {
+    collectCallerOwned(test.options?.provider);
+    for (const assertion of test.assert || []) {
+      if (assertion.type !== 'assert-set') {
+        collectCallerOwned(assertion.provider);
+      }
+    }
+  }
+  const track = async (provider: Promise<GradingConfig['provider']>) => {
     const resolved = await provider;
-    if (!Object.values(providerMap).includes(resolved)) {
-      ownedProviders.add(resolved);
+    const providers = isProviderTypeMap(resolved) ? Object.values(resolved) : [resolved];
+    for (const provider of providers) {
+      if (
+        isApiProvider(provider) &&
+        !callerOwnedProviders.has(provider) &&
+        !Object.values(providerMap).includes(provider)
+      ) {
+        ownedProviders.add(provider);
+      }
     }
     return resolved;
   };
@@ -351,6 +378,7 @@ export async function evaluateWithSource(
     loadedProviders.filter((provider) => !callerOwnedProviders.has(provider)),
   );
 
+  let evaluationError: unknown;
   try {
     const providerMap = buildConfiguredProviderMap(loadedProviders);
     const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
@@ -375,16 +403,24 @@ export async function evaluateWithSource(
       : new Eval(unifiedConfig, { author });
 
     const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
-      doEvaluate(
-        {
-          ...constructedTestSuite,
-          providerPromptMap: parsedProviderPromptMap,
+      withGradingProviderTracker(
+        (provider) => {
+          if (!Object.values(providerMap).includes(provider)) {
+            ownedProviders.add(provider);
+          }
         },
-        evalRecord,
-        {
-          isRedteam: Boolean(testSuiteConfig.redteam),
-          ...options,
-        },
+        () =>
+          doEvaluate(
+            {
+              ...constructedTestSuite,
+              providerPromptMap: parsedProviderPromptMap,
+            },
+            evalRecord,
+            {
+              isRedteam: Boolean(testSuiteConfig.redteam),
+              ...options,
+            },
+          ),
       ),
     );
 
@@ -403,6 +439,9 @@ export async function evaluateWithSource(
     }
 
     return ret;
+  } catch (error) {
+    evaluationError = error;
+    throw error;
   } finally {
     let cleanupError: unknown;
     for (const provider of ownedProviders) {
@@ -412,8 +451,11 @@ export async function evaluateWithSource(
         cleanupError ??= error;
       }
     }
-    if (cleanupError) {
+    if (cleanupError && evaluationError === undefined) {
       throw cleanupError;
+    }
+    if (cleanupError) {
+      logger.warn('Provider cleanup failed after evaluation error', { error: cleanupError });
     }
   }
 }

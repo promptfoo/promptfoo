@@ -358,12 +358,30 @@ async function loadProvidersFromFile(
   const configs = loadProviderConfigsFromFile(filePath, basePath);
   const relativePath = filePath.slice('file://'.length);
 
-  return Promise.all(
+  const results = await Promise.allSettled(
     configs.map((config) => {
       invariant(config.id, `Provider config in ${relativePath} must have an id`);
       return loadApiProvider(config.id, { options: config, basePath, env });
     }),
   );
+  const failure = results.find(
+    (result): result is PromiseRejectedResult => result.status === 'rejected',
+  );
+  if (failure) {
+    await Promise.allSettled(
+      results
+        .filter(
+          (result): result is PromiseFulfilledResult<ApiProvider> => result.status === 'fulfilled',
+        )
+        .map((result) => result.value.cleanup?.()),
+    );
+    throw failure.reason;
+  }
+  return results
+    .filter(
+      (result): result is PromiseFulfilledResult<ApiProvider> => result.status === 'fulfilled',
+    )
+    .map((result) => result.value);
 }
 
 export async function loadApiProviders(
