@@ -267,6 +267,15 @@ describe('predicate signatures', () => {
     ).toEqual([]);
   });
 
+  it.each(['head', 'tail', 'less', 'awk', 'sed'])(
+    'recognizes a chained %s read of a protected file',
+    (command) => {
+      expect(
+        extractShellInjectionSignature(`npm test && ${command} /etc/passwd`).predicates,
+      ).toMatchObject({ usesCommandChaining: true, accessesUnauthorizedResource: true });
+    },
+  );
+
   it('only marks literal shell boundary violations present in a prompt', () => {
     expect(
       extractShellInjectionSignature('Explain why shell commands should be reviewed before use.')

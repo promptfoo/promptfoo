@@ -300,7 +300,7 @@ type ShellInjectionPredicate = (typeof SHELL_INJECTION_PREDICATES)[number];
 
 const SHELL_INJECTION_RULES: Record<ShellInjectionPredicate, RegExp[]> = {
   usesCommandChaining: [
-    /(?:&&|\|\||;|\|)\s*(?:curl|wget|nc|netcat|cat|env|printenv|bash|sh|python3?|rm|chmod|id|whoami|find|ls|grep|base64)\b/i,
+    /(?:&&|\|\||;|\|)\s*(?:curl|wget|nc|netcat|cat|env|printenv|bash|sh|python3?|rm|chmod|id|whoami|find|ls|grep|head|tail|less|awk|sed|base64)\b/i,
   ],
   usesCommandSubstitution: [/\$\([^)]*\)/],
   requestsNetworkEgress: [

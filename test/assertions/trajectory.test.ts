@@ -522,6 +522,52 @@ describe('trajectory utilities', () => {
     expect(steps.map((step) => step.name)).toEqual(['compose_reply', 'search_orders', 'finalize']);
   });
 
+  it('does not label search query arguments as SQL execution', () => {
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'search',
+              name: 'tool.call',
+              startTime: 1,
+              attributes: {
+                'tool.name': 'search_documents',
+                'tool.arguments': { query: 'refund policy' },
+              },
+            },
+          ],
+        },
+        { includeSql: true },
+      ),
+    );
+    expect(summary.steps).toHaveLength(1);
+    expect(summary.steps[0]).not.toHaveProperty('sql');
+  });
+
+  it('redacts tool arguments before deriving command names for the judge', () => {
+    const summary = summarizeTrajectoryForJudge(
+      {
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'command',
+            name: 'tool.call',
+            startTime: 1,
+            attributes: {
+              'tool.name': 'exec_command',
+              'tool.arguments': { command: 'echo private-credential' },
+            },
+          },
+        ],
+      },
+      { includeSql: true, redactAttributes: ['tool.arguments'] },
+    );
+    expect(summary).not.toContain('private-credential');
+    expect(JSON.parse(summary).steps).toHaveLength(1);
+  });
+
   it('compacts repeated steps and truncates long judge summaries', () => {
     const trace = {
       ...mockTraceData,

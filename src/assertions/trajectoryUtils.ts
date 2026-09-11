@@ -508,10 +508,16 @@ function getSqlExecutionDetails(
   step: TrajectoryStep,
   redactAttributes?: string[],
 ): JudgeTrajectoryStep['sql'] {
-  const attributes = sanitizeTraceAttributes(step.attributes, {
-    redactAttributes,
-    truncateValues: false,
-  });
+  const attributes = step.attributes;
+  const databaseQuery = getFirstStringAttribute(attributes, ['db.query.text', 'db.statement']);
+  const toolName = getToolNameFromAttributes(attributes) ?? step.spanName;
+  const isDatabaseOperation =
+    databaseQuery !== undefined ||
+    getFirstStringAttribute(attributes, ['db.system', 'db.system.name']) !== undefined ||
+    /(^|[\s._:/-])(sql|sqlite|postgres(?:ql)?|mysql|database|db)($|[\s._:/-])/i.test(toolName);
+  if (!isDatabaseOperation) {
+    return undefined;
+  }
   const args = extractToolArgs({
     spanId: step.spanId,
     name: step.spanName,
@@ -519,7 +525,7 @@ function getSqlExecutionDetails(
     attributes,
   });
   const query =
-    getFirstStringAttribute(attributes, ['db.query.text', 'db.statement']) ??
+    databaseQuery ??
     (args && typeof args === 'object'
       ? getFirstStringAttribute(args as Record<string, unknown>, ['query', 'sql'])
       : undefined);
@@ -548,7 +554,17 @@ export function summarizeTrajectoryForJudge(
   trace: TraceData,
   options: { includeSql?: boolean; redactAttributes?: string[] } = {},
 ): string {
-  const rawSteps = extractTrajectorySteps(trace).map((step, index) => {
+  const sanitizedTrace = {
+    ...trace,
+    spans: trace.spans.map((span) => ({
+      ...span,
+      attributes: sanitizeTraceAttributes(span.attributes, {
+        redactAttributes: options.redactAttributes,
+        truncateValues: false,
+      }),
+    })),
+  };
+  const rawSteps = extractTrajectorySteps(sanitizedTrace).map((step, index) => {
     const status = getTrajectoryStepStatus(step);
     const sql = options.includeSql
       ? getSqlExecutionDetails(step, options.redactAttributes)
