@@ -108,6 +108,19 @@ describe('Provider Registry', () => {
   );
 
   it.each([
+    'openai:gpt-live-transcribe',
+    'openai:gpt-live-transcribe-2026-09-01',
+    'openai:live:gpt-live-transcribe',
+    'openai:live:gpt-live-transcribe-2026-09-01',
+  ])('rejects the transcription model on the conversational route %s', async (providerPath) => {
+    const factories = await getProviderFactories(providerPath);
+    const factory = factories.find((entry) => entry.test(providerPath));
+    await expect(factory!.create(providerPath, {}, { basePath: '.', options: {} })).rejects.toThrow(
+      'transcription session',
+    );
+  });
+
+  it.each([
     'azure:live:gpt-live-1',
     'azureopenai:live:gpt-live-1',
     'openai:realtime:gpt-live-1',

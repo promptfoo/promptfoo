@@ -1021,6 +1021,47 @@ describe('OpenAiLiveProvider', () => {
     );
   });
 
+  it.each([
+    [
+      { apiHost: 'provider.example' },
+      { apiBaseUrl: 'http://prompt.example/v1' },
+      'ws://prompt.example/v1/live/sessions',
+    ],
+    [
+      { apiBaseUrl: 'http://provider.example/v1' },
+      { apiHost: 'prompt.example' },
+      'wss://prompt.example/v1/live/sessions',
+    ],
+  ])(
+    'lets prompt endpoint alternatives override provider settings',
+    async (config, promptConfig, url) => {
+      const result = provider(config).callApi('Hi', promptContext(promptConfig));
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      closed(socket);
+      expect((await result).error).toBeUndefined();
+      expect(socket.url).toBe(url);
+    },
+  );
+
+  it.each([
+    [{ apiKey: 'provider-key' }, { apiKeyEnvar: 'PROMPT_LIVE_KEY' }],
+    [{ apiKey: undefined, apiKeyEnvar: 'PROVIDER_LIVE_KEY' }, { apiKey: 'prompt-key' }],
+  ])(
+    'lets prompt credential alternatives override provider settings',
+    async (config, promptConfig) => {
+      mockProcessEnv({ PROMPT_LIVE_KEY: 'prompt-key', PROVIDER_LIVE_KEY: 'provider-key' });
+      const result = provider(config).callApi('Hi', promptContext(promptConfig));
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      closed(socket);
+      expect((await result).error).toBeUndefined();
+      expect(socket.options.headers.Authorization).toBe('Bearer prompt-key');
+    },
+  );
+
   it('reports a missing prompt-level apiKeyEnvar instead of using OPENAI_API_KEY', async () => {
     mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
     const result = new OpenAiLiveProvider('gpt-live-1', {
@@ -1237,6 +1278,27 @@ describe('OpenAiLiveProvider', () => {
       expect.objectContaining({ code: 'upstream_error', message }),
     ]);
   });
+
+  it.each(['gateway-user-key', 'k9z'])(
+    'redacts the Basic-auth username %s from API errors',
+    async (username) => {
+      const result = provider({
+        apiKey: undefined,
+        apiBaseUrl: `http://${username}:@localhost:1234/v1`,
+      }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      apiError(socket, { code: 'upstream_error', message: `Unknown user ${username}.` });
+      closed(socket);
+      const response = await result;
+      expect(response.error).toBe('GPT-Live API error (upstream_error): Unknown user [REDACTED].');
+      expect(response.metadata?.apiErrors).toEqual([
+        expect.objectContaining({ message: 'Unknown user [REDACTED].' }),
+      ]);
+      expect(JSON.stringify(response)).not.toContain(username);
+    },
+  );
 
   it('uses prompt-scoped headers, including a case-insensitive authorization override', async () => {
     const result = provider({ headers: { 'X-Route': 'provider' } }).callApi('Hi', {

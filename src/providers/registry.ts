@@ -1073,8 +1073,16 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
-      // GPT-Live snapshots use the Live endpoint, not Chat Completions or Responses.
-      if (modelType === 'live' || modelType.startsWith('gpt-live-')) {
+      if (
+        requestedApiModel === 'gpt-live-transcribe' ||
+        requestedApiModel.startsWith('gpt-live-transcribe-')
+      ) {
+        throw new Error(
+          'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+        );
+      }
+      // Conversational GPT-Live snapshots use the Live endpoint.
+      if (modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType)) {
         const { OpenAiLiveProvider } = await import('./openai/live');
         return new OpenAiLiveProvider(
           modelType === 'live' ? modelName || configuredModel || 'gpt-live-1' : modelType,

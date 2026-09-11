@@ -139,7 +139,15 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     this.activeSessions.add(controller);
     providerRegistry.register(this);
     try {
-      const config: OpenAiLiveOptions = { ...this.config, ...context?.prompt?.config };
+      const promptConfig = context?.prompt?.config;
+      const config: OpenAiLiveOptions = {
+        ...this.config,
+        ...(promptConfig?.apiBaseUrl !== undefined && { apiHost: undefined }),
+        ...(promptConfig?.apiHost !== undefined && { apiBaseUrl: undefined }),
+        ...(promptConfig?.apiKeyEnvar !== undefined && { apiKey: undefined }),
+        ...(promptConfig?.apiKey !== undefined && { apiKeyEnvar: undefined }),
+        ...promptConfig,
+      };
       const format: LiveAudioFormat = config.audio?.format ?? { type: 'audio/pcm', rate: 24_000 };
       if (
         !(format.type === 'audio/pcm' && [16_000, 24_000].includes(format.rate)) &&

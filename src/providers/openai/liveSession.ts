@@ -918,7 +918,7 @@ export class LiveSession {
   }
 }
 
-/** Redaction forms of a credential header: its value, bare token, and decoded Basic password. */
+/** Redact header values, bare tokens, and both parts of decoded Basic credentials. */
 function credentialForms(value: string): string[] {
   // HTTP drops surrounding whitespace, so a gateway echoes the trimmed value.
   const trimmed = value.trim();
@@ -926,9 +926,9 @@ function credentialForms(value: string): string[] {
   if (!/^Basic\s/i.test(trimmed)) {
     return [trimmed, token];
   }
-  // A gateway can echo the decoded user:password pair or the password alone.
   const pair = Buffer.from(token, 'base64').toString('utf8');
-  return [trimmed, token, pair, pair.slice(pair.indexOf(':') + 1)];
+  const separator = pair.indexOf(':');
+  return [trimmed, token, pair, pair.slice(0, separator), pair.slice(separator + 1)];
 }
 
 /** Characters that continue a credential-like token, such as base64 or URL-safe text. */
