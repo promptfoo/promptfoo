@@ -87,6 +87,33 @@ describe('runtimeTransform', () => {
       expect(result.image).toBeUndefined();
     });
 
+    it('omits unchanged inherited vars from per-turn display data', async () => {
+      const result = await applyRuntimeTransforms('hello', 'input', ['base64'], mockStrategies, {
+        vars: {
+          input: 'previous input',
+          label: 'shared label',
+          document: 'data:text/plain;base64,aGVsbG8=',
+        },
+      });
+      expect(result.prompt).toBe('aGVsbG8=');
+      expect(result.displayVars).toBeUndefined();
+    });
+
+    it('keeps new and changed display vars from a transform', async () => {
+      const strategy: Strategy = {
+        id: 'display',
+        action: async (tests) =>
+          tests.map((test) => ({
+            ...test,
+            vars: { ...test.vars, label: 'changed', transcript: 'new transcript' },
+          })),
+      };
+      const result = await applyRuntimeTransforms('hello', 'input', ['display'], [strategy], {
+        vars: { label: 'original', document: 'unchanged' },
+      });
+      expect(result.displayVars).toEqual({ label: 'changed', transcript: 'new transcript' });
+    });
+
     it('should apply single transform layer', async () => {
       const result = await applyRuntimeTransforms('hello', 'input', ['base64'], mockStrategies);
 

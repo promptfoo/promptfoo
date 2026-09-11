@@ -166,6 +166,16 @@ describe('getEstimatedProbes', () => {
 });
 
 describe('isStrategyConfigured', () => {
+  it('requires bijection fan-out to precede an attack provider', () => {
+    const bijection = { id: 'bijection', config: { n: 2 } };
+    expect(
+      isStrategyConfigured('layer', { id: 'layer', config: { steps: ['jailbreak', bijection] } }),
+    ).toBe(false);
+    expect(
+      isStrategyConfigured('layer', { id: 'layer', config: { steps: [bijection, 'jailbreak'] } }),
+    ).toBe(true);
+  });
+
   it('should return true for strategies that do not require configuration', () => {
     expect(isStrategyConfigured('basic', 'basic')).toBe(true);
     expect(isStrategyConfigured('jailbreak', 'jailbreak')).toBe(true);

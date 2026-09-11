@@ -620,6 +620,13 @@ async function applyStrategies(
 }> {
   const newTestCases: TestCaseWithPlugin[] = [];
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
+  const recordStrategyResult = (id: string, result: { requested: number; generated: number }) => {
+    const previous = strategyResults[id];
+    strategyResults[id] = {
+      requested: (previous?.requested ?? 0) + result.requested,
+      generated: (previous?.generated ?? 0) + result.generated,
+    };
+  };
 
   for (const strategy of strategies) {
     logger.debug(`Generating ${strategy.id} tests`);
@@ -819,14 +826,14 @@ async function applyStrategies(
 
       for (const [lang, result] of Object.entries(resultsByLanguage)) {
         const strategyDisplayId = lang === 'en' ? displayId : `${displayId} (${lang})`;
-        strategyResults[strategyDisplayId] = result;
+        recordStrategyResult(strategyDisplayId, result);
       }
     } else if (strategy.id === 'layer') {
       // Layer strategy: requested count is same as applicable test cases
-      strategyResults[displayId] = {
+      recordStrategyResult(displayId, {
         requested: applyNumTestsCap(applicableTestCases.length),
         generated: resultTestCases.length,
-      };
+      });
     } else {
       // get an accurate 'Requested' count for strategies that add additional tests during generation
       let n = 1;
@@ -836,10 +843,10 @@ async function applyStrategies(
         n = getDefaultNFanout(strategy.id);
       }
 
-      strategyResults[displayId] = {
+      recordStrategyResult(displayId, {
         requested: applyNumTestsCap(applicableTestCases.length * n),
         generated: resultTestCases.length,
-      };
+      });
     }
   }
 
@@ -1034,15 +1041,7 @@ export async function synthesize({
   const explicitStrategies = strategies.filter((strategy) => !isStrategyCollection(strategy.id));
   const targetPlugins = (strategy: (typeof strategies)[number]) =>
     Array.isArray(strategy.config?.plugins) ? strategy.config.plugins : [];
-  const overlaps = (left: (typeof strategies)[number], right: (typeof strategies)[number]) => {
-    const leftPlugins = targetPlugins(left);
-    const rightPlugins = targetPlugins(right);
-    return (
-      leftPlugins.length === 0 ||
-      rightPlugins.length === 0 ||
-      leftPlugins.some((plugin) => rightPlugins.includes(plugin))
-    );
-  };
+  const collectionMembers = new Set<RedteamStrategyObject>();
   const expandedStrategies: typeof strategies = [];
   strategies.forEach((strategy) => {
     if (isStrategyCollection(strategy.id)) {
@@ -1053,13 +1052,14 @@ export async function synthesize({
             .filter(
               (strategyId) =>
                 !explicitStrategies.some(
-                  (explicit) => explicit.id === strategyId && overlaps(explicit, strategy),
+                  (explicit) => explicit.id === strategyId && targetPlugins(explicit).length === 0,
                 ),
             )
-            .map((strategyId) => ({
-              ...strategy,
-              id: strategyId,
-            })),
+            .map((strategyId) => {
+              const member = { ...strategy, id: strategyId };
+              collectionMembers.add(member);
+              return member;
+            }),
         );
       } else {
         logger.warn(`Strategy collection ${strategy.id} has no mappings, skipping`);
@@ -1088,10 +1088,10 @@ export async function synthesize({
       }
     }
     const plugins = targetPlugins(s);
-    return plugins.length ? `${s.id}:${plugins.sort().join(',')}` : s.id;
+    return plugins.length ? `${s.id}:${[...plugins].sort().join(',')}` : s.id;
   };
   strategies = expandedStrategies.filter((strategy) => {
-    const key = keyForStrategy(strategy);
+    const key = `${collectionMembers.has(strategy) ? 'collection:' : ''}${keyForStrategy(strategy)}`;
     if (seen.has(key)) {
       logger.debug(`[Synthesize] Skipping duplicate strategy: ${key}`);
       return false;
@@ -1335,6 +1335,28 @@ export async function synthesize({
   // Validate all plugins upfront
   logger.debug('Validating plugins...');
   plugins = [...new Set(expandedPlugins)].filter(validatePlugin).sort();
+
+  // Explicit members override their collection only for matching plugins.
+  strategies = strategies.flatMap((strategy) => {
+    const overrides = explicitStrategies.filter((explicit) => explicit.id === strategy.id);
+    if (!collectionMembers.has(strategy) || overrides.length === 0) {
+      return [strategy];
+    }
+    const remaining = plugins
+      .filter((plugin) => {
+        const testCase = { metadata: { pluginId: plugin.id } };
+        return (
+          pluginMatchesStrategyTargets(testCase, strategy.id, targetPlugins(strategy)) &&
+          !overrides.some((explicit) =>
+            pluginMatchesStrategyTargets(testCase, strategy.id, targetPlugins(explicit)),
+          )
+        );
+      })
+      .map((plugin) => plugin.id);
+    return remaining.length
+      ? [{ ...strategy, config: { ...strategy.config, plugins: remaining } }]
+      : [];
+  });
 
   // Check API health before proceeding
   if (shouldGenerateRemote()) {

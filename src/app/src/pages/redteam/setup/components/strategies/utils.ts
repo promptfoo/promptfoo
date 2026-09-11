@@ -9,6 +9,25 @@ export function getStrategyId(strategy: RedteamStrategy): string {
   return typeof strategy === 'string' ? strategy : strategy.id;
 }
 
+export function getLayerConfigError(steps: RedteamStrategy[]): string | undefined {
+  const attackIndex = steps.findIndex((step) => isAttackProvider(getStrategyId(step)));
+  if (
+    attackIndex >= 0 &&
+    steps
+      .slice(attackIndex + 1)
+      .some(
+        (step) =>
+          typeof step !== 'string' &&
+          step.id === 'bijection' &&
+          typeof step.config?.n === 'number' &&
+          step.config.n > 1,
+      )
+  ) {
+    return 'Bijection fan-out must be 1 after an attack provider';
+  }
+  return undefined;
+}
+
 // Strategies that require configuration before they can be used
 export const STRATEGIES_REQUIRING_CONFIG = ['layer', 'custom'];
 
@@ -24,7 +43,8 @@ function isLayerStrategyConfigValid(strategy: RedteamStrategy): boolean {
   return (
     Array.isArray(steps) &&
     steps.length > 0 &&
-    steps.every((step) => step != null && step !== '' && typeof step !== 'undefined')
+    steps.every((step) => step != null && step !== '' && typeof step !== 'undefined') &&
+    !getLayerConfigError(steps)
   );
 }
 

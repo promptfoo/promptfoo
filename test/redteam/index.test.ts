@@ -888,6 +888,48 @@ describe('synthesize', () => {
       expect(String(zalgoTest?.vars?.query).match(/\p{M}/gu)).toHaveLength(24);
     });
 
+    it.each([undefined, ['harmful', 'pii'], ['harmful:hate', 'pii:direct']])(
+      'preserves uncovered collection targets with scope %j',
+      async (plugins) => {
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: vi.fn().mockResolvedValue([{ vars: { query: 'abc' } }]),
+          key: 'mockPlugin',
+        });
+        const result = await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [
+            { id: 'harmful:hate', numTests: 1 },
+            { id: 'pii:direct', numTests: 1 },
+          ],
+          prompts: ['{{query}}'],
+          provider: mockProvider,
+          purpose: 'Test partially overridden mutation targets',
+          strategies: [
+            { id: 'text-mutations', config: { plugins } },
+            { id: 'zalgo', config: { plugins: ['pii'], intensity: 8, rate: 1 } },
+          ],
+          targetIds: ['test-provider'],
+        });
+        const mutated = result.testCases.filter((test) => test.metadata?.strategyId === 'zalgo');
+        expect(mutated.map((test) => test.metadata?.pluginId).sort()).toEqual([
+          'harmful:hate',
+          'pii:direct',
+        ]);
+        expect(
+          mutated.find((test) => test.metadata?.pluginId === 'pii:direct')?.metadata
+            ?.strategyConfig,
+        ).toMatchObject({ intensity: 8 });
+        const report = vi
+          .mocked(logger.info)
+          .mock.calls.map(([message]) => message)
+          .find(
+            (message) => typeof message === 'string' && message.includes('Test Generation Report'),
+          );
+        expect(stripAnsi(String(report))).toMatch(/zalgo\s*│\s*2\s*│\s*2\s*│/);
+      },
+    );
+
     it('keeps collection members when explicit targets are disjoint', async () => {
       vi.spyOn(Plugins, 'find').mockReturnValue({
         action: vi.fn().mockResolvedValue([{ vars: { query: 'abc' } }]),

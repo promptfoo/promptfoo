@@ -1275,9 +1275,18 @@ describe('StrategyConfigDialog', () => {
         />,
       );
 
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+      expect(
+        screen.getByText('Bijection fan-out must be 1 after an attack provider'),
+      ).toBeInTheDocument();
+      await user.click(screen.getAllByRole('button', { name: 'move step up' })[1]);
+      expect(
+        screen.queryByText('Bijection fan-out must be 1 after an attack provider'),
+      ).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'Save' }));
-
-      expect(mockOnSave).not.toHaveBeenCalled();
+      expect(mockOnSave).toHaveBeenCalledWith('layer', {
+        steps: [{ id: 'bijection', config: { n: 2 } }, 'jailbreak'],
+      });
     });
 
     it('should save layer strategy with specific plugins when selected', async () => {

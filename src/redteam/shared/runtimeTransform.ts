@@ -208,7 +208,7 @@ export async function applyRuntimeTransforms(
   const displayVars: Record<string, string> = {};
   if (testCase.vars) {
     for (const [key, value] of Object.entries(testCase.vars)) {
-      if (key !== injectVar && typeof value === 'string') {
+      if (key !== injectVar && typeof value === 'string' && value !== context?.vars?.[key]) {
         displayVars[key] = value;
       }
     }

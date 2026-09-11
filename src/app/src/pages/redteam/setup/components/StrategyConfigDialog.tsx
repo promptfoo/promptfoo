@@ -34,9 +34,8 @@ import {
   TEXT_MUTATION_STRATEGIES,
   type TextMutationStrategy,
 } from '@promptfoo/redteam/constants/strategies';
-import { isAttackProvider } from '@promptfoo/redteam/shared/attackProviders';
 import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
-import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
+import { getLayerConfigError, STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 import type { StrategyConfig } from '@promptfoo/redteam/types';
 
 import type { StrategyCardData } from './strategies/types';
@@ -106,6 +105,7 @@ export default function StrategyConfigDialog({
   const [error, setError] = React.useState<string>('');
 
   const [steps, setSteps] = React.useState<StepType[]>((config.steps as StepType[]) || []);
+  const layerError = getLayerConfigError(steps);
   const [newStep, setNewStep] = React.useState<string>('');
   const [layerPlugins, setLayerPlugins] = React.useState<string[]>(config.plugins || []);
   // Plugin targeting: 'all' or 'specific'
@@ -442,15 +442,7 @@ export default function StrategyConfigDialog({
           : localConfig;
       onSave(strategy, strategyConfig);
     } else if (strategy === 'layer') {
-      const attackIndex = steps.findIndex((step) => isAttackProvider(getStepId(step)));
-      const hasInvalidBijection = steps.slice(attackIndex + 1).some((step) => {
-        if (getStepId(step) !== 'bijection' || typeof step === 'string') {
-          return false;
-        }
-        return typeof step.config?.n === 'number' && step.config.n > 1;
-      });
-      if (attackIndex >= 0 && hasInvalidBijection) {
-        setError('Bijection fan-out must be 1 after an attack provider');
+      if (layerError) {
         return;
       }
       const layerConfig: Partial<StrategyConfig> = {
@@ -1485,12 +1477,12 @@ export default function StrategyConfigDialog({
       <p
         className={cn(
           'mt-1 text-xs',
-          steps.length === 0 ? 'text-destructive' : 'text-muted-foreground',
+          steps.length === 0 || layerError ? 'text-destructive' : 'text-muted-foreground',
         )}
       >
         {steps.length === 0
           ? 'Add at least one strategy step (required)'
-          : getValidationMessage() || 'Add steps to build your transform chain'}
+          : layerError || getValidationMessage() || 'Add steps to build your transform chain'}
       </p>
 
       {steps.length > 0 && (
@@ -1572,7 +1564,7 @@ export default function StrategyConfigDialog({
             disabled={
               (strategy === 'retry' && (!!error || !numTests)) ||
               !isCustomStrategyValid() ||
-              (strategy === 'layer' && steps.length === 0)
+              (strategy === 'layer' && (steps.length === 0 || !!layerError))
             }
           >
             Save
