@@ -19,7 +19,8 @@ import {
 } from './util/gradingProvider';
 import { hasProviderConfigTemplates } from './util/gradingProviderConfig';
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
-import { isProviderConfigFileReference } from './util/providerRef';
+import { isProviderConfigFileReference, normalizeProviderRef } from './util/providerRef';
+import { renderEnvOnlyInObject } from './util/render';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
@@ -208,24 +209,19 @@ async function resolveGradingProvider(
   context: { env?: EnvOverrides; basePath?: string },
   deferConfigTemplates = false,
 ): Promise<GradingConfig['provider']> {
-  const providerId = typeof provider === 'string' ? provider : provider?.id;
-  if (
-    deferConfigTemplates &&
-    typeof providerId === 'string' &&
-    isProviderConfigFileReference(providerId)
-  ) {
-    // The file's templates cannot be inspected until it is loaded. Keep the
-    // reference lazy too, including suite env for assertion-time construction.
-    return typeof provider === 'string'
-      ? { id: provider, ...(context.env && { env: context.env }) }
-      : context.env
-        ? { ...provider, env: { ...context.env, ...provider.env } }
-        : provider;
-  }
-  if (deferConfigTemplates && hasProviderConfigTemplates(provider)) {
-    // Assertion-time vars include defaults, scenarios, and expanded test rows.
-    // Carry suite env forward because this provider will be constructed later.
-    return context.env ? { ...provider, env: { ...context.env, ...provider.env } } : provider;
+  if (deferConfigTemplates && !isApiProvider(provider) && !isProviderTypeMap(provider)) {
+    const ref = normalizeProviderRef(provider);
+    if ('loadProviderPath' in ref) {
+      const options = 'loadOptions' in ref ? ref.loadOptions : { id: ref.loadProviderPath };
+      const env = context.env || options.env ? { ...context.env, ...options.env } : undefined;
+      const renderedPath = renderEnvOnlyInObject(ref.loadProviderPath, env);
+      if (isProviderConfigFileReference(renderedPath) || hasProviderConfigTemplates(options)) {
+        // Files and inline templates need final case vars. Preserve map loader
+        // paths separately from custom IDs, and carry suite env to construction.
+        const deferredOptions = env ? { ...options, env } : options;
+        return ref.kind === 'map' ? { [ref.loadProviderPath]: deferredOptions } : deferredOptions;
+      }
+    }
   }
   if (!isProviderTypeMap(provider)) {
     return isApiProvider(provider) ? provider : resolveProvider(provider, providerMap, context);

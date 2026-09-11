@@ -28,9 +28,10 @@ export async function matchesAgentRubric(
     );
   }
 
+  const gradingVars = { ...vars, output: tryParse(llmOutput), rubric };
   const configuredProvider = grading.provider
     ? await getGradingProvider('text', grading.provider, null, (config, env) =>
-        renderGradingProviderConfig(config, vars, env, providerCallContext?.filters),
+        renderGradingProviderConfig(config, gradingVars, env, providerCallContext?.filters),
       )
     : null;
   const agentProvider = configuredProvider || getCodexDefaultProviders().llmRubricProvider;
@@ -52,11 +53,7 @@ export async function matchesAgentRubric(
     },
     label: 'agent-rubric',
     providerCallContext,
-    vars: {
-      ...(vars || {}),
-      output: tryParse(llmOutput),
-      rubric,
-    },
+    vars: gradingVars,
   });
 
   return {

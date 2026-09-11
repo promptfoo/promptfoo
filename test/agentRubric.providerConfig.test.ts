@@ -3,6 +3,7 @@ import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchesAgentRubric } from '../src/matchers/agent';
 import { evaluate } from '../src/node/evaluate';
 import { mockProcessEnv } from './util/utils';
 
@@ -104,6 +105,9 @@ function makeSuite(location: string): EvaluateTestSuite {
         },
       ];
       break;
+    case 'options map':
+      test.assert = [{ ...assertion, provider: { [graderId]: { config: provider.config } } }];
+      break;
     case 'assert set':
       test.assert = [{ type: 'assert-set', assert: [assertion] }];
       break;
@@ -120,6 +124,91 @@ function makeSuite(location: string): EvaluateTestSuite {
 }
 
 describe('agent-rubric per-case provider config', () => {
+  it('renders a raw provider options map without eager evaluation resolution', async () => {
+    const result = await matchesAgentRubric(
+      'Inspect',
+      'done',
+      {
+        provider: {
+          [graderId]: {
+            id: 'custom-grader-label',
+            config: { working_dir: './evidence/{{trace_id}}' },
+          },
+        },
+      },
+      { trace_id: 'abc' },
+    );
+    expect(result.pass).toBe(true);
+    expect(configs[0]).toMatchObject({
+      id: 'custom-grader-label',
+      config: { working_dir: './evidence/abc' },
+    });
+  });
+
+  it.each(['string', 'options', 'options map'])(
+    'defers an env-templated grader file in %s form',
+    async (form) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-env-file-'));
+      tempDirs.push(directory);
+      const filename = path.join(directory, 'grader.yaml');
+      fs.writeFileSync(
+        filename,
+        `id: ${graderId}\nconfig:\n  working_dir: './evidence/{{trace_id}}'\n`,
+      );
+      const suite = makeSuite('assertion');
+      suite.env = { GRADER_FILE: form === 'string' ? filename : 'unused.yaml' };
+      const providerId = 'file://{{env.GRADER_FILE}}';
+      const options = { env: { GRADER_FILE: filename } };
+      const tests = suite.tests as Array<{ assert: Array<{ provider: unknown }> }>;
+      tests[0].assert[0].provider =
+        form === 'string'
+          ? providerId
+          : form === 'options'
+            ? { id: providerId, ...options }
+            : { [providerId]: options };
+      const result = await evaluate(suite, { cache: false });
+      expect((await result.toEvaluateSummary()).results.every((row) => row.success)).toBe(true);
+      expect(configs.map(({ config }) => config?.working_dir).sort()).toEqual([
+        './evidence/abc',
+        './evidence/def',
+      ]);
+    },
+  );
+
+  it('uses actual grading output and rubric ahead of same-named test vars in configs', async () => {
+    const result = await evaluate(
+      {
+        providers: ['echo'],
+        prompts: ['{{payload}}'],
+        tests: [
+          {
+            vars: {
+              payload: '{"workspace":"./evidence/actual"}',
+              output: { workspace: './wrong' },
+              rubric: 'wrong rubric',
+            },
+            assert: [
+              {
+                type: 'agent-rubric',
+                value: 'Inspect actual evidence',
+                provider: {
+                  id: graderId,
+                  config: { working_dir: '{{output.workspace}}', custom: '{{rubric}}' },
+                },
+              },
+            ],
+          },
+        ],
+      },
+      { cache: false },
+    );
+    expect((await result.toEvaluateSummary()).results[0].success).toBe(true);
+    expect(configs[0].config).toMatchObject({
+      working_dir: './evidence/actual',
+      custom: 'Inspect actual evidence',
+    });
+  });
+
   it.each(['assertion', 'default options'])(
     'defers a YAML grader in %s until case vars are available',
     async (location) => {
@@ -180,6 +269,7 @@ describe('agent-rubric per-case provider config', () => {
     'test options',
     'default options',
     'type map',
+    'options map',
     'assert set',
     'scenario',
   ])('renders %s config after merging defaults and expanding rows', async (location) => {
