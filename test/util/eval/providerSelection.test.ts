@@ -313,6 +313,60 @@ describe('provider selection', () => {
     );
   });
 
+  it.each([
+    { options: { disableDefaultAsserts: true }, assert: [{ type: 'equals', value: 'ok' }] },
+    { assert: [{ type: 'contains', value: 'ok' }] },
+  ])('omits unreachable default graders from selected tests: %j', (test) => {
+    const result = collectEffectiveTestProviderPermissions({
+      defaultTest: { options: { provider: 'cloud:unused-grader' } },
+      tests: [test],
+    });
+    expect(result).toEqual([]);
+  });
+
+  it('drops default assertions disabled by the selected test', () => {
+    expect(
+      collectEffectiveTestProviderPermissions({
+        defaultTest: { assert: [{ type: 'llm-rubric', provider: 'cloud:unused-grader' }] },
+        tests: [
+          { options: { disableDefaultAsserts: true }, assert: [{ type: 'equals', value: 'ok' }] },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it('retains a default grader used by a nested or embedding assertion', () => {
+    for (const assertion of [
+      { type: 'assert-set', assert: [{ type: 'not-llm-rubric', value: 'bad' }] },
+      { type: 'similar:cosine', value: 'ok' },
+    ]) {
+      expect(
+        collectEffectiveTestProviderPermissions({
+          defaultTest: { options: { provider: 'cloud:used-grader' } },
+          tests: [{ assert: [assertion] }],
+        }),
+      ).toEqual([{ id: 'cloud:used-grader' }]);
+    }
+  });
+
+  it('uses only the assertion override when a default grader is configured', () => {
+    expect(
+      collectEffectiveTestProviderPermissions({
+        defaultTest: { options: { provider: 'unused-default-grader' } },
+        tests: [{ assert: [{ type: 'llm-rubric', provider: 'used-assertion-grader' }] }],
+      }),
+    ).toEqual([{ id: 'used-assertion-grader' }]);
+  });
+
+  it('retains the default target when a grader can use it as a fallback', () => {
+    expect(
+      collectEffectiveTestProviderPermissions({
+        defaultTest: { provider: 'grader-fallback' },
+        tests: [{ provider: 'selected-target', assert: [{ type: 'llm-rubric' }] }],
+      }),
+    ).toEqual([{ id: 'selected-target' }, { id: 'grader-fallback' }]);
+  });
+
   // Fix 1 (thread 3481053696): a filtered run authorized only the top-level matrix,
   // so a per-test `test.provider` (executed by callActiveProvider) escaped the
   // permission boundary.
@@ -338,7 +392,10 @@ describe('provider selection', () => {
         {
           vars: {},
           options: { provider: 'openai:grader-model' },
-          assert: [{ type: 'llm-rubric', provider: 'anthropic:assert-grader' }],
+          assert: [
+            { type: 'llm-rubric', provider: 'anthropic:assert-grader' },
+            { type: 'llm-rubric', value: 'good' },
+          ],
         },
       ],
       defaultTest: { provider: 'openai:default-target' },
@@ -363,9 +420,9 @@ describe('provider selection', () => {
     const effective = collectEffectiveTestProviderPermissions(effectiveSource);
     expect(effective.map((p) => (typeof p === 'string' ? p : p.id))).toEqual([
       'openai:test-override',
-      'openai:grader-model',
-      'anthropic:assert-grader',
       'openai:default-target',
+      'anthropic:assert-grader',
+      'openai:grader-model',
       'openai:redteam-grader',
     ]);
   });
@@ -422,28 +479,27 @@ describe('provider selection', () => {
     ]);
   });
 
-  it('collects scenario, nested assertion, and typed grader providers', () => {
+  it('collects nested assertions and typed grader providers from expanded scenarios', () => {
     const effective = collectEffectiveTestProviderPermissions({
-      scenarios: [
+      tests: [
         {
-          config: [{ provider: 'openai:scenario-target' }],
-          tests: [
+          provider: 'openai:scenario-target',
+          options: {
+            provider: { text: 'openai:text-grader', embedding: 'openai:embedding-grader' },
+          },
+          assert: [
             {
-              options: {
-                provider: { text: 'openai:text-grader', embedding: 'openai:embedding-grader' },
-              },
+              type: 'assert-set',
               assert: [
-                {
-                  type: 'assert-set',
-                  assert: [{ type: 'llm-rubric', provider: { moderation: 'openai:moderator' } }],
-                },
+                { type: 'llm-rubric' },
+                { type: 'similar' },
+                { type: 'moderation', provider: { moderation: 'openai:moderator' } },
               ],
             },
           ],
         },
       ],
     });
-
     expect(effective.map((p) => (typeof p === 'string' ? p : p.id))).toEqual(
       expect.arrayContaining([
         'openai:scenario-target',

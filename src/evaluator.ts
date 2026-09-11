@@ -10,10 +10,10 @@ import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
   hasTraceAwareAssertions,
-  MODEL_GRADED_ASSERTION_TYPES,
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { MODEL_GRADED_ASSERTION_TYPES } from './assertions/providerTypes';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';

@@ -1801,6 +1801,7 @@ describe('retry command', () => {
       await insertRow(evalId, `${evalId}-old-success`, ResultFailureReason.NONE, true);
       await insertRow(evalId, `${evalId}-stale-error`, ResultFailureReason.ERROR, false);
 
+      await insertRow(evalId, `${evalId}-interrupted-error`, ResultFailureReason.ERROR, false);
       const errorResultIds = await getErrorResultIds(evalId);
       const preexistingResultIds = await getAllResultIds(evalId);
 

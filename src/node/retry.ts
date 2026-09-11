@@ -264,7 +264,7 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
 }
 
 /**
- * Require a newly persisted replacement for each stale ERROR row before deleting it.
+ * Require a newly persisted replacement for each failed execution before deleting stale ERROR rows.
  * The pre-retry snapshot prevents older duplicate rows from counting as replacements.
  */
 export async function assertErrorResultsReplaced(
@@ -302,7 +302,7 @@ export async function assertErrorResultsReplaced(
   }
 
   const preexistingIds = new Set([...resultIds, ...preexistingResultIds]);
-  const replacementCounts = new Map<string, number>();
+  const replacedExecutions = new Set<string>();
   const testIndicesByEval = new Map<string, Set<number>>();
   for (const row of staleRows) {
     const testIndices = testIndicesByEval.get(row.evalId) ?? new Set<number>();
@@ -332,7 +332,7 @@ export async function assertErrorResultsReplaced(
       for (const row of candidateRows) {
         const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
         if (!preexistingIds.has(row.id)) {
-          replacementCounts.set(key, (replacementCounts.get(key) ?? 0) + 1);
+          replacedExecutions.add(key);
         }
       }
     }
@@ -341,11 +341,8 @@ export async function assertErrorResultsReplaced(
   const missingRows: typeof staleRows = [];
   for (const row of staleRows) {
     const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
-    const available = replacementCounts.get(key) ?? 0;
-    if (available === 0) {
+    if (!replacedExecutions.has(key)) {
       missingRows.push(row);
-    } else {
-      replacementCounts.set(key, available - 1);
     }
   }
   if (missingRows.length > 0) {

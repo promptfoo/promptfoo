@@ -1188,7 +1188,7 @@ function isStructurePreservingSecretKey(fieldName: string): boolean {
   return STRUCTURE_PRESERVING_SECRET_KEYS.has(normalizeReplayFieldName(fieldName));
 }
 
-const URL_KEY_RE = /url$/i;
+const URL_KEY_RE = /(?:url|uri|endpoint)$/i;
 
 /** Redact a primitive (non-object) leaf value based on its key and content. */
 function redactPrimitiveLeaf(value: unknown, key: string | undefined): unknown {

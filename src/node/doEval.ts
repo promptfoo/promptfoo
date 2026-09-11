@@ -968,10 +968,9 @@ export async function doEval(
       });
     }
 
-    let permissionTests = testSuite.tests;
-    let permissionScenarios = testSuite.scenarios;
+    let permissionTests = validatedProviderSelection ? getTestCasesForSelection(testSuite) : [];
     if (validatedProviderSelection && hasExplicitTestCaseIndices) {
-      const tests = getTestCasesForSelection(testSuite);
+      const tests = permissionTests;
       const indices = validatedTestCaseSelection
         ? restoreTestCaseSelection(tests, validatedTestCaseSelection)
         : createTestCaseSelection(
@@ -979,13 +978,12 @@ export async function doEval(
             resumeRuntimeOptions?.testCaseIndices ?? evaluateOptions.testCaseIndices ?? [],
           ).tests.map(({ index }) => index);
       permissionTests = indices.map((index) => tests[index]);
-      permissionScenarios = [];
     }
     const cloudPermissionConfig = validatedProviderSelection
       ? buildProviderPermissionConfig(config, validatedProviderSelection, {
           tests: permissionTests,
-          scenarios: permissionScenarios,
-          defaultTest: testSuite.defaultTest,
+          defaultTest:
+            typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
           redteam: config.redteam,
         })
       : config;

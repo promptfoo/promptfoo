@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 
+import { usesGradingProvider } from '../../assertions/providerTypes';
 import { isCloudProvider } from '../cloud';
 import { normalizeProviderRef } from '../providerRef';
 import { redactSecretLeaves } from '../sanitizer';
@@ -319,95 +320,60 @@ function toPermissionProvider(provider: unknown): PermissionProvider | undefined
 
 interface EffectiveProviderTest {
   provider?: unknown;
-  options?: { provider?: unknown } | unknown;
+  options?: { provider?: unknown; disableDefaultAsserts?: boolean };
   assert?: unknown;
 }
 
 interface EffectiveProviderSource {
+  // Scenario combinations have already been expanded by getTestCasesForSelection.
   tests?: unknown;
-  scenarios?: unknown;
-  defaultTest?: unknown;
+  defaultTest?: EffectiveProviderTest;
   redteam?: { provider?: unknown } | unknown;
 }
 
-function collectTestProviderPermissions(test: unknown, into: PermissionProvider[]): void {
-  if (!test || typeof test !== 'object') {
-    return;
-  }
-  const record = test as EffectiveProviderTest;
+export function collectEffectiveTestProviderPermissions(
+  source: EffectiveProviderSource,
+): PermissionProvider[] {
+  const collected: PermissionProvider[] = [];
   const push = (provider: unknown) => {
     const permission = toPermissionProvider(provider);
     if (permission) {
-      into.push(permission);
-      return;
-    }
-    if (provider && typeof provider === 'object' && !Array.isArray(provider)) {
+      collected.push(permission);
+    } else if (provider && typeof provider === 'object' && !Array.isArray(provider)) {
       for (const type of ['embedding', 'classification', 'text', 'moderation']) {
         push((provider as Record<string, unknown>)[type]);
       }
     }
   };
-  // Target override executed by callActiveProvider.
-  push(record.provider);
-  // Grader override (test.options.provider) executed for model-graded assertions.
-  if (record.options && typeof record.options === 'object') {
-    push((record.options as { provider?: unknown }).provider);
-  }
-  // Per-assertion grader providers.
-  if (Array.isArray(record.assert)) {
-    for (const assertion of record.assert) {
-      if (assertion && typeof assertion === 'object') {
-        push((assertion as { provider?: unknown }).provider);
-        collectTestProviderPermissions(
-          { assert: (assertion as { assert?: unknown }).assert },
-          into,
-        );
-      }
+  const collectAssertions = (assertions: unknown, gradingProvider: unknown) => {
+    if (!Array.isArray(assertions)) {
+      return;
     }
-  }
-}
-
-/**
- * Collect the least-privilege identities of every provider that a filtered run can
- * actually execute beyond the top-level matrix: per-test `provider` target
- * overrides, `defaultTest` providers, model-graded assertion graders, and the
- * red-team provider. Without these, a per-test `test.provider` escapes the
- * projected permission boundary that `buildProviderPermissionConfig` enforces.
- */
-export function collectEffectiveTestProviderPermissions(
-  source: EffectiveProviderSource,
-): PermissionProvider[] {
-  const collected: PermissionProvider[] = [];
-  if (Array.isArray(source.tests)) {
-    for (const test of source.tests) {
-      collectTestProviderPermissions(test, collected);
-    }
-  }
-  if (Array.isArray(source.scenarios)) {
-    for (const scenario of source.scenarios) {
-      if (!scenario || typeof scenario !== 'object') {
+    for (const assertion of assertions) {
+      if (!assertion || typeof assertion !== 'object') {
         continue;
       }
-      const record = scenario as { config?: unknown; tests?: unknown };
-      if (Array.isArray(record.config)) {
-        for (const test of record.config) {
-          collectTestProviderPermissions(test, collected);
-        }
+      collectAssertions(assertion.assert, gradingProvider);
+      if (typeof assertion.type === 'string' && usesGradingProvider(assertion.type)) {
+        push(assertion.provider || gradingProvider);
       }
-      if (Array.isArray(record.tests)) {
-        for (const test of record.tests) {
-          collectTestProviderPermissions(test, collected);
-        }
+    }
+  };
+  const defaults = source.defaultTest;
+  if (Array.isArray(source.tests)) {
+    for (const test of source.tests) {
+      const record = test as EffectiveProviderTest;
+      push(record.provider || defaults?.provider);
+      const options = { ...defaults?.options, ...record.options };
+      const gradingProvider = options.provider || defaults?.provider || defaults?.options?.provider;
+      if (record.options?.disableDefaultAsserts !== true) {
+        collectAssertions(defaults?.assert, gradingProvider);
       }
+      collectAssertions(record.assert, gradingProvider);
     }
   }
-  collectTestProviderPermissions(source.defaultTest, collected);
   if (source.redteam && typeof source.redteam === 'object') {
-    const redteamProvider = (source.redteam as { provider?: unknown }).provider;
-    const permission = toPermissionProvider(redteamProvider);
-    if (permission) {
-      collected.push(permission);
-    }
+    push((source.redteam as { provider?: unknown }).provider);
   }
 
   const seen = new Set<string>();

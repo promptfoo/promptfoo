@@ -18,7 +18,11 @@ import {
 import { buildProviderShareConfig } from './util/eval/providerSelection';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { redactAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './util/sanitizer';
+import {
+  redactAzureBlobSasTokens,
+  redactSecretLeaves,
+  sanitizeTracingConfigForPersistence,
+} from './util/sanitizer';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -160,6 +164,10 @@ async function sendEvalRecord(
   } = evalRecord.runtimeOptions ?? {};
   let evalData: Record<string, unknown> = {
     ...evalRecord,
+    prompts: evalRecord.prompts.map((prompt) => ({
+      ...prompt,
+      ...(prompt.config ? { config: redactSecretLeaves(prompt.config) } : {}),
+    })),
     config: redactedConfig,
     results: [],
     runtimeOptions: evalRecord.runtimeOptions ? remoteRuntimeOptions : undefined,

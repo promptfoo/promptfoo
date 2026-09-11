@@ -720,6 +720,14 @@ describe('createShareableUrl', () => {
           tests: [{ index: 0, fingerprint: '2'.repeat(64) }],
         },
       };
+      mockEval.prompts = [
+        {
+          provider: 'echo',
+          raw: 'Hello',
+          label: 'Hello',
+          config: { apiKey: 'completed-prompt-secret', endpoint: 'https://u:p@gateway.test' },
+        },
+      ];
       const remoteConfig = {
         ...mockEval.config,
         providers: [{ id: 'echo', label: 'selected' }],
@@ -745,6 +753,9 @@ describe('createShareableUrl', () => {
       expect(requestBody.runtimeOptions).not.toHaveProperty('providerSelection');
       expect(requestBody.runtimeOptions).not.toHaveProperty('testCaseSelection');
       expect(requestBody.runtimeOptions).not.toHaveProperty('configEnvSource');
+      expect(JSON.stringify(requestBody)).not.toContain('completed-prompt-secret');
+      expect(JSON.stringify(requestBody)).not.toContain('https://u:p@');
+      expect(mockEval.prompts[0].config?.apiKey).toBe('completed-prompt-secret');
       expect(JSON.stringify(requestBody.config)).not.toContain('local-secret');
       expect(JSON.stringify(requestBody.config)).not.toContain('excluded.example.com');
       expect(mockEval.config.providers).toHaveLength(2);

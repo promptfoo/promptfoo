@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 describe('redactSecretLeaves', () => {
-  it.each(['apiBaseUrl', 'tokenUrl', 'API_BASE_URL'])(
+  it.each(['apiBaseUrl', 'tokenUrl', 'API_BASE_URL', 'endpoint', 'uri', 'MONGODB_URI'])(
     'redacts credentials in %s without dropping endpoint semantics',
     (key) => {
       const result = redactSecretLeaves({

@@ -2710,10 +2710,17 @@ describe('checkCloudPermissions', () => {
         testSuite: {
           prompts: [],
           providers,
-          tests: [{ provider: 'unselected-test' }, { provider: 'selected-test' }],
+          tests: [
+            { provider: 'unselected-test' },
+            { provider: 'selected-test', options: { disableDefaultAsserts: true } },
+          ],
+          defaultTest: {
+            options: { provider: 'unused-default-grader' },
+            assert: [{ type: 'llm-rubric', value: 'good' }],
+          },
           scenarios: [
             {
-              config: [{ provider: 'selected-scenario' }],
+              config: [{ provider: 'selected-scenario', options: { disableDefaultAsserts: true } }],
               tests: [{ vars: { input: 'scenario' } }],
             },
           ],
