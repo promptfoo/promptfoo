@@ -486,6 +486,10 @@ export class CrescendoProvider implements ApiProvider {
         // Track current input vars for history entry
         const lastInputVars = currentInputVars;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
+        if (lastResponse.error && options?.abortSignal?.aborted) {
+          exitReason = 'Target error';
+          break;
+        }
 
         if (lastResponse.sessionId && this.stateful) {
           vars['sessionId'] = lastResponse.sessionId;
@@ -546,6 +550,10 @@ export class CrescendoProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (lastResponse.error && options?.abortSignal?.aborted) {
+            exitReason = 'Target error';
+            break;
+          }
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Crescendo] Target ended conversation during unblocking', {
               round: roundNum,
@@ -1228,7 +1236,12 @@ export class CrescendoProvider implements ApiProvider {
       content: targetResponse.output,
     });
 
-    if (shouldFetchTrace && tracingOptions && !targetResponse.cached) {
+    if (
+      shouldFetchTrace &&
+      tracingOptions &&
+      !targetResponse.cached &&
+      !(targetResponse.error && options?.abortSignal?.aborted)
+    ) {
       const traceparent = context?.traceparent ?? undefined;
       const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
 

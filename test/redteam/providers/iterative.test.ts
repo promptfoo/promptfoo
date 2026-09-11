@@ -8,6 +8,7 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createSelectedToolErrorTarget } from '../../util/selectedToolErrorTarget';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
@@ -22,7 +23,8 @@ vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => ({
   isLoggedIntoCloud: vi.fn().mockReturnValue(true),
 }));
 
-vi.mock('../../../src/logger', () => ({
+vi.mock('../../../src/logger', async (importOriginal) => ({
+  ...(await importOriginal()),
   default: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -145,6 +147,93 @@ describe('RedteamIterativeProvider', () => {
         restoreEnv();
       }
     });
+  });
+
+  it.each(['pending', 'success'] as const)(
+    'keeps %s tool cancellation rejected instead of returning a stale target',
+    async (mode) => {
+      const fixture = createSelectedToolErrorTarget(0, mode === 'success' ? 'success' : 'error');
+      if (mode === 'pending') {
+        fixture.holdCallback();
+      }
+      const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+        '../../../src/redteam/providers/shared',
+      );
+      mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
+      });
+      try {
+        const pending = fixture
+          .run(() =>
+            runRedteamConversation({
+              prompt: { raw: '{{goal}}', label: 'greeting' },
+              filters: undefined,
+              vars: { goal: 'Say hello' },
+              redteamProvider: mockRedteamProvider,
+              gradingProvider: mockRedteamProvider,
+              targetProvider: fixture.target,
+              injectVar: 'goal',
+              numIterations: 2,
+              options: { abortSignal: fixture.controller.signal },
+              excludeTargetOutputFromAgenticAttackGeneration: false,
+            }),
+          )
+          .then(
+            (value) => ({ value, error: undefined }),
+            (error) => ({ value: undefined, error }),
+          );
+        await Promise.race([
+          fixture.callbackStarted,
+          pending.then((outcome) => {
+            throw new Error('Target settled before callback entry: ' + JSON.stringify(outcome));
+          }),
+        ]);
+        if (mode === 'pending') {
+          fixture.controller.abort(fixture.reason);
+        }
+        const outcome = await pending;
+        expect(outcome.value).toBeUndefined();
+        expect(outcome.error).toBe(fixture.reason);
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+      } finally {
+        await fixture.cleanup();
+        mockGetTargetResponse.mockReset();
+      }
+    },
+  );
+
+  it('finalizes a completed target error before another canceled iteration', async () => {
+    const fixture = createSelectedToolErrorTarget();
+    const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+      '../../../src/redteam/providers/shared',
+    );
+    mockGetTargetResponse.mockImplementation(shared.getTargetResponse);
+    mockRedteamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+      options?.abortSignal?.throwIfAborted();
+      return { output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }) };
+    });
+    try {
+      const result = await fixture.run(() =>
+        runRedteamConversation({
+          prompt: { raw: '{{goal}}', label: 'greeting' },
+          filters: undefined,
+          vars: { goal: 'Say hello' },
+          redteamProvider: mockRedteamProvider,
+          gradingProvider: mockRedteamProvider,
+          targetProvider: fixture.target,
+          injectVar: 'goal',
+          numIterations: 2,
+          options: { abortSignal: fixture.controller.signal },
+          excludeTargetOutputFromAgenticAttackGeneration: false,
+        }),
+      );
+      await fixture.expectSelected(result);
+      expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+    } finally {
+      await fixture.cleanup();
+      mockGetTargetResponse.mockReset();
+    }
   });
 
   describe('runRedteamConversation', () => {

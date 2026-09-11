@@ -10,6 +10,7 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../../factories/provider';
+import { createSelectedToolErrorTarget } from '../../../util/selectedToolErrorTarget';
 
 import type { CallApiContextParams, GradingResult } from '../../../../src/types/index';
 
@@ -1111,6 +1112,51 @@ describe('HydraProvider', () => {
         output: 'Say hello',
         tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
       });
+    });
+
+    it('finalizes a completed target error before canceled trace, next turn, or learnings', async () => {
+      const fixture = createSelectedToolErrorTarget();
+      mockAgentProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return { output: 'Say hello' };
+      });
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      mockFetchTraceContext.mockImplementation(async (_traceId, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return null;
+      });
+      try {
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 }, providerOptions);
+        const result = await fixture.run(() =>
+          provider.callApi(
+            '',
+            {
+              originalProvider: fixture.target,
+              vars: { input: 'Say hello' },
+              prompt: { raw: '{{input}}', label: 'greeting' },
+              traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+              test: { metadata: { scanId: 'fixture-scan' } },
+            },
+            { abortSignal: fixture.controller.signal },
+          ),
+        );
+        await fixture.expectSelected(result);
+        expect(mockAgentProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockGrader.getResult).not.toHaveBeenCalled();
+        expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      } finally {
+        await fixture.cleanup();
+      }
     });
 
     it.each(['tool', 'http', 'target-local', undefined] as const)(

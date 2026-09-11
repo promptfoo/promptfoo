@@ -1,5 +1,8 @@
+import { getEventListeners } from 'node:events';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withCacheEnabled } from '../../src/cache';
+import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
 import { SnowflakeCortexProvider } from '../../src/providers/snowflake';
@@ -7,9 +10,12 @@ import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrappe
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { DEFAULT_RETRY_POLICY } from '../../src/scheduler/retryPolicy';
 import { SlotQueue } from '../../src/scheduler/slotQueue';
+import { withFetchRetryContext } from '../../src/util/fetch/retryContext';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider } from '../../src/types/providers';
+
+vi.mock('../../src/logger');
 
 const routes = [
   {
@@ -80,8 +86,8 @@ describe('public Chat overrides preserve caller cancellation through the schedul
     vi.useRealTimers();
   });
 
-  async function createTarget(id: string) {
-    const provider = await loadApiProvider(id);
+  async function createTarget(id: string, config: Record<string, unknown> = {}) {
+    const provider = await loadApiProvider(id, { options: { config } });
     providers.push(provider);
     const registry = new RateLimitRegistry({ maxConcurrency: 1 });
     registries.push(registry);
@@ -105,6 +111,175 @@ describe('public Chat overrides preserve caller cancellation through the schedul
     });
     return { started: started.promise, response };
   }
+
+  it.each(routes)(
+    '$id preserves the original selected backoff while releasing canceled A',
+    async ({ id, url }) => {
+      const { registry, wrapped } = await createTarget(id, { maxRetries: 1 });
+      const selected = createDeferred<void>();
+      vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      vi.mocked(logger.debug).mockImplementation((message) => {
+        if (typeof message === 'string' && message.startsWith('Rate limited, waiting 5500ms')) {
+          selected.resolve();
+        }
+        return logger;
+      });
+      const a = new AbortController();
+      const b = new AbortController();
+      controllers.push(a, b);
+      const reason = Object.freeze(
+        Object.assign(new Error('cancel selected override wait'), { name: 'AbortError' }),
+      );
+      const dispatches: { at: number; prompt: string }[] = [];
+      const onResponseHeaders = vi.fn();
+      const firstResponse = new Response('{}', {
+        status: 429,
+        headers: { 'retry-after': '5', 'content-type': 'application/json' },
+      });
+      vi.mocked(globalThis.fetch).mockImplementation(async (input, options) => {
+        expect(String(input)).toBe(url);
+        dispatches.push({
+          at: Date.now(),
+          prompt: JSON.parse(String(options?.body)).messages[0].content,
+        });
+        return dispatches.length === 1 ? firstResponse : successResponse();
+      });
+      const release = vi.spyOn(SlotQueue.prototype, 'release');
+      const retrying = vi.fn();
+      registry.on('request:retrying', retrying);
+      const startedAt = Date.now();
+      const first = withCacheEnabled(false, () =>
+        wrapped.callApi('A', undefined, { abortSignal: a.signal, onResponseHeaders }),
+      ).catch((error) => error);
+      pendingCalls.push(first);
+      await selected.promise;
+      const second = withCacheEnabled(false, () =>
+        wrapped.callApi('B', undefined, { abortSignal: b.signal }),
+      );
+      void second.catch(() => {});
+      pendingCalls.push(second);
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        activeRequests: 1,
+        queueDepth: 1,
+      });
+      await vi.advanceTimersByTimeAsync(1000);
+      a.abort(reason);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await first).toBe(reason);
+      expect(release).toHaveBeenCalledOnce();
+      expect(dispatches).toEqual([{ at: startedAt, prompt: 'A' }]);
+      expect(onResponseHeaders).toHaveBeenCalledExactlyOnceWith(
+        Object.fromEntries(firstResponse.headers.entries()),
+        {
+          headers: Object.fromEntries(firstResponse.headers.entries()),
+          status: 429,
+          resetAt: startedAt + 5000,
+        },
+      );
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        activeRequests: 0,
+        queueDepth: 1,
+        failedRequests: 1,
+        retriedRequests: 0,
+      });
+      expect(getEventListeners(a.signal, 'abort')).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(3999);
+      expect(dispatches).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(second).resolves.toMatchObject({
+        output: 'live B succeeded',
+        tokenUsage: { total: 3, numRequests: 1 },
+      });
+      expect(dispatches).toEqual([
+        { at: startedAt, prompt: 'A' },
+        { at: startedAt + 5000, prompt: 'B' },
+      ]);
+      expect(release).toHaveBeenCalledTimes(2);
+      expect(retrying).not.toHaveBeenCalled();
+      expect(b.signal.aborted).toBe(false);
+      expect(getEventListeners(b.signal, 'abort')).toHaveLength(0);
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        activeRequests: 0,
+        queueDepth: 0,
+        completedRequests: 1,
+        failedRequests: 1,
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(routes)(
+    '$id forwards fresh quota headers even when no lower retry is selected',
+    async ({ id }) => {
+      const { registry, wrapped } = await createTarget(id, { maxRetries: 0 });
+      const a = new AbortController();
+      const b = new AbortController();
+      controllers.push(a, b);
+      const onResponseHeaders = vi.fn();
+      const response = successResponse();
+      response.headers.set('ratelimit-remaining', '0');
+      response.headers.set('ratelimit-reset', '5s');
+      vi.mocked(globalThis.fetch)
+        .mockResolvedValueOnce(response)
+        .mockResolvedValueOnce(successResponse());
+      const startedAt = Date.now();
+      const first = withCacheEnabled(false, () =>
+        wrapped.callApi('A', undefined, { abortSignal: a.signal, onResponseHeaders }),
+      );
+      pendingCalls.push(first);
+      await expect(first).resolves.toMatchObject({ output: 'live B succeeded', cached: false });
+      expect(onResponseHeaders).toHaveBeenCalledExactlyOnceWith(
+        Object.fromEntries(response.headers.entries()),
+      );
+      const second = withCacheEnabled(false, () =>
+        wrapped.callApi('B', undefined, { abortSignal: b.signal }),
+      );
+      void second.catch(() => {});
+      pendingCalls.push(second);
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(second).resolves.toMatchObject({ output: 'live B succeeded' });
+      expect(Date.now()).toBe(startedAt + 5000);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+      expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+        activeRequests: 0,
+        queueDepth: 0,
+        completedRequests: 2,
+        retriedRequests: 0,
+      });
+    },
+  );
+
+  it.each(
+    routes.flatMap((route) => ['hard quota', 'zero retries'].map((mode) => ({ ...route, mode }))),
+  )('$id emits no selected-backoff event for $mode', async ({ id, mode }) => {
+    const { provider } = await createTarget(id);
+    const maxRetries = mode === 'zero retries' ? 0 : 1;
+    const onResponseHeaders = vi.fn();
+    const body =
+      mode === 'hard quota'
+        ? { error: { code: 'insufficient_quota', message: 'Fixture hard quota' } }
+        : {};
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(body), {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'content-type': 'application/json', 'retry-after': '5' },
+      }),
+    );
+    const call = withFetchRetryContext(maxRetries, () =>
+      withCacheEnabled(false, () => provider.callApi('A', undefined, { onResponseHeaders })),
+    );
+    pendingCalls.push(call);
+    // Exercise lower selection without the scheduler's separate final-error retry policy.
+    await vi.advanceTimersByTimeAsync(0);
+    const result = await call;
+    expect(result.error).toContain('429');
+    expect(onResponseHeaders).not.toHaveBeenCalled();
+    expect(globalThis.fetch).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 
   it.each(routes)(
     '$id normalizes a custom caller reason without retrying and releases capacity for live B',

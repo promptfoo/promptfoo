@@ -116,13 +116,14 @@ export default class BestOfNProvider implements ApiProvider {
       // Try candidates concurrently until one succeeds
       let successfulResponse: ProviderResponse | null = null;
       let lastResponse: ProviderResponse | null = null;
+      let completedErrorResponse: ProviderResponse | null = null;
       let currentStep = 0;
 
       await async.eachLimit(
         data.modifiedPrompts,
         this.config.maxConcurrency,
         async (candidatePrompt) => {
-          if (successfulResponse) {
+          if (successfulResponse || completedErrorResponse) {
             return;
           }
 
@@ -166,6 +167,10 @@ export default class BestOfNProvider implements ApiProvider {
             [this.config.injectVar], // Skip special loading and template rendering for the injection variable
           );
 
+          if (completedErrorResponse) {
+            return;
+          }
+
           try {
             // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
             // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
@@ -181,6 +186,9 @@ export default class BestOfNProvider implements ApiProvider {
               sessionIds.push(sessionId);
             }
             lastResponse = response;
+            if (response.error && options?.abortSignal?.aborted) {
+              completedErrorResponse ??= response;
+            }
             accumulateResponseTokenUsage(targetTokenUsage, response);
             if (response.cost !== undefined) {
               targetCost = (targetCost ?? 0) + response.cost;
@@ -207,7 +215,9 @@ export default class BestOfNProvider implements ApiProvider {
         },
       );
 
-      const aggregatedResponse = (successfulResponse ?? lastResponse) as ProviderResponse | null;
+      const aggregatedResponse = (successfulResponse ??
+        completedErrorResponse ??
+        lastResponse) as ProviderResponse | null;
       if (aggregatedResponse) {
         aggregatedResponse.tokenUsage = targetTokenUsage;
         if (

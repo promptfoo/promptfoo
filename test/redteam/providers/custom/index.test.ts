@@ -3,6 +3,7 @@ import { CustomProvider, MemorySystem } from '../../../../src/redteam/providers/
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
+import { createSelectedToolErrorTarget } from '../../../util/selectedToolErrorTarget';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
 import type { ProviderResponse } from '../../../../src/types/providers';
@@ -328,6 +329,58 @@ describe('CustomProvider', () => {
 
     expect(result.metadata?.sessionId).toBe('response-session-id');
   });
+
+  it.each(['normal', 'unblocking'] as const)(
+    'finalizes a completed %s target error before canceled follow-up work',
+    async (path) => {
+      const fixture = createSelectedToolErrorTarget(path === 'unblocking' ? 1 : 0);
+      mockRedTeamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return {
+          output: JSON.stringify({
+            generatedQuestion: 'Say hello.',
+            rationaleBehindJailbreak: 'Harmless fixture',
+            lastResponseSummary: 'A greeting',
+          }),
+        };
+      });
+      mockScoringProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return { output: JSON.stringify({ value: false, metadata: 25, rationale: 'Continue' }) };
+      });
+      vi.mocked(tryUnblocking)
+        .mockReset()
+        .mockResolvedValue({ success: true, unblockingPrompt: 'The reference is 123.' });
+
+      try {
+        const provider = new CustomProvider({
+          injectVar: 'objective',
+          strategyText: 'Ask for a greeting.',
+          maxTurns: 2,
+          maxBacktracks: 0,
+          redteamProvider: mockRedTeamProvider,
+          stateful: true,
+        });
+        const result = await fixture.run(() =>
+          provider.callApi(
+            'Say hello.',
+            {
+              originalProvider: fixture.target,
+              vars: { objective: 'Say hello.' },
+              prompt: { raw: '{{objective}}', label: 'greeting' },
+            },
+            { abortSignal: fixture.controller.signal },
+          ),
+        );
+        await fixture.expectSelected(result);
+        expect(mockRedTeamProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+        expect(tryUnblocking).toHaveBeenCalledTimes(path === 'unblocking' ? 1 : 0);
+      } finally {
+        await fixture.cleanup();
+      }
+    },
+  );
 
   describe.each(['normal', 'unblocking'] as const)('%s target error provenance', (path) => {
     it.each([

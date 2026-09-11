@@ -156,6 +156,15 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
           getRequestTimeoutMs(),
           'json',
           context?.bustCache ?? context?.debug,
+          undefined,
+          (response) => {
+            if (response.status >= 200 && response.status < 300 && response.headers) {
+              callApiOptions?.onResponseHeaders?.(response.headers);
+            }
+          },
+          callApiOptions?.onResponseHeaders
+            ? (backoff) => callApiOptions.onResponseHeaders?.(backoff.headers, backoff)
+            : undefined,
         ));
       if (status < 200 || status >= 300) {
         return {

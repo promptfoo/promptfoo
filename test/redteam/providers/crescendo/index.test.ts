@@ -6,6 +6,7 @@ import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
 import * as traceContext from '../../../../src/tracing/traceContext';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
+import { createSelectedToolErrorTarget } from '../../../util/selectedToolErrorTarget';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
 import type { ProviderResponse } from '../../../../src/types/providers';
@@ -57,7 +58,8 @@ vi.mock('../../../../src/redteam/graders', () => ({
   getGraderById: mockGetGraderById,
 }));
 
-vi.mock('../../../../src/logger', () => ({
+vi.mock('../../../../src/logger', async (importOriginal) => ({
+  ...(await importOriginal()),
   default: {
     debug: vi.fn(),
     error: vi.fn(),
@@ -379,6 +381,67 @@ describe('CrescendoProvider', () => {
     expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
     expect(fetchTraceContextSpy).not.toHaveBeenCalled();
   });
+
+  it.each(['normal', 'unblocking'] as const)(
+    'finalizes a completed %s target error before canceled follow-up work',
+    async (path) => {
+      const fixture = createSelectedToolErrorTarget(path === 'unblocking' ? 1 : 0);
+      vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('Say hello.');
+      mockRedTeamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return {
+          output: JSON.stringify({
+            generatedQuestion: 'Say hello.',
+            rationaleBehindJailbreak: 'Harmless fixture',
+            lastResponseSummary: 'A greeting',
+          }),
+        };
+      });
+      mockScoringProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return { output: JSON.stringify({ value: false, metadata: 25, rationale: 'Continue' }) };
+      });
+      vi.mocked(tryUnblocking)
+        .mockReset()
+        .mockResolvedValue({ success: true, unblockingPrompt: 'The reference is 123.' });
+      const traceSpy = vi
+        .spyOn(traceContext, 'fetchTraceContext')
+        .mockImplementation(async (_id, options) => {
+          options?.abortSignal?.throwIfAborted();
+          return null;
+        });
+      try {
+        const provider = new CrescendoProvider({
+          injectVar: 'objective',
+          maxTurns: 2,
+          maxBacktracks: 0,
+          redteamProvider: mockRedTeamProvider,
+          stateful: true,
+        });
+        const result = await fixture.run(() =>
+          provider.callApi(
+            'Say hello.',
+            {
+              originalProvider: fixture.target,
+              vars: { objective: 'Say hello.' },
+              prompt: { raw: '{{objective}}', label: 'greeting' },
+              traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+              test: { metadata: { tracing: { enabled: true } } },
+            },
+            { abortSignal: fixture.controller.signal },
+          ),
+        );
+        await fixture.expectSelected(result);
+        expect(mockRedTeamProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockScoringProvider.callApi).not.toHaveBeenCalled();
+        expect(tryUnblocking).toHaveBeenCalledTimes(path === 'unblocking' ? 1 : 0);
+        expect(traceSpy).toHaveBeenCalledTimes(path === 'unblocking' ? 1 : 0);
+      } finally {
+        await fixture.cleanup();
+        traceSpy.mockRestore();
+      }
+    },
+  );
 
   describe.each(['normal', 'unblocking'] as const)('%s target error provenance', (path) => {
     it.each([

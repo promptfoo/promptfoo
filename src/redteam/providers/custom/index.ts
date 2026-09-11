@@ -447,6 +447,10 @@ export class CustomProvider implements ApiProvider {
           lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
           lastTargetErrorOrigin =
             lastResponse.metadata?.errorOrigin === 'tool' ? 'tool' : undefined;
+          if (options?.abortSignal?.aborted) {
+            exitReason = 'Target error';
+            break;
+          }
           logger.info(
             `[Custom] ROUND ${roundNum} - Target error: ${lastResponse.error}. Full response: ${JSON.stringify(
               lastResponse,
@@ -515,6 +519,10 @@ export class CustomProvider implements ApiProvider {
             lastTargetError = typeof lastResponse.error === 'string' ? lastResponse.error : 'Error';
             lastTargetErrorOrigin =
               lastResponse.metadata?.errorOrigin === 'tool' ? 'tool' : undefined;
+            if (options?.abortSignal?.aborted) {
+              exitReason = 'Target error';
+              break;
+            }
             logger.info(
               `[Custom] ROUND ${roundNum} - Target error after unblocking: ${lastResponse.error}.`,
               { lastResponse },

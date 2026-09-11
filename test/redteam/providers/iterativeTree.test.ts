@@ -27,6 +27,7 @@ import {
   createProviderResponse,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createSelectedToolErrorTarget } from '../../util/selectedToolErrorTarget';
 
 import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import type {
@@ -37,7 +38,6 @@ import type {
   ProviderResponse,
 } from '../../../src/types/index';
 
-vi.mock('../../../src/providers/openai');
 // Note: We don't mock '../../../src/util/templates' because tests need the real nunjucks engine
 vi.mock('../../../src/redteam/graders', async (importOriginal) => {
   return {
@@ -451,6 +451,51 @@ describe('RedteamIterativeProvider', () => {
         remoteGenerationSpy.mockRestore();
         attackerProviderSpy.mockRestore();
         gradingProviderSpy.mockRestore();
+      }
+    });
+
+    it('finalizes a completed branch error without a canceled final target re-probe', async () => {
+      const fixture = createSelectedToolErrorTarget();
+      mockRedteamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return { output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }) };
+      });
+      const gradingProvider = createMockProvider({ id: 'fixture-unused-grader' });
+      const remote = vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(false);
+      const attacker = vi
+        .spyOn(redteamProviderManager, 'getProvider')
+        .mockResolvedValue(mockRedteamProvider);
+      const grader = vi
+        .spyOn(redteamProviderManager, 'getGradingProvider')
+        .mockResolvedValue(gradingProvider);
+      try {
+        const provider = new RedteamIterativeTreeProvider({
+          injectVar: 'goal',
+          maxDepth: 1,
+          branchingFactor: 1,
+          maxAttempts: 2,
+        });
+        const result = await fixture.run(() =>
+          provider.callApi(
+            'Say hello',
+            {
+              originalProvider: fixture.target,
+              vars: { goal: 'Say hello' },
+              prompt: { raw: '{{goal}}', label: 'greeting' },
+            },
+            { abortSignal: fixture.controller.signal },
+          ),
+        );
+        await fixture.expectSelected(result);
+        expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+        expect(gradingProvider.callApi).not.toHaveBeenCalled();
+        expect(result.metadata?.redteamTreeHistory).toHaveLength(1);
+        expect(result.metadata?.stopReason).toBe('TARGET_ERROR');
+      } finally {
+        await fixture.cleanup();
+        remote.mockRestore();
+        attacker.mockRestore();
+        grader.mockRestore();
       }
     });
 

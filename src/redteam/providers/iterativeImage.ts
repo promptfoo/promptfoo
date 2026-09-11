@@ -399,6 +399,9 @@ async function runRedteamConversation({
       if (targetResponse.error) {
         logger.debug(`Iteration ${i + 1}: Target provider error: ${targetResponse.error}`);
         // Keep lastResponse with its output so final result can surface mapped output while marking error
+        if (options?.abortSignal?.aborted) {
+          break;
+        }
         continue;
       }
 

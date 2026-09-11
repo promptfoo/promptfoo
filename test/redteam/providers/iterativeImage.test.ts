@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
+import { createSelectedToolErrorTarget } from '../../util/selectedToolErrorTarget';
 
 import type { CallApiContextParams, ProviderResponse } from '../../../src/types/index';
 
 // Mock dependencies
-vi.mock('../../../src/logger', () => ({
+vi.mock('../../../src/logger', async (importOriginal) => ({
+  ...(await importOriginal()),
   default: {
     debug: vi.fn(),
     warn: vi.fn(),
@@ -70,6 +72,37 @@ describe('RedteamIterativeImageProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('finalizes a completed target error before another canceled image iteration', async () => {
+    const fixture = createSelectedToolErrorTarget();
+    const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
+      '../../../src/redteam/providers/shared',
+    );
+    vi.mocked(getTargetResponse).mockReset().mockImplementation(shared.getTargetResponse);
+    mockRedteamProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+      options?.abortSignal?.throwIfAborted();
+      return { output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }) };
+    });
+    try {
+      const provider = new RedteamIterativeProvider({ injectVar: 'goal' });
+      const result = await fixture.run(() =>
+        provider.callApi(
+          'Say hello',
+          {
+            originalProvider: fixture.target,
+            vars: { goal: 'Say hello' },
+            prompt: { raw: '{{goal}}', label: 'greeting' },
+          },
+          { abortSignal: fixture.controller.signal },
+        ),
+      );
+      await fixture.expectSelected(result);
+      expect(mockRedteamProvider.callApi).toHaveBeenCalledOnce();
+    } finally {
+      await fixture.cleanup();
+      vi.mocked(getTargetResponse).mockReset();
+    }
   });
 
   it('should have correct ID', () => {

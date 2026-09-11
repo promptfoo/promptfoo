@@ -453,6 +453,9 @@ export async function runMetaAgentRedteam({
     );
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+    if (targetResponse.error && options?.abortSignal?.aborted) {
+      break;
+    }
 
     // Fetch trace context if tracing is enabled
     let traceContext: TraceContextData | null = null;

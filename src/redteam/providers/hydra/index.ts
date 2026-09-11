@@ -682,6 +682,9 @@ export class HydraProvider implements ApiProvider {
       );
       lastTargetResponse = targetResponse;
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+      if (targetResponse.error && options?.abortSignal?.aborted) {
+        break;
+      }
 
       // Fetch trace context if tracing is enabled
       let traceContext: TraceContextData | null = null;
@@ -981,7 +984,7 @@ export class HydraProvider implements ApiProvider {
     }
 
     // Update scan learnings
-    if (scanId) {
+    if (scanId && !options?.abortSignal?.aborted) {
       try {
         const turnsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
         const learningRequest = {

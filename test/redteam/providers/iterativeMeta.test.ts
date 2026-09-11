@@ -9,6 +9,7 @@ import {
   createTokenUsage,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createSelectedToolErrorTarget } from '../../util/selectedToolErrorTarget';
 
 import type { AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
@@ -193,6 +194,50 @@ describe('RedteamIterativeMetaProvider', () => {
         output: { result: 'Say hello' },
         tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
       });
+    });
+
+    it('finalizes a completed target error before canceled trace or meta iteration work', async () => {
+      const fixture = createSelectedToolErrorTarget();
+      mockAgentProvider.callApi.mockImplementation(async (_prompt, _context, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return { output: { result: 'Say hello' } };
+      });
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      mockFetchTraceContext.mockImplementation(async (_traceId, options) => {
+        options?.abortSignal?.throwIfAborted();
+        return null;
+      });
+      try {
+        const provider = new RedteamIterativeMetaProvider({ injectVar: 'query', numIterations: 2 });
+        const result = await fixture.run(() =>
+          provider.callApi(
+            '',
+            {
+              originalProvider: fixture.target,
+              vars: { query: 'Say hello' },
+              prompt: { raw: '{{query}}', label: 'greeting' },
+              traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+            },
+            { abortSignal: fixture.controller.signal },
+          ),
+        );
+        await fixture.expectSelected(result);
+        expect(mockAgentProvider.callApi).toHaveBeenCalledOnce();
+        expect(mockGradingProvider.callApi).not.toHaveBeenCalled();
+        expect(mockFetchTraceContext).not.toHaveBeenCalled();
+      } finally {
+        await fixture.cleanup();
+      }
     });
 
     it.each(['tool', 'http', 'target-local', undefined] as const)(

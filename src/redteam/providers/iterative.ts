@@ -464,6 +464,9 @@ export async function runRedteamConversation({
         error: targetResponse.error,
         response: targetResponse,
       });
+      if (options?.abortSignal?.aborted) {
+        break;
+      }
       continue;
     }
     if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {

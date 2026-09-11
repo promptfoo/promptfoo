@@ -891,6 +891,7 @@ export async function createIterationContext({
 type SharedBacktrackingStopReason =
   | 'Grader failed'
   | 'Max backtracks reached'
+  | 'Target error'
   | 'Target ended conversation';
 
 export type RoundBacktrackingStopReason = SharedBacktrackingStopReason | 'Max rounds reached';
