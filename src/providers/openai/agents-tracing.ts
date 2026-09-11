@@ -654,7 +654,13 @@ function sanitizeCredentialText(value: string): string {
   }
 
   // Embedded encoded JSON cannot be traversed safely as an ordinary text value.
-  for (const [, key] of value.matchAll(/\\+"([A-Za-z_][A-Za-z\d_.-]*)\\+"\s*:/g)) {
+  for (const [, encodedKey] of value.matchAll(/\\+"((?:\\.|[^"\\])*)\\+"\s*:/g)) {
+    let key = encodedKey;
+    try {
+      key = JSON.parse(`"${encodedKey}"`);
+    } catch {
+      // Malformed embedded JSON falls through to the remaining text masks.
+    }
     if (isCredentialAttributeKey(key)) {
       return '<redacted>';
     }
@@ -667,7 +673,7 @@ function sanitizeCredentialText(value: string): string {
   let copied = 0;
   while ((match = options.exec(value))) {
     const [, prefix, option, separator] = match;
-    if (isCredentialAttributeKey(option)) {
+    if (isCredentialAttributeKey(option) || ['-u', '--user', '--proxy-user'].includes(option)) {
       sanitized += value.slice(copied, match.index) + prefix + option + separator + '<redacted>';
       copied = options.lastIndex;
     } else {
@@ -699,6 +705,10 @@ function sanitizeCredentialText(value: string): string {
     )
     .replace(
       /(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)[^\r\n]*/gi,
+      (_match, prefix: string) => `${prefix}<redacted>`,
+    )
+    .replace(
+      /(\bAuthorization\s*=\s*)([A-Za-z][A-Za-z\d-]*\s+)[^\s;,"'{}\]]+/gi,
       (_match, prefix: string) => `${prefix}<redacted>`,
     )
     .replace(
@@ -800,6 +810,7 @@ function isCredentialAttributeKey(key: string): boolean {
         'authorization',
         'cookie',
         'password',
+        'passwords',
         'passwd',
         'pwd',
         'passphrase',
@@ -814,6 +825,8 @@ function isCredentialAttributeKey(key: string): boolean {
         'jwt',
         'sig',
         'signature',
+        'pgpassword',
+        'assertion',
       ].includes(part)
     ) {
       if (
@@ -833,6 +846,9 @@ function isCredentialAttributeKey(key: string): boolean {
       }
       if (part === 'authorization' && ['endpoint', 'url', 'uri'].includes(parts[index + 1])) {
         return false;
+      }
+      if (part === 'assertion' && parts[index - 1] === 'client') {
+        return !['type', 'types'].includes(parts[index + 1]);
       }
       return true;
     }
@@ -862,9 +878,10 @@ function isCredentialPairValue(source: Record<string, unknown> | unknown[], key:
     const option = source[Number(key) - 1];
     return (
       typeof option === 'string' &&
-      isCredentialAttributeKey(option) &&
-      ((Number(key) % 2 === 1 && source.length % 2 === 0) ||
-        /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option))
+      (['-u', '--user', '--proxy-user'].includes(option) ||
+        (isCredentialAttributeKey(option) &&
+          (/^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) ||
+            (Number(key) % 2 === 1 && /^[A-Za-z][A-Za-z\d_.-]*$/.test(option)))))
     );
   }
   return (
@@ -973,7 +990,7 @@ function sanitizeStructuredAttribute(
       } else {
         sanitized = normalizeScalars ? sanitizeAttributeValue(entry) : entry;
         if (typeof sanitized === 'string') {
-          sanitized = sanitizeCredentialText(sanitized);
+          sanitized = sanitizeSerializedAttribute(sanitized);
         }
         state.changed ||= sanitized !== entry;
       }
@@ -1026,7 +1043,7 @@ function sanitizeAttributeValue(value: unknown): unknown {
 
 function safeJsonStringify(value: unknown): string {
   try {
-    return JSON.stringify(value);
+    return JSON.stringify(value) ?? String(value);
   } catch {
     return String(value);
   }

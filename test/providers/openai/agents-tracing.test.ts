@@ -298,6 +298,39 @@ describe('OTLPTracingExporter', () => {
     expect(JSON.stringify(payload)).not.toContain('opaque-byte-secret');
   });
 
+  it.each(['json', 'protobuf'] as const)(
+    'redacts remaining credential text and structured shapes in %s',
+    async (format) => {
+      const { attributes, payload } = await exportCustomData(
+        {
+          text: 'Authorization=Custom opaque-auth curl --user alice:opaque-user',
+          embedded: 'Request: "{\\"p\\u0061ssword\\":\\"opaque-embedded\\"}"',
+          native: {
+            client_assertion: 'opaque-assertion',
+            client_assertion_type: 'public-type',
+            passwords: 'opaque-passwords',
+            env: { PGPASSWORD: 'opaque-pgpassword' },
+            argv: ['Authorization', 'opaque-header', 'Content-Type'],
+            encoded: '{"kty":"RSA","d":"opaque-jwk"}',
+          },
+        },
+        format,
+      );
+
+      expect(attributes.text).not.toContain('opaque-');
+      expect(attributes.embedded).not.toContain('opaque-');
+      expect(JSON.parse(attributes.native as string)).toMatchObject({
+        client_assertion: '<redacted>',
+        client_assertion_type: 'public-type',
+        passwords: '<redacted>',
+        env: { PGPASSWORD: '<redacted>' },
+        argv: ['Authorization', '<redacted>', 'Content-Type'],
+        encoded: '{"kty":"RSA","d":"<redacted>"}',
+      });
+      expect(JSON.stringify(payload)).not.toContain('opaque-');
+    },
+  );
+
   it.each(['json', 'protobuf'] as const)('redacts plural key collections in %s', async (format) => {
     const input = {
       api_keys: ['opaque/one', 'opaque/two'],
