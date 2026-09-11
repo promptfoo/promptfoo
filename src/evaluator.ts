@@ -3351,6 +3351,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private generationUsageRecorded = false;
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3526,7 +3527,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
       countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
     });
-    accumulateGenerationTokenUsage(metrics.tokenUsage, row.testCase?.metadata?.providerTokenUsage);
+    if (!this.generationUsageRecorded) {
+      this.generationUsageRecorded = accumulateGenerationTokenUsage(
+        metrics.tokenUsage,
+        row.testCase?.metadata?.providerTokenUsage,
+      );
+    }
 
     if (row.gradingResult?.tokensUsed) {
       accumulateGradingTokenUsage(metrics.tokenUsage, row.gradingResult.tokensUsed, {

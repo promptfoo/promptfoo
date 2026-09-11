@@ -1236,7 +1236,15 @@ describe('evaluator', () => {
         },
       });
       eval1.prompts = [
-        { metrics: { tokenUsage: { total: 10, numRequests: 1 } } },
+        {
+          metrics: {
+            tokenUsage: {
+              total: 10,
+              numRequests: 1,
+              generation: { total: 40, prompt: 25, completion: 15, numRequests: 4 },
+            },
+          },
+        },
         { metrics: { tokenUsage: { total: 20, numRequests: 1 } } },
       ] as any;
 

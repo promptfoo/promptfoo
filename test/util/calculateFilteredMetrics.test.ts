@@ -217,10 +217,10 @@ describe('calculateFilteredMetrics', () => {
 
     it('counts persisted generation usage once without adding probes', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const generationUsage = { total: 7, prompt: 4, completion: 3, numRequests: 3 };
+      const generationUsage = { total: 7, prompt: 4, completion: 3 };
       const tokenUsage = { total: 10, prompt: 6, completion: 4 };
 
-      await addTokenResult(eval_, { testIdx: 0, tokenUsage, generationUsage });
+      await addTokenResult(eval_, { testIdx: 0, tokenUsage, generationUsage: {} });
       await addTokenResult(eval_, { testIdx: 1, tokenUsage, generationUsage });
 
       const [metrics] = await calculateFilteredMetrics({
@@ -232,7 +232,34 @@ describe('calculateFilteredMetrics', () => {
       expect(metrics.tokenUsage).toMatchObject({
         total: 20,
         numRequests: 2,
-        generation: { total: 7, prompt: 4, completion: 3, numRequests: 3 },
+        generation: { total: 7, prompt: 4, completion: 3, numRequests: 0 },
+      });
+    });
+
+    it('uses canonical incurred generation usage for filtered metrics', async () => {
+      const generationUsage = {
+        total: 7,
+        prompt: 4,
+        completion: 3,
+        numRequests: 1,
+        incurredTokenUsage: { total: 0, numRequests: 0 },
+      };
+      const eval_ = await Eval.create(
+        { metadata: { generationAccounting: { tokenUsage: generationUsage } } },
+        [{ raw: 'Test prompt', label: 'Test prompt' }],
+      );
+      eval_.prompts = [{ raw: 'Test prompt', label: 'Test prompt', provider: 'test-provider' }];
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        tokenUsage: { total: 10 },
+        generationUsage: { total: 99, numRequests: 9 },
+      });
+
+      const [metrics] = await eval_.getFilteredMetrics({});
+
+      expect(metrics.tokenUsage).toMatchObject({
+        generation: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+        incurredTokenUsage: { generation: { total: 0, numRequests: 0 } },
       });
     });
 

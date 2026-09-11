@@ -1225,6 +1225,7 @@ export default class Eval {
       evalId: this.id,
       numPrompts: this.prompts.length,
       whereSql,
+      generationTokenUsage: this.config.metadata?.generationAccounting?.tokenUsage,
     });
   }
 
@@ -1420,10 +1421,12 @@ export default class Eval {
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
 
-    accumulateGenerationTokenUsage(
-      stats.tokenUsage,
-      this.config.metadata?.generationAccounting?.tokenUsage,
-    );
+    if (!stats.tokenUsage.generation) {
+      accumulateGenerationTokenUsage(
+        stats.tokenUsage,
+        this.config.metadata?.generationAccounting?.tokenUsage,
+      );
+    }
 
     return stats;
   }

@@ -698,7 +698,9 @@ describeEvaluator('evaluator token usage', () => {
           completionDetails: { reasoning: 3 },
         },
       });
-      expect(unselectedPrompt.metrics?.tokenUsage).not.toHaveProperty('incurredTokenUsage');
+      expect(unselectedPrompt.metrics?.tokenUsage).toMatchObject({
+        incurredTokenUsage: { assertions: { total: 20, numRequests: 1 } },
+      });
 
       const [unselectedResult, selectedResult] = [...summary.results].sort(
         (a, b) => (a.tokenUsage?.assertions?.total ?? 0) - (b.tokenUsage?.assertions?.total ?? 0),
@@ -724,7 +726,9 @@ describeEvaluator('evaluator token usage', () => {
         numRequests: 1,
         assertions: { total: 20, cached: 0, numRequests: 1 },
       });
-      expect(unselectedResult.tokenUsage).not.toHaveProperty('incurredTokenUsage');
+      expect(unselectedResult.tokenUsage).toMatchObject({
+        incurredTokenUsage: { assertions: { total: 20, numRequests: 1 } },
+      });
       expect(unselectedResult.gradingResult?.tokensUsed).toMatchObject({
         total: 20,
         cached: 0,

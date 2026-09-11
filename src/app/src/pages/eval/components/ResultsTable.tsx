@@ -20,6 +20,7 @@ import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import {
+  getCombinedTokenUsageTotal,
   getIncurredTokenAccounting,
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
@@ -717,13 +718,14 @@ function renderTokenMetrics({
   const primaryTokens = getTokenUsageTotal(metrics?.tokenUsage);
   const attackerTokens = getTokenUsageTotal(metrics?.tokenUsage?.attacker);
   const gradingTokens = getTokenUsageTotal(metrics?.tokenUsage?.assertions);
+  const generationTokens = getTokenUsageTotal(metrics?.tokenUsage?.generation);
   const incurredAccounting = getIncurredTokenAccounting(metrics?.tokenUsage);
 
-  if (primaryTokens === 0 && attackerTokens === 0 && gradingTokens === 0) {
+  if (getCombinedTokenUsageTotal(metrics?.tokenUsage) === 0) {
     return null;
   }
 
-  const totalTokens = primaryTokens + attackerTokens + gradingTokens;
+  const totalTokens = getCombinedTokenUsageTotal(metrics?.tokenUsage);
   const filteredPrimaryTokens = filteredMetrics?.tokenUsage
     ? getTokenUsageTotal(filteredMetrics.tokenUsage)
     : undefined;
@@ -733,10 +735,13 @@ function renderTokenMetrics({
   const filteredGradingTokens = filteredMetrics?.tokenUsage
     ? getTokenUsageTotal(filteredMetrics.tokenUsage.assertions)
     : undefined;
+  const filteredGenerationTokens = filteredMetrics?.tokenUsage
+    ? getTokenUsageTotal(filteredMetrics.tokenUsage.generation)
+    : undefined;
   const filteredTokens =
     filteredPrimaryTokens === undefined
       ? undefined
-      : filteredPrimaryTokens + (filteredAttackerTokens ?? 0) + (filteredGradingTokens ?? 0);
+      : getCombinedTokenUsageTotal(filteredMetrics?.tokenUsage);
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
     filteredTokens !== undefined && testCount?.filtered
@@ -772,6 +777,14 @@ function renderTokenMetrics({
           {filteredGradingTokens === undefined
             ? null
             : renderFilteredSuffix(formatMetricValue(filteredGradingTokens))}
+        </div>
+      ) : null}
+      {generationTokens > 0 ? (
+        <div>
+          <strong>Generation Tokens:</strong> {formatMetricValue(generationTokens)}
+          {filteredGenerationTokens === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredGenerationTokens))}
         </div>
       ) : null}
       {incurredAccounting ? (

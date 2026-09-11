@@ -26,6 +26,7 @@ import { type SQL, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
+import { accumulateGenerationTokenUsage } from './tokenUsageUtils';
 
 import type { PromptMetrics } from '../types/index';
 
@@ -34,6 +35,8 @@ export interface FilteredMetricsOptions {
   numPrompts: number;
   /** SQL fragment for WHERE clause (not a raw string - prevents SQL injection) */
   whereSql: SQL<unknown>;
+  /** Canonical generation ledger stored with the evaluation. */
+  generationTokenUsage?: unknown;
 }
 
 /**
@@ -124,11 +127,6 @@ interface FilteredBasicMetricsRow {
   grading_completion_tokens: number | null;
   grading_cached_tokens: number | null;
   grading_num_requests: number | null;
-  generation_total_tokens: number | null;
-  generation_prompt_tokens: number | null;
-  generation_completion_tokens: number | null;
-  generation_cached_tokens: number | null;
-  generation_num_requests: number | null;
   has_incurred_usage: number;
   incurred_total_tokens: number | null;
   incurred_prompt_tokens: number | null;
@@ -235,13 +233,6 @@ function getFilteredTokenUsage(row: FilteredBasicMetricsRow): PromptMetrics['tok
       cached: row.grading_cached_tokens || 0,
       numRequests: row.grading_num_requests || 0,
     },
-    generation: {
-      total: row.generation_total_tokens || 0,
-      prompt: row.generation_prompt_tokens || 0,
-      completion: row.generation_completion_tokens || 0,
-      cached: row.generation_cached_tokens || 0,
-      numRequests: row.generation_num_requests || 0,
-    },
     ...(row.has_incurred_usage > 0 && {
       incurredTokenUsage: getIncurredTokenUsage(row),
     }),
@@ -308,6 +299,30 @@ async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
   return result?.count || 0;
 }
 
+async function getFilteredGenerationCarriers(whereSql: SQL<unknown>) {
+  const db = await getDb();
+  return (await db.all(sql`
+    SELECT
+      prompt_idx,
+      json_extract(test_case, '$.metadata.providerTokenUsage') as usage
+    FROM eval_results
+    WHERE ${whereSql}
+      AND json_type(test_case, '$.metadata.providerTokenUsage') = 'object'
+    ORDER BY prompt_idx, test_idx
+  `)) as Array<{ prompt_idx: number; usage: string | unknown }>;
+}
+
+function parseGenerationCarrier(usage: string | unknown) {
+  if (typeof usage !== 'string') {
+    return usage;
+  }
+  try {
+    return JSON.parse(usage);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * OPTIMIZED: Single GROUP BY query aggregating ALL prompts at once.
  * This is the key performance improvement from the audit.
@@ -315,7 +330,7 @@ async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
  * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
  */
 async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
-  const { numPrompts, whereSql } = opts;
+  const { generationTokenUsage, numPrompts, whereSql } = opts;
   const db = await getDb();
 
   // Initialize empty metrics
@@ -332,7 +347,6 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
   const incurredGradingPath = '$.tokensUsed.incurredTokenUsage';
   const gradingCachePath = '$.metadata.cachedResponse';
   const responseCachePath = '$.cached';
-  const generationPath = '$.metadata.providerTokenUsage';
   const incurredTargetUsage = (field: TokenUsageField) =>
     jsonIncurredUsageField(response, targetPath, incurredTargetPath, field, {
       cachedResponsePath: responseCachePath,
@@ -354,19 +368,6 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
 
   // ===== QUERY 1: Basic metrics + token usage (ALL PROMPTS) =====
   const basicMetricsQuery = sql`
-    WITH filtered_results AS (
-      SELECT
-        *,
-        ROW_NUMBER() OVER (
-          PARTITION BY eval_id
-          ORDER BY
-            CASE WHEN json_extract(test_case, ${generationPath}) IS NULL THEN 1 ELSE 0 END,
-            prompt_idx,
-            test_idx
-        ) AS generation_usage_rank
-      FROM eval_results
-      WHERE ${whereSql}
-    )
     SELECT
       prompt_idx,
       COUNT(DISTINCT test_idx) as total_count,
@@ -407,11 +408,6 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
         ${jsonUsageRequests(response, internalGradingPath)} +
         ${jsonUsageRequests(gradingResult, gradingPath, gradingCachePath)}
       ) as grading_num_requests,
-      SUM(CASE WHEN generation_usage_rank = 1 THEN ${jsonUsageTotal(sql`test_case`, generationPath)} ELSE 0 END) as generation_total_tokens,
-      SUM(CASE WHEN generation_usage_rank = 1 THEN ${jsonUsageNumber(sql`test_case`, generationPath, 'prompt')} ELSE 0 END) as generation_prompt_tokens,
-      SUM(CASE WHEN generation_usage_rank = 1 THEN ${jsonUsageNumber(sql`test_case`, generationPath, 'completion')} ELSE 0 END) as generation_completion_tokens,
-      SUM(CASE WHEN generation_usage_rank = 1 THEN ${jsonUsageCached(sql`test_case`, generationPath)} ELSE 0 END) as generation_cached_tokens,
-      SUM(CASE WHEN generation_usage_rank = 1 THEN ${jsonUsageRequests(sql`test_case`, generationPath)} ELSE 0 END) as generation_num_requests,
       SUM(
         CASE
           WHEN json_extract(response, ${incurredTargetPath}) IS NOT NULL
@@ -447,7 +443,8 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       SUM(
         ${incurredInternalGradingUsage('numRequests')} + ${incurredGradingUsage('numRequests')}
       ) as incurred_grading_num_requests
-    FROM filtered_results
+    FROM eval_results
+    WHERE ${whereSql}
     GROUP BY prompt_idx
     ORDER BY prompt_idx
   `;
@@ -476,6 +473,19 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       assertPassCount: 0,
       assertFailCount: 0,
     };
+  }
+
+  const generationCarriers = generationTokenUsage
+    ? [{ prompt_idx: basicResults[0]?.prompt_idx, usage: generationTokenUsage }]
+    : await getFilteredGenerationCarriers(whereSql);
+  for (const { prompt_idx, usage } of generationCarriers) {
+    const metric = metrics[prompt_idx];
+    if (
+      metric &&
+      accumulateGenerationTokenUsage(metric.tokenUsage, parseGenerationCarrier(usage))
+    ) {
+      break;
+    }
   }
 
   // ===== QUERY 2: Named scores (SQL JSON aggregation) =====
