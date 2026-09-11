@@ -135,28 +135,28 @@
       "react-dom": "^19.2.4"
     },
     "@opentelemetry/exporter-trace-otlp-http": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/otlp-exporter-base": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/otlp-transformer": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/resources": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/sdk-logs": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/sdk-metrics": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/sdk-trace-base": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "@opentelemetry/sdk-trace-node": {
-      "@opentelemetry/core": "2.10.0"
+      "@opentelemetry/core": "2.11.0"
     },
     "serialize-javascript": ">=7.0.5",
     "gaxios": "^8.0.0",
@@ -221,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.251",
+    "@anthropic-ai/claude-agent-sdk": "0.3.252",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -261,7 +261,7 @@
     "knip": "~6.27.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.147.0",
+    "oxc-parser": "^0.148.0",
     "pdf-parse": "^2.4.5",
     "prettier": "^3.8.1",
     "read-excel-file": "^9.3.9",
@@ -276,7 +276,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.251",
+    "@anthropic-ai/claude-agent-sdk": "0.3.252",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -337,8 +337,8 @@
     "@inquirer/select": "^5.1.0",
     "@libsql/client": "^0.17.3",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/core": "2.10.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
+    "@opentelemetry/core": "2.11.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-trace-base": "^2.6.0",
     "@opentelemetry/sdk-trace-node": "^2.6.0",

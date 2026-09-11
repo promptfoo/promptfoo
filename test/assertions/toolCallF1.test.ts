@@ -447,6 +447,39 @@ describe('handleToolCallF1', () => {
       expect(result).toMatchObject({ pass: true, score: 1 });
     });
 
+    it.each(['```json {"example":true} ```', '```info`invalid', '- ```info`invalid'])(
+      'keeps calls after an invalid backtick fence opener: %s',
+      (example) => {
+        const output = [
+          '{"type":"tool_use","name":"get_weather"}',
+          example,
+          '{"type":"tool_use","name":"delete_account"}',
+        ].join('\n');
+        const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+        expect(result.pass).toBe(false);
+        expect(result.score).toBeCloseTo(2 / 3);
+        expect(result.reason).toContain('Called: [delete_account, get_weather]');
+      },
+    );
+
+    it.each([
+      ['Example: {\n"payload":', '}'],
+      ['Example: [', ']'],
+    ])('ignores calls nested inside an inline example wrapper: %s', (opening, closing) => {
+      const output = [
+        '{"type":"tool_use","name":"get_weather"}',
+        opening,
+        '{"type":"tool_use","name":"delete_account"}',
+        closing,
+      ].join('\n');
+
+      expect(handleToolCallF1(createParams(output, ['get_weather']))).toMatchObject({
+        pass: true,
+        score: 1,
+      });
+    });
+
     it('ignores an example in an unclosed fence', () => {
       const output = 'Example:\n```json\n{"type":"tool_use","name":"delete_account"}';
       const result = handleToolCallF1(createParams(output, ['delete_account']));
@@ -515,6 +548,23 @@ describe('handleToolCallF1', () => {
       });
     });
 
+    it.each([
+      ['Actual call: {', '}'],
+      ['Actual call: [\ninvalid', ']'],
+    ])('recovers calls from an inline malformed wrapper: %s', (opening, closing) => {
+      const output = [
+        opening,
+        '{"type":"tool_use","name":"delete_account"}',
+        closing,
+        '{"type":"tool_use","name":"get_weather"}',
+      ].join('\n');
+      const result = handleToolCallF1(createParams(output, ['get_weather']));
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBeCloseTo(2 / 3);
+      expect(result.reason).toContain('Called: [delete_account, get_weather]');
+    });
+
     it('recovers unexpected calls from long malformed wrappers', () => {
       const output = [
         '{',
@@ -563,6 +613,29 @@ describe('handleToolCallF1', () => {
       });
     });
 
+    it.each(['{', '[', '}', ']'])(
+      'fails explicitly when unmatched %s delimiters exceed the recovery limit',
+      (delimiter) => {
+        const output = '{"type":"tool_use","name":"get_weather"}\n' + delimiter.repeat(200_000);
+        for (const inverse of [false, true]) {
+          const params = {
+            ...createParams(output, ['get_weather'], { threshold: 0 }),
+            inverse,
+          };
+          expect(handleToolCallF1(params)).toMatchObject({
+            pass: false,
+            score: 0,
+            reason: expect.stringContaining('delimiter limit'),
+          });
+          expect(handleToolCallF1({ ...params, output: JSON.stringify(output) })).toMatchObject({
+            pass: false,
+            score: 0,
+            reason: expect.stringContaining('delimiter limit'),
+          });
+        }
+      },
+    );
+
     it('recovers a call after many unmatched opening braces', () => {
       const output = `${'{\n'.repeat(10_000)}{"type":"tool_use","name":"get_weather"}`;
       const result = handleToolCallF1(createParams(output, ['get_weather']));
@@ -600,13 +673,13 @@ describe('handleToolCallF1', () => {
         {
           cwd: fileURLToPath(new URL('../..', import.meta.url)),
           encoding: 'utf8',
-          timeout: 60_000,
+          timeout: 20_000,
         },
       );
 
       expect(result.error).toBeUndefined();
       expect(result.status, result.stderr).toBe(0);
-    }, 75_000);
+    });
 
     it('should handle Anthropic output with only one tool call in string', () => {
       const output = `I'll help you with that.
