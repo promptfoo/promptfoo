@@ -144,6 +144,8 @@ Trace data is transferred to self-hosted servers out-of-band after the eval is u
 
 :::
 
+Blob downloads require `GET /api/blobs/<hash>?evalId=<id>`, and the blob must have a reference in that evaluation. Custom clients should use the media URL returned by the media-library endpoint.
+
 ### Troubleshooting Upload Issues
 
 #### Handling "413 Request Entity Too Large" Errors
