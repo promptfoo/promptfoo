@@ -267,15 +267,10 @@ function summarizeProviderItem(item: unknown, index: number): string | undefined
 
   if (type === 'command_execution') {
     const command = getString(object.command);
-    const executable = command
-      ?.trim()
-      .match(/^[^\s;&|]+/)?.[0]
-      ?.split(/[\\/]/)
-      .pop();
     const flags = command?.match(/(?<!\w)--?[a-z][\w-]*/gi);
     const semantics = [
-      executable ? `command=${executable}` : undefined,
-      flags?.length ? `flags=${[...new Set(flags)].slice(0, 10).join(',')}` : undefined,
+      command ? 'command=[redacted]' : undefined,
+      flags?.length ? `flag-count=${new Set(flags).size}` : undefined,
       command && /(?:^|[^<])>>?/.test(command) ? 'redirects-output' : undefined,
     ].filter(Boolean);
     return [header.join(' '), semantics.length ? semantics.join(' ') : undefined]
@@ -284,16 +279,8 @@ function summarizeProviderItem(item: unknown, index: number): string | undefined
   }
 
   if (type === 'file_change') {
-    const changes = Array.isArray(object.changes)
-      ? object.changes
-          .map((change) => getObject(change))
-          .map((change) =>
-            [getString(change?.kind), getString(change?.path)].filter(Boolean).join(' '),
-          )
-          .filter(Boolean)
-          .join(', ')
-      : undefined;
-    return [header.join(' '), changes ? `files: ${truncateForJudge(changes)}` : undefined]
+    const changes = Array.isArray(object.changes) ? object.changes.length : 0;
+    return [header.join(' '), changes ? `files: ${changes} changed` : undefined]
       .filter(Boolean)
       .join('\n');
   }
