@@ -2,38 +2,202 @@ import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-function findJsonEnd(text: string, start: number): number {
-  const closing: string[] = [text[start] === '{' ? '}' : ']'];
+type JsonDelimiter = {
+  char: '{' | '[' | '}' | ']';
+  index: number;
+  startsLine: boolean;
+  endsLine: boolean;
+};
+
+function columnWidth(text: string): number {
+  let column = 0;
+  for (const char of text) {
+    column += char === '\t' ? 4 - (column % 4) : 1;
+  }
+  return column;
+}
+
+function* jsonDelimiters(text: string): Generator<JsonDelimiter | null> {
   let inString = false;
   let escaped = false;
+  let fence = '';
+  let fenceContainer = 0;
+  const containers: number[] = [];
+  let lineStart = 0;
 
-  for (let end = start + 1; end < text.length; end++) {
-    const char = text[end];
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === '\\') {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
+  while (lineStart < text.length) {
+    const offset = lineStart;
+    const newline = text.indexOf('\n', lineStart);
+    const lineEnd = newline < 0 ? text.length : newline;
+    const content = text.slice(lineStart, lineEnd).trimEnd();
+    lineStart = lineEnd + 1;
+    const firstContent = content.search(/\S/);
+    const indent = columnWidth(content.slice(0, Math.max(0, firstContent)));
+    if (fence && content && indent < fenceContainer) {
+      fence = '';
+      yield null;
+    }
+    if (fence) {
+      const marker = /^[ \t]*(`{3,}|~{3,})/.exec(content);
+      if (
+        marker &&
+        indent <= fenceContainer + 3 &&
+        marker[1][0] === fence[0] &&
+        marker[1].length >= fence.length &&
+        !content.slice(marker[0].length).trim()
+      ) {
+        fence = '';
       }
       continue;
     }
 
-    if (char === '"') {
-      inString = true;
-    } else if (char === '{' || char === '[') {
-      closing.push(char === '{' ? '}' : ']');
-    } else if (char === '}' || char === ']') {
-      if (closing.pop() !== char) {
-        return -1;
+    while (content && containers.length && indent < containers[containers.length - 1]) {
+      containers.pop();
+    }
+    const list = /^[ \t]*(?:[-+*]|\d+[.)])[ \t]+/.exec(content);
+    if (list) {
+      containers.push(columnWidth(list[0]));
+    }
+    const container = containers[containers.length - 1] ?? 0;
+    const fenceText = list ? content.slice(list[0].length) : content;
+    const marker = /^[ \t]*(`{3,}|~{3,})/.exec(fenceText);
+    if (
+      marker &&
+      (list || indent <= container + 3) &&
+      (marker[1][0] !== '`' || !fenceText.slice(marker[0].length).includes('`'))
+    ) {
+      fence = marker[1];
+      fenceContainer = container;
+      yield null;
+      continue;
+    }
+
+    for (let column = 0; column < content.length; column++) {
+      const char = content[column];
+      const index = offset + column;
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === '"') {
+          inString = false;
+        }
+        continue;
       }
-      if (closing.length === 0) {
-        return end;
+
+      if (char === '"') {
+        inString = true;
+      } else if (char === '{' || char === '[' || char === '}' || char === ']') {
+        yield {
+          char,
+          index,
+          startsLine: column === firstContent,
+          endsLine: column === content.length - 1,
+        };
       }
     }
+
+    // JSON strings cannot span literal newlines.
+    if (inString) {
+      inString = false;
+      escaped = false;
+      yield null;
+    }
   }
-  return -1;
+}
+
+class ToolCallParseError extends Error {}
+
+const MAX_UNMATCHED_DELIMITERS = 65_536;
+
+function* jsonBlocks(
+  text: string,
+  skipRoot = false,
+): Generator<{ text: string; startsLine: boolean }> {
+  // Pop complete pairs so independent blocks do not accumulate in memory.
+  const unmatched: number[] = [];
+  let stackStart = 0;
+  for (const token of jsonDelimiters(text)) {
+    if (!token) {
+      stackStart = unmatched.length;
+    } else if (token.char === '{' || token.char === '[') {
+      unmatched.push(token.index);
+    } else if (
+      unmatched.length > stackStart &&
+      text[unmatched[unmatched.length - 1]] === (token.char === '}' ? '{' : '[')
+    ) {
+      unmatched.pop();
+    } else {
+      unmatched.push(token.index);
+      stackStart = unmatched.length;
+    }
+    if (unmatched.length > MAX_UNMATCHED_DELIMITERS) {
+      throw new ToolCallParseError(
+        `Tool Call F1 exceeded its delimiter limit (${MAX_UNMATCHED_DELIMITERS})`,
+      );
+    }
+  }
+
+  // Yield disjoint blocks; nested recovery skips the enclosing root.
+  let nextUnmatched = 0;
+  let depth = 0;
+  let start = -1;
+  let startDepth = 0;
+  let startsLine = false;
+  for (const token of jsonDelimiters(text)) {
+    if (!token) {
+      continue;
+    }
+    if (token.index === unmatched[nextUnmatched]) {
+      nextUnmatched++;
+      continue;
+    }
+    if (token.char === '{' || token.char === '[') {
+      if (start < 0 && depth === (skipRoot ? 1 : 0)) {
+        start = token.index;
+        startDepth = depth;
+        startsLine = token.startsLine;
+      }
+      depth++;
+      continue;
+    }
+    depth--;
+    if (start >= 0 && depth === startDepth) {
+      if (token.endsLine) {
+        yield { text: text.slice(start, token.index + 1), startsLine };
+      }
+      start = -1;
+    }
+  }
+}
+
+function* extractJsonBlocks(text: string): Generator<unknown> {
+  const pending = [jsonBlocks(text)];
+  let remaining = 4 * text.length;
+  while (pending.length) {
+    const next = pending[pending.length - 1].next();
+    if (next.done) {
+      pending.pop();
+      continue;
+    }
+    const { text: block, startsLine } = next.value;
+    if (block.length > remaining) {
+      throw new ToolCallParseError(
+        'Tool Call F1 could not finish parsing malformed output within its work limit',
+      );
+    }
+    remaining -= block.length;
+    try {
+      const parsed: unknown = JSON.parse(block);
+      if (startsLine) {
+        yield parsed;
+      }
+    } catch {
+      // Each rescan is paid for by the failed parse, keeping total work linear.
+      pending.push(jsonBlocks(block, true));
+    }
+  }
 }
 
 /**
@@ -56,41 +220,20 @@ function extractToolNames(output: unknown): Set<string> {
     return names;
   }
 
-  // Handle string output - try to parse as JSON and recursively extract
   if (typeof output === 'string') {
-    // First, try parsing the entire string as JSON
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(output);
-      const parsedNames = extractToolNames(parsed);
-      for (const name of parsedNames) {
-        names.add(name);
-      }
-      return names;
+      parsed = JSON.parse(output);
     } catch {
-      // Not valid JSON as a whole; look for embedded JSON values.
-    }
-
-    // Mixed text and JSON may include pretty-printed blocks and nested values.
-    // Balance delimiters outside strings before parsing each complete candidate.
-    for (let start = 0; start < output.length; start++) {
-      const opening = output[start];
-      if (opening !== '{' && opening !== '[') {
-        continue;
-      }
-
-      const end = findJsonEnd(output, start);
-      if (end >= 0) {
-        try {
-          for (const name of extractToolNames(JSON.parse(output.slice(start, end + 1)))) {
-            names.add(name);
-          }
-          start = end;
-        } catch {
-          // A balanced fragment may still be invalid JSON.
+      // Providers join serialized calls at line boundaries.
+      for (const block of extractJsonBlocks(output)) {
+        for (const name of extractToolNames(block)) {
+          names.add(name);
         }
       }
+      return names;
     }
-    return names;
+    return extractToolNames(parsed);
   }
 
   if (typeof output !== 'object') {
@@ -254,7 +397,15 @@ export const handleToolCallF1 = ({
   }
 
   const expected = new Set(expectedTools);
-  const actual = extractToolNames(output);
+  let actual: Set<string>;
+  try {
+    actual = extractToolNames(output);
+  } catch (error) {
+    if (!(error instanceof ToolCallParseError)) {
+      throw error;
+    }
+    return { pass: false, score: 0, reason: error.message, assertion };
+  }
 
   // Compute F1 components using set intersection
   const intersection = [...expected].filter((t) => actual.has(t)).length;
