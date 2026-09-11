@@ -88,7 +88,9 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  fs.rmSync(tmpRoot, { recursive: true, force: true });
+  if (tmpRoot) {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
 });
 
 interface Fixture {
@@ -178,6 +180,17 @@ describe('legacy Docker backfill patch (embedded in docker.yml)', () => {
     expect(result.dockerfile).toContain('ARG PYTHON_VERSION');
     expect(result.dockerfile).toContain('python3~=${PYTHON_VERSION}');
     expect(result.dockerfile).not.toContain('python3~=3.12');
+  });
+
+  it('preserves an existing parameterized Python minor', () => {
+    const dockerfile = legacyDockerfile()
+      .replace('RUN apk add --no-cache', 'ARG PYTHON_VERSION=3.12\nRUN apk add --no-cache')
+      .replace('python3~=3.12', 'python3~=${PYTHON_VERSION}');
+    const result = run({ dockerfile, bin: 'dist/src/entrypoint.js' }, { PYTHON_VERSION: '3.14' });
+
+    expect(result.ok).toBe(true);
+    expect(result.dockerfile.match(/ARG PYTHON_VERSION/g)).toHaveLength(1);
+    expect(result.dockerfile).toContain('python3~=${PYTHON_VERSION}');
   });
 
   it('excludes test files from both historical tsconfig include shapes', () => {

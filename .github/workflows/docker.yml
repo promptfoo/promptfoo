@@ -144,12 +144,14 @@ env:
 
     if (process.env.PYTHON_VERSION) {
       const pythonPackage = /python3~=\d+\.\d+/;
-      if (!pythonPackage.test(dockerfile)) {
-        throw new Error('Could not locate the historical Python minor pin');
+      if (!dockerfile.includes('python3~=${PYTHON_VERSION}')) {
+        if (!pythonPackage.test(dockerfile)) {
+          throw new Error('Could not locate the historical Python minor pin');
+        }
+        dockerfile = dockerfile
+          .replace(/^(\s*RUN apk add)/m, 'ARG PYTHON_VERSION\n$1')
+          .replace(pythonPackage, 'python3~=${PYTHON_VERSION}');
       }
-      dockerfile = dockerfile
-        .replace(/^(\s*RUN apk add)/m, 'ARG PYTHON_VERSION\n$1')
-        .replace(pythonPackage, 'python3~=${PYTHON_VERSION}');
     }
 
     fs.writeFileSync(dockerfilePath, dockerfile);
