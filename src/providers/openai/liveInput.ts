@@ -10,6 +10,74 @@ export interface LiveInputMessage {
   content: [{ type: 'input_text' | 'output_text'; text: string }];
 }
 
+const UNKNOWN_CHUNK_SIZE = 0xffffffff;
+const WAVE_FORMAT_PCM = 1;
+const WAVE_FORMAT_EXTENSIBLE = 0xfffe;
+/** KSDATAFORMAT_SUBTYPE_PCM after its leading format tag: 00000001-0000-0010-8000-00AA00389B71. */
+const PCM_SUBFORMAT_SUFFIX = Buffer.from('00001000800000aa00389b71', 'hex');
+
+function isMonoPcm16(bytes: Buffer, start: number, size: number, rate: number): boolean {
+  if (size < 16) {
+    return false;
+  }
+  const formatTag = bytes.readUInt16LE(start);
+  const pcm =
+    formatTag === WAVE_FORMAT_PCM ||
+    (formatTag === WAVE_FORMAT_EXTENSIBLE &&
+      size >= 40 &&
+      bytes.readUInt16LE(start + 18) === 16 &&
+      bytes.readUInt32LE(start + 24) === WAVE_FORMAT_PCM &&
+      bytes.subarray(start + 28, start + 40).equals(PCM_SUBFORMAT_SUFFIX));
+  return (
+    pcm &&
+    bytes.readUInt16LE(start + 2) === 1 &&
+    bytes.readUInt32LE(start + 4) === rate &&
+    bytes.readUInt16LE(start + 14) === 16
+  );
+}
+
+function decodeWav(bytes: Buffer, format: LiveAudioFormat): Buffer {
+  if (
+    format.type !== 'audio/pcm' ||
+    bytes.toString('ascii', 0, 4) !== 'RIFF' ||
+    bytes.toString('ascii', 8, 12) !== 'WAVE'
+  ) {
+    throw new Error('GPT-Live WAV input must be mono PCM16 matching audio.format.');
+  }
+  let validFormat = false;
+  const chunks: Buffer[] = [];
+  for (let offset = 12; offset + 8 <= bytes.length; ) {
+    const kind = bytes.toString('ascii', offset, offset + 4);
+    const declaredSize = bytes.readUInt32LE(offset + 4);
+    const start = offset + 8;
+    const available = bytes.length - start;
+    // Streaming writers, such as OpenAI text-to-speech and ffmpeg pipes, cannot backfill data sizes.
+    const size =
+      kind === 'data' && (declaredSize === UNKNOWN_CHUNK_SIZE || declaredSize > available)
+        ? available
+        : declaredSize;
+    if (size > available) {
+      throw new Error('Truncated GPT-Live WAV input.');
+    }
+    if (kind === 'fmt ') {
+      validFormat = isMonoPcm16(bytes, start, size, format.rate);
+    } else if (kind === 'data') {
+      chunks.push(bytes.subarray(start, start + size));
+    }
+    offset = start + size + (size % 2);
+  }
+  const pcm = Buffer.concat(chunks);
+  if (!validFormat || !pcm.length) {
+    throw new Error(
+      'GPT-Live WAV input must be nonempty mono PCM16 at the configured sample rate. Resample the file before evaluating.',
+    );
+  }
+  if (pcm.length % 2 !== 0) {
+    throw new Error('GPT-Live WAV input ends with an incomplete PCM16 sample.');
+  }
+  return pcm;
+}
+
 function decodeAudio(data: unknown, encoding: unknown, format: LiveAudioFormat): Buffer {
   if (typeof data !== 'string' || !data || data.length > 20 * 1024 * 1024) {
     throw new Error('GPT-Live audio must contain nonempty base64 data.');
@@ -19,41 +87,7 @@ function decodeAudio(data: unknown, encoding: unknown, format: LiveAudioFormat):
     throw new Error('GPT-Live audio must contain valid base64 data.');
   }
   if (encoding === 'wav') {
-    if (
-      format.type !== 'audio/pcm' ||
-      bytes.toString('ascii', 0, 4) !== 'RIFF' ||
-      bytes.toString('ascii', 8, 12) !== 'WAVE'
-    ) {
-      throw new Error('GPT-Live WAV input must be mono PCM16 matching audio.format.');
-    }
-    let validFormat = false;
-    const chunks: Buffer[] = [];
-    for (let offset = 12; offset + 8 <= bytes.length; ) {
-      const kind = bytes.toString('ascii', offset, offset + 4);
-      const size = bytes.readUInt32LE(offset + 4);
-      const start = offset + 8;
-      if (start + size > bytes.length) {
-        throw new Error('Truncated GPT-Live WAV input.');
-      }
-      if (kind === 'fmt ') {
-        validFormat =
-          size >= 16 &&
-          bytes.readUInt16LE(start) === 1 &&
-          bytes.readUInt16LE(start + 2) === 1 &&
-          bytes.readUInt32LE(start + 4) === format.rate &&
-          bytes.readUInt16LE(start + 14) === 16;
-      } else if (kind === 'data') {
-        chunks.push(bytes.subarray(start, start + size));
-      }
-      offset = start + size + (size % 2);
-    }
-    const pcm = Buffer.concat(chunks);
-    if (!validFormat || !pcm.length || pcm.length % 2 !== 0) {
-      throw new Error(
-        'GPT-Live WAV input must be nonempty mono PCM16 at the configured sample rate. Resample the file before evaluating.',
-      );
-    }
-    return pcm;
+    return decodeWav(bytes, format);
   }
   const expected =
     format.type === 'audio/pcm'
