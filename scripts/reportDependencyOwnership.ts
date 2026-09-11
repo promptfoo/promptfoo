@@ -98,43 +98,98 @@ function consumeJSDocName(body: string, start: number): number {
   return 0;
 }
 
+function takeJSDocType(source: string): string {
+  const start = source.indexOf('{');
+  if (start === -1) {
+    return source;
+  }
+  let depth = 0;
+  for (let index = start; index < source.length; index++) {
+    if (source[index] === '{') {
+      depth++;
+    } else if (source[index] === '}' && --depth === 0) {
+      return source.slice(0, index + 1);
+    }
+  }
+  return source;
+}
+
 function getRequireShadowRanges(
   program: ReturnType<typeof parseSync>['program'],
 ): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
-  if (
-    program.body.some(
-      (node) =>
-        (node.type === 'FunctionDeclaration' && node.id?.name === 'require') ||
-        (node.type === 'VariableDeclaration' &&
-          node.declarations.some(
-            (declaration) =>
-              declaration.id.type === 'Identifier' && declaration.id.name === 'require',
-          )),
-    )
-  ) {
-    ranges.push([0, Number.POSITIVE_INFINITY]);
-  }
+  const lexicalScopes: Array<[number, number]> = [[0, Number.POSITIVE_INFINITY]];
+  const functionScopes: Array<[number, number]> = [[0, Number.POSITIVE_INFINITY]];
+  const addFunctionScope = (node: { body: { start: number; end: number } | null }) => {
+    if (!node.body) {
+      return;
+    }
+    const scope: [number, number] = [node.body.start, node.body.end];
+    lexicalScopes.push(scope);
+    functionScopes.push(scope);
+  };
+  new Visitor({
+    BlockStatement(node) {
+      lexicalScopes.push([node.start, node.end]);
+    },
+    FunctionDeclaration(node) {
+      addFunctionScope(node);
+    },
+    FunctionExpression(node) {
+      addFunctionScope(node);
+    },
+    ArrowFunctionExpression(node) {
+      if (node.body.type === 'BlockStatement') {
+        addFunctionScope(node);
+      }
+    },
+  }).visit(program);
+  const scopeFor = (offset: number, scopes: Array<[number, number]>) =>
+    scopes
+      .filter(([start, end]) => offset >= start && offset <= end)
+      .sort(([left], [right]) => right - left)[0];
+  const addParams = (node: {
+    body: { start: number; end: number } | null;
+    params: Array<{ type: string; name?: string }>;
+  }) => {
+    if (
+      node.body &&
+      node.params.some((param) => param.type === 'Identifier' && param.name === 'require')
+    ) {
+      ranges.push([node.body.start, node.body.end]);
+    }
+  };
   new Visitor({
     FunctionDeclaration(node) {
-      if (
-        node.body &&
-        node.params.some((param) => param.type === 'Identifier' && param.name === 'require')
-      ) {
-        ranges.push([node.body.start, node.body.end]);
+      if (node.id?.name === 'require') {
+        ranges.push(scopeFor(node.start, lexicalScopes));
+      }
+      if (node.body) {
+        addParams(node);
       }
     },
     FunctionExpression(node) {
-      if (
-        node.body &&
-        node.params.some((param) => param.type === 'Identifier' && param.name === 'require')
-      ) {
+      if (node.id?.name === 'require' && node.body) {
         ranges.push([node.body.start, node.body.end]);
       }
+      addParams(node);
     },
     ArrowFunctionExpression(node) {
-      if (node.params.some((param) => param.type === 'Identifier' && param.name === 'require')) {
-        ranges.push([node.body.start, node.body.end]);
+      addParams(node);
+    },
+    VariableDeclaration(node) {
+      if (
+        node.declarations.some(
+          (declaration) =>
+            declaration.id.type === 'Identifier' && declaration.id.name === 'require',
+        )
+      ) {
+        ranges.push(scopeFor(node.start, node.kind === 'var' ? functionScopes : lexicalScopes));
+      }
+    },
+    ImportDeclaration(node) {
+      if (node.specifiers.some((specifier) => specifier.local.name === 'require')) {
+        ranges.push([0, Number.POSITIVE_INFINITY]);
       }
     },
   }).visit(program);
@@ -280,6 +335,7 @@ function discoverFiles(
     ]) {
       for (const file of globSync(pattern, {
         cwd: repoRoot,
+        dot: true,
         nodir: true,
         ignore: sourceIgnores(root),
       }).map(normalizePath)) {
@@ -602,7 +658,7 @@ export function reportDependencyOwnership(
         } else {
           // JSDoc accepts Closure forms that are not TypeScript syntax. Their import()
           // specifiers are still literal, so retain them when Oxc rejects the wrapper.
-          for (const match of source.matchAll(/import\(\s*(['"])([^'"]+)\1\s*\)/g)) {
+          for (const match of takeJSDocType(source).matchAll(/import\(\s*(['"])([^'"]+)\1\s*\)/g)) {
             add({ start: comment.start + 2 + start + (match.index ?? 0) }, match[2], 'type');
           }
         }
