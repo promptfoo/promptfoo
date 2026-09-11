@@ -499,7 +499,9 @@ export function reportDependencyOwnership(
         !dependency ||
         dependency === packages.get(manifest)?.name ||
         (((!declaredDependency &&
-          aliases.some((alias) => specifier === alias || specifier.startsWith(`${alias}/`))) ||
+          aliases.some(
+            (alias) => fileSpecifier === alias || fileSpecifier.startsWith(`${alias}/`),
+          )) ||
           (aliasedFile && fs.existsSync(aliasedFile) && fs.statSync(aliasedFile).isFile()) ||
           resolveInternalModule(repoRoot, file, fileSpecifier, config.aliases, configuredRoots)) &&
           !packageNames.includes(dependency)) ||
@@ -567,7 +569,7 @@ export function reportDependencyOwnership(
         }
       }
       for (const tag of body.matchAll(
-        /(?:^|[\r\n\u2028\u2029])[ \t]*@(type|param|arg(?:ument)?|returns?|typedef|property|prop|this|extends|implements|satisfies|throws|exception|enum|template)\b\s*/g,
+        /(?:^|[\r\n\u2028\u2029])[ \t]*@(type|param|arg(?:ument)?|returns?|typedef|property|prop|this|extends|augments|implements|satisfies|throws|exception|enum|template)\b\s*/g,
       )) {
         let start = tag.index + tag[0].length;
         if (['param', 'arg', 'argument', 'property', 'prop'].includes(tag[1])) {

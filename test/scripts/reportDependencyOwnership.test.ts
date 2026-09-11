@@ -736,7 +736,10 @@ describe('dependency ownership report', () => {
       },
       aliases: { 'src/app/package.json': ['@site', '@theme'] },
     });
-    write('src/app/src/index.ts', "import '@site/sdk'; import '@theme/Layout';");
+    write(
+      'src/app/src/index.ts',
+      "import '@site/sdk'; import '@theme/Layout'; import '@theme?raw';",
+    );
     const report = reportDependencyOwnership(root, config);
     expect(
       report.declarations.find((entry) => entry.dependency === '@site/sdk')?.references,
@@ -882,7 +885,7 @@ describe('dependency ownership report', () => {
     ]);
   });
 
-  it.each(['throws', 'exception'])('records JSDoc @%s types', (tag) => {
+  it.each(['throws', 'exception', 'augments'])('records JSDoc @%s types', (tag) => {
     write('src/index.js', `/** @${tag} {import('schema').Problem} */\nexport function run() {}`);
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
       expect.objectContaining({
