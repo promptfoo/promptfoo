@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildConfiguredProviderMap,
   GRADING_PROVIDER_TYPE_KEYS,
-  hasProviderConfigTemplates,
   isProviderTypeMap,
-  renderGradingProviderConfig,
   resolveConfiguredProviderReference,
 } from '../../src/util/gradingProvider';
+import {
+  hasProviderConfigTemplates,
+  renderGradingProviderConfig,
+} from '../../src/util/gradingProviderConfig';
 
 import type { ApiProvider } from '../../src/types/providers';
 

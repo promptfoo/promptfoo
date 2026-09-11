@@ -1,7 +1,7 @@
 import { DEFAULT_AGENT_GRADING_PROMPT } from '../prompts/grading';
 import { isAgenticGradingProvider } from '../providers/agentic-utils';
 import { getCodexDefaultProviders } from '../providers/openai/codexDefaults';
-import { renderGradingProviderConfig } from '../util/gradingProvider';
+import { renderGradingProviderConfig } from '../util/gradingProviderConfig';
 import { getGradingProvider } from './providers';
 import { runJsonGradingPrompt } from './rubric';
 import { tryParse } from './shared';

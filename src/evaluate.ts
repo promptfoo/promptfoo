@@ -14,10 +14,10 @@ import { isTransformFunction } from './types/transform';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
-  hasProviderConfigTemplates,
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
+import { hasProviderConfigTemplates } from './util/gradingProviderConfig';
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
