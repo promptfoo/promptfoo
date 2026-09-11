@@ -8,6 +8,7 @@ export const REDTEAM_PROVIDER_PATHS = {
   bestOfN: 'promptfoo:redteam:best-of-n',
   crescendo: 'promptfoo:redteam:crescendo',
   custom: 'promptfoo:redteam:custom',
+  goblin: 'promptfoo:redteam:goblin',
   goat: 'promptfoo:redteam:goat',
   hydra: 'promptfoo:redteam:hydra',
   indirectWebPwn: 'promptfoo:redteam:indirect-web-pwn',

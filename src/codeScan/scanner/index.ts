@@ -16,25 +16,23 @@ import {
   type ScanResponse,
 } from '../../types/codeScan';
 import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
-import {
-  loadConfigOrDefault,
-  mergeConfigWithOptions,
-  resolveApiHost,
-  resolveGuidance,
-} from '../config/loader';
+import { loadConfigOrDefault, mergeConfigWithOptions, resolveGuidance } from '../config/loader';
 import { validateOnBranch } from '../git/diff';
 import { processDiff } from '../git/diffProcessor';
 import { extractMetadata } from '../git/metadata';
-import { stopFilesystemMcpServer } from '../mcp/filesystem';
-import { setupMcpBridge } from '../mcp/index';
+import {
+  startFilesystemMcpServer,
+  stopFilesystemMcpServer,
+  waitForFilesystemMcpServerReady,
+} from '../mcp/filesystem';
+import { SocketIoMcpBridge } from '../mcp/transport';
 import { resolveAuthCredentials } from '../util/auth';
 import { parseGitHubPr } from '../util/github';
-import { type CleanupRefs, registerCleanupHandlers } from './cleanup';
+import { registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequestWithRetry } from './request';
 
 import type { Config } from '../config/schema';
-import type { SocketIoMcpBridge } from '../mcp/transport';
 
 /**
  * Options for executing a scan
@@ -89,86 +87,62 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
   let mcpProcess: ChildProcess | null = null;
   let mcpBridge: SocketIoMcpBridge | null = null;
   let sessionId: string | undefined = undefined;
+  const abortController = new AbortController();
+  const originalLogLevel = getLogLevel();
+  const structuredOutputRequested =
+    options.json === true ||
+    options.format === CodeScanOutputFormat.JSON ||
+    options.format === CodeScanOutputFormat.SARIF;
+  const absoluteRepoPath = path.resolve(repoPath);
+  let outputFormat: CodeScanOutputFormat | null = null;
+  let spinner: ReturnType<typeof createSpinner> | undefined;
+  let showSpinner = false;
 
   const startTime = Date.now();
 
-  let outputFormat: CodeScanOutputFormat;
   try {
     outputFormat = resolveOutputFormat(options);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.error(`Scan failed: ${errorMessage}`);
-    cliState.postActionCallback = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      process.exitCode = 1;
-    };
-    return;
-  }
-
-  // Structured modes reserve stdout for the payload. src/entrypoint.ts already pre-sets
-  // LOG_LEVEL=error before the logger module is imported (so any module-init logs are
-  // already suppressed); we re-apply here for callers that bypass the CLI entrypoint
-  // (e.g., library consumers calling executeScan directly).
-  if (outputFormat !== CodeScanOutputFormat.TEXT) {
-    setLogLevel('error');
-  }
-
-  // Load and merge configuration
-  const baseConfig: Config = loadConfigOrDefault(options.config);
-  const config = mergeConfigWithOptions(baseConfig, options);
-
-  // Resolve guidance (CLI options take precedence)
-  const guidance = resolveGuidance(options, config);
-
-  // Resolve repository path
-  const absoluteRepoPath = path.resolve(repoPath);
-
-  // Display startup messages (skipped for non-text formats to keep stdout clean for parsing)
-  if (outputFormat === CodeScanOutputFormat.TEXT) {
-    logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
-    logger.info(`  Minimum severity: ${config.minimumSeverity}`);
-    if (config.diffsOnly) {
-      logger.info(`  Mode: diffs only`);
-    } else {
-      logger.info(`  Mode: diffs + tracing into repo`);
+    // Structured modes reserve stdout for the payload. src/entrypoint.ts already pre-sets
+    // LOG_LEVEL=error before the logger module is imported (so any module-init logs are
+    // already suppressed); we re-apply here for callers that bypass the CLI entrypoint
+    // (e.g., library consumers calling executeScan directly).
+    if (outputFormat !== CodeScanOutputFormat.TEXT) {
+      setLogLevel('error');
     }
-    logger.info('');
-  }
 
-  logger.debug(`Repository: ${absoluteRepoPath}`);
+    // Load and merge configuration
+    const baseConfig: Config = loadConfigOrDefault(options.config);
+    const config = mergeConfigWithOptions(baseConfig, options);
 
-  // Create mutable refs for cleanup handlers
-  // This allows signal handlers to access resources even if created later
-  const cleanupRefs: CleanupRefs = {
-    repoPath: absoluteRepoPath,
-    socket: null,
-    mcpBridge: null,
-    mcpProcess: null,
-    spinner: null,
-    abortController: null,
-  };
+    // Resolve guidance (CLI options take precedence)
+    const guidance = resolveGuidance(options, config);
 
-  // Register cleanup handlers for signals (SIGINT, SIGTERM, etc.)
-  registerCleanupHandlers(cleanupRefs);
+    // Display startup messages (skipped for non-text formats to keep stdout clean for parsing)
+    if (outputFormat === CodeScanOutputFormat.TEXT) {
+      logger.info('Beginning scan for LLM-related vulnerabilities in your code.');
+      logger.info(`  Minimum severity: ${config.minimumSeverity}`);
+      if (config.diffsOnly) {
+        logger.info(`  Mode: diffs only`);
+      } else {
+        logger.info(`  Mode: diffs + tracing into repo`);
+      }
+      logger.info('');
+    }
 
-  // Initialize spinner (hidden for non-text formats so machine-readable output stays clean)
-  const isWebUI = Boolean(cliState.webUI);
-  const spinner = createSpinner({
-    format: outputFormat,
-    isWebUI,
-    logLevel: getLogLevel(),
-  });
+    logger.debug(`Repository: ${absoluteRepoPath}`);
 
-  if (spinner) {
-    cleanupRefs.spinner = spinner; // Update ref for signal handlers
-  }
+    // Register cleanup handlers for signals (SIGINT, SIGTERM, etc.)
+    registerCleanupHandlers(abortController);
 
-  const showSpinner = Boolean(spinner);
+    // Initialize spinner (hidden for non-text formats so machine-readable output stays clean)
+    const isWebUI = Boolean(cliState.webUI);
+    spinner = createSpinner({
+      format: outputFormat,
+      isWebUI,
+      logLevel: getLogLevel(),
+    });
 
-  try {
-    // Create AbortController for cancelling the scan
-    const abortController = new AbortController();
-    cleanupRefs.abortController = abortController; // Update ref for signal handlers
+    showSpinner = Boolean(spinner);
 
     // Parse PR context early for auth (if --github-pr provided)
     // This is needed for fork PR authentication where OIDC is unavailable
@@ -192,20 +166,39 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
     client = await createAgentClient({
       agent: 'code-scan',
-      host: resolveApiHost(options, config),
+      host: config.apiHost || 'https://api.promptfoo.app',
       auth: resolveAuthCredentials(options.apiKey, parsedPR),
     });
     sessionId = client.sessionId;
-    cleanupRefs.socket = client.socket; // Update ref for signal handlers
 
     // Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
-      const mcpSetup = await setupMcpBridge(client.socket, absoluteRepoPath, sessionId);
-      mcpProcess = mcpSetup.mcpProcess;
-      mcpBridge = mcpSetup.mcpBridge;
+      logger.debug('Setting up repo MCP access...');
+      logger.debug(`Using session ID: ${sessionId}`);
 
-      cleanupRefs.mcpProcess = mcpProcess; // Update ref for signal handlers
-      cleanupRefs.mcpBridge = mcpBridge; // Update ref for signal handlers
+      const startedMcpProcess = startFilesystemMcpServer(absoluteRepoPath);
+      try {
+        await waitForFilesystemMcpServerReady(startedMcpProcess);
+        logger.debug('Filesystem MCP server ready');
+
+        const connectedMcpBridge = new SocketIoMcpBridge(
+          startedMcpProcess,
+          client.socket,
+          sessionId,
+        );
+        await connectedMcpBridge.connect();
+
+        client.socket.emit('runner:hello', {
+          session_id: sessionId,
+          repo_root: absoluteRepoPath,
+        });
+
+        mcpProcess = startedMcpProcess;
+        mcpBridge = connectedMcpBridge;
+      } catch (error) {
+        await stopFilesystemMcpServer(startedMcpProcess);
+        throw error;
+      }
     }
 
     // Validate branch and determine base branch
@@ -346,7 +339,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
           githubPr: options.githubPr,
         });
       } else if (outputFormat === CodeScanOutputFormat.SARIF) {
-        logger.error(
+        console.error(
           `Scan skipped: ${msg} SARIF output was not generated because the scan did not complete.`,
         );
         cliState.postActionCallback = async () => {
@@ -370,6 +363,11 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     const msg = `Scan failed: ${errorMessage}`;
     if (showSpinner && spinner) {
       spinner.fail(msg);
+    } else if (structuredOutputRequested) {
+      // Structured modes reserve stdout for the payload, so errors go to stderr. This
+      // covers both resolved formats (JSON/SARIF) and requests that failed before the
+      // format resolved (e.g. an invalid --json + --format sarif combination).
+      console.error(msg);
     } else {
       logger.error(msg);
     }
@@ -400,6 +398,14 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     if (client) {
       client.disconnect();
       logger.debug('Agent client disconnected');
+    }
+
+    if (
+      outputFormat !== null &&
+      outputFormat !== CodeScanOutputFormat.TEXT &&
+      getLogLevel() !== originalLogLevel
+    ) {
+      setLogLevel(originalLogLevel);
     }
   }
 }

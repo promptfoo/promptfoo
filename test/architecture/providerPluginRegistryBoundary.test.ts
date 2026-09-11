@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import ts from 'typescript';
+import { type Node, parseSync, Visitor } from 'oxc-parser';
 import { describe, expect, it } from 'vitest';
 import {
   extractModuleSpecifiers,
@@ -21,63 +21,67 @@ const providerPluginFamilyFiles = [
 ];
 
 function getRuntimeModuleSpecifiers(sourceText: string, filePath: string): string[] {
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
-  const specifiers: string[] = [];
-
-  function visit(node: ts.Node): void {
-    if (ts.isImportDeclaration(node) && ts.isStringLiteralLike(node.moduleSpecifier)) {
-      const clause = node.importClause;
-      const namedBindings = clause?.namedBindings;
-      const runsAtRuntime =
-        clause == null ||
-        (!clause.isTypeOnly &&
-          (clause.name != null ||
-            namedBindings == null ||
-            ts.isNamespaceImport(namedBindings) ||
-            namedBindings.elements.some((element) => !element.isTypeOnly)));
-      if (runsAtRuntime) {
-        specifiers.push(node.moduleSpecifier.text);
-      }
-    } else if (
-      ts.isExportDeclaration(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteralLike(node.moduleSpecifier)
-    ) {
-      const runsAtRuntime =
-        !node.isTypeOnly &&
-        (!node.exportClause ||
-          ts.isNamespaceExport(node.exportClause) ||
-          node.exportClause.elements.some((element) => !element.isTypeOnly));
-      if (runsAtRuntime) {
-        specifiers.push(node.moduleSpecifier.text);
-      }
-    } else if (ts.isCallExpression(node)) {
-      const expression = node.expression;
-      const isRuntimeLoad =
-        expression.kind === ts.SyntaxKind.ImportKeyword ||
-        (ts.isIdentifier(expression) && expression.text === 'require') ||
-        (ts.isPropertyAccessExpression(expression) &&
-          ts.isIdentifier(expression.expression) &&
-          ((expression.expression.text === 'require' && expression.name.text === 'resolve') ||
-            (expression.expression.text === 'module' && expression.name.text === 'require')));
-      if (isRuntimeLoad) {
-        if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
-          throw new Error('Provider plugin runtime loads must use one static string specifier');
-        }
-        specifiers.push(node.arguments[0].text);
-      }
-    }
-
-    ts.forEachChild(node, visit);
+  const { program, errors } = parseSync(filePath, sourceText);
+  if (errors.length > 0) {
+    throw new Error(`Cannot parse ${filePath}: ${errors[0].message}`);
   }
-
-  visit(sourceFile);
+  const specifiers: string[] = [];
+  function addStaticLoad(source: Node | undefined, hasExtraArguments = false): void {
+    if (hasExtraArguments || source?.type !== 'Literal' || typeof source.value !== 'string') {
+      throw new Error('Provider plugin runtime loads must use one static string specifier');
+    }
+    specifiers.push(source.value);
+  }
+  new Visitor({
+    ImportDeclaration(node) {
+      if (
+        node.importKind !== 'type' &&
+        (node.specifiers.length === 0 ||
+          node.specifiers.some(
+            (specifier) => specifier.type !== 'ImportSpecifier' || specifier.importKind !== 'type',
+          ))
+      ) {
+        specifiers.push(node.source.value);
+      }
+    },
+    ExportNamedDeclaration(node) {
+      if (
+        node.exportKind !== 'type' &&
+        node.source &&
+        (node.specifiers.length === 0 ||
+          node.specifiers.some((specifier) => specifier.exportKind !== 'type'))
+      ) {
+        specifiers.push(node.source.value);
+      }
+    },
+    ExportAllDeclaration(node) {
+      if (node.exportKind !== 'type') {
+        specifiers.push(node.source.value);
+      }
+    },
+    ImportExpression(node) {
+      addStaticLoad(node.source, node.options != null);
+    },
+    TSImportEqualsDeclaration(node) {
+      if (node.importKind !== 'type' && node.moduleReference.type === 'TSExternalModuleReference') {
+        specifiers.push(node.moduleReference.expression.value);
+      }
+    },
+    CallExpression(node) {
+      const callee = node.callee;
+      if (
+        (callee.type === 'Identifier' && callee.name === 'require') ||
+        (callee.type === 'MemberExpression' &&
+          !callee.computed &&
+          callee.object.type === 'Identifier' &&
+          callee.property.type === 'Identifier' &&
+          ((callee.object.name === 'require' && callee.property.name === 'resolve') ||
+            (callee.object.name === 'module' && callee.property.name === 'require')))
+      ) {
+        addStaticLoad(node.arguments[0], node.arguments.length !== 1);
+      }
+    },
+  }).visit(program);
   return [...new Set(specifiers)];
 }
 
@@ -141,20 +145,21 @@ describe('provider plugin package boundary', () => {
     expect(violations).toEqual([]);
   });
 
-  it.each(
-    providerPluginFamilyFiles,
-  )('%s does not depend on the CLI, server, or root facade', (relativePath) => {
-    const source = readFileSync(path.join(repoRoot, relativePath), 'utf8');
-    const violations = getRuntimeModuleSpecifiers(source, relativePath).filter(
-      (specifier) =>
-        specifier === '../index' ||
-        specifier === '../../index' ||
-        specifier.includes('/commands/') ||
-        specifier.includes('/server/'),
-    );
+  it.each(providerPluginFamilyFiles)(
+    '%s does not depend on the CLI, server, or root facade',
+    (relativePath) => {
+      const source = readFileSync(path.join(repoRoot, relativePath), 'utf8');
+      const violations = getRuntimeModuleSpecifiers(source, relativePath).filter(
+        (specifier) =>
+          specifier === '../index' ||
+          specifier === '../../index' ||
+          specifier.includes('/commands/') ||
+          specifier.includes('/server/'),
+      );
 
-    expect(violations).toEqual([]);
-  });
+      expect(violations).toEqual([]);
+    },
+  );
 
   it('keeps the plugin contract independent of the broad legacy types barrel', () => {
     const source = readFileSync(path.join(repoRoot, 'src/providers/registryTypes.ts'), 'utf8');

@@ -134,6 +134,11 @@ describe('logger', () => {
     mockGetEnvBool.mockImplementation((_, defaultValue) => defaultValue);
     mockGetConfigDirectoryPath.mockReset();
     mockGetConfigDirectoryPath.mockReturnValue('/mock/config');
+    winstonMock.transports.File.mockReset().mockImplementation(function (this: {
+      write: ReturnType<typeof vi.fn>;
+    }) {
+      this.write = vi.fn();
+    });
     for (const fn of Object.values(fsMock)) {
       (fn as Mock).mockReset();
     }

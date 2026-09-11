@@ -50,7 +50,7 @@ class ProviderPluginLoadErrorImpl extends Error {
 
   constructor(pluginName: string, providerPath: string, cause: unknown) {
     const message = cause instanceof Error ? cause.message : String(cause);
-    super(`Failed to load provider family for '${providerPath}': ${message}`);
+    super(`Failed to load provider plugin '${pluginName}' for '${providerPath}': ${message}`);
     this.name = 'ProviderPluginLoadError';
     this.pluginName = pluginName;
     this.providerPath = providerPath;
