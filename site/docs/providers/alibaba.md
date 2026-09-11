@@ -23,8 +23,8 @@ The provider supports all [OpenAI provider](/docs/providers/openai) configuratio
 
 ```yaml
 providers:
-  - alibaba:qwen-max # Simple usage
-  - id: alibaba:qwen-plus # Aliases: alicloud:, aliyun:, dashscope:
+  - alibaba:qwen3.7-plus # Balanced general use
+  - id: alibaba:qwen-plus # Legacy model compatibility example
     config:
       temperature: 0.7
       apiKey: your_api_key_here # Alternative to DASHSCOPE_API_KEY environment variable
@@ -32,6 +32,8 @@ providers:
 ```
 
 :::note
+
+The equivalent provider prefixes are `alicloud:`, `aliyun:`, and `dashscope:`. For new configurations, Alibaba recommends `qwen3.7-plus` for balanced use, `qwen3.8-flash` for lower cost, or `qwen3.8-max` for stronger reasoning. Check the [model catalog for your region](https://www.alibabacloud.com/help/en/model-studio/text-generation-model); model availability differs by region.
 
 If you're using the Alibaba Cloud Beijing region console, switch the base URL to `https://dashscope.aliyuncs.com/compatible-mode/v1` instead of the international endpoint.
 

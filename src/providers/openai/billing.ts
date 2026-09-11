@@ -3,6 +3,7 @@ import {
   GPT_LONG_CONTEXT_THRESHOLD,
   getOpenAICacheWriteInputTokens,
   OPENAI_BILLING_MODELS,
+  OPENAI_DAYBREAK_ALIASES,
 } from './util';
 
 import type { ProviderConfig } from '../shared';
@@ -756,6 +757,48 @@ function getBaseTextRates(
   };
 }
 
+function getDaybreakModelRates(
+  modelName: string,
+  totalInputTokens: number,
+  options: { serviceTier?: string | null; apiUrl?: string; regionalProcessing?: boolean },
+): OpenAIModelRates | undefined {
+  const underlyingModel = OPENAI_DAYBREAK_ALIASES.get(modelName);
+  if (
+    !underlyingModel ||
+    !options.apiUrl ||
+    options.regionalProcessing ||
+    ![undefined, null, 'default', 'standard'].includes(options.serviceTier)
+  ) {
+    return undefined;
+  }
+  try {
+    if (new URL(options.apiUrl).hostname.toLowerCase() !== 'api.openai.com') {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+
+  if (underlyingModel === 'gpt-5.6-sol') {
+    const text = getBaseTextRates(underlyingModel, totalInputTokens);
+    return text ? { text } : undefined;
+  }
+
+  // Red's model card caps input at 272K; its pricing table has no long-context rates.
+  // https://developers.openai.com/api/docs/models/gpt-daybreak-red-latest
+  if (totalInputTokens > 272_000) {
+    return undefined;
+  }
+  return {
+    text: {
+      input: perMillion(12.5),
+      cachedInput: perMillion(1.25),
+      cacheWriteInput: perMillion(15.625),
+      output: perMillion(75),
+    },
+  };
+}
+
 function getFineTunedModelRates(
   modelName: string,
   tier: OpenAIProcessingTier,
@@ -1086,7 +1129,9 @@ export function calculateOpenAIUsageCost(
   );
   const catalogRates = bedrockMantleTextRates
     ? { text: bedrockMantleTextRates }
-    : getModelRates(modelName, tier, usage.totalInputTokens);
+    : OPENAI_DAYBREAK_ALIASES.has(modelName)
+      ? getDaybreakModelRates(modelName, usage.totalInputTokens, options)
+      : getModelRates(modelName, tier, usage.totalInputTokens);
   const explicitTextRates = getCompleteTextCostOverrides(config);
   const explicitAudioRates = getCompleteAudioCostOverrides(config);
   // Complete explicit rates are authoritative when no catalog entry applies, including for

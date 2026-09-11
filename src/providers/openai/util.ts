@@ -10,6 +10,13 @@ import type { ProviderConfig } from '../shared';
 const ajv = getAjv();
 
 export const GPT_LONG_CONTEXT_THRESHOLD = 272_000;
+
+// Billing relationships verified September 11, 2026. Keep the alias on the wire.
+export const OPENAI_DAYBREAK_ALIASES = new Map([
+  ['gpt-daybreak-blue-latest', 'gpt-5.6-sol'],
+  ['gpt-daybreak-red-latest', 'gpt-5.6-cyber'],
+]);
+
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /(?:^|\/)(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,})(?:\/|$)/i;
 

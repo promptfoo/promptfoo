@@ -8,6 +8,139 @@ import {
 } from '../../../src/providers/openai/billing';
 
 describe('OpenAI billing helpers', () => {
+  describe('native Daybreak alias pricing', () => {
+    const apiUrl = 'https://api.openai.com/v1';
+    const usage = {
+      input_tokens: 2000,
+      output_tokens: 1000,
+      input_tokens_details: { cached_tokens: 500, cache_write_tokens: 250 },
+    };
+
+    it.each([
+      ['gpt-daybreak-blue-latest', 272_000, 4, 0.4, 5, 20],
+      ['gpt-daybreak-blue-latest', 272_001, 8, 0.8, 10, 30],
+      ['gpt-daybreak-red-latest', 272_000, 12.5, 1.25, 15.625, 75],
+    ] as const)(
+      'prices %s with %i input tokens and reported cache usage',
+      (model, inputTokens, input, cached, write, output) => {
+        expect(
+          calculateOpenAIUsageCost(
+            model,
+            {},
+            { ...usage, input_tokens: inputTokens },
+            { apiUrl, serviceTier: 'default' },
+          ),
+        ).toBeCloseTo(
+          ((inputTokens - 750) * input + 500 * cached + 250 * write + 1000 * output) / 1e6,
+          10,
+        );
+      },
+    );
+
+    it('does not extrapolate Red prices past its documented maximum input', () => {
+      expect(
+        calculateOpenAIUsageCost(
+          'gpt-daybreak-red-latest',
+          {},
+          { ...usage, input_tokens: 272_001 },
+          { apiUrl },
+        ),
+      ).toBeUndefined();
+    });
+
+    it.each(['gpt-daybreak-blue-latest', 'gpt-daybreak-red-latest'])(
+      'limits %s automatic prices to established tiers, endpoints, and usage',
+      (model) => {
+        for (const serviceTier of [undefined, null, 'default', 'standard']) {
+          expect(calculateOpenAIUsageCost(model, {}, usage, { apiUrl, serviceTier })).toBeTypeOf(
+            'number',
+          );
+        }
+        for (const serviceTier of ['auto', 'batch', 'flex', 'priority', 'fast', 'future-tier']) {
+          expect(
+            calculateOpenAIUsageCost(model, {}, usage, { apiUrl, serviceTier }),
+          ).toBeUndefined();
+        }
+        for (const endpoint of [
+          undefined,
+          'https://gateway.example/v1',
+          'https://us.api.openai.com/v1',
+          'https://eu.api.openai.com/v1',
+          'https://api.openai.com.example/v1',
+          'https://gateway.example/api.openai.com',
+        ]) {
+          expect(calculateOpenAIUsageCost(model, {}, usage, { apiUrl: endpoint })).toBeUndefined();
+        }
+        expect(
+          calculateOpenAIUsageCost(model, {}, usage, { apiUrl, regionalProcessing: true }),
+        ).toBeUndefined();
+        expect(
+          calculateOpenAIUsageCost(
+            model,
+            {},
+            { input_tokens: 2000, output_tokens: 1000 },
+            { apiUrl },
+          ),
+        ).toBeUndefined();
+        expect(calculateOpenAIUsageCost(model, {}, undefined, { apiUrl })).toBeUndefined();
+        expect(
+          calculateOpenAIUsageCost(
+            model,
+            {},
+            { ...usage, input_tokens_details: { ...usage.input_tokens_details, audio_tokens: 10 } },
+            { apiUrl },
+          ),
+        ).toBeUndefined();
+        expect(calculateOpenAIUsageCost(model, {}, usage, { apiUrl, cachedResponse: true })).toBe(
+          0,
+        );
+      },
+    );
+
+    it('preserves partial native overrides and complete explicit rates outside catalog scope', () => {
+      expect(
+        calculateOpenAIUsageCost('gpt-daybreak-red-latest', { inputCost: 0 }, usage, { apiUrl }),
+      ).toBeCloseTo(0.075, 10);
+      const gatewayOptions = { apiUrl: 'https://gateway.example/v1', serviceTier: 'flex' };
+      expect(
+        calculateOpenAIUsageCost(
+          'gpt-daybreak-red-latest',
+          { inputCost: 0 },
+          usage,
+          gatewayOptions,
+        ),
+      ).toBeUndefined();
+      expect(
+        calculateOpenAIUsageCost(
+          'gpt-daybreak-red-latest',
+          { inputCost: 2 / 1e6, outputCost: 3 / 1e6 },
+          usage,
+          gatewayOptions,
+        ),
+      ).toBeCloseTo(0.007, 10);
+      expect(
+        calculateOpenAIUsageCost('gpt-daybreak-red-latest', { cost: 0 }, usage, gatewayOptions),
+      ).toBe(0);
+    });
+
+    it('does not resolve arbitrary names or infer a platform from aggregate token usage', () => {
+      for (const model of [
+        'openai/gpt-daybreak-blue-latest',
+        'bedrock:gpt-daybreak-blue-latest',
+        'gpt-daybreak-red-latest-custom',
+      ]) {
+        expect(calculateOpenAIUsageCost(model, {}, usage, { apiUrl })).toBeUndefined();
+      }
+      expect(
+        calculateOpenAIUsageCostFromTokenUsage('openai.gpt-daybreak-blue-latest', {
+          prompt: 2000,
+          completion: 1000,
+          completionDetails: { cacheCreationInputTokens: 0 },
+        }),
+      ).toBeUndefined();
+    });
+  });
+
   describe('GPT-6 Astra', () => {
     it.each([
       { inputTokens: 272_000, input: 10, cached: 1, write: 12.5, output: 50 },
