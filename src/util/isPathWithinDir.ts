@@ -19,31 +19,38 @@ import logger from '../logger';
  * @returns Promise that resolves to true if the path is within dir
  */
 export async function isPathWithinDir(filePath: string, dir: string): Promise<boolean> {
-  // Validate dir exists first — fail fast on configuration errors
-  let realDirRaw: string;
+  return isPathWithinCanonicalDir(filePath, await resolveCanonicalDir(dir));
+}
+
+/** Resolve a directory once when callers need to keep its identity stable. */
+export async function resolveCanonicalDir(dir: string): Promise<string> {
   try {
-    realDirRaw = await fs.realpath(dir);
+    return await fs.realpath(dir);
   } catch {
     throw new Error(`Directory does not exist or is inaccessible: ${dir}`);
   }
+}
 
+/**
+ * Check against an already-resolved directory without resolving that directory again.
+ * This keeps case-sensitive Windows directories distinct and lets callers pin the
+ * allowed directory across multiple filesystem operations.
+ */
+export async function isPathWithinCanonicalDir(
+  filePath: string,
+  realDir: string,
+): Promise<boolean> {
   try {
-    const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
+    const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(realDir, filePath);
     const realTargetRaw = await fs.realpath(absoluteTarget);
 
-    // Equal means the dir itself
-    if (realTargetRaw === realDirRaw) {
-      return true;
-    }
-
-    // Containment check via relative() — avoids prefix gotchas like /foo/bar vs /foo/barista
-    const rel = path.relative(realDirRaw, realTargetRaw);
-    return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+    const prefix = realDir.endsWith(path.sep) ? realDir : `${realDir}${path.sep}`;
+    return realTargetRaw === realDir || realTargetRaw.startsWith(prefix);
   } catch (error: any) {
     // If target doesn't exist (ENOENT), validate parent directory instead.
     // This allows writes to create new files in valid directories.
     if (error.code === 'ENOENT') {
-      const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
+      const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(realDir, filePath);
       const parentDir = path.dirname(absoluteTarget);
 
       // Stop recursion if we've reached root
@@ -52,7 +59,7 @@ export async function isPathWithinDir(filePath: string, dir: string): Promise<bo
         return false;
       }
 
-      return isPathWithinDir(parentDir, dir);
+      return isPathWithinCanonicalDir(parentDir, realDir);
     }
 
     // Fail safely on any other error (broken symlinks, permission errors, etc.)

@@ -395,8 +395,9 @@ describe('HttpProvider structured multipart requests', () => {
     vi.spyOn(fs.promises, 'realpath').mockImplementation(async (file) => {
       const canonical = await realpath(file);
       if (String(file) === path.join(link, 'report.txt') && ++sourceResolutions === 1) {
-        fs.renameSync(safeDir, `${safeDir}-original`);
-        fs.symlinkSync(outsideDir, safeDir, 'junction');
+        const swappedPath = process.platform === 'win32' ? link : safeDir;
+        fs.renameSync(swappedPath, `${swappedPath}-original`);
+        fs.symlinkSync(outsideDir, swappedPath, 'junction');
       }
       return canonical;
     });

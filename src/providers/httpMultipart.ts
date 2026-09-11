@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 
 import { z } from 'zod';
 import cliState from '../cliState';
-import { isPathWithinDir } from '../util/isPathWithinDir';
+import { isPathWithinCanonicalDir, resolveCanonicalDir } from '../util/isPathWithinDir';
 import { getNunjucksEngine } from '../util/templates';
 
 const GeneratedDocumentSourceSchema = z.object({
@@ -252,7 +252,8 @@ async function loadFilePart(
 ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
   const renderedPath = renderTemplate(source.path, vars);
   const resolvedPath = resolvePath(renderedPath);
-  if (!(await isPathWithinDir(resolvedPath, cliState.basePath || process.cwd()))) {
+  const basePath = await resolveCanonicalDir(cliState.basePath || process.cwd());
+  if (!(await isPathWithinCanonicalDir(resolvedPath, basePath))) {
     throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
   }
   const file = await fs.open(resolvedPath, 'r');
@@ -262,7 +263,7 @@ async function loadFilePart(
     if (
       opened.dev !== canonical.dev ||
       opened.ino !== canonical.ino ||
-      !(await isPathWithinDir(canonicalPath, cliState.basePath || process.cwd()))
+      !(await isPathWithinCanonicalDir(canonicalPath, basePath))
     ) {
       throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
     }
