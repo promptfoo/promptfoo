@@ -170,7 +170,7 @@ New to promptfoo? See [Getting Started](/docs/getting-started) for an overview o
 - **Faithfulness checks done right.** When using `llm-rubric` to check for hallucination, the source material must be inlined in the rubric via `{{variable}}` so the grader can actually compare.
 - **Calibrated grading.** Set an explicit grader provider, supply source evidence, and verify that known-good answers pass and known-bad answers fail. Record model versions/settings for comparisons.
 - **Environment variables.** Use Nunjucks syntax `'{{env.API_KEY}}'` in YAML configs, not shell syntax.
-- **CI-friendly runs.** Use `npx promptfoo eval -o output.json --no-cache` and inspect `success`, `score`, and `error`.
+- **CI-friendly runs.** Use `npx promptfoo eval -o output.json --no-cache --no-share` and inspect `success`, `score`, and `error`.
 - **Evidence before scores.** Require nonzero tested coverage; a missing or failed grader is an error, and mock graders are only for fixture checks.
 
 The provider and red-team skills also teach the agent to:
