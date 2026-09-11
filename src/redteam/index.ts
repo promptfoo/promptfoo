@@ -4,6 +4,7 @@ import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
+import Clone from 'rfdc';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
@@ -80,6 +81,8 @@ import type {
   SynthesizeOptions,
 } from './types';
 
+const clone = Clone();
+
 const MATERIALIZED_MULTI_INPUT_PROMPT_METADATA_KEY = '__promptfooMaterializedMultiInputPrompt';
 
 function mergeRemoteGeneratedTestProvenance(
@@ -99,54 +102,45 @@ function mergeRemoteGeneratedTestProvenance(
   };
 }
 
-type StrategyRemoteProvenance = {
-  byPlugin: Map<string, RemoteGeneratedTestProvenance>;
-  fallback: RemoteGeneratedTestProvenance | undefined;
+type StrategyRemoteSource = {
+  metadata: TestCaseWithPlugin['metadata'];
+  vars: NonNullable<TestCase['vars']>;
 };
 
-function collectStrategyRemoteProvenance(
-  testCases: TestCaseWithPlugin[],
-): StrategyRemoteProvenance {
-  const byPlugin = new Map<string, RemoteGeneratedTestProvenance>();
-  let fallback: RemoteGeneratedTestProvenance | undefined;
-  for (const testCase of testCases) {
-    const provenance = getRemoteGeneratedTestProvenance(testCase.metadata);
-    if (!provenance) {
-      continue;
-    }
-    fallback = mergeRemoteGeneratedTestProvenance(fallback, provenance);
-    const pluginId = testCase.metadata.pluginId;
-    byPlugin.set(pluginId, mergeRemoteGeneratedTestProvenance(byPlugin.get(pluginId), provenance));
-  }
-  return { byPlugin, fallback };
+function collectStrategyRemoteProvenance(testCases: TestCaseWithPlugin[]): StrategyRemoteSource[] {
+  return testCases
+    .filter((testCase) => getRemoteGeneratedTestProvenance(testCase.metadata))
+    .map(({ metadata, vars }) => ({ metadata, vars: vars ?? {} }));
 }
 
 function propagateStrategyRemoteProvenance<T extends Record<string, any>>(
   metadata: T,
-  varsBeforeStrategy: TestCase['vars'],
   vars: TestCase['vars'],
-  source: StrategyRemoteProvenance,
+  sources: StrategyRemoteSource[],
 ): T {
-  const pluginId = metadata.pluginId;
-  const provenance =
-    getRemoteGeneratedTestProvenance(metadata) ??
-    (typeof pluginId === 'string' ? source.byPlugin.get(pluginId) : source.fallback);
-  if (!provenance) {
-    return metadata;
-  }
-  const propagated = propagateRemoteGeneratedVarProvenance(
-    setRemoteGeneratedTestProvenance(metadata, provenance),
-    getChangedVarNames(varsBeforeStrategy ?? {}, vars ?? {}),
-    {
-      varsAfterTransform: vars ?? {},
-      varsBeforeTransform: varsBeforeStrategy ?? {},
-    },
+  const matchingSources = sources.filter(
+    (source) => source.metadata.pluginId === metadata.pluginId,
   );
-  const updated = getRemoteGeneratedTestProvenance(propagated)!;
-  return setRemoteGeneratedTestProvenance(propagated, {
-    ...updated,
-    unsafeRenderVars: Object.keys(vars ?? {}),
-  });
+  // Strategies can fan out, mutate inputs, or omit source metadata. Keep the original
+  // values so copied attack text stays tracked without marking unchanged local vars.
+  for (const source of matchingSources.length > 0 ? matchingSources : sources) {
+    metadata = propagateRemoteGeneratedVarProvenance(
+      setRemoteGeneratedTestProvenance(
+        metadata,
+        mergeRemoteGeneratedTestProvenance(
+          getRemoteGeneratedTestProvenance(metadata),
+          getRemoteGeneratedTestProvenance(source.metadata)!,
+        ),
+      ),
+      getChangedVarNames(source.vars, vars ?? {}),
+      {
+        metadataBeforeTransform: source.metadata,
+        varsAfterTransform: vars ?? {},
+        varsBeforeTransform: source.vars,
+      },
+    );
+  }
+  return metadata;
 }
 
 function getMaterializedMultiInputPromptSnapshot(
@@ -749,7 +743,11 @@ async function applyStrategies(
     const remoteProvenance = collectStrategyRemoteProvenance(testCasesToProcess);
 
     const strategyTestCases: (TestCase | undefined)[] = await strategyAction(
-      testCasesToProcess,
+      testCasesToProcess.map((testCase) => ({
+        ...testCase,
+        vars: clone(testCase.vars),
+        metadata: clone(testCase.metadata),
+      })),
       injectVar,
       {
         ...(strategy.config || {}),
@@ -824,7 +822,7 @@ async function applyStrategies(
             }),
             ...getMaterializedMultiInputPromptMetadata(vars),
           };
-          metadata = propagateStrategyRemoteProvenance(metadata, t.vars, vars, remoteProvenance);
+          metadata = propagateStrategyRemoteProvenance(metadata, vars, remoteProvenance);
 
           return {
             ...t,

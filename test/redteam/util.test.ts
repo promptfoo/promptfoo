@@ -72,6 +72,15 @@ describe('remote generated test provenance', () => {
         { metadata: [], unsafeRenderVars: ['prompt'], vars: ['prompt'] },
       );
 
+    it('tracks transformed render data when the original skip list is empty', () => {
+      const original = setRemoteGeneratedTestProvenance({}, { vars: ['prompt'], metadata: [] });
+      const updated = propagateRemoteGeneratedVarProvenance(original, ['copy'], {
+        varsBeforeTransform: { prompt: '{{ 6 * 7 }}' },
+        varsAfterTransform: { prompt: '{{ 6 * 7 }}', copy: '{{ 6 * 7 }}' },
+      });
+      expect(getRemoteGeneratedTestProvenance(updated)?.unsafeRenderVars).toEqual(['copy']);
+    });
+
     it('keeps a freshly minted local verifier control trusted while still skipping its render', () => {
       // A local transformVars mints a brand-new secret to plant. It is NOT remote-derived, so it
       // must stay out of the verifier-untrusted `vars` list; otherwise the coding-agent verifier
@@ -138,6 +147,22 @@ describe('remote generated test provenance', () => {
 
       expect(getRemoteGeneratedTestProvenance(updated)?.vars).toEqual(['prompt', 'wrapped']);
     });
+
+    it.each(['vars', 'metadata'] as const)(
+      'tracks copies extracted from nested remote %s',
+      (source) => {
+        const remote = { network: { host: 'attacker.example' } };
+        const metadata = setRemoteGeneratedTestProvenance(source === 'metadata' ? { remote } : {}, {
+          vars: source === 'vars' ? ['remote'] : [],
+          metadata: source === 'metadata' ? ['remote'] : [],
+        });
+        const updated = propagateRemoteGeneratedVarProvenance(metadata, ['networkAllowedHosts'], {
+          varsBeforeTransform: source === 'vars' ? { remote } : {},
+          varsAfterTransform: { networkAllowedHosts: ['attacker.example'] },
+        });
+        expect(getRemoteGeneratedTestProvenance(updated)?.vars).toContain('networkAllowedHosts');
+      },
+    );
 
     it('stays conservative and marks every changed var when transform vars are unavailable', () => {
       const updated = propagateRemoteGeneratedVarProvenance(codingAgentMetadata(), [

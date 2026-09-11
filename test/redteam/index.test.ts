@@ -18,6 +18,7 @@ import {
   resolvePluginConfig,
   synthesize,
 } from '../../src/redteam/index';
+import { verifyCodingAgentResult } from '../../src/redteam/plugins/codingAgent/verifiers';
 import { Plugins } from '../../src/redteam/plugins/index';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remoteGeneration';
@@ -1242,61 +1243,86 @@ describe('synthesize', () => {
       );
     });
 
-    it('should propagate unsafe remote render vars through arbitrary custom strategy outputs', async () => {
-      const attack = '{{ range.constructor("return process.version")() }}';
-      const mockPluginAction = vi.fn().mockResolvedValue([
-        {
-          vars: { query: attack },
-          metadata: {
-            __promptfooRemoteGenerated: {
-              metadata: [],
-              unsafeRenderVars: ['query'],
-              vars: [],
+    it.each([
+      [false, false],
+      [false, true],
+      [true, false],
+      [true, true],
+    ])(
+      'tracks strategy copies (in-place: %s, verifier provenance: %s)',
+      async (mutatesInputs, tracksVerifier) => {
+        const attack = '{{ range.constructor("return process.version")() }}';
+        const secret = 'FRESH_LOCAL_STRATEGY_SECRET_9239';
+        const mockPluginAction = vi.fn().mockResolvedValue([
+          {
+            vars: { query: attack, trusted: '{{ 6 * 7 }}' },
+            metadata: {
+              __promptfooRemoteGenerated: {
+                metadata: [],
+                unsafeRenderVars: ['query'],
+                vars: tracksVerifier ? ['query'] : [],
+              },
+              pluginId: 'test-plugin',
             },
-            pluginId: 'test-plugin',
           },
-        },
-      ]);
-      vi.spyOn(Plugins, 'find').mockReturnValue({
-        action: mockPluginAction,
-        key: 'test-plugin',
-      });
+        ]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'test-plugin',
+        });
 
-      const mockCustomAction = vi.fn().mockImplementation((testCases: any[]) =>
-        testCases.map((testCase) => ({
-          ...testCase,
-          vars: {
-            query: 'safe transformed payload',
-            copiedAttack: testCase.vars.query,
-          },
-        })),
-      );
-      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
-        return [{ id: 'custom', action: mockCustomAction }].find(predicate);
-      });
+        const mockCustomAction = vi.fn().mockImplementation((testCases: any[]) =>
+          testCases.map((testCase) => {
+            const vars = {
+              ...testCase.vars,
+              query: 'safe transformed payload',
+              copiedAttack: testCase.vars.query,
+              secretEnvValue: secret,
+            };
+            return mutatesInputs ? Object.assign(testCase, { vars }) : { ...testCase, vars };
+          }),
+        );
+        vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
+          return [{ id: 'custom', action: mockCustomAction }].find(predicate);
+        });
 
-      const result = await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'test-plugin', numTests: 1 }],
-        prompts: ['{{query}}'],
-        strategies: [{ id: 'custom' }],
-        targetIds: ['test-provider'],
-      });
+        const result = await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'test-plugin', numTests: 1 }],
+          prompts: ['{{query}}'],
+          strategies: [{ id: 'custom' }],
+          targetIds: ['test-provider'],
+        });
 
-      const strategyTestCase = result.testCases.find(
-        (testCase) => testCase.metadata?.strategyId === 'custom',
-      );
-      expect(strategyTestCase?.vars).toEqual({
-        query: 'safe transformed payload',
-        copiedAttack: attack,
-      });
-      expect(strategyTestCase?.metadata?.__promptfooRemoteGenerated).toEqual({
-        metadata: [],
-        unsafeRenderVars: ['query', 'copiedAttack'],
-        vars: [],
-      });
-    });
+        expect(result.testCases.find((testCase) => !testCase.metadata?.strategyId)?.vars).toEqual({
+          query: attack,
+          trusted: '{{ 6 * 7 }}',
+        });
+        const strategyTestCase = result.testCases.find(
+          (testCase) => testCase.metadata?.strategyId === 'custom',
+        );
+        expect(strategyTestCase?.vars).toEqual({
+          query: 'safe transformed payload',
+          copiedAttack: attack,
+          trusted: '{{ 6 * 7 }}',
+          secretEnvValue: secret,
+        });
+        expect(strategyTestCase?.metadata?.__promptfooRemoteGenerated).toEqual({
+          metadata: [],
+          unsafeRenderVars: ['query', 'copiedAttack', 'secretEnvValue'],
+          vars: tracksVerifier ? ['query', 'copiedAttack'] : [],
+        });
+        await expect(
+          verifyCodingAgentResult(
+            'coding-agent:secret-env-read',
+            secret,
+            strategyTestCase!,
+            undefined,
+          ),
+        ).resolves.toMatchObject({ kind: 'sensitive-value-observed' });
+      },
+    );
 
     it('should mark fresh strategy materialization variables as unsafe render data', async () => {
       const attack = '{{ range.constructor("return process.version")() }}';

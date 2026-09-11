@@ -80,28 +80,33 @@ function collectRemoteOriginValues(
   varsBeforeTransform: Record<string, unknown>,
   metadata: Record<string, unknown>,
 ): unknown[] {
-  const values: unknown[] = [];
+  const values = new Set<unknown>();
+  const collect = (value: unknown): void => {
+    if (values.has(value)) {
+      return;
+    }
+    values.add(value);
+    if (value && typeof value === 'object') {
+      for (const child of Object.values(value)) {
+        collect(child);
+      }
+    }
+  };
   for (const name of provenance.vars) {
     if (Object.prototype.hasOwnProperty.call(varsBeforeTransform, name)) {
-      values.push(varsBeforeTransform[name]);
+      collect(varsBeforeTransform[name]);
     }
   }
   for (const name of provenance.metadata) {
     if (Object.prototype.hasOwnProperty.call(metadata, name)) {
-      values.push(metadata[name]);
+      collect(metadata[name]);
     }
   }
-  return values;
+  return [...values];
 }
 
-/**
- * A transform-produced value is considered remote-derived only when it is an actual copy
- * of remote-origin content: it deep-equals a remote-origin value, or (for strings) embeds
- * a non-trivial remote-origin string. Fresh values minted locally by a `transformVars`
- * (new secrets, canaries, artifact/workspace paths) must NOT be treated as remote-derived,
- * otherwise the coding-agent verifier drops them from its trusted evidence controls and a
- * genuine leak passes unnoticed.
- */
+// Preserve copies and embedded remote content without distrusting freshly minted
+// local secrets, canaries, and workspace paths used by deterministic verifiers.
 function isValueDerivedFromRemoteContent(
   value: unknown,
   remoteOriginValues: unknown[],
@@ -134,6 +139,7 @@ export function propagateRemoteGeneratedVarProvenance<T extends Record<string, u
   metadata: T,
   varNames: string[],
   transformedVars?: {
+    metadataBeforeTransform?: Record<string, unknown>;
     varsAfterTransform: Record<string, unknown>;
     varsBeforeTransform: Record<string, unknown>;
   },
@@ -143,30 +149,28 @@ export function propagateRemoteGeneratedVarProvenance<T extends Record<string, u
     return metadata;
   }
 
-  // Render-skip provenance stays conservative: any variable a local transform produced or
-  // mutated may embed a remote-derived template, and skipping local rendering is always the
-  // safe direction (the raw value is forwarded to the target verbatim).
-  const renderSkipVarNames = varNames;
-
-  // Verifier-trust provenance must stay precise. When we know the pre/post transform vars we
-  // can distinguish remote-derived copies from freshly minted local verifier controls; when
-  // we do not, fall back to the conservative "mark everything" behavior.
+  const remoteOriginValues = transformedVars
+    ? collectRemoteOriginValues(
+        provenance,
+        transformedVars.varsBeforeTransform,
+        transformedVars.metadataBeforeTransform ?? metadata,
+      )
+    : undefined;
+  // New render data is skipped conservatively, while fresh local verifier controls
+  // stay trusted unless they copy remote content.
   const verifierUntrustedVarNames = transformedVars
     ? varNames.filter((name) =>
         isValueDerivedFromRemoteContent(
           transformedVars.varsAfterTransform[name],
-          collectRemoteOriginValues(provenance, transformedVars.varsBeforeTransform, metadata),
+          remoteOriginValues!,
         ),
       )
     : varNames;
 
   return setRemoteGeneratedTestProvenance(metadata, {
     ...provenance,
-    vars: provenance.vars.length > 0 ? [...provenance.vars, ...verifierUntrustedVarNames] : [],
-    unsafeRenderVars:
-      provenance.unsafeRenderVars && provenance.unsafeRenderVars.length > 0
-        ? [...provenance.unsafeRenderVars, ...renderSkipVarNames]
-        : undefined,
+    vars: [...provenance.vars, ...verifierUntrustedVarNames],
+    unsafeRenderVars: [...(provenance.unsafeRenderVars ?? []), ...varNames],
   });
 }
 

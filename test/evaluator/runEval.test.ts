@@ -778,40 +778,39 @@ describe('runEval', () => {
       strategyConfig: { steps: ['hydra', { id: 'video' }] },
       strategyId: 'layer/custom',
     },
-  ])('should skip rendering $strategyId legacy display variable $displayVar', async ({
-    displayVar,
-    strategyConfig,
-    strategyId,
-  }) => {
-    const results = await runEval({
-      ...defaultOptions,
-      provider: mockProvider,
-      prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
-      test: {
-        vars: {
-          prompt: 'Safe encoded payload',
-          [displayVar]: 'Copied attack text: {{missing | trim}}',
+  ])(
+    'should skip rendering $strategyId legacy display variable $displayVar',
+    async ({ displayVar, strategyConfig, strategyId }) => {
+      const results = await runEval({
+        ...defaultOptions,
+        provider: mockProvider,
+        prompt: { raw: 'User said: {{prompt}}', label: 'test-label' },
+        test: {
+          vars: {
+            prompt: 'Safe encoded payload',
+            [displayVar]: 'Copied attack text: {{missing | trim}}',
+          },
+          metadata: {
+            pluginConfig: {},
+            pluginId: 'ssrf',
+            ...(strategyConfig ? { strategyConfig } : {}),
+            strategyId,
+          },
         },
-        metadata: {
-          pluginConfig: {},
-          pluginId: 'ssrf',
-          ...(strategyConfig ? { strategyConfig } : {}),
-          strategyId,
-        },
-      },
-      testSuite: {
-        providers: [],
-        prompts: [],
-        redteam: { injectVar: 'prompt' },
-      } as unknown as TestSuite,
-      conversations: {},
-      registers: {},
-      isRedteam: true,
-    });
+        testSuite: {
+          providers: [],
+          prompts: [],
+          redteam: { injectVar: 'prompt' },
+        } as unknown as TestSuite,
+        conversations: {},
+        registers: {},
+        isRedteam: true,
+      });
 
-    expect(results[0].success).toBe(true);
-    expect(results[0].prompt.raw).toContain('Safe encoded payload');
-  });
+      expect(results[0].success).toBe(true);
+      expect(results[0].prompt.raw).toContain('Safe encoded payload');
+    },
+  );
 
   it('should skip rendering arbitrary strategy variables marked as unsafe remote payloads', async () => {
     const results = await runEval({
