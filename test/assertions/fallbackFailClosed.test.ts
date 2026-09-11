@@ -7,7 +7,11 @@ import type { ApiProvider, Assertion, AtomicTestCase, ProviderResponse } from '.
 
 // Lazily-mocked trace store: runAssertions only reaches getTraceStore().getTrace
 // when a *reached* trace-aware assertion needs trace context.
-const { getTraceMock } = vi.hoisted(() => ({ getTraceMock: vi.fn() }));
+const { getTraceMock, flushOtelMock } = vi.hoisted(() => ({
+  getTraceMock: vi.fn(),
+  flushOtelMock: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../../src/tracing/otelSdk', () => ({ flushOtel: flushOtelMock }));
 vi.mock('../../src/tracing/store', () => ({
   getTraceStore: () => ({ getTrace: getTraceMock }),
 }));
@@ -398,6 +402,40 @@ describe('Trace data is loaded only for reached assertions', () => {
 
     expect(result.pass).toBe(true);
     expect(getTraceMock).not.toHaveBeenCalled();
+  });
+
+  it('flushes buffered grader parents before reading an external child span', async () => {
+    let graderParentStored = false;
+    flushOtelMock.mockImplementationOnce(async () => {
+      await Promise.resolve();
+      graderParentStored = true;
+    });
+    getTraceMock.mockImplementation(() => ({
+      traceId: 'trace-1',
+      spans: [
+        { spanId: 'target', name: 'llm.target', startTime: 0, endTime: 1 },
+        ...(graderParentStored
+          ? []
+          : [
+              {
+                spanId: 'external-child',
+                parentSpanId: 'buffered-grader',
+                name: 'llm.grader-child',
+                startTime: 0,
+                endTime: 1,
+              },
+            ]),
+      ],
+    }));
+    const result = await runAssertions({
+      test: createTestCase([
+        { type: 'equals', value: 'mismatch', fallback: 'next' },
+        { type: 'trace-span-count', value: { pattern: 'llm*', min: 1, max: 1 } },
+      ]),
+      providerResponse: mockProviderResponse,
+      traceId: 'trace-1',
+    });
+    expect(result.pass).toBe(true);
   });
 
   it('loads trace data once (memoized) across reached trace-aware assertions', async () => {

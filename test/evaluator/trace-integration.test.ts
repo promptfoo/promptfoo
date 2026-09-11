@@ -473,7 +473,10 @@ describe('evaluator trace integration', () => {
           redactAttributes: ['secret'],
         }),
       );
-      expect(mockFlushOtel).toHaveBeenCalledOnce();
+      expect(mockFlushOtel).toHaveBeenCalledTimes(2);
+      expect(mockFlushOtel.mock.invocationCallOrder[1]).toBeLessThan(
+        mockTraceStore.getTrace.mock.invocationCallOrder[0],
+      );
       expect(mockFlushOtel.mock.invocationCallOrder[0]).toBeLessThan(
         mockFetchTraceContext.mock.invocationCallOrder[0],
       );

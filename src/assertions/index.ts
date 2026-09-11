@@ -30,6 +30,7 @@ import {
   getProviderCallTracingContext,
 } from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
+import { flushOtel } from '../tracing/otelSdk';
 import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
@@ -198,6 +199,8 @@ export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean 
 }
 
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
+  // Persist completed grader parents before classifying externally exported descendants.
+  await flushOtel();
   const traceStore = getTraceStore();
   const maxAttempts = Math.min(
     MAX_TRACE_FETCH_MAX_ATTEMPTS,
