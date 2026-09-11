@@ -1543,6 +1543,27 @@ describe('OpenAiLiveProvider', () => {
     );
   });
 
+  it('caps streamed function calls before the backend completes', async () => {
+    const handler = vi.fn().mockResolvedValue('result');
+    const result = provider({
+      delegation: lookupDelegation,
+      functionCallHandler: handler,
+      maxToolIterations: 2,
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+    for (const id of ['call_1', 'call_1', 'call_2']) {
+      backend(socket, { type: 'response.output_item.done', item: functionCall(id) });
+    }
+    expect(sentTypes(socket)).not.toContain('session.close');
+    backend(socket, { type: 'response.output_item.done', item: functionCall('call_3') });
+    expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+    expect(handler).not.toHaveBeenCalled();
+    closed(socket);
+    expect((await result).error).toContain('backend function calls exceeded maxToolIterations=2');
+  });
+
   it('bounds a single oversized batch of function calls by the default maxToolIterations', async () => {
     const handler = vi.fn().mockResolvedValue('result');
     const result = provider({
@@ -1557,8 +1578,8 @@ describe('OpenAiLiveProvider', () => {
     }
     backend(socket, { type: 'response.completed', response: { id: 'resp_1', output: [] } });
     await vi.advanceTimersByTimeAsync(0);
-    expect(handler).toHaveBeenCalledTimes(8);
-    expect(sentTypes(socket).filter((type) => type === 'response.item.create')).toHaveLength(8);
+    expect(handler).not.toHaveBeenCalled();
+    expect(sentTypes(socket)).not.toContain('response.item.create');
     expect(sentTypes(socket)).not.toContain('response.create');
     expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
     closed(socket);

@@ -1024,6 +1024,15 @@ export const providerMap: ProviderFactory[] = [
           assertOpenAiApiModel(candidate, apiUrl);
         }
       }
+      if (
+        [modelType, requestedApiModel].some(
+          (model) => model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-'),
+        )
+      ) {
+        throw new Error(
+          'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+        );
+      }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
           modelName || configuredModel || 'gpt-5.6-terra',
@@ -1071,15 +1080,6 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiTtsProvider(
           modelName || configuredModel || 'gpt-4o-mini-tts',
           providerOptions,
-        );
-      }
-      if (
-        [modelType, requestedApiModel].some(
-          (model) => model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-'),
-        )
-      ) {
-        throw new Error(
-          'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
         );
       }
       // Conversational GPT-Live snapshots use the Live endpoint.

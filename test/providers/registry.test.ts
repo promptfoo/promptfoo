@@ -112,7 +112,12 @@ describe('Provider Registry', () => {
     'openai:gpt-live-transcribe-2026-09-01',
     'openai:live:gpt-live-transcribe',
     'openai:live:gpt-live-transcribe-2026-09-01',
-  ])('rejects the transcription model on the conversational route %s', async (providerPath) => {
+    'openai:transcription:gpt-live-transcribe',
+    'openai:transcription:gpt-live-transcribe-2026-09-01',
+    'openai:realtime:gpt-live-transcribe',
+    'openai:chat:gpt-live-transcribe',
+    'openai:responses:gpt-live-transcribe',
+  ])('rejects unsupported Live transcription on route %s', async (providerPath) => {
     const factories = await getProviderFactories(providerPath);
     const factory = factories.find((entry) => entry.test(providerPath));
     await expect(factory!.create(providerPath, {}, { basePath: '.', options: {} })).rejects.toThrow(

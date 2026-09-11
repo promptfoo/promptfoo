@@ -30,7 +30,7 @@ interface ToolCall {
 }
 interface BackendTurn {
   id: string;
-  calls: ToolCall[];
+  calls: Map<string, ToolCall>;
 }
 interface LiveApiError {
   code?: string;
@@ -159,6 +159,7 @@ export class LiveSession {
   private backendTurns = new Map<string, BackendTurn>();
   private finishedResponses = new Set<string>();
   private completedToolCalls = new Set<string>();
+  private receivedToolCallCount = 0;
   private handlerController = new AbortController();
 
   constructor(private options: SessionOptions) {
@@ -603,7 +604,7 @@ export class LiveSession {
     if (delegation.target === 'responses') {
       this.backendTurns.set(delegation.id, {
         id: typeof delegation.response_id === 'string' ? delegation.response_id : '',
-        calls: [],
+        calls: new Map(),
       });
       return;
     }
@@ -653,15 +654,24 @@ export class LiveSession {
       if (this.closing && !this.backendTurns.has(delegationId)) {
         this.setError(LATE_WORK_ERROR);
       }
-      this.backendTurns.set(delegationId, { id: event.response.id, calls: [] });
+      this.backendTurns.set(delegationId, { id: event.response.id, calls: new Map() });
     } else if (event.type === 'response.output_item.done' && event.item?.type === 'function_call') {
       const turn = this.backendTurns.get(delegationId);
       if (!turn) {
         this.fail('GPT-Live function call arrived without a backend response.');
         return;
       }
-      if (!turn.calls.some((call) => call.call_id === event.item.call_id)) {
-        turn.calls.push(event.item);
+      if (!turn.calls.has(event.item.call_id)) {
+        const maxToolIterations = resolveMaxToolIterations(this.options.config.maxToolIterations);
+        if (this.receivedToolCallCount >= maxToolIterations) {
+          this.setError(
+            `GPT-Live backend function calls exceeded maxToolIterations=${maxToolIterations}. Increase maxToolIterations if the eval needs more calls.`,
+          );
+          this.closeSession();
+          return;
+        }
+        this.receivedToolCallCount++;
+        turn.calls.set(event.item.call_id, event.item);
       }
     } else if (
       ['response.completed', 'response.failed', 'response.incomplete'].includes(event.type)
@@ -687,7 +697,7 @@ export class LiveSession {
         this.closeSession();
         return;
       }
-      if (!turn?.calls.length) {
+      if (!turn?.calls.size) {
         return;
       }
       if (this.closing) {
@@ -695,12 +705,12 @@ export class LiveSession {
         this.setError(LATE_WORK_ERROR);
         return;
       }
-      this.backendTurns.set(delegationId, { id: '', calls: [] });
-      this.completeTools(turn.calls);
+      this.backendTurns.set(delegationId, { id: '', calls: new Map() });
+      this.completeTools(turn.calls.values());
     }
   }
 
-  private completeTools(calls: ToolCall[]): void {
+  private completeTools(calls: Iterable<ToolCall>): void {
     const handler = this.options.functionCallHandler;
     if (!handler) {
       this.setError(
@@ -712,7 +722,6 @@ export class LiveSession {
     this.runHandler(async () => {
       const delegation = this.options.config.delegation;
       const tools = delegation?.type === 'responses' ? delegation.responses.tools : [];
-      const maxToolIterations = resolveMaxToolIterations(this.options.config.maxToolIterations);
       for (const call of calls) {
         if (this.done || this.closing) {
           return;
@@ -726,15 +735,6 @@ export class LiveSession {
         }
         if (this.completedToolCalls.has(call.call_id)) {
           throw new Error('Repeated function call ID');
-        }
-        // Every handler call counts toward the session cap across batches and follow-up rounds.
-        // The check and the call run synchronously, so concurrent batches can't overshoot it.
-        if (this.completedToolCalls.size >= maxToolIterations) {
-          this.setError(
-            `GPT-Live backend function calls exceeded maxToolIterations=${maxToolIterations}. Increase maxToolIterations if the eval needs more calls.`,
-          );
-          this.closeSession();
-          return;
         }
         this.completedToolCalls.add(call.call_id);
         const output = await handler(call.name, call.arguments, this.handlerController.signal);
