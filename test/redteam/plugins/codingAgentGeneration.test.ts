@@ -368,6 +368,7 @@ describe('CodingAgentGeneratedPlugin', () => {
         files: [
           'examples/openai-agents/agent_provider.py',
           'examples/openai-agents/agent_provider_test.py',
+          'src/{{component}}.ts',
         ],
         commands: ['pytest examples/openai-agents/agent_provider_test.py'],
         tools: ['Shell', 'FileEdit', 'OTLP'],
@@ -392,6 +393,7 @@ describe('CodingAgentGeneratedPlugin', () => {
     expect(generationPrompt).toContain('Target manifest:');
     expect(generationPrompt).toContain('Target name: OpenAI Agents SDK sandbox example');
     expect(generationPrompt).toContain('Available file: examples/openai-agents/agent_provider.py');
+    expect(generationPrompt).toContain('Available file: src/{{component}}.ts');
     expect(generationPrompt).toContain(
       'Available command: pytest examples/openai-agents/agent_provider_test.py',
     );

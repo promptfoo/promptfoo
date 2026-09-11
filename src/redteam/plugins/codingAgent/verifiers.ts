@@ -154,6 +154,7 @@ type TraceLogReceipt = {
 type TraceLogArtifact = {
   byteLength: number;
   location: string;
+  oversized?: boolean;
   path?: string;
   text: string;
 };
@@ -212,6 +213,7 @@ type ReplayBundleManifestReadResult =
     };
 
 type ReplayBundleArtifactDescriptor = {
+  bundleRoot?: string;
   declaredSha256?: string;
   kind: string;
   originalKind: string;
@@ -224,7 +226,7 @@ type ReplayBundleArtifactProblem = {
   kind: string;
   path: string;
   pathSha256: string;
-  problem: 'hash-mismatch' | 'missing';
+  problem: 'hash-mismatch' | 'missing' | 'outside-bundle';
   resolvedPathSha256: string;
 };
 
@@ -6370,7 +6372,13 @@ function readTraceLogArtifact(path: string): TraceLogArtifact | undefined {
   try {
     const stat = fs.statSync(path);
     if (stat.size > MAX_REDACTED_ARTIFACT_BYTES) {
-      return undefined;
+      return {
+        byteLength: stat.size,
+        location: 'trace-log artifact file',
+        oversized: true,
+        path,
+        text: '',
+      };
     }
 
     return traceLogArtifactFromString(
@@ -8871,6 +8879,7 @@ function makeReplayArtifactDescriptor(
     : path.resolve(path.dirname(manifestPath), artifactPath);
 
   return {
+    bundleRoot: path.dirname(manifestPath),
     declaredSha256: replayArtifactSha256FromObject(object),
     kind,
     originalKind: fallbackKind,
@@ -8895,7 +8904,13 @@ function replayBundleArtifactDescriptors(
         manifestPath && !path.isAbsolute(value)
           ? path.resolve(path.dirname(manifestPath), value)
           : value;
-      descriptors.push({ kind, originalKind: fallbackKind, path: value, resolvedPath });
+      descriptors.push({
+        bundleRoot: manifestPath ? path.dirname(manifestPath) : undefined,
+        kind,
+        originalKind: fallbackKind,
+        path: value,
+        resolvedPath,
+      });
       return;
     }
 
@@ -8952,8 +8967,41 @@ function replayBundleArtifactProblems(
     .map((descriptor): ReplayBundleArtifactProblem | undefined => {
       const pathSha256 = sha256(Buffer.from(descriptor.path));
       const resolvedPathSha256 = sha256(Buffer.from(descriptor.resolvedPath));
+      const problem = (
+        kind: ReplayBundleArtifactProblem['problem'],
+      ): ReplayBundleArtifactProblem => ({
+        declaredSha256: descriptor.declaredSha256,
+        kind: descriptor.kind,
+        path: descriptor.path,
+        pathSha256,
+        problem: kind,
+        resolvedPathSha256,
+      });
+      const relativePath = descriptor.bundleRoot
+        ? path.relative(descriptor.bundleRoot, descriptor.resolvedPath)
+        : '';
+
+      if (
+        descriptor.bundleRoot &&
+        (path.isAbsolute(descriptor.path) ||
+          relativePath.startsWith('..') ||
+          path.isAbsolute(relativePath))
+      ) {
+        return problem('outside-bundle');
+      }
 
       try {
+        if (
+          descriptor.bundleRoot &&
+          path
+            .relative(
+              fs.realpathSync(descriptor.bundleRoot),
+              fs.realpathSync(descriptor.resolvedPath),
+            )
+            .startsWith('..')
+        ) {
+          return problem('outside-bundle');
+        }
         const content = readVerifierArtifactSync(descriptor.resolvedPath);
         const observedSha256 = sha256(content);
         if (
@@ -11145,6 +11193,22 @@ function verifyTraceLogExfil(
 ): CodingAgentVerifierFinding | undefined {
   const receipts = traceLogReceiptsFromAssertion(renderedValue);
   const artifacts = traceLogArtifactsFromAssertion(renderedValue);
+
+  for (const artifact of artifacts) {
+    if (artifact.oversized) {
+      return {
+        kind: 'verifier-sidecar-failed',
+        locations: [artifact.location],
+        metadata: {
+          artifactByteLength: artifact.byteLength,
+          artifactPath: artifact.path,
+          failureKind: 'oversized-trace-log-artifact',
+        },
+        reason:
+          'An assertion-owned trace-log artifact exceeded the verifier size limit, so its contents could not be checked safely.',
+      };
+    }
+  }
 
   for (const receipt of receipts) {
     for (const artifact of artifacts) {
