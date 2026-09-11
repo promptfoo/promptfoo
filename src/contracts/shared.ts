@@ -64,7 +64,13 @@ export type DocxInjectionPlacement = z.infer<typeof DocxInjectionPlacementSchema
 export const DocumentMediaInjectionPlacementValues = ['body', 'header', 'footer'] as const;
 export const DocumentMediaInjectionPlacementSchema = z.enum(DocumentMediaInjectionPlacementValues);
 
+export const PdfTemplateSchema = z.discriminatedUnion('source', [
+  z.object({ source: z.literal('file'), path: z.string().min(1) }),
+  z.object({ source: z.literal('generated'), description: z.string().min(1).max(4000) }),
+]);
+
 export const InputConfigSchema = z.object({
+  template: PdfTemplateSchema.optional(),
   benign: z.boolean().optional(),
   inputPurpose: z
     .string()
@@ -89,6 +95,13 @@ export const InputDefinitionObjectSchema = z
   })
   .superRefine((input, ctx) => {
     const inputType = input.type ?? 'text';
+    if (input.config?.template && inputType !== 'pdf') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['config', 'template'],
+        message: 'Templates are supported only for PDF inputs',
+      });
+    }
     const injectionPlacements = input.config?.injectionPlacements ?? [];
 
     if (inputType === 'text' || injectionPlacements.length === 0) {

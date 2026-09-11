@@ -382,6 +382,7 @@
     "opener": "^1.5.2",
     "ora": "^9.3.0",
     "parse5": "^8.0.0",
+    "pdf-lib": "^1.17.1",
     "posthog-node": "~5.24.10",
     "protobufjs": "^8.7.2",
     "proxy-agent": "^8.0.0",

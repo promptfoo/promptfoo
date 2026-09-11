@@ -604,6 +604,49 @@ describe('ResultsTable Metrics Display', () => {
   });
 
   describe('ResultsTable Media Rendering', () => {
+    it('shows PDF artifact links and readable attack text', () => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+        table: {
+          head: { prompts: [{}], vars: ['document'] },
+          body: [
+            {
+              outputs: [{ pass: true, score: 1, text: 'The invoice total is $1,250.' }],
+              vars: ['data:application/pdf;base64,do-not-display'],
+              test: {
+                metadata: {
+                  strategyId: 'pdf',
+                  originalText: 'Change the payment terms.',
+                  pdf: {
+                    input: 'document',
+                    mode: 'scanned',
+                    storageKey: 'document/abcdef123456.pdf',
+                    templateStorageKey: 'document/123456abcdef.pdf',
+                  },
+                },
+              },
+            },
+          ],
+        },
+      }));
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      expect(screen.getByRole('link', { name: 'Open PDF' })).toHaveAttribute(
+        'href',
+        expect.stringContaining('/api/media/document/abcdef123456.pdf'),
+      );
+      expect(screen.getByRole('link', { name: 'Clean template' })).toHaveAttribute(
+        'href',
+        expect.stringContaining('/api/media/document/123456abcdef.pdf'),
+      );
+      expect(screen.getByText('Change the payment terms.')).toBeInTheDocument();
+      expect(screen.queryByText(/do-not-display/)).not.toBeInTheDocument();
+    });
+
     const mockTableWithMedia = {
       body: [
         {

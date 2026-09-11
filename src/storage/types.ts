@@ -8,7 +8,7 @@
 /**
  * Supported media types
  */
-export type MediaType = 'audio' | 'image' | 'video';
+export type MediaType = 'audio' | 'image' | 'video' | 'document';
 
 /**
  * Metadata associated with stored media

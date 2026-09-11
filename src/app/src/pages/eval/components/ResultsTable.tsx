@@ -67,7 +67,7 @@ import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import { NumberInput } from '@app/components/ui/number-input';
-import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
+import { getMediaUrl, isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import {
@@ -512,6 +512,38 @@ function renderVariableCell({
   });
 
   const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
+  const pdf = row.test?.metadata?.pdf;
+  if (pdf?.input === varName && typeof pdf.storageKey === 'string') {
+    return (
+      <div className="cell space-y-2">
+        <div className="flex gap-3 text-sm">
+          {[
+            ['Open PDF', pdf.storageKey],
+            ['Clean template', pdf.templateStorageKey],
+          ].map(([label, key]) =>
+            typeof key === 'string' && /^document\/[a-f0-9]{12}\.pdf$/.test(key) ? (
+              <a
+                key={label}
+                href={getMediaUrl(`storageRef:${key}`)!}
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary underline"
+              >
+                {label}
+              </a>
+            ) : null,
+          )}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {pdf.mode === 'scanned' ? 'Scanned PDF' : 'Text PDF'}
+        </div>
+        <TruncatedText
+          text={String(row.test?.metadata?.originalText ?? '')}
+          maxLength={maxTextLength}
+        />
+      </div>
+    );
+  }
   const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
     | Record<string, { path: string; type: string; format?: string }>
     | undefined;
@@ -1344,6 +1376,9 @@ function getImageSourceForCell({
   }
 
   const varName = getVariableNameForColumn(columnId, headVars);
+  if (varName && row.original.test?.metadata?.pdf?.input === varName) {
+    return undefined;
+  }
   const imageValue = varName
     ? getVariableCellValue({
         row: row.original,

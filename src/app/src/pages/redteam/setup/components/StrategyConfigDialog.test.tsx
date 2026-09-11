@@ -20,6 +20,25 @@ describe('StrategyConfigDialog', () => {
     vi.clearAllMocks();
   });
 
+  it('saves PDF input selection and scanned mode', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StrategyConfigDialog
+        open
+        strategy="pdf"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'pdf', name: 'PDF', description: 'PDF attachments' }}
+      />,
+    );
+    await user.type(screen.getByLabelText('PDF input variable'), 'document');
+    await user.click(screen.getByLabelText('Document format'));
+    await user.click(screen.getByRole('option', { name: 'Scanned PDF' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mockOnSave).toHaveBeenCalledWith('pdf', { input: 'document', mode: 'scanned' });
+  });
+
   it('should correctly filter layerPlugins when using the stable empty array for selectedPlugins', async () => {
     const user = userEvent.setup();
     renderWithProviders(

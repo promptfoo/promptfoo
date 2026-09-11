@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Invoice review</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #f4f3ee;
+        color: #1b2926;
+        font:
+          16px/1.6 system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 760px;
+        margin: 8vh auto;
+        padding: 24px;
+      }
+      .eyebrow {
+        color: #506f64;
+        text-transform: uppercase;
+        font-size: 12px;
+        letter-spacing: 0.15em;
+        font-weight: 650;
+      }
+      h1 {
+        font-size: clamp(32px, 6vw, 48px);
+        line-height: 1.15;
+        letter-spacing: -0.04em;
+        margin: 16px 0;
+      }
+      .intro {
+        color: #5a6560;
+        margin-bottom: 32px;
+      }
+      form,
+      #result {
+        background: #fff;
+        border: 1px solid #d9dfd8;
+        border-radius: 16px;
+        padding: 28px;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      input,
+      textarea {
+        width: 100%;
+        font: inherit;
+        border: 1px solid #bccbc3;
+        border-radius: 8px;
+        padding: 12px;
+        background: #fcfdfb;
+      }
+      input {
+        margin-bottom: 24px;
+      }
+      textarea {
+        resize: vertical;
+      }
+      button {
+        margin-top: 24px;
+        border: 0;
+        border-radius: 8px;
+        background: #174c3b;
+        color: white;
+        font: inherit;
+        padding: 12px 24px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+      :focus-visible {
+        outline: 3px solid #83bbaa;
+        outline-offset: 3px;
+      }
+      #status {
+        color: #596b62;
+        min-height: 26px;
+        margin: 16px 0;
+      }
+      #result h2 {
+        font-size: 18px;
+        margin-top: 0;
+      }
+      #answer {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .footnote {
+        color: #69746e;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="eyebrow">Accounts workspace</div>
+      <h1>Make sense of an invoice.</h1>
+      <p class="intro">
+        Upload a vendor invoice and ask about its details, totals, or payment terms.
+      </p>
+      <form id="upload">
+        <label for="document">Invoice PDF</label>
+        <input id="document" name="document" type="file" accept="application/pdf,.pdf" required />
+        <label for="question">Your question</label>
+        <textarea id="question" name="question" rows="3" maxlength="4000" required>
+What are the invoice total and payment terms?</textarea>
+        <button id="submit" type="submit">Review invoice</button>
+        <p class="footnote">PDF only · Up to 5 MiB and 10 pages</p>
+      </form>
+      <p id="status" role="status" aria-live="polite"></p>
+      <section id="result" hidden aria-labelledby="result-title">
+        <h2 id="result-title">Invoice summary</h2>
+        <div id="answer"></div>
+      </section>
+    </main>
+    <script>
+      const form = document.getElementById('upload');
+      const button = document.getElementById('submit');
+      const status = document.getElementById('status');
+      const result = document.getElementById('result');
+      form.addEventListener('input', () => {
+        result.hidden = true;
+        status.textContent = '';
+      });
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        button.disabled = true;
+        result.hidden = true;
+        status.textContent = 'Reading your invoice…';
+        try {
+          const response = await fetch('/api/analyze', {
+            method: 'POST',
+            body: new FormData(form),
+          });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || 'Could not review this invoice.');
+          document.getElementById('answer').textContent = data.answer;
+          result.hidden = false;
+          status.textContent = 'Review complete';
+        } catch (error) {
+          status.textContent = error.message || 'Could not reach the server. Try again.';
+        } finally {
+          button.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

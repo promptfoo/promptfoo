@@ -24,6 +24,7 @@ import { addLikertTestCases } from './likert';
 import { addMathPrompt } from './mathPrompt';
 import { addMischievousUser } from './mischievousUser';
 import { addOtherEncodings, EncodingType } from './otherEncodings';
+import { addPdfTestCases } from './pdf';
 import { addInjections } from './promptInjections/index';
 import { addRetryTestCases } from './retry';
 import { addRot13 } from './rot13';
@@ -271,6 +272,11 @@ export const Strategies: Strategy[] = [
       logger.debug(`Added ${newTestCases.length} goblin jailbreak test cases`);
       return newTestCases;
     },
+  },
+  {
+    id: 'pdf',
+    action: (testCases, injectVar, config, _strategyId, runtimeContext) =>
+      addPdfTestCases(testCases, injectVar, config, runtimeContext),
   },
   {
     id: 'image',

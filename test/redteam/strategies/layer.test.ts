@@ -5,6 +5,15 @@ import type { Strategy } from '../../../src/redteam/strategies/index';
 import type { TestCaseWithPlugin } from '../../../src/types/index';
 
 describe('addLayerTestCases', () => {
+  it.each([
+    ['pdf', 'base64'],
+    ['jailbreak:hydra', 'pdf'],
+    ['pdf', 'pdf'],
+  ])('rejects unsupported PDF composition: %j', async (...steps) => {
+    await expect(addLayerTestCases([], 'prompt', { steps }, [], vi.fn())).rejects.toThrow(
+      'final strategy in a single-turn layer',
+    );
+  });
   const mockStrategies: Strategy[] = [
     {
       id: 'base64',

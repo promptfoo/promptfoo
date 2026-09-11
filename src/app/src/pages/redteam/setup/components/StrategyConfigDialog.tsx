@@ -31,6 +31,7 @@ import {
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
+import { isAttackProvider } from '@promptfoo/redteam/shared/attackProviders';
 import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
 import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 import type { StrategyConfig } from '@promptfoo/redteam/types';
@@ -141,6 +142,9 @@ export default function StrategyConfigDialog({
     );
 
     return LAYER_TRANSFORMABLE_STRATEGIES.filter((strategy) => {
+      if (strategy === 'pdf' && steps.some((step) => isAttackProvider(getStepId(step)))) {
+        return false;
+      }
       // Cannot add duplicates
       if (stepIds.has(strategy)) {
         return false;
@@ -435,6 +439,7 @@ export default function StrategyConfigDialog({
       strategy === 'custom' ||
       strategy === 'gcg' ||
       strategy === 'citation' ||
+      strategy === 'pdf' ||
       strategy === 'mischievous-user'
     ) {
       if (!isCustomStrategyValid()) {
@@ -1308,6 +1313,41 @@ export default function StrategyConfigDialog({
 
   const renderStrategyConfig = () => {
     switch (strategy) {
+      case 'pdf':
+        return (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="pdf-input">PDF input variable</Label>
+              <Input
+                id="pdf-input"
+                placeholder="Automatically select the PDF input"
+                value={String(localConfig.input ?? '')}
+                onChange={(event) =>
+                  setLocalConfig({ ...localConfig, input: event.target.value || undefined })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pdf-mode">Document format</Label>
+              <Select
+                value={String(localConfig.mode ?? 'text')}
+                onValueChange={(mode) => setLocalConfig({ ...localConfig, mode })}
+              >
+                <SelectTrigger id="pdf-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="text">Text PDF</SelectItem>
+                  <SelectItem value="scanned">Scanned PDF</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Appends attack notes to a clean template. Configure the template on the target's PDF
+              input in YAML. Supports single-turn generation.
+            </p>
+          </div>
+        );
       case 'basic':
         return renderBasicStrategyConfig();
       case 'jailbreak':

@@ -129,7 +129,7 @@ describe('API schema red-team coverage', () => {
         MediaSchemas.Info.Params.safeParse({ type: 'audio', filename: 'abcdef123456.mp3' }).success,
       ).toBe(true);
       expect(
-        MediaSchemas.Info.Params.safeParse({ type: 'document', filename: 'abcdef123456.pdf' })
+        MediaSchemas.Info.Params.safeParse({ type: 'unknown', filename: 'abcdef123456.pdf' })
           .success,
       ).toBe(false);
       expect(

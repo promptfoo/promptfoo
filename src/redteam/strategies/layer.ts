@@ -59,6 +59,16 @@ export async function addLayerTestCases(
     return [];
   }
 
+  const stepIds = steps.map((step) => (typeof step === 'string' ? step : step.id));
+  if (
+    stepIds.includes('pdf') &&
+    (stepIds.indexOf('pdf') !== steps.length - 1 || stepIds.some(isAttackProvider))
+  ) {
+    throw new Error(
+      'PDF must be the final strategy in a single-turn layer; multi-turn PDF transforms are not supported',
+    );
+  }
+
   let current: TestCaseWithPlugin[] = testCases;
 
   for (let i = 0; i < steps.length; i++) {

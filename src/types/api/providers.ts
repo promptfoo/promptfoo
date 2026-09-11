@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PdfTemplateSchema } from '../../contracts/shared';
 import { ProviderOptionsSchema } from '../../validators/providers';
 import { BaseTokenUsageSchema } from '../shared';
 import { ErrorResponseSchema, JsonObjectSchema } from './common';
@@ -37,7 +38,9 @@ const JsonProviderInputDefinitionSchema = z.union([
     type: z.literal('text').optional(),
   }),
   z.object({
-    config: JsonProviderDocumentInputConfigSchema.optional(),
+    config: JsonProviderDocumentInputConfigSchema.extend({
+      template: PdfTemplateSchema.optional(),
+    }).optional(),
     description: z.string().min(1),
     type: z.literal('pdf'),
   }),

@@ -109,7 +109,7 @@ describe('Media Routes', () => {
     });
 
     it('should return 400 for invalid type', async () => {
-      const response = await api.get('/api/media/info/document/abcdef123456.pdf');
+      const response = await api.get('/api/media/info/invalid/abcdef123456.pdf');
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -201,21 +201,24 @@ describe('Media Routes', () => {
       expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
     });
 
-    it.each(['video', 'image'] as const)('should accept valid %s type', async (type) => {
-      const ext = type === 'video' ? 'mp4' : 'png';
-      const mockStorage = {
-        providerId: 'local-fs',
-        getUrl: vi.fn().mockResolvedValue(`/media/${type}/abcdef123456.${ext}`),
-      } as unknown as MediaStorageProvider;
+    it.each(['video', 'image', 'document'] as const)(
+      'should accept valid %s type',
+      async (type) => {
+        const ext = { video: 'mp4', image: 'png', document: 'pdf' }[type];
+        const mockStorage = {
+          providerId: 'local-fs',
+          getUrl: vi.fn().mockResolvedValue(`/media/${type}/abcdef123456.${ext}`),
+        } as unknown as MediaStorageProvider;
 
-      mockedMediaExists.mockResolvedValue(true);
-      mockedGetMediaStorage.mockReturnValue(mockStorage);
+        mockedMediaExists.mockResolvedValue(true);
+        mockedGetMediaStorage.mockReturnValue(mockStorage);
 
-      const response = await api.get(`/api/media/info/${type}/abcdef123456.${ext}`);
+        const response = await api.get(`/api/media/info/${type}/abcdef123456.${ext}`);
 
-      expect(response.status).toBe(200);
-      expect(response.body.data.key).toBe(`${type}/abcdef123456.${ext}`);
-    });
+        expect(response.status).toBe(200);
+        expect(response.body.data.key).toBe(`${type}/abcdef123456.${ext}`);
+      },
+    );
 
     it('should return 500 when mediaExists throws error', async () => {
       mockedMediaExists.mockRejectedValue(new Error('Database connection failed'));

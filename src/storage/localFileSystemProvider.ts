@@ -34,6 +34,7 @@ function getExtensionFromContentType(contentType: string): string {
     'audio/mpeg': 'mp3',
     'audio/ogg': 'ogg',
     'audio/webm': 'webm',
+    'application/pdf': 'pdf',
     'image/png': 'png',
     'image/jpeg': 'jpg',
     'image/jpg': 'jpg',

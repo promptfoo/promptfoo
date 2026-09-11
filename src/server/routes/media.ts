@@ -114,6 +114,7 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
       mp3: 'audio/mpeg',
       ogg: 'audio/ogg',
       webm: 'audio/webm',
+      pdf: 'application/pdf',
       png: 'image/png',
       jpg: 'image/jpeg',
       jpeg: 'image/jpeg',
