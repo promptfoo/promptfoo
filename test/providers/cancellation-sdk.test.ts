@@ -370,7 +370,10 @@ describe.each([
     await vi.waitFor(() => expect(mocks.bedrockSend).toHaveBeenCalledTimes(2));
     expect(mocks.bedrockSend.mock.calls[1][1].abortSignal).toBe(controller.signal);
     controller.abort();
-    await expect(result).rejects.toThrow(/abort/i);
+    await expect(result).resolves.toMatchObject({
+      error: expect.stringMatching(/abort|cancel/i),
+      metadata: { invocationArn: 'fixture-job', s3OutputUri: 's3://fixture/videos' },
+    });
     expect(mocks.bedrockSend).toHaveBeenCalledTimes(2);
     expect(mocks.s3Send).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
