@@ -1002,7 +1002,7 @@ async function collectExternalTraceAfterProviderCall({
     !response?.error &&
     response?.output !== null &&
     response?.output !== undefined &&
-    hasTraceAwareAssertions(test.assert);
+    hasTraceAwareAssertions(test.assert, test);
 
   try {
     if (needsTraceForGrading) {
@@ -1432,7 +1432,7 @@ async function gradeRunEvalResponse({
   const traceId = getTraceId(traceContext);
   if (
     traceId &&
-    hasTraceAwareAssertions(test.assert) &&
+    hasTraceAwareAssertions(test.assert, test) &&
     !isExternalTraceProvider(testSuite?.tracing?.provider)
   ) {
     await flushOtel();

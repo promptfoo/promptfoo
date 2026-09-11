@@ -1,3 +1,4 @@
+import { sanitizeTraceAttributes } from '../tracing/sanitizeAttributes';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
@@ -61,6 +62,7 @@ interface JudgeTrajectoryStep {
   index: number;
   name: string;
   spanName?: string;
+  sql?: { query: string; authorized?: boolean; rowCount?: number };
   status?: TrajectoryStepStatus;
   type: TrajectoryStepType;
 }
@@ -474,6 +476,8 @@ function compactJudgeTrajectorySteps(steps: JudgeTrajectoryStep[]): JudgeTraject
       previousStep.type === step.type &&
       previousStep.name === step.name &&
       previousStep.spanName === step.spanName &&
+      !previousStep.sql &&
+      !step.sql &&
       hasSameStatus(previousStep.status, step.status)
     ) {
       previousStep.collapsedCount = (previousStep.collapsedCount ?? 1) + 1;
@@ -500,15 +504,62 @@ function truncateJudgeTrajectorySteps(
   ];
 }
 
-export function summarizeTrajectoryForJudge(trace: TraceData): string {
+function getSqlExecutionDetails(
+  step: TrajectoryStep,
+  redactAttributes?: string[],
+): JudgeTrajectoryStep['sql'] {
+  const attributes = sanitizeTraceAttributes(step.attributes, {
+    redactAttributes,
+    truncateValues: false,
+  });
+  const args = extractToolArgs({
+    spanId: step.spanId,
+    name: step.spanName,
+    startTime: step.startTime,
+    attributes,
+  });
+  const query =
+    getFirstStringAttribute(attributes, ['db.query.text', 'db.statement']) ??
+    (args && typeof args === 'object'
+      ? getFirstStringAttribute(args as Record<string, unknown>, ['query', 'sql'])
+      : undefined);
+  if (!query) {
+    return undefined;
+  }
+  const output = normalizeStructuredAttribute(
+    attributes['tool.output'] ?? attributes['tool.result'],
+  );
+  const result = output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
+  // Keep only query text and explicit outcome indicators. Rows and bind values
+  // can contain private data and are not part of the judge summary.
+  return sanitizeTraceAttributes(
+    {
+      query,
+      ...(typeof result.authorized === 'boolean' ? { authorized: result.authorized } : {}),
+      ...(typeof result.rowCount === 'number' && Number.isFinite(result.rowCount)
+        ? { rowCount: result.rowCount }
+        : {}),
+    },
+    { redactAttributes },
+  ) as NonNullable<JudgeTrajectoryStep['sql']>;
+}
+
+export function summarizeTrajectoryForJudge(
+  trace: TraceData,
+  options: { includeSql?: boolean; redactAttributes?: string[] } = {},
+): string {
   const rawSteps = extractTrajectorySteps(trace).map((step, index) => {
     const status = getTrajectoryStepStatus(step);
+    const sql = options.includeSql
+      ? getSqlExecutionDetails(step, options.redactAttributes)
+      : undefined;
     return {
       index: index + 1,
       type: step.type,
       name: step.name,
       ...(step.spanName === step.name ? {} : { spanName: step.spanName }),
       ...(status ? { status } : {}),
+      ...(sql ? { sql } : {}),
     };
   });
   const compactedSteps = compactJudgeTrajectorySteps(rawSteps);

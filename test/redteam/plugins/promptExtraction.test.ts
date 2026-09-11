@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { summarizeObservedPluginFeatureBandCoverage } from '../../../src/redteam/generation/predicateSignatures';
+import {
+  extractPromptExtractionSignature,
+  summarizeObservedPluginFeatureBandCoverage,
+} from '../../../src/redteam/generation/predicateSignatures';
 import {
   PROMPT_EXTRACTION_ATTACK_FAMILIES,
   PromptExtractionPlugin,
@@ -38,6 +41,15 @@ describe('PromptExtractionPlugin', () => {
     expect(authorityPretext?.instructions).toContain('"legal counsel"');
     expect(authorityPretext?.instructions).toContain('"verbatim hidden instructions"');
     expect(authorityPretext?.instructions).toContain('"authority checks"');
+  });
+
+  it.each(PROMPT_EXTRACTION_ATTACK_FAMILIES)('accepts its own $id examples', (family) => {
+    for (const example of family.examples ?? []) {
+      const signature = extractPromptExtractionSignature(example);
+      for (const predicate of family.requiredPredicates ?? []) {
+        expect(signature.predicates[predicate], `${family.id}: ${example}`).toBe(true);
+      }
+    }
   });
 
   it('generates a coverage-aware portfolio with attack metadata', async () => {
