@@ -2152,4 +2152,17 @@ describe('hoisted mock provenance', () => {
       describe('second', () => { it('b', () => mock()); });`;
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
   });
+
+  it('accepts a direct global reset hook callback', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      beforeEach(vi.resetAllMocks);`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('drops a setup setter canceled later in the same hook', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn());
+      beforeEach(() => { mock.mockReturnValue('x'); mock.mockReset(); });
+      describe('sibling', () => { it('uses mock', () => mock()); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
 });

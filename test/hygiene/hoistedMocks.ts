@@ -165,6 +165,7 @@ export function findHoistedPersistentMockWithoutReset(
     call: Node;
     api: string;
   }[] = [];
+  const directResetHooks: Context[] = [];
   const testCallbacks: {
     callback: Extract<Value, { kind: 'function' }>;
     context: Context;
@@ -815,6 +816,15 @@ export function findHoistedPersistentMockWithoutReset(
       }
     }
     recordReset(keys, context);
+    for (const key of keys) {
+      const setups = scopedSetupSetters.get(key);
+      if (setups) {
+        scopedSetupSetters.set(
+          key,
+          setups.filter(({ suite }) => suite !== context.suite),
+        );
+      }
+    }
   }
 
   function canCoexist(left: string, right: string): boolean {
@@ -968,6 +978,8 @@ export function findHoistedPersistentMockWithoutReset(
       const callback = args[0];
       if (callback?.kind === 'function') {
         setupCallbacks.push({ callback, context, call: node, api: base });
+      } else if (callback?.kind === 'api' && callback.name === 'vi.resetAllMocks') {
+        directResetHooks.push(context);
       }
     } else if (TEST_APIS.has(base) && !curried && !api.endsWith('.todo') && args.length >= 2) {
       suitesWithTests.add(context.suite);
@@ -2439,6 +2451,9 @@ export function findHoistedPersistentMockWithoutReset(
     targetSuites = [...suites].filter(
       (owner) => suitesWithTests.has(owner) || (!owner.hasChildren && !owner.empty),
     );
+    for (const context of directResetHooks) {
+      recordReset(mocks.keys(), { ...context, phase: 'reset', hookResets: new Set() });
+    }
     for (const phase of ['setup', 'reset'] as const) {
       for (const hook of setupCallbacks) {
         if (HOOK_PHASES.get(hook.api) === phase) {
