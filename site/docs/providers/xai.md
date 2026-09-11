@@ -967,6 +967,8 @@ tests:
         value: Provides information about recent AI news
 ```
 
+<a id="pricing-2"></a>
+
 #### Pricing {#voice-pricing}
 
 [xAI's pricing](https://docs.x.ai/developers/pricing) lists Grok Voice Think Fast 2.0 at
