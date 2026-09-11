@@ -255,17 +255,26 @@ async function loadFilePart(
   if (!(await isPathWithinDir(resolvedPath, cliState.basePath || process.cwd()))) {
     throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
   }
-  const canonicalPath = await fs.realpath(resolvedPath);
-  if (!(await isPathWithinDir(canonicalPath, cliState.basePath || process.cwd()))) {
-    throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
-  }
+  const file = await fs.open(resolvedPath, 'r');
+  try {
+    const canonicalPath = await fs.realpath(resolvedPath);
+    const [opened, canonical] = await Promise.all([file.stat(), fs.stat(canonicalPath)]);
+    if (
+      opened.dev !== canonical.dev ||
+      opened.ino !== canonical.ino ||
+      !(await isPathWithinDir(canonicalPath, cliState.basePath || process.cwd()))
+    ) {
+      throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
+    }
 
-  const buffer = await fs.readFile(canonicalPath, { signal: abortSignal });
-  return {
-    buffer,
-    filename: path.basename(resolvedPath),
-    contentType: getContentTypeFromFilename(resolvedPath),
-  };
+    return {
+      buffer: await file.readFile({ signal: abortSignal }),
+      filename: path.basename(resolvedPath),
+      contentType: getContentTypeFromFilename(resolvedPath),
+    };
+  } finally {
+    await file.close();
+  }
 }
 
 export async function renderHttpMultipartBody(

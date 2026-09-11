@@ -123,6 +123,7 @@ async function createMultipartDocumentSummarizerServer() {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     servers.splice(0).map(
       (server) =>
@@ -377,7 +378,7 @@ describe('HttpProvider structured multipart requests', () => {
     },
   );
 
-  it('reads the canonical file after a configured symlink is swapped', async () => {
+  it('rejects a canonical ancestor swapped after the file is opened', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-swap-'));
     tempDirs.push(tempDir);
     const baseDir = path.join(tempDir, 'workspace');
@@ -393,9 +394,9 @@ describe('HttpProvider structured multipart requests', () => {
     let sourceResolutions = 0;
     vi.spyOn(fs.promises, 'realpath').mockImplementation(async (file) => {
       const canonical = await realpath(file);
-      if (String(file) === path.join(link, 'report.txt') && ++sourceResolutions === 2) {
-        fs.unlinkSync(link);
-        fs.symlinkSync(outsideDir, link, 'junction');
+      if (String(file) === path.join(link, 'report.txt') && ++sourceResolutions === 1) {
+        fs.renameSync(safeDir, `${safeDir}-original`);
+        fs.symlinkSync(outsideDir, safeDir, 'junction');
       }
       return canonical;
     });
@@ -415,9 +416,10 @@ describe('HttpProvider structured multipart requests', () => {
           },
         },
       });
-      const response = await provider.callApi('test');
-      expect(response.error).toBeUndefined();
-      expect(mockServer.getLastRequest()?.files[0].sizeBytes).toBe(4);
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'File path escapes allowed base directory',
+      );
+      expect(mockServer.getLastRequest()).toBeUndefined();
     } finally {
       cliState.basePath = previousBasePath;
     }
