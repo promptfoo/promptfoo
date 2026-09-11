@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache, isCacheEnabled } from '../../src/cache';
 import { AnthropicMessagesProvider } from '../../src/providers/anthropic/messages';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureGenericProvider } from '../../src/providers/azure/generic';
@@ -14,13 +15,15 @@ import {
 import { GoogleAuthManager } from '../../src/providers/google/auth';
 import { GoogleProvider } from '../../src/providers/google/provider';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../src/providers/google/vertex';
+import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
 import { fetchWithProxy } from '../../src/util/fetch';
 import { createDeferred } from '../util/utils';
 
 const mocks = vi.hoisted(() => ({ request: vi.fn(), bedrockSend: vi.fn(), s3Send: vi.fn() }));
 vi.mock('../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
-  isCacheEnabled: () => false,
+  isCacheEnabled: vi.fn(),
+  getCache: vi.fn(),
 }));
 vi.mock('../../src/providers/google/util', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -55,6 +58,8 @@ vi.mock('google-auth-library', () => ({
 }));
 
 beforeEach(() => {
+  vi.mocked(isCacheEnabled).mockReset().mockReturnValue(false);
+  vi.mocked(getCache).mockReset();
   mocks.request.mockReset();
   mocks.bedrockSend.mockReset();
   mocks.s3Send.mockReset();
@@ -83,7 +88,44 @@ function waitForAbort(signal: AbortSignal | null | undefined): Promise<never> {
   });
 }
 
-const vertexModels = ['gemini-2.5-flash', 'claude-sonnet-4', 'llama-3', 'chat-bison'];
+it.each([
+  ['OpenAI', OpenAiModerationProvider],
+  ['Azure', AzureModerationProvider],
+] as const)(
+  '%s moderation rejects a settled cache hit after cancellation',
+  async (_name, Provider) => {
+    const controller = new AbortController();
+    const reason = new Error('cancelled after cache settled');
+    const started = createDeferred<void>();
+    const read = createDeferred<string | { flags: never[] }>();
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(getCache).mockReturnValue({
+      get: vi.fn(() => {
+        started.resolve();
+        return read.promise;
+      }),
+    } as unknown as ReturnType<typeof getCache>);
+    const provider = new Provider('moderation', {
+      config: { apiKey: 'fixture-key', endpoint: 'https://fixture.invalid' },
+    });
+    const request = provider.callModerationApi('', 'hello', undefined, {
+      abortSignal: controller.signal,
+    });
+    await Promise.race([
+      started.promise,
+      request.then(() => {
+        throw new Error('Operation completed before cache read');
+      }),
+    ]);
+    read.resolve(
+      Provider === OpenAiModerationProvider ? JSON.stringify({ flags: [] }) : { flags: [] },
+    );
+    queueMicrotask(() => controller.abort(reason));
+    await expect(request).rejects.toBe(reason);
+  },
+);
+
+const vertexModels = ['gemini-2.5-flash', 'claude-sonnet-4@20250514', 'llama-3', 'chat-bison'];
 const googleOperations = [
   ...vertexModels.map((model) => ({
     name: `Vertex ${model}`,
@@ -107,6 +149,57 @@ const googleOperations = [
       }).callApi('hello', undefined, { abortSignal: signal }),
   },
 ];
+
+it.each(vertexModels)('retains Vertex %s output when caching is cancelled', async (model) => {
+  const controller = new AbortController();
+  const started = createDeferred<void>();
+  vi.spyOn(GoogleAuthManager, 'getApiKey').mockReturnValue({ apiKey: undefined, source: 'none' });
+  vi.mocked(isCacheEnabled).mockReturnValue(true);
+  vi.mocked(getCache).mockReturnValue({
+    get: vi.fn().mockResolvedValue(undefined),
+    set: vi.fn(() => {
+      started.resolve();
+      return waitForAbort(controller.signal);
+    }),
+  } as unknown as ReturnType<typeof getCache>);
+  const data = model.startsWith('gemini')
+    ? {
+        candidates: [{ content: { parts: [{ text: 'completed output' }] }, finishReason: 'STOP' }],
+        usageMetadata: { promptTokenCount: 7, candidatesTokenCount: 4, totalTokenCount: 11 },
+      }
+    : model.startsWith('claude')
+      ? {
+          content: [{ type: 'text', text: 'completed output' }],
+          usage: { input_tokens: 7, output_tokens: 4 },
+        }
+      : model.startsWith('llama')
+        ? {
+            choices: [{ message: { content: 'completed output' } }],
+            usage: { prompt_tokens: 7, completion_tokens: 4, total_tokens: 11 },
+          }
+        : { predictions: [{ candidates: [{ content: 'completed output' }] }] };
+  mocks.request.mockResolvedValue({ data });
+  const provider = new VertexChatProvider(model, {
+    config: { projectId: 'fixture-project', region: 'us-central1', cost: 0.001 },
+  });
+  const pending = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+  await Promise.race([
+    started.promise,
+    pending.then(() => {
+      throw new Error('Cache write was not started');
+    }),
+  ]);
+  controller.abort(new Error('cancelled cache write'));
+  const result = await pending;
+  expect(result.output).toBe('completed output');
+  expect(result.error).toContain('cancelled cache write');
+  if (model !== 'chat-bison') {
+    expect(result.tokenUsage?.total).toBe(11);
+  }
+  if (model.startsWith('gemini') || model.startsWith('claude')) {
+    expect(result.cost).toBeGreaterThan(0);
+  }
+});
 
 describe.each(googleOperations)('$name SDK cancellation', ({ call }) => {
   beforeEach(() => {

@@ -94,6 +94,14 @@ function getChatSearchSurcharge(modelName: string): number {
 }
 
 export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
+  getAudioInputFormat(): 'openai' | undefined {
+    const model =
+      (this.config.passthrough as { model?: unknown } | undefined)?.model ?? this.modelName;
+    return typeof model === 'string' && /^gpt-(?:audio|4o(?:-mini)?-audio)(?:-|$)/.test(model)
+      ? 'openai'
+      : undefined;
+  }
+
   static OPENAI_CHAT_MODELS = OPENAI_CHAT_MODELS;
 
   static OPENAI_CHAT_MODEL_NAMES = OPENAI_CHAT_MODELS.map((model) => model.id);
@@ -361,6 +369,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     return tokenCost === undefined ? searchCost || undefined : tokenCost + searchCost;
   }
 
+  /**
+   * Extract provider-specific fields while the raw OpenAI-compatible response is still available.
+   */
+  protected getProviderResponseMetadata(_data: unknown): Record<string, unknown> {
+    return {};
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -549,10 +564,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
+    let completedResponse: ProviderResponse | undefined;
+    const mcpToolCalls: McpToolCallEntry[] = [];
     try {
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
       const cost = this.calculateResponseCost(data, config, cached);
+      const providerMetadata = this.getProviderResponseMetadata(data);
 
       // Track content filtering for guardrails
       const contentFiltered = finishReason === FINISH_REASON_MAP.content_filter;
@@ -568,6 +586,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           ...(finishReason && { finishReason }),
           guardrails: { flagged: true }, // Refusal is ALWAYS a guardrail violation
           metadata: {
+            ...providerMetadata,
             http: {
               status,
               statusText,
@@ -591,6 +610,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             flagged: true,
           },
           metadata: {
+            ...providerMetadata,
             http: {
               status,
               statusText,
@@ -637,9 +657,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         output = `Thinking: ${reasoning}\n\n${output}`;
       }
 
-      // Executed MCP tool calls, published as `metadata.toolCalls` so assertions can
-      // check tool routing and arguments without wrapping the provider.
-      const mcpToolCalls: McpToolCallEntry[] = [];
+      completedResponse = {
+        output,
+        tokenUsage: getTokenUsage(data, cached),
+        cached,
+        latencyMs,
+        logProbs,
+        ...(finishReason && { finishReason }),
+        cost,
+        guardrails: { flagged: contentFiltered },
+        metadata: providerMetadata,
+      };
 
       // Handle function tool callbacks
       const functionCalls: any = message.function_call
@@ -667,9 +695,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                 const mcpResult = await this.mcpClient.callTool(
                   functionName,
                   parsedArgs,
-                  ...(callApiOptions?.abortSignal
-                    ? ([callApiOptions?.abortSignal] as const)
-                    : ([] as const)),
+                  callApiOptions?.abortSignal,
                 );
 
                 if (isMcpErrorResult(mcpResult)) {
@@ -740,15 +766,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }
         if (hasSuccessfulCallback && results.length > 0) {
           return {
+            ...completedResponse,
             output: results.join('\n'),
-            tokenUsage: getTokenUsage(data, cached),
-            cached,
-            latencyMs,
-            logProbs,
-            ...(finishReason && { finishReason }),
-            cost,
-            guardrails: { flagged: contentFiltered },
             metadata: {
+              ...providerMetadata,
               http: {
                 status,
                 statusText,
@@ -771,22 +792,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
       if (message.audio) {
         return {
+          ...completedResponse,
           output: message.audio.transcript || '',
           audio: {
             id: message.audio.id,
             expiresAt: message.audio.expires_at,
             data: message.audio.data,
             transcript: message.audio.transcript,
-            format: message.audio.format || 'wav',
+            format: message.audio.format || body.audio?.format || 'wav',
           },
-          tokenUsage: getTokenUsage(data, cached),
-          cached,
-          latencyMs,
-          logProbs,
-          ...(finishReason && { finishReason }),
-          cost,
-          guardrails: { flagged: contentFiltered },
           metadata: {
+            ...providerMetadata,
             http: {
               status,
               statusText,
@@ -800,15 +816,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const citations = getChatSearchCitations(message.annotations, output);
 
       return {
+        ...completedResponse,
         output,
-        tokenUsage: getTokenUsage(data, cached),
-        cached,
-        latencyMs,
-        logProbs,
-        ...(finishReason && { finishReason }),
-        cost,
-        guardrails: { flagged: contentFiltered },
         metadata: {
+          ...providerMetadata,
           http: {
             status,
             statusText,
@@ -829,8 +840,12 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         await deleteFromCache?.();
       }
       return {
+        ...completedResponse,
+        ...(completedResponse && { raw: data }),
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
         metadata: {
+          ...completedResponse?.metadata,
+          ...(mcpToolCalls.length > 0 && { toolCalls: mcpToolCalls }),
           http: {
             status,
             statusText,

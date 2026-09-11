@@ -1,9 +1,10 @@
 import { getEnvString } from '../envars';
-import { resolveProviderCreatorInput, splitOpenAiCompatibleConfig } from './creator';
+import { resolveProviderCreatorInput } from './creator';
 import { createNscaleImageProvider } from './nscale/image';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { splitLocalOptions } from './openai/localOptions';
 
 import type { ApiProvider } from '../types/index';
 import type { ProviderCreatorOptions } from './creator';
@@ -24,30 +25,30 @@ export function createNscaleProvider(
   const splits = providerPath.split(':');
 
   const config = providerOptions.config || {};
+  const { localOptions, modelParameters } = splitLocalOptions(config);
 
-  const { providerOptions: providerLevelOptions, passthrough } =
-    splitOpenAiCompatibleConfig(config);
-
-  // Prefer service tokens over API keys (API keys deprecated Oct 30, 2025)
-  const getApiKey = () => {
-    return (
-      config.apiKey ||
-      providerOptions.env?.NSCALE_SERVICE_TOKEN ||
-      getEnvString('NSCALE_SERVICE_TOKEN') ||
-      providerOptions.env?.NSCALE_API_KEY ||
-      getEnvString('NSCALE_API_KEY')
-    );
+  const getApiKeyEnvar = () => {
+    if (config.apiKeyEnvar) {
+      return config.apiKeyEnvar;
+    }
+    // Select a native namespace without copying its credential into config.
+    for (const envar of ['NSCALE_SERVICE_TOKEN', 'NSCALE_API_KEY']) {
+      if (providerOptions.env?.[envar] || getEnvString(envar)) {
+        return envar;
+      }
+    }
+    return 'NSCALE_SERVICE_TOKEN';
   };
 
   const nscaleConfig = {
     ...providerOptions,
     config: {
-      ...providerLevelOptions,
+      ...localOptions,
+      apiKeyEnvar: getApiKeyEnvar(),
       // Honor an explicit apiBaseUrl (private/regional Nscale endpoints) instead
       // of silently ignoring it while still shipping it in the request body.
-      apiBaseUrl: providerLevelOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',
-      apiKey: getApiKey(),
-      passthrough,
+      apiBaseUrl: localOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',
+      passthrough: { ...modelParameters, ...config.passthrough },
     },
   };
 

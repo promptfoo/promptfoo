@@ -1,10 +1,15 @@
-import { resolveProviderCreatorInput, splitOpenAiCompatibleConfig } from './creator';
+import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { splitLocalOptions } from './openai/localOptions';
 
 import type { ApiProvider } from '../types/index';
 import type { ProviderCreatorOptions } from './creator';
 
 class CerebrasProvider extends OpenAiChatCompletionProvider {
+  override getOrganization(): string | undefined {
+    return this.config.organization;
+  }
+
   async getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
     // Get the body from the parent method
     const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
@@ -35,17 +40,16 @@ export function createCerebrasProvider(
   const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
-  const { providerOptions: settings, passthrough } = splitOpenAiCompatibleConfig(
-    providerOptions.config || {},
-  );
+  const config = providerOptions.config || {};
+  const { localOptions, modelParameters } = splitLocalOptions(config);
 
   const cerebrasConfig = {
     ...providerOptions,
     config: {
-      apiBaseUrl: 'https://api.cerebras.ai/v1',
-      apiKeyEnvar: 'CEREBRAS_API_KEY',
-      ...settings,
-      passthrough,
+      ...localOptions,
+      apiBaseUrl: localOptions.apiBaseUrl || 'https://api.cerebras.ai/v1',
+      apiKeyEnvar: localOptions.apiKeyEnvar || 'CEREBRAS_API_KEY',
+      passthrough: { ...modelParameters, ...config.passthrough },
     },
   };
 

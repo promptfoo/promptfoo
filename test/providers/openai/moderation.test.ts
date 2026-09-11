@@ -41,6 +41,47 @@ describe('OpenAiModerationProvider', () => {
     });
   };
 
+  it('defaults to the current multimodal moderation model', async () => {
+    const provider = new OpenAiModerationProvider(undefined, {
+      config: { apiKey: 'test-key' },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: {
+        id: 'modr-default',
+        model: 'omni-moderation-latest',
+        results: [{ flagged: false, categories: {}, category_scores: {} }],
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+
+    const result = await provider.callModerationApi('', 'A friendly greeting');
+
+    expect(result).toEqual({ flags: [] });
+    expect(provider.modelName).toBe('omni-moderation-latest');
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.stringContaining('/moderations'),
+      expect.objectContaining({
+        body: JSON.stringify({
+          model: 'omni-moderation-latest',
+          input: [{ type: 'text', text: 'A friendly greeting' }],
+        }),
+      }),
+      expect.any(Number),
+      'json',
+      true,
+      undefined,
+    );
+  });
+
+  it.each(['text-moderation-latest', 'text-moderation-stable', 'text-moderation-007'])(
+    'does not advertise retired moderation model %s',
+    (model) => {
+      expect(OpenAiModerationProvider.MODERATION_MODEL_IDS).not.toContain(model);
+    },
+  );
+
   describe('Basic functionality', () => {
     it('should moderate content and detect harmful content', async () => {
       const provider = createProvider();

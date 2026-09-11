@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import crypto from 'node:crypto';
+import { setTimeout as sleepWithSignal } from 'node:timers/promises';
 import fs from 'fs';
 import path from 'path';
 
@@ -690,6 +691,8 @@ async function fetchAndReadBody(
   maxRetries: number | undefined,
   isIdempotent: boolean,
 ): Promise<{ respText: string; resp: Response; fetchLatencyMs: number }> {
+  const signal =
+    options.signal === undefined && url instanceof Request ? url.signal : options.signal;
   const maxBodyRetries = isIdempotent ? 2 : 0;
   for (let bodyAttempt = 0; bodyAttempt <= maxBodyRetries; bodyAttempt++) {
     const fetchStart = Date.now();
@@ -709,7 +712,11 @@ async function fetchAndReadBody(
           backoffMs,
           error: (err as Error)?.message?.slice(0, 200),
         });
-        await sleep(backoffMs);
+        if (signal) {
+          await sleepWithSignal(backoffMs, undefined, { signal });
+        } else {
+          await sleep(backoffMs);
+        }
         continue;
       }
       // Preserve cancellation: an aborted body read rejects with an AbortError, and
@@ -917,6 +924,7 @@ export async function fetchWithCache<T = unknown>(
   const cache = getCacheInstance();
 
   const cachedResponse = await awaitCache(cache.get<SerializedFetchResponse>(cacheKey));
+  signal?.throwIfAborted();
   if (cachedResponse != null) {
     logger.debug(
       `Returning cached response for ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${cachedResponse}`,
@@ -949,6 +957,7 @@ export async function fetchWithCache<T = unknown>(
   }
 
   const response = await awaitCache(inflightResponse);
+  signal?.throwIfAborted();
   const result = deserializeFetchResponse<T>(response, false, cache, cacheKey);
   return coalesced ? { ...result, coalesced: true } : result;
 }

@@ -35,18 +35,8 @@ export async function loadProviderCallbackFromFileUrl(
 }
 
 /**
- * Load, cache, and invoke one `functionToolCallbacks` entry, returning the string a
- * tool-result message expects.
- *
- * Shared by the two providers that implement function-tool callbacks directly on the
- * provider class — Bedrock Converse and OpenAI Chat — whose copies were identical apart
- * from log prefixes. Keeping one implementation is what stops them drifting: the
- * path-traversal guard is a worked example of a fix that reached one copy of this logic
- * and not the others.
- *
- * Loading and invocation use the same executor as Google and FunctionCallbackHandler.
- * This adapter retains string conversion and strict file exports; Google returns raw
- * values, while FunctionCallbackHandler preserves its lenient export policy.
+ * Run a direct provider callback with strict file exports and string output.
+ * Google retains raw values; FunctionCallbackHandler allows fallback file exports.
  */
 export async function executeProviderFunctionCallback({
   functionName,
@@ -75,7 +65,10 @@ export async function executeProviderFunctionCallback({
       name: functionName,
       args,
       callId,
-      reference: callbacks?.[functionName],
+      reference:
+        callbacks && Object.prototype.hasOwnProperty.call(callbacks, functionName)
+          ? callbacks[functionName]
+          : undefined,
       cache,
       signal,
       loadFile: (reference) => loadProviderCallbackFromFileUrl(reference, logPrefix),
@@ -151,7 +144,12 @@ export class FunctionCallbackHandler {
       }
     }
 
-    if (!functionInfo || !callbacks || !callbacks[functionInfo.name]) {
+    if (
+      !functionInfo ||
+      !callbacks ||
+      !Object.prototype.hasOwnProperty.call(callbacks, functionInfo.name) ||
+      !callbacks[functionInfo.name]
+    ) {
       // No callback available - return stringified original
       return {
         output: typeof call === 'string' ? call : JSON.stringify(call),
@@ -345,11 +343,7 @@ export class FunctionCallbackHandler {
       const parsedArgs =
         args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
       signal?.throwIfAborted();
-      const result = await this.mcpClient.callTool(
-        toolName,
-        parsedArgs,
-        ...(signal ? ([signal] as const) : ([] as const)),
-      );
+      const result = await this.mcpClient.callTool(toolName, parsedArgs, signal);
 
       if (isMcpErrorResult(result)) {
         return {

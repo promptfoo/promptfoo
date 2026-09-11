@@ -127,6 +127,29 @@ describe('EchoProvider', () => {
       expect(Date.now() - startTime).toBeGreaterThanOrEqual(100);
     });
 
+    it('rejects a request cancelled before dispatch', async () => {
+      const provider = new EchoProvider();
+      const controller = new AbortController();
+      controller.abort(new Error('stop echo'));
+
+      await expect(
+        provider.callApi('input', undefined, { abortSignal: controller.signal }),
+      ).rejects.toThrow('stop echo');
+    });
+
+    it('cancels the configured delay without returning a completed response', async () => {
+      vi.useFakeTimers();
+      const provider = new EchoProvider({ delay: 100 });
+      const controller = new AbortController();
+      const pending = provider.callApi('input', undefined, { abortSignal: controller.signal });
+      const rejected = expect(pending).rejects.toThrow();
+
+      controller.abort();
+      await vi.runAllTimersAsync();
+      await rejected;
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
     it('should handle empty input', async () => {
       const input = '';
       const provider = new EchoProvider();

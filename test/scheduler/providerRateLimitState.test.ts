@@ -69,21 +69,51 @@ describe('ProviderRateLimitState', () => {
       expect(state.getMetrics().failedRequests).toBe(1);
     });
 
-    it('counts an aborted normalized response as a failure', async () => {
-      const controller = new AbortController();
-      await expect(
-        state.executeWithRetry(
-          'cancelled-request',
-          async () => {
-            controller.abort(new Error('cancelled'));
-            return { error: 'transport converted cancellation' };
-          },
-          { abortSignal: controller.signal },
-        ),
-      ).rejects.toThrow('cancelled');
-      expect(state.getMetrics().completedRequests).toBe(0);
-      expect(state.getMetrics().failedRequests).toBe(1);
-    });
+    it.each([200, 429])(
+      'retains aborted response billing and learns rate limits (%s)',
+      async (status) => {
+        const controller = new AbortController();
+        await expect(
+          state.executeWithRetry(
+            'cancelled-request',
+            async () => {
+              controller.abort(new Error('cancelled'));
+              return {
+                error: 'callback cancelled',
+                cost: 0.03,
+                tokenUsage: { total: 11 },
+                status,
+              };
+            },
+            {
+              abortSignal: controller.signal,
+              isRateLimited: (result) => result?.status === 429,
+              getHeaders: () => ({
+                'x-ratelimit-limit-requests': '1',
+                'x-ratelimit-remaining-requests': '0',
+                'x-ratelimit-reset-requests': '2s',
+              }),
+              getRetryAfter: () => 2000,
+            },
+          ),
+        ).resolves.toMatchObject({
+          error: 'callback cancelled',
+          cost: 0.03,
+          tokenUsage: { total: 11 },
+        });
+        expect(state.getMetrics().activeRequests).toBe(0);
+        expect(state.getMetrics().retriedRequests).toBe(0);
+        expect(state.getMetrics().completedRequests).toBe(0);
+        expect(state.getMetrics().failedRequests).toBe(1);
+        expect(state.getMetrics().rateLimitHits).toBe(status === 429 ? 1 : 0);
+        const nextCall = vi.fn().mockResolvedValue('next');
+        const next = state.executeWithRetry('next', nextCall, {});
+        await vi.advanceTimersByTimeAsync(1999);
+        expect(nextCall).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(next).resolves.toBe('next');
+      },
+    );
 
     it('should execute function and return result', async () => {
       const result = await state.executeWithRetry('req-1', async () => 'success', {});
