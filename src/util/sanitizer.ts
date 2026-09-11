@@ -717,7 +717,7 @@ type RestoreResult<T> = {
 function collectStoredAzureBlobSasTokens(
   value: unknown,
   tokensByRedactedUri = new Map<string, string | null>(),
-  path: Array<string | number> = [],
+  path: Array<string | null> = [],
 ): Map<string, string | null> {
   if (typeof value === 'string') {
     const redacted = redactAzureBlobSasToken(value);
@@ -743,8 +743,9 @@ function collectStoredAzureBlobSasTokens(
   }
 
   if (Array.isArray(value)) {
-    for (const [index, item] of value.entries()) {
-      collectStoredAzureBlobSasTokens(item, tokensByRedactedUri, [...path, index]);
+    // Preserve field names and array depth while allowing entries to move.
+    for (const item of value) {
+      collectStoredAzureBlobSasTokens(item, tokensByRedactedUri, [...path, null]);
     }
     return tokensByRedactedUri;
   }
@@ -762,7 +763,7 @@ function collectStoredAzureBlobSasTokens(
 function restoreAzureBlobSasTokensFromMap<T>(
   value: T,
   tokensByRedactedUri: ReadonlyMap<string, string | null>,
-  path: Array<string | number> = [],
+  path: Array<string | null> = [],
 ): RestoreResult<T> {
   if (typeof value === 'string') {
     if (tokensByRedactedUri.get(JSON.stringify([null, value])) === null) {
@@ -776,8 +777,8 @@ function restoreAzureBlobSasTokensFromMap<T>(
 
   if (Array.isArray(value)) {
     let restored = false;
-    const restoredItems = value.map((item, index) => {
-      const result = restoreAzureBlobSasTokensFromMap(item, tokensByRedactedUri, [...path, index]);
+    const restoredItems = value.map((item) => {
+      const result = restoreAzureBlobSasTokensFromMap(item, tokensByRedactedUri, [...path, null]);
       restored ||= result.restored;
       return result.value;
     });
