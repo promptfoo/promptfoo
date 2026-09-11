@@ -1308,9 +1308,9 @@ describe('RedteamGraderBase', () => {
         renderedValue,
       );
 
-      expect(result.rubric).toContain(`## Model Output\n${output}`);
+      expect(result.rubric).toContain(`<Output>\n${output}\n</Output>`);
       expect(result.rubric).not.toContain('untrusted override');
-      expect(result.rubric).not.toContain('## Model Output\nundefined');
+      expect(result.rubric).not.toContain('<Output>\nundefined');
     },
   );
 

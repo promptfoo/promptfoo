@@ -94,32 +94,6 @@ failure are diagnostic; they cannot establish a smaller usable profile.
    remains a failure; absent capabilities are not savings for a consumer that
    needs them. This tool's local echo QA does not prove every optional capability.
 
-## Conditional private capability experiment
-
-The first candidate is a dependency-only browser add-back profile: the unchanged
-full facade plus explicit `playwright`, `playwright-extra`,
-`puppeteer-extra-plugin-stealth`, and `@playwright/browser-chromium` dependencies.
-Playwright also supports ChatKit, so these dependencies are not exclusively owned
-by the browser provider. Any prototype remains private and outside the published
-workspace graph. It must not duplicate provider registries or lifecycle state.
-
-Set the gate before collecting results: at least **100 MiB and 15%** reduction in
-installed tree plus downloaded assets versus a working full profile, repeated in
-fresh consumers; deterministic browser success/error/recovery checks and the full
-facade probes must pass; no repeatable startup regression. The fixture must use
-local HTML and exact extracted output, with no external service or provider API.
-
-Stop if the baseline capability is broken, omitted native dependencies prevent
-execution, savings depend on missing requested features, a root-hoisted dependency
-is needed, or meaningful browser/native execution cannot be verified. Correct a
-production declaration through its owner before comparing profiles. A private
-add-back dependency bundle proves selective consumer installation only; it does
-not prove a standalone evaluator package or justify public package publication.
-
-Local-model extraction is deferred until a pinned deterministic model fixture is
-available. Importing a mocked pipeline or reporting a missing-model error does
-not establish native execution usability.
-
 ## Initial observation (September 8, 2026)
 
 A Linux x64 consumer run with Node 24.20.0 / npm 11.19.0 used an artifact built
@@ -147,10 +121,3 @@ usability. The default dependency-tree check also reported an invalid
 `@huggingface/transformers` after its optional installation failed, in addition to
 normal platform exclusions. These are failed acceptance checks and incomplete
 capability coverage, not accepted installation savings.
-
-A private four-dependency browser add-back prototype was prepared, but its fresh
-installation through the configured registry returned a missing-package error for
-a required facade dependency before browser execution. The benefit gate remains
-unmet. Do not publish a capability package based on these results. Re-run with a
-working approved registry and equivalent usable consumers before drawing a
-capability-size or startup conclusion.
