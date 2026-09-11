@@ -1,6 +1,8 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Trajectory assertions with OpenTelemetry traces
 
+sharing: false
+
 prompts:
   - 'Explain how {{topic}} works in simple terms'
 

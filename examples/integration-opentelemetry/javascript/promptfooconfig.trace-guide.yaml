@@ -1,6 +1,8 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: Trace-based agent eval guide
 
+sharing: false
+
 prompts:
   - 'Explain how {{topic}} works in simple terms'
 
