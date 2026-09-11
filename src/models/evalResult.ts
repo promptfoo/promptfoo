@@ -172,6 +172,7 @@ function projectTranscriptMetadata<T>(
         }
         const attack = { ...entry };
         if (options.stripPrompt) {
+          delete attack.prompt;
           delete attack.message;
         }
         if (options.stripOutput) {

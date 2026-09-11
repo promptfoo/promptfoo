@@ -392,10 +392,10 @@ describe('JSON export with improved error handling', () => {
   });
 
   describe.each([2, 3])('known transcript projection in V%s artifacts', (version) => {
-    it.each(['none', 'prompt', 'output', 'vars', 'grading', 'metadata', 'all'])(
+    it.each(['none', 'prompt', 'output', 'vars', 'grading', 'metadata', 'prompt+output', 'all'])(
       'honors independent %s stripping across schema copies without mutating inputs',
       async (flag) => {
-        const strips = (category: string) => flag === category || flag === 'all';
+        const strips = (category: string) => flag === 'all' || flag.split('+').includes(category);
         const restoreEnv = mockProcessEnv({
           PROMPTFOO_STRIP_PROMPT_TEXT: String(strips('prompt')),
           PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strips('output')),
@@ -430,6 +430,17 @@ describe('JSON export with improved error handling', () => {
             },
           ],
         };
+        // GOAT and Crescendo emit prompt; imported legacy entries can use message.
+        const successfulAttack = {
+          turn: 2,
+          prompt: 'successful input canary',
+          response: 'successful output canary',
+        };
+        const legacySuccessfulAttack = {
+          turn: 3,
+          message: 'legacy attack message canary',
+          response: 'legacy attack response canary',
+        };
         const metadata = {
           redteamFinalPrompt: 'final input canary',
           redteamHistory: [
@@ -458,7 +469,10 @@ describe('JSON export with improved error handling', () => {
             null,
           ],
           successfulAttacks: [
-            { turn: 2, message: 'successful input canary', response: 'successful output canary' },
+            successfulAttack,
+            legacySuccessfulAttack,
+            null,
+            'legacy successful attack entry',
           ],
           transformDisplayVars: { topic: 'display vars canary' },
           storedGraderResult: grade,
@@ -470,6 +484,7 @@ describe('JSON export with improved error handling', () => {
             metadata: { note: 'opaque metadata' },
           },
         };
+        const originalSuccessfulAttacks = metadata.successfulAttacks;
         const row = createEvaluateResult({
           provider: { id: 'raw/provider:model-id', label: 'raw model label' },
           response: { output: { http: { output: 'opaque model value' } }, metadata },
@@ -533,12 +548,19 @@ describe('JSON export with improved error handling', () => {
           expect(copy.redteamFinalPrompt).toEqual(kept('prompt', metadata.redteamFinalPrompt));
           expect(history.inputVars).toEqual(kept('vars', originalHistory.inputVars));
           expect(copy.transformDisplayVars).toEqual(kept('vars', metadata.transformDisplayVars));
-          expect(copy.successfulAttacks[0].message).toEqual(
-            kept('prompt', metadata.successfulAttacks[0].message),
-          );
+          expect(copy.successfulAttacks[0].prompt).toEqual(kept('prompt', successfulAttack.prompt));
           expect(copy.successfulAttacks[0].response).toEqual(
-            kept('output', metadata.successfulAttacks[0].response),
+            kept('output', successfulAttack.response),
           );
+          expect(copy.successfulAttacks[0].turn).toBe(successfulAttack.turn);
+          expect(copy.successfulAttacks[1].message).toEqual(
+            kept('prompt', legacySuccessfulAttack.message),
+          );
+          expect(copy.successfulAttacks[1].response).toEqual(
+            kept('output', legacySuccessfulAttack.response),
+          );
+          expect(copy.successfulAttacks[1].turn).toBe(legacySuccessfulAttack.turn);
+          expect(copy.successfulAttacks.slice(2)).toEqual([null, 'legacy successful attack entry']);
           expect(copy.storedGraderResult).toEqual(kept('grading', grade));
           for (const [index, message] of copy.messages.slice(0, 3).entries()) {
             expect(message.content).toEqual(kept('prompt', metadata.messages[index]?.content));
@@ -577,12 +599,14 @@ describe('JSON export with improved error handling', () => {
               'input image canary',
               'message input canary',
               'successful input canary',
+              'legacy attack message canary',
             ],
             output: [
               'history output canary',
               'output audio canary',
               'output image canary',
               'successful output canary',
+              'legacy attack response canary',
             ],
             vars: ['turn vars canary', 'display vars canary'],
             grading: ['grade reason', 'component reason'],
@@ -602,7 +626,9 @@ describe('JSON export with improved error handling', () => {
         };
         try {
           // Exercise JSONL and model projections as well as the real format writers.
-          check(sanitizeResultForJsonlArtifact(row));
+          const jsonlArtifact = sanitizeResultForJsonlArtifact(row);
+          check(jsonlArtifact);
+          checkSerialized(`${JSON.stringify(jsonlArtifact)}\n`);
           const model = new EvalResult({
             ...row,
             response: row.response ?? null,
@@ -630,6 +656,12 @@ describe('JSON export with improved error handling', () => {
           expect(cell).toEqual(originalCell);
           expect(model.response).toBe(row.response);
           expect(model.gradingResult).toBe(grade);
+          expect(row.metadata).toBe(metadata);
+          expect(row.response!.metadata).toBe(metadata);
+          expect(cell.metadata).toBe(metadata);
+          expect(metadata.successfulAttacks).toBe(originalSuccessfulAttacks);
+          expect(metadata.successfulAttacks[0]).toBe(successfulAttack);
+          expect(metadata.successfulAttacks[1]).toBe(legacySuccessfulAttack);
         } finally {
           restoreEnv();
         }
