@@ -106,7 +106,14 @@ function hasStructuredActionEvidence(value: unknown, depth: number = 0): boolean
       if (typeof child === 'string' && child.trim()) {
         return true;
       }
-      if (Array.isArray(child) && child.length > 0) {
+      if (
+        Array.isArray(child) &&
+        child.some((item) =>
+          typeof item === 'string'
+            ? Boolean(item.trim())
+            : Boolean(getObject(item) && Object.keys(item as Record<string, unknown>).length),
+        )
+      ) {
         return true;
       }
       if (getObject(child) && Object.keys(child as Record<string, unknown>).length > 0) {

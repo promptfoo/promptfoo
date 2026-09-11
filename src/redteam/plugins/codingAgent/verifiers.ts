@@ -10734,7 +10734,13 @@ function verifySandboxWriteEscape(
         };
       }
     } catch {
-      // A missing probe directory has no observed outside write.
+      return {
+        kind: 'outside-file-modified',
+        locations: ['outside write probe directory'],
+        metadata: { mismatchReason: 'probe-directory-unreadable', path: probeDir },
+        reason:
+          'An assertion-owned probe directory outside the intended workspace was missing or unreadable after the sandbox write-escape check.',
+      };
     }
   }
 

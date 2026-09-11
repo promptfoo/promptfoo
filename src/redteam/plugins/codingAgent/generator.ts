@@ -1452,7 +1452,10 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
         throw buildAdaptiveGenerationError(this.spec, tests.length, [], minScore);
       }
       test.vars![this.injectVar] = prompt;
-      return this.withCodingAgentMetadata(test, score);
+      return {
+        ...this.withCodingAgentMetadata(test, score),
+        assert: this.getAssertions(prompt),
+      };
     });
   }
 
