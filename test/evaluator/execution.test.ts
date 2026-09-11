@@ -109,6 +109,43 @@ describeEvaluator('evaluator execution control', () => {
     }
   });
 
+  it('retains billing returned when the row timeout aborts a callback', async () => {
+    const started = createDeferred<void>();
+    const provider: ApiProvider = {
+      id: () => 'cancelled-callback',
+      callApi: vi.fn(async (_prompt, _context, options) => {
+        const signal = options!.abortSignal!;
+        await new Promise<void>((resolve) => {
+          signal.addEventListener('abort', () => resolve(), { once: true });
+          started.resolve();
+        });
+        return {
+          output: 'completed model output',
+          error: String(signal.reason),
+          cost: 0.03,
+          tokenUsage: { total: 11, prompt: 7, completion: 4, numRequests: 1 },
+        };
+      }),
+    };
+    const suite: TestSuite = { providers: [provider], prompts: [toPrompt('hello')], tests: [{}] };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    vi.useFakeTimers();
+    const run = evaluate(suite, record, { timeoutMs: 100 });
+    await started.promise;
+    await vi.advanceTimersByTimeAsync(100);
+    await run;
+    const rows = await record.getResults();
+    expect(rows).toHaveLength(1);
+    expect(asEvaluateResult(rows[0])).toMatchObject({
+      response: { output: 'completed model output' },
+      cost: 0.03,
+      tokenUsage: { total: 11, numRequests: 1 },
+      success: false,
+      score: 0,
+      failureReason: ResultFailureReason.ERROR,
+    });
+  });
+
   it.each([false, true])(
     'isolates overlapping evaluation cleanup (shared provider: %s)',
     async (shared) => {
@@ -207,6 +244,9 @@ describeEvaluator('evaluator execution control', () => {
       expect(rows[0].cost).toBe(0.25);
       expect(rows[0].response?.tokenUsage?.total).toBe(5);
       expect(evalRecord.getStats().tokenUsage.total).toBe(5);
+      expect(rows[0].success).toBe(true);
+      expect(rows[0].score).toBe(1);
+      expect(rows[0].error).toBeNull();
     } finally {
       controller.abort();
       delay.mockRestore();
@@ -895,6 +935,7 @@ describeEvaluator('evaluator execution control', () => {
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 100 });
       await vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersToNextTimerAsync();
       await evalPromise;
 
       expect(slowApiProvider.callApi).toHaveBeenCalledWith(
@@ -977,6 +1018,7 @@ describeEvaluator('evaluator execution control', () => {
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
       await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersToNextTimerAsync();
       await evalPromise;
 
       expect(hangingProvider.cleanup).not.toHaveBeenCalled();
@@ -1045,6 +1087,7 @@ describeEvaluator('evaluator execution control', () => {
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
       await vi.advanceTimersByTimeAsync(50);
+      await vi.advanceTimersToNextTimerAsync();
       await evalPromise;
 
       expect(mockAddResult).toHaveBeenCalledTimes(1);
@@ -1060,8 +1103,7 @@ describeEvaluator('evaluator execution control', () => {
         output: 'Late response',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       });
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(1);
 
       expect(mockAddResult).toHaveBeenCalledTimes(1);
     } finally {

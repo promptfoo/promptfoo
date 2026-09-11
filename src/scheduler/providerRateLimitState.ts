@@ -178,14 +178,6 @@ export class ProviderRateLimitState extends EventEmitter {
         const latencyMs = Date.now() - startTime;
         this.latencies.push(latencyMs);
 
-        if (options.abortSignal?.aborted) {
-          // Preserve a completed response's billing without retrying cancelled work.
-          slotHeld = false;
-          this.slotQueue.release();
-          this.failedRequests++;
-          return result;
-        }
-
         // Extract headers and check for rate limit
         const headers = options.getHeaders?.(result);
         const isRateLimited = options.isRateLimited?.(result, undefined) ?? false;
@@ -202,7 +194,13 @@ export class ProviderRateLimitState extends EventEmitter {
 
         if (isRateLimited) {
           this.handleRateLimit(retryAfterMs);
+        }
+        if (options.abortSignal?.aborted) {
+          this.failedRequests++;
+          return result;
+        }
 
+        if (isRateLimited) {
           // Check if we should retry
           if (shouldRetry(attempt, undefined, true, retryPolicy)) {
             attempt++;
