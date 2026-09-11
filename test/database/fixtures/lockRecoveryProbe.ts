@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url';
 
 import { createClient } from '@libsql/client/node';
 import { Sqlite3Client } from '@libsql/client/sqlite3';
-import { closeDb, getDb, getDbPath } from '../../../src/database/index';
+import { closeDb, getDb, getDbPath, isDbOpen } from '../../../src/database/index';
 import type { Client } from '@libsql/client/node';
 
 export interface LockRecoveryProbeResult {
@@ -10,6 +10,9 @@ export interface LockRecoveryProbeResult {
   followupError: string | null;
   followupRowsAffected: number | null;
   transactionAfterFailureError: string | null;
+  dbOpenAfterFailure: boolean | null;
+  reopenedError: string | null;
+  reopenedRowsAffected: number | null;
   callbackCalls: number;
   clientClosedAfterFailure: boolean;
   beforeCloseIds: number[];
@@ -63,6 +66,9 @@ const result: LockRecoveryProbeResult = {
   followupError: null,
   followupRowsAffected: null,
   transactionAfterFailureError: null,
+  dbOpenAfterFailure: null,
+  reopenedError: null,
+  reopenedRowsAffected: null,
   callbackCalls: 0,
   clientClosedAfterFailure: false,
   beforeCloseIds: [],
@@ -175,6 +181,14 @@ try {
         await tx.run('INSERT INTO lock_recovery_test VALUES (4)');
       }),
     );
+    // A failed recovery must not poison the process: the cached handles are dropped,
+    // so the next getDb() opens a fresh connection that can still write.
+    result.dbOpenAfterFailure = isDbOpen();
+    result.reopenedError = await captureError(async () => {
+      const reopened = await getDb();
+      const insert = await reopened.run('INSERT INTO lock_recovery_test VALUES (5)');
+      result.reopenedRowsAffected = insert.rowsAffected;
+    });
   }
   if (mode === 'script') {
     const query = await contender.execute('SELECT COUNT(*) AS count FROM attached_rows');

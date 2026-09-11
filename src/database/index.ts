@@ -35,6 +35,15 @@ let dbPromise: Promise<Drizzle> | null = null;
 let sqliteInstance: Client | null = null;
 let sqliteInstanceIsTesting = false;
 
+// Drop every cached handle so the next getDb() builds a fresh connection instead of
+// handing back a client that is closed or otherwise unusable.
+function clearCachedDb(): void {
+  sqliteInstance = null;
+  sqliteInstanceIsTesting = false;
+  dbInstance = null;
+  dbPromise = null;
+}
+
 function isMissingPathError(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException | null)?.code;
   return code === 'ENOENT' || code === 'ENOTDIR';
@@ -242,6 +251,35 @@ function serializeTopLevelOperations(
 ): Drizzle {
   const rawExecute = client.execute.bind(client);
 
+  // libsql 0.5.29 can leave a failed statement active: later writes appear to succeed
+  // but disappear at close. Returns false when the connection could not be healed and
+  // was discarded, so the caller must fail closed.
+  const recoverConnection = async (): Promise<boolean> => {
+    try {
+      const result = await rawExecute('PRAGMA busy_timeout');
+      const busyTimeoutMs = Number(result.rows[0]?.timeout ?? 5000);
+      await client.reconnect();
+      // journal_mode persists in the file; restore only connection settings.
+      await configureConnection(rawExecute, busyTimeoutMs, 'preserve');
+      return true;
+    } catch (recoveryError) {
+      logger.warn('Could not recover database connection after lock failure', {
+        error: recoveryError,
+      });
+      try {
+        client.close();
+      } catch {
+        // The connection is already unusable; the lock error is what callers need.
+      }
+      // A closed client must not stay cached, or every later write would reject for
+      // the rest of the process. The next getDb() builds a fresh connection instead.
+      if (sqliteInstance === client) {
+        clearCachedDb();
+      }
+      return false;
+    }
+  };
+
   const withLockRecovery = async <T>(operation: () => Promise<T>, retry: boolean): Promise<T> => {
     for (let attempt = 1; ; attempt++) {
       // The native transaction() method does not check client.closed itself.
@@ -254,26 +292,10 @@ function serializeTopLevelOperations(
         if (!isTransientDatabaseLockError(error)) {
           throw error;
         }
-        // libsql 0.5.29 can leave a failed statement active: later writes appear to
-        // succeed but disappear at close. Heal even when this operation will not
-        // retry. Reconnecting shared in-memory tests would destroy their schema.
-        if (reconnectOnLockFailure) {
-          try {
-            const result = await rawExecute('PRAGMA busy_timeout');
-            const busyTimeoutMs = Number(result.rows[0]?.timeout ?? 5000);
-            await client.reconnect();
-            // journal_mode persists in the file; restore only connection settings.
-            await configureConnection(rawExecute, busyTimeoutMs, 'preserve');
-          } catch (recoveryError) {
-            logger.warn('Could not recover database connection after lock failure', {
-              error: recoveryError,
-            });
-            try {
-              client.close();
-            } finally {
-              throw error;
-            }
-          }
+        // Heal even when this operation will not retry. Reconnecting shared in-memory
+        // tests would destroy their schema, so they opt out.
+        if (reconnectOnLockFailure && !(await recoverConnection())) {
+          throw error;
         }
         if (!retry || attempt >= TRANSIENT_LOCK_RETRY_ATTEMPTS) {
           throw error;
@@ -377,10 +399,7 @@ export async function getDb() {
         unregisterTestDatabaseClient(sqliteInstance);
         sqliteInstance.close();
       }
-      sqliteInstance = null;
-      sqliteInstanceIsTesting = false;
-      dbInstance = null;
-      dbPromise = null;
+      clearCachedDb();
       throw error;
     });
   }
@@ -436,10 +455,7 @@ export async function closeDb() {
       // Even if close fails, we should still clear the instances
       // to prevent reuse of a potentially corrupted connection
     } finally {
-      sqliteInstance = null;
-      sqliteInstanceIsTesting = false;
-      dbInstance = null;
-      dbPromise = null;
+      clearCachedDb();
     }
   }
 }
