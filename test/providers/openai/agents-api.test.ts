@@ -34,9 +34,10 @@ const page = (data: unknown[], more = false, lastId: string | null = null) => ({
 const json = (data: unknown) => new Response(JSON.stringify(data));
 
 describe('OpenAiAgentsApiProvider', () => {
-  mockProcessEnv({ OPENAI_API_KEY: undefined });
+  let restoreEnv: () => void;
 
   beforeEach(() => {
+    restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
     vi.mocked(fetchWithRetries).mockReset();
     vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
       if (options?.method === 'DELETE') {
@@ -54,6 +55,7 @@ describe('OpenAiAgentsApiProvider', () => {
   });
 
   afterEach(() => {
+    restoreEnv();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
@@ -128,6 +130,109 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(await new OpenAiAgentsApiProvider().callApi('hi')).toMatchObject({
       error: expect.stringContaining('OPENAI_API_KEY'),
     });
+    expect(fetchWithRetries).not.toHaveBeenCalled();
+  });
+
+  it('renders nested config once and preserves variable values as literal data', async () => {
+    const agentProvider = provider({
+      agent: { instructions: 'Follow {{role}}', tools: [{ server_label: '{{tool}}' }] },
+      metadata: { purpose: '{{purpose}}' },
+    });
+    const result = await agentProvider.callApi('hi', {
+      vars: { role: '{{ 6 * 7 }}', tool: 'docs', purpose: 'qa' },
+      prompt: { raw: 'hi', label: 'test' },
+    });
+    expect(result.output).toBe('42');
+    expect(JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]!.body as string)).toMatchObject({
+      agent: { instructions: 'Follow {{ 6 * 7 }}', tools: [{ server_label: 'docs' }] },
+      metadata: { purpose: 'qa' },
+    });
+    expect(agentProvider.config.agent?.instructions).toBe('Follow {{role}}');
+  });
+
+  it('applies per-prompt config without injecting a default model into a saved agent', async () => {
+    const attachedProviderMethod = vi.fn();
+    const result = await provider().callApi('hi', {
+      vars: { role: 'Be concise', saved: 'agent_prompt' },
+      prompt: {
+        raw: 'hi',
+        label: 'test',
+        config: {
+          agent_id: '{{saved}}',
+          agent: { instructions: '{{role}}' },
+          environment: { type: 'openai_hosted' },
+          retainSession: true,
+          provider: { callApi: attachedProviderMethod },
+        },
+      },
+    });
+    expect(result.output).toBe('42');
+    expect(JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]!.body as string)).toMatchObject({
+      agent_id: 'agent_prompt',
+      agent: { instructions: 'Be concise' },
+      environment: { type: 'openai_hosted' },
+    });
+    expect(
+      JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]!.body as string).agent,
+    ).not.toHaveProperty('model');
+    expect(
+      vi.mocked(fetchWithRetries).mock.calls.some(([, request]) => request?.method === 'DELETE'),
+    ).toBe(false);
+    expect(attachedProviderMethod).not.toHaveBeenCalled();
+  });
+
+  it.each(['', 'gpt-6-astra'])('preserves model suffix precedence (%s)', async (suffix) => {
+    const agentProvider = new OpenAiAgentsApiProvider(suffix, { config: { apiKey: 'test-key' } });
+    await agentProvider.callApi('hi', {
+      vars: {},
+      prompt: { raw: 'hi', label: 'test', config: { agent: { model: 'gpt-5.6' } } },
+    });
+    expect(
+      JSON.parse(vi.mocked(fetchWithRetries).mock.calls[0][1]!.body as string).agent.model,
+    ).toBe(suffix || 'gpt-5.6');
+  });
+
+  it('isolates per-prompt credentials and lifecycle settings across concurrent calls', async () => {
+    const agentProvider = provider();
+    const results = await Promise.all(
+      ['first', 'second'].map((name) =>
+        agentProvider.callApi(name, {
+          vars: { name },
+          prompt: {
+            raw: name,
+            label: name,
+            config: {
+              apiKey: '{{name}}-key',
+              apiBaseUrl: 'https://{{name}}.example/v1',
+              agent: { instructions: '{{name}}' },
+              retainSession: name === 'first',
+            },
+          },
+        }),
+      ),
+    );
+    expect(results.every((result) => result.output === '42')).toBe(true);
+    for (const [url, request] of vi.mocked(fetchWithRetries).mock.calls) {
+      const name = new URL(String(url)).hostname.split('.')[0];
+      expect(new Headers(request!.headers).get('Authorization')).toBe(`Bearer ${name}-key`);
+      if (request?.method === 'POST') {
+        expect(JSON.parse(request.body as string).agent.instructions).toBe(name);
+      }
+      if (request?.method === 'DELETE') {
+        expect(name).toBe('second');
+      }
+    }
+    expect(results[1].metadata?.sessionDeleted).toBe(true);
+    expect(agentProvider.config.apiKey).toBe('test-key');
+    expect(agentProvider.config.apiBaseUrl).toBeUndefined();
+  });
+
+  it('validates per-prompt lifecycle settings before creating a session', async () => {
+    const result = await provider().callApi('hi', {
+      vars: {},
+      prompt: { raw: 'hi', label: 'test', config: { timeoutMs: 0 } },
+    });
+    expect(result.error).toContain('timeoutMs must be a positive integer');
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,6 @@
 import logger from '../../logger';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
+import { renderVarsInObject } from '../../util/render';
 import { sleepWithAbort } from '../../util/time';
 import { calculateOpenAIUsageCost } from './billing';
 import { OpenAiGenericProvider } from './index';
@@ -74,6 +75,7 @@ interface Page<T> {
 /** Managed Codex sessions, distinct from the local @openai/agents SDK provider. */
 export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   declare config: AgentsApiOptions;
+  private readonly modelOverride: string;
 
   constructor(
     modelName = '',
@@ -81,6 +83,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   ) {
     const config = options.config ?? {};
     super(modelName || config.agent?.model || (config.agent_id ? '' : 'gpt-6-astra'), options);
+    this.modelOverride = modelName;
     for (const key of ['timeoutMs', 'pollIntervalMs'] as const) {
       const value = config[key];
       if (
@@ -138,7 +141,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           ];
           for (const credential of credentials) {
             if (credential) {
-              detail = detail.replaceAll(credential, '[REDACTED]');
+              detail = detail.split(credential).join('[REDACTED]');
             }
           }
           detail = detail.slice(0, 1_024);
@@ -203,7 +206,29 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
 
   async callApi(
     prompt: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
+    try {
+      const mergedConfig = { ...this.config, ...context?.prompt?.config };
+      // Promptfoo can attach a live provider here; do not render its methods or state.
+      delete mergedConfig.provider;
+      const config = renderVarsInObject(mergedConfig, context?.vars) as AgentsApiOptions;
+      // Keep request credentials and lifecycle settings isolated across concurrent calls.
+      const callProvider = new OpenAiAgentsApiProvider(this.modelOverride, {
+        config,
+        env: this.env,
+      });
+      return await callProvider.runSession(prompt, options);
+    } catch (error) {
+      options?.abortSignal?.throwIfAborted();
+      return { cached: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  private async runSession(
+    prompt: string,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();

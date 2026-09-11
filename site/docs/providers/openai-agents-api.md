@@ -95,6 +95,8 @@ providers:
 
 A model suffix in `openai:agents-api:<model>` takes precedence over `agent.model`. Prompts are sent as literal user input, including prompts that contain JSON.
 
+Per-prompt `config` overrides provider settings at the top level: an `agent` or `environment` object replaces the corresponding provider object. Configuration strings support test variables, such as `agent.instructions: 'Answer as {{role}}'`. Variable values are inserted once and are not interpreted as additional templates.
+
 ## Results and lifecycle
 
 The provider returns completed assistant messages marked `final_answer`, with a fallback for messages whose phase is unset. Commentary, tool output, and subagent messages are excluded from the scored answer. An idle session or a completed subagent turn does not establish success.
