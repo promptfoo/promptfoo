@@ -289,6 +289,39 @@ describe('pure assertion registry', () => {
 });
 
 describe('assertion registry injection', () => {
+  it.each([undefined, 'trace-run'])(
+    'forwards supplied traces to custom handlers (traceId=%s)',
+    async (traceId) => {
+      const handler = vi.fn(
+        (params: AssertionParams<'trace-check'>): GradingResult<'trace-check'> => ({
+          pass: true,
+          score: 1,
+          reason: 'trace inspected',
+          assertion: params.assertion,
+        }),
+      );
+      const registry = new AssertionRegistry<
+        AssertionParams<'trace-check'>,
+        GradingResult<'trace-check'>
+      >([{ name: 'trace', handlers: { 'trace-check': handler } }]);
+      const traceData = {
+        traceId: 'trace-run',
+        evaluationId: 'eval',
+        testCaseId: 'case',
+        spans: [{ spanId: 'span', name: 'work', startTime: 1, endTime: 2 }],
+      };
+      await runAssertion({
+        assertion: { type: 'trace-check' },
+        providerResponse: { output: 'done' },
+        test: {},
+        registry,
+        traceId,
+        traceData,
+      });
+      expect(handler.mock.calls[0][0].assertionValueContext.trace).toEqual(traceData);
+    },
+  );
+
   it('keeps the built-in runner result contract', async () => {
     const result = await runAssertion({
       assertion: { type: 'contains', value: 'expected' },

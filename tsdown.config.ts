@@ -56,6 +56,8 @@ export default defineConfig([
   {
     ...sharedBuildOptions,
     entry: { 'server/index': 'src/server/index.ts' },
+    // Executable builds must not overwrite the library's index.d.ts.
+    dts: false,
     format: ['esm'],
     shims: true,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
@@ -69,6 +71,7 @@ export default defineConfig([
   {
     ...sharedBuildOptions,
     entry: ['src/entrypoint.ts', 'src/main.ts'],
+    dts: false,
     format: ['esm'],
     shims: true, // Provides __dirname, __filename shims automatically
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
