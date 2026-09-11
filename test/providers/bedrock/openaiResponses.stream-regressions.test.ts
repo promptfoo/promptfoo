@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { calculateOpenAIUsageCost } from '../../../src/providers/openai/billing';
 import { ResponsesProcessor } from '../../../src/providers/responses/processor';
 import { readResponsesStream } from '../../../src/providers/responses/stream';
 
@@ -31,6 +32,60 @@ describe('Responses stream regressions', () => {
     expect(parsed.output).toEqual([
       { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '' }] },
     ]);
+  });
+
+  describe.each([undefined, null, false, 0, {}, ''])('malformed refusal payload %j', (payload) => {
+    it.each([
+      { type: 'response.refusal.delta', delta: payload },
+      { type: 'response.refusal.done', refusal: payload },
+      { type: 'response.content_part.done', part: { type: 'refusal', refusal: payload } },
+      { type: 'response.output_item.done', item: { type: 'refusal', refusal: payload } },
+      { type: 'response.output_item.done', item: { type: 'message', refusal: payload } },
+      {
+        type: 'response.output_item.done',
+        item: { type: 'message', content: [{ type: 'refusal', refusal: payload }] },
+      },
+    ])('does not replace a completed answer for $type', async (event) => {
+      const output = [
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'output_text', text: 'valid answer' }],
+        },
+      ];
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          event,
+          { type: 'response.completed', response: { status: 'completed', output } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      expect(parsed.output).toEqual(output);
+    });
+  });
+
+  it('retains image-token usage and billing on a refused response', async () => {
+    const usage = {
+      input_tokens: 120,
+      output_tokens: 40,
+      total_tokens: 160,
+      input_tokens_details: { text_tokens: 20, image_tokens: 100 },
+      output_tokens_details: { image_tokens: 40 },
+    };
+    const parsed = await readResponsesStream(
+      createSseResponse([
+        { type: 'response.refusal.done', refusal: 'Cannot comply.' },
+        { type: 'response.completed', response: { status: 'completed', usage, output: [] } },
+      ]),
+      'test',
+      { debug: vi.fn() },
+    );
+    expect(parsed.usage).toEqual(usage);
+    expect(calculateOpenAIUsageCost('gpt-image-1.5', {}, parsed.usage)).toBeCloseTo(
+      (20 * 5 + 100 * 8 + 40 * 32) / 1e6,
+      10,
+    );
   });
 
   it('cancels an aborted Responses stream that stalls after headers', async () => {
@@ -6288,127 +6343,141 @@ describe('Responses stream regressions', () => {
       expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
     });
 
-    it('replaces a single shifted message draft after an unfinalized tool is removed', async () => {
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const parsed = await readResponsesStream(
-        createSseResponse([
-          {
-            type: 'response.output_text.done',
-            output_index: 1,
-            content_index: 0,
-            item_id: 'm_safe',
-            text: 'SAFE FINAL TEXT',
-          },
-          {
-            type: 'response.incomplete',
-            response: {
-              status: 'incomplete',
-              output: [
-                {
-                  type: 'function_call',
-                  call_id: 'call_dangerous',
-                  name: 'dangerous_action',
-                  arguments: '{"path":"/tmp/secret"}',
-                },
-                {
-                  type: 'message',
-                  id: 'm_safe',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'SECRET TEXT DRAFT' }],
-                },
-              ],
+    it.each([
+      { eventIds: true, terminalIds: true },
+      { eventIds: false, terminalIds: true },
+      { eventIds: false, terminalIds: false },
+    ])(
+      'replaces a single shifted message draft after an unfinalized tool is removed ($eventIds/$terminalIds)',
+      async ({ eventIds, terminalIds }) => {
+        const processCalls = vi.fn().mockResolvedValue('executed');
+        const parsed = await readResponsesStream(
+          createSseResponse([
+            {
+              type: 'response.output_text.done',
+              output_index: 1,
+              content_index: 0,
+              ...(eventIds ? { item_id: 'm_safe' } : {}),
+              text: 'SAFE FINAL TEXT',
             },
-          },
-        ]),
-        'test',
-        { debug: vi.fn() },
-      );
-      const processed = await createProcessor(processCalls).processResponseOutput(
-        parsed,
-        {},
-        false,
-      );
-
-      expect(processCalls).not.toHaveBeenCalled();
-      expect(processed.output).toBe('SAFE FINAL TEXT');
-      expect(parsed.output).toEqual([
-        expect.objectContaining({
-          id: 'm_safe',
-          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FINAL TEXT' })],
-        }),
-      ]);
-      expect(JSON.stringify(parsed)).not.toContain('SECRET');
-      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
-    });
-
-    it('replaces two shifted message drafts after an unfinalized tool is removed', async () => {
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const parsed = await readResponsesStream(
-        createSseResponse([
-          {
-            type: 'response.output_text.done',
-            output_index: 1,
-            content_index: 0,
-            item_id: 'm_first',
-            text: 'SAFE FIRST',
-          },
-          {
-            type: 'response.output_text.done',
-            output_index: 2,
-            content_index: 0,
-            item_id: 'm_second',
-            text: 'SAFE SECOND',
-          },
-          {
-            type: 'response.incomplete',
-            response: {
-              status: 'incomplete',
-              output: [
-                {
-                  type: 'function_call',
-                  call_id: 'call_dangerous',
-                  name: 'dangerous_action',
-                  arguments: '{"path":"/tmp/secret"}',
-                },
-                {
-                  type: 'message',
-                  id: 'm_first',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'SECRET FIRST DRAFT' }],
-                },
-                {
-                  type: 'message',
-                  id: 'm_second',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'SECRET SECOND DRAFT' }],
-                },
-              ],
+            {
+              type: 'response.incomplete',
+              response: {
+                status: 'incomplete',
+                output: [
+                  {
+                    type: 'function_call',
+                    call_id: 'call_dangerous',
+                    name: 'dangerous_action',
+                    arguments: '{"path":"/tmp/secret"}',
+                  },
+                  {
+                    type: 'message',
+                    ...(terminalIds ? { id: 'm_safe' } : {}),
+                    role: 'assistant',
+                    content: [{ type: 'output_text', text: 'SECRET TEXT DRAFT' }],
+                  },
+                ],
+              },
             },
-          },
-        ]),
-        'test',
-        { debug: vi.fn() },
-      );
-      const processed = await createProcessor(processCalls).processResponseOutput(
-        parsed,
-        {},
-        false,
-      );
+          ]),
+          'test',
+          { debug: vi.fn() },
+        );
+        const processed = await createProcessor(processCalls).processResponseOutput(
+          parsed,
+          {},
+          false,
+        );
 
-      expect(processCalls).not.toHaveBeenCalled();
-      expect(processed.output).toBe('SAFE FIRST\nSAFE SECOND');
-      expect(parsed.output).toEqual([
-        expect.objectContaining({
-          id: 'm_first',
-          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FIRST' })],
-        }),
-        expect.objectContaining({
-          id: 'm_second',
-          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE SECOND' })],
-        }),
-      ]);
-      expect(JSON.stringify(parsed)).not.toContain('SECRET');
-      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
-    });
+        expect(processCalls).not.toHaveBeenCalled();
+        expect(processed.output).toBe('SAFE FINAL TEXT');
+        expect(parsed.output).toEqual([
+          expect.objectContaining({
+            ...(terminalIds ? { id: 'm_safe' } : {}),
+            content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FINAL TEXT' })],
+          }),
+        ]);
+        expect(JSON.stringify(parsed)).not.toContain('SECRET');
+        expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+      },
+    );
+
+    it.each([
+      { eventIds: true, terminalIds: true },
+      { eventIds: false, terminalIds: true },
+      { eventIds: false, terminalIds: false },
+    ])(
+      'replaces two shifted message drafts after an unfinalized tool is removed ($eventIds/$terminalIds)',
+      async ({ eventIds, terminalIds }) => {
+        const processCalls = vi.fn().mockResolvedValue('executed');
+        const parsed = await readResponsesStream(
+          createSseResponse([
+            {
+              type: 'response.output_text.done',
+              output_index: 1,
+              content_index: 0,
+              ...(eventIds ? { item_id: 'm_first' } : {}),
+              text: 'SAFE FIRST',
+            },
+            {
+              type: 'response.output_text.done',
+              output_index: 2,
+              content_index: 0,
+              ...(eventIds ? { item_id: 'm_second' } : {}),
+              text: 'SAFE SECOND',
+            },
+            {
+              type: 'response.incomplete',
+              response: {
+                status: 'incomplete',
+                output: [
+                  {
+                    type: 'function_call',
+                    call_id: 'call_dangerous',
+                    name: 'dangerous_action',
+                    arguments: '{"path":"/tmp/secret"}',
+                  },
+                  {
+                    type: 'message',
+                    ...(terminalIds ? { id: 'm_first' } : {}),
+                    role: 'assistant',
+                    content: [{ type: 'output_text', text: 'SECRET FIRST DRAFT' }],
+                  },
+                  {
+                    type: 'message',
+                    ...(terminalIds ? { id: 'm_second' } : {}),
+                    role: 'assistant',
+                    content: [{ type: 'output_text', text: 'SECRET SECOND DRAFT' }],
+                  },
+                ],
+              },
+            },
+          ]),
+          'test',
+          { debug: vi.fn() },
+        );
+        const processed = await createProcessor(processCalls).processResponseOutput(
+          parsed,
+          {},
+          false,
+        );
+
+        expect(processCalls).not.toHaveBeenCalled();
+        expect(processed.output).toBe('SAFE FIRST\nSAFE SECOND');
+        expect(parsed.output).toEqual([
+          expect.objectContaining({
+            ...(terminalIds ? { id: 'm_first' } : {}),
+            content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FIRST' })],
+          }),
+          expect.objectContaining({
+            ...(terminalIds ? { id: 'm_second' } : {}),
+            content: [expect.objectContaining({ type: 'output_text', text: 'SAFE SECOND' })],
+          }),
+        ]);
+        expect(JSON.stringify(parsed)).not.toContain('SECRET');
+        expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+      },
+    );
   });
 });

@@ -626,6 +626,7 @@ function getSafeUsage(usage: any): Record<string, any> | undefined {
     'accepted_prediction_tokens',
     'rejected_prediction_tokens',
     'audio_tokens',
+    'image_tokens',
     'text_tokens',
   ];
   const safeUsage: Record<string, any> = {};
@@ -1051,6 +1052,7 @@ export async function readResponsesStream(
   const addedFunctionItems = new Map<string, Record<string, string | undefined>>();
   const streamedAnnotations = new Map<string, StreamedAnnotationItem>();
   let sawFinalizedRefusal = false;
+  let sawMalformedRefusal = false;
   let finalizedOutputChars = 0;
   let streamEventCount = 0;
   let streamExcessInputBytes = 0;
@@ -1408,7 +1410,11 @@ export async function readResponsesStream(
 
     let finalizedRefusalItem = getOutputRefusalItem(event);
     if (finalizedRefusalItem) {
-      sawFinalizedRefusal = true;
+      const hasRefusalText = finalizedRefusalItem.content.some(
+        (part: { refusal: string }) => part.refusal.length > 0,
+      );
+      sawFinalizedRefusal ||= hasRefusalText;
+      sawMalformedRefusal ||= !hasRefusalText;
       const outputIndex = getValidOutputIndex(event);
       if (event.type === 'response.output_item.done' && outputIndex !== undefined) {
         for (const [previousKey, previousItem] of finalizedRefusalItems) {
@@ -1948,7 +1954,8 @@ export async function readResponsesStream(
     latestResponseEventType === 'response.cancelled' ||
     latestResponse?.status === 'failed' ||
     latestResponse?.status === 'cancelled';
-  const useFinalizedItems = !isCompletedResponse || sawFinalizedRefusal;
+  const useFinalizedRefusals = sawFinalizedRefusal || (sawMalformedRefusal && !isCompletedResponse);
+  const useFinalizedItems = !isCompletedResponse || useFinalizedRefusals;
   const finalizedOutputTextByContent = new Map(
     Array.from(outputTextByContent).filter(([key]) => finalizedOutputTextKeys.has(key)),
   );
@@ -1958,7 +1965,7 @@ export async function readResponsesStream(
   ).filter((text): text is string => text !== undefined);
   const refusalTerminalOutput = filterExecutableToolCalls(latestResponse?.output, true);
   const outputWithFinalizedText =
-    sawFinalizedRefusal && !hasTerminalSafetyDecision(latestResponse)
+    useFinalizedRefusals && !hasTerminalSafetyDecision(latestResponse)
       ? (recoverIncompleteOutput(
           refusalTerminalOutput,
           finalizedOutputTextByContent,
@@ -2011,7 +2018,7 @@ export async function readResponsesStream(
     return boundedResponse(getSafeRefusalResponse(latestResponse, safeOutput, true));
   }
 
-  if (sawFinalizedRefusal) {
+  if (useFinalizedRefusals) {
     const safeOutput = filterExecutableToolCalls(finalizedStreamOutput, true);
     return boundedResponse(getSafeRefusalResponse(latestResponse, safeOutput, true));
   }
@@ -2057,6 +2064,16 @@ export async function readResponsesStream(
       });
     }
 
+    // Tool filters preserve message order while removing output slots.
+    const originalMessageIndices = outputWithCompletedAnnotations.flatMap((item, index) =>
+      item?.type === 'message' ? [index] : [],
+    );
+    const filteredMessageIndices = finalizedStreamOutput.flatMap((item, index) =>
+      item?.type === 'message' ? [index] : [],
+    );
+    const filteredMessageIndexByOriginalIndex = new Map(
+      originalMessageIndices.map((index, position) => [index, filteredMessageIndices[position]]),
+    );
     const remainingUnindexedOutputText = unassignedUnindexedOutputText + pendingUnindexedOutputText;
     const alignedOutputTextByContent = new Map<string, string>();
     const alignedFinalizedOutputTextKeys = new Set<string>();
@@ -2069,7 +2086,7 @@ export async function readResponsesStream(
       }
       const terminalIndex = itemId
         ? finalizedStreamOutput.findIndex((item: any) => item?.id === itemId)
-        : -1;
+        : (filteredMessageIndexByOriginalIndex.get(outputIndex) ?? -1);
       if (
         itemId &&
         terminalIndex < 0 &&
