@@ -340,6 +340,12 @@ describe('OpenAiAgentsApiProvider', () => {
         authorization: null,
       },
       {
+        source: 'a semicolon-separated query parameter',
+        config: { apiBaseUrl: 'https://gateway.example/v1?tenant=a;api-key=gateway-query-secret' },
+        processEnv: {},
+        authorization: null,
+      },
+      {
         source: 'userinfo',
         config: { apiBaseUrl: userinfoGatewayUrl },
         processEnv: {},
@@ -475,6 +481,17 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(result.output).toBe('42');
       expect(new Set(authorizations())).toEqual(new Set(['Bearer configured-token']));
       expect(noRequestUrlHasUserinfo()).toBe(true);
+    });
+
+    it('redacts an echoed semicolon-separated query credential', async () => {
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        apiError(401, 'Rejected gateway-query-secret'),
+      );
+      const result = await new OpenAiAgentsApiProvider('', {
+        config: { apiBaseUrl: 'https://gateway.example/v1?tenant=a;api-key=gateway-query-secret' },
+      }).callApi('hi');
+      expect(result.error).toContain('HTTP 401');
+      expect(result.error).not.toContain('gateway-query-secret');
     });
 
     it('redacts an echoed Basic token and decoded userinfo from errors', async () => {

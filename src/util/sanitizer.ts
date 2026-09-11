@@ -366,6 +366,21 @@ export function looksLikeSecret(value: string): boolean {
   return false;
 }
 
+// Headers with standard non-credential meanings; other custom headers may authenticate a gateway.
+const NON_CREDENTIAL_HEADERS = new Set([
+  'accept',
+  'content-type',
+  'openai-beta',
+  'openai-organization',
+  'openai-project',
+  'user-agent',
+  'x-openai-originator',
+]);
+
+export function isNonCredentialHeader(name: string): boolean {
+  return NON_CREDENTIAL_HEADERS.has(name.toLowerCase());
+}
+
 const SAFE_TRACING_CREDENTIAL_TEMPLATE =
   /^(?:(?:bearer|basic|token|api[-_]?key)\s+)?\{\{\s*env(?:\.[A-Za-z_][A-Za-z0-9_]*|\[['"][A-Za-z_][A-Za-z0-9_]*['"]\])+\s*(?:\|\s*(?:trim|urlencode)\s*)*\}\}$/i;
 
@@ -1023,8 +1038,18 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
   for (const [key, value] of Object.entries(obj)) {
     if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
-    } else if (key === 'headers' && obj.type === 'mcp' && value && typeof value === 'object') {
-      sanitized[key] = Object.fromEntries(Object.keys(value).map((name) => [name, REDACTED]));
+    } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
+      sanitized[key] = Object.fromEntries(
+        Object.entries(value).map(([name, item]) => [
+          name,
+          isSafeTracingCredentialTemplate(item) ||
+          (typeof item === 'string' &&
+            !isTracingCredentialHeader(name, item) &&
+            (isNonCredentialHeader(name) || SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase())))
+            ? item
+            : REDACTED,
+        ]),
+      );
     } else if (key === 'apiHost' && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(`https://${value}`).replace(/^https:\/\//, '');
     } else if (

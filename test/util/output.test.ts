@@ -215,6 +215,7 @@ describe('writeOutput', () => {
           id: 'openai:agents-api',
           config: {
             apiHost: 'host-credential:@gateway.example',
+            headers: { 'X-Gateway-Auth': 'opaque-gateway-7294', Accept: 'application/json' },
             apiBaseUrl: 'https://url-credential:@gateway.example/v1',
             agent: {
               tools: [
@@ -244,16 +245,42 @@ describe('writeOutput', () => {
       },
     });
 
+    eval_.prompts = [
+      {
+        raw: 'Literal prompt text',
+        label: 'gateway',
+        provider: 'openai:agents-api',
+        config: {
+          apiBaseUrl: 'https://gateway.example/v1?tenant=a;api-key=prompt-query-secret',
+          headers: { 'X-Gateway-Auth': 'prompt-header-secret' },
+        },
+      },
+    ];
+
     await writeOutput(outputPath, eval_, null);
 
     expect(fsPromises.writeFile).toHaveBeenCalledTimes(1);
     const outputJson = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
     const parsed = JSON.parse(outputJson);
+    expect(parsed.results.prompts[0]).toEqual({
+      raw: 'Literal prompt text',
+      label: 'gateway',
+      provider: 'openai:agents-api',
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1?tenant=%5BREDACTED%5D',
+        headers: { 'X-Gateway-Auth': '[REDACTED]' },
+      },
+    });
+    expect(eval_.prompts[0].config?.headers?.['X-Gateway-Auth']).toBe('prompt-header-secret');
     expect(parsed.config.env.AWS_BEARER_TOKEN_BEDROCK).toBe('[REDACTED]');
     expect(parsed.config.env.ANTHROPIC_API_KEY).toBe('[REDACTED]');
     expect(parsed.config.env.REGION).toBe('us-east-1');
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
+    expect(parsed.config.providers[1].config.headers).toEqual({
+      'X-Gateway-Auth': '[REDACTED]',
+      Accept: 'application/json',
+    });
     expect(parsed.config.providers[1].config.agent.tools[0].headers).toEqual({
       'X-MCP-Custom': '[REDACTED]',
     });
@@ -262,6 +289,9 @@ describe('writeOutput', () => {
       'url-credential',
       'query-credential',
       'opaque-value-7294',
+      'opaque-gateway-7294',
+      'prompt-query-secret',
+      'prompt-header-secret',
     ]) {
       expect(outputJson).not.toContain(credential);
     }

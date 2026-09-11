@@ -1344,6 +1344,9 @@ describe('sanitizeObject', () => {
           'Content-Type': 'application/json',
           Authorization: 'Bearer secret-token',
           'x-api-key': 'api-key-value',
+          'X-Gateway-Auth': 'opaque-gateway-7294',
+          'X-Scope-OrgID': 'tenant-a',
+          'X-Trace-Reader': '{{ env.TRACE_READER_KEY }}',
         },
         body: {
           username: 'user',
@@ -1356,6 +1359,10 @@ describe('sanitizeObject', () => {
       expect(result.url).toBe('https://api.example.com/v1/resource');
       expect(result.headers.Authorization).toBe('[REDACTED]');
       expect(result.headers['x-api-key']).toBe('[REDACTED]');
+      expect(result.headers['Content-Type']).toBe('application/json');
+      expect(result.headers['X-Gateway-Auth']).toBe('[REDACTED]');
+      expect(result.headers['X-Scope-OrgID']).toBe('tenant-a');
+      expect(result.headers['X-Trace-Reader']).toBe('{{ env.TRACE_READER_KEY }}');
       expect(result.body.password).toBe('[REDACTED]');
       expect(result.body.data).toBe('public-data');
     });

@@ -1,7 +1,7 @@
 import logger from '../../logger';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/render';
-import { isSecretField, REDACTED } from '../../util/sanitizer';
+import { isNonCredentialHeader, isSecretField, REDACTED } from '../../util/sanitizer';
 import { analyzeTemplateReference } from '../../util/templates';
 import { sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
@@ -103,17 +103,6 @@ const MIN_CREDENTIAL_LENGTH = 8;
 const MIN_TOKEN_CREDENTIAL_LENGTH = 2;
 const CREDENTIAL_NAME =
   /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password|(?:^|[-_])key$)/i;
-// Header names that never carry credentials. Every other configured header value is redacted, and
-// any other custom header may authenticate a gateway.
-const NON_CREDENTIAL_HEADERS = new Set([
-  'accept',
-  'content-type',
-  'openai-beta',
-  'openai-organization',
-  'openai-project',
-  'user-agent',
-  'x-openai-originator',
-]);
 
 class AgentsApiHttpError extends Error {
   constructor(
@@ -202,7 +191,7 @@ function getUrlCredentials(value: string): string[] {
   if (userinfo) {
     found.push(userinfo, basicCredential(userinfo));
   }
-  for (const segment of url.search.slice(1).split('&')) {
+  for (const segment of url.search.slice(1).split(/[&;]/)) {
     const separator = segment.indexOf('=');
     const [param] = new URLSearchParams(segment);
     if (separator !== -1 && param && isCredentialName(param[0])) {
@@ -211,10 +200,6 @@ function getUrlCredentials(value: string): string[] {
     }
   }
   return found.filter((credential) => credential.trim().length > 0);
-}
-
-function isNonCredentialHeader(name: string): boolean {
-  return NON_CREDENTIAL_HEADERS.has(name.toLowerCase());
 }
 
 /**
