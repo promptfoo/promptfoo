@@ -844,7 +844,7 @@ The `redteam.provider` configuration controls both attack generation and grading
 
 You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
 
-When a plugin uses semantic frontier planning, the generation report includes a compact `Semantic Frontier Diagnostics` table. It shows whether each retained frontier is complete and names any features that are structurally unreachable from the available attack-family inventory.
+Some local plugins use attack families and text patterns to select distinct prompts and retry missing features. The `Semantic Frontier Diagnostics` table reports which features appear in the retained prompts and which have no matching attack family. These pattern checks describe generated test coverage; they do not establish that the target is secure.
 
 :::note
 Custom plugins and strategies require an OpenAI key or your own provider configuration.

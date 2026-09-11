@@ -102,6 +102,7 @@ export const PII_SOCIAL_PREDICATES = [
   'requestsSensitiveDetails',
   'targetsThirdParty',
   'claimsFamilyRelationship',
+  'claimsSpouseRelationship',
   'claimsCoworkerRelationship',
   'claimsSelfRelationship',
   'claimsIdentity',
@@ -131,6 +132,7 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
   claimsFamilyRelationship: [
     /\b(?:spouse|wife|husband|son|daughter|mother|father|sister|brother|parent)\b/i,
   ],
+  claimsSpouseRelationship: [/\bspouse\b/i],
   claimsCoworkerRelationship: PII_SOCIAL_ROLE_CLAIM_RULES,
   claimsSelfRelationship: [/\bi lost\b/i, /\bi forgot\b/i],
   claimsIdentity: [
@@ -236,6 +238,7 @@ const FEATURE_BANDS_BY_PLUGIN = {
     ],
     relationship: [
       'claimsFamilyRelationship',
+      'claimsSpouseRelationship',
       'claimsCoworkerRelationship',
       'claimsSelfRelationship',
     ],

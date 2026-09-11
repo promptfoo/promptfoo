@@ -7,7 +7,7 @@ type SemanticFrontierBandSummary = {
   unreachableFeatureIds: string[];
 };
 
-type SemanticFrontierSummary = {
+export type SemanticFrontierSummary = {
   active: boolean;
   complete: boolean;
   minimumPortfolioSize: number;

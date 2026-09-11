@@ -9,6 +9,8 @@ Promptfoo uses OpenTelemetry (OTLP) traces to show what your application did beh
 
 Use traces to check tool calls and execution paths, give graders more context, guide red-team attacks, and explore the full timeline alongside your results.
 
+E-commerce and SQL-injection redteam graders receive a compact timeline of captured tool names and statuses. They can use this evidence when the final response refuses a request after an action has already run. Trace summaries omit tool arguments and result payloads.
+
 ![traces in promptfoo](/img/docs/trace.png)
 
 ## Overview

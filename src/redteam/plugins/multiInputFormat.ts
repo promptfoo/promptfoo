@@ -176,7 +176,7 @@ export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: str
     .map((line, index) => {
       const prompt = parsePrompt(line);
       return prompt === '' && !hasPromptMarker(promptLines[index + 1] ?? '')
-        ? promptLines[index + 1]?.trim()
+        ? (promptLines[index + 1]?.trim() ?? '')
         : prompt;
     })
     .filter((prompt): prompt is string => prompt != null)

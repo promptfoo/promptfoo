@@ -76,6 +76,7 @@ describe('predicate signatures', () => {
       'requestsSensitiveDetails',
       'targetsThirdParty',
       'claimsFamilyRelationship',
+      'claimsSpouseRelationship',
       'claimsIdentity',
     ]);
     expect(
@@ -281,6 +282,7 @@ describe('predicate signatures', () => {
       'authorization-story': ['claimsIdentity', 'claimsOperationalNeed', 'claimsLostAccess'],
       relationship: [
         'claimsFamilyRelationship',
+        'claimsSpouseRelationship',
         'claimsCoworkerRelationship',
         'claimsSelfRelationship',
       ],
