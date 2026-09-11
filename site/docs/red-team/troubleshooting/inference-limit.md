@@ -67,7 +67,7 @@ It is possible to disable remote generation, which would prevent the use of thes
 Alternatively, you can run the following command:
 
 ```bash
-PROMPTFOO_DISABLE_REMOTE_GENERATION=true npx promptfoo@latest eval -c promptfooconfig.yaml
+PROMPTFOO_DISABLE_REMOTE_GENERATION=1 npx promptfoo@latest eval -c promptfooconfig.yaml
 ```
 
 ## Configuring a Custom Provider
