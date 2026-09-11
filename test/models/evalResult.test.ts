@@ -1805,6 +1805,11 @@ describe('EvalResult', () => {
               },
             ],
             structuredOutput: { answer: 'STRUCTURED_OUTPUT_SECRET' },
+            audio: {
+              data: 'REALTIME_AUDIO_SECRET',
+              format: 'pcm16',
+              transcript: 'REALTIME_TRANSCRIPT_SECRET',
+            },
             permissionDenials: [
               { tool_name: 'Write', tool_input: { path: 'PERMISSION_DENIAL_SECRET' } },
             ],
@@ -1837,6 +1842,8 @@ describe('EvalResult', () => {
             'TOOL_RESULT_SECRET',
             'SKILL_INPUT_SECRET',
             'STRUCTURED_OUTPUT_SECRET',
+            'REALTIME_AUDIO_SECRET',
+            'REALTIME_TRANSCRIPT_SECRET',
             'PERMISSION_DENIAL_SECRET',
           ]) {
             expect(JSON.stringify(result)).not.toContain(secret);
@@ -1942,6 +1949,25 @@ describe('EvalResult', () => {
     });
   });
 
+  it('preserves full history text and media when only test variables are stripped', () => {
+    const restore = mockProcessEnv({ PROMPTFOO_STRIP_TEST_VARS: 'true' });
+    const prompt = 'prompt'.repeat(4_000);
+    const output = 'output'.repeat(4_000);
+    const promptAudio = { data: 'a'.repeat(70_000), format: 'wav' };
+    try {
+      const result = projectEvaluateResultForOutput(
+        createEvaluateResult({
+          metadata: {
+            redteamHistory: [{ prompt, output, promptAudio, inputVars: { secret: 'value' } }],
+          },
+        }),
+      );
+      expect(result.metadata?.redteamHistory).toEqual([{ prompt, output, promptAudio }]);
+    } finally {
+      restore();
+    }
+  });
+
   describe('projectTracesForOutput', () => {
     const createTraces = () =>
       [
@@ -1975,7 +2001,12 @@ describe('EvalResult', () => {
               events: [
                 {
                   name: 'codex.message',
-                  attributes: { 'codex.message': 'sensitive event output', safe: 'retained' },
+                  attributes: {
+                    'codex.message.text': 'sensitive message text',
+                    'codex.reasoning.text': 'sensitive reasoning text',
+                    'codex.command.output': 'sensitive command output',
+                    safe: 'retained',
+                  },
                 },
               ],
             },
@@ -2002,6 +2033,27 @@ describe('EvalResult', () => {
 
       expect(projectTracesForOutput(traces)).toBe(traces);
     });
+
+    it.each([undefined, { safe: 'retained' }])(
+      'removes all sensitive event attributes regardless of parent attributes (%#)',
+      (attributes) => {
+        const traces = createTraces();
+        const span = traces[0].spans[0];
+        span.attributes = attributes;
+        Object.assign(span, {
+          events: [{ name: 'codex.message', attributes: { 'codex.message.text': 'secret' } }],
+        });
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+        try {
+          const result = projectTracesForOutput(traces);
+          expect(result[0].spans[0]).toMatchObject({ events: [{ name: 'codex.message' }] });
+          expect(JSON.stringify(result)).not.toContain('secret');
+          expect(JSON.stringify(traces)).toContain('secret');
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
 
     it.each([
       {
@@ -2060,6 +2112,17 @@ describe('EvalResult', () => {
             expect(span.attributes).toHaveProperty(key);
           }
           const event = (span as typeof span & { events: Array<{ attributes: object }> }).events[0];
+          for (const key of [
+            'codex.message.text',
+            'codex.reasoning.text',
+            'codex.command.output',
+          ]) {
+            if (env.PROMPTFOO_STRIP_RESPONSE_OUTPUT === 'true') {
+              expect(event.attributes).not.toHaveProperty(key);
+            } else {
+              expect(event.attributes).toHaveProperty(key);
+            }
+          }
           for (const key of removed) {
             expect(event.attributes).not.toHaveProperty(key);
           }

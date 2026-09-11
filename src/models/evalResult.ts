@@ -78,6 +78,9 @@ const TRACE_RESPONSE_OUTPUT_ATTRIBUTE_KEYS = [
   'codex.command',
   'codex.search.query',
   'codex.message',
+  'codex.message.text',
+  'codex.command.output',
+  'codex.reasoning.text',
   'codex.reasoning',
   'codex.reasoning.summary',
   OTEL_LOG_BODY_ATTRIBUTE_KEY,
@@ -189,12 +192,20 @@ function projectRedteamHistoryForOutput(
   }
 
   return history.filter(isRecord).map((entry) => {
-    const boundedPrompt = boundHistoryText(entry.prompt);
-    const boundedPromptAudio = boundHistoryMedia(entry.promptAudio);
-    const boundedPromptImage = boundHistoryMedia(entry.promptImage);
-    const boundedOutput = boundHistoryText(entry.output);
-    const boundedOutputAudio = boundHistoryMedia(entry.outputAudio);
-    const boundedOutputImage = boundHistoryMedia(entry.outputImage);
+    const boundedPrompt = forceProjection ? boundHistoryText(entry.prompt) : entry.prompt;
+    const boundedPromptAudio = forceProjection
+      ? boundHistoryMedia(entry.promptAudio)
+      : entry.promptAudio;
+    const boundedPromptImage = forceProjection
+      ? boundHistoryMedia(entry.promptImage)
+      : entry.promptImage;
+    const boundedOutput = forceProjection ? boundHistoryText(entry.output) : entry.output;
+    const boundedOutputAudio = forceProjection
+      ? boundHistoryMedia(entry.outputAudio)
+      : entry.outputAudio;
+    const boundedOutputImage = forceProjection
+      ? boundHistoryMedia(entry.outputImage)
+      : entry.outputImage;
     return {
       ...(typeof entry.id === 'string' && { id: entry.id }),
       ...(typeof entry.parentId === 'string' && { parentId: entry.parentId }),
@@ -248,6 +259,7 @@ function stripAgentCallContent(entry: unknown, contentKeys: readonly string[]): 
 }
 
 function stripResponseContentMetadata(metadata: Record<string, unknown>): void {
+  delete metadata.audio;
   if ('toolCalls' in metadata) {
     metadata.toolCalls = Array.isArray(metadata.toolCalls)
       ? metadata.toolCalls.map((entry) => stripAgentCallContent(entry, ['input', 'output']))
@@ -1090,10 +1102,6 @@ export function projectTracesForOutput(traces: TraceData[]): TraceData[] {
       ...projectedTrace,
       spans: projectedTrace.spans.map((span) => {
         const projectedSpan = projectTraceSpanErrorDetails(span);
-        if (!span.attributes) {
-          return projectedSpan;
-        }
-
         const projectedAttributes = { ...span.attributes };
         if ('codex.error' in projectedAttributes) {
           projectedAttributes['codex.error'] = '[error details stripped]';
@@ -1129,8 +1137,9 @@ export function projectTracesForOutput(traces: TraceData[]): TraceData[] {
               delete attributes[key];
             }
           }
+          const { attributes: _eventAttributes, ...eventWithoutAttributes } = event;
           return {
-            ...event,
+            ...eventWithoutAttributes,
             ...(Object.keys(attributes).length > 0 && { attributes }),
           };
         });

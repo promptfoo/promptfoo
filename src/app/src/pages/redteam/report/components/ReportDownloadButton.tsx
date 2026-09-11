@@ -68,7 +68,7 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
         Strategy: getStrategyIdFromTest(result.testCase as any),
         Target: result.provider.label || result.provider.id || '',
         Prompt: getReportPrompt(result, injectVar),
-        Response: result.response?.output || '',
+        Response: result.response?.output ?? '',
         Pass: `${pass ? 'Pass' : 'Fail'}${score === undefined ? '' : ` (${score})`}`,
         Score: score ?? '',
         Reason: result.gradingResult?.reason || '',
@@ -107,50 +107,33 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
     showToast(`Failed to download ${format}: ${message}`, 'error', 5000);
   };
 
-  const handleCsvDownload = () => {
+  const handleDownload = async (format: 'CSV' | 'JSON') => {
     setIsDownloading(true);
-
-    // Track report export
+    const extension = format.toLowerCase();
     recordEvent('webui_action', {
       action: 'redteam_report_export',
-      format: 'csv',
+      format: extension,
     });
 
     try {
-      const csv = convertEvalDataToCsv(evalData);
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      downloadBlob(blob, getFilename('csv'));
-    } catch (error) {
-      console.error('Error generating CSV:', error);
-      showDownloadError('CSV', error);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  const handleJsonDownload = async () => {
-    setIsDownloading(true);
-
-    // Track report export
-    recordEvent('webui_action', {
-      action: 'redteam_report_export',
-      format: 'json',
-    });
-
-    try {
-      const response = await callApi(`/results/${encodeURIComponent(evalId)}`, {
+      const query = format === 'CSV' ? '?includeTraces=false' : '';
+      const response = await callApi(`/results/${encodeURIComponent(evalId)}${query}`, {
         cache: 'no-store',
       });
       if (!response.ok) {
         throw new Error(`Failed to load full evaluation data (${response.status})`);
       }
       const body = (await response.json()) as SharedResults;
-      const jsonData = JSON.stringify(body.data, null, 2);
-      const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
-      downloadBlob(blob, getFilename('json'));
+      const content =
+        format === 'CSV' ? convertEvalDataToCsv(body.data) : JSON.stringify(body.data, null, 2);
+      const mimeType = format === 'CSV' ? 'text/csv' : 'application/json';
+      downloadBlob(
+        new Blob([content], { type: `${mimeType};charset=utf-8;` }),
+        getFilename(extension),
+      );
     } catch (error) {
-      console.error('Error generating JSON:', error);
-      showDownloadError('JSON', error);
+      console.error(`Error generating ${format}:`, error);
+      showDownloadError(format, error);
     } finally {
       setIsDownloading(false);
     }
@@ -187,8 +170,8 @@ const ReportDownloadButton = ({ evalId, evalDescription, evalData }: ReportDownl
       </Tooltip>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={handlePdfDownload}>PDF</DropdownMenuItem>
-        <DropdownMenuItem onClick={handleCsvDownload}>CSV</DropdownMenuItem>
-        <DropdownMenuItem onClick={handleJsonDownload}>JSON</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleDownload('CSV')}>CSV</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleDownload('JSON')}>JSON</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

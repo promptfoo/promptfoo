@@ -3902,6 +3902,36 @@ describe('evaluator', () => {
     // Regression for PR #9591 review (thread 3481318130): compact history must be typed
     // and bounded — prompt/output must be strings, and oversized media is dropped from
     // the summary (kept behind full row-detail hydration).
+    it('bounds response previews across compact storage modes while preserving full results', async () => {
+      const longText = 'p'.repeat(30_000);
+      const values = [longText, [{ role: 'user' as const, content: longText }], ''];
+      const cases = values.map((prompt, testIdx) =>
+        createEvaluateResult({ testIdx, response: { prompt, output: longText } }),
+      );
+      const persisted = await EvalFactory.create({ numResults: 0 });
+      const inMemory = new Eval({});
+      for (const result of cases) {
+        await persisted.addResult(result);
+        await inMemory.addResult(result);
+      }
+      const legacy = new Eval({});
+      legacy.oldResults = createEvaluateSummaryV2({ results: cases });
+      for (const eval_ of [persisted, inMemory, legacy]) {
+        const compact = await eval_.toResultsFile({
+          resultProjection: 'redteamReport',
+          includeTraces: false,
+        });
+        for (const result of compact.results.results) {
+          expect(JSON.stringify(result.response?.prompt).length).toBeLessThanOrEqual(10_250);
+          expect(result.response?.output).toBe(longText.slice(0, 10_240));
+        }
+        expect(compact.results.results[2].response?.prompt).toBe('');
+        const full = await eval_.toResultsFile({ includeTraces: false });
+        expect(full.results.results.map((result) => result.response?.prompt)).toEqual(values);
+        expect(full.results.results[0].response?.output).toBe(longText);
+      }
+    });
+
     it('bounds compact history media and rejects non-string prompt/output', async () => {
       const hugeAudio = 'A'.repeat(1_500_000); // well over the media byte budget
       const smallImage = { data: 'A'.repeat(32), format: 'png', apiKey: 'MEDIA_SECRET' };

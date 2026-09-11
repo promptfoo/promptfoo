@@ -227,6 +227,9 @@ const RiskCategoryDrawer = ({
     setDetailsLoadError(null);
     setSelectedTest(null);
     setDetailsDialogOpen(false);
+    return () => {
+      detailsAbortRef.current?.abort();
+    };
   }, [category, evalId, open]);
 
   const sortedFailures = React.useMemo(() => {

@@ -668,40 +668,46 @@ describe('RiskCategoryDrawer row-detail bounding (PR #9591 review)', () => {
     await waitFor(() => expect(callApi).toHaveBeenCalledTimes(7));
   });
 
-  it('aborts a row-detail download signal when the drawer closes', async () => {
-    const user = userEvent.setup();
-    const capturedSignals: AbortSignal[] = [];
-    mockCallApiRoutes([
-      {
-        path: /\/results\/test-eval-123\/rows\//,
-        repeat: true,
-        response: (_path: string, options: RequestInit | undefined) => {
-          if (options?.signal) {
-            capturedSignals.push(options.signal);
-          }
-          return { data: makeResult('row-a') };
+  it.each(['closes', 'unmounts'])(
+    'aborts row-detail downloads when the drawer %s',
+    async (action) => {
+      const user = userEvent.setup();
+      const capturedSignals: AbortSignal[] = [];
+      mockCallApiRoutes([
+        {
+          path: /\/results\/test-eval-123\/rows\//,
+          repeat: true,
+          response: (_path: string, options: RequestInit | undefined) => {
+            if (options?.signal) {
+              capturedSignals.push(options.signal);
+            }
+            return { data: makeResult('row-a') };
+          },
         },
-      },
-    ]);
+      ]);
 
-    const props = {
-      open: true,
-      onClose: vi.fn(),
-      category: 'bola',
-      failures: [makeFailure('row-a')],
-      passes: [],
-      evalId: 'test-eval-123',
-      numPassed: 0,
-      numFailed: 1,
-    };
-    const { rerender } = renderWithProviders(<RiskCategoryDrawer {...props} />);
+      const props = {
+        open: true,
+        onClose: vi.fn(),
+        category: 'bola',
+        failures: [makeFailure('row-a')],
+        passes: [],
+        evalId: 'test-eval-123',
+        numPassed: 0,
+        numFailed: 1,
+      };
+      const { rerender, unmount } = renderWithProviders(<RiskCategoryDrawer {...props} />);
 
-    await user.click(screen.getByRole('button', { name: 'Details' }));
-    await waitFor(() => expect(capturedSignals).toHaveLength(1));
-    expect(capturedSignals[0].aborted).toBe(false);
+      await user.click(screen.getByRole('button', { name: 'Details' }));
+      await waitFor(() => expect(capturedSignals).toHaveLength(1));
+      expect(capturedSignals[0].aborted).toBe(false);
 
-    // Closing the drawer must cancel the in-flight network + JSON work.
-    rerender(<RiskCategoryDrawer {...props} open={false} />);
-    await waitFor(() => expect(capturedSignals[0].aborted).toBe(true));
-  });
+      if (action === 'unmounts') {
+        unmount();
+      } else {
+        rerender(<RiskCategoryDrawer {...props} open={false} />);
+      }
+      await waitFor(() => expect(capturedSignals[0].aborted).toBe(true));
+    },
+  );
 });

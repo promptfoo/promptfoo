@@ -460,6 +460,19 @@ function createProjectedGradingResult(row: RedteamReportResultRow): GradingResul
   } as unknown as GradingResult);
 }
 
+function boundReportPrompt(prompt: NonNullable<EvaluateResult['response']>['prompt']) {
+  if (typeof prompt === 'string') {
+    return prompt.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH);
+  }
+  if (Array.isArray(prompt)) {
+    const serialized = JSON.stringify(prompt);
+    return serialized.length > MAX_COMPACT_HISTORY_TEXT_LENGTH
+      ? serialized.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
+      : prompt;
+  }
+  return undefined;
+}
+
 function createRedteamReportResponse(
   row: RedteamReportResultRow,
   stripFlags: RedteamReportStripFlags,
@@ -627,14 +640,16 @@ function projectResultForRedteamReport(
       : typeof redteamFinalPromptCandidate === 'string'
         ? redteamFinalPromptCandidate
         : undefined;
-  const responsePrompt = result.response?.prompt;
+  const responsePrompt = boundReportPrompt(result.response?.prompt);
   const hasResponsePrompt = !stripFlags.shouldStripPromptText && responsePrompt !== undefined;
   const response =
     result.response || redteamFinalPrompt !== undefined
       ? {
           ...(result.response && stripFlags.shouldStripResponseOutput
             ? { output: '[output stripped]' }
-            : result.response?.output !== undefined && { output: result.response.output }),
+            : typeof result.response?.output === 'string' && {
+                output: result.response.output.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
+              }),
           ...(hasResponsePrompt && { prompt: responsePrompt }),
           ...(!hasResponsePrompt &&
             redteamFinalPrompt !== undefined && { metadata: { redteamFinalPrompt } }),
@@ -2509,7 +2524,17 @@ export default class Eval {
             END`,
         responsePrompt: stripFlags.shouldStripPromptText
           ? sql<string | null>`NULL`
-          : sql<string | null>`${validResponseJson} -> '$.prompt'`,
+          : sql<string | null>`CASE
+              WHEN json_type(${validResponseJson}, '$.prompt') = 'text'
+              THEN json_quote(substr(json_extract(${validResponseJson}, '$.prompt'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}))
+              WHEN json_type(${validResponseJson}, '$.prompt') = 'array'
+              THEN CASE
+                WHEN length(${validResponseJson} -> '$.prompt') <= ${MAX_COMPACT_HISTORY_TEXT_LENGTH}
+                THEN ${validResponseJson} -> '$.prompt'
+                ELSE json_quote(substr(${validResponseJson} -> '$.prompt', 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}))
+              END
+              ELSE NULL
+            END`,
         responseRedteamFinalPrompt:
           stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
             ? sql<string | null>`NULL`

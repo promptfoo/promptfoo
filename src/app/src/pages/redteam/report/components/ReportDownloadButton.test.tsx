@@ -87,23 +87,59 @@ describe('ReportDownloadButton', () => {
     expect(await jsonBlob.text()).toBe(JSON.stringify(fullEvalData, null, 2));
   });
 
-  it('shows an error and does not create a JSON file when the full evaluation request fails', async () => {
-    mockCallApiResponse({ error: 'server error' }, { ok: false, status: 500 });
-    const user = userEvent.setup();
+  it.each(['CSV', 'JSON'])(
+    'does not download %s when the full evaluation request fails',
+    async (format) => {
+      mockCallApiResponse({ error: 'server error' }, { ok: false, status: 500 });
+      const user = userEvent.setup();
 
-    renderDownloadButton();
+      renderDownloadButton();
 
-    await user.click(screen.getByRole('button', { name: 'download report' }));
-    await user.click(await screen.findByText('JSON'));
+      await user.click(screen.getByRole('button', { name: 'download report' }));
+      await user.click(await screen.findByText(format));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Failed to download JSON: Failed to load full evaluation data (500)',
-    );
-    expect(URL.createObjectURL).not.toHaveBeenCalled();
-    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
-  });
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        `Failed to download ${format}: Failed to load full evaluation data (500)`,
+      );
+      expect(URL.createObjectURL).not.toHaveBeenCalled();
+      expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    },
+  );
 
-  it('exports compact result status while neutralizing CSV formulas', async () => {
+  it.each(['full response '.repeat(1_000), { answer: 'structured response', details: [1, 2] }])(
+    'downloads complete CSV response evidence in case %#',
+    async (output) => {
+      const fullResult = {
+        provider: { id: 'fixture' },
+        prompt: { raw: '', label: '' },
+        vars: {},
+        testCase: {},
+        response: { output, prompt: 'full prompt' },
+        success: true,
+        score: 1,
+      };
+      mockCallApiResponse({
+        data: {
+          ...compactEvalData,
+          results: { ...compactEvalData.results, results: [fullResult] },
+        },
+      });
+      renderDownloadButton();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: 'download report' }));
+      await user.click(await screen.findByText('CSV'));
+      await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+      const [headers, values] = parseCsv(await getDownloadedBlob().text()) as string[][];
+      const row = Object.fromEntries(headers.map((header, index) => [header, values[index]]));
+      expect(row.Prompt).toBe('full prompt');
+      expect(row.Response).toBe(typeof output === 'string' ? output : JSON.stringify(output));
+      expect(callApi).toHaveBeenCalledWith('/results/eval-1?includeTraces=false', {
+        cache: 'no-store',
+      });
+    },
+  );
+
+  it('exports full result status while neutralizing CSV formulas', async () => {
     const pluginId = '=HYPERLINK("https://evil.example","click")';
     const evalData = {
       ...compactEvalData,
@@ -138,6 +174,7 @@ describe('ReportDownloadButton', () => {
     } as unknown as EvalData;
     const user = userEvent.setup();
 
+    mockCallApiResponse({ data: evalData });
     renderDownloadButton({ evalData });
 
     await user.click(screen.getByRole('button', { name: 'download report' }));
