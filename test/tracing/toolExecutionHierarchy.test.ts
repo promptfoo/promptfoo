@@ -83,52 +83,52 @@ describe('provider tool execution hierarchy', () => {
     });
   });
 
-  it.each([
-    'target',
-    'grader',
-  ] as const)('preserves the %s role on nested tool, streaming-turn, and marker spans', async (role) => {
-    const root = getGenAITracer().startSpan(`test case ${role} agent`);
-    const provider: ApiProvider = {
-      id: () => 'openai:agent',
-      callApi: async () => ({ output: 'done' }),
-    };
-    const callContext: CallApiContextParams = {
-      prompt: { raw: 'test prompt', label: role },
-      vars: {},
-    };
+  it.each(['target', 'grader'] as const)(
+    'preserves the %s role on nested tool, streaming-turn, and marker spans',
+    async (role) => {
+      const root = getGenAITracer().startSpan(`test case ${role} agent`);
+      const provider: ApiProvider = {
+        id: () => 'openai:agent',
+        callApi: async () => ({ output: 'done' }),
+      };
+      const callContext: CallApiContextParams = {
+        prompt: { raw: 'test prompt', label: role },
+        vars: {},
+      };
 
-    await withTestCaseSpan(root, async () => {
-      await withTracedProviderCall({ provider, callContext, role }, async () => {
-        const tracer = getGenAITracer();
-        const state = { turnCount: 0, activeTurnIndex: 0 };
-        const now = Date.now();
+      await withTestCaseSpan(root, async () => {
+        await withTracedProviderCall({ provider, callContext, role }, async () => {
+          const tracer = getGenAITracer();
+          const state = { turnCount: 0, activeTurnIndex: 0 };
+          const now = Date.now();
 
-        openTurnSpan(state, { tracer, eventTime: now, system: 'openai' });
-        const tool = tracer.startSpan('tool search', {
-          attributes: addActiveSpanRoleAttribute({ 'tool.name': 'search' }),
+          openTurnSpan(state, { tracer, eventTime: now, system: 'openai' });
+          const tool = tracer.startSpan('tool search', {
+            attributes: addActiveSpanRoleAttribute({ 'tool.name': 'search' }),
+          });
+          tool.end();
+          closeTurnSpan(state, { eventTime: now + 1 });
+          emitTurnMarkerSpan({
+            tracer,
+            index: 2,
+            startTime: now,
+            endTime: now + 1,
+            attributes: { 'gen_ai.turn.index': 2 },
+          });
+
+          return { output: 'done' };
         });
-        tool.end();
-        closeTurnSpan(state, { eventTime: now + 1 });
-        emitTurnMarkerSpan({
-          tracer,
-          index: 2,
-          startTime: now,
-          endTime: now + 1,
-          attributes: { 'gen_ai.turn.index': 2 },
-        });
-
-        return { output: 'done' };
+        return [{ score: 1, success: true }];
       });
-      return [{ score: 1, success: true }];
-    });
 
-    const childSpans = exporter
-      .getFinishedSpans()
-      .filter((span) => span.name.startsWith('gen_ai.turn') || span.name === 'tool search');
+      const childSpans = exporter
+        .getFinishedSpans()
+        .filter((span) => span.name.startsWith('gen_ai.turn') || span.name === 'tool search');
 
-    expect(childSpans).toHaveLength(3);
-    for (const span of childSpans) {
-      expect(span.attributes[SPAN_ROLE_ATTRIBUTE]).toBe(role);
-    }
-  });
+      expect(childSpans).toHaveLength(3);
+      for (const span of childSpans) {
+        expect(span.attributes[SPAN_ROLE_ATTRIBUTE]).toBe(role);
+      }
+    },
+  );
 });

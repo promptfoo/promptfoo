@@ -92,16 +92,15 @@ describe('LangfuseProvider', () => {
     expect(() => new LangfuseProvider(value)).toThrow();
   });
 
-  it.each([
-    '../../admin',
-    'abc123',
-    '00000000000000000000000000000000',
-  ])('rejects invalid OpenTelemetry trace IDs: %s', async (traceId) => {
-    await expect(new LangfuseProvider(config).fetchTrace(traceId)).rejects.toThrow(
-      TraceProviderError,
-    );
-    expect(mockedFetch).not.toHaveBeenCalled();
-  });
+  it.each(['../../admin', 'abc123', '00000000000000000000000000000000'])(
+    'rejects invalid OpenTelemetry trace IDs: %s',
+    async (traceId) => {
+      await expect(new LangfuseProvider(config).fetchTrace(traceId)).rejects.toThrow(
+        TraceProviderError,
+      );
+      expect(mockedFetch).not.toHaveBeenCalled();
+    },
+  );
 
   it('retrieves observations, parentage, model metadata, token usage, and costs', async () => {
     const result = await new LangfuseProvider(config).fetchTrace(TRACE_ID);
@@ -234,16 +233,16 @@ describe('LangfuseProvider', () => {
     { name: 'text_completion gpt-4o', operation: 'text_completion' },
     { name: 'text-completion gpt-4o', operation: 'text_completion' },
     { name: 'generate_content gemini', operation: 'generate_content' },
-  ])('infers the more specific GenAI generation operation from $name', async ({
-    name,
-    operation,
-  }) => {
-    mockedFetch.mockResolvedValue(response({ data: [{ ...observations[1], name }] }));
+  ])(
+    'infers the more specific GenAI generation operation from $name',
+    async ({ name, operation }) => {
+      mockedFetch.mockResolvedValue(response({ data: [{ ...observations[1], name }] }));
 
-    expect((await new LangfuseProvider(config).fetchTrace(TRACE_ID))?.spans[0].attributes).toEqual(
-      expect.objectContaining({ 'gen_ai.operation.name': operation }),
-    );
-  });
+      expect(
+        (await new LangfuseProvider(config).fetchTrace(TRACE_ID))?.spans[0].attributes,
+      ).toEqual(expect.objectContaining({ 'gen_ai.operation.name': operation }));
+    },
+  );
 
   it.each([
     { type: 'AGENT', attribute: 'gen_ai.agent.name' },

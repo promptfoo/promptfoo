@@ -140,15 +140,14 @@ describe('TempoProvider', () => {
     ]);
   });
 
-  it.each([
-    '../../admin',
-    'abc123',
-    '00000000000000000000000000000000',
-  ])('rejects invalid trace identifiers before requesting Tempo: %s', async (traceId) => {
-    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
-    await expect(provider.fetchTrace(traceId)).rejects.toBeInstanceOf(TraceProviderError);
-    expect(mockedFetch).not.toHaveBeenCalled();
-  });
+  it.each(['../../admin', 'abc123', '00000000000000000000000000000000'])(
+    'rejects invalid trace identifiers before requesting Tempo: %s',
+    async (traceId) => {
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+      await expect(provider.fetchTrace(traceId)).rejects.toBeInstanceOf(TraceProviderError);
+      expect(mockedFetch).not.toHaveBeenCalled();
+    },
+  );
 
   it('drops malformed or unrelated spans while preserving valid siblings', async () => {
     const mixedResponse = structuredClone(traceResponse);

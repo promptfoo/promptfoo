@@ -85,122 +85,125 @@ describe('redteam browser commands', () => {
     vi.resetAllMocks();
   });
 
-  it.each(
-    commandCases,
-  )('registers $commandSignature with exact arguments and options', (commandCase) => {
-    const program = createProgram(commandCase);
+  it.each(commandCases)(
+    'registers $commandSignature with exact arguments and options',
+    (commandCase) => {
+      const program = createProgram(commandCase);
 
-    expect(program.commands).toHaveLength(1);
-    const command = program.commands[0];
-    expect(command.name()).toBe(commandCase.commandName);
-    expect(command.usage()).toBe(`[options] [${commandCase.argumentName}]`);
-    expect(command.description()).toBe(commandCase.description);
-    expect(
-      command.registeredArguments.map((argument) => ({
-        name: argument.name(),
-        required: argument.required,
-        variadic: argument.variadic,
-      })),
-    ).toEqual([
-      {
-        name: commandCase.argumentName,
-        required: false,
-        variadic: false,
-      },
-    ]);
-    expect(
-      command.options.map((option) => ({
-        flags: option.flags,
-        short: option.short,
-        long: option.long,
-        description: option.description,
-        defaultValue: option.defaultValue,
-        attributeName: option.attributeName(),
-      })),
-    ).toEqual([
-      {
-        flags: '-p, --port <number>',
-        short: '-p',
-        long: '--port',
-        description: 'Port number',
-        defaultValue: getDefaultPort().toString(),
-        attributeName: 'port',
-      },
-      {
-        flags: '--filter-description <pattern>',
-        short: undefined,
-        long: '--filter-description',
-        description: 'Filter evals by description using a regex pattern',
-        defaultValue: undefined,
-        attributeName: 'filterDescription',
-      },
-      {
-        flags: '--env-file, --env-path <path>',
-        short: '--env-file',
-        long: '--env-path',
-        description: 'Path to .env file',
-        defaultValue: undefined,
-        attributeName: 'envPath',
-      },
-    ]);
-    expect(command.opts()).toEqual({
-      port: getDefaultPort().toString(),
-      filterDescription: undefined,
-      envPath: undefined,
-    });
-  });
+      expect(program.commands).toHaveLength(1);
+      const command = program.commands[0];
+      expect(command.name()).toBe(commandCase.commandName);
+      expect(command.usage()).toBe(`[options] [${commandCase.argumentName}]`);
+      expect(command.description()).toBe(commandCase.description);
+      expect(
+        command.registeredArguments.map((argument) => ({
+          name: argument.name(),
+          required: argument.required,
+          variadic: argument.variadic,
+        })),
+      ).toEqual([
+        {
+          name: commandCase.argumentName,
+          required: false,
+          variadic: false,
+        },
+      ]);
+      expect(
+        command.options.map((option) => ({
+          flags: option.flags,
+          short: option.short,
+          long: option.long,
+          description: option.description,
+          defaultValue: option.defaultValue,
+          attributeName: option.attributeName(),
+        })),
+      ).toEqual([
+        {
+          flags: '-p, --port <number>',
+          short: '-p',
+          long: '--port',
+          description: 'Port number',
+          defaultValue: getDefaultPort().toString(),
+          attributeName: 'port',
+        },
+        {
+          flags: '--filter-description <pattern>',
+          short: undefined,
+          long: '--filter-description',
+          description: 'Filter evals by description using a regex pattern',
+          defaultValue: undefined,
+          attributeName: 'filterDescription',
+        },
+        {
+          flags: '--env-file, --env-path <path>',
+          short: '--env-file',
+          long: '--env-path',
+          description: 'Path to .env file',
+          defaultValue: undefined,
+          attributeName: 'envPath',
+        },
+      ]);
+      expect(command.opts()).toEqual({
+        port: getDefaultPort().toString(),
+        filterDescription: undefined,
+        envPath: undefined,
+      });
+    },
+  );
 
-  it.each(
-    commandCases,
-  )('runs $commandName in order and starts its destination with a string port', async (commandCase) => {
-    vi.mocked(checkServerRunning).mockResolvedValue(false);
+  it.each(commandCases)(
+    'runs $commandName in order and starts its destination with a string port',
+    async (commandCase) => {
+      vi.mocked(checkServerRunning).mockResolvedValue(false);
 
-    await runCommand(commandCase, [
-      'project-dir',
-      '--port',
-      '3017',
-      '--filter-description',
-      'legacy.*',
-      '--env-file',
-      '.env.test',
-    ]);
+      await runCommand(commandCase, [
+        'project-dir',
+        '--port',
+        '3017',
+        '--filter-description',
+        'legacy.*',
+        '--env-file',
+        '.env.test',
+      ]);
 
-    expect(setupEnv).toHaveBeenCalledExactlyOnceWith('.env.test');
-    expect(telemetry.record).toHaveBeenCalledExactlyOnceWith(commandCase.telemetryEvent, {});
-    expect(setConfigDirectoryPath).toHaveBeenCalledExactlyOnceWith('project-dir');
-    expect(logger.warn).toHaveBeenCalledExactlyOnceWith(deprecatedFilterWarning);
-    expect(checkServerRunning).toHaveBeenCalledExactlyOnceWith();
-    expect(startServer).toHaveBeenCalledExactlyOnceWith('3017', commandCase.browserBehavior);
-    expect(openBrowser).not.toHaveBeenCalled();
-    expectCallOrder(
-      vi.mocked(setupEnv),
-      vi.mocked(telemetry.record),
-      vi.mocked(setConfigDirectoryPath),
-      vi.mocked(logger.warn),
-      vi.mocked(checkServerRunning),
-      vi.mocked(startServer),
-    );
-  });
+      expect(setupEnv).toHaveBeenCalledExactlyOnceWith('.env.test');
+      expect(telemetry.record).toHaveBeenCalledExactlyOnceWith(commandCase.telemetryEvent, {});
+      expect(setConfigDirectoryPath).toHaveBeenCalledExactlyOnceWith('project-dir');
+      expect(logger.warn).toHaveBeenCalledExactlyOnceWith(deprecatedFilterWarning);
+      expect(checkServerRunning).toHaveBeenCalledExactlyOnceWith();
+      expect(startServer).toHaveBeenCalledExactlyOnceWith('3017', commandCase.browserBehavior);
+      expect(openBrowser).not.toHaveBeenCalled();
+      expectCallOrder(
+        vi.mocked(setupEnv),
+        vi.mocked(telemetry.record),
+        vi.mocked(setConfigDirectoryPath),
+        vi.mocked(logger.warn),
+        vi.mocked(checkServerRunning),
+        vi.mocked(startServer),
+      );
+    },
+  );
 
-  it.each(
-    commandCases,
-  )('opens the $commandName destination when the server is already running', async (commandCase) => {
-    vi.mocked(checkServerRunning).mockResolvedValue(true);
+  it.each(commandCases)(
+    'opens the $commandName destination when the server is already running',
+    async (commandCase) => {
+      vi.mocked(checkServerRunning).mockResolvedValue(true);
 
-    await runCommand(commandCase);
+      await runCommand(commandCase);
 
-    expect(setupEnv).toHaveBeenCalledExactlyOnceWith(undefined);
-    expect(telemetry.record).toHaveBeenCalledExactlyOnceWith(commandCase.telemetryEvent, {});
-    expect(setConfigDirectoryPath).not.toHaveBeenCalled();
-    expect(logger.warn).not.toHaveBeenCalled();
-    expect(checkServerRunning).toHaveBeenCalledExactlyOnceWith();
-    expect(openBrowser).toHaveBeenCalledExactlyOnceWith(commandCase.browserBehavior);
-    expect(startServer).not.toHaveBeenCalled();
-    expectCallOrder(
-      vi.mocked(setupEnv),
-      vi.mocked(telemetry.record),
-      vi.mocked(checkServerRunning),
-      vi.mocked(openBrowser),
-    );
-  });
+      expect(setupEnv).toHaveBeenCalledExactlyOnceWith(undefined);
+      expect(telemetry.record).toHaveBeenCalledExactlyOnceWith(commandCase.telemetryEvent, {});
+      expect(setConfigDirectoryPath).not.toHaveBeenCalled();
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(checkServerRunning).toHaveBeenCalledExactlyOnceWith();
+      expect(openBrowser).toHaveBeenCalledExactlyOnceWith(commandCase.browserBehavior);
+      expect(startServer).not.toHaveBeenCalled();
+      expectCallOrder(
+        vi.mocked(setupEnv),
+        vi.mocked(telemetry.record),
+        vi.mocked(checkServerRunning),
+        vi.mocked(openBrowser),
+      );
+    },
+  );
 });

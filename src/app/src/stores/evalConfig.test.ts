@@ -1028,53 +1028,52 @@ describe('evalConfig store', () => {
         expectedAuth: { username: 'tempo-user' },
         secret: 'tempo-password-secret',
       },
-    ])('redacts tracing provider $name and credential headers before persistence', ({
-      auth,
-      expectedAuth,
-      secret,
-    }) => {
-      useStore.getState().setConfig({
-        tracing: {
+    ])(
+      'redacts tracing provider $name and credential headers before persistence',
+      ({ auth, expectedAuth, secret }) => {
+        useStore.getState().setConfig({
+          tracing: {
+            enabled: true,
+            queryDelay: 1250,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth,
+              timeout: 5000,
+              headers: {
+                Authorization: 'Bearer tempo-header-secret',
+                'X-Api-Key': 'tempo-api-key-secret',
+                'X-Honeycomb-Team': 'tempo-honeycomb-secret',
+                'X-Tempo-Reader': 'short-reader-value',
+                'X-Scope-OrgID': 'tenant-a',
+              },
+            },
+          },
+        });
+
+        expect(JSON.stringify(useStore.getState().config.tracing)).toContain(secret);
+
+        const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
+        expect(persisted.tracing).toEqual({
           enabled: true,
           queryDelay: 1250,
           provider: {
             id: 'tempo',
             endpoint: 'https://tempo.example.com',
-            auth,
+            auth: expectedAuth,
             timeout: 5000,
-            headers: {
-              Authorization: 'Bearer tempo-header-secret',
-              'X-Api-Key': 'tempo-api-key-secret',
-              'X-Honeycomb-Team': 'tempo-honeycomb-secret',
-              'X-Tempo-Reader': 'short-reader-value',
-              'X-Scope-OrgID': 'tenant-a',
-            },
+            headers: { 'X-Scope-OrgID': 'tenant-a' },
           },
-        },
-      });
+        });
 
-      expect(JSON.stringify(useStore.getState().config.tracing)).toContain(secret);
-
-      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state.config;
-      expect(persisted.tracing).toEqual({
-        enabled: true,
-        queryDelay: 1250,
-        provider: {
-          id: 'tempo',
-          endpoint: 'https://tempo.example.com',
-          auth: expectedAuth,
-          timeout: 5000,
-          headers: { 'X-Scope-OrgID': 'tenant-a' },
-        },
-      });
-
-      const serialized = JSON.stringify(persisted);
-      expect(serialized).not.toContain(secret);
-      expect(serialized).not.toContain('tempo-header-secret');
-      expect(serialized).not.toContain('tempo-api-key-secret');
-      expect(serialized).not.toContain('tempo-honeycomb-secret');
-      expect(serialized).not.toContain('short-reader-value');
-    });
+        const serialized = JSON.stringify(persisted);
+        expect(serialized).not.toContain(secret);
+        expect(serialized).not.toContain('tempo-header-secret');
+        expect(serialized).not.toContain('tempo-api-key-secret');
+        expect(serialized).not.toContain('tempo-honeycomb-secret');
+        expect(serialized).not.toContain('short-reader-value');
+      },
+    );
 
     it('preserves tracing provider credential templates while dropping referenced values', () => {
       useStore.getState().setConfig({

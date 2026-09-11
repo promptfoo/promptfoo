@@ -463,30 +463,31 @@ describe('MiniMaxProvider', () => {
     expect(result.metadata?.rateLimitKind).toBe('rate_limit');
   });
 
-  it.each([
-    0, 25, 100,
-  ])('calculates native cached token usage %s before normalization', async (cachedTokens) => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: {
-        choices: [{ message: { content: 'MiniMax response' }, finish_reason: 'stop' }],
-        usage: {
-          prompt_tokens: 100,
-          completion_tokens: 50,
-          total_tokens: 150,
-          prompt_tokens_details: { cached_tokens: cachedTokens },
+  it.each([0, 25, 100])(
+    'calculates native cached token usage %s before normalization',
+    async (cachedTokens) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [{ message: { content: 'MiniMax response' }, finish_reason: 'stop' }],
+          usage: {
+            prompt_tokens: 100,
+            completion_tokens: 50,
+            total_tokens: 150,
+            prompt_tokens_details: { cached_tokens: cachedTokens },
+          },
         },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
-    const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
-      config: { config: { apiKey: 'fixture-key' } },
-    });
-    const result = await provider.callApi('Test prompt');
-    expect(result.cost).toBe(calculateMiniMaxCost('MiniMax-M2.7', {}, 100, 50, cachedTokens));
-    expect(result.tokenUsage?.prompt).toBe(100);
-  });
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = createMiniMaxProvider('minimax:MiniMax-M2.7', {
+        config: { config: { apiKey: 'fixture-key' } },
+      });
+      const result = await provider.callApi('Test prompt');
+      expect(result.cost).toBe(calculateMiniMaxCost('MiniMax-M2.7', {}, 100, 50, cachedTokens));
+      expect(result.tokenUsage?.prompt).toBe(100);
+    },
+  );
 
   it('reports zero incremental cost for promptfoo cache hits', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce({

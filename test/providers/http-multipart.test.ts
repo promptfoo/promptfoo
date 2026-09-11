@@ -494,14 +494,14 @@ describe('HttpProvider structured multipart requests', () => {
       expect(normalizeFilePath(input)).toBe(winPath(expected));
     });
 
-    it.each([
-      ['file://C:\\Users\\name\\doc.pdf'],
-      ['file:///C:\\Users\\name\\doc.pdf'],
-    ])('normalizes a Windows drive URL written with backslashes (%s)', (input) => {
-      // Same on both platforms: win32 normalize() keeps the backslashes, and POSIX has no
-      // notion of `\` as a separator so it passes the value straight through.
-      expect(normalizeFilePath(input)).toBe('C:\\Users\\name\\doc.pdf');
-    });
+    it.each([['file://C:\\Users\\name\\doc.pdf'], ['file:///C:\\Users\\name\\doc.pdf']])(
+      'normalizes a Windows drive URL written with backslashes (%s)',
+      (input) => {
+        // Same on both platforms: win32 normalize() keeps the backslashes, and POSIX has no
+        // notion of `\` as a separator so it passes the value straight through.
+        expect(normalizeFilePath(input)).toBe('C:\\Users\\name\\doc.pdf');
+      },
+    );
 
     it('normalizes standard POSIX absolute file:// URLs on every platform', () => {
       // fileURLToPath() rejects a driveless path on Windows, so these exercise the decoded

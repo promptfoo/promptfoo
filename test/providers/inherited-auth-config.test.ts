@@ -134,31 +134,34 @@ describe('Nscale image resolved configuration', () => {
   it.each([
     [undefined, 'http://127.0.0.1:9000/v1/'],
     ['explicit-key', 'http://127.0.0.1:9000/v1'],
-  ] as const)('preserves scoped credentials, key %s and base URL %s', async (apiKey, apiBaseUrl) => {
-    reply(imageReply);
-    const provider = createNscaleProvider('nscale:image:private/image:model', {
-      id: 'nscale-fixture',
-      env: { NSCALE_SERVICE_TOKEN: 'scoped-nscale' },
-      config: {
+  ] as const)(
+    'preserves scoped credentials, key %s and base URL %s',
+    async (apiKey, apiBaseUrl) => {
+      reply(imageReply);
+      const provider = createNscaleProvider('nscale:image:private/image:model', {
+        id: 'nscale-fixture',
+        env: { NSCALE_SERVICE_TOKEN: 'scoped-nscale' },
         config: {
-          apiKey,
-          apiBaseUrl,
-          size: '512x512',
-          response_format: 'url',
-          headers: { 'X-Fixture': 'yes' },
+          config: {
+            apiKey,
+            apiBaseUrl,
+            size: '512x512',
+            response_format: 'url',
+            headers: { 'X-Fixture': 'yes' },
+          },
         },
-      },
-    });
-    const result = await provider.callApi('A blue square');
-    expect(provider.id()).toBe('nscale-fixture');
-    expect(result.output).toContain('https://example.invalid/fixture.png');
-    expect(result.cached).toBe(false);
-    expect(firstRequest()).toMatchObject({
-      url: 'http://127.0.0.1:9000/v1/images/generations',
-      headers: { Authorization: `Bearer ${apiKey ?? 'scoped-nscale'}`, 'X-Fixture': 'yes' },
-      body: { model: 'private/image:model', size: '512x512', n: 1, response_format: 'url' },
-    });
-  });
+      });
+      const result = await provider.callApi('A blue square');
+      expect(provider.id()).toBe('nscale-fixture');
+      expect(result.output).toContain('https://example.invalid/fixture.png');
+      expect(result.cached).toBe(false);
+      expect(firstRequest()).toMatchObject({
+        url: 'http://127.0.0.1:9000/v1/images/generations',
+        headers: { Authorization: `Bearer ${apiKey ?? 'scoped-nscale'}`, 'X-Fixture': 'yes' },
+        body: { model: 'private/image:model', size: '512x512', n: 1, response_format: 'url' },
+      });
+    },
+  );
 
   it('keeps its service endpoint and default image format despite OpenAI environment settings', async () => {
     reply({ data: [{ b64_json: 'Zml4dHVyZQ==' }] }, true);
@@ -173,24 +176,24 @@ describe('Nscale image resolved configuration', () => {
 });
 
 describe('Gateway scoped credentials', () => {
-  it.each([
-    undefined,
-    'explicit-key',
-  ])('uses Comet scoped credentials and explicit key %s', async (apiKey) => {
-    reply(imageReply);
-    const provider = new CometApiImageProvider('private/image:model', {
-      id: 'comet-fixture',
-      env: { COMETAPI_KEY: 'scoped-comet' },
-      config: { apiKey },
-    });
-    const result = await provider.callApi('A blue square');
-    expect(provider.id()).toBe('comet-fixture');
-    expect(result.output).toContain('https://example.invalid/fixture.png');
-    expect(firstRequest()).toMatchObject({
-      url: 'https://api.cometapi.com/v1/images/generations',
-      headers: { Authorization: `Bearer ${apiKey ?? 'scoped-comet'}` },
-    });
-  });
+  it.each([undefined, 'explicit-key'])(
+    'uses Comet scoped credentials and explicit key %s',
+    async (apiKey) => {
+      reply(imageReply);
+      const provider = new CometApiImageProvider('private/image:model', {
+        id: 'comet-fixture',
+        env: { COMETAPI_KEY: 'scoped-comet' },
+        config: { apiKey },
+      });
+      const result = await provider.callApi('A blue square');
+      expect(provider.id()).toBe('comet-fixture');
+      expect(result.output).toContain('https://example.invalid/fixture.png');
+      expect(firstRequest()).toMatchObject({
+        url: 'https://api.cometapi.com/v1/images/generations',
+        headers: { Authorization: `Bearer ${apiKey ?? 'scoped-comet'}` },
+      });
+    },
+  );
 
   it('preserves Comet process credentials', async () => {
     reply(imageReply);
@@ -198,28 +201,28 @@ describe('Gateway scoped credentials', () => {
     expect(firstRequest().headers).toMatchObject({ Authorization: 'Bearer process-comet' });
   });
 
-  it.each([
-    undefined,
-    'explicit-key',
-  ])('uses Helicone scoped credentials and explicit key %s', async (apiKey) => {
-    reply(chatReply);
-    const provider = new HeliconeGatewayProvider('private/model:tag', {
-      id: 'helicone-fixture',
-      env: { HELICONE_API_KEY: 'scoped-helicone' },
-      config: { apiKey, baseUrl: 'http://127.0.0.1:9000', router: 'fixture' },
-    });
-    const result = await provider.callApi('Hello');
-    expect(provider.id()).toBe('helicone-fixture');
-    expect(result).toMatchObject({
-      output: 'Hello',
-      tokenUsage: { prompt: 5, completion: 2, total: 7 },
-    });
-    expect(firstRequest()).toMatchObject({
-      url: 'http://127.0.0.1:9000/router/fixture/chat/completions',
-      headers: { Authorization: `Bearer ${apiKey ?? 'scoped-helicone'}` },
-      body: { model: 'private/model:tag' },
-    });
-  });
+  it.each([undefined, 'explicit-key'])(
+    'uses Helicone scoped credentials and explicit key %s',
+    async (apiKey) => {
+      reply(chatReply);
+      const provider = new HeliconeGatewayProvider('private/model:tag', {
+        id: 'helicone-fixture',
+        env: { HELICONE_API_KEY: 'scoped-helicone' },
+        config: { apiKey, baseUrl: 'http://127.0.0.1:9000', router: 'fixture' },
+      });
+      const result = await provider.callApi('Hello');
+      expect(provider.id()).toBe('helicone-fixture');
+      expect(result).toMatchObject({
+        output: 'Hello',
+        tokenUsage: { prompt: 5, completion: 2, total: 7 },
+      });
+      expect(firstRequest()).toMatchObject({
+        url: 'http://127.0.0.1:9000/router/fixture/chat/completions',
+        headers: { Authorization: `Bearer ${apiKey ?? 'scoped-helicone'}` },
+        body: { model: 'private/model:tag' },
+      });
+    },
+  );
 
   it('preserves Helicone process credentials', async () => {
     reply(chatReply);

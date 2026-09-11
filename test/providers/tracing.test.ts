@@ -181,24 +181,23 @@ describe('provider tracing integration', () => {
     expect(isActiveTracingExport('http://127.0.0.1:4318', 'http/json')).toBe(false);
   });
 
-  it.each([
-    'http://localhost:4318',
-    'http://127.0.0.1:4318/',
-    'http://127.0.0.1:4318/v1/traces/',
-  ])('recognizes equivalent local receiver endpoint %s', async (endpoint) => {
-    cliState.setActiveOtlpReceiver({
-      host: '127.0.0.1',
-      port: 4318,
-      acceptFormats: ['json'],
-    });
+  it.each(['http://localhost:4318', 'http://127.0.0.1:4318/', 'http://127.0.0.1:4318/v1/traces/'])(
+    'recognizes equivalent local receiver endpoint %s',
+    async (endpoint) => {
+      cliState.setActiveOtlpReceiver({
+        host: '127.0.0.1',
+        port: 4318,
+        acceptFormats: ['json'],
+      });
 
-    await cliState.withRequestTracingConfig(
-      { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
-      async () => {
-        expect(isActiveTracingExport(endpoint, 'http/json')).toBe(true);
-      },
-    );
-  });
+      await cliState.withRequestTracingConfig(
+        { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
+        async () => {
+          expect(isActiveTracingExport(endpoint, 'http/json')).toBe(true);
+        },
+      );
+    },
+  );
 
   it('waits until subprocess spans are stored under the provider span', async () => {
     const getTrace = vi

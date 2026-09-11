@@ -42,44 +42,43 @@ describe('nodeEvaluatorRuntime', () => {
       processValue: 'current-process-secret',
       expected: '{{ env.TEMPO_TOKEN }}',
     },
-  ])('$name during programmatic trace-provider resolution', ({
-    disabled,
-    processValue,
-    expected,
-  }) => {
-    const previousConfig = cliState.config;
-    const restoreEnvironment = mockProcessEnv({
-      PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: disabled ? 'true' : 'false',
-      PROMPTFOO_SELF_HOSTED: 'false',
-      TEMPO_TOKEN: processValue,
-    });
-    cliState.config = {
-      env: { TEMPO_TOKEN: 'previous-evaluation-secret' } as NonNullable<TestSuite['env']>,
-    };
-
-    try {
-      const suite: TestSuite = {
-        providers: [],
-        prompts: [],
-        tracing: {
-          enabled: true,
-          provider: {
-            id: 'tempo',
-            endpoint: 'https://tempo.example.com',
-            auth: { token: '{{ env.TEMPO_TOKEN }}' },
-          },
-        },
+  ])(
+    '$name during programmatic trace-provider resolution',
+    ({ disabled, processValue, expected }) => {
+      const previousConfig = cliState.config;
+      const restoreEnvironment = mockProcessEnv({
+        PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: disabled ? 'true' : 'false',
+        PROMPTFOO_SELF_HOSTED: 'false',
+        TEMPO_TOKEN: processValue,
+      });
+      cliState.config = {
+        env: { TEMPO_TOKEN: 'previous-evaluation-secret' } as NonNullable<TestSuite['env']>,
       };
 
-      const resolved = nodeEvaluatorRuntime.resolveRuntimeTestSuite!(suite);
+      try {
+        const suite: TestSuite = {
+          providers: [],
+          prompts: [],
+          tracing: {
+            enabled: true,
+            provider: {
+              id: 'tempo',
+              endpoint: 'https://tempo.example.com',
+              auth: { token: '{{ env.TEMPO_TOKEN }}' },
+            },
+          },
+        };
 
-      expect(resolved.tracing?.provider?.auth?.token).toBe(expected);
-      expect(JSON.stringify(resolved.tracing)).not.toContain('previous-evaluation-secret');
-    } finally {
-      cliState.config = previousConfig;
-      restoreEnvironment();
-    }
-  });
+        const resolved = nodeEvaluatorRuntime.resolveRuntimeTestSuite!(suite);
+
+        expect(resolved.tracing?.provider?.auth?.token).toBe(expected);
+        expect(JSON.stringify(resolved.tracing)).not.toContain('previous-evaluation-secret');
+      } finally {
+        cliState.config = previousConfig;
+        restoreEnvironment();
+      }
+    },
+  );
 
   it('creates and closes JSONL writers for JSONL output paths only', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-evaluator-runtime-'));

@@ -504,28 +504,31 @@ describe('TrueFoundry', () => {
         "Unable to determine whether response content blocked by label 'MultiSeverity_HateSpeechScore' because the content filtering system timed out",
         'Content management policy check did not complete because the content filtering system timed out',
         'Responsible AI policy check did not complete because the content filtering system timed out',
-      ])('should preserve downstream content filter failures as API errors: %s', async (message) => {
-        const errorResponse = {
-          error: {
-            message,
-            code: 'content_filter_error',
-          },
-        };
+      ])(
+        'should preserve downstream content filter failures as API errors: %s',
+        async (message) => {
+          const errorResponse = {
+            error: {
+              message,
+              code: 'content_filter_error',
+            },
+          };
 
-        const response = new Response(JSON.stringify(errorResponse), {
-          status: 400,
-          statusText: 'Bad Request',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
-        });
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
+          const response = new Response(JSON.stringify(errorResponse), {
+            status: 400,
+            statusText: 'Bad Request',
+            headers: new Headers({ 'Content-Type': 'application/json' }),
+          });
+          mockedFetchWithRetries.mockResolvedValueOnce(response);
 
-        const result = await provider.callApi('Test prompt');
+          const result = await provider.callApi('Test prompt');
 
-        expect(result.error).toContain('400 Bad Request');
-        expect(result.error).toContain('content_filter_error');
-        expect(result.isRefusal).toBeUndefined();
-        expect(result.guardrails).toBeUndefined();
-      });
+          expect(result.error).toContain('400 Bad Request');
+          expect(result.error).toContain('content_filter_error');
+          expect(result.isRefusal).toBeUndefined();
+          expect(result.guardrails).toBeUndefined();
+        },
+      );
 
       it('should preserve nested downstream content filter failures as API errors', async () => {
         const errorResponse = {
@@ -796,47 +799,47 @@ describe('TrueFoundry', () => {
       mockedFetchWithRetries.mockReset();
     });
 
-    it.each([
-      'cohere-main/embed-english-v3.0',
-      'tenant/vector-index:stable',
-    ])('selects embeddings explicitly and preserves the wire ID %s', async (modelName) => {
-      const provider = createTrueFoundryProvider(`truefoundry:${modelName}`, {
-        config: {
+    it.each(['cohere-main/embed-english-v3.0', 'tenant/vector-index:stable'])(
+      'selects embeddings explicitly and preserves the wire ID %s',
+      async (modelName) => {
+        const provider = createTrueFoundryProvider(`truefoundry:${modelName}`, {
           config: {
-            task: 'embedding',
-            apiBaseUrl: 'https://tenant.example/gateway',
-            passthrough: { input_type: 'search_query' },
+            config: {
+              task: 'embedding',
+              apiBaseUrl: 'https://tenant.example/gateway',
+              passthrough: { input_type: 'search_query' },
+            },
           },
-        },
-        env: { TRUEFOUNDRY_API_KEY: 'scoped-test-key' },
-      });
-      expect(provider).toBeInstanceOf(TrueFoundryEmbeddingProvider);
-      expect(provider.id()).toBe(`truefoundry:${modelName}`);
+          env: { TRUEFOUNDRY_API_KEY: 'scoped-test-key' },
+        });
+        expect(provider).toBeInstanceOf(TrueFoundryEmbeddingProvider);
+        expect(provider.id()).toBe(`truefoundry:${modelName}`);
 
-      mockedFetchWithRetries.mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            data: [{ embedding: [0.1, 0.2], index: 0 }],
-            usage: { prompt_tokens: 3, total_tokens: 3 },
+        mockedFetchWithRetries.mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              data: [{ embedding: [0.1, 0.2], index: 0 }],
+              usage: { prompt_tokens: 3, total_tokens: 3 },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+        const response = await (provider as TrueFoundryEmbeddingProvider).callEmbeddingApi('hello');
+        expect(response).toMatchObject({
+          embedding: [0.1, 0.2],
+          tokenUsage: { total: 3, prompt: 3, numRequests: 1 },
+        });
+        expect(mockedFetchWithRetries).toHaveBeenCalledWith(
+          'https://tenant.example/gateway/embeddings',
+          expect.objectContaining({
+            headers: expect.objectContaining({ Authorization: 'Bearer scoped-test-key' }),
+            body: JSON.stringify({ input: 'hello', model: modelName, input_type: 'search_query' }),
           }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
-      );
-      const response = await (provider as TrueFoundryEmbeddingProvider).callEmbeddingApi('hello');
-      expect(response).toMatchObject({
-        embedding: [0.1, 0.2],
-        tokenUsage: { total: 3, prompt: 3, numRequests: 1 },
-      });
-      expect(mockedFetchWithRetries).toHaveBeenCalledWith(
-        'https://tenant.example/gateway/embeddings',
-        expect.objectContaining({
-          headers: expect.objectContaining({ Authorization: 'Bearer scoped-test-key' }),
-          body: JSON.stringify({ input: 'hello', model: modelName, input_type: 'search_query' }),
-        }),
-        expect.any(Number),
-        undefined,
-      );
-    });
+          expect.any(Number),
+          undefined,
+        );
+      },
+    );
 
     it('uses explicit chat even when the account name contains embedding', async () => {
       const provider = createTrueFoundryProvider('truefoundry:embedding-team/chat-alias:stable', {

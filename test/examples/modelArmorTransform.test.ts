@@ -118,29 +118,27 @@ describe('Model Armor example response transform', () => {
     });
   });
 
-  it.each([
-    'PARTIAL',
-    'FAILURE',
-    undefined,
-  ])('rejects an indeterminate invocation result: %s', (invocationResult) => {
-    expect(() => run(response({ invocationResult }))).toThrow(/Model Armor invocation was/);
-  });
+  it.each(['PARTIAL', 'FAILURE', undefined])(
+    'rejects an indeterminate invocation result: %s',
+    (invocationResult) => {
+      expect(() => run(response({ invocationResult }))).toThrow(/Model Armor invocation was/);
+    },
+  );
 
-  it.each([
-    'EXECUTION_SKIPPED',
-    'EXECUTION_ERROR',
-    'FILTER_EXECUTION_STATE_UNSPECIFIED',
-  ])('rejects an incomplete filter execution: %s', (executionState) => {
-    expect(() =>
-      run(
-        response({
-          filterResults: {
-            rai: { raiFilterResult: { executionState, matchState: 'NO_MATCH_FOUND' } },
-          },
-        }),
-      ),
-    ).toThrow(new RegExp(executionState));
-  });
+  it.each(['EXECUTION_SKIPPED', 'EXECUTION_ERROR', 'FILTER_EXECUTION_STATE_UNSPECIFIED'])(
+    'rejects an incomplete filter execution: %s',
+    (executionState) => {
+      expect(() =>
+        run(
+          response({
+            filterResults: {
+              rai: { raiFilterResult: { executionState, matchState: 'NO_MATCH_FOUND' } },
+            },
+          }),
+        ),
+      ).toThrow(new RegExp(executionState));
+    },
+  );
 
   it('rejects a filter result with no execution state', () => {
     expect(() =>
@@ -163,14 +161,14 @@ describe('Model Armor example response transform', () => {
     );
   });
 
-  it.each([
-    'FILTER_MATCH_STATE_UNSPECIFIED',
-    undefined,
-  ])('rejects an unknown aggregate match state: %s', (filterMatchState) => {
-    expect(() => run(response({ filterMatchState }))).toThrow(
-      /Unknown Model Armor filter match state/,
-    );
-  });
+  it.each(['FILTER_MATCH_STATE_UNSPECIFIED', undefined])(
+    'rejects an unknown aggregate match state: %s',
+    (filterMatchState) => {
+      expect(() => run(response({ filterMatchState }))).toThrow(
+        /Unknown Model Armor filter match state/,
+      );
+    },
+  );
 
   it('rejects missing and transport-error responses', () => {
     expect(() => run({})).toThrow(/did not include sanitizationResult/);
@@ -320,25 +318,25 @@ describe('Model Armor example response transform', () => {
     ).toThrow(/aggregate match state MATCH_FOUND disagrees/);
   });
 
-  it.each([
-    'FILTER_MATCH_STATE_UNSPECIFIED',
-    'SOMETHING_NEW',
-  ])('rejects an unknown child match state: %s', (matchState) => {
-    expect(() =>
-      run(
-        response({
-          filterResults: {
-            pi_and_jailbreak: {
-              piAndJailbreakFilterResult: {
-                executionState: 'EXECUTION_SUCCESS',
-                matchState,
+  it.each(['FILTER_MATCH_STATE_UNSPECIFIED', 'SOMETHING_NEW'])(
+    'rejects an unknown child match state: %s',
+    (matchState) => {
+      expect(() =>
+        run(
+          response({
+            filterResults: {
+              pi_and_jailbreak: {
+                piAndJailbreakFilterResult: {
+                  executionState: 'EXECUTION_SUCCESS',
+                  matchState,
+                },
               },
             },
-          },
-        }),
-      ),
-    ).toThrow(new RegExp(`match state was ${matchState}`));
-  });
+          }),
+        ),
+      ).toThrow(new RegExp(`match state was ${matchState}`));
+    },
+  );
 
   it('rejects a filter result with no match state', () => {
     expect(() =>

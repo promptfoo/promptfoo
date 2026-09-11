@@ -369,21 +369,21 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
   });
 
-  it.each([
-    'default',
-    '',
-  ])('rejects missing generation model %j before acquiring a client', async (modelName) => {
-    const provider = new AwsBedrockKnowledgeBaseProvider(modelName, {
-      config: { knowledgeBaseId: 'kb-123' },
-    });
-    const getClient = vi.spyOn(provider, 'getKnowledgeBaseClient');
+  it.each(['default', ''])(
+    'rejects missing generation model %j before acquiring a client',
+    async (modelName) => {
+      const provider = new AwsBedrockKnowledgeBaseProvider(modelName, {
+        config: { knowledgeBaseId: 'kb-123' },
+      });
+      const getClient = vi.spyOn(provider, 'getKnowledgeBaseClient');
 
-    const result = await provider.callApi('Describe the garden');
+      const result = await provider.callApi('Describe the garden');
 
-    expect(result.error).toContain('Set bedrock:kb:<model-id> or provide config.modelArn');
-    expect(getClient).not.toHaveBeenCalled();
-    expect(mockSend).not.toHaveBeenCalled();
-  });
+      expect(result.error).toContain('Set bedrock:kb:<model-id> or provide config.modelArn');
+      expect(getClient).not.toHaveBeenCalled();
+      expect(mockSend).not.toHaveBeenCalled();
+    },
+  );
 
   it('accepts an explicit modelArn with the default route and preserves custom identity', async () => {
     mockSend.mockResolvedValueOnce({ output: { text: 'A quiet garden' }, citations: [] });
@@ -499,29 +499,29 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     );
   });
 
-  it.each([
-    'sonnet-4-5-20250929',
-    'haiku-4-5-20251001',
-  ])('preserves top_p and top_k when Claude %s cannot also use temperature', async (model) => {
-    mockSend.mockResolvedValueOnce({ output: { text: 'A quiet garden' }, citations: [] });
-    const provider = new AwsBedrockKnowledgeBaseProvider(`anthropic.claude-${model}-v1:0`, {
-      config: { knowledgeBaseId: 'kb-123', temperature: 0, top_p: 0.75, top_k: 20 },
-    });
+  it.each(['sonnet-4-5-20250929', 'haiku-4-5-20251001'])(
+    'preserves top_p and top_k when Claude %s cannot also use temperature',
+    async (model) => {
+      mockSend.mockResolvedValueOnce({ output: { text: 'A quiet garden' }, citations: [] });
+      const provider = new AwsBedrockKnowledgeBaseProvider(`anthropic.claude-${model}-v1:0`, {
+        config: { knowledgeBaseId: 'kb-123', temperature: 0, top_p: 0.75, top_k: 20 },
+      });
 
-    expect((await provider.callApi('Describe the garden')).output).toBe('A quiet garden');
-    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        retrieveAndGenerateConfiguration: expect.objectContaining({
-          knowledgeBaseConfiguration: expect.objectContaining({
-            generationConfiguration: {
-              inferenceConfig: { textInferenceConfig: { topP: 0.75 } },
-              additionalModelRequestFields: { top_k: 20 },
-            },
+      expect((await provider.callApi('Describe the garden')).output).toBe('A quiet garden');
+      expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          retrieveAndGenerateConfiguration: expect.objectContaining({
+            knowledgeBaseConfiguration: expect.objectContaining({
+              generationConfiguration: {
+                inferenceConfig: { textInferenceConfig: { topP: 0.75 } },
+                additionalModelRequestFields: { top_k: 20 },
+              },
+            }),
           }),
         }),
-      }),
-    );
-  });
+      );
+    },
+  );
 
   it('should not include retrievalConfiguration when numberOfResults is not provided', async () => {
     const mockResponse = {

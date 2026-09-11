@@ -410,77 +410,77 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(evalRecord.prompts[0]?.metrics?.namedScores).toEqual({ Score: 20, PeakAverage: 1 });
   });
 
-  it.each([
-    'afterEach',
-    'persistence',
-  ])('should count rows in metric update order when %s finishes out of order', async (delayAt) => {
-    const firstRowPaused = createDeferred<void>();
-    const resumeFirstRow = createDeferred<void>();
-    const completedRows: number[] = [];
-    const pauseFirstRow = async (testIdx: number) => {
-      if (testIdx === 0) {
-        firstRowPaused.resolve();
-        await resumeFirstRow.promise;
-      }
-    };
-    const provider: ApiProvider = {
-      id: () => 'out-of-order-metrics-provider',
-      callApi: async (_prompt, context) => {
-        if (context?.vars?.index === 1) {
-          await firstRowPaused.promise;
+  it.each(['afterEach', 'persistence'])(
+    'should count rows in metric update order when %s finishes out of order',
+    async (delayAt) => {
+      const firstRowPaused = createDeferred<void>();
+      const resumeFirstRow = createDeferred<void>();
+      const completedRows: number[] = [];
+      const pauseFirstRow = async (testIdx: number) => {
+        if (testIdx === 0) {
+          firstRowPaused.resolve();
+          await resumeFirstRow.promise;
         }
-        return { output: 'ok' };
-      },
-    };
-    const testSuite: TestSuite = {
-      providers: [provider],
-      prompts: [toPrompt('Out-of-order derived metrics prompt')],
-      tests: [0, 1].map((index) => ({
-        vars: { index },
-        assert: [{ type: 'javascript' as const, value: '1', metric: 'Score' }],
-      })),
-      extensions: delayAt === 'afterEach' ? ['file://delayed-hook.js'] : undefined,
-      derivedMetrics: [
-        { name: 'Average', value: 'Score / __count' },
-        {
-          name: 'PeakAverage',
-          value: (scores) => Math.max(scores.PeakAverage || 0, scores.Average),
+      };
+      const provider: ApiProvider = {
+        id: () => 'out-of-order-metrics-provider',
+        callApi: async (_prompt, context) => {
+          if (context?.vars?.index === 1) {
+            await firstRowPaused.promise;
+          }
+          return { output: 'ok' };
         },
-      ],
-    };
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    if (delayAt === 'afterEach') {
-      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
-        if (hookName === 'afterEach' && 'result' in context) {
-          await pauseFirstRow(context.result.testIdx);
-        }
-        return context;
-      });
-    } else {
-      const addResult = evalRecord.addResult.bind(evalRecord);
-      vi.spyOn(evalRecord, 'addResult').mockImplementation(async (result) => {
-        await pauseFirstRow(result.testIdx);
-        return addResult(result);
-      });
-    }
+      };
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [toPrompt('Out-of-order derived metrics prompt')],
+        tests: [0, 1].map((index) => ({
+          vars: { index },
+          assert: [{ type: 'javascript' as const, value: '1', metric: 'Score' }],
+        })),
+        extensions: delayAt === 'afterEach' ? ['file://delayed-hook.js'] : undefined,
+        derivedMetrics: [
+          { name: 'Average', value: 'Score / __count' },
+          {
+            name: 'PeakAverage',
+            value: (scores) => Math.max(scores.PeakAverage || 0, scores.Average),
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      if (delayAt === 'afterEach') {
+        vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+          if (hookName === 'afterEach' && 'result' in context) {
+            await pauseFirstRow(context.result.testIdx);
+          }
+          return context;
+        });
+      } else {
+        const addResult = evalRecord.addResult.bind(evalRecord);
+        vi.spyOn(evalRecord, 'addResult').mockImplementation(async (result) => {
+          await pauseFirstRow(result.testIdx);
+          return addResult(result);
+        });
+      }
 
-    await evaluate(testSuite, evalRecord, {
-      maxConcurrency: 2,
-      progressCallback: (_complete, _total, index) => {
-        completedRows.push(index);
-        if (index === 1) {
-          resumeFirstRow.resolve();
-        }
-      },
-    });
+      await evaluate(testSuite, evalRecord, {
+        maxConcurrency: 2,
+        progressCallback: (_complete, _total, index) => {
+          completedRows.push(index);
+          if (index === 1) {
+            resumeFirstRow.resolve();
+          }
+        },
+      });
 
-    expect(completedRows).toEqual([1, 0]);
-    expect(evalRecord.prompts[0]?.metrics?.namedScores).toEqual({
-      Score: 2,
-      Average: 1,
-      PeakAverage: 1,
-    });
-  });
+      expect(completedRows).toEqual([1, 0]);
+      expect(evalRecord.prompts[0]?.metrics?.namedScores).toEqual({
+        Score: 2,
+        Average: 1,
+        PeakAverage: 1,
+      });
+    },
+  );
 
   it('should apply max-score to overall pass/fail and stats', async () => {
     const maxScoreProvider: ApiProvider = {

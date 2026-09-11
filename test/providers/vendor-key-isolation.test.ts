@@ -51,18 +51,18 @@ async function invoke(provider: ApiProvider) {
 }
 
 describe.each(routes)('$path credential isolation', ({ path, family, mode, vendorKey }) => {
-  it.each([
-    undefined,
-    'scoped-openai',
-  ])('rejects unrelated OpenAI credentials, scoped=%s', async (key) => {
-    const provider = await loadApiProvider(path, {
-      options: { env: { OPENAI_API_KEY: key } },
-    });
-    expect((provider as OpenAiGenericProvider).getApiKey()).toBeUndefined();
-    const result = await invoke(provider).catch((error: Error) => ({ error: error.message }));
-    expect(result.error).toContain('API key is not set');
-    expect(fetchWithCache).not.toHaveBeenCalled();
-  });
+  it.each([undefined, 'scoped-openai'])(
+    'rejects unrelated OpenAI credentials, scoped=%s',
+    async (key) => {
+      const provider = await loadApiProvider(path, {
+        options: { env: { OPENAI_API_KEY: key } },
+      });
+      expect((provider as OpenAiGenericProvider).getApiKey()).toBeUndefined();
+      const result = await invoke(provider).catch((error: Error) => ({ error: error.message }));
+      expect(result.error).toContain('API key is not set');
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
 
   it('preserves explicit, selected and native credential precedence', async () => {
     const restore = mockProcessEnv({
@@ -120,54 +120,55 @@ describe.each(routes)('$path credential isolation', ({ path, family, mode, vendo
   });
 });
 
-describe.each(
-  routes.filter(({ family }) => family === 'nscale'),
-)('$path native credential serialization', ({ path }) => {
-  it('prefers a process service token over a scoped legacy key', async () => {
-    const restore = mockProcessEnv({ NSCALE_SERVICE_TOKEN: 'process-service-token' });
-    try {
-      const provider = await loadApiProvider(path, {
-        options: { env: { NSCALE_API_KEY: 'scoped-legacy-key' } },
-      });
-      expect(JSON.stringify(provider.config)).not.toMatch(
-        /process-service-token|scoped-legacy-key/,
-      );
-      const result = await invoke(provider);
-      expect(result.error).toBeUndefined();
-      expect(vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.headers).toMatchObject({
-        Authorization: 'Bearer process-service-token',
-      });
-    } finally {
-      restore();
-    }
-  });
-
-  it.each([
-    ['NSCALE_SERVICE_TOKEN', 'scoped'],
-    ['NSCALE_API_KEY', 'scoped'],
-    ['NSCALE_SERVICE_TOKEN', 'process'],
-    ['NSCALE_API_KEY', 'process'],
-  ] as const)('keeps %s from %s outside config', async (variable, source) => {
-    const restore = mockProcessEnv({
-      [variable]: source === 'process' ? 'native-token-value' : undefined,
+describe.each(routes.filter(({ family }) => family === 'nscale'))(
+  '$path native credential serialization',
+  ({ path }) => {
+    it('prefers a process service token over a scoped legacy key', async () => {
+      const restore = mockProcessEnv({ NSCALE_SERVICE_TOKEN: 'process-service-token' });
+      try {
+        const provider = await loadApiProvider(path, {
+          options: { env: { NSCALE_API_KEY: 'scoped-legacy-key' } },
+        });
+        expect(JSON.stringify(provider.config)).not.toMatch(
+          /process-service-token|scoped-legacy-key/,
+        );
+        const result = await invoke(provider);
+        expect(result.error).toBeUndefined();
+        expect(vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.headers).toMatchObject({
+          Authorization: 'Bearer process-service-token',
+        });
+      } finally {
+        restore();
+      }
     });
-    try {
-      const provider = await loadApiProvider(path, {
-        options: {
-          env: source === 'scoped' ? { [variable]: 'native-token-value' } : {},
-        },
+
+    it.each([
+      ['NSCALE_SERVICE_TOKEN', 'scoped'],
+      ['NSCALE_API_KEY', 'scoped'],
+      ['NSCALE_SERVICE_TOKEN', 'process'],
+      ['NSCALE_API_KEY', 'process'],
+    ] as const)('keeps %s from %s outside config', async (variable, source) => {
+      const restore = mockProcessEnv({
+        [variable]: source === 'process' ? 'native-token-value' : undefined,
       });
-      expect(JSON.stringify(provider.config)).not.toContain('native-token-value');
-      const result = await invoke(provider);
-      expect(result.error).toBeUndefined();
-      expect(vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.headers).toMatchObject({
-        Authorization: 'Bearer native-token-value',
-      });
-    } finally {
-      restore();
-    }
-  });
-});
+      try {
+        const provider = await loadApiProvider(path, {
+          options: {
+            env: source === 'scoped' ? { [variable]: 'native-token-value' } : {},
+          },
+        });
+        expect(JSON.stringify(provider.config)).not.toContain('native-token-value');
+        const result = await invoke(provider);
+        expect(result.error).toBeUndefined();
+        expect(vi.mocked(fetchWithCache).mock.calls[0]?.[1]?.headers).toMatchObject({
+          Authorization: 'Bearer native-token-value',
+        });
+      } finally {
+        restore();
+      }
+    });
+  },
+);
 
 describe.each(['nscale', 'cometapi'])('%s image credentials', (family) => {
   it('keeps unrelated OpenAI credentials out of image requests', async () => {

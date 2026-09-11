@@ -1081,13 +1081,12 @@ describe('root test hygiene', () => {
       line: 2,
       snippet: 'vi.fn().mockReturnValue("unsafe")',
     },
-  ])('does not anchor hoisted diagnostics to a per-test setter in $source', ({
-    source,
-    line,
-    snippet,
-  }) => {
-    expect(scanFixturePolicies(source).hoistedPersistentMock).toMatchObject([{ line, snippet }]);
-  });
+  ])(
+    'does not anchor hoisted diagnostics to a per-test setter in $source',
+    ({ source, line, snippet }) => {
+      expect(scanFixturePolicies(source).hoistedPersistentMock).toMatchObject([{ line, snippet }]);
+    },
+  );
 
   it('anchors multi-hoist diagnostics to the persistent setter in the violating callback', () => {
     const source = [
@@ -1447,9 +1446,12 @@ describe('root test hygiene', () => {
         '}',
       ].join('\n'),
     ],
-  ])('allows module-scope persistent mocks when paired with reset or scoped per-test in %#', (source) => {
-    expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(false);
-  });
+  ])(
+    'allows module-scope persistent mocks when paired with reset or scoped per-test in %#',
+    (source) => {
+      expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(false);
+    },
+  );
 
   it('treats vi.restoreAllMocks() as insufficient for module-scope vi.fn() defaults', () => {
     // vi.restoreAllMocks() is documented as targeting vi.spyOn mocks; relying

@@ -171,52 +171,52 @@ describe('ReplicateProvider', () => {
     );
   });
 
-  it.each([
-    false,
-    true,
-  ])('should count live polling when the cached initial prediction is %s', async (cachedPrediction) => {
-    // First call returns processing status
-    mockedFetchWithCache.mockResolvedValueOnce({
-      data: {
-        id: 'test-id',
-        status: 'processing',
-        output: null,
-      },
-      cached: cachedPrediction,
-      status: 200,
-      statusText: 'OK',
-    });
+  it.each([false, true])(
+    'should count live polling when the cached initial prediction is %s',
+    async (cachedPrediction) => {
+      // First call returns processing status
+      mockedFetchWithCache.mockResolvedValueOnce({
+        data: {
+          id: 'test-id',
+          status: 'processing',
+          output: null,
+        },
+        cached: cachedPrediction,
+        status: 200,
+        statusText: 'OK',
+      });
 
-    // Second call (polling) returns completed
-    mockedFetchWithCache.mockResolvedValueOnce({
-      data: {
-        id: 'test-id',
-        status: 'succeeded',
-        output: 'test response',
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      // Second call (polling) returns completed
+      mockedFetchWithCache.mockResolvedValueOnce({
+        data: {
+          id: 'test-id',
+          status: 'succeeded',
+          output: 'test response',
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
 
-    const provider = new ReplicateProvider('test-model', {
-      config: { apiKey: mockApiKey },
-    });
+      const provider = new ReplicateProvider('test-model', {
+        config: { apiKey: mockApiKey },
+      });
 
-    const result = await provider.callApi('test prompt');
-    expect(result.output).toBe('test response');
-    expect(result.cached).not.toBe(true);
-    expect(result.tokenUsage).toMatchObject({ total: 0, numRequests: 1 });
-    expect(mockedFetchWithCache).toHaveBeenCalledTimes(2);
-    expect(mockedFetchWithCache).toHaveBeenNthCalledWith(
-      2,
-      'https://api.replicate.com/v1/predictions/test-id',
-      expect.objectContaining({ method: 'GET' }),
-      expect.any(Number),
-      'json',
-      true,
-    );
-  });
+      const result = await provider.callApi('test prompt');
+      expect(result.output).toBe('test response');
+      expect(result.cached).not.toBe(true);
+      expect(result.tokenUsage).toMatchObject({ total: 0, numRequests: 1 });
+      expect(mockedFetchWithCache).toHaveBeenCalledTimes(2);
+      expect(mockedFetchWithCache).toHaveBeenNthCalledWith(
+        2,
+        'https://api.replicate.com/v1/predictions/test-id',
+        expect.objectContaining({ method: 'GET' }),
+        expect.any(Number),
+        'json',
+        true,
+      );
+    },
+  );
 
   it('should handle array outputs', async () => {
     mockedFetchWithCache.mockResolvedValue({
@@ -345,62 +345,62 @@ describe('ReplicateProvider', () => {
   it.each([
     { output: 'cached prediction', expectedOutput: 'cached prediction' },
     { output: ['cached', ' ', 'prediction'], expectedOutput: 'cached prediction' },
-  ])('does not count an inner cached prediction for output $output', async ({
-    output,
-    expectedOutput,
-  }) => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: { id: 'test-id', status: 'succeeded', output },
-      cached: true,
-      status: 200,
-      statusText: 'OK',
-    });
+  ])(
+    'does not count an inner cached prediction for output $output',
+    async ({ output, expectedOutput }) => {
+      mockedFetchWithCache.mockResolvedValue({
+        data: { id: 'test-id', status: 'succeeded', output },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
 
-    const mockCache = {
-      get: vi.fn().mockResolvedValue(null),
-      set: vi.fn(),
-    } as any;
-    vi.mocked(isCacheEnabled).mockReturnValue(true);
-    vi.mocked(getCache).mockResolvedValue(mockCache);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      } as any;
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue(mockCache);
 
-    const provider = new ReplicateProvider('test-model', {
-      config: { apiKey: mockApiKey },
-    });
-    const result = await provider.callApi('test prompt');
+      const provider = new ReplicateProvider('test-model', {
+        config: { apiKey: mockApiKey },
+      });
+      const result = await provider.callApi('test prompt');
 
-    expect(result).toMatchObject({
-      output: expectedOutput,
-      cached: true,
-      tokenUsage: { total: 0, cached: 0, numRequests: 0 },
-    });
-    expect(JSON.parse(mockCache.set.mock.calls[0][1])).toMatchObject({
-      cached: true,
-      tokenUsage: { numRequests: 0 },
-    });
-  });
+      expect(result).toMatchObject({
+        output: expectedOutput,
+        cached: true,
+        tokenUsage: { total: 0, cached: 0, numRequests: 0 },
+      });
+      expect(JSON.parse(mockCache.set.mock.calls[0][1])).toMatchObject({
+        cached: true,
+        tokenUsage: { numRequests: 0 },
+      });
+    },
+  );
 
-  it.each([
-    { unsupported: true },
-    [{ unsupported: true }],
-  ])('preserves cache accounting for unsupported cached output %o', async (output) => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: { id: 'test-id', status: 'succeeded', output },
-      cached: true,
-      status: 200,
-      statusText: 'OK',
-    });
+  it.each([{ unsupported: true }, [{ unsupported: true }]])(
+    'preserves cache accounting for unsupported cached output %o',
+    async (output) => {
+      mockedFetchWithCache.mockResolvedValue({
+        data: { id: 'test-id', status: 'succeeded', output },
+        cached: true,
+        status: 200,
+        statusText: 'OK',
+      });
 
-    const provider = new ReplicateProvider('test-model', {
-      config: { apiKey: mockApiKey },
-    });
-    const result = await provider.callApi('test prompt');
+      const provider = new ReplicateProvider('test-model', {
+        config: { apiKey: mockApiKey },
+      });
+      const result = await provider.callApi('test prompt');
 
-    expect(result).toMatchObject({
-      error: expect.stringContaining('Unsupported response from Replicate'),
-      cached: true,
-      tokenUsage: { total: 0, cached: 0, numRequests: 0 },
-    });
-  });
+      expect(result).toMatchObject({
+        error: expect.stringContaining('Unsupported response from Replicate'),
+        cached: true,
+        tokenUsage: { total: 0, cached: 0, numRequests: 0 },
+      });
+    },
+  );
 
   it('should cache successful string responses', async () => {
     mockedFetchWithCache.mockResolvedValue({

@@ -167,28 +167,26 @@ describe('OTLPTracingExporter', () => {
       metadata: { 'promptfoo.model_provider': 'litellm' },
       expectedProvider: 'litellm',
     },
-  ])('preserves $description on generation spans', ({
-    model,
-    modelConfig,
-    metadata,
-    expectedProvider,
-  }) => {
-    const exporter = new OTLPTracingExporter() as any;
-    const payload = exporter.transformToOTLP([
-      {
-        type: 'trace.span',
-        traceId: 'trace_0123456789abcdef0123456789abcdef',
-        spanId: 'span_0123456789abcdef',
-        spanData: { type: 'generation', model, model_config: modelConfig },
-        traceMetadata: metadata,
-        error: null,
-      },
-    ]);
+  ])(
+    'preserves $description on generation spans',
+    ({ model, modelConfig, metadata, expectedProvider }) => {
+      const exporter = new OTLPTracingExporter() as any;
+      const payload = exporter.transformToOTLP([
+        {
+          type: 'trace.span',
+          traceId: 'trace_0123456789abcdef0123456789abcdef',
+          spanId: 'span_0123456789abcdef',
+          spanData: { type: 'generation', model, model_config: modelConfig },
+          traceMetadata: metadata,
+          error: null,
+        },
+      ]);
 
-    const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
-    expect(attributes['gen_ai.provider.name']).toBe(expectedProvider);
-    expect(attributes).not.toHaveProperty('trace.metadata.promptfoo.model_provider');
-  });
+      const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
+      expect(attributes['gen_ai.provider.name']).toBe(expectedProvider);
+      expect(attributes).not.toHaveProperty('trace.metadata.promptfoo.model_provider');
+    },
+  );
 
   it('omits provider attribution when a custom model backend cannot be identified', () => {
     const exporter = new OTLPTracingExporter() as any;

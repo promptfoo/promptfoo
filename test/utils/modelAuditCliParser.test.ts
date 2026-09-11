@@ -122,19 +122,12 @@ describe('parseModelAuditArgs', () => {
     expect(() => parseModelAuditArgs(['model.pkl'], { maxSize: 'invalid-size' })).toThrow();
   });
 
-  it.each([
-    '1GB',
-    '500MB',
-    '1.5GB',
-    '100KB',
-    '1024B',
-    '1 GB',
-    '500 MB',
-    ' 1GB ',
-    '2.5 TB',
-  ])('should accept maxSize format %s', (maxSize) => {
-    expect(() => parseModelAuditArgs(['model.pkl'], { maxSize })).not.toThrow();
-  });
+  it.each(['1GB', '500MB', '1.5GB', '100KB', '1024B', '1 GB', '500 MB', ' 1GB ', '2.5 TB'])(
+    'should accept maxSize format %s',
+    (maxSize) => {
+      expect(() => parseModelAuditArgs(['model.pkl'], { maxSize })).not.toThrow();
+    },
+  );
 
   it('should parse selected scanners and excluded scanners', () => {
     const result = parseModelAuditArgs(['model.pkl'], {

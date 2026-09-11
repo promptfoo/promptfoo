@@ -322,39 +322,38 @@ describe('retryCommand', () => {
       expectedLogicalCost: 0.5,
       expectedIncurredCost: 0.25,
     },
-  ])('preserves logical and incurred cost when retrying a $label', async ({
-    costs,
-    expectedLogicalCost,
-    expectedIncurredCost,
-  }) => {
-    const prompts = [{}] as any[];
-    const evalRecord = createEval({
-      persisted: true,
-      prompts,
-      fetchResultsBatched: vi.fn(async function* () {
-        yield costs.map(({ logical, incurred, cached }, index) => ({
-          id: `retried-result-${index}`,
-          promptIdx: 0,
-          success: true,
-          score: 1,
-          cost: logical,
-          namedScores: {},
-          response: {
-            cached,
-            ...(incurred !== undefined && { incurredCost: incurred }),
-          },
-        })) as any[];
-      }),
-    });
+  ])(
+    'preserves logical and incurred cost when retrying a $label',
+    async ({ costs, expectedLogicalCost, expectedIncurredCost }) => {
+      const prompts = [{}] as any[];
+      const evalRecord = createEval({
+        persisted: true,
+        prompts,
+        fetchResultsBatched: vi.fn(async function* () {
+          yield costs.map(({ logical, incurred, cached }, index) => ({
+            id: `retried-result-${index}`,
+            promptIdx: 0,
+            success: true,
+            score: 1,
+            cost: logical,
+            namedScores: {},
+            response: {
+              cached,
+              ...(incurred !== undefined && { incurredCost: incurred }),
+            },
+          })) as any[];
+        }),
+      });
 
-    await recalculatePromptMetrics(evalRecord);
+      await recalculatePromptMetrics(evalRecord);
 
-    expect(prompts[0].metrics).toMatchObject({
-      cost: expectedLogicalCost,
-      incurredCost: expectedIncurredCost,
-    });
-    expect(evalRecord.addPrompts).toHaveBeenCalledWith(prompts);
-  });
+      expect(prompts[0].metrics).toMatchObject({
+        cost: expectedLogicalCost,
+        incurredCost: expectedIncurredCost,
+      });
+      expect(evalRecord.addPrompts).toHaveBeenCalledWith(prompts);
+    },
+  );
 
   it.each([
     {

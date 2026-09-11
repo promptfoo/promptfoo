@@ -99,29 +99,28 @@ describe('createMetaProvider routing', () => {
     expect(() => createMetaProvider(`meta:${subType}:foo`)).toThrow(/does not expose/);
   });
 
-  it.each([
-    'agents',
-    'chatkit',
-    'codex-sdk',
-    'voice',
-  ])('rejects the unknown %s sub-type instead of routing it as a Responses model', (subType) => {
-    expect(() => createMetaProvider(`meta:${subType}:foo`)).toThrow(
-      /Unknown Meta Model API sub-type/,
-    );
-  });
+  it.each(['agents', 'chatkit', 'codex-sdk', 'voice'])(
+    'rejects the unknown %s sub-type instead of routing it as a Responses model',
+    (subType) => {
+      expect(() => createMetaProvider(`meta:${subType}:foo`)).toThrow(
+        /Unknown Meta Model API sub-type/,
+      );
+    },
+  );
 
   it('still treats a bare single-segment path as a model id', () => {
     expect(createMetaProvider('meta:muse-spark-2').id()).toBe('meta:responses:muse-spark-2');
   });
 
-  it.each([
-    'meta:muse-spark-1.1',
-    'meta:chat:muse-spark-1.1',
-    'meta:messages:muse-spark-1.1',
-  ])('attributes %s tracing spans to the meta system', (providerPath) => {
-    const provider = createMetaProvider(providerPath);
-    expect((provider as unknown as { getGenAISystem: () => string }).getGenAISystem()).toBe('meta');
-  });
+  it.each(['meta:muse-spark-1.1', 'meta:chat:muse-spark-1.1', 'meta:messages:muse-spark-1.1'])(
+    'attributes %s tracing spans to the meta system',
+    (providerPath) => {
+      const provider = createMetaProvider(providerPath);
+      expect((provider as unknown as { getGenAISystem: () => string }).getGenAISystem()).toBe(
+        'meta',
+      );
+    },
+  );
 });
 
 describe('MetaProvider configuration', () => {
@@ -141,20 +140,20 @@ describe('MetaProvider configuration', () => {
     expect(provider.getApiUrl()).toBe('https://proxy.example.com/v1');
   });
 
-  it.each([
-    'meta:chat:muse-spark-1.1',
-    'meta:responses:muse-spark-1.1',
-  ])('honours apiHost and normalizes trailing slashes for %s', (id) => {
-    const trailingSlashes = '/'.repeat(100_000);
-    const withHost = createMetaProvider(id, {
-      config: { apiHost: `proxy.example.com${trailingSlashes}` },
-    }) as MetaResponsesProvider;
-    const withBaseUrl = createMetaProvider(id, {
-      config: { apiBaseUrl: `https://proxy.example.com/v1${trailingSlashes}` },
-    }) as MetaResponsesProvider;
-    expect((withHost as any).getApiUrl()).toBe('https://proxy.example.com/v1');
-    expect((withBaseUrl as any).getApiUrl()).toBe('https://proxy.example.com/v1');
-  });
+  it.each(['meta:chat:muse-spark-1.1', 'meta:responses:muse-spark-1.1'])(
+    'honours apiHost and normalizes trailing slashes for %s',
+    (id) => {
+      const trailingSlashes = '/'.repeat(100_000);
+      const withHost = createMetaProvider(id, {
+        config: { apiHost: `proxy.example.com${trailingSlashes}` },
+      }) as MetaResponsesProvider;
+      const withBaseUrl = createMetaProvider(id, {
+        config: { apiBaseUrl: `https://proxy.example.com/v1${trailingSlashes}` },
+      }) as MetaResponsesProvider;
+      expect((withHost as any).getApiUrl()).toBe('https://proxy.example.com/v1');
+      expect((withBaseUrl as any).getApiUrl()).toBe('https://proxy.example.com/v1');
+    },
+  );
 
   it('resolves an empty-string apiBaseUrl (e.g. an unset template) to the Meta host', () => {
     const provider = asChat(
@@ -304,23 +303,21 @@ describe('MetaProvider request body shaping', () => {
     expect(body.reasoning_effort).toBe('high');
   });
 
-  it.each([
-    0,
-    null,
-    undefined,
-    512,
-  ])('preserves canonical chat passthrough cap %s over aliases', async (cap) => {
-    const provider = asChat(
-      createMetaProvider('meta:chat:muse-spark-1.1', {
-        config: {
-          max_completion_tokens: 4096,
-          passthrough: { max_completion_tokens: cap, max_tokens: 2048 },
-        },
-      }),
-    );
-    const { body } = await provider.getOpenAiBody('Hello');
-    expect(body).toHaveProperty('max_completion_tokens', cap);
-  });
+  it.each([0, null, undefined, 512])(
+    'preserves canonical chat passthrough cap %s over aliases',
+    async (cap) => {
+      const provider = asChat(
+        createMetaProvider('meta:chat:muse-spark-1.1', {
+          config: {
+            max_completion_tokens: 4096,
+            passthrough: { max_completion_tokens: cap, max_tokens: 2048 },
+          },
+        }),
+      );
+      const { body } = await provider.getOpenAiBody('Hello');
+      expect(body).toHaveProperty('max_completion_tokens', cap);
+    },
+  );
 
   it('forwards max_completion_tokens', async () => {
     const provider = asChat(
@@ -455,12 +452,12 @@ describe('calculateMetaCost', () => {
     );
   });
 
-  it.each(museSparkPricingCases)('bills cached prompt tokens at the correct rate for $modelName', ({
-    modelName,
-    expectedCost,
-  }) => {
-    expect(calculateMetaCost(modelName, {}, 1000, 500, 400)).toBeCloseTo(expectedCost, 12);
-  });
+  it.each(museSparkPricingCases)(
+    'bills cached prompt tokens at the correct rate for $modelName',
+    ({ modelName, expectedCost }) => {
+      expect(calculateMetaCost(modelName, {}, 1000, 500, 400)).toBeCloseTo(expectedCost, 12);
+    },
+  );
 
   it('returns undefined for unknown models without user pricing', () => {
     expect(calculateMetaCost('muse-unknown', {}, 1000, 500)).toBeUndefined();
@@ -521,19 +518,17 @@ describe('MetaProvider callApi cost', () => {
     statusText: 'OK',
   };
 
-  it.each(
-    museSparkPricingCases,
-  )('calculates Chat Completions cost including cached tokens for $modelName', async ({
-    modelName,
-    expectedCost,
-  }) => {
-    vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
-    const provider = createMetaProvider(`meta:chat:${modelName}`, {
-      config: { apiKey: 'LLM|1|k' },
-    });
-    const result = await provider.callApi('Say hi');
-    expect(result.cost).toBeCloseTo(expectedCost, 12);
-  });
+  it.each(museSparkPricingCases)(
+    'calculates Chat Completions cost including cached tokens for $modelName',
+    async ({ modelName, expectedCost }) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
+      const provider = createMetaProvider(`meta:chat:${modelName}`, {
+        config: { apiKey: 'LLM|1|k' },
+      });
+      const result = await provider.callApi('Say hi');
+      expect(result.cost).toBeCloseTo(expectedCost, 12);
+    },
+  );
 
   it('leaves cost undefined for unknown models without user pricing', async () => {
     vi.mocked(fetchWithCache).mockResolvedValueOnce(okResponse as any);
@@ -612,27 +607,25 @@ describe('MetaResponsesProvider', () => {
     expect(JSON.stringify(json)).not.toContain('LLM|123|secret');
   });
 
-  it.each(
-    museSparkPricingCases,
-  )('calculates Responses API cost including cached tokens for $modelName', ({
-    modelName,
-    expectedCost,
-  }) => {
-    const provider = createMetaProvider(`meta:responses:${modelName}`) as MetaResponsesProvider;
-    const billed = (provider as any).applyBilling(
-      { output: 'hi' },
-      {
-        usage: {
-          input_tokens: 1000,
-          output_tokens: 500,
-          input_tokens_details: { cached_tokens: 400 },
+  it.each(museSparkPricingCases)(
+    'calculates Responses API cost including cached tokens for $modelName',
+    ({ modelName, expectedCost }) => {
+      const provider = createMetaProvider(`meta:responses:${modelName}`) as MetaResponsesProvider;
+      const billed = (provider as any).applyBilling(
+        { output: 'hi' },
+        {
+          usage: {
+            input_tokens: 1000,
+            output_tokens: 500,
+            input_tokens_details: { cached_tokens: 400 },
+          },
         },
-      },
-      provider.config,
-      false,
-    );
-    expect(billed.cost).toBeCloseTo(expectedCost, 12);
-  });
+        provider.config,
+        false,
+      );
+      expect(billed.cost).toBeCloseTo(expectedCost, 12);
+    },
+  );
 
   it('reports zero-cost for cached responses via the base billing path', () => {
     const provider = createMetaProvider('meta:responses:muse-spark-1.1') as MetaResponsesProvider;
@@ -647,22 +640,20 @@ describe('MetaResponsesProvider', () => {
 });
 
 describe('MetaResponsesProvider request body shaping', () => {
-  it.each([
-    0,
-    null,
-    undefined,
-    512,
-  ])('preserves canonical Responses passthrough cap %s and removes chat aliases', async (cap) => {
-    const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
-      config: {
-        max_output_tokens: 4096,
-        passthrough: { max_output_tokens: cap, max_completion_tokens: 2048, max_tokens: 1024 },
-      },
-    });
-    const { body } = await (provider as MetaResponsesProvider).getOpenAiBody('Hello');
-    expect(body).toHaveProperty('max_output_tokens', cap);
-    expect(body).not.toHaveProperty('max_completion_tokens');
-  });
+  it.each([0, null, undefined, 512])(
+    'preserves canonical Responses passthrough cap %s and removes chat aliases',
+    async (cap) => {
+      const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
+        config: {
+          max_output_tokens: 4096,
+          passthrough: { max_output_tokens: cap, max_completion_tokens: 2048, max_tokens: 1024 },
+        },
+      });
+      const { body } = await (provider as MetaResponsesProvider).getOpenAiBody('Hello');
+      expect(body).toHaveProperty('max_output_tokens', cap);
+      expect(body).not.toHaveProperty('max_completion_tokens');
+    },
+  );
 
   it('maps chat-style max_completion_tokens onto max_output_tokens', async () => {
     const provider = createMetaProvider('meta:responses:muse-spark-1.1', {
@@ -1049,35 +1040,38 @@ describe('MetaMessagesProvider', () => {
   it.each([
     ['provider', { ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: provider-secret' }],
     ['suite', undefined],
-  ] as const)('does not forward an inherited x-api-key for %s-scoped custom headers', async (scope, env) => {
-    const restore = mockProcessEnv({ MODEL_API_KEY: 'LLM|1|messages-key' });
-    const previousConfig = cliState.config;
-    if (scope === 'suite') {
-      cliState.config = {
-        ...previousConfig,
-        env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: suite-secret' },
-      } as any;
-    }
+  ] as const)(
+    'does not forward an inherited x-api-key for %s-scoped custom headers',
+    async (scope, env) => {
+      const restore = mockProcessEnv({ MODEL_API_KEY: 'LLM|1|messages-key' });
+      const previousConfig = cliState.config;
+      if (scope === 'suite') {
+        cliState.config = {
+          ...previousConfig,
+          env: { ANTHROPIC_CUSTOM_HEADERS: 'X-Proxy-Secret: suite-secret' },
+        } as any;
+      }
 
-    try {
-      const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
-        env,
-      }) as MetaMessagesProvider;
-      const { req } = await (provider.anthropic as any).buildRequest({
-        method: 'post',
-        path: '/v1/messages',
-        body: { model: 'muse-spark-1.1', max_tokens: 1, messages: [] },
-      });
-      const headers = new Headers(req.headers);
+      try {
+        const provider = createMetaProvider('meta:messages:muse-spark-1.1', {
+          env,
+        }) as MetaMessagesProvider;
+        const { req } = await (provider.anthropic as any).buildRequest({
+          method: 'post',
+          path: '/v1/messages',
+          body: { model: 'muse-spark-1.1', max_tokens: 1, messages: [] },
+        });
+        const headers = new Headers(req.headers);
 
-      expect(headers.get('authorization')).toBe('Bearer LLM|1|messages-key');
-      expect(headers.has('x-proxy-secret')).toBe(false);
-      expect(headers.has('x-api-key')).toBe(false);
-    } finally {
-      cliState.config = previousConfig;
-      restore();
-    }
-  });
+        expect(headers.get('authorization')).toBe('Bearer LLM|1|messages-key');
+        expect(headers.has('x-proxy-secret')).toBe(false);
+        expect(headers.has('x-api-key')).toBe(false);
+      } finally {
+        cliState.config = previousConfig;
+        restore();
+      }
+    },
+  );
 
   it('throws the Meta-specific missing-key error from callApi', async () => {
     const restore = mockProcessEnv({ MODEL_API_KEY: undefined });
@@ -1098,32 +1092,30 @@ describe('MetaMessagesProvider', () => {
     expect(JSON.stringify(json)).not.toContain('LLM|123|secret');
   });
 
-  it.each(
-    museSparkPricingCases,
-  )('calculates Messages API cost including cached tokens for $modelName', async ({
-    modelName,
-    expectedCost,
-  }) => {
-    const spy = vi.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValueOnce({
-      output: 'hi',
-      tokenUsage: {
-        // Anthropic-format: prompt is total input incl. cache reads.
-        total: 1500,
-        prompt: 1000,
-        completion: 500,
-        completionDetails: { cacheReadInputTokens: 400, cacheCreationInputTokens: 0 },
-      },
-    });
-    try {
-      const provider = createMetaProvider(`meta:messages:${modelName}`, {
-        config: { apiKey: 'LLM|1|k' },
+  it.each(museSparkPricingCases)(
+    'calculates Messages API cost including cached tokens for $modelName',
+    async ({ modelName, expectedCost }) => {
+      const spy = vi.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValueOnce({
+        output: 'hi',
+        tokenUsage: {
+          // Anthropic-format: prompt is total input incl. cache reads.
+          total: 1500,
+          prompt: 1000,
+          completion: 500,
+          completionDetails: { cacheReadInputTokens: 400, cacheCreationInputTokens: 0 },
+        },
       });
-      const result = await provider.callApi('Say hi');
-      expect(result.cost).toBeCloseTo(expectedCost, 12);
-    } finally {
-      spy.mockRestore();
-    }
-  });
+      try {
+        const provider = createMetaProvider(`meta:messages:${modelName}`, {
+          config: { apiKey: 'LLM|1|k' },
+        });
+        const result = await provider.callApi('Say hi');
+        expect(result.cost).toBeCloseTo(expectedCost, 12);
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
 
   it('does not attach cost to usage-less error responses or cached responses', async () => {
     const spy = vi

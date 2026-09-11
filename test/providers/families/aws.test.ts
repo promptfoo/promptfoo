@@ -51,16 +51,16 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider.id()).toBe('bedrock:xai.grok-4.3');
   });
 
-  it.each([
-    'bedrock:converse:xai.grok-4.3',
-    'bedrock:completion:xai.grok-4.3',
-  ])('routes the explicit %s form to the Grok mantle Responses provider', async (id) => {
-    const provider = await bedrockFactory.create(id, { config: { apiKey: 'bedrock-key' } }, ctx);
-    expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
-    expect((provider as any).config.apiBaseUrl).toBe(
-      'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
-    );
-  });
+  it.each(['bedrock:converse:xai.grok-4.3', 'bedrock:completion:xai.grok-4.3'])(
+    'routes the explicit %s form to the Grok mantle Responses provider',
+    async (id) => {
+      const provider = await bedrockFactory.create(id, { config: { apiKey: 'bedrock-key' } }, ctx);
+      expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+      expect((provider as any).config.apiBaseUrl).toBe(
+        'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
+      );
+    },
+  );
 
   it('rejects prefixed Grok ids that have no native inference profile', async () => {
     // grok-4.3 is mantle-only: AWS publishes no `us.`/`global.` profile for it.
@@ -83,18 +83,18 @@ describe('aws bedrock provider factory routing', () => {
     }
   });
 
-  it.each([
-    'bedrock:us.xai.grok-4.6',
-    'bedrock:global.xai.grok-4.6',
-  ])('routes the Grok 4.6 inference profile %s to the native InvokeModel provider', async (id) => {
-    // Verified live 2026-08-31: grok-4.6 reports inferenceTypesSupported
-    // ["INFERENCE_PROFILE"] and its profiles answer InvokeModel/Converse with ordinary AWS
-    // credentials — no mantle bearer token. It must not be routed to the mantle endpoint.
-    const provider = await bedrockFactory.create(id, { config: { region: 'us-west-2' } }, ctx);
-    expect(provider).not.toBeInstanceOf(OpenAiResponsesProvider);
-    expect((provider as any).config?.apiBaseUrl).toBeUndefined();
-    expect(provider.id()).toBe(id);
-  });
+  it.each(['bedrock:us.xai.grok-4.6', 'bedrock:global.xai.grok-4.6'])(
+    'routes the Grok 4.6 inference profile %s to the native InvokeModel provider',
+    async (id) => {
+      // Verified live 2026-08-31: grok-4.6 reports inferenceTypesSupported
+      // ["INFERENCE_PROFILE"] and its profiles answer InvokeModel/Converse with ordinary AWS
+      // credentials — no mantle bearer token. It must not be routed to the mantle endpoint.
+      const provider = await bedrockFactory.create(id, { config: { region: 'us-west-2' } }, ctx);
+      expect(provider).not.toBeInstanceOf(OpenAiResponsesProvider);
+      expect((provider as any).config?.apiBaseUrl).toBeUndefined();
+      expect(provider.id()).toBe(id);
+    },
+  );
 
   it('routes the explicit converse form of a Grok 4.6 profile to the Converse provider', async () => {
     const { AwsBedrockConverseProvider } = await import('../../../src/providers/bedrock/converse');
@@ -252,18 +252,18 @@ describe('aws bedrock provider factory routing', () => {
     expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
   });
 
-  it.each([
-    'converse',
-    'completion',
-  ])('rejects the legacy %s API for Bedrock Mythos with a clear error', async (modelType) => {
-    await expect(
-      bedrockFactory.create(
-        `bedrock:${modelType}:anthropic.claude-mythos-5`,
-        { config: { apiKey: 'bedrock-key' } },
-        ctx,
-      ),
-    ).rejects.toThrow(/Anthropic Messages API/);
-  });
+  it.each(['converse', 'completion'])(
+    'rejects the legacy %s API for Bedrock Mythos with a clear error',
+    async (modelType) => {
+      await expect(
+        bedrockFactory.create(
+          `bedrock:${modelType}:anthropic.claude-mythos-5`,
+          { config: { apiKey: 'bedrock-key' } },
+          ctx,
+        ),
+      ).rejects.toThrow(/Anthropic Messages API/);
+    },
+  );
 
   it('routes the converse: form of Bedrock Fable to the Converse provider', async () => {
     // Unlike Mythos, Fable does not require the Anthropic Messages endpoint, so the
@@ -360,26 +360,30 @@ describe('aws bedrock provider factory routing', () => {
     'bedrock:us.openai.gpt-5.5',
     'bedrock:eu.openai.gpt-5.4',
     'bedrock:global.openai.gpt-5.5',
-  ])('rejects region/geo-prefixed frontier id %s with a clear error pointing at the bare id', async (providerPath) => {
-    // These older IDs retain their existing Mantle Responses guidance.
-    restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
-    const provider = await bedrockFactory.create(providerPath, { config: {} }, ctx);
-    expect(provider).not.toBeInstanceOf(OpenAiResponsesProvider);
-    await expect(provider.callApi('hi')).rejects.toThrow(/Responses API.*bedrock:openai\.gpt-5\./s);
-  });
+  ])(
+    'rejects region/geo-prefixed frontier id %s with a clear error pointing at the bare id',
+    async (providerPath) => {
+      // These older IDs retain their existing Mantle Responses guidance.
+      restoreEnv = mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'env-bedrock-key' });
+      const provider = await bedrockFactory.create(providerPath, { config: {} }, ctx);
+      expect(provider).not.toBeInstanceOf(OpenAiResponsesProvider);
+      await expect(provider.callApi('hi')).rejects.toThrow(
+        /Responses API.*bedrock:openai\.gpt-5\./s,
+      );
+    },
+  );
 
-  it.each([
-    'us.openai.gpt-5.6-sol',
-    'global.openai.gpt-5.6-terra',
-    'in.openai.gpt-5.6-luna',
-  ])('preserves the explicit Converse profile %s and explains unsupported Invoke use', async (model) => {
-    const converse = await bedrockFactory.create(`bedrock:converse:${model}`, {}, ctx);
-    expect(converse).toBeInstanceOf(AwsBedrockConverseProvider);
-    expect((converse as AwsBedrockConverseProvider).modelName).toBe(model);
+  it.each(['us.openai.gpt-5.6-sol', 'global.openai.gpt-5.6-terra', 'in.openai.gpt-5.6-luna'])(
+    'preserves the explicit Converse profile %s and explains unsupported Invoke use',
+    async (model) => {
+      const converse = await bedrockFactory.create(`bedrock:converse:${model}`, {}, ctx);
+      expect(converse).toBeInstanceOf(AwsBedrockConverseProvider);
+      expect((converse as AwsBedrockConverseProvider).modelName).toBe(model);
 
-    const invoke = await bedrockFactory.create(`bedrock:${model}`, {}, ctx);
-    await expect(invoke.callApi('hello')).rejects.toThrow(`bedrock:converse:${model}`);
-  });
+      const invoke = await bedrockFactory.create(`bedrock:${model}`, {}, ctx);
+      await expect(invoke.callApi('hello')).rejects.toThrow(`bedrock:converse:${model}`);
+    },
+  );
 
   it.each([
     ['bedrock:amazon.nova-reel-v1:0', 'amazon.nova-reel-v1:0'],

@@ -10,13 +10,12 @@ vi.mock('../../../src/providers/openai/chat', () => ({
 afterEach(() => vi.resetAllMocks());
 
 describe('GitHub Models retirement', () => {
-  it.each([
-    'github:',
-    'github:openai/gpt-5',
-    'github:azureml/Phi-4',
-  ])('%s fails before inference', (id) => {
-    expect(() => createGitHubProvider(id, {}, {})).toThrow(/retired on July 30, 2026/);
-  });
+  it.each(['github:', 'github:openai/gpt-5', 'github:azureml/Phi-4'])(
+    '%s fails before inference',
+    (id) => {
+      expect(() => createGitHubProvider(id, {}, {})).toThrow(/retired on July 30, 2026/);
+    },
+  );
 
   it('does not silently redirect configured credentials to another provider', () => {
     expect(() =>

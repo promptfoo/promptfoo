@@ -36,37 +36,40 @@ function reply(status: string, output?: unknown) {
 it.each([
   [ReplicateProvider, 'shared output'],
   [ReplicateImageProvider, 'https://example.invalid/shared.png'],
-])('shares a cached %s prediction across row signals while cancelling only its caller', async (Provider, output) => {
-  vi.mocked(isCacheEnabled).mockReturnValue(true);
-  vi.mocked(getCache).mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);
-  let finish!: (value: ReturnType<typeof reply>) => void;
-  vi.mocked(fetchWithCache).mockImplementation(
-    () =>
-      new Promise((resolve) => {
-        finish = resolve;
-      }),
-  );
-  const provider = new Provider('owner/model', { config: { apiKey: 'fixture' } });
-  const first = new AbortController();
-  const second = new AbortController();
-  const result1 = provider.callApi('Hello', undefined, { abortSignal: first.signal });
-  const result2 = provider.callApi('Hello', undefined, { abortSignal: second.signal });
-  await vi.advanceTimersByTimeAsync(0);
-  expect(fetchWithCache).toHaveBeenCalledTimes(1);
-  const sharedSignal = vi.mocked(fetchWithCache).mock.calls[0][1]?.signal;
-  expect(sharedSignal).toBeInstanceOf(AbortSignal);
-  first.abort();
-  await expect(result1).rejects.toMatchObject({ name: 'AbortError' });
-  expect(sharedSignal?.aborted).toBe(false);
-  finish(reply('succeeded', output));
-  const surviving = await result2;
-  expect(surviving).toMatchObject({ output: expect.stringContaining(output) });
-  if (Provider === ReplicateProvider) {
-    expect(surviving.tokenUsage?.numRequests).toBe(1);
-  } else {
-    expect(surviving.cached).toBe(false);
-  }
-});
+])(
+  'shares a cached %s prediction across row signals while cancelling only its caller',
+  async (Provider, output) => {
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(getCache).mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);
+    let finish!: (value: ReturnType<typeof reply>) => void;
+    vi.mocked(fetchWithCache).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const provider = new Provider('owner/model', { config: { apiKey: 'fixture' } });
+    const first = new AbortController();
+    const second = new AbortController();
+    const result1 = provider.callApi('Hello', undefined, { abortSignal: first.signal });
+    const result2 = provider.callApi('Hello', undefined, { abortSignal: second.signal });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchWithCache).toHaveBeenCalledTimes(1);
+    const sharedSignal = vi.mocked(fetchWithCache).mock.calls[0][1]?.signal;
+    expect(sharedSignal).toBeInstanceOf(AbortSignal);
+    first.abort();
+    await expect(result1).rejects.toMatchObject({ name: 'AbortError' });
+    expect(sharedSignal?.aborted).toBe(false);
+    finish(reply('succeeded', output));
+    const surviving = await result2;
+    expect(surviving).toMatchObject({ output: expect.stringContaining(output) });
+    if (Provider === ReplicateProvider) {
+      expect(surviving.tokenUsage?.numRequests).toBe(1);
+    } else {
+      expect(surviving.cached).toBe(false);
+    }
+  },
+);
 
 it('counts only the creator when concurrent rows share a prediction', async () => {
   vi.mocked(isCacheEnabled).mockReturnValue(true);
@@ -90,85 +93,84 @@ it('counts only the creator when concurrent rows share a prediction', async () =
   expect((await second).tokenUsage?.numRequests).toBe(0);
 });
 
-it.each([
-  'both-succeed',
-  'creator-aborts',
-  'all-abort',
-] as const)('keeps prediction ownership and cleanup across a late joiner: %s', async (scenario) => {
-  vi.mocked(isCacheEnabled).mockReturnValue(true);
-  vi.mocked(getCache).mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);
-  const polls: Array<(response: ReturnType<typeof reply>) => void> = [];
-  vi.mocked(fetchWithCache).mockImplementation((_url, request) =>
-    request?.method === 'POST'
-      ? Promise.resolve(reply('processing'))
-      : new Promise((resolve, reject) => {
-          request?.signal?.addEventListener('abort', () => reject(request.signal?.reason));
-          polls.push(resolve);
-        }),
-  );
-  const provider = new ReplicateProvider('owner/model', { config: { apiKey: 'fixture' } });
-  const controller = new AbortController();
-  const first = provider.callApi('Hello', undefined, { abortSignal: controller.signal });
-  await vi.advanceTimersByTimeAsync(0);
-  const lateController = new AbortController();
-  const late = provider.callApi('Hello', undefined, { abortSignal: lateController.signal });
-  await vi.advanceTimersByTimeAsync(0);
-  expect(polls).toHaveLength(2);
-  if (scenario === 'both-succeed') {
-    polls.forEach((resolve) => resolve(reply('succeeded', 'shared output')));
-    const results = await Promise.all([first, late]);
-    expect(results.map((result) => result.tokenUsage?.numRequests).sort()).toEqual([0, 1]);
-  } else {
-    controller.abort();
-    await expect(first).rejects.toMatchObject({ name: 'AbortError' });
-    if (scenario === 'all-abort') {
-      lateController.abort();
-      await expect(late).rejects.toMatchObject({ name: 'AbortError' });
-      const nextController = new AbortController();
-      const next = provider.callApi('Hello', undefined, { abortSignal: nextController.signal });
-      await vi.advanceTimersByTimeAsync(0);
-      expect(
-        vi.mocked(fetchWithCache).mock.calls.filter(([, request]) => request?.method === 'POST'),
-      ).toHaveLength(2);
-      nextController.abort();
-      await expect(next).rejects.toMatchObject({ name: 'AbortError' });
-      return;
+it.each(['both-succeed', 'creator-aborts', 'all-abort'] as const)(
+  'keeps prediction ownership and cleanup across a late joiner: %s',
+  async (scenario) => {
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(getCache).mockReturnValue({ get: vi.fn(), set: vi.fn() } as any);
+    const polls: Array<(response: ReturnType<typeof reply>) => void> = [];
+    vi.mocked(fetchWithCache).mockImplementation((_url, request) =>
+      request?.method === 'POST'
+        ? Promise.resolve(reply('processing'))
+        : new Promise((resolve, reject) => {
+            request?.signal?.addEventListener('abort', () => reject(request.signal?.reason));
+            polls.push(resolve);
+          }),
+    );
+    const provider = new ReplicateProvider('owner/model', { config: { apiKey: 'fixture' } });
+    const controller = new AbortController();
+    const first = provider.callApi('Hello', undefined, { abortSignal: controller.signal });
+    await vi.advanceTimersByTimeAsync(0);
+    const lateController = new AbortController();
+    const late = provider.callApi('Hello', undefined, { abortSignal: lateController.signal });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(polls).toHaveLength(2);
+    if (scenario === 'both-succeed') {
+      polls.forEach((resolve) => resolve(reply('succeeded', 'shared output')));
+      const results = await Promise.all([first, late]);
+      expect(results.map((result) => result.tokenUsage?.numRequests).sort()).toEqual([0, 1]);
+    } else {
+      controller.abort();
+      await expect(first).rejects.toMatchObject({ name: 'AbortError' });
+      if (scenario === 'all-abort') {
+        lateController.abort();
+        await expect(late).rejects.toMatchObject({ name: 'AbortError' });
+        const nextController = new AbortController();
+        const next = provider.callApi('Hello', undefined, { abortSignal: nextController.signal });
+        await vi.advanceTimersByTimeAsync(0);
+        expect(
+          vi.mocked(fetchWithCache).mock.calls.filter(([, request]) => request?.method === 'POST'),
+        ).toHaveLength(2);
+        nextController.abort();
+        await expect(next).rejects.toMatchObject({ name: 'AbortError' });
+        return;
+      }
+      polls[1](reply('succeeded', 'shared output'));
+      expect((await late).tokenUsage?.numRequests).toBe(1);
     }
-    polls[1](reply('succeeded', 'shared output'));
-    expect((await late).tokenUsage?.numRequests).toBe(1);
-  }
-  expect(
-    vi.mocked(fetchWithCache).mock.calls.filter(([, request]) => request?.method === 'POST'),
-  ).toHaveLength(1);
-});
+    expect(
+      vi.mocked(fetchWithCache).mock.calls.filter(([, request]) => request?.method === 'POST'),
+    ).toHaveLength(1);
+  },
+);
 
-it.each([
-  ReplicateProvider,
-  ReplicateImageProvider,
-])('%s avoids creating a prediction when cancelled during cache lookup', async (Provider) => {
-  vi.mocked(isCacheEnabled).mockReturnValue(true);
-  let finishCache!: (value: undefined) => void;
-  vi.mocked(getCache).mockReturnValue({
-    get: vi.fn(
-      () =>
-        new Promise((resolve) => {
-          finishCache = resolve;
-        }),
-    ),
-    set: vi.fn(),
-  } as any);
-  const controller = new AbortController();
-  const result = new Provider('owner/model', { config: { apiKey: 'fixture' } }).callApi(
-    'Hello',
-    undefined,
-    { abortSignal: controller.signal },
-  );
-  await vi.advanceTimersByTimeAsync(0);
-  controller.abort();
-  finishCache(undefined);
-  await expect(result).rejects.toMatchObject({ name: 'AbortError' });
-  expect(fetchWithCache).not.toHaveBeenCalled();
-});
+it.each([ReplicateProvider, ReplicateImageProvider])(
+  '%s avoids creating a prediction when cancelled during cache lookup',
+  async (Provider) => {
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    let finishCache!: (value: undefined) => void;
+    vi.mocked(getCache).mockReturnValue({
+      get: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finishCache = resolve;
+          }),
+      ),
+      set: vi.fn(),
+    } as any);
+    const controller = new AbortController();
+    const result = new Provider('owner/model', { config: { apiKey: 'fixture' } }).callApi(
+      'Hello',
+      undefined,
+      { abortSignal: controller.signal },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    finishCache(undefined);
+    await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  },
+);
 
 it('caches an image completed by polling after replaying an incomplete creation', async () => {
   vi.mocked(isCacheEnabled).mockReturnValue(true);
@@ -252,33 +254,33 @@ describe.each([ReplicateProvider, ReplicateImageProvider])('%s local cancellatio
     expect(getCache).not.toHaveBeenCalled();
   });
 
-  it.each([
-    'owner/model',
-    'owner/model:version',
-  ])('forwards signal while preserving %s creation and output', async (model) => {
-    vi.mocked(fetchWithCache).mockResolvedValue(
-      reply('succeeded', 'https://example.invalid/fixture.png'),
-    );
-    const signal = new AbortController().signal;
-    const response = await new Provider(model, { config: { apiKey: 'fixture' } }).callApi(
-      'Hello',
-      undefined,
-      { abortSignal: signal },
-    );
-    expect(response.output).toContain('https://example.invalid/fixture.png');
-    expect(fetchWithCache).toHaveBeenCalledWith(
-      model.includes(':')
-        ? 'https://api.replicate.com/v1/predictions'
-        : 'https://api.replicate.com/v1/models/owner/model/predictions',
-      expect.objectContaining({
-        method: 'POST',
-        signal,
-        headers: expect.objectContaining({ Prefer: 'wait=60' }),
-      }),
-      expect.any(Number),
-      'json',
-    );
-  });
+  it.each(['owner/model', 'owner/model:version'])(
+    'forwards signal while preserving %s creation and output',
+    async (model) => {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        reply('succeeded', 'https://example.invalid/fixture.png'),
+      );
+      const signal = new AbortController().signal;
+      const response = await new Provider(model, { config: { apiKey: 'fixture' } }).callApi(
+        'Hello',
+        undefined,
+        { abortSignal: signal },
+      );
+      expect(response.output).toContain('https://example.invalid/fixture.png');
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        model.includes(':')
+          ? 'https://api.replicate.com/v1/predictions'
+          : 'https://api.replicate.com/v1/models/owner/model/predictions',
+        expect.objectContaining({
+          method: 'POST',
+          signal,
+          headers: expect.objectContaining({ Prefer: 'wait=60' }),
+        }),
+        expect.any(Number),
+        'json',
+      );
+    },
+  );
 
   it('stops during the polling delay without cancelling a remote prediction', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue(reply('processing'));

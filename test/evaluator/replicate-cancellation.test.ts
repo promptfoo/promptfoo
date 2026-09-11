@@ -77,53 +77,53 @@ describe('Replicate evaluation cancellation', () => {
     });
   });
 
-  it.each([
-    'text',
-    'image',
-  ])('stops %s creation/polling after the actual evaluation timeout', async (mode) => {
-    const options = { config: { apiKey: 'fixture' } };
-    const provider =
-      mode === 'image'
-        ? new ReplicateImageProvider('owner/model', options)
-        : new ReplicateProvider('owner/model', options);
-    const testSuite: TestSuite = {
-      providers: [provider],
-      prompts: [{ raw: 'fixture prompt', label: 'fixture prompt' }],
-      tests: [{}],
-    };
-    const errorSpy = vi.spyOn(logger, 'error');
-    const evalRecord = new Eval({});
-    const result = evaluate(testSuite, evalRecord, { timeoutMs: 100, maxConcurrency: 1 });
+  it.each(['text', 'image'])(
+    'stops %s creation/polling after the actual evaluation timeout',
+    async (mode) => {
+      const options = { config: { apiKey: 'fixture' } };
+      const provider =
+        mode === 'image'
+          ? new ReplicateImageProvider('owner/model', options)
+          : new ReplicateProvider('owner/model', options);
+      const testSuite: TestSuite = {
+        providers: [provider],
+        prompts: [{ raw: 'fixture prompt', label: 'fixture prompt' }],
+        tests: [{}],
+      };
+      const errorSpy = vi.spyOn(logger, 'error');
+      const evalRecord = new Eval({});
+      const result = evaluate(testSuite, evalRecord, { timeoutMs: 100, maxConcurrency: 1 });
 
-    await vi.advanceTimersByTimeAsync(0);
-    expect(fetchWithCache).toHaveBeenCalledTimes(2);
-    const signal = vi.mocked(fetchWithCache).mock.calls[0][1]?.signal;
-    expect(signal).toBeInstanceOf(AbortSignal);
-    expect(signal?.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(100);
-    await result;
-    await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+      const signal = vi.mocked(fetchWithCache).mock.calls[0][1]?.signal;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(100);
+      await result;
+      await vi.advanceTimersByTimeAsync(2000);
 
-    expect(signal?.aborted).toBe(true);
-    expect(fetchWithCache).toHaveBeenCalledTimes(2);
-    const summary = await evalRecord.toEvaluateSummary();
-    expect(summary.results).toHaveLength(1);
-    expect(summary.results[0]).toMatchObject({
-      error: expect.stringContaining('Evaluation timed out after 100ms'),
-      failureReason: ResultFailureReason.ERROR,
-      score: 0,
-      success: false,
-    });
-    expect(
-      errorSpy.mock.calls.some(
-        ([message]) =>
-          String(message).includes('Provider call failed during eval') ||
-          String(message).includes('Assertion grading failed during eval'),
-      ),
-    ).toBe(false);
-    expect(vi.mocked(fetchWithCache).mock.calls.map(([url]) => url)).toEqual([
-      'https://api.replicate.com/v1/models/owner/model/predictions',
-      'https://api.replicate.com/v1/predictions/fixture-prediction',
-    ]);
-  });
+      expect(signal?.aborted).toBe(true);
+      expect(fetchWithCache).toHaveBeenCalledTimes(2);
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toMatchObject({
+        error: expect.stringContaining('Evaluation timed out after 100ms'),
+        failureReason: ResultFailureReason.ERROR,
+        score: 0,
+        success: false,
+      });
+      expect(
+        errorSpy.mock.calls.some(
+          ([message]) =>
+            String(message).includes('Provider call failed during eval') ||
+            String(message).includes('Assertion grading failed during eval'),
+        ),
+      ).toBe(false);
+      expect(vi.mocked(fetchWithCache).mock.calls.map(([url]) => url)).toEqual([
+        'https://api.replicate.com/v1/models/owner/model/predictions',
+        'https://api.replicate.com/v1/predictions/fixture-prediction',
+      ]);
+    },
+  );
 });

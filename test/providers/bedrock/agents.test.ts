@@ -212,33 +212,36 @@ describe('AwsBedrockAgentsProvider', () => {
     },
     { andAll: [{ equals: { key: 'category', value: 'technical' } }] },
     { orAll: [{ equals: { key: 'category', value: 'technical' } }, { product: 'widget-pro' }] },
-  ])('rejects unsupported retrieval filter %j before client creation or cache lookup', async (filter) => {
-    const provider = new AwsBedrockAgentsProvider('agent-123', {
-      config: {
-        agentId: 'agent-123',
-        agentAliasId: 'alias-456',
-        knowledgeBaseConfigurations: [
-          {
-            knowledgeBaseId: 'kb-123',
-            retrievalConfiguration: { vectorSearchConfiguration: { filter: filter as any } },
-          },
-        ],
-      },
-    });
-    const getClient = vi.spyOn(provider, 'getAgentRuntimeClient');
-    mockIsCacheEnabled.mockReturnValue(true);
-    mockGet.mockResolvedValueOnce(JSON.stringify({ output: 'cached response' }));
+  ])(
+    'rejects unsupported retrieval filter %j before client creation or cache lookup',
+    async (filter) => {
+      const provider = new AwsBedrockAgentsProvider('agent-123', {
+        config: {
+          agentId: 'agent-123',
+          agentAliasId: 'alias-456',
+          knowledgeBaseConfigurations: [
+            {
+              knowledgeBaseId: 'kb-123',
+              retrievalConfiguration: { vectorSearchConfiguration: { filter: filter as any } },
+            },
+          ],
+        },
+      });
+      const getClient = vi.spyOn(provider, 'getAgentRuntimeClient');
+      mockIsCacheEnabled.mockReturnValue(true);
+      mockGet.mockResolvedValueOnce(JSON.stringify({ output: 'cached response' }));
 
-    const result = await provider.callApi('Describe a quiet garden');
+      const result = await provider.callApi('Describe a quiet garden');
 
-    expect(result).toEqual({
-      error:
-        'Invalid knowledgeBaseConfigurations[0].retrievalConfiguration.vectorSearchConfiguration.filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.',
-    });
-    expect(getClient).not.toHaveBeenCalled();
-    expect(mockGet).not.toHaveBeenCalled();
-    expect(mockSend).not.toHaveBeenCalled();
-  });
+      expect(result).toEqual({
+        error:
+          'Invalid knowledgeBaseConfigurations[0].retrievalConfiguration.vectorSearchConfiguration.filter: use an AWS RetrievalFilter with one operator, such as equals, or andAll/orAll with at least two operands. Flat metadata maps are not supported.',
+      });
+      expect(getClient).not.toHaveBeenCalled();
+      expect(mockGet).not.toHaveBeenCalled();
+      expect(mockSend).not.toHaveBeenCalled();
+    },
+  );
 
   it('does not replay legacy cached guardrail claims', async () => {
     mockIsCacheEnabled.mockReturnValue(true);

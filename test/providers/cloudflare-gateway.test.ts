@@ -304,19 +304,18 @@ describe('CloudflareGateway Provider', () => {
       expect(provider.id()).toBe('cloudflare-gateway:openai:gpt-4o');
     });
 
-    it.each([
-      'openai',
-      'groq',
-      'mistral',
-    ])('attributes %s gateway telemetry to the underlying provider rather than a custom label', (underlyingProvider) => {
-      const provider = new CloudflareGatewayOpenAiProvider(underlyingProvider, 'test-model', {
-        config: minimumConfig,
-        id: 'customer:custom-label',
-      });
+    it.each(['openai', 'groq', 'mistral'])(
+      'attributes %s gateway telemetry to the underlying provider rather than a custom label',
+      (underlyingProvider) => {
+        const provider = new CloudflareGatewayOpenAiProvider(underlyingProvider, 'test-model', {
+          config: minimumConfig,
+          id: 'customer:custom-label',
+        });
 
-      expect(provider.id()).toBe('customer:custom-label');
-      expect(provider['getGenAISystem']()).toBe(underlyingProvider);
-    });
+        expect(provider.id()).toBe('customer:custom-label');
+        expect(provider['getGenAISystem']()).toBe(underlyingProvider);
+      },
+    );
 
     it('should return correct toString()', () => {
       const provider = new CloudflareGatewayOpenAiProvider('openai', 'gpt-4o', {

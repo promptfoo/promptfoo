@@ -36,18 +36,15 @@ describe('collectKeyValueOption', () => {
     expect(collectKeyValueOption('--var', value as string, undefined)).toEqual(expected);
   });
 
-  it.each([
-    'invalid',
-    '=value',
-    ' =value',
-    ' = ',
-    'key =value',
-  ])('throws InvalidArgumentError for malformed input %p', (value) => {
-    expect(() => collectKeyValueOption('--tag', value, undefined)).toThrow(InvalidArgumentError);
-    expect(() => collectKeyValueOption('--tag', value, undefined)).toThrow(
-      '--tag must be specified in key=value format.',
-    );
-  });
+  it.each(['invalid', '=value', ' =value', ' = ', 'key =value'])(
+    'throws InvalidArgumentError for malformed input %p',
+    (value) => {
+      expect(() => collectKeyValueOption('--tag', value, undefined)).toThrow(InvalidArgumentError);
+      expect(() => collectKeyValueOption('--tag', value, undefined)).toThrow(
+        '--tag must be specified in key=value format.',
+      );
+    },
+  );
 
   it('includes the option name in the error message', () => {
     expect(() => collectKeyValueOption('--var', 'nope', undefined)).toThrow(

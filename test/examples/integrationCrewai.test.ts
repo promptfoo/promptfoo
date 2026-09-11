@@ -116,14 +116,14 @@ describe('integration-crewai example', () => {
     });
   });
 
-  it.each([
-    'openai/gpt-4.1-mini',
-    'custom-provider/team/model:release',
-  ])('forwards the configured model %s unchanged and parses a markdown string', (model) => {
-    const result = runExample({ config: { model }, output: CANDIDATES, result_type: 'string' });
-    expect(result.response).toEqual({ output: CANDIDATES });
-    expect(result.observed.model).toBe(model);
-  });
+  it.each(['openai/gpt-4.1-mini', 'custom-provider/team/model:release'])(
+    'forwards the configured model %s unchanged and parses a markdown string',
+    (model) => {
+      const result = runExample({ config: { model }, output: CANDIDATES, result_type: 'string' });
+      expect(result.response).toEqual({ output: CANDIDATES });
+      expect(result.observed.model).toBe(model);
+    },
+  );
 
   it('surfaces a kickoff failure as a provider error', () => {
     const result = runExample({ error: 'kickoff' });
@@ -133,21 +133,21 @@ describe('integration-crewai example', () => {
     });
   });
 
-  it.each([
-    undefined,
-    'fixture-openai-key',
-  ])('uses the configured provider credentials when the OpenAI key is %s', (openaiKey) => {
-    const result = runExample(
-      { config: { model: 'anthropic/claude-sonnet-4-6' }, output: CANDIDATES },
-      { OPENAI_API_KEY: openaiKey, ANTHROPIC_API_KEY: 'fixture-anthropic-key' },
-    );
-    expect(result.response).toEqual({ output: CANDIDATES });
-    expect(result.observed).toEqual({
-      model: 'anthropic/claude-sonnet-4-6',
-      api_key: 'fixture-anthropic-key',
-      inputs: { job_requirements: 'Find a Ruby engineer' },
-    });
-  });
+  it.each([undefined, 'fixture-openai-key'])(
+    'uses the configured provider credentials when the OpenAI key is %s',
+    (openaiKey) => {
+      const result = runExample(
+        { config: { model: 'anthropic/claude-sonnet-4-6' }, output: CANDIDATES },
+        { OPENAI_API_KEY: openaiKey, ANTHROPIC_API_KEY: 'fixture-anthropic-key' },
+      );
+      expect(result.response).toEqual({ output: CANDIDATES });
+      expect(result.observed).toEqual({
+        model: 'anthropic/claude-sonnet-4-6',
+        api_key: 'fixture-anthropic-key',
+        inputs: { job_requirements: 'Find a Ruby engineer' },
+      });
+    },
+  );
 
   it('reports missing credentials for the default OpenAI model', () => {
     const result = runExample({ output: CANDIDATES }, {});

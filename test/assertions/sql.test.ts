@@ -100,18 +100,18 @@ describe('is-sql assertion', () => {
         outputString: 'SELECT $$select distinct first_name last_name from employees$$ AS sample',
         renderedValue: { databaseType: 'PostgreSQL' },
       },
-    ])('should ignore SQL-like text in literals and comments: $outputString', async ({
-      outputString,
-      renderedValue,
-    }) => {
-      const result = await handleIsSql({
-        assertion,
-        renderedValue,
-        outputString,
-        inverse: false,
-      } as AssertionParams);
-      expect(result).toMatchObject({ pass: true, score: 1 });
-    });
+    ])(
+      'should ignore SQL-like text in literals and comments: $outputString',
+      async ({ outputString, renderedValue }) => {
+        const result = await handleIsSql({
+          assertion,
+          renderedValue,
+          outputString,
+          inverse: false,
+        } as AssertionParams);
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      },
+    );
 
     it.each([
       'SELECT a b FROM t',
@@ -133,20 +133,19 @@ describe('is-sql assertion', () => {
       });
     });
 
-    it.each([
-      'PostgreSQL',
-      'TransactSQL',
-      'BigQuery',
-    ])('should not treat MySQL-only modifiers as modifiers in %s', async (databaseType) => {
-      const result = await handleIsSql({
-        assertion,
-        renderedValue: { databaseType },
-        outputString: 'SELECT SQL_NO_CACHE name FROM users',
-        inverse: false,
-      } as AssertionParams);
+    it.each(['PostgreSQL', 'TransactSQL', 'BigQuery'])(
+      'should not treat MySQL-only modifiers as modifiers in %s',
+      async (databaseType) => {
+        const result = await handleIsSql({
+          assertion,
+          renderedValue: { databaseType },
+          outputString: 'SELECT SQL_NO_CACHE name FROM users',
+          inverse: false,
+        } as AssertionParams);
 
-      expect(result).toMatchObject({ pass: false, score: 0 });
-    });
+        expect(result).toMatchObject({ pass: false, score: 0 });
+      },
+    );
 
     it('should preserve MySQL-family modifiers for MariaDB', async () => {
       const result = await handleIsSql({
@@ -159,38 +158,38 @@ describe('is-sql assertion', () => {
       expect(result).toMatchObject({ pass: true, score: 1 });
     });
 
-    it.each([
-      'PostgreSQL',
-      'BigQuery',
-    ])('should preserve square-bracket subscripts in %s', async (databaseType) => {
-      const result = await handleIsSql({
-        assertion,
-        renderedValue: { databaseType },
-        outputString: 'SELECT arr[1] value FROM t',
-        inverse: false,
-      } as AssertionParams);
+    it.each(['PostgreSQL', 'BigQuery'])(
+      'should preserve square-bracket subscripts in %s',
+      async (databaseType) => {
+        const result = await handleIsSql({
+          assertion,
+          renderedValue: { databaseType },
+          outputString: 'SELECT arr[1] value FROM t',
+          inverse: false,
+        } as AssertionParams);
 
-      expect(result).toMatchObject({ pass: true, score: 1 });
-    });
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      },
+    );
 
     it.each([
       { databaseType: 'BigQuery', outputString: "SELECT r'hello' value FROM t" },
       { databaseType: 'TransactSQL', outputString: "SELECT N'hello' value FROM t" },
       // Intentionally `Sqlite` (not `SQLite`) to match node-sql-parser dialect naming.
       { databaseType: 'Sqlite', outputString: "SELECT X'53514C697465' value FROM t" },
-    ])('should preserve prefixed literals in $databaseType', async ({
-      databaseType,
-      outputString,
-    }) => {
-      const result = await handleIsSql({
-        assertion,
-        renderedValue: { databaseType },
-        outputString,
-        inverse: false,
-      } as AssertionParams);
+    ])(
+      'should preserve prefixed literals in $databaseType',
+      async ({ databaseType, outputString }) => {
+        const result = await handleIsSql({
+          assertion,
+          renderedValue: { databaseType },
+          outputString,
+          inverse: false,
+        } as AssertionParams);
 
-      expect(result).toMatchObject({ pass: true, score: 1 });
-    });
+        expect(result).toMatchObject({ pass: true, score: 1 });
+      },
+    );
 
     it.each(['', '   '])('should fail empty SQL: %j', async (outputString) => {
       const result: GradingResult = await handleIsSql({
