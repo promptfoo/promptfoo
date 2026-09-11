@@ -493,6 +493,15 @@ export async function readTest(
   isDefaultTest: boolean = false,
   env: EnvOverrides | undefined = cliState.env,
 ): Promise<TestCase> {
+  return cliState.withEnv(env, () => readTestWithEnv(test, basePath, isDefaultTest, env));
+}
+
+async function readTestWithEnv(
+  test: string | TestCaseWithVarsFile,
+  basePath: string,
+  isDefaultTest: boolean,
+  env: EnvOverrides | undefined,
+): Promise<TestCase> {
   if (typeof test === 'object' && remoteTestCases.has(test as TestCase)) {
     return test as TestCase;
   }

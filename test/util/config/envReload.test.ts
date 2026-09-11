@@ -566,6 +566,30 @@ describe('suite environment loading', () => {
     expect(JSON.parse(testSuite.prompts[0].raw)).toEqual({ content: 'suite content' });
   });
 
+  it.each(['inline', 'file'] as const)(
+    'uses the direct readTest environment while expanding %s vars sources',
+    async (form) => {
+      const previousFile = path.join(tempDir, 'previous.json');
+      const suiteFile = path.join(tempDir, 'suite.json');
+      fs.writeFileSync(previousFile, JSON.stringify('previous content'));
+      fs.writeFileSync(suiteFile, JSON.stringify('suite content'));
+      fs.writeFileSync(
+        path.join(tempDir, 'vars.yaml'),
+        'source: file://{{ env.OPENAI_API_KEY }}\n',
+      );
+      fs.writeFileSync(path.join(tempDir, 'test.yaml'), 'vars: vars.yaml\n');
+      cliState.config = { env: { OPENAI_API_KEY: previousFile } };
+      const test = await readTest(
+        form === 'file' ? 'test.yaml' : { vars: 'vars.yaml' },
+        tempDir,
+        false,
+        { OPENAI_API_KEY: suiteFile },
+      );
+      expect(test.vars).toEqual({ source: 'suite content' });
+      expect(getEnvString('OPENAI_API_KEY')).toBe(previousFile);
+    },
+  );
+
   it('loads array test references relative to each config directory', async () => {
     const paths = ['first', 'second'].map((name) => {
       const configPath = writeConfig(name, { tests: ['cases.yaml'] });
