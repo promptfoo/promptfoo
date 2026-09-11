@@ -316,6 +316,23 @@ export function mergeGoogleCompletionOptions(
         }
       }
     }
+
+    // A provider-level passthrough policy must not override a prompt's tool choice.
+    // Preserve unrelated passthrough fields and non-function tool settings.
+    if (promptConfig?.passthrough === undefined && baseConfig.passthrough) {
+      const passthrough = { ...baseConfig.passthrough };
+      const inheritedToolConfig = normalizeGoogleToolConfig(passthrough);
+      delete passthrough.toolConfig;
+      delete passthrough.tool_config;
+      if (inheritedToolConfig) {
+        const { functionCallingConfig: _functionCallingConfig, ...nonFunctionToolConfig } =
+          inheritedToolConfig;
+        if (Object.keys(nonFunctionToolConfig).length > 0) {
+          passthrough.toolConfig = nonFunctionToolConfig;
+        }
+      }
+      mergedConfig.passthrough = passthrough;
+    }
   }
 
   return mergedConfig;

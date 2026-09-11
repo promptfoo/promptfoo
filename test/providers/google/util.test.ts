@@ -5242,6 +5242,175 @@ describe('util', () => {
   });
 
   describe('mergeGoogleCompletionOptions', () => {
+    it.each([
+      ['required', { tool_choice: 'required' as const }, { mode: 'ANY' }],
+      [
+        'camel case',
+        {
+          toolConfig: {
+            functionCallingConfig: { mode: 'AUTO' as const, allowedFunctionNames: ['promptFn'] },
+          },
+        },
+        { mode: 'AUTO', allowedFunctionNames: ['promptFn'] },
+      ],
+      [
+        'snake case',
+        {
+          tool_config: {
+            function_calling_config: {
+              mode: 'AUTO' as const,
+              allowed_function_names: ['promptFn'],
+            },
+          },
+        },
+        { mode: 'AUTO', allowedFunctionNames: ['promptFn'] },
+      ],
+    ])('replaces inherited passthrough policy with prompt %s', (_label, promptConfig, expected) => {
+      for (const inheritedToolConfig of [
+        {
+          toolConfig: {
+            functionCallingConfig: {
+              mode: 'NONE' as const,
+              allowedFunctionNames: ['providerFn'],
+              streamFunctionCallArguments: true,
+            },
+            retrievalConfig: { languageCode: 'en-US' },
+            includeServerSideToolInvocations: true,
+          },
+        },
+        {
+          tool_config: {
+            function_calling_config: {
+              mode: 'NONE' as const,
+              allowed_function_names: ['providerFn'],
+              stream_function_call_arguments: true,
+            },
+            retrieval_config: { language_code: 'en-US' },
+            include_server_side_tool_invocations: true,
+          },
+        },
+      ]) {
+        const baseConfig = {
+          passthrough: {
+            ...inheritedToolConfig,
+            tools: [{ googleMaps: {} }],
+            customField: 'retained',
+          },
+        };
+        const original = structuredClone(baseConfig);
+        const merged = mergeGoogleCompletionOptions(baseConfig, {
+          ...(promptConfig as Parameters<typeof mergeGoogleCompletionOptions>[1]),
+          passthrough: undefined,
+        });
+
+        expect(resolveGoogleToolConfig(merged)).toEqual({
+          toolConfig: {
+            functionCallingConfig: expected,
+            retrievalConfig: { languageCode: 'en-US' },
+            includeServerSideToolInvocations: true,
+          },
+          toolsDisabled: false,
+        });
+        expect(merged.passthrough?.tools).toEqual([{ googleMaps: {} }]);
+        expect(merged.passthrough?.customField).toBe('retained');
+        expect(baseConfig).toEqual(original);
+      }
+    });
+
+    it('preserves an intentional prompt passthrough policy and replaces inherited fields', () => {
+      const passthrough = { toolConfig: { functionCallingConfig: { mode: 'ANY' } } };
+      const merged = mergeGoogleCompletionOptions(
+        { passthrough: { customField: 'provider' } },
+        { tool_choice: 'none', passthrough },
+      );
+
+      expect(merged.passthrough).toEqual(passthrough);
+      expect(resolveGoogleToolConfig(merged)).toEqual({
+        toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+        toolsDisabled: false,
+      });
+    });
+
+    it('lets explicit empty prompt passthrough replace inherited fields', () => {
+      const merged = mergeGoogleCompletionOptions(
+        {
+          passthrough: {
+            toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+            customField: 'provider',
+          },
+        },
+        { tool_choice: 'none', passthrough: {} },
+      );
+
+      expect(merged.passthrough).toEqual({});
+      expect(resolveGoogleToolConfig(merged)).toEqual({
+        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+        toolsDisabled: true,
+      });
+    });
+
+    it.each([undefined, { tool_choice: undefined }])(
+      'retains inherited passthrough when prompt policy is absent: %j',
+      (promptConfig) => {
+        const baseConfig = {
+          passthrough: { toolConfig: { functionCallingConfig: { mode: 'NONE' } } },
+        };
+        const merged = mergeGoogleCompletionOptions(baseConfig, promptConfig);
+
+        expect(merged.passthrough).toEqual(baseConfig.passthrough);
+        expect(resolveGoogleToolConfig(merged)).toEqual({
+          toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+          toolsDisabled: true,
+        });
+      },
+    );
+
+    it('lets a prompt disable provider-level passthrough function calls', () => {
+      const merged = mergeGoogleCompletionOptions(
+        {
+          passthrough: {
+            toolConfig: {
+              functionCallingConfig: { mode: 'ANY', allowedFunctionNames: ['lookup'] },
+              retrievalConfig: { languageCode: 'en-US' },
+            },
+          },
+        },
+        { tool_choice: 'none' },
+      );
+
+      expect(resolveGoogleToolConfig(merged)).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'NONE' },
+          retrievalConfig: { languageCode: 'en-US' },
+        },
+        toolsDisabled: true,
+      });
+    });
+
+    it('retains non-function snake-case passthrough settings under a prompt override', () => {
+      const merged = mergeGoogleCompletionOptions(
+        {
+          passthrough: {
+            tool_config: {
+              function_calling_config: { mode: 'ANY' },
+              retrieval_config: { language_code: 'en-US' },
+            },
+            customField: 'retained',
+          },
+        },
+        { tool_choice: 'none' },
+      );
+
+      expect(merged.passthrough?.customField).toBe('retained');
+      expect(resolveGoogleToolConfig(merged)).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'NONE' },
+          retrievalConfig: { languageCode: 'en-US' },
+        },
+        toolsDisabled: true,
+      });
+    });
+
     it('treats prompt-level undefined as "not set" and preserves base policy', () => {
       const merged = mergeGoogleCompletionOptions(
         {

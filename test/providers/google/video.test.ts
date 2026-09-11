@@ -2113,6 +2113,7 @@ describe('GoogleVideoProvider', () => {
 
           expect(result.error).toBeUndefined();
           expect(result.metadata?.extensionSeconds).toBe(7);
+          expect(result.cost).toBeCloseTo(2.8);
           expect(result.metadata).not.toHaveProperty('durationSeconds');
           expect(result.video).not.toHaveProperty('duration');
           const body = getLastVideoCreateRequestBody(transport);
