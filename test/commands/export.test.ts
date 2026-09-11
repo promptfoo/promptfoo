@@ -349,5 +349,94 @@ describe('exportCommand', () => {
       expect(mockFsPromises.stat).toHaveBeenCalledWith(logPath);
       expect(logger.info).toHaveBeenCalledWith('Log files have been collected in: logs.gz');
     });
+
+    it('should preserve non-ASCII log file names in the archive', async () => {
+      const fileName = 'promptfoo-日志.log';
+      const logPath = `/test/config/logs/${fileName}`;
+      const output = new EventEmitter() as EventEmitter & {
+        on: typeof EventEmitter.prototype.on;
+      };
+      const gzip = {
+        end: vi.fn(() => output.emit('close')),
+        pipe: vi.fn(),
+        write: vi.fn(),
+        on: vi.fn(),
+      };
+
+      vi.mocked(fs.createWriteStream).mockReturnValue(output as unknown as fs.WriteStream);
+      vi.mocked(zlib.createGzip).mockReturnValue(gzip as unknown as zlib.Gzip);
+      mockGetLogFiles.mockResolvedValue([
+        {
+          name: fileName,
+          path: logPath,
+          mtime: new Date('2025-01-01T00:00:00.000Z'),
+          type: 'debug',
+          size: 10,
+        },
+      ]);
+      mockFsPromises.readFile.mockResolvedValue(Buffer.from('hello logs'));
+      mockFsPromises.stat.mockImplementation(async (filePath) => {
+        if (filePath === 'logs.gz') {
+          return { size: 123 } as fs.Stats;
+        }
+        return {
+          size: 10,
+          mtime: new Date('2025-01-01T00:00:00.000Z'),
+        } as fs.Stats;
+      });
+
+      exportCommand(program);
+
+      await program.parseAsync(['node', 'test', 'export', 'logs', '--output', 'logs.gz']);
+
+      const header = vi.mocked(gzip.write).mock.calls[0][0] as Buffer;
+      const archivedFileName = header.subarray(0, 100).toString('utf8').replace(/\0.*$/, '');
+      expect(archivedFileName).toBe(fileName);
+    });
+
+    it('should not split a UTF-8 character at the tar file name limit', async () => {
+      const fileName = `promptfoo-a${'日'.repeat(32)}.log`;
+      const logPath = `/test/config/logs/${fileName}`;
+      const output = new EventEmitter() as EventEmitter & {
+        on: typeof EventEmitter.prototype.on;
+      };
+      const gzip = {
+        end: vi.fn(() => output.emit('close')),
+        pipe: vi.fn(),
+        write: vi.fn(),
+        on: vi.fn(),
+      };
+
+      vi.mocked(fs.createWriteStream).mockReturnValue(output as unknown as fs.WriteStream);
+      vi.mocked(zlib.createGzip).mockReturnValue(gzip as unknown as zlib.Gzip);
+      mockGetLogFiles.mockResolvedValue([
+        {
+          name: fileName,
+          path: logPath,
+          mtime: new Date('2025-01-01T00:00:00.000Z'),
+          type: 'debug',
+          size: 10,
+        },
+      ]);
+      mockFsPromises.readFile.mockResolvedValue(Buffer.from('hello logs'));
+      mockFsPromises.stat.mockImplementation(async (filePath) => {
+        if (filePath === 'logs.gz') {
+          return { size: 123 } as fs.Stats;
+        }
+        return {
+          size: 10,
+          mtime: new Date('2025-01-01T00:00:00.000Z'),
+        } as fs.Stats;
+      });
+
+      exportCommand(program);
+
+      await program.parseAsync(['node', 'test', 'export', 'logs', '--output', 'logs.gz']);
+
+      const header = vi.mocked(gzip.write).mock.calls[0][0] as Buffer;
+      const archivedFileName = header.subarray(0, 100).toString('utf8').replace(/\0.*$/, '');
+      expect(archivedFileName).not.toContain('\uFFFD');
+      expect(fileName.startsWith(archivedFileName)).toBe(true);
+    });
   });
 });
