@@ -534,7 +534,7 @@ export class LiveSession {
     const rejected = clientEventId ? `rejected ${command?.name ?? 'a client event'}` : undefined;
     // Codes such as moderation_blocked name a category word by word; identifiers in messages,
     // such as safety_identifier, don't make an error a safety intervention.
-    const labels = [apiError.code, apiError.type].map((label) => label?.replaceAll('_', ' '));
+    const labels = [apiError.code, apiError.type].map((label) => label?.replace(/_/g, ' '));
     if (GUARDRAIL_ERROR.test([...labels, apiError.message].filter(Boolean).join(' '))) {
       // Safety interventions are refusals, even when they reject one of promptfoo's commands.
       this.guardrailReason ??= `GPT-Live moderation ${rejected ?? 'interrupted the response'}${detail}`;
