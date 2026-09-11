@@ -175,9 +175,16 @@ export class ProviderRateLimitState extends EventEmitter {
       try {
         options.abortSignal?.throwIfAborted();
         const result = await callFn();
-        options.abortSignal?.throwIfAborted();
         const latencyMs = Date.now() - startTime;
         this.latencies.push(latencyMs);
+
+        if (options.abortSignal?.aborted) {
+          // Preserve a completed response's billing without retrying cancelled work.
+          slotHeld = false;
+          this.slotQueue.release();
+          this.failedRequests++;
+          return result;
+        }
 
         // Extract headers and check for rate limit
         const headers = options.getHeaders?.(result);

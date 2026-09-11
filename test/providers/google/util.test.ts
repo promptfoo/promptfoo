@@ -4397,6 +4397,52 @@ describe('util', () => {
   });
 
   describe('mergeGoogleCompletionOptions', () => {
+    it('lets a prompt disable provider-level passthrough function calls', () => {
+      const merged = mergeGoogleCompletionOptions(
+        {
+          passthrough: {
+            toolConfig: {
+              functionCallingConfig: { mode: 'ANY', allowedFunctionNames: ['lookup'] },
+              retrievalConfig: { languageCode: 'en-US' },
+            },
+          },
+        },
+        { tool_choice: 'none' },
+      );
+
+      expect(resolveGoogleToolConfig(merged)).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'NONE' },
+          retrievalConfig: { languageCode: 'en-US' },
+        },
+        toolsDisabled: true,
+      });
+    });
+
+    it('retains non-function snake-case passthrough settings under a prompt override', () => {
+      const merged = mergeGoogleCompletionOptions(
+        {
+          passthrough: {
+            tool_config: {
+              function_calling_config: { mode: 'ANY' },
+              retrieval_config: { language_code: 'en-US' },
+            },
+            customField: 'retained',
+          },
+        },
+        { tool_choice: 'none' },
+      );
+
+      expect(merged.passthrough?.customField).toBe('retained');
+      expect(resolveGoogleToolConfig(merged)).toEqual({
+        toolConfig: {
+          functionCallingConfig: { mode: 'NONE' },
+          retrievalConfig: { languageCode: 'en-US' },
+        },
+        toolsDisabled: true,
+      });
+    });
+
     it('treats prompt-level undefined as "not set" and preserves base policy', () => {
       const merged = mergeGoogleCompletionOptions(
         {

@@ -69,18 +69,29 @@ describe('ProviderRateLimitState', () => {
       expect(state.getMetrics().failedRequests).toBe(1);
     });
 
-    it('counts an aborted normalized response as a failure', async () => {
+    it('retains an aborted response without retrying or losing billing', async () => {
       const controller = new AbortController();
       await expect(
         state.executeWithRetry(
           'cancelled-request',
           async () => {
             controller.abort(new Error('cancelled'));
-            return { error: 'transport converted cancellation' };
+            return {
+              error: 'callback cancelled',
+              cost: 0.03,
+              tokenUsage: { total: 11 },
+              status: 429,
+            };
           },
-          { abortSignal: controller.signal },
+          { abortSignal: controller.signal, isRateLimited: (result) => result?.status === 429 },
         ),
-      ).rejects.toThrow('cancelled');
+      ).resolves.toMatchObject({
+        error: 'callback cancelled',
+        cost: 0.03,
+        tokenUsage: { total: 11 },
+      });
+      expect(state.getMetrics().activeRequests).toBe(0);
+      expect(state.getMetrics().retriedRequests).toBe(0);
       expect(state.getMetrics().completedRequests).toBe(0);
       expect(state.getMetrics().failedRequests).toBe(1);
     });

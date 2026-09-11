@@ -1645,7 +1645,10 @@ async function runEvalInternal({
   evalId,
   providerCallQueue,
   rateLimitRegistry,
-}: RunEvalOptions): Promise<EvaluateResult[]> {
+  onTargetResponse,
+}: RunEvalOptions & { onTargetResponse?: (row: EvaluateResult) => void }): Promise<
+  EvaluateResult[]
+> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
     typeof provider.delay === 'number',
@@ -1769,6 +1772,7 @@ async function runEvalInternal({
           if (response.tokenUsage) {
             accumulateResponseTokenUsage(ret.tokenUsage, response);
           }
+          onTargetResponse?.({ ...ret, tokenUsage: structuredClone(ret.tokenUsage) });
           // Row timeouts do not cancel deferred grading; the evaluation deadline does.
           const outcomeSignal =
             deferGrading && evaluateOptions
@@ -3101,6 +3105,7 @@ function adjustConcurrencyForSerialFeatures({
 interface ProcessEvalStepOptions {
   deferGrading?: boolean;
   onRowsReady?: () => void;
+  onTargetResponse?: (row: EvaluateResult) => void;
   precomputedRows?: EvaluateResult[];
   providerCallQueue?: ProviderCallQueue;
   shouldSkipStaleRows?: () => boolean;
@@ -3617,6 +3622,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     {
       deferGrading = false,
       onRowsReady,
+      onTargetResponse,
       precomputedRows,
       providerCallQueue,
       shouldSkipStaleRows,
@@ -3631,6 +3637,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           (await this.runEvalStepAfterBeforeEach(evalStep, {
             deferGrading,
             onRowsReady,
+            onTargetResponse,
             providerCallQueue,
             testSuite: context.testSuite,
           }));
@@ -3648,11 +3655,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     {
       deferGrading,
       onRowsReady,
+      onTargetResponse,
       providerCallQueue,
       testSuite,
     }: {
       deferGrading: boolean;
       onRowsReady?: () => void;
+      onTargetResponse?: (row: EvaluateResult) => void;
       providerCallQueue?: ProviderCallQueue;
       testSuite: TestSuite;
     },
@@ -3665,6 +3674,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const rows = await runEvalInternal({
       ...evalStep,
       deferGrading,
+      onTargetResponse,
       providerCallQueue: deferGrading ? providerCallQueue : undefined,
     });
     onRowsReady?.();
@@ -3824,6 +3834,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     let timeoutId: NodeJS.Timeout | undefined;
     let didTimeout = false;
+    let completedTarget: EvaluateResult | undefined;
     const clearEvalStepTimeout = () => {
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -3839,6 +3850,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           {
             deferGrading,
             onRowsReady: clearEvalStepTimeout,
+            onTargetResponse: (row) => {
+              if (!didTimeout) {
+                completedTarget = row;
+              }
+            },
             providerCallQueue,
             shouldSkipStaleRows: () => didTimeout,
           },
@@ -3856,7 +3872,25 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       if (!didTimeout) {
         throw error;
       }
-      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      if (completedTarget) {
+        await this.processEvalRows(
+          evalStep,
+          index,
+          [
+            {
+              ...completedTarget,
+              error: `Evaluation timed out after ${timeoutMs}ms`,
+              success: false,
+              score: 0,
+              failureReason: ResultFailureReason.ERROR,
+            },
+          ],
+          undefined,
+          context,
+        );
+      } else {
+        await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      }
     } finally {
       clearEvalStepTimeout();
     }

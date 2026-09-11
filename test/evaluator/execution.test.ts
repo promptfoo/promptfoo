@@ -36,64 +36,78 @@ afterEach(() => {
 });
 
 describeEvaluator('evaluator execution control', () => {
-  it.each(['provider transform', 'test transform', 'binary storage'])(
-    'retains a completed target when cancellation interrupts %s',
-    async (stage) => {
-      const controller = new AbortController();
-      const started = createDeferred<void>();
-      const pendingOperation = createDeferred<never>();
-      const wait = () => {
-        started.resolve();
-        return pendingOperation.promise;
-      };
-      const extraction =
-        stage === 'binary storage'
-          ? vi.spyOn(blobExtractor, 'extractAndStoreBinaryData').mockImplementationOnce(wait)
-          : undefined;
-      const transformSpy =
-        stage === 'binary storage' ? undefined : vi.mocked(transform).mockImplementationOnce(wait);
-      const provider: ApiProvider = {
-        id: () => 'completed-target',
-        ...(stage === 'provider transform' && { transform: 'provider transform' }),
-        callApi: vi.fn().mockResolvedValue({
-          output: 'ready',
-          cost: 0.03,
-          incurredCost: 0.02,
-          tokenUsage: { prompt: 7, completion: 4, total: 11, numRequests: 1 },
-        }),
-      };
-      const suite: TestSuite = {
-        providers: [provider],
-        prompts: [toPrompt('hello')],
-        tests: [stage === 'binary storage' ? {} : { options: { transform: 'test transform' } }],
-      };
-      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
-      const run = evaluate(suite, evalRecord, { abortSignal: controller.signal });
-      try {
-        await started.promise;
+  it.each(
+    ['provider transform', 'test transform', 'binary storage'].flatMap((stage) =>
+      ['cancellation', 'timeout'].map((stop) => [stage, stop]),
+    ),
+  )('retains a completed target when %s is interrupted by %s', async (stage, stop) => {
+    const controller = new AbortController();
+    const started = createDeferred<void>();
+    const pendingOperation = createDeferred<never>();
+    const wait = () => {
+      started.resolve();
+      return pendingOperation.promise;
+    };
+    const extraction =
+      stage === 'binary storage'
+        ? vi.spyOn(blobExtractor, 'extractAndStoreBinaryData').mockImplementationOnce(wait)
+        : undefined;
+    const transformSpy =
+      stage === 'binary storage' ? undefined : vi.mocked(transform).mockImplementationOnce(wait);
+    const provider: ApiProvider = {
+      id: () => 'completed-target',
+      ...(stage === 'provider transform' && { transform: 'provider transform' }),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'ready',
+        cost: 0.03,
+        incurredCost: 0.02,
+        tokenUsage: { prompt: 7, completion: 4, total: 11, numRequests: 1 },
+      }),
+    };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('hello')],
+      tests: [stage === 'binary storage' ? {} : { options: { transform: 'test transform' } }],
+    };
+    const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    if (stop === 'timeout') {
+      vi.useFakeTimers();
+    }
+    const run = evaluate(suite, evalRecord, {
+      abortSignal: controller.signal,
+      ...(stop === 'timeout' && { timeoutMs: 100 }),
+    });
+    try {
+      await started.promise;
+      if (stop === 'timeout') {
+        await vi.advanceTimersByTimeAsync(100);
+      } else {
         controller.abort(new Error('cancelled after target completed'));
-        await run.catch(() => undefined);
-        const results = await evalRecord.getResults();
-        expect(results).toHaveLength(1);
-        expect(asEvaluateResult(results[0])).toMatchObject({
-          response: { output: 'ready', tokenUsage: { total: 11, numRequests: 1 } },
-          cost: 0.03,
-          incurredCost: 0.02,
-          tokenUsage: { total: 11, numRequests: 1 },
-          success: false,
-          error: 'cancelled after target completed',
-          failureReason: ResultFailureReason.ERROR,
-        });
-        if (transformSpy) {
-          expect(transformSpy).toHaveBeenCalledOnce();
-        }
-      } finally {
-        pendingOperation.reject(new Error('fixture released'));
-        extraction?.mockRestore();
-        transformSpy?.mockRestore();
       }
-    },
-  );
+      await run.catch(() => undefined);
+      const results = await evalRecord.getResults();
+      expect(results).toHaveLength(1);
+      expect(asEvaluateResult(results[0])).toMatchObject({
+        response: { output: 'ready', tokenUsage: { total: 11, numRequests: 1 } },
+        cost: 0.03,
+        incurredCost: 0.02,
+        tokenUsage: { total: 11, numRequests: 1 },
+        success: false,
+        error:
+          stop === 'timeout'
+            ? 'Evaluation timed out after 100ms'
+            : 'cancelled after target completed',
+        failureReason: ResultFailureReason.ERROR,
+      });
+      if (transformSpy) {
+        expect(transformSpy).toHaveBeenCalledOnce();
+      }
+    } finally {
+      pendingOperation.reject(new Error('fixture released'));
+      extraction?.mockRestore();
+      transformSpy?.mockRestore();
+    }
+  });
 
   it.each([false, true])(
     'isolates overlapping evaluation cleanup (shared provider: %s)',
