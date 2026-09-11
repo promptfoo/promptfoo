@@ -93,11 +93,11 @@ Clean and attacked PDFs are saved through the configured media storage provider.
 
 Each test's `metadata.pdf` records `input`, `mode`, readable `text`, `templateText`, `templateStorageKey`, `templateHash`, `storageKey`, and `contentHash`. Hashes use `sha256:<hex digest>` identifiers so exports distinguish them from opaque credentials. The result table links to the attacked PDF and clean template when those storage files remain available.
 
-The strategy preserves the plugin's assertions and attack goal. Redteam graders receive the readable document and companion inputs in place of PDF bytes. `metadata.originalText` retains the injected payload. Scanned-mode grading uses the text used to render the PDF; the target must actually support visual PDF reading or OCR.
+The strategy preserves the plugin's assertions and attack goal. Redteam graders receive the readable document and companion inputs. Companion attachments use their recorded readable content when available; otherwise, the grader sees an explicit omitted-attachment marker. Attachment bytes are excluded from the grading prompt. `metadata.originalText` retains the injected payload. Scanned-mode grading uses the text used to render the PDF; the target must actually support visual PDF reading or OCR.
 
 ## Limits
 
-- Single-turn generation only. In a `layer`, `pdf` must be the final step, and earlier steps must preserve multi-input JSON. Multi-turn runtime PDF transforms are rejected.
+- Standalone, single-turn generation only. Configure `pdf` directly under `redteam.strategies`; it can run alongside other strategies, but cannot be a step inside `layer`. Multi-turn runtime PDF transforms are rejected.
 - Templates must be unencrypted PDFs with extractable text. Image-only source templates are not supported; generate image-only output with `mode: scanned`.
 - Input and output files are limited to 5 MiB and 10 pages, including appended notes. Page dimensions must be between 1 and 20 inches.
 - New text uses Helvetica's Latin character set. Unsupported characters cause an error instead of disappearing. Existing template fonts remain intact in text mode.
