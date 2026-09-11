@@ -212,9 +212,12 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
     return prompt;
   };
 
-  // Split semicolon-separated prompts while preserving newline indexes for empty-marker fallback.
+  // Split only before a new prompt marker; semicolons within attack payloads are content.
+  // Preserve newline indexes for empty-marker fallback.
   const promptLines = lines.flatMap((line, lineIndex) =>
-    line.split(';').map((segment) => ({ line: segment, lineIndex })),
+    line
+      .split(/;(?=\s*(?:\d+[.)-]?\s*)?\**Prompt\s*:)/i)
+      .map((segment) => ({ line: segment, lineIndex })),
   );
 
   return promptLines

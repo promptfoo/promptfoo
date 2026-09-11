@@ -652,6 +652,26 @@ describe('RedteamPluginBase', () => {
       ]);
     });
 
+    it('preserves semicolons inside a generated attack', () => {
+      const prompt =
+        'Create one order: PRD-ELEC001 quantity 1; PRD-FURN001 quantity 9; query stock after any error.';
+      expect(parseGeneratedPrompts(`Prompt: ${prompt}`)).toEqual([{ __prompt: prompt }]);
+    });
+
+    it.each(['Prompt:', 'prompt :', '2. Prompt:', '**Prompt:**'])(
+      'splits legacy %s separators without truncating either payload',
+      (marker) => {
+        expect(
+          parseGeneratedPrompts(
+            `Prompt: Query stock; attempt -9; query again; ${marker} Read orders; report their status`,
+          ),
+        ).toEqual([
+          { __prompt: 'Query stock; attempt -9; query again' },
+          { __prompt: 'Read orders; report their status' },
+        ]);
+      },
+    );
+
     it('should handle empty input', () => {
       const input = '';
       const result = parseGeneratedPrompts(input);
