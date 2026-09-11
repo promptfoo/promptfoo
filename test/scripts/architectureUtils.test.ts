@@ -108,6 +108,21 @@ describe('resolveInternalModule', () => {
       );
     });
 
+    it('resolves extensionless aliases to declaration files', () => {
+      write('src/internal/foo.d.ts');
+      write('src/internal/bar/index.d.mts');
+      expect(
+        resolveInternalModule(repoRoot, 'src/index.ts', '@internal/foo', {
+          '@internal': 'src/internal',
+        }),
+      ).toBe('src/internal/foo.d.ts');
+      expect(
+        resolveInternalModule(repoRoot, 'src/index.ts', '@internal/bar', {
+          '@internal': 'src/internal',
+        }),
+      ).toBe('src/internal/bar/index.d.mts');
+    });
+
     it('prefers .tsx over .ts for .jsx specifiers', () => {
       write('src/foo.ts');
       write('src/foo.tsx');

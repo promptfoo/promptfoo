@@ -51,6 +51,7 @@ const DEFAULT_SOURCE_ROOTS = ['src', 'packages'];
 
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
 const SOURCE_EXTENSIONS = [...TYPESCRIPT_EXTENSIONS, '.js', '.jsx', '.mjs', '.cjs'];
+const DECLARATION_EXTENSIONS = ['.d.ts', '.d.mts', '.d.cts'];
 const DIRECTORY_INDEXES = SOURCE_EXTENSIONS.map((extension) => `index${extension}`);
 const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
   '.js': ['.ts', '.tsx'],
@@ -388,7 +389,9 @@ export function resolveInternalModule(
     ...runtimeSourceCandidates,
     unresolvedPath,
     ...SOURCE_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
+    ...DECLARATION_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
     ...DIRECTORY_INDEXES.map((indexFile) => path.join(unresolvedPath, indexFile)),
+    ...DECLARATION_EXTENSIONS.map((extension) => path.join(unresolvedPath, `index${extension}`)),
   ];
 
   for (const candidate of candidates) {
@@ -397,7 +400,8 @@ export function resolveInternalModule(
       if (
         sourceRoots.some((root) => isWithinRoot(relativeCandidate, root)) &&
         !relativeCandidate.split('/').includes('node_modules') &&
-        SOURCE_EXTENSIONS.includes(path.extname(relativeCandidate))
+        (SOURCE_EXTENSIONS.includes(path.extname(relativeCandidate)) ||
+          DECLARATION_EXTENSIONS.some((extension) => relativeCandidate.endsWith(extension)))
       ) {
         return relativeCandidate;
       }
