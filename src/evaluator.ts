@@ -1007,7 +1007,7 @@ async function collectExternalTraceAfterProviderCall({
 
   try {
     if (needsTraceForGrading) {
-      await flushOtel();
+      await awaitProviderOperation(flushOtel(), abortSignal);
     }
 
     logger.debug(`[Evaluator] Fetching traces from external provider for traceId=${traceId}`);
@@ -1445,7 +1445,7 @@ async function gradeRunEvalResponse({
     hasTraceAwareAssertions(test.assert) &&
     !isExternalTraceProvider(testSuite?.tracing?.provider)
   ) {
-    await flushOtel();
+    await awaitProviderOperation(flushOtel(), abortSignal);
   }
 
   const assertionProviderResponse = {
