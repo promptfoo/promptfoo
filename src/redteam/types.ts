@@ -52,186 +52,188 @@ export interface TracingConfig {
   strategies?: Record<string, TracingConfig>;
 }
 
-export const PluginConfigSchema = z.object({
-  /** Example inputs used to steer red-team test generation. */
-  examples: z.array(z.string()).optional(),
-  /** Example grader outputs used to calibrate plugin-specific grading. */
-  graderExamples: z
-    .array(
-      z.object({
-        output: z.string(),
-        pass: z.boolean(),
-        score: z.number(),
-        reason: z.string(),
-      }),
-    )
-    .optional(),
-  /** Additional rubric guidance passed to plugin graders. */
-  graderGuidance: z.string().optional(),
-  /** Severity override for the generated finding. */
-  severity: SeveritySchema.optional(),
-  /** Language or languages requested for generated tests. */
-  language: z.union([z.string(), z.array(z.string())]).optional(),
-  /** Prompt override used by plugins that accept custom generation prompts. */
-  prompt: z.string().optional(),
-  /** System purpose override supplied to plugin generation. */
-  purpose: z.string().optional(),
-  /** Plugin-specific behavior modifiers such as tone or style. */
-  // TODO: should be z.record(Modifier, z.unknown())
-  modifiers: z.record(z.string(), z.unknown()).optional(),
-  /** Target identifiers used by BOLA-style authorization plugins. */
-  targetIdentifiers: z.array(z.string()).optional(),
-  /** Target systems used by BFLA-style authorization plugins. */
-  targetSystems: z.array(z.string()).optional(),
-  /** Whether competitor-oriented plugins may mention the configured competitor names. */
-  mentions: z.boolean().optional(),
-  /** URLs used by SSRF-oriented plugins as candidate targets. */
-  targetUrls: z.array(z.string()).optional(),
-  /** Severity threshold that marks an SSRF probe as failed. */
-  ssrfFailThreshold: z.enum(['low', 'medium', 'high', 'critical']).optional(),
-  /** Subject name used by PII-oriented plugins. */
-  name: z.string().optional(),
-  /** Whether CyberSecEval-style plugins should generate multilingual probes. */
-  multilingual: z.boolean().optional(),
+export const PluginConfigSchema = z
+  .object({
+    /** Example inputs used to steer red-team test generation. */
+    examples: z.array(z.string()).optional(),
+    /** Example grader outputs used to calibrate plugin-specific grading. */
+    graderExamples: z
+      .array(
+        z.object({
+          output: z.string(),
+          pass: z.boolean(),
+          score: z.number(),
+          reason: z.string(),
+        }),
+      )
+      .optional(),
+    /** Additional rubric guidance passed to plugin graders. */
+    graderGuidance: z.string().optional(),
+    /** Severity override for the generated finding. */
+    severity: SeveritySchema.optional(),
+    /** Language or languages requested for generated tests. */
+    language: z.union([z.string(), z.array(z.string())]).optional(),
+    /** Prompt override used by plugins that accept custom generation prompts. */
+    prompt: z.string().optional(),
+    /** System purpose override supplied to plugin generation. */
+    purpose: z.string().optional(),
+    /** Plugin-specific behavior modifiers such as tone or style. */
+    // TODO: should be z.record(Modifier, z.unknown())
+    modifiers: z.record(z.string(), z.unknown()).optional(),
+    /** Target identifiers used by BOLA-style authorization plugins. */
+    targetIdentifiers: z.array(z.string()).optional(),
+    /** Target systems used by BFLA-style authorization plugins. */
+    targetSystems: z.array(z.string()).optional(),
+    /** Whether competitor-oriented plugins may mention the configured competitor names. */
+    mentions: z.boolean().optional(),
+    /** URLs used by SSRF-oriented plugins as candidate targets. */
+    targetUrls: z.array(z.string()).optional(),
+    /** Severity threshold that marks an SSRF probe as failed. */
+    ssrfFailThreshold: z.enum(['low', 'medium', 'high', 'critical']).optional(),
+    /** Subject name used by PII-oriented plugins. */
+    name: z.string().optional(),
+    /** Whether CyberSecEval-style plugins should generate multilingual probes. */
+    multilingual: z.boolean().optional(),
 
-  /** Variable name that receives the indirect prompt-injection payload. */
-  indirectInjectionVar: z.string().optional(),
-  /** Expected retrieval results used by RAG-poisoning plugins. */
-  intendedResults: z.array(z.string()).optional(),
-  /** Intent label or labels used by intent-aware plugins. */
-  intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
-  /** Policy text or policy id used by policy-aware plugins. */
-  policy: z.union([z.string(), PolicyObjectSchema]).optional(),
-  /** System prompt supplied to plugins that need the target instructions explicitly. */
-  systemPrompt: z.string().optional(),
-  /** Strategy ids this plugin should not be combined with. */
-  excludeStrategies: z.array(z.string()).optional(),
+    /** Variable name that receives the indirect prompt-injection payload. */
+    indirectInjectionVar: z.string().optional(),
+    /** Expected retrieval results used by RAG-poisoning plugins. */
+    intendedResults: z.array(z.string()).optional(),
+    /** Intent label or labels used by intent-aware plugins. */
+    intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
+    /** Policy text or policy id used by policy-aware plugins. */
+    policy: z.union([z.string(), PolicyObjectSchema]).optional(),
+    /** System prompt supplied to plugins that need the target instructions explicitly. */
+    systemPrompt: z.string().optional(),
+    /** Strategy ids this plugin should not be combined with. */
+    excludeStrategies: z.array(z.string()).optional(),
 
-  /** Single protected file path used by coding-agent fixtures. */
-  protectedFilePath: z.string().optional(),
-  /** Multiple protected file paths used by coding-agent fixtures. */
-  protectedFilePaths: z.array(z.string()).optional(),
-  /** Single secret file path used by coding-agent fixtures. */
-  secretFilePath: z.string().optional(),
-  /** Multiple secret file paths used by coding-agent fixtures. */
-  secretFilePaths: z.array(z.string()).optional(),
-  /** Single local secret file path used by coding-agent fixtures. */
-  secretLocalFilePath: z.string().optional(),
-  /** Multiple local secret file paths used by coding-agent fixtures. */
-  secretLocalFilePaths: z.array(z.string()).optional(),
-  /** Single expected secret file value used by coding-agent fixtures. */
-  secretFileValue: z.string().optional(),
-  /** Multiple expected secret file values used by coding-agent fixtures. */
-  secretFileValues: z.array(z.string()).optional(),
-  /** Single path outside the workspace that must not be written. */
-  outsideWritePath: z.string().optional(),
-  /** Multiple paths outside the workspace that must not be written. */
-  outsideWritePaths: z.array(z.string()).optional(),
-  /** Single host path outside the workspace used by write-safety fixtures. */
-  outsideWriteHostPath: z.string().optional(),
-  /** Multiple host paths outside the workspace used by write-safety fixtures. */
-  outsideWriteHostPaths: z.array(z.string()).optional(),
-  /** Single probe directory outside the workspace used by write-safety fixtures. */
-  outsideWriteProbeDir: z.string().optional(),
-  /** Multiple probe directories outside the workspace used by write-safety fixtures. */
-  outsideWriteProbeDirs: z.array(z.string()).optional(),
-  /** Single outside path that is explicitly allowed to be written. */
-  outsideWriteAllowedPath: z.string().optional(),
-  /** Multiple outside paths that are explicitly allowed to be written. */
-  outsideWriteAllowedPaths: z.array(z.string()).optional(),
-  /** Expected SHA-256 hash for an outside-write fixture artifact. */
-  outsideWriteExpectedSha256: z.string().optional(),
-  /** SHA-256 hash of the outside path contents before the run. */
-  outsideWritePathSha256: z.string().optional(),
-  /** SHA-256 hash used by outside-write fixture checks. */
-  outsideWriteSha256: z.string().optional(),
-  /** Single outside path that must remain absent after the run. */
-  outsideWriteMustNotExistPath: z.string().optional(),
-  /** Multiple outside paths that must remain absent after the run. */
-  outsideWriteMustNotExistPaths: z.array(z.string()).optional(),
-  /** Single path that must not exist after the run. */
-  mustNotExistPath: z.string().optional(),
-  /** Multiple paths that must not exist after the run. */
-  mustNotExistPaths: z.array(z.string()).optional(),
-  /** Single protected write target used by fixture checks. */
-  protectedWritePath: z.string().optional(),
-  /** Multiple protected write targets used by fixture checks. */
-  protectedWritePaths: z.array(z.string()).optional(),
-  /** Single sandbox path used by fixture checks. */
-  sandboxWritePath: z.string().optional(),
-  /** Multiple sandbox paths used by fixture checks. */
-  sandboxWritePaths: z.array(z.string()).optional(),
-  /** Single artifact root used by verifier fixtures. */
-  verifierArtifactRoot: z.string().optional(),
-  /** Multiple artifact roots used by verifier fixtures. */
-  verifierArtifactRoots: z.array(z.string()).optional(),
-  /** Single verifier probe directory used by fixture checks. */
-  verifierProbeDir: z.string().optional(),
-  /** Multiple verifier probe directories used by fixture checks. */
-  verifierProbeDirs: z.array(z.string()).optional(),
-  /** Single workspace path supplied to coding-agent fixtures. */
-  workspacePath: z.string().optional(),
-  /** Multiple workspace paths supplied to coding-agent fixtures. */
-  workspacePaths: z.array(z.string()).optional(),
-  /** Single workspace root supplied to coding-agent fixtures. */
-  workspaceRoot: z.string().optional(),
-  /** Multiple workspace roots supplied to coding-agent fixtures. */
-  workspaceRoots: z.array(z.string()).optional(),
-  /** Preferred working directory supplied to coding-agent fixtures. */
-  workingDirectory: z.string().optional(),
-  /** Explicit working-directory path supplied to coding-agent fixtures. */
-  workingDirectoryPath: z.string().optional(),
-  /** Short-form working directory alias supplied to coding-agent fixtures. */
-  workingDir: z.string().optional(),
-  /** Single URL used to detect outbound network egress. */
-  networkEgressUrl: z.string().optional(),
-  /** Multiple URLs used to detect outbound network egress. */
-  networkEgressUrls: z.array(z.string()).optional(),
-  /** Single trap URL used by network-safety fixtures. */
-  networkTrapUrl: z.string().optional(),
-  /** Multiple trap URLs used by network-safety fixtures. */
-  networkTrapUrls: z.array(z.string()).optional(),
-  /** Single host used to detect outbound network egress. */
-  networkEgressHost: z.string().optional(),
-  /** Multiple hosts used to detect outbound network egress. */
-  networkEgressHosts: z.array(z.string()).optional(),
-  /** Single trap host used by network-safety fixtures. */
-  networkTrapHost: z.string().optional(),
-  /** Multiple trap hosts used by network-safety fixtures. */
-  networkTrapHosts: z.array(z.string()).optional(),
-  /** Single host explicitly allowed by network-safety fixtures. */
-  networkAllowedHost: z.string().optional(),
-  /** Multiple hosts explicitly allowed by network-safety fixtures. */
-  networkAllowedHosts: z.array(z.string()).optional(),
-  /** Single URL explicitly allowed by network-safety fixtures. */
-  networkAllowedUrl: z.string().optional(),
-  /** Multiple URLs explicitly allowed by network-safety fixtures. */
-  networkAllowedUrls: z.array(z.string()).optional(),
-  /** Single trap-log path inspected by network-safety fixtures. */
-  networkTrapLogPath: z.string().optional(),
-  /** Multiple trap-log paths inspected by network-safety fixtures. */
-  networkTrapLogPaths: z.array(z.string()).optional(),
-  /** Single path scanned for network-safety fixture artifacts. */
-  networkScanPath: z.string().optional(),
-  /** Multiple paths scanned for network-safety fixture artifacts. */
-  networkScanPaths: z.array(z.string()).optional(),
-  /** Single workspace path used by network-safety fixtures. */
-  networkWorkspacePath: z.string().optional(),
-  /** Multiple workspace paths used by network-safety fixtures. */
-  networkWorkspacePaths: z.array(z.string()).optional(),
-  /** Single receipt string expected from a network-egress fixture. */
-  networkEgressReceipt: z.string().optional(),
-  /** Multiple receipt strings expected from network-egress fixtures. */
-  networkEgressReceipts: z.array(z.string()).optional(),
+    /** Single protected file path used by coding-agent fixtures. */
+    protectedFilePath: z.string().optional(),
+    /** Multiple protected file paths used by coding-agent fixtures. */
+    protectedFilePaths: z.array(z.string()).optional(),
+    /** Single secret file path used by coding-agent fixtures. */
+    secretFilePath: z.string().optional(),
+    /** Multiple secret file paths used by coding-agent fixtures. */
+    secretFilePaths: z.array(z.string()).optional(),
+    /** Single local secret file path used by coding-agent fixtures. */
+    secretLocalFilePath: z.string().optional(),
+    /** Multiple local secret file paths used by coding-agent fixtures. */
+    secretLocalFilePaths: z.array(z.string()).optional(),
+    /** Single expected secret file value used by coding-agent fixtures. */
+    secretFileValue: z.string().optional(),
+    /** Multiple expected secret file values used by coding-agent fixtures. */
+    secretFileValues: z.array(z.string()).optional(),
+    /** Single path outside the workspace that must not be written. */
+    outsideWritePath: z.string().optional(),
+    /** Multiple paths outside the workspace that must not be written. */
+    outsideWritePaths: z.array(z.string()).optional(),
+    /** Single host path outside the workspace used by write-safety fixtures. */
+    outsideWriteHostPath: z.string().optional(),
+    /** Multiple host paths outside the workspace used by write-safety fixtures. */
+    outsideWriteHostPaths: z.array(z.string()).optional(),
+    /** Single probe directory outside the workspace used by write-safety fixtures. */
+    outsideWriteProbeDir: z.string().optional(),
+    /** Multiple probe directories outside the workspace used by write-safety fixtures. */
+    outsideWriteProbeDirs: z.array(z.string()).optional(),
+    /** Single outside path that is explicitly allowed to be written. */
+    outsideWriteAllowedPath: z.string().optional(),
+    /** Multiple outside paths that are explicitly allowed to be written. */
+    outsideWriteAllowedPaths: z.array(z.string()).optional(),
+    /** Expected SHA-256 hash for an outside-write fixture artifact. */
+    outsideWriteExpectedSha256: z.string().optional(),
+    /** SHA-256 hash of the outside path contents before the run. */
+    outsideWritePathSha256: z.string().optional(),
+    /** SHA-256 hash used by outside-write fixture checks. */
+    outsideWriteSha256: z.string().optional(),
+    /** Single outside path that must remain absent after the run. */
+    outsideWriteMustNotExistPath: z.string().optional(),
+    /** Multiple outside paths that must remain absent after the run. */
+    outsideWriteMustNotExistPaths: z.array(z.string()).optional(),
+    /** Single path that must not exist after the run. */
+    mustNotExistPath: z.string().optional(),
+    /** Multiple paths that must not exist after the run. */
+    mustNotExistPaths: z.array(z.string()).optional(),
+    /** Single protected write target used by fixture checks. */
+    protectedWritePath: z.string().optional(),
+    /** Multiple protected write targets used by fixture checks. */
+    protectedWritePaths: z.array(z.string()).optional(),
+    /** Single sandbox path used by fixture checks. */
+    sandboxWritePath: z.string().optional(),
+    /** Multiple sandbox paths used by fixture checks. */
+    sandboxWritePaths: z.array(z.string()).optional(),
+    /** Single artifact root used by verifier fixtures. */
+    verifierArtifactRoot: z.string().optional(),
+    /** Multiple artifact roots used by verifier fixtures. */
+    verifierArtifactRoots: z.array(z.string()).optional(),
+    /** Single verifier probe directory used by fixture checks. */
+    verifierProbeDir: z.string().optional(),
+    /** Multiple verifier probe directories used by fixture checks. */
+    verifierProbeDirs: z.array(z.string()).optional(),
+    /** Single workspace path supplied to coding-agent fixtures. */
+    workspacePath: z.string().optional(),
+    /** Multiple workspace paths supplied to coding-agent fixtures. */
+    workspacePaths: z.array(z.string()).optional(),
+    /** Single workspace root supplied to coding-agent fixtures. */
+    workspaceRoot: z.string().optional(),
+    /** Multiple workspace roots supplied to coding-agent fixtures. */
+    workspaceRoots: z.array(z.string()).optional(),
+    /** Preferred working directory supplied to coding-agent fixtures. */
+    workingDirectory: z.string().optional(),
+    /** Explicit working-directory path supplied to coding-agent fixtures. */
+    workingDirectoryPath: z.string().optional(),
+    /** Short-form working directory alias supplied to coding-agent fixtures. */
+    workingDir: z.string().optional(),
+    /** Single URL used to detect outbound network egress. */
+    networkEgressUrl: z.string().optional(),
+    /** Multiple URLs used to detect outbound network egress. */
+    networkEgressUrls: z.array(z.string()).optional(),
+    /** Single trap URL used by network-safety fixtures. */
+    networkTrapUrl: z.string().optional(),
+    /** Multiple trap URLs used by network-safety fixtures. */
+    networkTrapUrls: z.array(z.string()).optional(),
+    /** Single host used to detect outbound network egress. */
+    networkEgressHost: z.string().optional(),
+    /** Multiple hosts used to detect outbound network egress. */
+    networkEgressHosts: z.array(z.string()).optional(),
+    /** Single trap host used by network-safety fixtures. */
+    networkTrapHost: z.string().optional(),
+    /** Multiple trap hosts used by network-safety fixtures. */
+    networkTrapHosts: z.array(z.string()).optional(),
+    /** Single host explicitly allowed by network-safety fixtures. */
+    networkAllowedHost: z.string().optional(),
+    /** Multiple hosts explicitly allowed by network-safety fixtures. */
+    networkAllowedHosts: z.array(z.string()).optional(),
+    /** Single URL explicitly allowed by network-safety fixtures. */
+    networkAllowedUrl: z.string().optional(),
+    /** Multiple URLs explicitly allowed by network-safety fixtures. */
+    networkAllowedUrls: z.array(z.string()).optional(),
+    /** Single trap-log path inspected by network-safety fixtures. */
+    networkTrapLogPath: z.string().optional(),
+    /** Multiple trap-log paths inspected by network-safety fixtures. */
+    networkTrapLogPaths: z.array(z.string()).optional(),
+    /** Single path scanned for network-safety fixture artifacts. */
+    networkScanPath: z.string().optional(),
+    /** Multiple paths scanned for network-safety fixture artifacts. */
+    networkScanPaths: z.array(z.string()).optional(),
+    /** Single workspace path used by network-safety fixtures. */
+    networkWorkspacePath: z.string().optional(),
+    /** Multiple workspace paths used by network-safety fixtures. */
+    networkWorkspacePaths: z.array(z.string()).optional(),
+    /** Single receipt string expected from a network-egress fixture. */
+    networkEgressReceipt: z.string().optional(),
+    /** Multiple receipt strings expected from network-egress fixtures. */
+    networkEgressReceipts: z.array(z.string()).optional(),
 
-  /** Multi-variable input definitions used while generating test cases. */
-  inputs: InputsSchema.optional(),
-  /** Maximum generated characters per conversation message. */
-  maxCharsPerMessage: z.number().int().positive().optional(),
+    /** Multi-variable input definitions used while generating test cases. */
+    inputs: InputsSchema.optional(),
+    /** Maximum generated characters per conversation message. */
+    maxCharsPerMessage: z.number().int().positive().optional(),
 
-  /** Nonce used to prevent reuse of cached generated test cases. */
-  __nonce: z.number().optional(),
-});
+    /** Nonce used to prevent reuse of cached generated test cases. */
+    __nonce: z.number().optional(),
+  })
+  .catchall(z.unknown());
 
 /**
  * Example grader outcome used to calibrate plugin-specific red-team grading.
@@ -276,180 +278,7 @@ export interface PluginGraderExample {
  *
  * @public
  */
-export interface PluginConfig {
-  /** Example inputs used to steer red-team test generation. */
-  examples?: string[];
-  /** Example grader outputs used to calibrate plugin-specific grading. */
-  graderExamples?: PluginGraderExample[];
-  /** Additional rubric guidance passed to plugin graders. */
-  graderGuidance?: string;
-  /** Severity override for the generated finding. */
-  severity?: Severity;
-  /** Language or languages requested for generated tests. */
-  language?: string | string[];
-  /** Prompt override used by plugins that accept custom generation prompts. */
-  prompt?: string;
-  /** System purpose override supplied to plugin generation. */
-  purpose?: string;
-  /** Plugin-specific behavior modifiers such as tone or style. */
-  modifiers?: Record<string, unknown>;
-  /** Target identifiers used by BOLA-style authorization plugins. */
-  targetIdentifiers?: string[];
-  /** Target systems used by BFLA-style authorization plugins. */
-  targetSystems?: string[];
-  /** Whether competitor-oriented plugins may mention the configured competitor names. */
-  mentions?: boolean;
-  /** URLs used by SSRF-oriented plugins as candidate targets. */
-  targetUrls?: string[];
-  /** Severity threshold that marks an SSRF probe as failed. */
-  ssrfFailThreshold?: 'low' | 'medium' | 'high' | 'critical';
-  /** Subject name used by PII-oriented plugins. */
-  name?: string;
-  /** Whether CyberSecEval-style plugins should generate multilingual probes. */
-  multilingual?: boolean;
-  /** Variable name that receives the indirect prompt-injection payload. */
-  indirectInjectionVar?: string;
-  /** Expected retrieval results used by RAG-poisoning plugins. */
-  intendedResults?: string[];
-  /** Intent label or labels used by intent-aware plugins. */
-  intent?: string | (string | string[])[];
-  /** Policy text or policy id used by policy-aware plugins. */
-  policy?: Policy;
-  /** System prompt supplied to plugins that need the target instructions explicitly. */
-  systemPrompt?: string;
-  /** Strategy ids this plugin should not be combined with. */
-  excludeStrategies?: string[];
-  /** Single protected file path used by coding-agent fixtures. */
-  protectedFilePath?: string;
-  /** Multiple protected file paths used by coding-agent fixtures. */
-  protectedFilePaths?: string[];
-  /** Single secret file path used by coding-agent fixtures. */
-  secretFilePath?: string;
-  /** Multiple secret file paths used by coding-agent fixtures. */
-  secretFilePaths?: string[];
-  /** Single local secret file path used by coding-agent fixtures. */
-  secretLocalFilePath?: string;
-  /** Multiple local secret file paths used by coding-agent fixtures. */
-  secretLocalFilePaths?: string[];
-  /** Single expected secret file value used by coding-agent fixtures. */
-  secretFileValue?: string;
-  /** Multiple expected secret file values used by coding-agent fixtures. */
-  secretFileValues?: string[];
-  /** Single path outside the workspace that must not be written. */
-  outsideWritePath?: string;
-  /** Multiple paths outside the workspace that must not be written. */
-  outsideWritePaths?: string[];
-  /** Single host path outside the workspace used by write-safety fixtures. */
-  outsideWriteHostPath?: string;
-  /** Multiple host paths outside the workspace used by write-safety fixtures. */
-  outsideWriteHostPaths?: string[];
-  /** Single probe directory outside the workspace used by write-safety fixtures. */
-  outsideWriteProbeDir?: string;
-  /** Multiple probe directories outside the workspace used by write-safety fixtures. */
-  outsideWriteProbeDirs?: string[];
-  /** Single outside path that is explicitly allowed to be written. */
-  outsideWriteAllowedPath?: string;
-  /** Multiple outside paths that are explicitly allowed to be written. */
-  outsideWriteAllowedPaths?: string[];
-  /** Expected SHA-256 hash for an outside-write fixture artifact. */
-  outsideWriteExpectedSha256?: string;
-  /** SHA-256 hash of the outside path contents before the run. */
-  outsideWritePathSha256?: string;
-  /** SHA-256 hash used by outside-write fixture checks. */
-  outsideWriteSha256?: string;
-  /** Single outside path that must remain absent after the run. */
-  outsideWriteMustNotExistPath?: string;
-  /** Multiple outside paths that must remain absent after the run. */
-  outsideWriteMustNotExistPaths?: string[];
-  /** Single path that must not exist after the run. */
-  mustNotExistPath?: string;
-  /** Multiple paths that must not exist after the run. */
-  mustNotExistPaths?: string[];
-  /** Single protected write target used by fixture checks. */
-  protectedWritePath?: string;
-  /** Multiple protected write targets used by fixture checks. */
-  protectedWritePaths?: string[];
-  /** Single sandbox path used by fixture checks. */
-  sandboxWritePath?: string;
-  /** Multiple sandbox paths used by fixture checks. */
-  sandboxWritePaths?: string[];
-  /** Single artifact root used by verifier fixtures. */
-  verifierArtifactRoot?: string;
-  /** Multiple artifact roots used by verifier fixtures. */
-  verifierArtifactRoots?: string[];
-  /** Single verifier probe directory used by fixture checks. */
-  verifierProbeDir?: string;
-  /** Multiple verifier probe directories used by fixture checks. */
-  verifierProbeDirs?: string[];
-  /** Single workspace path supplied to coding-agent fixtures. */
-  workspacePath?: string;
-  /** Multiple workspace paths supplied to coding-agent fixtures. */
-  workspacePaths?: string[];
-  /** Single workspace root supplied to coding-agent fixtures. */
-  workspaceRoot?: string;
-  /** Multiple workspace roots supplied to coding-agent fixtures. */
-  workspaceRoots?: string[];
-  /** Preferred working directory supplied to coding-agent fixtures. */
-  workingDirectory?: string;
-  /** Explicit working-directory path supplied to coding-agent fixtures. */
-  workingDirectoryPath?: string;
-  /** Short-form working directory alias supplied to coding-agent fixtures. */
-  workingDir?: string;
-  /** Single URL used to detect outbound network egress. */
-  networkEgressUrl?: string;
-  /** Multiple URLs used to detect outbound network egress. */
-  networkEgressUrls?: string[];
-  /** Single trap URL used by network-safety fixtures. */
-  networkTrapUrl?: string;
-  /** Multiple trap URLs used by network-safety fixtures. */
-  networkTrapUrls?: string[];
-  /** Single host used to detect outbound network egress. */
-  networkEgressHost?: string;
-  /** Multiple hosts used to detect outbound network egress. */
-  networkEgressHosts?: string[];
-  /** Single trap host used by network-safety fixtures. */
-  networkTrapHost?: string;
-  /** Multiple trap hosts used by network-safety fixtures. */
-  networkTrapHosts?: string[];
-  /** Single host explicitly allowed by network-safety fixtures. */
-  networkAllowedHost?: string;
-  /** Multiple hosts explicitly allowed by network-safety fixtures. */
-  networkAllowedHosts?: string[];
-  /** Single URL explicitly allowed by network-safety fixtures. */
-  networkAllowedUrl?: string;
-  /** Multiple URLs explicitly allowed by network-safety fixtures. */
-  networkAllowedUrls?: string[];
-  /** Single trap-log path inspected by network-safety fixtures. */
-  networkTrapLogPath?: string;
-  /** Multiple trap-log paths inspected by network-safety fixtures. */
-  networkTrapLogPaths?: string[];
-  /** Single path scanned for network-safety fixture artifacts. */
-  networkScanPath?: string;
-  /** Multiple paths scanned for network-safety fixture artifacts. */
-  networkScanPaths?: string[];
-  /** Single workspace path used by network-safety fixtures. */
-  networkWorkspacePath?: string;
-  /** Multiple workspace paths used by network-safety fixtures. */
-  networkWorkspacePaths?: string[];
-  /** Single receipt string expected from a network-egress fixture. */
-  networkEgressReceipt?: string;
-  /** Multiple receipt strings expected from network-egress fixtures. */
-  networkEgressReceipts?: string[];
-  /**
-   * Multi-variable input definitions used while generating test cases.
-   *
-   * Each key is the variable name. Use a short description string for simple
-   * text inputs, or an object when the input needs a declared media type or
-   * generation guidance.
-   */
-  inputs?: Inputs;
-  /** Maximum generated characters per conversation message. */
-  maxCharsPerMessage?: number;
-  /** Nonce used to prevent reuse of cached generated test cases. */
-  __nonce?: number;
-  /** Additional plugin-specific settings preserved for custom integrations. */
-  [key: string]: unknown;
-}
+export interface PluginConfig extends z.infer<typeof PluginConfigSchema> {}
 
 export const StrategyConfigSchema = z
   .object({
