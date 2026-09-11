@@ -209,7 +209,10 @@ function projectGradingResultForRedteamReport(gradingResult: GradingResult): Gra
       typeof gradingResult.score === 'number' && Number.isFinite(gradingResult.score)
         ? gradingResult.score
         : 0,
-    reason: typeof gradingResult.reason === 'string' ? gradingResult.reason : '',
+    reason:
+      typeof gradingResult.reason === 'string'
+        ? gradingResult.reason.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
+        : '',
     ...(assertion && { assertion }),
     ...(suggestions !== undefined && { suggestions }),
     ...(componentResults !== undefined && { componentResults }),
@@ -227,7 +230,18 @@ function projectVarsForRedteamReport(
   const projectedVars: [string, EvaluateResult['vars'][string]][] = [];
   for (const key of new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])) {
     if (Object.prototype.hasOwnProperty.call(vars, key)) {
-      projectedVars.push([key, vars[key]]);
+      const value = vars[key];
+      if (typeof value === 'string') {
+        projectedVars.push([key, value.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)]);
+      } else if (isRecord(value) || Array.isArray(value)) {
+        try {
+          if (JSON.stringify(value).length <= MAX_COMPACT_HISTORY_TEXT_LENGTH) {
+            projectedVars.push([key, value]);
+          }
+        } catch {}
+      } else {
+        projectedVars.push([key, value]);
+      }
     }
   }
   return Object.fromEntries(projectedVars);
@@ -2505,7 +2519,7 @@ export default class Eval {
               WHEN 'null' THEN json('null')
               WHEN 'array' THEN json(report_vars.value)
               WHEN 'object' THEN json(report_vars.value)
-              ELSE report_vars.value
+              ELSE substr(report_vars.value, 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
             END
           )
           FROM json_each(${validTestCaseVarsJson}) AS report_vars
@@ -2513,6 +2527,10 @@ export default class Eval {
             reportVarKeys.map((key) => sql`${key}`),
             sql`, `,
           )})
+            AND (
+              report_vars.type NOT IN ('array', 'object')
+              OR length(report_vars.value) <= ${MAX_COMPACT_HISTORY_TEXT_LENGTH}
+            )
         )`,
         responseExists: jsonIsObject(evalResultsTable.response),
         responseOutput: stripFlags.shouldStripResponseOutput
@@ -2558,7 +2576,11 @@ export default class Eval {
           : jsonNumberOrNull(validGradingResultJson, '$.score'),
         gradingReason: stripFlags.shouldStripGradingResult
           ? sql<string | null>`NULL`
-          : jsonTextOrNull(validGradingResultJson, '$.reason'),
+          : sql<string | null>`CASE
+              WHEN json_type(${validGradingResultJson}, '$.reason') = 'text'
+              THEN substr(json_extract(${validGradingResultJson}, '$.reason'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+              ELSE NULL
+            END`,
         gradingAssertionType: stripFlags.shouldStripGradingResult
           ? sql<string | null>`NULL`
           : jsonTextOrNull(validGradingResultJson, '$.assertion.type'),

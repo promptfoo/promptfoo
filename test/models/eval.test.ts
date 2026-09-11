@@ -3906,7 +3906,13 @@ describe('evaluator', () => {
       const longText = 'p'.repeat(30_000);
       const values = [longText, [{ role: 'user' as const, content: longText }], ''];
       const cases = values.map((prompt, testIdx) =>
-        createEvaluateResult({ testIdx, response: { prompt, output: longText } }),
+        createEvaluateResult({
+          testIdx,
+          vars: { prompt: longText, query: { nested: longText } },
+          testCase: { vars: { prompt: longText, query: { nested: longText } } },
+          response: { prompt, output: longText },
+          gradingResult: { pass: false, score: 0, reason: longText },
+        }),
       );
       const persisted = await EvalFactory.create({ numResults: 0 });
       const inMemory = new Eval({});
@@ -3924,11 +3930,14 @@ describe('evaluator', () => {
         for (const result of compact.results.results) {
           expect(JSON.stringify(result.response?.prompt).length).toBeLessThanOrEqual(10_250);
           expect(result.response?.output).toBe(longText.slice(0, 10_240));
+          expect(JSON.stringify(result.vars).length).toBeLessThanOrEqual(20_500);
+          expect(result.gradingResult?.reason?.length).toBeLessThanOrEqual(10_240);
         }
         expect(compact.results.results[2].response?.prompt).toBe('');
         const full = await eval_.toResultsFile({ includeTraces: false });
         expect(full.results.results.map((result) => result.response?.prompt)).toEqual(values);
         expect(full.results.results[0].response?.output).toBe(longText);
+        expect(full.results.results[0].gradingResult?.reason).toBe(longText);
       }
     });
 

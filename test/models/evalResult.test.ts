@@ -1810,6 +1810,7 @@ describe('EvalResult', () => {
               format: 'pcm16',
               transcript: 'REALTIME_TRANSCRIPT_SECRET',
             },
+            functionCallResults: ['REALTIME_FUNCTION_RESULT_SECRET'],
             permissionDenials: [
               { tool_name: 'Write', tool_input: { path: 'PERMISSION_DENIAL_SECRET' } },
             ],
@@ -1844,6 +1845,7 @@ describe('EvalResult', () => {
             'STRUCTURED_OUTPUT_SECRET',
             'REALTIME_AUDIO_SECRET',
             'REALTIME_TRANSCRIPT_SECRET',
+            'REALTIME_FUNCTION_RESULT_SECRET',
             'PERMISSION_DENIAL_SECRET',
           ]) {
             expect(JSON.stringify(result)).not.toContain(secret);
