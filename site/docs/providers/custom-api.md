@@ -15,7 +15,6 @@ promptfoo supports multiple JavaScript module formats. Complete working examples
 - [ESM Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-custom/mjs) - (`.mjs`, `.js` with `"type": "module"`) - Uses `import`/`export`
 - [TypeScript Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-custom/typescript) - (`.ts`) - Provides type safety with interfaces
 - [Embeddings Provider](https://github.com/promptfoo/promptfoo/tree/main/examples/provider-custom/embeddings) (commonjs)
-- [Visa Vulnerability Agentic Harness](https://github.com/promptfoo/promptfoo/tree/main/examples/visa-vulnerability-agentic-harness) - Evaluate a local VVAH scan pipeline against vulnerable and fixed source-code fixtures.
 
 ## Provider Interface
 

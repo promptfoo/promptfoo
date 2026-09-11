@@ -172,6 +172,11 @@ describe('VVAH example provider', () => {
       { ...manifest(), stages: { ...manifest().stages, s4: { outcome: 'completed_with_errors' } } },
     ],
     ['manifest exit code', { findings: [] }, { ...manifest(), exit_code: 1 }],
+    [
+      'degraded reporting',
+      { findings: [] },
+      { ...manifest(), stages: { s9: { outcome: 'completed_with_errors' } } },
+    ],
   ])('does not grade %s as clean', async (_name, report, run) => {
     const resultPromise = provider().callApi(prompt);
     await finish(report, run);
@@ -190,10 +195,36 @@ describe('VVAH example provider', () => {
     '.git/config',
     '.ENV',
     'security-scan/findings.json',
+    '.. \\.. \\outside.txt',
+    'security-scan./findings.json',
+    'src/app.py ',
+    'NUL.txt',
   ])('rejects unsafe fixture path %s before spawning', async (name) => {
+    vi.mocked(spawn).mockImplementation(() => {
+      throw new Error('Unexpected scan');
+    });
     const result = await provider().callApi(JSON.stringify({ files: { [name]: 'payload' } }));
     expect(result.error).toContain('Invalid source file');
     expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['src/app.py', 'src\\app.py'],
+    ['src/app.py', 'SRC/App.py'],
+    ['caf\u00e9.py', 'cafe\u0301.py'],
+  ])('rejects source aliases %s and %s before writing', async (first, second) => {
+    vi.mocked(spawn).mockImplementation(() => {
+      throw new Error('Unexpected scan');
+    });
+    const result = await provider().callApi(
+      JSON.stringify({ files: { [first]: 'first', [second]: 'second' } }),
+    );
+    expect(result.error).toContain('Duplicate source file');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it.each([0, -1, 0.5, Number.NaN, 2147483648])('rejects invalid timeout %s', (timeoutMs) => {
+    expect(() => provider({ timeoutMs })).toThrow('timeoutMs must be a positive integer');
   });
 
   it.each(['not JSON', 'null', '{}', '{"files":{}}', '{"files":[]}', '{"files":{"a.py":1}}'])(
@@ -222,11 +253,27 @@ describe('VVAH example provider', () => {
     await expect(access(cwd)).rejects.toThrow();
   });
 
+  it('preserves billed usage when a failed scan writes a manifest but no report', async () => {
+    const resultPromise = provider().callApi(prompt);
+    await started;
+    const run = { ...manifest(), exit_code: 1 };
+    run.totals.cost_usd = 0.02;
+    await writeFile(path.join(cwd, 'run_manifest_failed.json'), JSON.stringify(run));
+    child.stderr.write('model request failed after earlier stages ran');
+    child.emit('close', 1);
+    expect(await resultPromise).toMatchObject({
+      error: expect.stringContaining('code 1'),
+      tokenUsage: { total: 170, numRequests: 4 },
+      cost: 0.02,
+    });
+    await expect(access(cwd)).rejects.toThrow();
+  });
+
   it('rejects missing scan artifacts even after a zero exit code', async () => {
     const resultPromise = provider().callApi(prompt);
     await started;
     child.emit('close', 0);
-    expect((await resultPromise).error).toContain('findings.json');
+    expect((await resultPromise).error).toContain('Expected one VVAH run manifest');
     await expect(access(cwd)).rejects.toThrow();
   });
 
@@ -247,6 +294,15 @@ describe('VVAH example provider', () => {
     controller.abort();
     const result = await provider().callApi(prompt, undefined, { abortSignal: controller.signal });
     expect(result.error).toContain('abort');
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it.each(['cancelled by user', null])('normalizes non-Error abort reason %s', async (reason) => {
+    const controller = new AbortController();
+    controller.abort(reason);
+    expect(await provider().callApi(prompt, undefined, { abortSignal: controller.signal })).toEqual(
+      { error: `VVAH: ${String(reason)}` },
+    );
     expect(spawn).not.toHaveBeenCalled();
   });
 
