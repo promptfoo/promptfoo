@@ -76,7 +76,7 @@ redteam:
     - jailbreak-templates
 ```
 
-## Related Concepts
+## Related Concepts {#related-plugins}
 
 - [PII Plugins](pii.md) - Personal-information exposure beyond payment data
 - [RBAC Plugin](rbac.md) - Role and permission boundaries for sensitive actions
