@@ -129,7 +129,9 @@ const CLI_NOT_FOUND_MESSAGE =
 
 async function getProjectRoots(workspace: string, basePath?: string): Promise<string[]> {
   const projectRoots = new Set(
-    [workspace, basePath ?? process.cwd(), process.cwd()].map((root) => path.resolve(root)),
+    [workspace, basePath ?? process.cwd(), process.cwd()]
+      .map((root) => path.resolve(root))
+      .filter((root) => path.dirname(root) !== root),
   );
   for (const root of [...projectRoots]) {
     projectRoots.add(await fs.realpath(root));
@@ -291,13 +293,33 @@ function redactCredentials(response: ProviderResponse, credentials: string[]): P
     'g',
   );
   const redact = (value: string) => value.replace(pattern, REDACTED);
+  const rawStrings: string[] = [];
+  JSON.stringify(response.raw, (_key, value) => {
+    if (typeof value === 'string') {
+      rawStrings.push(value);
+    }
+    return value;
+  });
+  const hasSplitCredential = credentials.some(
+    (credential) =>
+      !rawStrings.some((value) => value.includes(credential)) &&
+      rawStrings.some(
+        (value, index) => index > 0 && (rawStrings[index - 1] + value).includes(credential),
+      ),
+  );
+  const sanitizedResponse = hasSplitCredential ? { ...response, raw: undefined } : response;
   return JSON.parse(
-    JSON.stringify(response, (_key, value) => {
+    JSON.stringify(sanitizedResponse, (_key, value) => {
       if (typeof value === 'string') {
         return redact(value);
       }
       // Keep the provider's response field names even for an invalid, short credential.
-      if (value !== response && value && typeof value === 'object' && !Array.isArray(value)) {
+      if (
+        value !== sanitizedResponse &&
+        value &&
+        typeof value === 'object' &&
+        !Array.isArray(value)
+      ) {
         return Object.fromEntries(Object.entries(value).map(([key, item]) => [redact(key), item]));
       }
       return value;

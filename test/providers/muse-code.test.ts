@@ -485,6 +485,13 @@ describe('MuseCodeProvider', () => {
     expect(vi.mocked(spawn).mock.calls[0][0]).toBe(path.join(binDir, executableName('muse')));
   });
 
+  it('allows absolute PATH lookup when cwd is the filesystem root', async () => {
+    vi.spyOn(process, 'cwd').mockReturnValue(path.parse(testDir).root);
+    const response = await provider({ config: { env: { PATH: binDir } } }).callApi(prompt);
+    expect(response.error).toBeUndefined();
+    expect(vi.mocked(spawn).mock.calls[0][0]).toBe(path.join(binDir, executableName('muse')));
+  });
+
   it('fails without spawning when Muse is only available in the config repository', async () => {
     await fs.writeFile(path.join(testDir, executableName('muse')), '', { mode: 0o700 });
     const response = await provider({
@@ -627,6 +634,21 @@ describe('MuseCodeProvider', () => {
       expect(JSON.stringify(tracedResponse)).not.toContain(JSON.stringify(apiKey).slice(1, -1));
     },
   );
+
+  it('omits raw journal data when a credential spans separate fields', async () => {
+    const apiKey = 'split-secret';
+    const events = structuredClone(fixtureEvents);
+    events.at(-1)!.payload.details = ['split-', 'secret'];
+    onSpawn = (child) => {
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+
+    const response = await provider({ config: { apiKey } }).callApi(prompt);
+
+    expect(response.error).toBeUndefined();
+    expect(response.raw).toBeUndefined();
+  });
 
   it.each([
     ['output', 0],
