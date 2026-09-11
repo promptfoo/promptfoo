@@ -321,7 +321,7 @@ describe('Azure Moderation', () => {
       } as any;
 
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(getCache).mockResolvedValue(mockCache);
+      vi.mocked(getCache).mockReturnValue(mockCache);
 
       const provider = new AzureModerationProvider('text-content-safety', {
         config: {
@@ -344,7 +344,7 @@ describe('Azure Moderation', () => {
       } as any;
 
       vi.mocked(isCacheEnabled).mockReturnValue(true);
-      vi.mocked(getCache).mockResolvedValue(mockCache);
+      vi.mocked(getCache).mockReturnValue(mockCache);
 
       const { fetchWithProxy } = await import('../../../src/util/fetch/index');
       vi.mocked(fetchWithProxy).mockResolvedValue({

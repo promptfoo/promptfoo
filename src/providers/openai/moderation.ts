@@ -2,7 +2,7 @@ import { createHmac } from 'crypto';
 
 import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
-import { getAbortError, getInFlightCacheKey, getRequestTimeoutMs } from '../shared';
+import { getAbortError, getInFlightCacheKey, getRequestTimeoutMs, waitWithAbort } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { appendOpenAiApiPath } from './util';
 
@@ -251,7 +251,7 @@ export class OpenAiModerationProvider
       return handleApiError(this.getMissingApiKeyErrorMessage());
     }
 
-    const useCache = isCacheEnabled();
+    const cache = isCacheEnabled() ? getCache() : undefined;
     const supportsImages = supportsImageInput(this.modelName);
     const input = formatModerationInput(assistantResponse, supportsImages);
     const cacheKey = getModerationCacheKey(this.modelName, this.config, input, {
@@ -260,9 +260,8 @@ export class OpenAiModerationProvider
       organization: this.getOrganization(),
     });
 
-    if (useCache) {
-      const cache = await getCache();
-      const cachedResponse = await cache.get(cacheKey);
+    if (cache) {
+      const cachedResponse = await waitWithAbort(cache.get(cacheKey), abortSignal);
 
       if (cachedResponse) {
         logger.debug('Returning cached moderation response');
@@ -294,7 +293,7 @@ export class OpenAiModerationProvider
               method: 'POST',
               headers,
               body: requestBody,
-              ...(abortSignal ? { signal: abortSignal } : {}),
+              signal: abortSignal,
             },
             getRequestTimeoutMs(),
             'json',
@@ -314,9 +313,8 @@ export class OpenAiModerationProvider
 
       const response = parseOpenAIModerationResponse(data);
 
-      if (useCache) {
-        const cache = await getCache();
-        await cache.set(cacheKey, JSON.stringify(response));
+      if (cache) {
+        await waitWithAbort(cache.set(cacheKey, JSON.stringify(response)), abortSignal);
       }
 
       return response;

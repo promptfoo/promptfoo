@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvInt } from '../../src/envars';
 import {
   calculateCost,
@@ -18,12 +18,19 @@ import {
   toTitleCase,
   transformToolChoice,
   transformTools,
+  waitWithAbort,
 } from '../../src/providers/shared';
 import { createMockProvider } from '../factories/provider';
+import { createDeferred } from '../util/utils';
 
 vi.mock('../../src/envars');
 
 describe('Shared Provider Functions', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
@@ -85,6 +92,59 @@ describe('Shared Provider Functions', () => {
       expect(error.message).toBe('Request was aborted');
       expect(error.cause).toBe(reason);
     });
+  });
+
+  describe('waitWithAbort', () => {
+    it('preserves results and errors without a signal', async () => {
+      await expect(waitWithAbort(Promise.resolve('result'))).resolves.toBe('result');
+      const error = new Error('operation failed');
+      await expect(waitWithAbort(Promise.reject(error))).rejects.toBe(error);
+    });
+
+    it.each(['resolve', 'reject'] as const)(
+      'removes its listener when work %ss',
+      async (outcome) => {
+        const controller = new AbortController();
+        const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+        const operation = createDeferred<string>();
+        const result = waitWithAbort(operation.promise, controller.signal);
+        if (outcome === 'resolve') {
+          operation.resolve('result');
+          await expect(result).resolves.toBe('result');
+        } else {
+          const error = new Error('cache unavailable');
+          operation.reject(error);
+          await expect(result).rejects.toBe(error);
+        }
+        expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+      },
+    );
+
+    it('cancels pending work, removes the listener, and handles a later rejection', async () => {
+      const controller = new AbortController();
+      const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+      const operation = createDeferred<string>();
+      const result = waitWithAbort(operation.promise, controller.signal);
+      controller.abort('cancelled');
+
+      await expect(result).rejects.toMatchObject({ name: 'AbortError', cause: 'cancelled' });
+      expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+      operation.reject(new Error('late cache error'));
+    });
+
+    it.each([true, false])(
+      'rejects settled work when cancellation is already visible: %s',
+      async (alreadyAborted) => {
+        const controller = new AbortController();
+        if (alreadyAborted) {
+          controller.abort();
+        }
+        const result = waitWithAbort(Promise.resolve('cached result'), controller.signal);
+        controller.abort();
+
+        await expect(result).rejects.toMatchObject({ name: 'AbortError' });
+      },
+    );
   });
 
   describe('parseChatPrompt', () => {

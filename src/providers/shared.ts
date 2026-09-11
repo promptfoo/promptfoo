@@ -19,12 +19,7 @@ export const LONG_RUNNING_MODEL_TIMEOUT_MS = 600_000; // 10 minutes
 const abortSignalIds = new WeakMap<AbortSignal, number>();
 let nextAbortSignalId = 0;
 
-/**
- * The error a cancelled provider call should reject with: the signal's own abort reason
- * when it already carries one, otherwise an `AbortError` callers can recognize. Any other
- * reason (a `TimeoutError`, a plain error, a string) is kept as the error's `cause` so the
- * original context survives the rename.
- */
+/** Normalize cancellation to AbortError while preserving the original reason. */
 export function getAbortError(signal: AbortSignal): Error {
   const reason = signal.reason;
   if (reason instanceof Error && reason.name === 'AbortError') {
@@ -36,12 +31,38 @@ export function getAbortError(signal: AbortSignal): Error {
       : typeof reason === 'string' && reason
         ? reason
         : 'Request was aborted';
-  // `cause` is assigned rather than passed to `new Error(msg, { cause })`: src/app
-  // typechecks this file against lib ES2020, which has no `ErrorOptions` overload.
+  // The app's ES2020 lib does not support the ErrorOptions constructor overload.
   const error = new Error(message) as Error & { cause?: unknown };
   error.name = 'AbortError';
   error.cause = reason;
   return error;
+}
+
+/** Stop waiting on work that cannot itself be cancelled, such as a cache operation. */
+export async function waitWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+
+  let onAbort!: () => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(getAbortError(signal));
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
+  try {
+    const result = await Promise.race([promise, aborted]);
+    if (signal.aborted) {
+      throw getAbortError(signal);
+    }
+    return result;
+  } catch (error) {
+    throw signal.aborted ? getAbortError(signal) : error;
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+  }
 }
 
 /**

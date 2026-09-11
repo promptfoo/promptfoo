@@ -4,7 +4,7 @@ import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getAbortError, getRequestTimeoutMs } from '../shared';
+import { getAbortError, getRequestTimeoutMs, waitWithAbort } from '../shared';
 import { AzureGenericProvider } from './generic';
 
 import type { EnvVarKey } from '../../envars';
@@ -216,7 +216,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       throw getAbortError(abortSignal);
     }
 
-    await this.ensureInitialized();
+    await waitWithAbort(this.ensureInitialized(), abortSignal);
 
     const apiKey =
       this.configWithHeaders.apiKey || this.getContentSafetyApiKey() || this.getApiKeyOrThrow();
@@ -242,17 +242,16 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       );
     }
 
-    const useCache = isCacheEnabled();
+    const cache = isCacheEnabled() ? getCache() : undefined;
     let cacheKey = '';
 
-    if (useCache) {
+    if (cache) {
       cacheKey = getModerationCacheKey(
         this.modelName,
         { ...this.configWithHeaders, endpoint: this.endpoint, apiVersion: this.apiVersion },
         assistantResponse,
       );
-      const cache = await getCache();
-      const cachedResponse = await cache.get(cacheKey);
+      const cachedResponse = await waitWithAbort(cache.get(cacheKey), abortSignal);
 
       if (cachedResponse) {
         logger.debug('Returning cached Azure moderation response');
@@ -316,9 +315,8 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       const data = await response.json();
       const result = parseAzureModerationResponse(data);
 
-      if (useCache && cacheKey) {
-        const cache = await getCache();
-        await cache.set(cacheKey, result);
+      if (cache) {
+        await waitWithAbort(cache.set(cacheKey, result), abortSignal);
       }
 
       return result;
