@@ -235,6 +235,40 @@ describe('ResultsTable Metrics Display', () => {
     );
   });
 
+  it('shows generation requests when providers report no token totals', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: { redteam: {} },
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              metrics: {
+                ...mockTable.head.prompts[0].metrics,
+                tokenUsage: { generation: { numRequests: 2 } },
+              },
+            },
+          ],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Generation Requests:').parentElement).toHaveTextContent(
+      'Generation Requests: 2',
+    );
+  });
+
   it('displays average tokens with correct calculation', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Avg Tokens:')).toBeInTheDocument();

@@ -341,6 +341,9 @@ export function accumulateGradingTokenUsage(
   const reportedTotal =
     tokensUsed?.total ?? (tokensUsed?.prompt ?? 0) + (tokensUsed?.completion ?? 0);
   const cachedTokens = tokensUsed?.cached ?? 0;
+  if (tokensUsed?.numRequests === 0 && reportedTotal === 0 && cachedTokens === 0) {
+    return;
+  }
   const cachedResponse =
     options?.cached === true ||
     (options?.cached === undefined &&

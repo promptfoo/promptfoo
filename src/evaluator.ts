@@ -3367,6 +3367,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
     };
+    this.generationUsageRecorded = Boolean(
+      cliState.resume &&
+        store.prompts.some((prompt) => {
+          const generation = prompt.metrics?.tokenUsage?.generation;
+          return (generation?.total ?? 0) > 0 || (generation?.numRequests ?? 0) > 0;
+        }),
+    );
     this.conversations = {};
     this.registers = {};
 
@@ -3665,6 +3672,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
       }
 
+      if (this.generationUsageRecorded && row.testCase.metadata?.providerTokenUsage) {
+        const metadata = { ...row.testCase.metadata };
+        delete metadata.providerTokenUsage;
+        row.testCase = { ...row.testCase, metadata };
+      }
+
       await this.persistEvalRow(row);
 
       if (this.abortIfTargetUnavailable(row, context)) {
@@ -3804,6 +3817,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   ) {
     const sanitizedTestCase = { ...evalStep.test };
     delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
+    if (this.generationUsageRecorded && sanitizedTestCase.metadata?.providerTokenUsage) {
+      sanitizedTestCase.metadata = { ...sanitizedTestCase.metadata };
+      delete sanitizedTestCase.metadata.providerTokenUsage;
+    }
 
     const timeoutResult = createEvalStepTimeoutResult(
       evalStep,
@@ -3819,6 +3836,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (metrics) {
       metrics.testErrorCount += 1;
       metrics.totalLatencyMs += timeoutMs;
+      if (!this.generationUsageRecorded) {
+        this.generationUsageRecorded = accumulateGenerationTokenUsage(
+          metrics.tokenUsage,
+          sanitizedTestCase.metadata?.providerTokenUsage,
+        );
+      }
     }
 
     context.numComplete++;

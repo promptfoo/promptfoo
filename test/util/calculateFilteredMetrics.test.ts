@@ -263,6 +263,22 @@ describe('calculateFilteredMetrics', () => {
       });
     });
 
+    it('falls back to a row carrier when canonical generation usage is empty', async () => {
+      const eval_ = await Eval.create({ metadata: { generationAccounting: { tokenUsage: {} } } }, [
+        { raw: 'Test prompt', label: 'Test prompt' },
+      ]);
+      eval_.prompts = [{ raw: 'Test prompt', label: 'Test prompt', provider: 'test-provider' }];
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        tokenUsage: { total: 10 },
+        generationUsage: { total: 7, prompt: 4, completion: 3 },
+      });
+
+      const [metrics] = await eval_.getFilteredMetrics({});
+
+      expect(metrics.tokenUsage.generation).toMatchObject({ total: 7, prompt: 4, completion: 3 });
+    });
+
     it('should handle results without token usage', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 0,

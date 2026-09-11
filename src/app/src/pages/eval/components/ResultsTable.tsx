@@ -719,9 +719,10 @@ function renderTokenMetrics({
   const attackerTokens = getTokenUsageTotal(metrics?.tokenUsage?.attacker);
   const gradingTokens = getTokenUsageTotal(metrics?.tokenUsage?.assertions);
   const generationTokens = getTokenUsageTotal(metrics?.tokenUsage?.generation);
+  const generationRequests = metrics?.tokenUsage?.generation?.numRequests ?? 0;
   const incurredAccounting = getIncurredTokenAccounting(metrics?.tokenUsage);
 
-  if (getCombinedTokenUsageTotal(metrics?.tokenUsage) === 0) {
+  if (getCombinedTokenUsageTotal(metrics?.tokenUsage) === 0 && generationRequests === 0) {
     return null;
   }
 
@@ -785,6 +786,11 @@ function renderTokenMetrics({
           {filteredGenerationTokens === undefined
             ? null
             : renderFilteredSuffix(formatMetricValue(filteredGenerationTokens))}
+        </div>
+      ) : null}
+      {generationRequests > 0 ? (
+        <div>
+          <strong>Generation Requests:</strong> {formatMetricValue(generationRequests)}
         </div>
       ) : null}
       {incurredAccounting ? (

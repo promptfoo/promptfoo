@@ -73,14 +73,17 @@ function jsonUsageTotal(column: SQL, usagePath: string, cachedResponsePath?: str
 }
 
 function jsonUsageRequests(column: SQL, usagePath: string, cachedResponsePath?: string): SQL {
+  const requests = sql`CAST(json_extract(${column}, ${`${usagePath}.numRequests`}) AS INTEGER)`;
+  const hasUsage = sql`${jsonUsageTotal(column, usagePath)} > 0`;
   const explicitlyCached = cachedResponsePath
     ? sql`COALESCE(json_extract(${column}, ${cachedResponsePath}), 0) = 1`
     : sql`0`;
   return sql`CASE
     WHEN json_extract(${column}, ${usagePath}) IS NULL THEN 0
+    WHEN ${requests} = 0 AND NOT ${hasUsage} THEN 0
     WHEN ${explicitlyCached} THEN
-      MAX(COALESCE(CAST(json_extract(${column}, ${`${usagePath}.numRequests`}) AS INTEGER), 1), 1)
-    ELSE COALESCE(CAST(json_extract(${column}, ${`${usagePath}.numRequests`}) AS INTEGER), 1)
+      MAX(COALESCE(${requests}, 1), 1)
+    ELSE COALESCE(${requests}, 1)
   END`;
 }
 
@@ -307,6 +310,7 @@ async function getFilteredGenerationCarriers(whereSql: SQL<unknown>) {
       json_extract(test_case, '$.metadata.providerTokenUsage') as usage
     FROM eval_results
     WHERE ${whereSql}
+      AND json_valid(test_case)
       AND json_type(test_case, '$.metadata.providerTokenUsage') = 'object'
     ORDER BY prompt_idx, test_idx
   `)) as Array<{ prompt_idx: number; usage: string | unknown }>;
@@ -475,9 +479,12 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
     };
   }
 
-  const generationCarriers = generationTokenUsage
-    ? [{ prompt_idx: basicResults[0]?.prompt_idx, usage: generationTokenUsage }]
-    : await getFilteredGenerationCarriers(whereSql);
+  const generationCarriers = [
+    ...(generationTokenUsage
+      ? [{ prompt_idx: basicResults[0]?.prompt_idx, usage: generationTokenUsage }]
+      : []),
+    ...(await getFilteredGenerationCarriers(whereSql)),
+  ];
   for (const { prompt_idx, usage } of generationCarriers) {
     const metric = metrics[prompt_idx];
     if (
