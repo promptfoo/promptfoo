@@ -318,6 +318,10 @@ export async function evaluateWithSource(
   testSuite: EvaluateTestSuite,
   options: InternalEvaluateOptions = {},
 ) {
+  return cliState.withEnv(testSuite.env, () => evaluateWithEnv(testSuite, options));
+}
+
+async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEvaluateOptions) {
   const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
 
   if (testSuiteConfig.writeLatestResults) {
@@ -328,9 +332,7 @@ export async function evaluateWithSource(
     env: testSuiteConfig.env,
   });
   const providerMap = buildConfiguredProviderMap(loadedProviders);
-  const constructedTestSuite = await cliState.withConfig({ env: testSuiteConfig.env }, () =>
-    createRuntimeTestSuite(testSuiteConfig, loadedProviders),
-  );
+  const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
   await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
 
   const parsedProviderPromptMap = readProviderPromptMap(

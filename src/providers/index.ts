@@ -85,6 +85,24 @@ export async function loadApiProvider(
   providerPath: string,
   context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
+  return withProviderEnv(context, (env) => createApiProvider(providerPath, { ...context, env }));
+}
+
+function withProviderEnv<T>(
+  options: { env?: EnvOverrides },
+  load: (env: EnvOverrides | undefined) => Promise<T>,
+): Promise<T> {
+  // Explicit undefined masks an earlier suite; omitted env inherits the active scope.
+  const env = Object.prototype.hasOwnProperty.call(options, 'env')
+    ? options.env
+    : getEnvOverrides();
+  return cliState.withEnv(env, () => load(env));
+}
+
+async function createApiProvider(
+  providerPath: string,
+  context: LoadApiProviderContext,
+): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
 
   // Merge environment overrides: context.env (test suite level) is base,
@@ -236,7 +254,7 @@ function loadOptionsFromResolveContext(
 ): LoadApiProviderOptions {
   return {
     ...(options && { options }),
-    ...(context.env && { env: context.env }),
+    ...(Object.prototype.hasOwnProperty.call(context, 'env') && { env: context.env }),
     ...(context.basePath && { basePath: context.basePath }),
   };
 }
@@ -377,12 +395,7 @@ export async function loadApiProviders(
 ): Promise<ApiProvider[]> {
   const { basePath } = options;
 
-  // An explicit suite env, including an empty one during reload, replaces the
-  // previous suite. Only inherit cliState when callers did not supply env.
-  const hasExplicitEnv = Object.prototype.hasOwnProperty.call(options, 'env');
-  const env = hasExplicitEnv ? options.env : getEnvOverrides();
-
-  const load = async () => {
+  const load = async (env: EnvOverrides | undefined) => {
     if (typeof providerPaths === 'string') {
       // Check if the string path points to a file
       if (isProviderConfigFileReference(providerPaths)) {
@@ -443,7 +456,7 @@ export async function loadApiProviders(
     throw new Error('Invalid providers list');
   };
 
-  return hasExplicitEnv ? cliState.withConfig({ env }, load) : load();
+  return withProviderEnv(options, load);
 }
 
 /**
