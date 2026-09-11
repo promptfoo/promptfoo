@@ -17,6 +17,7 @@ import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
 import { persistTraceMetadata } from './models/evalResult';
+import { sanitizeTraceAttributes } from './tracing/sanitizeAttributes';
 import {
   MAX_SPANS_PER_APPEND_REQUEST,
   MAX_SPANS_PER_TRACE,
@@ -586,15 +587,20 @@ function remapTracesForShare(
       ...trace,
       traceId: remoteTraceId,
       evaluationId: remoteEvalId,
-      metadata: remapKnownLinkage(
-        trace.metadata,
-        ['evaluationId'],
-        ['traceId'],
-        localEvalId,
-        remoteEvalId,
-        trace.traceId,
-        remoteTraceId,
-      ),
+      metadata: trace.metadata
+        ? sanitizeTraceAttributes(
+            remapKnownLinkage(
+              trace.metadata,
+              ['evaluationId'],
+              ['traceId'],
+              localEvalId,
+              remoteEvalId,
+              trace.traceId,
+              remoteTraceId,
+            ),
+            { truncateValues: false },
+          )
+        : undefined,
       spans: trace.spans.map((span) => ({
         ...span,
         attributes: remapKnownLinkage(
@@ -643,13 +649,14 @@ function createShareBlobCaches(): {
   inlineCache: BlobInlineCache | null;
   remoteBlobUploadCache: RemoteBlobUploadCache | null;
 } {
+  const transferBlobs = isBlobStorageEnabled() || getEnvBool('PROMPTFOO_INLINE_MEDIA', false);
   const inlineBlobs =
-    isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
+    transferBlobs && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
 
   return {
     inlineCache: inlineBlobs ? createBlobInlineCache() : null,
     // Trace blobs are transferred separately even when result blobs use inlining.
-    remoteBlobUploadCache: isBlobStorageEnabled() ? createRemoteBlobUploadCache() : null,
+    remoteBlobUploadCache: transferBlobs ? createRemoteBlobUploadCache() : null,
   };
 }
 

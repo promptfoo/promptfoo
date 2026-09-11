@@ -857,6 +857,31 @@ describe('createShareableUrl', () => {
       expect(uploadTraceBlobRefsForShare).not.toHaveBeenCalled();
     });
 
+    it('redacts sensitive trace metadata before sharing', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      mockEval.getTraces = vi.fn().mockResolvedValue([
+        {
+          traceId: 'trace-secret',
+          evaluationId: mockEval.id as string,
+          testCaseId: 'test-case-1',
+          metadata: { authorization: 'Bearer secret', safe: 'kept' },
+          spans: [],
+        },
+      ]);
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+
+      await createShareableUrl(mockEval as Eval, { silent: true });
+
+      const traceBody = JSON.parse(mockFetch.mock.calls[2][1].body);
+      expect(traceBody[0].metadata).toMatchObject({
+        authorization: '<redacted>',
+        safe: 'kept',
+      });
+    });
+
     it('still rolls back when the trace endpoint reports that the new eval is missing', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       mockEval.getTraces = vi.fn().mockResolvedValue([
@@ -1290,6 +1315,32 @@ describe('createShareableUrl', () => {
       } finally {
         storageSpy.mockRestore();
       }
+    });
+
+    it('still transfers existing blob refs when inline media disables new externalization', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      vi.spyOn(blobExtractor, 'isBlobStorageEnabled').mockReturnValue(false);
+      vi.mocked(envars.getEnvBool).mockImplementation(
+        (key, defaultValue) => key === 'PROMPTFOO_INLINE_MEDIA' || Boolean(defaultValue),
+      );
+      const resultRow = {
+        id: 'result-inline-media',
+        promptIdx: 0,
+        response: { output: 'promptfoo://blob/' + '5'.repeat(64) },
+        testIdx: 0,
+      } as EvalResult;
+      mockEval.getTotalResultRowCount = vi.fn().mockResolvedValue(1);
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [resultRow];
+      });
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+
+      await createShareableUrl(mockEval as Eval, { silent: true });
+
+      expect(inlineBlobRefsForShare).toHaveBeenCalled();
+      expect(recordResultBlobRefsForShare).toHaveBeenCalled();
     });
 
     it('remaps evaluation linkage for results without a trace', async () => {

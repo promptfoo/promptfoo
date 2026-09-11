@@ -246,7 +246,13 @@ const MAX_TRACE_RECORD_LENGTH = 1_000_000;
 const MAX_TRACE_REQUEST_LENGTH = 8 * 1024 * 1024;
 
 function serializedLengthWithin(limit: number) {
-  return (value: Record<string, unknown> | unknown[]) => JSON.stringify(value).length <= limit;
+  return (value: Record<string, unknown> | unknown[]) => {
+    try {
+      return JSON.stringify(value).length <= limit;
+    } catch {
+      return false;
+    }
+  };
 }
 
 const TraceSpanRequestSchema = z

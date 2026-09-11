@@ -86,4 +86,23 @@ describe('Eval API schemas', () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it('rejects traces whose nested metadata cannot be serialized safely', () => {
+    let nested: Record<string, unknown> = {};
+    for (let depth = 0; depth < 10_000; depth++) {
+      nested = { nested };
+    }
+
+    const result = EvalSchemas.AddTraces.Request.safeParse([
+      {
+        traceId: 'trace-1',
+        evaluationId: 'eval-1',
+        testCaseId: 'test-1',
+        metadata: nested,
+        spans: [],
+      },
+    ]);
+
+    expect(result.success).toBe(false);
+  });
 });

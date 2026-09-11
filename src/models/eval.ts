@@ -3,6 +3,7 @@ import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
 import {
+  blobReferencesTable,
   datasetsTable,
   evalResultsTable,
   evalsTable,
@@ -1664,6 +1665,24 @@ export default class Eval {
             datasetId: datasetRel[0].datasetId,
           })
           .onConflictDoNothing()
+          .run();
+      }
+
+      const blobRefs = await tx
+        .select()
+        .from(blobReferencesTable)
+        .where(eq(blobReferencesTable.evalId, this.id))
+        .all();
+      if (blobRefs.length > 0) {
+        await tx
+          .insert(blobReferencesTable)
+          .values(
+            blobRefs.map((ref) => ({
+              ...ref,
+              id: crypto.randomUUID(),
+              evalId: newEvalId,
+            })),
+          )
           .run();
       }
 

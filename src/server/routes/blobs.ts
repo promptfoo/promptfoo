@@ -542,25 +542,26 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
-  let blob: Awaited<ReturnType<typeof getBlobByHash>>;
+  const assetMimeType = sanitizeBlobMimeType(asset.mimeType);
   try {
-    blob = await getBlobByHash(hash);
-    // Do not redirect when either metadata source is unsafe or disagrees with the other. The
-    // provider controls redirect response headers, so both records must independently clear the
-    // same MIME boundary before bytes leave this server.
-    const assetMimeType = sanitizeBlobMimeType(asset.mimeType);
-    const blobMimeType = blob.metadata.mimeType;
     const presigned =
+      asset.provider !== 'local' &&
+      asset.provider !== 'filesystem' &&
       assetMimeType !== BLOB_MIME_TYPE_FALLBACK &&
-      blobMimeType !== BLOB_MIME_TYPE_FALLBACK &&
-      assetMimeType === asset.mimeType.trim().toLowerCase() &&
-      assetMimeType === blobMimeType
+      assetMimeType === asset.mimeType.trim().toLowerCase()
         ? await getBlobUrl(hash)
         : null;
     if (presigned) {
       res.redirect(302, presigned);
       return;
     }
+  } catch (error) {
+    logger.debug('[BlobRoute] Failed to create blob redirect', { error, hash });
+  }
+
+  let blob: Awaited<ReturnType<typeof getBlobByHash>>;
+  try {
+    blob = await getBlobByHash(hash);
   } catch (error) {
     logger.error('[BlobRoute] Failed to load blob', { error, hash });
     res.status(404).json({ error: 'Blob not found' });

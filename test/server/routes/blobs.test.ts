@@ -451,7 +451,7 @@ describe('Blobs Routes', () => {
       expect(response.status).toBe(302);
       expect(response.header.location).toBe(presignedUrl);
       expect(mockedGetBlobUrl).toHaveBeenCalledWith(validHash);
-      expect(mockedGetBlobByHash).toHaveBeenCalledWith(validHash);
+      expect(mockedGetBlobByHash).not.toHaveBeenCalled();
     });
 
     it('should serve blob data directly when no presigned URL', async () => {
