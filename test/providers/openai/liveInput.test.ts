@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { convertPcm16ToWav } from '../../../src/providers/openai/audio';
 import { prepareLiveInput } from '../../../src/providers/openai/liveInput';
 
@@ -45,6 +45,10 @@ function extensibleWav(pcm: Buffer, subformat = 1) {
 }
 
 describe('Live input', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('keeps user text separate from trusted instructions and maps system history to developer', () => {
     const input = prepareLiveInput(
       JSON.stringify([
@@ -130,5 +134,32 @@ describe('Live input', () => {
         format,
       ),
     ).toThrow('128');
+  });
+
+  it('rejects cumulative audio past five minutes before decoding or concatenating it', () => {
+    const ulaw = { type: 'audio/pcmu', rate: 8_000 } as const;
+    const second = Buffer.alloc(8_000, 0xff).toString('base64');
+    const partsPrompt = (parts: string[]) =>
+      JSON.stringify([
+        {
+          role: 'user',
+          content: parts.map((data) => ({
+            type: 'input_audio',
+            input_audio: { data, format: 'g711_ulaw' },
+          })),
+        },
+      ]);
+    const seconds = (count: number) => Array.from({ length: count }, () => second);
+    expect(prepareLiveInput(partsPrompt(seconds(300)), ulaw).audio).toHaveLength(2_400_000);
+
+    const concat = vi.spyOn(Buffer, 'concat');
+    expect(() => prepareLiveInput(partsPrompt(seconds(301)), ulaw)).toThrow(
+      'GPT-Live input audio must not exceed five minutes.',
+    );
+    // The size estimate rejects a part before it is decoded or validated.
+    expect(() => prepareLiveInput(partsPrompt([...seconds(300), '!!!!']), ulaw)).toThrow(
+      'GPT-Live input audio must not exceed five minutes.',
+    );
+    expect(concat).not.toHaveBeenCalled();
   });
 });

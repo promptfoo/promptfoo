@@ -147,7 +147,7 @@ export class LiveSession {
   private transcript: LiveTranscriptDelta[] = [];
   private transcriptBytes = 0;
   private apiErrors: LiveApiError[] = [];
-  private commands = new Map<string, string>();
+  private commands = new Map<string, { name: string; pending: boolean }>();
   private commandCount = 0;
   private readonly credentials: string[];
   private tokenUsage: TokenUsage = { numRequests: 1 };
@@ -283,9 +283,9 @@ export class LiveSession {
     }
   }
 
-  /** Name promptfoo's commands so Live errors can identify the rejected command. */
-  private registerCommand(command: string, eventId = `promptfoo_${++this.commandCount}`): string {
-    this.commands.set(eventId, command);
+  /** Track promptfoo's commands so Live errors can identify rejected or cancelled commands. */
+  private registerCommand(name: string, eventId = `promptfoo_${++this.commandCount}`): string {
+    this.commands.set(eventId, { name, pending: true });
     return eventId;
   }
 
@@ -409,6 +409,7 @@ export class LiveSession {
         this.streamAudio();
         break;
       case 'session.instructions.appended':
+        this.acknowledgeCommand(event.client_event_id);
         if (
           event.client_event_id === OPENING_INSTRUCTION_ID &&
           this.captureEndFrame === undefined &&
@@ -423,6 +424,9 @@ export class LiveSession {
           });
           this.startResponseWindow();
         }
+        break;
+      case 'session.commentary.appended':
+        this.acknowledgeCommand(event.client_event_id);
         break;
       case 'session.input_transcript.delta':
       case 'session.output_transcript.delta':
@@ -493,6 +497,15 @@ export class LiveSession {
     }
   }
 
+  /** An acknowledged command is no longer pending, so session.close cannot cancel it. */
+  private acknowledgeCommand(clientEventId: unknown): void {
+    const command =
+      typeof clientEventId === 'string' ? this.commands.get(clientEventId) : undefined;
+    if (command) {
+      command.pending = false;
+    }
+  }
+
   private handleApiError(event: LiveEvent): void {
     const details = event.error && typeof event.error === 'object' ? event.error : {};
     const clientEventId = [details.client_event_id, event.client_event_id].find(
@@ -517,22 +530,24 @@ export class LiveSession {
       this.fail(`GPT-Live startup failed${detail}`);
       return;
     }
-    // session.close cancels pending appends and queued work; those errors don't change the result.
-    if (this.closing) {
+    const command = clientEventId ? this.commands.get(clientEventId) : undefined;
+    const guardrail = GUARDRAIL_ERROR.test(
+      [apiError.code, apiError.type, apiError.message].filter(Boolean).join(' '),
+    );
+    // session.close cancels promptfoo's pending appends and queued work; those errors don't change
+    // the result. Moderation and errors for anything else received while closing still count.
+    if (this.closing && command?.pending && !guardrail) {
       return;
     }
     if (clientEventId) {
-      this.setError(
-        `GPT-Live rejected ${this.commands.get(clientEventId) ?? 'a client event'}${detail}`,
-      );
+      this.setError(`GPT-Live rejected ${command?.name ?? 'a client event'}${detail}`);
       // Without the opening prompt, the model is never asked to speak.
       if (clientEventId === OPENING_INSTRUCTION_ID || clientEventId === OPENING_COMMENTARY_ID) {
         this.closeSession();
       }
       return;
     }
-    const text = [apiError.code, apiError.type, apiError.message].filter(Boolean).join(' ');
-    if (GUARDRAIL_ERROR.test(text)) {
+    if (guardrail) {
       // Moderation can interrupt the current speech without ending the session.
       this.guardrailReason ??= `GPT-Live moderation interrupted the response${detail}`;
       return;
@@ -818,8 +833,10 @@ export class LiveSession {
     if (!this.finalized) {
       this.setError('GPT-Live final session usage is unconfirmed.');
     }
+    // gpt-live-1 and its dated snapshots share the published $0.05/minute rate.
     const rate =
-      this.options.config.costPerMinute ?? (this.options.model === 'gpt-live-1' ? 0.05 : undefined);
+      this.options.config.costPerMinute ??
+      (/^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(this.options.model) ? 0.05 : undefined);
     const voiceCost =
       this.voiceSeconds !== undefined && rate !== undefined
         ? (this.voiceSeconds * rate) / 60

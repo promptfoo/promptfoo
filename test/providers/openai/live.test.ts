@@ -106,6 +106,10 @@ const audioPrompt = (audio: Buffer) =>
     },
   ]);
 const eventId = expect.stringMatching(/^promptfoo_\d+$/);
+const promptContext = (config: OpenAiLiveOptions) => ({
+  vars: {},
+  prompt: { raw: 'Hi', label: 'Hi', config },
+});
 
 describe('OpenAiLiveProvider', () => {
   let restoreEnv: () => void;
@@ -206,6 +210,37 @@ describe('OpenAiLiveProvider', () => {
     expect(wav.subarray(44)).toEqual(Buffer.from([1, 0, 2, 0]));
     expect(socket.terminate).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('prices dated gpt-live-1 snapshots at the default voice rate', async () => {
+    const capture = async (model: string) => {
+      const result = new OpenAiLiveProvider(model, {
+        config: {
+          apiKey: 'fixture-key',
+          responseWindowMs: 100,
+          websocketTimeout: 200,
+          closeTimeoutMs: 100,
+        },
+      }).callApi('Hi');
+      const socket = await connect();
+      expect(socket.sent[0].session.model).toBe(model);
+      start(socket);
+      text(socket);
+      await vi.advanceTimersByTimeAsync(100);
+      closed(socket, 30);
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.voiceSeconds).toBe(30);
+      return response;
+    };
+
+    const dated = await capture('gpt-live-1-2026-09-01');
+    expect(dated.metadata?.voiceCost).toBeCloseTo(0.025);
+    expect(dated.cost).toBeCloseTo(0.025);
+    // Other model names are priced only with costPerMinute.
+    const other = await capture('gpt-live-1-preview');
+    expect(other.metadata?.voiceCost).toBeUndefined();
+    expect(other.cost).toBeUndefined();
   });
 
   it('paces input audio and keeps streaming silence after the clip', async () => {
@@ -548,6 +583,93 @@ describe('OpenAiLiveProvider', () => {
     ]);
   });
 
+  it('grades moderation received while closing as a refusal', async () => {
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket, 'Here is');
+    await vi.advanceTimersByTimeAsync(100);
+    expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+    apiError(socket, {
+      type: 'invalid_request_error',
+      code: 'moderation_blocked',
+      message: 'Assistant audio was interrupted by moderation.',
+    });
+    closed(socket);
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response).toMatchObject({
+      output: 'Here is',
+      isRefusal: true,
+      guardrails: {
+        flagged: true,
+        flaggedOutput: true,
+        reason:
+          'GPT-Live moderation interrupted the response (moderation_blocked): Assistant audio was interrupted by moderation.',
+      },
+      metadata: { finalUsageConfirmed: true, closeReason: 'close_requested' },
+    });
+    expect(response.cost).toBeCloseTo(0.01);
+  });
+
+  it.each([
+    {
+      name: 'an unattributed server error',
+      error: { type: 'server_error', code: 'internal_error', message: 'Finalization failed.' },
+      expected: 'GPT-Live API error (internal_error): Finalization failed.',
+    },
+    {
+      name: 'an error for an unknown client event',
+      error: {
+        type: 'invalid_request_error',
+        code: 'invalid_value',
+        message: 'Unknown event.',
+        client_event_id: 'client_event_42',
+      },
+      expected: 'GPT-Live rejected a client event (invalid_value): Unknown event.',
+    },
+    {
+      name: 'an error for an acknowledged command',
+      acknowledged: true,
+      error: {
+        type: 'invalid_request_error',
+        code: 'append_cancelled',
+        message: 'Pending append cancelled.',
+        client_event_id: 'promptfoo_opening',
+      },
+      expected:
+        'GPT-Live rejected session.commentary.append (append_cancelled): Pending append cancelled.',
+    },
+    {
+      name: 'moderation for a pending command',
+      error: {
+        type: 'invalid_request_error',
+        code: 'moderation_blocked',
+        message: 'Commentary blocked.',
+        client_event_id: 'promptfoo_opening',
+      },
+      expected:
+        'GPT-Live rejected session.commentary.append (moderation_blocked): Commentary blocked.',
+    },
+  ])('reports $name received while closing', async ({ acknowledged, error, expected }) => {
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    if (acknowledged) {
+      emit(socket, { type: 'session.commentary.appended', client_event_id: 'promptfoo_opening' });
+    }
+    text(socket, 'Paris.');
+    await vi.advanceTimersByTimeAsync(100);
+    expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+    apiError(socket, error);
+    closed(socket);
+    const response = await result;
+    expect(response.error).toBe(expected);
+    expect(response.output).toBe('Paris.');
+    expect(response.isRefusal).toBeUndefined();
+    expect(response.metadata?.finalUsageConfirmed).toBe(true);
+  });
+
   it('closes when Live rejects the opening prompt', async () => {
     const result = provider().callApi('Hi');
     const socket = await connect();
@@ -799,6 +921,87 @@ describe('OpenAiLiveProvider', () => {
       }),
     ).toMatchObject({ Authorization: 'Bearer ambient-openai-key', 'api-key': 'gateway-key' });
     expect(await upgradeHeaders({})).toMatchObject({ Authorization: 'Bearer ambient-openai-key' });
+  });
+
+  it('resolves prompt-level credentials without forwarding the ambient OpenAI key', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key', PROMPT_LIVE_KEY: 'prompt-env-key' });
+    const gateway = new OpenAiLiveProvider('gpt-live-1', {
+      config: {
+        apiBaseUrl: 'http://localhost:1234/v1',
+        headers: { 'api-key': 'gateway-key' },
+        responseWindowMs: 100,
+        websocketTimeout: 200,
+        closeTimeoutMs: 100,
+      },
+    });
+    const upgradeHeaders = async (config: OpenAiLiveOptions) => {
+      const result = gateway.callApi('Hi', promptContext(config));
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      closed(socket);
+      expect((await result).error).toBeUndefined();
+      return socket.options.headers;
+    };
+
+    expect(await upgradeHeaders({ apiKey: 'prompt-key' })).toEqual({
+      Authorization: 'Bearer prompt-key',
+      'api-key': 'gateway-key',
+    });
+    expect(await upgradeHeaders({ instructions: 'Answer briefly.' })).toEqual({
+      'api-key': 'gateway-key',
+    });
+    expect(await upgradeHeaders({ apiKeyEnvar: 'PROMPT_LIVE_KEY' })).toEqual({
+      Authorization: 'Bearer prompt-env-key',
+      'api-key': 'gateway-key',
+    });
+    expect(JSON.stringify(sockets.map((socket) => socket.options.headers))).not.toContain(
+      'ambient-openai-key',
+    );
+  });
+
+  it('reports a missing prompt-level apiKeyEnvar instead of using OPENAI_API_KEY', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
+    const result = new OpenAiLiveProvider('gpt-live-1', {
+      config: { responseWindowMs: 100, websocketTimeout: 200, closeTimeoutMs: 100 },
+    }).callApi('Hi', promptContext({ apiKeyEnvar: 'MISSING_LIVE_KEY' }));
+    await vi.advanceTimersByTimeAsync(200);
+    expect((await result).error).toBe(
+      'API key is not set. Set the MISSING_LIVE_KEY environment variable or add `apiKey` to the provider config.',
+    );
+    expect(sockets).toHaveLength(0);
+  });
+
+  it('treats URL userinfo as a gateway credential and rejects query-string credentials', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
+    const apiBaseUrl = 'http://gateway-user:gateway-secret@localhost:1234/v1';
+    const upgrade = async (config: OpenAiLiveOptions) => {
+      const result = new OpenAiLiveProvider('gpt-live-1', {
+        config: { responseWindowMs: 100, websocketTimeout: 200, closeTimeoutMs: 100, ...config },
+      }).callApi('Hi');
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      closed(socket);
+      expect((await result).error).toBeUndefined();
+      return socket;
+    };
+
+    // ws turns the userinfo into Basic credentials when no Authorization header is supplied.
+    const gateway = await upgrade({ apiBaseUrl });
+    expect(gateway.url).toBe('ws://gateway-user:gateway-secret@localhost:1234/v1/live/sessions');
+    expect(gateway.options.headers).toEqual({});
+    expect((await upgrade({ apiBaseUrl, apiKey: 'explicit-key' })).options.headers).toEqual({
+      Authorization: 'Bearer explicit-key',
+    });
+    const queryCredential = await new OpenAiLiveProvider('gpt-live-1', {
+      config: { apiBaseUrl: 'http://localhost:1234/v1?api-key=gateway-secret' },
+    }).callApi('Hi');
+    expect(queryCredential.error).toBe('GPT-Live session URLs do not accept query parameters.');
+    expect(sockets).toHaveLength(2);
+    // URL userinfo also satisfies the credential requirement without OPENAI_API_KEY.
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    expect((await upgrade({ apiBaseUrl })).options.headers).toEqual({});
   });
 
   it('uses prompt-scoped headers, including a case-insensitive authorization override', async () => {

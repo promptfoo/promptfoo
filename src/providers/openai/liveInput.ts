@@ -10,6 +10,14 @@ export interface LiveInputMessage {
   content: [{ type: 'input_text' | 'output_text'; text: string }];
 }
 
+/** Input audio plus the response window must fit in one five-minute capture. */
+export const LIVE_MAX_CAPTURE_MS = 300_000;
+
+export function getLiveBytesPerSecond(format: LiveAudioFormat): number {
+  return format.rate * (format.type === 'audio/pcm' ? 2 : 1);
+}
+
+const AUDIO_DURATION_ERROR = 'GPT-Live input audio must not exceed five minutes.';
 const UNKNOWN_CHUNK_SIZE = 0xffffffff;
 const WAVE_FORMAT_PCM = 1;
 const WAVE_FORMAT_EXTENSIBLE = 0xfffe;
@@ -118,6 +126,8 @@ function prepareContent(
   }
   const text: string[] = [];
   const audio: Buffer[] = [];
+  const maxAudioBytes = (getLiveBytesPerSecond(format) * LIVE_MAX_CAPTURE_MS) / 1000;
+  let audioBytes = 0;
   for (const part of parts) {
     if (
       part &&
@@ -137,7 +147,21 @@ function prepareContent(
         'GPT-Live audio is supported only in the final user message. Supply prior conversation as text.',
       );
     }
-    audio.push(decodeAudio(part.input_audio.data, part.input_audio.format, format));
+    const { data } = part.input_audio;
+    // Bound the total with base64's decoded size before decoding, so many small parts can't
+    // allocate past the capture limit.
+    if (
+      typeof data === 'string' &&
+      audioBytes + Buffer.byteLength(data, 'base64') > maxAudioBytes
+    ) {
+      throw new Error(AUDIO_DURATION_ERROR);
+    }
+    const bytes = decodeAudio(data, part.input_audio.format, format);
+    audioBytes += bytes.length;
+    if (audioBytes > maxAudioBytes) {
+      throw new Error(AUDIO_DURATION_ERROR);
+    }
+    audio.push(bytes);
   }
   return { text, audio: Buffer.concat(audio) };
 }

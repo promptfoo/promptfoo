@@ -7,7 +7,7 @@ description: Test GPT-Live voice conversations with paced audio input, timestamp
 
 Use `openai:live:gpt-live-1` to evaluate [OpenAI's GPT-Live API](https://developers.openai.com/api/docs/guides/live). It connects to `/v1/live/sessions` and supports full-duplex audio, where the model can listen and speak simultaneously. `openai:gpt-live-1` and `openai:live` select the same provider, and dated `openai:gpt-live-*` snapshots also use it.
 
-Set `OPENAI_API_KEY` to an OpenAI project key with Live access. For a compatible gateway, set `apiBaseUrl` and authenticate with `apiKey` or a credential header in `headers`, such as `Authorization` or `api-key`. When a gateway uses its own credential header, an `OPENAI_API_KEY` from the environment is not sent to it unless you set `apiKey` or `apiKeyEnvar`.
+Set `OPENAI_API_KEY` to an OpenAI project key with Live access. For a compatible gateway, set `apiBaseUrl` and authenticate with `apiKey`, a credential header in `headers` (such as `Authorization` or `api-key`), or userinfo in `apiBaseUrl`. When a gateway uses its own credential header or URL userinfo, an `OPENAI_API_KEY` from the environment is not sent to it unless the provider or prompt config sets `apiKey` or `apiKeyEnvar`.
 
 ## Quickstart
 
@@ -113,7 +113,7 @@ Startup failures report the server's error code and message. After startup, Live
 
 - A rejected opening instruction ends the capture, because Live was never asked to speak.
 - Other rejected commands and unattributed errors mark the result as an error and keep the full transcript.
-- Errors for work cancelled by `session.close` are recorded but do not change the result.
+- Errors for pending commands that `session.close` cancels are recorded but do not change the result. Moderation and other errors received while closing are still reported.
 
 Safety interventions are graded as refusals rather than errors. A moderation interruption sets `isRefusal` and `guardrails.flagged`. A session closed by the safety filter (`reason: content`) also sets `finishReason: content_filter` and `conversationEnded`, so multi-turn red team strategies stop probing. Sessions that close as `expired` or `connection_lost` remain errors.
 
@@ -123,6 +123,6 @@ Safety interventions are graded as refusals rather than errors. A moderation int
 
 `metadata.voiceSeconds` is the latest cumulative usage snapshot. `metadata.finalUsageConfirmed` is true only when `session.closed` supplies valid final usage. A dropped connection preserves partial output and observed usage, and reports an error.
 
-Voice cost uses the published $0.05/minute rate for `gpt-live-1`; `costPerMinute` overrides it. Responses token usage and model cost are accumulated separately from nested backend events. `cost` includes confirmed voice and backend model costs, excluding hosted-tool fees. Client-managed backend costs are unknown, so those sessions expose voice cost in `metadata.voiceCost` and omit total cost.
+Voice cost uses the published $0.05/minute rate for `gpt-live-1` and its dated snapshots, such as `gpt-live-1-2026-09-01`. Set `costPerMinute` to override it or to price other models. Responses token usage and model cost are accumulated separately from nested backend events. `cost` includes confirmed voice and backend model costs, excluding hosted-tool fees. Client-managed backend costs are unknown, so those sessions expose voice cost in `metadata.voiceCost` and omit total cost.
 
 See the [runnable example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-live) and [OpenAI's Live session guide](https://developers.openai.com/api/docs/guides/live-conversations).

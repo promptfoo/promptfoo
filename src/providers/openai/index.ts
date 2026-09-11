@@ -126,11 +126,12 @@ export class OpenAiGenericProvider implements ApiProvider {
     );
   }
 
-  getApiKey(): string | undefined {
+  /** Pass a prompt-merged config to resolve that call's credential. */
+  getApiKey(config: OpenAiSharedOptions = this.config): string | undefined {
     return resolveProviderApiKey(
-      this.config,
+      config,
       this.env,
-      this.config.useDefaultApiKey === false ? [] : ['OPENAI_API_KEY'],
+      config.useDefaultApiKey === false ? [] : ['OPENAI_API_KEY'],
     );
   }
 
@@ -178,8 +179,8 @@ export class OpenAiGenericProvider implements ApiProvider {
     return context?.bustCache ?? context?.debug;
   }
 
-  protected getMissingApiKeyErrorMessage(): string {
-    return `API key is not set. Set the ${this.config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`;
+  protected getMissingApiKeyErrorMessage(config: OpenAiSharedOptions = this.config): string {
+    return `API key is not set. Set the ${config.apiKeyEnvar || 'OPENAI_API_KEY'} environment variable or add \`apiKey\` to the provider config.`;
   }
 
   // @ts-ignore: Params are not used in this implementation

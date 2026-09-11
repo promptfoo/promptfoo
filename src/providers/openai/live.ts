@@ -2,7 +2,7 @@ import { loadCallbackFromFileUrl } from '../../util/functions/loadFunction';
 import { providerRegistry } from '../providerRegistry';
 import { getRequestTimeoutMs } from '../shared';
 import { hasHeaderOverride, OpenAiGenericProvider } from './index';
-import { prepareLiveInput } from './liveInput';
+import { getLiveBytesPerSecond, LIVE_MAX_CAPTURE_MS, prepareLiveInput } from './liveInput';
 import { isLiveCredentialHeader, LIVE_FRAME_MS, LiveSession } from './liveSession';
 import { appendOpenAiApiPath } from './util';
 
@@ -100,12 +100,12 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       );
       const closeTimeoutMs = positiveTimeout(config.closeTimeoutMs ?? 15_000, 'closeTimeoutMs');
       const input = prepareLiveInput(prompt, format);
-      const bytesPerSecond = format.rate * (format.type === 'audio/pcm' ? 2 : 1);
+      const bytesPerSecond = getLiveBytesPerSecond(format);
       const captureDurationMs =
         Math.ceil(
           ((input.audio.length / bytesPerSecond) * 1000 + responseWindowMs) / LIVE_FRAME_MS,
         ) * LIVE_FRAME_MS;
-      if (captureDurationMs > 300_000) {
+      if (captureDurationMs > LIVE_MAX_CAPTURE_MS) {
         throw new Error('GPT-Live input audio plus response window must not exceed five minutes.');
       }
       const requestTimeoutMs = getRequestTimeoutMs();
@@ -129,25 +129,29 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
       const delegationHandler = await resolveHandler(config.delegationHandler);
       const functionCallHandler = await resolveHandler(config.functionCallHandler);
       controller.signal.throwIfAborted();
-      const apiKey = this.getApiKey();
-      const headers = this.getOpenAiRequestHeaders(config.headers);
-      const credentialHeaders = Object.entries(headers).filter(
-        ([name, value]) => isLiveCredentialHeader(name) && String(value).trim().length > 0,
-      );
-      if (!apiKey && this.requiresApiKey() && !credentialHeaders.length) {
-        throw new Error(this.getMissingApiKeyErrorMessage());
-      }
       const url = new URL(appendOpenAiApiPath(this.getApiUrl(), 'live/sessions'));
       url.protocol = ['http:', 'ws:'].includes(url.protocol) ? 'ws:' : 'wss:';
       if (url.search) {
         throw new Error('GPT-Live session URLs do not accept query parameters.');
       }
+      // A prompt-level apiKey or apiKeyEnvar selects this call's credential.
+      const apiKey = this.getApiKey(config);
+      const headers = this.getOpenAiRequestHeaders(config.headers);
+      const credentialHeaders = Object.entries(headers).filter(
+        ([name, value]) => isLiveCredentialHeader(name) && String(value).trim().length > 0,
+      );
+      // ws sends URL userinfo as Basic credentials unless an Authorization header is set.
+      const hasUrlCredentials = Boolean(url.username || url.password);
+      if (!apiKey && this.requiresApiKey() && !credentialHeaders.length && !hasUrlCredentials) {
+        throw new Error(this.getMissingApiKeyErrorMessage(config));
+      }
       // Don't forward an ambient OPENAI_API_KEY to a gateway that authenticates with its own
-      // credential header; an explicit apiKey or apiKeyEnvar still sends it.
+      // credential header or URL userinfo; an explicit apiKey or apiKeyEnvar still sends it.
       const sendApiKey =
         Boolean(config.apiKey || config.apiKeyEnvar) ||
         url.hostname.toLowerCase() === 'api.openai.com' ||
-        !credentialHeaders.some(([name]) => name.toLowerCase() !== 'authorization');
+        (!hasUrlCredentials &&
+          !credentialHeaders.some(([name]) => name.toLowerCase() !== 'authorization'));
       const session = new LiveSession({
         url: url.toString(),
         headers: {
