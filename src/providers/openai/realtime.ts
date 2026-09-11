@@ -4,7 +4,6 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { sanitizeUrlForLogging } from '../../util/sanitizer';
 import { hasHeaderOverride, OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
-import { createOpenAiRealtimeSocket } from './realtimeClient';
 import {
   appendOpenAiApiPath,
   NON_CONVERSATIONAL_REALTIME_MODELS,
@@ -774,10 +773,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         perMessageDeflate: false,
       };
 
-      const ws = createOpenAiRealtimeSocket({
-        socketUrl: wsUrl,
-        websocketOptions: wsOptions,
-      });
+      const ws = new WebSocket(wsUrl, wsOptions);
 
       // Inactivity-based request timeout. Held in a closure variable so the
       // tool-round site can pause it (clearTimeout) before awaiting user code
@@ -2079,10 +2075,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
       perMessageDeflate: false,
     };
 
-    const ws = createOpenAiRealtimeSocket({
-      socketUrl: wsUrl,
-      websocketOptions: wsOptions,
-    });
+    const ws = new WebSocket(wsUrl, wsOptions);
     this.persistentConnection = ws;
 
     this.connectionReady = new Promise<void>((resolve, reject) => {

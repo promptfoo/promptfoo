@@ -1,8 +1,12 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
-import { callOpenAiImageApi } from '../image/utils';
-import { buildStructuredImageOutputs, formatOutput, OpenAiImageProvider } from '../openai/image';
+import {
+  buildStructuredImageOutputs,
+  callOpenAiImageApi,
+  formatOutput,
+  OpenAiImageProvider,
+} from '../openai/image';
 import { getRequestTimeoutMs } from '../shared';
 import { getXAICostInUsd } from './chat';
 

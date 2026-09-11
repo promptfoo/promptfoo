@@ -332,6 +332,17 @@ const FETCH_CACHE_SECRET_HMAC_CONTEXT = 'promptfoo:fetch-cache-secret-key';
 // the key so promptfoo upgrades remain a deliberate invalidation boundary.
 const CACHE_KEY_IGNORED_HEADERS = new Set(['accept-encoding', 'traceparent', 'tracestate']);
 const SDK_USER_AGENT_PATTERN = /^OpenAI\/JS \S+$/;
+const SDK_TRANSPORT_HEADERS = new Set([
+  'x-stainless-arch',
+  'x-stainless-helper-method',
+  'x-stainless-lang',
+  'x-stainless-os',
+  'x-stainless-package-version',
+  'x-stainless-retry-count',
+  'x-stainless-runtime',
+  'x-stainless-runtime-version',
+  'x-stainless-timeout',
+]);
 // A fixed, compiled-in salt (NOT a secret). It must be deterministic across
 // processes so that a request carrying a static secret — or a binary body —
 // hashes to the same on-disk cache key on every run and stays cacheable. A
@@ -347,7 +358,7 @@ let nextAbortSignalId = 0;
 // `Headers.entries()` yields lowercased names per the Fetch spec, so we don't
 // need to normalize the input here.
 function isIgnoredCacheKeyHeader(name: string, headers: Headers): boolean {
-  if (CACHE_KEY_IGNORED_HEADERS.has(name) || name.startsWith('x-stainless-')) {
+  if (CACHE_KEY_IGNORED_HEADERS.has(name) || SDK_TRANSPORT_HEADERS.has(name)) {
     return true;
   }
 
@@ -358,7 +369,7 @@ function isIgnoredCacheKeyHeader(name: string, headers: Headers): boolean {
   return (
     name === 'user-agent' &&
     SDK_USER_AGENT_PATTERN.test(headers.get(name) ?? '') &&
-    Array.from(headers.keys()).some((headerName) => headerName.startsWith('x-stainless-'))
+    Array.from(headers.keys()).some((headerName) => SDK_TRANSPORT_HEADERS.has(headerName))
   );
 }
 
@@ -367,7 +378,7 @@ function hasSdkTransportHeaders(url: RequestInfo, options: RequestInit) {
   // Stainless SDKs create a fresh AbortController for every request, even when
   // the caller did not provide a signal. Those transport-only signals should
   // share an upstream request while retaining per-caller cancellation below.
-  return Array.from(headers.keys()).some((headerName) => headerName.startsWith('x-stainless-'));
+  return Array.from(headers.keys()).some((headerName) => SDK_TRANSPORT_HEADERS.has(headerName));
 }
 
 function fingerprintFetchCacheSecret(value: string) {

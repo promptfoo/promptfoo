@@ -53,6 +53,7 @@ export function createJsonCachedOpenAiClient(options: JsonCachedOpenAiClientOpti
     cached: false,
   };
   const timeout = options.timeout ?? getRequestTimeoutMs();
+  const endpoint = getSdkEndpoint(options.baseURL);
   const apiKey = getSdkApiKey(options.apiKey, options.allowMissingApiKey);
   const ambientCustomHeaderNames = getAmbientOpenAiCustomHeaderNames(options.headers);
 
@@ -62,7 +63,7 @@ export function createJsonCachedOpenAiClient(options: JsonCachedOpenAiClientOpti
     organization: options.organization ?? null,
     project: null,
     webhookSecret: null,
-    baseURL: options.baseURL,
+    baseURL: endpoint.baseURL,
     defaultHeaders: options.headers,
     maxRetries: 0,
     timeout,
@@ -74,11 +75,11 @@ export function createJsonCachedOpenAiClient(options: JsonCachedOpenAiClientOpti
         options.organization,
         ambientCustomHeaderNames,
       );
-      if (isSdkUploadCapabilityProbe(requestUrl)) {
+      if (requestUrl.startsWith('data:')) {
         return globalThis.fetch(url, requestInit);
       }
       const response = await fetchWithCache(
-        requestUrl,
+        withEndpointQuery(requestUrl, endpoint.query),
         requestInit,
         timeout,
         'json',
@@ -133,12 +134,14 @@ export async function callJsonCachedOpenAi<T>(
 
 export function createOpenAiClient(options: OpenAiClientOptions) {
   const apiKey = getSdkApiKey(options.apiKey, options.allowMissingApiKey);
+  const endpoint = getSdkEndpoint(options.baseURL);
   const requestFetch = options.fetch ?? globalThis.fetch;
   const ambientCustomHeaderNames = getAmbientOpenAiCustomHeaderNames(options.headers);
   const shouldWrapFetch = Boolean(
     options.fetch ||
       (!options.apiKey && options.allowMissingApiKey) ||
-      ambientCustomHeaderNames.size > 0,
+      ambientCustomHeaderNames.size > 0 ||
+      endpoint.query,
   );
 
   return new OpenAI({
@@ -147,7 +150,7 @@ export function createOpenAiClient(options: OpenAiClientOptions) {
     organization: options.organization ?? null,
     project: null,
     webhookSecret: null,
-    baseURL: options.baseURL,
+    baseURL: endpoint.baseURL,
     defaultHeaders: options.headers,
     maxRetries: Math.max(0, options.maxRetries ?? 0),
     timeout: options.timeout ?? getRequestTimeoutMs(),
@@ -160,10 +163,10 @@ export function createOpenAiClient(options: OpenAiClientOptions) {
             ambientCustomHeaderNames,
           );
           const requestUrl = getRequestUrlString(url);
-          if (isSdkUploadCapabilityProbe(requestUrl)) {
+          if (requestUrl.startsWith('data:')) {
             return globalThis.fetch(url, requestInit);
           }
-          return requestFetch(url, requestInit);
+          return requestFetch(withEndpointQuery(requestUrl, endpoint.query), requestInit);
         }
       : undefined,
   });
@@ -268,12 +271,23 @@ function getReconstructedJsonHeaders(headers?: Record<string, string>) {
   return reconstructedHeaders;
 }
 
-// Exported for tests. The OpenAI SDK probes upload capability with a `data:`
-// URL. The exact form ("data:," today) is an implementation detail; match the
-// scheme rather than the literal so future SDK versions keep bypassing the
-// cache wrapper.
-export function isSdkUploadCapabilityProbe(url: string) {
-  return url.startsWith('data:');
+function getSdkEndpoint(baseURL: string) {
+  const url = new URL(baseURL);
+  const query = url.search;
+  url.search = '';
+  url.hash = '';
+  return { baseURL: url.toString(), query };
+}
+
+function withEndpointQuery(requestUrl: string, query: string): string {
+  if (!query) {
+    return requestUrl;
+  }
+  const url = new URL(requestUrl);
+  // Keep opaque values and repeated gateway parameters byte-for-byte. The SDK
+  // otherwise appends resource paths inside a base URL's query string.
+  url.search = query + (url.search ? `&${url.search.slice(1)}` : '');
+  return url.toString();
 }
 
 function getRequestUrlString(url: RequestInfo | URL) {

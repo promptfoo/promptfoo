@@ -12,11 +12,6 @@ import type { OpenAiRealtimeOptions } from '../../../src/providers/openai/realti
 // Mock WebSocket
 vi.mock('ws');
 const MockWebSocket = WebSocket as Mocked<typeof WebSocket>;
-const mockCreateOpenAiRealtimeSocket = vi.hoisted(() => vi.fn());
-
-vi.mock('../../../src/providers/openai/realtimeClient', () => ({
-  createOpenAiRealtimeSocket: mockCreateOpenAiRealtimeSocket,
-}));
 
 // Mock logger
 vi.mock('../../../src/logger', () => ({
@@ -166,9 +161,6 @@ describe('OpenAI Realtime Provider', () => {
     // Mock WebSocket constructor
     (MockWebSocket as any).mockImplementation(function () {
       return mockWs;
-    });
-    mockCreateOpenAiRealtimeSocket.mockImplementation(({ socketUrl, websocketOptions }) => {
-      return new (MockWebSocket as any)(socketUrl, websocketOptions);
     });
   });
 

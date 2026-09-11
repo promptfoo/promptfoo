@@ -895,6 +895,30 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
     });
 
+    it('keeps caller-defined Stainless routing headers in cache keys', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { tenant: 'first' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { tenant: 'second' }));
+      const headers = { 'x-stainless-lang': 'js', 'user-agent': 'OpenAI/JS 6.37.0' };
+      const first = await fetchWithCache(
+        url,
+        {
+          headers: { ...headers, 'x-stainless-tenant': 'first' },
+        },
+        1000,
+      );
+      const second = await fetchWithCache(
+        url,
+        {
+          headers: { ...headers, 'x-stainless-tenant': 'second' },
+        },
+        1000,
+      );
+      expect(first.data).toEqual({ tenant: 'first' });
+      expect(second.data).toEqual({ tenant: 'second' });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
     it('should safely deduplicate abortable requests while another caller remains active', async () => {
       const firstController = new AbortController();
       const secondController = new AbortController();

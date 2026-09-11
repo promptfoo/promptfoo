@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type FetchWithCacheResult, fetchWithCache } from '../../../src/cache';
 import {
+  callJsonCachedOpenAi,
   createJsonCachedOpenAiClient,
   createOpenAiClient,
-  isSdkUploadCapabilityProbe,
 } from '../../../src/providers/openai/client';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -226,18 +226,30 @@ describe('createOpenAiClient', () => {
   });
 });
 
-describe('isSdkUploadCapabilityProbe', () => {
-  it('matches the SDK data: probe in its current form', () => {
-    expect(isSdkUploadCapabilityProbe('data:,')).toBe(true);
-  });
-
-  it('matches data: URLs with payloads so future SDK probe variants still bypass cache', () => {
-    expect(isSdkUploadCapabilityProbe('data:text/plain;base64,SGVsbG8=')).toBe(true);
-    expect(isSdkUploadCapabilityProbe('data:application/json,%7B%7D')).toBe(true);
-  });
-
-  it('does not match regular HTTP URLs', () => {
-    expect(isSdkUploadCapabilityProbe('https://api.openai.com/v1/chat/completions')).toBe(false);
-    expect(isSdkUploadCapabilityProbe('http://localhost:8080/v1/responses')).toBe(false);
-  });
+describe('gateway query parameters', () => {
+  it.each([false, true])(
+    'keeps paths outside opaque and repeated query parameters (cached: %s)',
+    async (cached) => {
+      const data = { id: 'video-123', status: 'completed' };
+      const fetch = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(data), {
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+      fetchWithCacheMock.mockResolvedValue(createCachedResponse(data));
+      const options = {
+        apiKey: 'test-key',
+        baseURL: 'https://gateway.example/proxy/v1?token=a%2Fb+%26c&tag=one&tag=two',
+      };
+      if (cached) {
+        await callJsonCachedOpenAi(options, (client) => client.videos.retrieve('video-123'));
+      } else {
+        await createOpenAiClient({ ...options, fetch }).videos.retrieve('video-123');
+      }
+      const requestUrl = cached ? fetchWithCacheMock.mock.calls[0][0] : fetch.mock.calls[0][0];
+      expect(requestUrl).toBe(
+        'https://gateway.example/proxy/v1/videos/video-123?token=a%2Fb+%26c&tag=one&tag=two',
+      );
+    },
+  );
 });

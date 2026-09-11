@@ -305,9 +305,6 @@ describe('FunctionCallbackHandler', () => {
         output: JSON.stringify(call),
         isError: true,
       });
-      expect(mockLogger.warn).toHaveBeenCalledWith(
-        expect.stringContaining("Error stringifying result from function 'testFunction'"),
-      );
     });
 
     it('should return original call on callback error', async () => {

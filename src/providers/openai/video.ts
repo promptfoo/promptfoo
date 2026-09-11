@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -5,6 +6,7 @@ import OpenAI from 'openai';
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import {
   buildStorageRefUrl,
@@ -17,6 +19,11 @@ import {
 } from '../video';
 import { OpenAiGenericProvider } from '.';
 import { createOpenAiClient, unwrapOpenAiTransportError } from './client';
+import {
+  assertOpenAiApiModel,
+  hasSensitiveOpenAiCachePath,
+  hasSensitiveOpenAiCacheString,
+} from './util';
 
 import type { MediaStorageRef } from '../../storage/types';
 import type { EnvOverrides } from '../../types/env';
@@ -26,6 +33,7 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type {
+  OpenAiVideoCreateSize,
   OpenAiVideoDuration,
   OpenAiVideoJob,
   OpenAiVideoModel,
@@ -60,17 +68,19 @@ const VALID_VIDEO_SIZES: readonly OpenAiVideoSize[] = [
   '720x1280',
   '1792x1024',
   '1024x1792',
+  '1920x1080',
+  '1080x1920',
 ] as const;
 
 /**
  * Valid video durations in seconds for OpenAI Sora
  */
-const VALID_VIDEO_DURATIONS: readonly OpenAiVideoDuration[] = [4, 8, 12] as const;
+const VALID_VIDEO_DURATIONS: readonly OpenAiVideoDuration[] = [4, 8, 12, 16, 20] as const;
 
 /**
  * Default configuration values
  */
-const DEFAULT_SIZE: OpenAiVideoSize = '1280x720';
+const DEFAULT_SIZE: OpenAiVideoCreateSize = '1280x720';
 const DEFAULT_SECONDS: OpenAiVideoDuration = 8;
 const DEFAULT_POLL_INTERVAL_MS = 10000; // 10 seconds
 const DEFAULT_MAX_POLL_TIME_MS = 600000; // 10 minutes
@@ -84,6 +94,95 @@ const VARIANT_MIME_TYPES: Record<OpenAiVideoVariant, string> = {
   spritesheet: 'image/jpeg',
 };
 
+type OpenAiVideoInputReference = { file_id: string } | { image_url: string };
+
+function getImageMimeType(value: string): string {
+  const extension = path.extname(value).toLowerCase();
+  if (extension === '.jpg' || extension === '.jpeg' || value.startsWith('/9j/')) {
+    return 'image/jpeg';
+  }
+  if (extension === '.webp' || value.startsWith('UklGR')) {
+    return 'image/webp';
+  }
+  return 'image/png';
+}
+
+async function normalizeInputReference(
+  reference: NonNullable<OpenAiVideoOptions['input_reference']>,
+): Promise<OpenAiVideoInputReference> {
+  if (typeof reference !== 'string') {
+    return reference;
+  }
+  if (/^(?:https?:\/\/|data:)/i.test(reference)) {
+    return { image_url: reference };
+  }
+  if (/^file:\/\//i.test(reference)) {
+    const filePath = reference.slice(7);
+    const buffer = await fs.readFile(filePath);
+    return {
+      image_url: `data:${getImageMimeType(filePath)};base64,${buffer.toString('base64')}`,
+    };
+  }
+  return { image_url: `data:${getImageMimeType(reference)};base64,${reference}` };
+}
+
+function hasValidInputReference(reference: OpenAiVideoOptions['input_reference']): boolean {
+  if (!reference || typeof reference === 'string') {
+    return true;
+  }
+
+  const candidate = reference as { file_id?: unknown; image_url?: unknown };
+  const hasFileId = typeof candidate.file_id === 'string' && candidate.file_id.trim().length > 0;
+  const hasImageUrl =
+    typeof candidate.image_url === 'string' && candidate.image_url.trim().length > 0;
+  return hasFileId !== hasImageUrl;
+}
+
+function hasValidCharacters(characters: OpenAiVideoOptions['characters']): boolean {
+  return (
+    !characters ||
+    (Array.isArray(characters) &&
+      characters.length <= 2 &&
+      characters.every(
+        (character) =>
+          character && typeof character.id === 'string' && character.id.trim().length > 0,
+      ))
+  );
+}
+
+function hasAuthenticatedInputReference(reference: OpenAiVideoOptions['input_reference']): boolean {
+  const imageUrl =
+    typeof reference === 'string'
+      ? reference
+      : reference && 'image_url' in reference
+        ? reference.image_url
+        : undefined;
+  if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
+    return false;
+  }
+  try {
+    const parsedUrl = new URL(imageUrl);
+    const normalizedUrl = parsedUrl.toString();
+    return (
+      sanitizeUrl(normalizedUrl) !== normalizedUrl ||
+      hasSensitiveOpenAiCachePath(decodeURIComponent(parsedUrl.pathname))
+    );
+  } catch {
+    return true;
+  }
+}
+
+function isSensitiveCacheHeader(key: string): boolean {
+  return (
+    isSecretField(key) ||
+    /(?:authorization|api[-_]?key|token|secret|signature|credential|cookie|password)/i.test(key)
+  );
+}
+
+function hasSensitiveCacheValue(value: string): boolean {
+  return hasSensitiveOpenAiCacheString(value);
+}
+
 // =============================================================================
 // Validation Functions (using shared validator)
 // =============================================================================
@@ -91,7 +190,28 @@ const VARIANT_MIME_TYPES: Record<OpenAiVideoVariant, string> = {
 /**
  * Validate video size parameter
  */
-export const validateVideoSize = createValidator(VALID_VIDEO_SIZES, 'video size');
+const validateKnownVideoSize = createValidator(VALID_VIDEO_SIZES, 'video size');
+
+export function validateVideoSize(
+  size: OpenAiVideoSize,
+  model?: OpenAiVideoModel,
+): { valid: boolean; message?: string } {
+  const validation = validateKnownVideoSize(size);
+  if (!validation.valid) {
+    return validation;
+  }
+
+  if (model?.startsWith('sora-2') && !model.startsWith('sora-2-pro')) {
+    if (size !== '1280x720' && size !== '720x1280') {
+      return {
+        valid: false,
+        message: `Invalid video size "${size}" for ${model}. Valid options: 1280x720, 720x1280`,
+      };
+    }
+  }
+
+  return { valid: true };
+}
 
 /**
  * Validate video seconds parameter
@@ -105,85 +225,20 @@ export function calculateVideoCost(
   model: OpenAiVideoModel,
   seconds: number,
   cached: boolean = false,
+  size: OpenAiVideoSize = DEFAULT_SIZE,
 ): number {
   if (cached) {
     return 0;
   }
-  const costPerSecond = SORA_COSTS[model] || SORA_COSTS['sora-2'];
+  let costPerSecond = SORA_COSTS[model] || SORA_COSTS['sora-2'];
+  if (model.startsWith('sora-2-pro')) {
+    if (size === '1792x1024' || size === '1024x1792') {
+      costPerSecond = 0.5;
+    } else if (size === '1920x1080' || size === '1080x1920') {
+      costPerSecond = 0.7;
+    }
+  }
   return costPerSecond * seconds;
-}
-
-type OpenAiVideoErrorDetails = {
-  rawError: unknown;
-  status?: number;
-  message: string;
-};
-
-function getOpenAiVideoErrorDetails(err: unknown): OpenAiVideoErrorDetails {
-  const rawError = unwrapOpenAiTransportError(err);
-
-  if (typeof rawError === 'object' && rawError !== null) {
-    const status =
-      'status' in rawError && typeof rawError.status === 'number' ? rawError.status : undefined;
-    const nestedError = 'error' in rawError ? rawError.error : undefined;
-    const nestedMessage =
-      typeof nestedError === 'object' &&
-      nestedError !== null &&
-      'message' in nestedError &&
-      typeof nestedError.message === 'string'
-        ? nestedError.message
-        : undefined;
-    const fallbackMessage = rawError instanceof Error ? rawError.message : String(rawError);
-
-    return {
-      rawError,
-      status,
-      message: stripStatusPrefix(status, nestedMessage ?? fallbackMessage),
-    };
-  }
-
-  return {
-    rawError,
-    message: String(rawError),
-  };
-}
-
-function stripStatusPrefix(status: number | undefined, message: string): string {
-  if (status === undefined) {
-    return message;
-  }
-
-  const prefix = `${status} `;
-  return message.startsWith(prefix) ? message.slice(prefix.length) : message;
-}
-
-function formatCreateVideoError(err: unknown): string {
-  const details = getOpenAiVideoErrorDetails(err);
-  return details.status === undefined
-    ? `Failed to create video job: ${String(details.rawError)}`
-    : `API error ${details.status}: ${details.message}`;
-}
-
-function formatPollVideoError(err: unknown): string {
-  const details = getOpenAiVideoErrorDetails(err);
-  return details.status === undefined
-    ? `Polling error: ${String(details.rawError)}`
-    : `Status check failed: ${details.message}`;
-}
-
-function formatDownloadVideoError(variant: OpenAiVideoVariant, err: unknown): string {
-  const details = getOpenAiVideoErrorDetails(err);
-  return details.status === undefined
-    ? `Download error for ${variant}: ${String(details.rawError)}`
-    : `Failed to download ${variant}: ${details.status} ${details.message}`;
-}
-
-function isJsonVideoInputReference(inputReference: string) {
-  return (
-    inputReference.startsWith('http://') ||
-    inputReference.startsWith('https://') ||
-    inputReference.startsWith('data:')
-  );
 }
 
 // =============================================================================
@@ -222,84 +277,77 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     return `[OpenAI Video Provider ${this.modelName}]`;
   }
 
-  private createClient(headers?: Record<string, string>) {
+  /**
+   * Build authorization headers for API requests
+   */
+  private getAuthHeaders(customHeaders?: Record<string, string>): Record<string, string> {
+    const resolvedHeaders = this.getOpenAiRequestHeaders(customHeaders);
+    const hasAuthorizationOverride = Object.keys(resolvedHeaders).some(
+      (header) => header.toLowerCase() === 'authorization',
+    );
+    const apiKey = this.getApiKey();
+    return {
+      ...(apiKey && !hasAuthorizationOverride ? { Authorization: `Bearer ${apiKey}` } : {}),
+      ...resolvedHeaders,
+    };
+  }
+
+  private createClient(customHeaders?: Record<string, string>) {
+    const headers = this.getAuthHeaders(customHeaders);
+    for (const header of Object.keys(headers)) {
+      if (header.toLowerCase() === 'content-type') {
+        delete headers[header];
+      }
+    }
     return createOpenAiClient({
       apiKey: this.getApiKey(),
       allowMissingApiKey: !this.requiresApiKey(),
       organization: this.getOrganization(),
       baseURL: this.getApiUrl(),
-      headers: this.getOpenAiRequestHeaders(headers),
-      // `fetchWithProxy` already owns transient retry behavior for this transport.
-      // Keep SDK retries off here so create/remix requests do not multiply attempts.
+      headers,
       maxRetries: 0,
       fetch: (url, init) => fetchWithProxy(url instanceof URL ? url.toString() : url, init),
     });
   }
 
-  /**
-   * Create a new video generation job
-   */
   private async createVideoJob(
     prompt: string,
     config: OpenAiVideoOptions,
   ): Promise<{ job: OpenAiVideoJob; error?: string }> {
     const client = this.createClient(config.headers);
-    const body: OpenAI.VideoCreateParams = {
-      model: this.modelName as OpenAI.VideoModel,
-      prompt,
-    };
-
-    // Only include these for new videos (not remix)
-    if (!config.remix_video_id) {
-      body.size = (config.size || DEFAULT_SIZE) as OpenAI.VideoSize;
-      // API requires seconds as a string ("4", "8", or "12")
-      body.seconds = String(config.seconds || DEFAULT_SECONDS) as OpenAI.VideoSeconds;
-    }
-
-    // Handle input_reference (image-to-video)
-    if (config.input_reference) {
-      if (typeof config.input_reference !== 'string') {
-        body.input_reference = config.input_reference;
-      } else if (config.input_reference.startsWith('file://')) {
-        const filePath = config.input_reference.slice(7);
-        try {
-          const buffer = await fs.readFile(filePath);
-          body.input_reference = new File([Uint8Array.from(buffer)], path.basename(filePath));
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-            throw error;
-          }
-          return {
-            job: {} as OpenAiVideoJob,
-            error: `Input reference file not found: ${filePath}`,
-          };
-        }
-      } else if (isJsonVideoInputReference(config.input_reference)) {
-        body.input_reference = { image_url: config.input_reference };
-      } else {
-        body.input_reference = new File(
-          [Uint8Array.from(Buffer.from(config.input_reference, 'base64'))],
-          'input-reference.png',
-        );
-      }
-    }
-
     try {
-      logger.debug('[OpenAI Video] Creating video job', {
-        remixVideoId: config.remix_video_id,
-        model: this.modelName,
-      });
-
-      const job = config.remix_video_id
-        ? ((await client.videos.remix(config.remix_video_id, {
-            prompt,
-          })) as OpenAiVideoJob)
-        : ((await client.videos.create(body)) as OpenAiVideoJob);
+      let job: OpenAiVideoJob;
+      if (config.remix_video_id) {
+        job = (await client.videos.remix(config.remix_video_id, { prompt })) as OpenAiVideoJob;
+      } else {
+        const body = {
+          model: config.model || this.modelName,
+          prompt,
+          size: config.size || DEFAULT_SIZE,
+          seconds: String(config.seconds || DEFAULT_SECONDS),
+          ...(config.characters?.length ? { characters: config.characters } : {}),
+          ...(config.input_reference
+            ? { input_reference: await normalizeInputReference(config.input_reference) }
+            : {}),
+        };
+        // Reference objects and reusable characters use the JSON API contract.
+        // The SDK's generated create helper currently always encodes multipart.
+        job =
+          config.input_reference || config.characters?.length
+            ? await client.post<OpenAiVideoJob>('/videos', { body })
+            : ((await client.videos.create(body as OpenAI.VideoCreateParams)) as OpenAiVideoJob);
+      }
       return { job };
     } catch (err: unknown) {
+      const error = unwrapOpenAiTransportError(err);
       return {
         job: {} as OpenAiVideoJob,
-        error: formatCreateVideoError(err),
+        error:
+          error instanceof OpenAI.APIError
+            ? `API error ${error.status}: ${error.error?.message ?? error.message}`
+            : (error as NodeJS.ErrnoException)?.code === 'ENOENT'
+              ? `Input reference file not found: ${String(config.input_reference).slice(7)}`
+              : `Failed to create video job: ${String(error)}`,
       };
     }
   }
@@ -311,9 +359,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     videoId: string,
     pollIntervalMs: number,
     maxPollTimeMs: number,
+    customHeaders?: Record<string, string>,
   ): Promise<{ job: OpenAiVideoJob; error?: string }> {
     const startTime = Date.now();
-    const client = this.createClient();
+    const client = this.createClient(customHeaders);
 
     while (Date.now() - startTime < maxPollTimeMs) {
       try {
@@ -339,7 +388,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       } catch (err: unknown) {
         return {
           job: {} as OpenAiVideoJob,
-          error: formatPollVideoError(err),
+          error:
+            err instanceof OpenAI.APIError
+              ? `Status check failed: ${err.error?.message ?? err.message}`
+              : `Polling error: ${String(unwrapOpenAiTransportError(err))}`,
         };
       }
     }
@@ -358,14 +410,16 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     variant: OpenAiVideoVariant,
     cacheKey: string,
     evalId?: string,
+    customHeaders?: Record<string, string>,
   ): Promise<{ storageRef?: MediaStorageRef; error?: string }> {
-    const client = this.createClient();
+    const client = this.createClient(customHeaders);
 
     try {
       const response = await client.videos.downloadContent(
         soraVideoId,
         variant === 'video' ? {} : { variant },
       );
+
       const buffer = Buffer.from(await response.arrayBuffer());
       const mimeType = VARIANT_MIME_TYPES[variant];
       const mediaType = variant === 'video' ? 'video' : 'image';
@@ -383,7 +437,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       return { storageRef: ref };
     } catch (err: unknown) {
       return {
-        error: formatDownloadVideoError(variant, err),
+        error:
+          err instanceof OpenAI.APIError
+            ? `Failed to download ${variant}: ${err.status} ${err.error?.message ?? err.message}`
+            : `Download error for ${variant}: ${String(unwrapOpenAiTransportError(err))}`,
       };
     }
   }
@@ -404,37 +461,104 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     };
 
     const model = (config.model || this.modelName) as OpenAiVideoModel;
-    const size = (config.size || DEFAULT_SIZE) as OpenAiVideoSize;
+    assertOpenAiApiModel(model, this.getApiUrl());
+    const size = (config.size || DEFAULT_SIZE) as OpenAiVideoCreateSize;
     const seconds = config.seconds || DEFAULT_SECONDS;
     const evalId = context?.evaluationId;
 
-    // Validate size
-    const sizeValidation = validateVideoSize(size);
-    if (!sizeValidation.valid) {
-      return { error: sizeValidation.message };
-    }
+    if (!config.remix_video_id) {
+      const sizeValidation = validateVideoSize(size, model);
+      if (!sizeValidation.valid) {
+        return { error: sizeValidation.message };
+      }
 
-    // Validate seconds
-    const secondsValidation = validateVideoSeconds(seconds);
-    if (!secondsValidation.valid) {
-      return { error: secondsValidation.message };
+      const secondsValidation = validateVideoSeconds(seconds);
+      if (!secondsValidation.valid) {
+        return { error: secondsValidation.message };
+      }
+
+      if (!hasValidCharacters(config.characters)) {
+        return { error: 'Sora generation accepts at most two characters with non-empty IDs.' };
+      }
+
+      if (!hasValidInputReference(config.input_reference)) {
+        return { error: 'Sora input_reference must provide exactly one of image_url or file_id.' };
+      }
     }
 
     // Generate deterministic cache key from inputs
     // Note: remix_video_id is excluded from cache key as remixes should always regenerate
+    const apiUrl = this.getApiUrl();
+    const requestHeaders = this.getAuthHeaders(config.headers);
+    let sendsToOpenAiApi = false;
+    let hasSensitiveUrlCredentials = false;
+    let hasSensitiveUrlPath = false;
+    try {
+      const parsedApiUrl = new URL(apiUrl);
+      const normalizedApiUrl = parsedApiUrl.toString();
+      sendsToOpenAiApi = parsedApiUrl.hostname.toLowerCase() === 'api.openai.com';
+      hasSensitiveUrlCredentials = sanitizeUrl(normalizedApiUrl) !== normalizedApiUrl;
+      hasSensitiveUrlPath = hasSensitiveOpenAiCachePath(decodeURIComponent(parsedApiUrl.pathname));
+    } catch {
+      hasSensitiveUrlCredentials = true;
+      hasSensitiveUrlPath = true;
+    }
+    const safeCacheHeaders = Object.fromEntries(
+      Object.entries(this.getOpenAiRequestHeaders(config.headers))
+        .filter(
+          ([key, value]) =>
+            !isSensitiveCacheHeader(key) &&
+            typeof value === 'string' &&
+            value.trim().length > 0 &&
+            !hasSensitiveCacheValue(value),
+        )
+        .map(([key, value]) => [key.toLowerCase(), value])
+        .sort(([left], [right]) => left.localeCompare(right)),
+    );
+    const hasSensitiveHeaderValue = Object.entries(requestHeaders).some(
+      ([key, value]) =>
+        !isSensitiveCacheHeader(key) && typeof value === 'string' && hasSensitiveCacheValue(value),
+    );
+    const cacheScope = {
+      ...safeCacheHeaders,
+      ...(sendsToOpenAiApi ? {} : { 'api-base-url': sanitizeUrl(apiUrl) }),
+    };
+    const usesAuthenticatedCustomEndpoint =
+      !sendsToOpenAiApi &&
+      (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
+    const hasProjectDiscriminator = Object.keys(safeCacheHeaders).some((key) =>
+      /(?:^|[-_])(?:project|tenant|account)(?:[-_]|$)/i.test(key),
+    );
+    const hasProjectScopedAsset =
+      Boolean(config.characters?.length) ||
+      Boolean(
+        config.input_reference &&
+          typeof config.input_reference === 'object' &&
+          'file_id' in config.input_reference,
+      );
+    const canCacheVideo =
+      !hasSensitiveCacheValue(prompt) &&
+      !hasSensitiveHeaderValue &&
+      !hasSensitiveUrlPath &&
+      !hasAuthenticatedInputReference(config.input_reference) &&
+      !usesAuthenticatedCustomEndpoint &&
+      (!hasProjectScopedAsset || hasProjectDiscriminator);
     const cacheKey = generateVideoCacheKey({
       provider: 'openai',
-      prompt,
+      prompt: canCacheVideo ? prompt : randomUUID(),
       model,
       size,
       seconds,
-      inputReference: config.remix_video_id ? null : config.input_reference,
+      inputReference: config.remix_video_id || !canCacheVideo ? null : config.input_reference,
+      characters: config.remix_video_id || !canCacheVideo ? undefined : config.characters,
+      cacheScope: canCacheVideo ? cacheScope : undefined,
     });
 
     // Check for cached video (skip for remix operations)
-    const cachedVideoKey = config.remix_video_id
-      ? null
-      : await checkVideoCache(cacheKey, PROVIDER_NAME);
+    const cachedVideoKey =
+      config.remix_video_id || !canCacheVideo
+        ? null
+        : await checkVideoCache(cacheKey, PROVIDER_NAME);
     if (cachedVideoKey) {
       logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
 
@@ -501,7 +625,12 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const pollIntervalMs = config.poll_interval_ms || DEFAULT_POLL_INTERVAL_MS;
     const maxPollTimeMs = config.max_poll_time_ms || DEFAULT_MAX_POLL_TIME_MS;
 
-    const { error: pollError } = await this.pollVideoStatus(videoId, pollIntervalMs, maxPollTimeMs);
+    const { job: completedJob, error: pollError } = await this.pollVideoStatus(
+      videoId,
+      pollIntervalMs,
+      maxPollTimeMs,
+      config.headers,
+    );
 
     if (pollError) {
       return { error: pollError };
@@ -519,6 +648,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       'video',
       cacheKey,
       evalId,
+      config.headers,
     );
 
     if (videoDownloadError || !videoRef) {
@@ -533,6 +663,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         'thumbnail',
         cacheKey,
         evalId,
+        config.headers,
       );
       if (error) {
         logger.warn(`[OpenAI Video] Failed to download thumbnail: ${error}`);
@@ -549,6 +680,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         'spritesheet',
         cacheKey,
         evalId,
+        config.headers,
       );
       if (error) {
         logger.warn(`[OpenAI Video] Failed to download spritesheet: ${error}`);
@@ -558,16 +690,23 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     }
 
     const latencyMs = Date.now() - startTime;
-    const cost = calculateVideoCost(model, seconds, false);
+    const completedModel = (completedJob.model || model) as OpenAiVideoModel;
+    const completedSize = (completedJob.size || size) as OpenAiVideoSize;
+    const parsedSeconds = Number(completedJob.seconds);
+    const completedSeconds =
+      Number.isFinite(parsedSeconds) && parsedSeconds > 0 ? parsedSeconds : seconds;
+    const cost = calculateVideoCost(completedModel, completedSeconds, false, completedSize);
 
     // Store cache mapping for future lookups
-    await storeCacheMapping(
-      cacheKey,
-      videoRef.key,
-      thumbnailRef?.key,
-      spritesheetRef?.key,
-      PROVIDER_NAME,
-    );
+    if (canCacheVideo) {
+      await storeCacheMapping(
+        cacheKey,
+        videoRef.key,
+        thumbnailRef?.key,
+        spritesheetRef?.key,
+        PROVIDER_NAME,
+      );
+    }
 
     // Build storage ref URLs
     const videoUrl = buildStorageRefUrl(videoRef.key);
@@ -587,18 +726,18 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         storageRef: { key: videoRef.key }, // Structured storage reference (preferred)
         url: videoUrl, // Legacy URL format for backwards compatibility
         format: 'mp4',
-        size,
-        duration: seconds,
+        size: completedSize,
+        duration: completedSeconds,
         thumbnail: thumbnailUrl,
         spritesheet: spritesheetUrl,
-        model,
+        model: completedModel,
       },
       metadata: {
         soraVideoId: videoId,
         cacheKey,
-        model,
-        size,
-        seconds,
+        model: completedModel,
+        size: completedSize,
+        seconds: completedSeconds,
         storageKey: videoRef.key,
       },
     };

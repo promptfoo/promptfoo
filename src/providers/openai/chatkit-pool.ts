@@ -182,9 +182,6 @@ export class ChatKitBrowserPool {
     if (htmlChanged || createClientSecretChanged) {
       this.templates.set(templateKey, { html, createClientSecret });
       logger.debug('[ChatKitPool] Registered template', { templateKey });
-    }
-
-    if (htmlChanged || createClientSecretChanged) {
       // The served page caches the minted client secret in-memory. Refresh
       // pooled pages when either the page HTML or the secret factory changes so
       // a page never replays credentials from an older provider/session.
