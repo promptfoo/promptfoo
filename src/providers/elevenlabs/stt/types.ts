@@ -77,14 +77,3 @@ export interface WERResult {
     alignment?: string;
   };
 }
-
-/**
- * Audio file metadata
- */
-export interface AudioFileMetadata {
-  format: AudioFormat;
-  duration_ms?: number;
-  sample_rate?: number;
-  channels?: number;
-  size_bytes: number;
-}

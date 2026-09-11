@@ -1,6 +1,7 @@
 import { DEFAULT_AGENT_GRADING_PROMPT } from '../prompts/grading';
-import { isAgenticProvider } from '../providers/agentic-utils';
+import { isAgenticGradingProvider } from '../providers/agentic-utils';
 import { getCodexDefaultProviders } from '../providers/openai/codexDefaults';
+import { renderGradingProviderConfig } from '../util/gradingProvider';
 import { getGradingProvider } from './providers';
 import { runJsonGradingPrompt } from './rubric';
 import { tryParse } from './shared';
@@ -28,14 +29,16 @@ export async function matchesAgentRubric(
   }
 
   const configuredProvider = grading.provider
-    ? await getGradingProvider('text', grading.provider, null)
+    ? await getGradingProvider('text', grading.provider, null, (config, env) =>
+        renderGradingProviderConfig(config, vars, env),
+      )
     : null;
   const agentProvider = configuredProvider || getCodexDefaultProviders().llmRubricProvider;
 
-  if (!agentProvider || !isAgenticProvider(agentProvider)) {
+  if (!agentProvider || !isAgenticGradingProvider(agentProvider)) {
     throw new Error(
       'agent-rubric assertion requires an agentic grading provider. ' +
-        'Use openai:codex-sdk, openai:codex-app-server, anthropic:claude-agent-sdk, or opencode:sdk.',
+        'Use openai:codex-sdk, openai:codex-app-server, anthropic:claude-agent-sdk, openinterpreter, or opencode:sdk.',
     );
   }
 
@@ -50,9 +53,9 @@ export async function matchesAgentRubric(
     label: 'agent-rubric',
     providerCallContext,
     vars: {
+      ...(vars || {}),
       output: tryParse(llmOutput),
       rubric,
-      ...(vars || {}),
     },
   });
 

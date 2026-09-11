@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildConfiguredProviderMap,
   GRADING_PROVIDER_TYPE_KEYS,
+  hasProviderConfigTemplates,
   isProviderTypeMap,
+  renderGradingProviderConfig,
   resolveConfiguredProviderReference,
 } from '../../src/util/gradingProvider';
 
@@ -166,5 +168,50 @@ describe('resolveConfiguredProviderReference', () => {
     const inlineProvider = { text: { id: 'litellm:judge', config: { temperature: 0 } } };
 
     expect(resolveConfiguredProviderReference(inlineProvider, providerMap)).toBe(inlineProvider);
+  });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('grader config templates', () => {
+  it.each(['{{trace_id}}', '{% if fixture %}a{% endif %}', '{# comment #}'])(
+    'detects %s before eager provider construction',
+    (template) => {
+      expect(hasProviderConfigTemplates({ id: 'agent', config: { working_dir: template } })).toBe(
+        true,
+      );
+    },
+  );
+
+  it.each([
+    undefined,
+    'agent',
+    { id: 'agent' },
+    { id: 'agent', config: { working_dir: './fixed', enabled: true } },
+    makeProvider('agent'),
+  ])('preserves non-templated providers', (provider) => {
+    expect(hasProviderConfigTemplates(provider)).toBe(false);
+  });
+
+  it('supports intentional defaults without mutating config or rendering nested test vars', () => {
+    const config = {
+      working_dir: './{{missing | default("fallback")}}',
+      enabled: true,
+      nested: { path: '{{trace_id}}' },
+      list: ['{{trace_id}}'],
+    };
+    expect(renderGradingProviderConfig(config, { trace_id: 'abc' })).toEqual({
+      ...config,
+      working_dir: './fallback',
+    });
+    expect(config.working_dir).toBe('./{{missing | default("fallback")}}');
+  });
+
+  it('reports malformed templates without exposing config contents', () => {
+    expect(() => renderGradingProviderConfig({ working_dir: '{{ secret-value | }' })).toThrow(
+      'Invalid agent-rubric provider config template in "working_dir"',
+    );
   });
 });

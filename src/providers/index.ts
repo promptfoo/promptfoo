@@ -95,7 +95,7 @@ export async function loadApiProvider(
   // This allows constructors to access real env values while preserving runtime templates
   // like {{ vars.* }} for per-test customization at callApi() time
   const renderedConfig = options.config
-    ? renderEnvOnlyInObject(options.config, mergedEnv)
+    ? (context.configTransform ?? renderEnvOnlyInObject)(options.config, mergedEnv)
     : undefined;
   const renderedId = options.id ? renderEnvOnlyInObject(options.id, mergedEnv) : undefined;
 
@@ -189,6 +189,7 @@ export async function loadApiProvider(
       fileContent.env || mergedEnv ? { ...fileContent.env, ...mergedEnv } : undefined;
 
     return loadApiProvider(fileContent.id, {
+      configTransform: context.configTransform,
       basePath,
       options: {
         ...fileContent,

@@ -27,12 +27,24 @@ describe('collectKeyValueOption', () => {
     expect(collectKeyValueOption('--tag', 'empty=', undefined)).toEqual({ empty: '' });
   });
 
-  it.each(['invalid', '=value'])('throws InvalidArgumentError for malformed input %p', (value) => {
-    expect(() => collectKeyValueOption('--tag', value, undefined)).toThrow(InvalidArgumentError);
-    expect(() => collectKeyValueOption('--tag', value, undefined)).toThrow(
-      '--tag must be specified in key=value format.',
-    );
+  // `--var` shares this coercion, where a whitespace value can be the point.
+  it.each([
+    ['sep= ', { sep: ' ' }],
+    ['pad=hi ', { pad: 'hi ' }],
+    ['nl=a\nb', { nl: 'a\nb' }],
+  ])('takes the value verbatim for %p', (value, expected) => {
+    expect(collectKeyValueOption('--var', value as string, undefined)).toEqual(expected);
   });
+
+  it.each(['invalid', '=value', ' =value', ' = ', 'key =value'])(
+    'throws InvalidArgumentError for malformed input %p',
+    (value) => {
+      expect(() => collectKeyValueOption('--tag', value, undefined)).toThrow(InvalidArgumentError);
+      expect(() => collectKeyValueOption('--tag', value, undefined)).toThrow(
+        '--tag must be specified in key=value format.',
+      );
+    },
+  );
 
   it('includes the option name in the error message', () => {
     expect(() => collectKeyValueOption('--var', 'nope', undefined)).toThrow(
