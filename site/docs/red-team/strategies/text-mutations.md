@@ -97,7 +97,7 @@ redteam:
 
 The default seed is `promptfoo`. Promptfoo combines it with the strategy ID and original input before selecting mutation positions.
 
-To configure one member of `text-mutations`, include both the collection and the configured strategy. The explicit strategy configuration takes precedence.
+To configure one member of `text-mutations`, include both the collection and the configured strategy. The explicit strategy configuration takes precedence for its targeted plugins. Other plugins retain the collection defaults. For example, a `zalgo` entry scoped to `pii` customizes PII tests while `text-mutations` still applies its default Zalgo configuration to harmful-content tests.
 
 ## What to verify
 
