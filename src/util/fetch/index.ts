@@ -275,7 +275,7 @@ export async function fetchWithProxy(
       logger.debug(
         `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
       );
-      await sleep(backoffMs);
+      await sleepWithAbort(backoffMs, combinedSignal);
       continue;
     }
 

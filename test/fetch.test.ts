@@ -22,7 +22,13 @@ import {
 } from '../src/util/fetch/index';
 import { withFetchRetryContext } from '../src/util/fetch/retryContext';
 import { sleep } from '../src/util/time';
-import { clearProxyEnv, createMockResponse, mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
+import {
+  clearProxyEnv,
+  createDeferred,
+  createMockResponse,
+  mockProcessEnv,
+  PROXY_ENV_KEYS,
+} from './util/utils';
 
 const FETCH_TEST_ENV_KEYS = [
   ...PROXY_ENV_KEYS,
@@ -2319,6 +2325,57 @@ describe('fetchWithProxy transient error retries', () => {
   afterEach(() => {
     vi.resetAllMocks();
   });
+
+  it.each(['options', 'caller'] as const)(
+    'cancels transient retry backoff through the %s signal',
+    async (source) => {
+      vi.useFakeTimers();
+      try {
+        const backoff = createDeferred<void>();
+        vi.mocked(sleep).mockReturnValueOnce(backoff.promise);
+        vi.mocked(global.fetch)
+          .mockResolvedValueOnce(
+            createMockResponse({ status: 503, statusText: 'Service Unavailable' }),
+          )
+          .mockResolvedValue(new Response());
+        const optionsController = new AbortController();
+        const callerController = new AbortController();
+        let settled = false;
+        const result = fetchWithProxy(
+          'https://example.com',
+          { signal: optionsController.signal },
+          callerController.signal,
+        )
+          .catch((error: unknown) => error)
+          .finally(() => {
+            settled = true;
+          });
+
+        await vi.advanceTimersByTimeAsync(0);
+        expect(global.fetch).toHaveBeenCalledOnce();
+        const controller = source === 'options' ? optionsController : callerController;
+        controller.abort(new Error('cancelled during transient backoff'));
+        await vi.advanceTimersByTimeAsync(0);
+        const stoppedWithoutWaiting = settled;
+        const pendingTimers = vi.getTimerCount();
+        // Drain the old retry loop too, so a failed regression leaves no pending work.
+        backoff.resolve();
+        await vi.runAllTimersAsync();
+        const error = await result;
+
+        expect(stoppedWithoutWaiting).toBe(true);
+        expect(pendingTimers).toBe(0);
+        expect(error).toMatchObject({
+          name: 'AbortError',
+          message: 'cancelled during transient backoff',
+          cause: controller.signal.reason,
+        });
+        expect(global.fetch).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it('should retry on 503 Service Unavailable', async () => {
     const transientResponse = createMockResponse({
