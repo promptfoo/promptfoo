@@ -126,7 +126,11 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): 
     if (nativePath) {
       let value: unknown = vars;
       for (const key of nativePath.replace(/\[['"]([^'"]+)['"]\]/g, '.$1').split('.')) {
-        if (!value || typeof value !== 'object' || !Object.hasOwn(value, key)) {
+        if (
+          !value ||
+          typeof value !== 'object' ||
+          !Object.prototype.hasOwnProperty.call(value, key)
+        ) {
           value = undefined;
           break;
         }
