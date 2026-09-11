@@ -140,6 +140,16 @@ describe('setupReadiness', () => {
       });
     });
 
+    it.each([
+      '{% for i in range(3) %}{{ i }}{% endfor %}',
+      '{{ cycler("odd","even").next() }}',
+      '{{ joiner(",")() }}',
+    ])('allows the Nunjucks global in %s', (prompt) => {
+      const readiness = getSetupReadiness({ providers: ['echo'], prompts: [prompt], tests: [{}] });
+      expect(readiness.isReadyToRun).toBe(true);
+      expect(readiness.requiredVariables).toEqual([]);
+    });
+
     it('uses default test variables when reviewing inline test cases', () => {
       const readiness = getSetupReadiness({
         providers: ['openai:gpt-4.1'],

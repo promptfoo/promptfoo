@@ -445,6 +445,18 @@ describe('sanitizeObject', () => {
       });
     });
 
+    it('restores unique SAS tokens when a nested array inside a test is reordered', () => {
+      const files = [
+        'az://account/container/a.yaml?sp=r&sig=secret-a',
+        'az://account/container/b.yaml?sp=r&sig=secret-b',
+      ];
+      const stored = { tests: [{ vars: { files } }] };
+      const reordered = { tests: [{ vars: { files: [...files].reverse() } }] };
+      expect(restoreAzureBlobSasTokens(redactAzureBlobSasTokens(reordered), stored)).toEqual(
+        reordered,
+      );
+    });
+
     it('restores nested array SAS tokens by value when object entries are reordered', () => {
       const stored = {
         tests: [
