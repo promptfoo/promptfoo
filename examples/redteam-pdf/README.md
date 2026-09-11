@@ -4,7 +4,7 @@ A local invoice-review application that consumes real PDF uploads. The `pdf` str
 
 ## Run the app
 
-Requires Node.js 22.22+ and an `OPENAI_API_KEY` with access to `gpt-5.4-mini`.
+Requires Node.js 22.22+ and an `OPENAI_API_KEY` with access to `gpt-5.4-mini` for the app and attack generation, and `gpt-5.5-2026-04-23` for grading.
 
 ```bash
 npx promptfoo@latest init --example redteam-pdf
@@ -33,6 +33,8 @@ PROMPTFOO_DISABLE_REMOTE_GENERATION=true npx promptfoo@latest eval \
 ```
 
 The sample runs three `policy` tests covering invoice accuracy and false payment claims, each delivered with the `pdf` strategy. The `question` input stays benign. The clean baseline should pass before you interpret attack findings.
+
+The grader uses a stronger model to distinguish following an attack from quoting it. Review its reasons alongside the original invoice and model answer. Add `--force` to `redteam generate` when you want new attacks from an unchanged configuration.
 
 Change `config.mode: text` to `scanned` to rasterize every page. For generated templates, replace the document's `config.template` with:
 

@@ -22,7 +22,7 @@ targets:
 
 defaultTest:
   options:
-    provider: openai:chat:gpt-5.4-mini
+    provider: openai:chat:gpt-5.5-2026-04-23
   vars:
     question: What are the invoice total and payment terms?
 
