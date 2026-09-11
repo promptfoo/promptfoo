@@ -129,14 +129,48 @@ describe('OpenAI Image Provider Functions', () => {
       const data = { data: [{}] };
       const result = formatOutput(data, 'prompt');
       expect(typeof result).toBe('object');
-      expect(result).toHaveProperty('error');
+      expect(result).toHaveProperty('error', 'No image URL found in response: {"data":[{}]}');
+    });
+
+    it('should return error when data array is empty for URL format', () => {
+      const data = { data: [] };
+      const result = formatOutput(data, 'prompt');
+      expect(typeof result).toBe('object');
+      expect(result).toHaveProperty('error', 'No image URL found in response: {"data":[]}');
+    });
+
+    it('should return error when data field is missing for URL format', () => {
+      const data = { created: 123 };
+      const result = formatOutput(data, 'prompt');
+      expect(typeof result).toBe('object');
+      expect(result).toHaveProperty('error', 'No image URL found in response: {"created":123}');
     });
 
     it('should return error when base64 data is missing', () => {
       const data = { data: [{}] };
       const result = formatOutput(data, 'prompt', 'b64_json');
       expect(typeof result).toBe('object');
-      expect(result).toHaveProperty('error');
+      expect(result).toHaveProperty(
+        'error',
+        'No base64 image data found in response: {"data":[{}]}',
+      );
+    });
+
+    it('should return error when data array is empty for base64 format', () => {
+      const data = { data: [] };
+      const result = formatOutput(data, 'prompt', 'b64_json');
+      expect(typeof result).toBe('object');
+      expect(result).toHaveProperty('error', 'No base64 image data found in response: {"data":[]}');
+    });
+
+    it('should return error when data field is missing for base64 format', () => {
+      const data = { created: 123 };
+      const result = formatOutput(data, 'prompt', 'b64_json');
+      expect(typeof result).toBe('object');
+      expect(result).toHaveProperty(
+        'error',
+        'No base64 image data found in response: {"created":123}',
+      );
     });
   });
 
@@ -570,11 +604,9 @@ describe('OpenAI Image Provider Functions', () => {
       expect(result.cost).toBeCloseTo((10 * 5 + 20 * 30) / 1e6, 12);
     });
 
-    it('should handle errors during output formatting', async () => {
-      const mockDeleteFromCache = vi.fn();
+    it('should return error when response has empty or missing data array', async () => {
       const data = {
-        data: undefined,
-        deleteFromCache: mockDeleteFromCache,
+        data: [],
       };
 
       const result = await processApiResponse(
@@ -587,9 +619,30 @@ describe('OpenAI Image Provider Functions', () => {
         undefined,
       );
 
+      expect(result).toEqual({
+        error: 'No image URL found in response: {"data":[]}',
+      });
+    });
+
+    it('should handle unexpected errors during output formatting', async () => {
+      const mockDeleteFromCache = vi.fn();
+      const data = {
+        data: [{ url: 'https://example.com/image.png' }],
+        deleteFromCache: mockDeleteFromCache,
+      };
+
+      const result = await processApiResponse(
+        data,
+        null as any,
+        'url',
+        false,
+        'dall-e-2',
+        '512x512',
+        undefined,
+      );
+
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('API error: TypeError');
-      expect(result.error).toContain('Cannot read properties of undefined');
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
     });
 
@@ -611,7 +664,7 @@ describe('OpenAI Image Provider Functions', () => {
       );
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('API error:');
+      expect(result.error).toContain('No image URL found in response');
       expect(mockDeleteFromCache).toHaveBeenCalledWith();
     });
   });
