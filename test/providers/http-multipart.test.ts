@@ -378,59 +378,56 @@ describe('HttpProvider structured multipart requests', () => {
     },
   );
 
-  it.skipIf(process.platform === 'win32')(
-    'rejects a canonical ancestor swapped after the file is opened',
-    async () => {
-      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-swap-'));
-      tempDirs.push(tempDir);
-      const baseDir = path.join(tempDir, 'workspace');
-      const safeDir = path.join(baseDir, 'safe');
-      const outsideDir = path.join(tempDir, 'outside');
-      fs.mkdirSync(safeDir, { recursive: true });
-      fs.mkdirSync(outsideDir);
-      fs.writeFileSync(path.join(safeDir, 'report.txt'), 'safe');
-      fs.writeFileSync(path.join(outsideDir, 'report.txt'), 'outside');
-      const link = path.join(baseDir, 'linked');
-      fs.symlinkSync(safeDir, link, 'junction');
-      const realpath = fs.promises.realpath;
-      let sourceResolutions = 0;
-      vi.spyOn(fs.promises, 'realpath').mockImplementation(async (file) => {
-        const canonical = await realpath(file);
-        if (String(file) === path.join(link, 'report.txt') && ++sourceResolutions === 1) {
-          fs.renameSync(safeDir, `${safeDir}-original`);
-          fs.symlinkSync(outsideDir, safeDir, 'junction');
-        }
-        return canonical;
-      });
-      const previousBasePath = cliState.basePath;
-      cliState.basePath = baseDir;
-      try {
-        const mockServer = await createMultipartDocumentSummarizerServer();
-        const provider = new HttpProvider('http', {
-          config: {
-            url: mockServer.url,
-            headers: { 'X-API-Key': 'test-api-key' },
-            multipart: {
-              parts: [
-                {
-                  kind: 'file',
-                  name: 'files',
-                  source: { type: 'path', path: 'linked/report.txt' },
-                },
-                { kind: 'field', name: 'documentQuery', value: '{{prompt}}' },
-              ],
-            },
-          },
-        });
-        await expect(provider.callApi('test')).rejects.toThrow(
-          'File path escapes allowed base directory',
-        );
-        expect(mockServer.getLastRequest()).toBeUndefined();
-      } finally {
-        cliState.basePath = previousBasePath;
+  it('rejects a canonical ancestor swapped after the file is opened', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-swap-'));
+    tempDirs.push(tempDir);
+    const baseDir = path.join(tempDir, 'workspace');
+    const safeDir = path.join(baseDir, 'safe');
+    const outsideDir = path.join(tempDir, 'outside');
+    fs.mkdirSync(safeDir, { recursive: true });
+    fs.mkdirSync(outsideDir);
+    fs.writeFileSync(path.join(safeDir, 'report.txt'), 'safe');
+    fs.writeFileSync(path.join(outsideDir, 'report.txt'), 'outside');
+    const link = path.join(baseDir, 'linked');
+    fs.symlinkSync(safeDir, link, 'junction');
+    const realpath = fs.promises.realpath;
+    let sourceResolutions = 0;
+    vi.spyOn(fs.promises, 'realpath').mockImplementation(async (file) => {
+      const canonical = await realpath(file);
+      if (String(file) === path.join(link, 'report.txt') && ++sourceResolutions === 1) {
+        fs.renameSync(safeDir, `${safeDir}-original`);
+        fs.symlinkSync(outsideDir, safeDir, 'junction');
       }
-    },
-  );
+      return canonical;
+    });
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = baseDir;
+    try {
+      const mockServer = await createMultipartDocumentSummarizerServer();
+      const provider = new HttpProvider('http', {
+        config: {
+          url: mockServer.url,
+          headers: { 'X-API-Key': 'test-api-key' },
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: { type: 'path', path: 'linked/report.txt' },
+              },
+              { kind: 'field', name: 'documentQuery', value: '{{prompt}}' },
+            ],
+          },
+        },
+      });
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'File path escapes allowed base directory',
+      );
+      expect(mockServer.getLastRequest()).toBeUndefined();
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
+  });
 
   it('redacts secret-like multipart text fields from debug metadata', async () => {
     const mockServer = await createMultipartDocumentSummarizerServer();
