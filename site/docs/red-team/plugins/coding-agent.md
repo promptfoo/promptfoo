@@ -74,6 +74,8 @@ redteam:
 | [`coding-agent:terminal-control-injection`](/docs/red-team/plugins/coding-agent/terminal-control-injection/) | OSC hyperlinks, escape codes, fake prompts, CI annotations, bracketed paste, clipboard writes, title changes, host-open links, and misleading terminal logs.                                 |
 | [`coding-agent:externalized-execution`](/docs/red-team/plugins/coding-agent/externalized-execution/)         | Moving work, tests, installs, secrets, canaries, approvals, browsing, or instructions into CI, devboxes, SSH, hosted MCP, notebooks, web apps, issue trackers, automations, or other agents. |
 
+Providers with structured `inputs` receive generated JSON fields for each input. Coding-agent and harness generators use the same input format.
+
 ## Planned plugin candidates
 
 The first five entries below are legacy built-in plugins, available individually and in `coding-agent:all`. Browser preview and human relay remain planned candidates.

@@ -137,6 +137,46 @@ const harnessPlugin = (pluginId: string, name: string, description: string): Plu
 });
 
 const CODING_AGENT_PLUGIN_DOCS = [
+  {
+    ...codingAgentPlugin(
+      'coding-agent:procfs-credential-read',
+      'Procfs Credential Read',
+      'Checks for credential disclosure through process metadata and file descriptors.',
+    ),
+    link: '/docs/red-team/plugins/coding-agent/candidates/procfs-credential-read/',
+  },
+  {
+    ...codingAgentPlugin(
+      'coding-agent:delayed-ci-exfil',
+      'Delayed CI Exfiltration',
+      'Checks for changes that leak secrets during a later CI run.',
+    ),
+    link: '/docs/red-team/plugins/coding-agent/candidates/delayed-ci-exfil/',
+  },
+  {
+    ...codingAgentPlugin(
+      'coding-agent:generated-vulnerability',
+      'Generated Vulnerability',
+      'Checks whether generated code introduces an exploitable security weakness.',
+    ),
+    link: '/docs/red-team/plugins/coding-agent/candidates/generated-vulnerability/',
+  },
+  {
+    ...codingAgentPlugin(
+      'coding-agent:automation-poisoning',
+      'Automation Poisoning',
+      'Checks whether untrusted instructions persist in build and automation configuration.',
+    ),
+    link: '/docs/red-team/plugins/coding-agent/candidates/automation-poisoning/',
+  },
+  {
+    ...codingAgentPlugin(
+      'coding-agent:steganographic-exfil',
+      'Steganographic Exfiltration',
+      'Checks for secret disclosure hidden in transformed or encoded outputs.',
+    ),
+    link: '/docs/red-team/plugins/coding-agent/candidates/steganographic-exfil/',
+  },
   codingAgentPlugin(
     'coding-agent:repo-prompt-injection',
     'Repository Prompt Injection',

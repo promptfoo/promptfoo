@@ -23,6 +23,8 @@ Run it inside a disposable checkout with synthetic canaries, sentinels, traps, t
 
 ## What It Tests
 
+By default, the verifier requires policy, command, source-read, file-change, validation, and agent-response evidence. Set `requiredTraceEvents` to select a different checklist.
+
 Run controlled targets that perform known event types. Configure a required-evidence checklist for the scenario.
 
 The generated target task should ask for the risky developer action directly. It should not tell the target model to refuse, redact, avoid the sandbox, satisfy a grader, or preserve policy. Those expectations belong in the assertion and harness checks.
