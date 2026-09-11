@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   applyProviderSelection,
   buildProviderPermissionConfig,
@@ -23,6 +27,100 @@ function provider(id: string, label?: string, config?: Record<string, unknown>) 
 describe('provider selection', () => {
   const cloudProviderId = 'promptfoo://provider/11111111-1111-4111-8111-111111111111';
   const linkedTargetId = 'promptfoo://provider/22222222-2222-4222-8222-222222222222';
+  const temporaryDirectories: string[] = [];
+
+  afterEach(() => {
+    for (const directory of temporaryDirectories.splice(0)) {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['string', 'options', 'map'])(
+    'resolves %s file-backed graders before authorizing them',
+    (shape) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'provider-permissions-'));
+      temporaryDirectories.push(directory);
+      fs.writeFileSync(path.join(directory, 'cloud.yaml'), `id: ${cloudProviderId}\n`);
+      fs.writeFileSync(
+        path.join(directory, 'linked.json'),
+        JSON.stringify({
+          id: 'http',
+          label: 'linked grader',
+          config: { linkedTargetId, apiKey: 'grader-secret' },
+        }),
+      );
+      const ref = (id: string) =>
+        shape === 'string' ? id : shape === 'options' ? { id } : { [id]: {} };
+      const result = collectEffectiveTestProviderPermissions(
+        {
+          tests: [
+            {
+              assert: [
+                { type: 'llm-rubric', provider: ref('file://cloud.yaml') },
+                { type: 'llm-rubric', provider: ref('file://linked.json') },
+              ],
+            },
+          ],
+        },
+        directory,
+      );
+      expect(result).toEqual([
+        cloudProviderId,
+        { id: 'http', label: 'linked grader', config: { linkedTargetId } },
+      ]);
+      expect(JSON.stringify(result)).not.toContain('grader-secret');
+    },
+  );
+
+  it('preserves environment overrides in file-backed provider identities', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'provider-permissions-'));
+    temporaryDirectories.push(directory);
+    fs.writeFileSync(
+      path.join(directory, 'grader.json'),
+      JSON.stringify({
+        id: 'http',
+        env: { OPENAI_API_KEY: 'unused-file-default' },
+        config: { linkedTargetId: '{{ env.OPENAI_API_KEY }}', apiKey: 'grader-secret' },
+      }),
+    );
+    expect(
+      collectEffectiveTestProviderPermissions(
+        {
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'llm-rubric',
+                  provider: {
+                    id: 'file://grader.json',
+                    env: { OPENAI_API_KEY: linkedTargetId },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        directory,
+      ),
+    ).toEqual([{ id: 'http', config: { linkedTargetId } }]);
+  });
+
+  it('rejects multi-provider grader files before running a filtered evaluation', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'provider-permissions-'));
+    temporaryDirectories.push(directory);
+    fs.writeFileSync(
+      path.join(directory, 'grader.json'),
+      JSON.stringify([{ id: cloudProviderId }]),
+    );
+    expect(() =>
+      collectEffectiveTestProviderPermissions(
+        {
+          tests: [{ assert: [{ type: 'llm-rubric', provider: 'file://grader.json' }] }],
+        },
+        directory,
+      ),
+    ).toThrow('must contain a single provider');
+  });
 
   it('preserves authorization identity without provider secrets', () => {
     const providers = [

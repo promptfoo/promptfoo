@@ -2,7 +2,12 @@ import { createHash } from 'crypto';
 
 import { usesGradingProvider } from '../../assertions/providerTypes';
 import { isCloudProvider } from '../cloud';
-import { normalizeProviderRef } from '../providerRef';
+import {
+  isProviderConfigFileReference,
+  normalizeProviderRef,
+  readProviderConfigFile,
+} from '../providerRef';
+import { renderEnvOnlyInObject } from '../render';
 import { redactSecretLeaves } from '../sanitizer';
 
 interface RuntimeProvider {
@@ -325,6 +330,7 @@ interface EffectiveProviderTest {
 }
 
 interface EffectiveProviderSource {
+  providers?: unknown[];
   // Scenario combinations have already been expanded by getTestCasesForSelection.
   tests?: unknown;
   defaultTest?: EffectiveProviderTest;
@@ -333,14 +339,45 @@ interface EffectiveProviderSource {
 
 export function collectEffectiveTestProviderPermissions(
   source: EffectiveProviderSource,
+  basePath?: string,
 ): PermissionProvider[] {
   const collected: PermissionProvider[] = [];
-  const push = (provider: unknown) => {
+  const push = (provider: unknown, files = new Set<string>()) => {
+    const descriptor = normalizeProviderRef(provider);
+    const gradingTypes = ['embedding', 'classification', 'text', 'moderation'];
+    if ('loadProviderPath' in descriptor && !gradingTypes.includes(descriptor.loadProviderPath)) {
+      const options = 'loadOptions' in descriptor ? descriptor.loadOptions : undefined;
+      const mergedEnv = options?.env;
+      const providerPath = renderEnvOnlyInObject(descriptor.loadProviderPath, mergedEnv);
+      if (isProviderConfigFileReference(providerPath)) {
+        if (files.has(providerPath)) {
+          throw new Error(`Circular provider config: ${providerPath}`);
+        }
+        const { configs, wasArray } = readProviderConfigFile(providerPath, basePath);
+        if (wasArray || !configs[0]?.id) {
+          throw new Error(
+            `Grading provider config must contain a single provider with an id: ${providerPath}`,
+          );
+        }
+        files.add(providerPath);
+        const config = configs[0];
+        push({ ...config, env: { ...config.env, ...mergedEnv } }, files);
+        files.delete(providerPath);
+        return;
+      }
+      provider = {
+        id: providerPath,
+        label: options?.label,
+        config: {
+          linkedTargetId: renderEnvOnlyInObject(options?.config?.linkedTargetId, mergedEnv),
+        },
+      };
+    }
     const permission = toPermissionProvider(provider);
     if (permission) {
       collected.push(permission);
     } else if (provider && typeof provider === 'object' && !Array.isArray(provider)) {
-      for (const type of ['embedding', 'classification', 'text', 'moderation']) {
+      for (const type of gradingTypes) {
         push((provider as Record<string, unknown>)[type]);
       }
     }
@@ -359,6 +396,7 @@ export function collectEffectiveTestProviderPermissions(
       }
     }
   };
+  source.providers?.forEach((provider) => push(provider));
   const defaults = source.defaultTest;
   if (Array.isArray(source.tests)) {
     for (const test of source.tests) {
@@ -391,6 +429,7 @@ export function buildProviderPermissionConfig(
   config: object,
   selection: ProviderSelection,
   effectiveSource?: EffectiveProviderSource,
+  basePath?: string,
 ): Record<string, unknown> {
   const metadata = getPermissionMetadata(config);
   const hasRedteam = Boolean((config as { redteam?: unknown }).redteam);
@@ -398,10 +437,13 @@ export function buildProviderPermissionConfig(
   // Authorize per-test/default/grader/red-team providers alongside the selected
   // matrix so a filtered MCP run cannot execute an unauthorized `test.provider`.
   const effectiveProviders = effectiveSource
-    ? collectEffectiveTestProviderPermissions({
-        ...effectiveSource,
-        redteam: effectiveSource.redteam ?? (config as { redteam?: unknown }).redteam,
-      })
+    ? collectEffectiveTestProviderPermissions(
+        {
+          ...effectiveSource,
+          redteam: effectiveSource.redteam ?? (config as { redteam?: unknown }).redteam,
+        },
+        basePath,
+      )
     : [];
   const seen = new Set(selectionProviders.map((provider) => JSON.stringify(provider)));
   const providers = [...selectionProviders];

@@ -980,12 +980,17 @@ export async function doEval(
       permissionTests = indices.map((index) => tests[index]);
     }
     const cloudPermissionConfig = validatedProviderSelection
-      ? buildProviderPermissionConfig(config, validatedProviderSelection, {
-          tests: permissionTests,
-          defaultTest:
-            typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
-          redteam: config.redteam,
-        })
+      ? buildProviderPermissionConfig(
+          config,
+          validatedProviderSelection,
+          {
+            tests: permissionTests,
+            defaultTest:
+              typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+            redteam: config.redteam,
+          },
+          _basePath || cliState.basePath,
+        )
       : config;
     await checkCloudPermissions(cloudPermissionConfig as UnifiedConfig);
 

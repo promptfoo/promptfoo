@@ -75,8 +75,11 @@ import {
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
+  type UnifiedConfig,
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
+import { checkCloudPermissions } from './util/cloud';
+import { buildProviderPermissionConfig } from './util/eval/providerSelection';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
@@ -3698,6 +3701,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   store: EvaluationStore<TEvaluation, TResult>;
   testSuite: TestSuite;
   options: InternalEvaluateOptions;
+  private permissionChecks = new Map<string, Promise<void>>();
   stats: EvaluateStats;
   conversations: EvalConversations;
   registers: EvalRegisters;
@@ -3924,6 +3928,27 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     );
   }
 
+  private async checkProviderPermissions(testSuite: TestSuite, tests?: AtomicTestCase[]) {
+    if (!this.options.providerSelection) {
+      return;
+    }
+    const config = buildProviderPermissionConfig(
+      this.store.config,
+      this.options.providerSelection,
+      {
+        providers: testSuite.providers,
+        tests: tests ?? getTestCasesForSelection(testSuite),
+        defaultTest: typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+      },
+      this.options.configBasePath ?? cliState.basePath,
+    );
+    const key = JSON.stringify(config);
+    if (!this.permissionChecks.has(key)) {
+      this.permissionChecks.set(key, checkCloudPermissions(config as UnifiedConfig));
+    }
+    await this.permissionChecks.get(key);
+  }
+
   private async runEvalStepAfterBeforeEach(
     evalStep: RunEvalOptions,
     {
@@ -3942,6 +3967,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       test: evalStep.test,
     });
     evalStep.test = beforeEachOut.test;
+    await this.checkProviderPermissions(testSuite, [evalStep.test]);
 
     const rows = await runEvalInternal({
       ...evalStep,
@@ -5223,6 +5249,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }),
       };
     }
+
+    await this.checkProviderPermissions(testSuite);
 
     if (!(await maybeAddGeneratedPrompts(testSuite, options))) {
       return this.store.evaluation;
