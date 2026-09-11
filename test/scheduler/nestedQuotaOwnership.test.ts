@@ -5,6 +5,10 @@ import { loadApiProvider } from '../../src/providers';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import { callTargetProvider, redteamProviderManager } from '../../src/redteam/providers/shared';
 import {
+  getProviderCallExecutionContext,
+  withProviderCallExecutionContext,
+} from '../../src/scheduler/providerCallExecutionContext';
+import {
   isRateLimitWrapped,
   wrapProviderWithRateLimiting,
 } from '../../src/scheduler/providerWrapper';
@@ -519,5 +523,223 @@ describe('actual iterative manager child quota ownership', () => {
       { totalRequests: 1, completedRequests: 1, activeRequests: 0, queueDepth: 0 },
     ]);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(['raw', 'wrapped'] as const)(
+    'owns a newly acquired target pool while its %s delegator calls the same pool',
+    async (mode) => {
+      const target = await chat('fixture-delegated-target');
+      const explicit = vi.fn();
+      const delegated: ApiProvider = {
+        id: () => target.id(),
+        config: target.config,
+        callApi: vi.fn((prompt, context, options) =>
+          callTargetProvider(target, prompt, context, {
+            ...options,
+            onResponseHeaders: (headers, backoff) => {
+              options?.onResponseHeaders?.(headers, backoff);
+              explicit(headers, backoff);
+            },
+          }),
+        ),
+      };
+      const attacker: ApiProvider = {
+        id: () => 'harmless-delegation-attacker',
+        callApi: async () => ({
+          output: JSON.stringify({ improvement: 'Greet', prompt: 'Hello' }),
+        }),
+      };
+      await redteamProviderManager.setGradingProvider({
+        id: () => 'harmless-delegation-judge',
+        callApi: async () => ({
+          output: JSON.stringify({
+            currentResponse: { rating: 1, explanation: 'Hello' },
+            previousBestResponse: { rating: 0, explanation: 'None' },
+          }),
+        }),
+      });
+      const strategy = new RedteamIterativeProvider({
+        injectVar: 'attack',
+        numIterations: 1,
+        redteamProvider: attacker,
+      });
+      const controller = new AbortController();
+      controllers.push(controller);
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'Hello.' }, finish_reason: 'stop' }],
+            usage,
+          }),
+          {
+            headers: {
+              'content-type': 'application/json',
+              'ratelimit-limit': '10',
+              'ratelimit-remaining': '9',
+            },
+          },
+        ),
+      );
+      let rows: Awaited<ReturnType<typeof runEval>> | undefined;
+      const done = withCacheEnabled(false, () =>
+        runEval({
+          delay: 0,
+          testIdx: 0,
+          promptIdx: 0,
+          repeatIndex: 0,
+          isRedteam: false,
+          provider:
+            mode === 'wrapped' ? wrapProviderWithRateLimiting(delegated, registry) : delegated,
+          prompt: { raw: '{{attack}}', label: 'nested acquired owner' },
+          test: { provider: strategy, vars: { attack: 'Hello' } },
+          conversations: {},
+          registers: {},
+          abortSignal: controller.signal,
+          rateLimitRegistry: registry,
+        }),
+      ).then((result) => {
+        rows = result;
+      });
+      pending.push(done);
+      await vi.advanceTimersByTimeAsync(0);
+      // The transport must start with concurrency one, before awaiting the row.
+      expect(globalThis.fetch).toHaveBeenCalledOnce();
+      await done;
+      expect(rows?.[0]).toMatchObject({ success: true, response: { output: 'Hello.' } });
+      expect(delegated.callApi).toHaveBeenCalledOnce();
+      expect(explicit).toHaveBeenCalledOnce();
+      expect(registry.getMetrics()[getRateLimitKey(target)]).toMatchObject({
+        totalRequests: 1,
+        completedRequests: 1,
+        activeRequests: 0,
+        queueDepth: 0,
+        retriedRequests: 0,
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it('keeps acquired delegator ownership local while another registry survives caller cancellation', async () => {
+    const target = await chat('fixture-held-delegated-target');
+    const delegated: ApiProvider = {
+      id: () => target.id(),
+      config: target.config,
+      callApi: (p, c, o) => callTargetProvider(target, p, c, o),
+    };
+    const outer: ApiProvider = {
+      id: () => 'fixture-outer-owner',
+      config: { maxRetries: 0 },
+      callApi: async () => ({ output: '' }),
+    };
+    const other = new RateLimitRegistry({ maxConcurrency: 1 });
+    const firstController = new AbortController();
+    const secondController = new AbortController();
+    controllers.push(firstController, secondController);
+    const reason = Object.freeze(
+      Object.assign(new Error('first owner cancelled'), { name: 'AbortError' }),
+    );
+    const releases: (() => void)[] = [];
+    vi.mocked(globalThis.fetch).mockImplementation(
+      (_url, options) =>
+        new Promise<Response>((resolve, reject) => {
+          const signal = options?.signal;
+          const finish = () => {
+            signal?.removeEventListener('abort', abort);
+            resolve(
+              new Response(
+                JSON.stringify({
+                  choices: [{ message: { role: 'assistant', content: 'Hello survivor.' } }],
+                  usage,
+                }),
+                {
+                  headers: {
+                    'content-type': 'application/json',
+                    'ratelimit-limit': '10',
+                    'ratelimit-remaining': '9',
+                  },
+                },
+              ),
+            );
+          };
+          const abort = () => {
+            signal?.removeEventListener('abort', abort);
+            reject(signal?.reason);
+          };
+          if (signal?.aborted) {
+            abort();
+          } else {
+            signal?.addEventListener('abort', abort, { once: true });
+          }
+          releases.push(finish);
+        }),
+    );
+    const explicit = vi.fn();
+    const invoke = (state: RateLimitRegistry, signal: AbortSignal) =>
+      withCacheEnabled(false, () =>
+        withProviderCallExecutionContext(
+          { abortSignal: signal, rateLimitRegistry: state, rateLimitProvider: outer },
+          () =>
+            state.execute(
+              outer,
+              () =>
+                callTargetProvider(delegated, 'Hello', undefined, {
+                  abortSignal: signal,
+                  onResponseHeaders: explicit,
+                }),
+              { abortSignal: signal },
+            ),
+        ),
+      );
+    let firstError: unknown;
+    let secondValue: ProviderResponse | undefined;
+    const first = invoke(registry, firstController.signal).then(
+      () => {},
+      (error: unknown) => {
+        firstError = error;
+      },
+    );
+    const second = invoke(other, secondController.signal).then((value) => {
+      secondValue = value;
+    });
+    pending.push(first, second);
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+      expect(getProviderCallExecutionContext()).toBeUndefined();
+      firstController.abort(reason);
+      await vi.advanceTimersByTimeAsync(0);
+      await first;
+      expect(firstError).toBe(reason);
+      expect(secondController.signal.aborted).toBe(false);
+      expect(secondValue).toBeUndefined();
+      expect(other.getMetrics()[getRateLimitKey(target)]).toMatchObject({
+        activeRequests: 1,
+        queueDepth: 0,
+      });
+      releases[1]();
+      await vi.advanceTimersByTimeAsync(0);
+      await second;
+      expect(secondValue?.output).toBe('Hello survivor.');
+      expect(explicit).toHaveBeenCalledOnce();
+      for (const state of [registry, other]) {
+        for (const metrics of Object.values(state.getMetrics())) {
+          expect(metrics).toMatchObject({
+            activeRequests: 0,
+            queueDepth: 0,
+            retriedRequests: 0,
+            rateLimitHits: 0,
+          });
+        }
+      }
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      firstController.abort(reason);
+      secondController.abort();
+      for (const release of releases) {
+        release();
+      }
+      await Promise.allSettled([first, second]);
+      other.dispose();
+    }
   });
 });

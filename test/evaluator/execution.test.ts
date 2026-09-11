@@ -11,6 +11,8 @@ import { __resetPromptConversationCacheForTests, evaluate } from '../../src/eval
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import {
   type ApiProvider,
   type ProviderResponse,
@@ -1165,4 +1167,182 @@ describeEvaluator('evaluator execution control', () => {
     expect(resultByTopic.get('alpha')?.error).toBeUndefined();
     expect(resultByTopic.get('gamma')?.error).toContain('Evaluation exceeded max duration');
   });
+
+  it.each(['queued', 'active after deadline', 'immediate per-step'] as const)(
+    'retains original caller cancellation for %s grading',
+    async (mode) => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const reason = Object.assign(new Error('original caller cancelled grading'), {
+        name: 'AbortError',
+      });
+      const rows: any[] = [];
+      const drains: (() => void)[] = [];
+      const metrics: { activeRequests: number; queueDepth: number }[] = [];
+      const dispose = RateLimitRegistry.prototype.dispose;
+      const disposeSpy = vi
+        .spyOn(RateLimitRegistry.prototype, 'dispose')
+        .mockImplementation(function (this: RateLimitRegistry) {
+          metrics.push(...Object.values(this.getMetrics()));
+          return dispose.call(this);
+        });
+      const enqueued = vi.spyOn(ProviderGroupedCallQueue.prototype, 'enqueue');
+      const held = (signal?: AbortSignal, ms?: number) =>
+        new Promise<void>((resolve, reject) => {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          const finish = (error?: unknown) => {
+            if (timer) {
+              clearTimeout(timer);
+            }
+            signal?.removeEventListener('abort', abort);
+            if (error) {
+              reject(error);
+            } else {
+              resolve();
+            }
+          };
+          const abort = () => finish(signal?.reason ?? reason);
+          drains.push(() => finish());
+          if (signal?.aborted) {
+            abort();
+          } else {
+            signal?.addEventListener('abort', abort, { once: true });
+            if (ms !== undefined) {
+              timer = setTimeout(() => finish(), ms);
+            }
+          }
+        });
+      const topics =
+        mode === 'queued'
+          ? ['alpha', 'beta', 'gamma']
+          : mode === 'active after deadline'
+            ? ['alpha', 'beta', 'gamma', 'delta']
+            : ['alpha'];
+      let activeJudges = 0;
+      let judgeSignal: AbortSignal | undefined;
+      const target: ApiProvider = {
+        id: () => `caller-target-${mode}`,
+        callApi: vi.fn(async (prompt, _context, options) => {
+          if (mode === 'queued' && prompt.includes('beta')) {
+            await held(options?.abortSignal);
+          }
+          if (mode === 'active after deadline') {
+            await held(options?.abortSignal, prompt.includes('gamma') ? undefined : 10);
+          }
+          return { output: `Completed ${prompt}`, tokenUsage: createEmptyTokenUsage() };
+        }),
+      };
+      const judge: ApiProvider = {
+        id: () => `caller-judge-${mode}`,
+        callApi: vi.fn(async (_prompt, _context, options) => {
+          judgeSignal = options?.abortSignal;
+          activeJudges++;
+          try {
+            if (mode !== 'queued') {
+              await held(judgeSignal);
+            }
+            return {
+              output: JSON.stringify({ pass: true, score: 1, reason: 'passed' }),
+              tokenUsage: createEmptyTokenUsage(),
+            };
+          } finally {
+            activeJudges--;
+          }
+        }),
+      };
+      const record = {
+        id: `caller-grading-${mode}`,
+        results: rows,
+        prompts: [],
+        persisted: false,
+        config: {},
+        addPrompts: vi.fn().mockResolvedValue(undefined),
+        addResult: vi.fn(async (row) => {
+          rows.push(row);
+        }),
+        fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+        getResults: vi.fn().mockResolvedValue(rows),
+        save: vi.fn().mockResolvedValue(undefined),
+        setDurationMs: vi.fn(),
+        setVars: vi.fn(),
+        toEvaluateSummary: vi.fn(),
+      };
+      let settled = false;
+      const pending = evaluate(
+        {
+          providers: [target],
+          prompts: [toPrompt('Topic {{topic}}')],
+          tests: topics.map((topic) => ({
+            vars: { topic },
+            assert: [{ type: 'llm-rubric', value: 'Harmless judge', provider: judge }],
+          })),
+        },
+        record as unknown as Eval,
+        {
+          maxConcurrency: 1,
+          abortSignal: controller.signal,
+          ...(mode === 'immediate per-step' ? { timeoutMs: 1000 } : { maxEvalTimeMs: 55 }),
+        },
+      ).finally(() => {
+        settled = true;
+      });
+      try {
+        await vi.advanceTimersByTimeAsync(mode === 'active after deadline' ? 55 : 0);
+        expect(settled).toBe(false);
+        if (mode === 'queued') {
+          expect(target.callApi).toHaveBeenCalledTimes(2);
+          expect(enqueued.mock.calls.some(([id]) => id === judge.id())).toBe(true);
+          expect(judge.callApi).not.toHaveBeenCalled();
+        } else {
+          expect(judge.callApi).toHaveBeenCalledOnce();
+          expect(activeJudges).toBe(1);
+          expect(judgeSignal?.aborted).toBe(false);
+        }
+        controller.abort(reason);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBe(true);
+        await pending;
+        expect(activeJudges).toBe(0);
+        expect(judge.callApi).toHaveBeenCalledTimes(mode === 'queued' ? 0 : 1);
+        if (mode !== 'queued') {
+          expect(judgeSignal?.aborted).toBe(true);
+        }
+        const alpha = rows.filter((row) => row.vars.topic === 'alpha');
+        expect(alpha).toHaveLength(1);
+        if (mode !== 'immediate per-step') {
+          expect(alpha[0].response.output).toBe('Completed Topic alpha');
+        }
+        expect(alpha[0].success).toBe(false);
+        expect(alpha[0].error).toMatch(/abort|cancel/i);
+        if (mode === 'active after deadline') {
+          expect(rows.find((row) => row.vars.topic === 'beta')?.response.output).toBe(
+            'Completed Topic beta',
+          );
+          expect(rows.find((row) => row.vars.topic === 'delta')?.error).toContain(
+            'Evaluation exceeded max duration',
+          );
+        }
+        expect(metrics.length).toBeGreaterThan(0);
+        expect(metrics.every((m) => m.activeRequests === 0 && m.queueDepth === 0)).toBe(true);
+        const calls = [
+          vi.mocked(target.callApi).mock.calls.length,
+          vi.mocked(judge.callApi).mock.calls.length,
+        ];
+        await vi.advanceTimersByTimeAsync(1000);
+        expect([
+          vi.mocked(target.callApi).mock.calls.length,
+          vi.mocked(judge.callApi).mock.calls.length,
+        ]).toEqual(calls);
+      } finally {
+        controller.abort(reason);
+        for (const drain of drains) {
+          drain();
+        }
+        await vi.advanceTimersByTimeAsync(0);
+        await pending;
+        disposeSpy.mockRestore();
+        enqueued.mockRestore();
+      }
+    },
+  );
 });

@@ -1311,6 +1311,7 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
 async function applyRunEvalResponseOutcome({
   abortSignal,
   deferGrading,
+  deferredGradingAbortSignal,
   evalId,
   isRedteam,
   latencyMs,
@@ -1330,6 +1331,7 @@ async function applyRunEvalResponseOutcome({
 }: {
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
+  deferredGradingAbortSignal?: AbortSignal;
   evalId?: string;
   isRedteam: boolean;
   latencyMs: number;
@@ -1362,6 +1364,7 @@ async function applyRunEvalResponseOutcome({
   await gradeRunEvalResponse({
     abortSignal,
     deferGrading,
+    deferredGradingAbortSignal,
     evalId,
     latencyMs,
     prompt,
@@ -1393,6 +1396,7 @@ function applyEmptyResponseOutcome(ret: EvaluateResult, isRedteam: boolean) {
 async function gradeRunEvalResponse({
   abortSignal,
   deferGrading,
+  deferredGradingAbortSignal,
   evalId,
   latencyMs,
   prompt,
@@ -1411,6 +1415,7 @@ async function gradeRunEvalResponse({
 }: {
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
+  deferredGradingAbortSignal?: AbortSignal;
   evalId?: string;
   latencyMs: number;
   prompt: Prompt;
@@ -1459,7 +1464,7 @@ async function gradeRunEvalResponse({
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
     const gradingPromise = withProviderCallExecutionContext(
-      { abortSignal, providerCallQueue, rateLimitRegistry },
+      { abortSignal: deferredGradingAbortSignal, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
           prompt: renderedPrompt,
@@ -1472,7 +1477,7 @@ async function gradeRunEvalResponse({
           traceId,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
-      applyGradingError(ret, error, abortSignal);
+      applyGradingError(ret, error, deferredGradingAbortSignal);
     });
     deferredGradingPromises.set(ret, gradingPromise);
     return;
@@ -1616,27 +1621,30 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
-async function runEvalInternal({
-  provider,
-  prompt, // raw prompt
-  test,
-  testSuite,
-  delay,
-  nunjucksFilters: filters,
-  evaluateOptions,
-  // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
-  testIdx: testIndex,
-  promptIdx: promptIndex,
-  repeatIndex,
-  conversations,
-  registers,
-  isRedteam,
-  abortSignal,
-  deferGrading,
-  evalId,
-  providerCallQueue,
-  rateLimitRegistry,
-}: RunEvalOptions): Promise<EvaluateResult[]> {
+async function runEvalInternal(
+  {
+    provider,
+    prompt, // raw prompt
+    test,
+    testSuite,
+    delay,
+    nunjucksFilters: filters,
+    evaluateOptions,
+    // TODO(ian): Rename these public `Idx` fields to `Index` with compatibility handling.
+    testIdx: testIndex,
+    promptIdx: promptIndex,
+    repeatIndex,
+    conversations,
+    registers,
+    isRedteam,
+    abortSignal,
+    deferGrading,
+    evalId,
+    providerCallQueue,
+    rateLimitRegistry,
+  }: RunEvalOptions,
+  deferredGradingOptions: Pick<RunEvalOptions, 'abortSignal'> = { abortSignal },
+): Promise<EvaluateResult[]> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
     typeof provider.delay === 'number',
@@ -1761,6 +1769,7 @@ async function runEvalInternal({
           trackProviderUsage(provider, response);
           await applyRunEvalResponseOutcome({
             abortSignal,
+            deferredGradingAbortSignal: deferredGradingOptions.abortSignal,
             deferGrading,
             evalId,
             isRedteam,
@@ -3598,11 +3607,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     evalStep.test = beforeEachOut.test;
 
-    const rows = await runEvalInternal({
-      ...evalStep,
-      deferGrading,
-      providerCallQueue: deferGrading ? providerCallQueue : undefined,
-    });
+    const rows = await runEvalInternal(
+      {
+        ...evalStep,
+        deferGrading,
+        providerCallQueue: deferGrading ? providerCallQueue : undefined,
+      },
+      this.options,
+    );
     onRowsReady?.();
     return rows;
   }

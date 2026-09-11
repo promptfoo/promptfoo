@@ -1,6 +1,7 @@
 import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { preserveResponseHeadersObserverError } from '../../scheduler/responseHeadersObserver';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
@@ -641,7 +642,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       // "Rate limit exceeded:" / "Quota exceeded:" form rather than being
       // wrapped in "API call error: HttpRateLimitError: ...".
       if (err instanceof HttpRateLimitError) {
-        return {
+        return preserveResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err, {
           error: formatRateLimitErrorMessage(err),
           metadata: {
             rateLimitKind: err.kind,
@@ -651,9 +652,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               headers: err.headers ?? responseHeaders ?? {},
             },
           },
-        };
+        });
       }
-      return {
+      return preserveResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err, {
         error: `API call error: ${String(err)}`,
         metadata: {
           http: {
@@ -662,7 +663,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
             headers: responseHeaders ?? {},
           },
         },
-      };
+      });
     }
 
     let errorOrigin: 'tool' | undefined;
@@ -1018,7 +1019,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       if (isCallerAbortError(err, callApiOptions?.abortSignal, { requireReasonMatch: true })) {
         throwIfAborted(callApiOptions?.abortSignal);
       }
-      await deleteFromCache?.();
+      if (errorOrigin !== 'tool') {
+        await deleteFromCache?.();
+      }
       return {
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
         ...(errorOrigin === 'tool' && completedModelAccounting),

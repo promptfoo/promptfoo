@@ -4,7 +4,7 @@ import { setImmediate } from 'node:timers/promises';
 import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { withCacheEnabled } from '../../src/cache';
+import { withCacheEnabled, withCacheNamespace } from '../../src/cache';
 import { loadApiProvider } from '../../src/providers';
 import RedteamIterativeProvider from '../../src/redteam/providers/iterative';
 import { redteamProviderManager } from '../../src/redteam/providers/shared';
@@ -340,6 +340,135 @@ describe('selected tool error through the actual iterative scheduler boundary', 
       expect([...releasesByQueue.values()].sort()).toEqual([1, 1, 1, 1, 1, 2]);
       expect(getEventListeners(firstController.signal, 'abort')).toHaveLength(0);
       expect(getEventListeners(secondController.signal, 'abort')).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(['fresh', 'cached'] as const)(
+    'retains the valid %s model response after a selected callback failure and caller cancellation',
+    async (source) => {
+      const controller = new AbortController();
+      controllers.push(controller);
+      const completed = createDeferred<void>();
+      const failure = Object.freeze(new Error('Independent callback failed'));
+      const reason = Object.freeze(
+        Object.assign(new Error('Caller saw tool completion'), { name: 'AbortError' }),
+      );
+      let fail = false;
+      const events: string[] = [];
+      const processor: SpanProcessor = {
+        onStart() {},
+        onEnd(span) {
+          if (span.name === 'execute_tool lookup' && span.status.code === SpanStatusCode.ERROR) {
+            expect(controller.signal.aborted).toBe(false);
+            events.push('tool ended');
+            completed.resolve();
+          }
+        },
+        async forceFlush() {},
+        async shutdown() {},
+      };
+      tracerProvider = new NodeTracerProvider({ spanProcessors: [processor] });
+      tracerProvider.register();
+      const callback = vi.fn(async () => {
+        if (fail) {
+          events.push('callback failed');
+          throw failure;
+        }
+        return 'Hello from tool.';
+      });
+      const target = await loadApiProvider('openai:chat:gpt-4o-mini', {
+        options: {
+          config: {
+            apiBaseUrl: 'https://tool-cache-retention.fixture.test/v1',
+            apiKey: 'fixture-key',
+            maxRetries: 0,
+            functionToolCallbacks: { lookup: callback },
+          },
+        },
+      });
+      providers.push(target);
+      const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+        expect(String(input)).toBe('https://tool-cache-retention.fixture.test/v1/chat/completions');
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: 'call-lookup',
+                      type: 'function',
+                      function: { name: 'lookup', arguments: '{}' },
+                    },
+                  ],
+                },
+                finish_reason: 'tool_calls',
+              },
+            ],
+            usage: { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 },
+          }),
+          {
+            headers: { 'content-type': 'application/json', 'x-request-id': 'tool-cache-fixture' },
+          },
+        );
+      });
+      const policy = completed.promise.then(() => {
+        events.push('caller aborted');
+        controller.abort(reason);
+      });
+      pending.push(policy);
+      drains.push(() => completed.resolve());
+      const wrapped = wrapProviderWithRateLimiting(target, registry);
+      await withCacheNamespace(`selected-tool-cache-${source}`, () =>
+        withCacheEnabled(true, async () => {
+          if (source === 'cached') {
+            const seed = await wrapped.callApi('Same harmless prompt');
+            expect(seed.error).toBeUndefined();
+          }
+          fail = true;
+          const selected = await trace
+            .getTracer('cache-retention')
+            .startActiveSpan('application', async (span) => {
+              try {
+                return await wrapped.callApi('Same harmless prompt', undefined, {
+                  abortSignal: controller.signal,
+                });
+              } finally {
+                span.end();
+              }
+            });
+          await policy;
+          expect(selected.error).toContain(failure.message);
+          expect(selected.metadata).toMatchObject({
+            errorOrigin: 'tool',
+            http: { status: 200, headers: { 'x-request-id': 'tool-cache-fixture' } },
+          });
+          expect(selected.cached).toBe(source === 'cached');
+          expect(selected.tokenUsage?.total).toBe(5);
+          expect(events).toEqual(['callback failed', 'tool ended', 'caller aborted']);
+          expect(controller.signal.reason).toBe(reason);
+          fail = false;
+          const survivor = await wrapped.callApi('Same harmless prompt', undefined, {
+            abortSignal: new AbortController().signal,
+          });
+          expect(survivor.error).toBeUndefined();
+          expect(survivor.output).toBe('Hello from tool.');
+          expect(survivor.cached).toBe(true);
+          expect(fetch).toHaveBeenCalledOnce();
+          expect(callback).toHaveBeenCalledTimes(source === 'cached' ? 3 : 2);
+        }),
+      );
+      for (const metrics of Object.values(registry.getMetrics())) {
+        expect(metrics).toMatchObject({
+          activeRequests: 0,
+          queueDepth: 0,
+          retriedRequests: 0,
+          rateLimitHits: 0,
+        });
+      }
       expect(vi.getTimerCount()).toBe(0);
     },
   );

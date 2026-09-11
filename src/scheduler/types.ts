@@ -3,6 +3,7 @@
  */
 
 import { isHttpRateLimitError } from '../util/fetch/errors';
+import { isResponseHeadersObserverErrorResponse } from './responseHeadersObserver';
 
 import type { CallApiOptionsParams, ProviderResponse } from '../types/providers';
 
@@ -38,6 +39,9 @@ export function isProviderResponseRateLimited(
   result: ProviderResponse | undefined,
   error: Error | undefined,
 ): boolean {
+  if (isResponseHeadersObserverErrorResponse(result)) {
+    return false;
+  }
   // Tool diagnostics may mention their own quota without describing the model request.
   const responseError = result?.metadata?.errorOrigin === 'tool' ? undefined : result?.error;
   // Structured signal — never retry a hard quota.

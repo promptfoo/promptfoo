@@ -7,7 +7,11 @@ import {
 } from './adaptiveConcurrency';
 import { sleepWithAbort, throwIfAborted } from './cancellation';
 import { parseRateLimitHeaders } from './headerParser';
-import { createResponseHeadersObserver } from './responseHeadersObserver';
+import {
+  createResponseHeadersObserver,
+  isResponseHeadersObserverError,
+  isResponseHeadersObserverErrorResponse,
+} from './responseHeadersObserver';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
 import { SlotQueue } from './slotQueue';
 
@@ -212,7 +216,9 @@ export class ProviderRateLimitState extends EventEmitter {
             'isRefusal' in result &&
             result.isRefusal === true;
           const headers = options.getHeaders?.(result);
-          isRateLimited = options.isRateLimited?.(result, undefined) ?? false;
+          isRateLimited =
+            !isResponseHeadersObserverErrorResponse(result) &&
+            (options.isRateLimited?.(result, undefined) ?? false);
           retryAfterMs = options.getRetryAfter?.(result, undefined);
 
           // Learn quota before releasing capacity to another queued caller.
@@ -245,6 +251,10 @@ export class ProviderRateLimitState extends EventEmitter {
         } catch (error) {
           if (ownsSlot) {
             this.latencies.push(Date.now() - startTime);
+          }
+
+          if (isResponseHeadersObserverError(onResponseHeaders, error)) {
+            throw error;
           }
 
           // Cancellation is final, even for a custom reason or a message that
