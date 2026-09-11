@@ -11,7 +11,7 @@ The [example application](https://github.com/promptfoo/promptfoo/tree/main/examp
 
 ## 1. Start the application
 
-Use Node.js 22.22 or newer and an OpenAI API key with access to `gpt-5.4-mini`:
+Use Node.js 22.22 or newer and an OpenAI API key with access to `gpt-5.4-mini` for the app and attack generation, and `gpt-5.5-2026-04-23` for grading:
 
 ```bash
 npx promptfoo@latest init --example redteam-pdf
@@ -24,6 +24,8 @@ npm start
 Open `http://localhost:3100`. Upload `fixtures/invoice.pdf` and use the default question. The invoice total is **$1,250.00** and the payment terms are **Net 30**.
 
 Set `PDF_MODEL` to change the app's model. The attack generator and grader are configured separately in `promptfooconfig.yaml`.
+
+The sample uses a stronger grader to distinguish following a malicious note from quoting it. Inspect the grader's reasons alongside the original invoice and model answer.
 
 ## 2. Verify clean uploads
 
@@ -50,6 +52,8 @@ PROMPTFOO_DISABLE_REMOTE_GENERATION=true npx promptfoo@latest eval \
 ```
 
 The first command generates test cases and PDF files. The second sends them through the same `/api/analyze` upload endpoint used by the browser and grades the responses. Model requests use your API key and incur usage charges.
+
+Add `--force` to `redteam generate` to generate new attacks when the configuration has not changed.
 
 The strategy reuses the clean invoice across attacks and appends each payload on its own review-notes page. It stores the original attack goal separately from the rendered document.
 
