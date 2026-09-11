@@ -1387,7 +1387,7 @@ describe('evaluator', () => {
         },
         scenarios: [
           {
-            config: [{ input: 'scenario' }],
+            config: [{ vars: { input: 'SCENARIO_CONFIG_VAR_SECRET' } }],
             tests: [{ prompt: 'SCENARIO_PROMPT_SECRET', vars: { input: 'SCENARIO_VAR_SECRET' } }],
             defaultTest: {
               prompt: 'SCENARIO_DEFAULT_PROMPT_SECRET',
@@ -1419,6 +1419,7 @@ describe('evaluator', () => {
           vars: {},
         });
         expect(config.scenarios[0]).toMatchObject({
+          config: [{ vars: {} }],
           tests: [{ prompt: '[prompt stripped]', vars: {} }],
           defaultTest: { prompt: '[prompt stripped]', vars: {} },
         });

@@ -821,6 +821,7 @@ export function projectConfigForOutput(
     isRecord(scenario)
       ? {
           ...scenario,
+          ...(Array.isArray(scenario.config) ? { config: scenario.config.map(projectTest) } : {}),
           ...(Array.isArray(scenario.tests) ? { tests: scenario.tests.map(projectTest) } : {}),
           ...(scenario.defaultTest === undefined
             ? {}
