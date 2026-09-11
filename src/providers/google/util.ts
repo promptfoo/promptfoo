@@ -1774,7 +1774,6 @@ function getMimeTypeFromBase64(data: string): string | undefined {
 function processImagesInContents(
   contents: GeminiFormat,
   contextVars?: Record<string, VarValue>,
-  sourceVars?: Record<string, VarValue>,
 ): GeminiFormat {
   if (!contextVars) {
     return contents;
@@ -1792,16 +1791,14 @@ function processImagesInContents(
 
   const base64ToMimeType = new Map<string, string>();
 
-  for (const [varName, value] of Object.entries(contextVars)) {
+  for (const value of Object.values(contextVars)) {
     if (typeof value === 'string') {
       let mimeType = getMimeTypeFromBase64(value);
-      const source = sourceVars?.[varName];
-      // Generic MP4 brands do not distinguish audio from video; retain the file's provenance.
+      // Generic MP4 brands need audio provenance bound to the current loaded bytes.
       if (
         mimeType === 'video/mp4' &&
         !isDataUrl(value) &&
-        (getLoadedFileMimeType(contextVars, value) === 'audio/mp4' ||
-          (typeof source === 'string' && source.startsWith('file://') && /\.m4a$/i.test(source)))
+        getLoadedFileMimeType(contextVars, value) === 'audio/mp4'
       ) {
         mimeType = 'audio/mp4';
       }
@@ -1987,7 +1984,6 @@ export function geminiFormatAndSystemInstructions(
   options?: {
     basePath?: string;
     useAssistantRole?: boolean;
-    sourceVars?: Record<string, VarValue>;
   },
 ): {
   contents: GeminiFormat;
@@ -2027,7 +2023,7 @@ export function geminiFormatAndSystemInstructions(
   }
 
   // Process images in contents
-  contents = processImagesInContents(contents, contextVars, options?.sourceVars);
+  contents = processImagesInContents(contents, contextVars);
 
   return { contents, systemInstruction };
 }

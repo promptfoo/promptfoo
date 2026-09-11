@@ -44,6 +44,7 @@ import {
   stripExecutableToolFileReferences,
   validateFunctionCall,
 } from '../../../src/providers/google/util';
+import { setLoadedFileMimeTypes } from '../../../src/util/file';
 
 import type { Tool } from '../../../src/providers/google/types';
 
@@ -2110,48 +2111,46 @@ describe('util', () => {
           },
         );
 
-        it.each([
-          ['isom', 'file://recording.m4a'],
-          ['mp42', 'file://recording.M4A'],
-          ['isom', 'file://recording.M4a'],
-        ])('should use M4A file provenance for the generic %s brand in %s', (brand, source) => {
-          const media = Buffer.from(`....ftyp${brand}........`).toString('base64');
-          const vars = { media };
+        it.each(['isom', 'mp42'])(
+          'should use value-bound M4A provenance for the generic %s brand',
+          (brand) => {
+            const media = Buffer.from(`....ftyp${brand}........`).toString('base64');
+            const vars = { media };
+            // The real renderer supplies this same value-bound, nonenumerable carrier.
+            setLoadedFileMimeTypes(vars, new Map([[media, 'audio/mp4']]));
 
-          const { contents } = geminiFormatAndSystemInstructions(media, vars, undefined, {
-            sourceVars: { media: source },
-          });
+            const { contents } = geminiFormatAndSystemInstructions(media, vars);
 
-          expect(contents[0].parts).toEqual([
-            { inlineData: { mimeType: 'audio/mp4', data: media } },
-          ]);
-          expect(vars.media).toBe(media);
-        });
+            expect(contents[0].parts).toEqual([
+              { inlineData: { mimeType: 'audio/mp4', data: media } },
+            ]);
+            expect(vars.media).toBe(media);
+            expect(JSON.parse(JSON.stringify(vars))).toEqual({ media });
+          },
+        );
 
         it('should preserve M4A aliases when only the alias appears in the prompt', () => {
           const audio = Buffer.from('....ftypisom........').toString('base64');
           const vars = { audio, alias: audio };
-          const sourceVars = { audio: 'file://recording.m4a', alias: '{{audio}}' };
+          setLoadedFileMimeTypes(vars, new Map([[audio, 'audio/mp4']]));
 
-          const { contents } = geminiFormatAndSystemInstructions(vars.alias, vars, undefined, {
-            sourceVars,
-          });
+          const { contents } = geminiFormatAndSystemInstructions(vars.alias, vars);
 
           expect(contents[0].parts[0].inlineData?.mimeType).toBe('audio/mp4');
           expect(contents[0].parts).toEqual([
             { inlineData: { mimeType: 'audio/mp4', data: audio } },
           ]);
           expect(vars).toEqual({ audio, alias: audio });
-          expect(sourceVars).toEqual({ audio: 'file://recording.m4a', alias: '{{audio}}' });
+          expect(JSON.parse(JSON.stringify(vars))).toEqual({ audio, alias: audio });
         });
 
         it('should preserve explicit video MIME types despite M4A file provenance', () => {
           const base64Data = Buffer.from('....ftypisom........').toString('base64');
           const media = `data:video/mp4;base64,${base64Data}`;
+          const vars = { media };
+          setLoadedFileMimeTypes(vars, new Map([[media, 'audio/mp4']]));
 
-          const { contents } = geminiFormatAndSystemInstructions(media, { media }, undefined, {
-            sourceVars: { media: 'file://recording.m4a' },
-          });
+          const { contents } = geminiFormatAndSystemInstructions(media, vars);
 
           expect(contents[0].parts).toEqual([
             { inlineData: { mimeType: 'video/mp4', data: base64Data } },
@@ -2160,10 +2159,10 @@ describe('util', () => {
 
         it('should leave unrecognized file content as text despite M4A file provenance', () => {
           const media = 'Unrecognized audio content';
+          const vars = { media };
+          setLoadedFileMimeTypes(vars, new Map([[media, 'audio/mp4']]));
 
-          const { contents } = geminiFormatAndSystemInstructions(media, { media }, undefined, {
-            sourceVars: { media: 'file://recording.m4a' },
-          });
+          const { contents } = geminiFormatAndSystemInstructions(media, vars);
 
           expect(contents[0].parts).toEqual([{ text: media }]);
         });

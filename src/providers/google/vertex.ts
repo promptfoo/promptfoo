@@ -653,7 +653,6 @@ export class VertexChatProvider extends GoogleGenericProvider {
         basePath:
           promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
         useAssistantRole: config.useAssistantRole,
-        sourceVars: context?.test?.vars,
       },
     );
 

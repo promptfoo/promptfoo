@@ -455,72 +455,98 @@ export function getTools() { return { functionDeclarations: ${JSON.stringify(dec
     );
   });
 
-  it.each(['isom', 'mp42'])(
-    'loads an M4A %s register produced by a previous actual runEval',
-    async (brand) => {
-      const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
-      bytes.write(brand, 8, 'ascii');
-      const file = path.join(temporaryDirectory, 'stored.m4a');
-      await writeFile(file, bytes);
-      const fileUrl = `file://${file}`;
-      const encoded = bytes.toString('base64');
-      const provider = await load('Studio');
-      const registers = {};
-      const options = {
-        provider,
-        registers,
-        conversations: {},
-        delay: 0,
-        testIdx: 0,
-        promptIdx: 0,
-        repeatIndex: 0,
-        isRedteam: false,
-      };
-      fetchMock.mockImplementationOnce(async () =>
-        Response.json({ candidates: [{ content: { parts: [{ text: fileUrl }] } }] }),
-      );
-      const first = await withCacheEnabled(false, () =>
-        runEval({
-          ...options,
-          prompt: { raw: 'Return the recording path', label: 'producer' },
-          test: { options: { storeOutputAs: 'audio' } },
-        }),
-      );
-      expect(first[0].success).toBe(true);
-      expect(registers).toEqual({ audio: fileUrl });
-      requestBody('Studio');
-      fetchMock.mockClear();
+  describe.each<Route>(['Studio', 'Vertex Express', 'standalone'])('%s registers', (route) => {
+    it.each([
+      { brand: 'isom', replacement: 'M4A file' },
+      { brand: 'mp42', replacement: 'M4A file' },
+      { brand: 'isom', replacement: 'MP4 file' },
+      { brand: 'mp42', replacement: 'MP4 file' },
+      { brand: 'isom', replacement: 'raw MP4' },
+    ])(
+      'loads a $replacement $brand register produced by a previous actual runEval',
+      async ({ brand, replacement }) => {
+        // A BMFF identification prefix proves request representation, not codec decoding.
+        const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
+        bytes.write(brand, 8, 'ascii');
+        const currentAudio = replacement === 'M4A file';
+        const file = path.join(temporaryDirectory, currentAudio ? 'stored.m4a' : 'clip.mp4');
+        await writeFile(file, bytes);
+        const encoded = bytes.toString('base64');
+        const storedOutput = replacement === 'raw MP4' ? encoded : `file://${file}`;
+        // The stale original is deliberately absent: replacement must occur before loading.
+        const oldFile = path.join(temporaryDirectory, 'old.m4a');
+        const originalTest: { vars: Record<string, string> } = currentAudio
+          ? { vars: { alias: '{{audio}}' } }
+          : { vars: { audio: `file://${oldFile}` } };
+        const originalVars = originalTest.vars;
+        const originalSnapshot = structuredClone(originalTest);
+        const provider = await load(route);
+        const registers = {};
+        const options = {
+          provider,
+          registers,
+          conversations: {},
+          delay: 0,
+          testIdx: 0,
+          promptIdx: 0,
+          repeatIndex: 0,
+          isRedteam: false,
+        };
+        fetchMock.mockImplementationOnce(async () =>
+          Response.json({ candidates: [{ content: { parts: [{ text: storedOutput }] } }] }),
+        );
+        const first = await withCacheEnabled(false, () =>
+          runEval({
+            ...options,
+            prompt: { raw: 'Return the recording path', label: 'producer' },
+            test: { options: { storeOutputAs: 'audio' } },
+          }),
+        );
+        expect(first[0].success).toBe(true);
+        expect(registers).toEqual({ audio: storedOutput });
+        requestBody(route);
+        fetchMock.mockClear();
 
-      const originalTest = { vars: { alias: '{{audio}}' } };
-      const second = await withCacheEnabled(false, () =>
-        runEval({
-          ...options,
-          testIdx: 1,
-          prompt: { raw: '{{alias}}', label: 'consumer' },
-          test: originalTest,
-        }),
-      );
-      expect(second[0].success).toBe(true);
-      expect(second[0].response?.error).toBeUndefined();
-      expect(second[0].response?.output).toBe('ok');
-      const body = requestBody('Studio');
-      expect(body.contents[0].parts[0].inlineData.mimeType).toBe('audio/mp4');
-      expect(body).toEqual({
-        contents: [
-          { role: 'user', parts: [{ inlineData: { mimeType: 'audio/mp4', data: encoded } }] },
-        ],
-        generationConfig: {},
-      });
-      expect(originalTest).toEqual({ vars: { alias: '{{audio}}' } });
-      expect(registers).toEqual({ audio: fileUrl });
-      expect(second[0].vars).toEqual({ alias: encoded, audio: encoded });
-      expect(Object.getOwnPropertySymbols(second[0].vars)).toHaveLength(0);
-      expect(JSON.parse(JSON.stringify(second[0])).vars).toEqual({
-        alias: encoded,
-        audio: encoded,
-      });
-    },
-  );
+        const second = await withCacheEnabled(false, () =>
+          runEval({
+            ...options,
+            testIdx: 1,
+            prompt: { raw: currentAudio ? '{{alias}}' : '{{audio}}', label: 'consumer' },
+            test: originalTest,
+          }),
+        );
+        expect(second[0].success).toBe(true);
+        expect(second[0].response?.error).toBeUndefined();
+        expect(second[0].response?.output).toBe('ok');
+        const body = requestBody(route);
+        expect(body.contents[0].parts[0].inlineData.mimeType).toBe(
+          currentAudio ? 'audio/mp4' : 'video/mp4',
+        );
+        expect(body).toEqual({
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  inlineData: { mimeType: currentAudio ? 'audio/mp4' : 'video/mp4', data: encoded },
+                },
+              ],
+            },
+          ],
+          generationConfig: {},
+        });
+        expect(originalTest.vars).toBe(originalVars);
+        expect(originalTest).toEqual(originalSnapshot);
+        expect(options.registers).toBe(registers);
+        expect(registers).toEqual({ audio: storedOutput });
+        expect(() => readFileSync(oldFile)).toThrow();
+        const expectedVars = currentAudio ? { alias: encoded, audio: encoded } : { audio: encoded };
+        expect(second[0].vars).toEqual(expectedVars);
+        expect(Object.getOwnPropertySymbols(second[0].vars)).toHaveLength(0);
+        expect(JSON.parse(JSON.stringify(second[0])).vars).toEqual(expectedVars);
+      },
+    );
+  });
 
   it('does not retain loaded MIME across a new vars object or a new render', async () => {
     const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');

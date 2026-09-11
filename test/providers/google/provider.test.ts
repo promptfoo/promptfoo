@@ -322,8 +322,9 @@ describe('GoogleProvider', () => {
       });
     });
 
-    it('should send generic MP4 bytes from an M4A variable as audio', async () => {
+    it('should send generic MP4 bytes with explicit audio MIME', async () => {
       const media = Buffer.from('....ftypisom........').toString('base64');
+      const audio = `data:audio/mp4;base64,${media}`;
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
         data: {
           candidates: [{ content: { parts: [{ text: 'Audio transcript' }] } }],
@@ -334,9 +335,9 @@ describe('GoogleProvider', () => {
         statusText: 'OK',
       });
 
-      const response = await provider.callApi(media, {
+      const response = await provider.callApi(audio, {
         prompt: { raw: '{{audio}}', label: 'Audio' },
-        vars: { audio: media },
+        vars: { audio },
         test: { vars: { audio: 'file://recording.m4a' } },
       });
 

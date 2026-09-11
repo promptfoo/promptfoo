@@ -2929,9 +2929,10 @@ describe('AIStudioChatProvider', () => {
         expectedBasePath: promptSystemInstructionBasePath,
       },
     ])(
-      'preserves M4A provenance with $owner-owned instruction and schema files',
+      'preserves explicit audio MIME with $owner-owned instruction and schema files',
       async ({ promptConfig, expectedBasePath }) => {
         const media = Buffer.from('....ftypisom........').toString('base64');
+        const audio = `data:audio/mp4;base64,${media}`;
         const expectedInstructionReference = `file://${path.resolve(
           expectedBasePath,
           'system-instruction.txt',
@@ -2965,9 +2966,9 @@ describe('AIStudioChatProvider', () => {
           },
           cached: false,
         } as any);
-        const response = await provider.callGemini(media, {
+        const response = await provider.callGemini(audio, {
           prompt: { raw: '{{audio}}', label: 'Audio', config: promptConfig },
-          vars: { audio: media },
+          vars: { audio },
           test: { vars: { audio: 'file://recording.m4a' } },
         });
 
