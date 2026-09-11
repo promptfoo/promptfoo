@@ -262,6 +262,43 @@ function redactCredentials(text: string, credentials: readonly string[]): string
     .replace(/\b(Bearer|Basic)\s+[\w.~+/=-]{8,}/gi, `$1 ${REDACTED}`);
 }
 
+function isUsage(value: unknown): value is Usage {
+  const usage = value as Usage | null | undefined;
+  return (
+    typeof usage?.input_tokens === 'number' &&
+    typeof usage.output_tokens === 'number' &&
+    typeof usage.total_tokens === 'number'
+  );
+}
+
+function toTokenUsage(usage: Usage) {
+  return {
+    prompt: usage.input_tokens,
+    completion: usage.output_tokens,
+    total: usage.total_tokens,
+    cached: usage.input_tokens_details?.cached_tokens,
+    completionDetails: { reasoning: usage.output_tokens_details?.reasoning_tokens },
+  };
+}
+
+function addUsage(left: Usage, right: Usage): Usage {
+  return {
+    input_tokens: left.input_tokens + right.input_tokens,
+    output_tokens: left.output_tokens + right.output_tokens,
+    total_tokens: left.total_tokens + right.total_tokens,
+    input_tokens_details: {
+      cached_tokens:
+        (left.input_tokens_details?.cached_tokens ?? 0) +
+        (right.input_tokens_details?.cached_tokens ?? 0),
+    },
+    output_tokens_details: {
+      reasoning_tokens:
+        (left.output_tokens_details?.reasoning_tokens ?? 0) +
+        (right.output_tokens_details?.reasoning_tokens ?? 0),
+    },
+  };
+}
+
 function referencesVariable(template: string, names: string[]): boolean {
   return names.some((name) => {
     const reference = analyzeTemplateReference(template, name);
@@ -439,6 +476,68 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     } while (true);
   }
 
+  private async listSubagentIds(
+    endpoint: string,
+    headers: Headers,
+    signal: AbortSignal,
+  ): Promise<string[]> {
+    const subagents = await this.list<{ id?: unknown }>(`${endpoint}/subagents`, headers, signal);
+    return subagents.map(({ id }) => {
+      if (typeof id !== 'string' || !id) {
+        throw new Error('Agents API returned an invalid subagent');
+      }
+      return id;
+    });
+  }
+
+  /**
+   * In live multi-agent sessions, session totals equaled the root turn's usage while each subagent
+   * turn reported its own. The API does not say whether session totals include subagent turns, so
+   * their usage is recorded beside the totals, never added, and the totals are marked.
+   */
+  private async getSubagentUsageMetadata(
+    endpoint: string,
+    headers: Headers,
+    signal: AbortSignal,
+    evalSignal?: AbortSignal,
+  ): Promise<Record<string, unknown>> {
+    try {
+      const subagentIds = await this.listSubagentIds(endpoint, headers, signal);
+      if (!subagentIds.length) {
+        return {};
+      }
+      let sum: Usage | undefined;
+      let complete = true;
+      for (const id of subagentIds) {
+        const turns = await this.list<Turn>(
+          `${endpoint}/subagents/${encodeURIComponent(id)}/turns`,
+          headers,
+          signal,
+        );
+        for (const turn of turns) {
+          if (isUsage(turn.usage)) {
+            sum = sum ? addUsage(sum, turn.usage) : turn.usage;
+          } else {
+            complete = false;
+          }
+        }
+      }
+      return {
+        usageMayExcludeSubagents: true,
+        // A partial sum would understate subagent work, so it is reported only when complete.
+        ...(complete && sum ? { subagentUsage: toTokenUsage(sum) } : {}),
+      };
+    } catch (error) {
+      evalSignal?.throwIfAborted();
+      logger.debug('[OpenAI Agents API] Subagent turn usage unavailable', {
+        endpoint,
+        error: this.redact(error instanceof Error ? error.message : String(error)),
+      });
+      // Subagents may have run, so the session totals may still exclude their work.
+      return { usageMayExcludeSubagents: true };
+    }
+  }
+
   /**
    * Session items cover only the root agent; each subagent keeps its own item history.
    * Returns undefined when those histories cannot be read so the gap is reported, not hidden.
@@ -450,12 +549,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     evalSignal?: AbortSignal,
   ): Promise<Item[] | undefined> {
     try {
-      const subagents = await this.list<{ id?: unknown }>(`${endpoint}/subagents`, headers, signal);
       const items: Item[] = [];
-      for (const { id } of subagents) {
-        if (typeof id !== 'string' || !id) {
-          throw new Error('Agents API returned an invalid subagent');
-        }
+      for (const id of await this.listSubagentIds(endpoint, headers, signal)) {
         items.push(
           ...(await this.list<Item>(
             `${endpoint}/subagents/${encodeURIComponent(id)}/items`,
@@ -697,17 +792,12 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         hasSubagents,
         options?.abortSignal,
       );
+      const subagentUsageMetadata = hasSubagents
+        ? await this.getSubagentUsageMetadata(endpoint, headers, signal, options?.abortSignal)
+        : {};
       const model = finished.agent.model;
       result.output = output;
-      result.tokenUsage = usage
-        ? {
-            prompt: usage.input_tokens,
-            completion: usage.output_tokens,
-            total: usage.total_tokens,
-            cached: usage.input_tokens_details?.cached_tokens,
-            completionDetails: { reasoning: usage.output_tokens_details?.reasoning_tokens },
-          }
-        : undefined;
+      result.tokenUsage = usage ? toTokenUsage(usage) : undefined;
       // Aggregate session tokens do not identify each subagent's model or service tier.
       if (!hasSubagents) {
         result.cost = calculateOpenAIUsageCost(model, this.config, usage, {
@@ -723,6 +813,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
           : 'model tokens only; excludes tools and sandbox charges',
         ...toolActivity,
         ...usageMetadata,
+        ...subagentUsageMetadata,
       });
       completed = true;
     } catch (error) {

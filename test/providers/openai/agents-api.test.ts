@@ -137,6 +137,9 @@ describe('OpenAiAgentsApiProvider', () => {
       metadata: { sessionId: session.id, turnId: turn.id, sessionDeleted: true },
     });
     expect(result.cost).toBeGreaterThan(0);
+    // Single-agent sessions neither read nor mark subagent usage.
+    expect(result.metadata).not.toHaveProperty('usageMayExcludeSubagents');
+    expect(result.metadata).not.toHaveProperty('subagentUsage');
     const [url, request, , retries] = vi.mocked(fetchWithRetries).mock.calls[0];
     expect(url).toBe('https://api.openai.com/v1/agents/sessions');
     expect(JSON.parse(request!.body as string)).toEqual({
@@ -1350,6 +1353,103 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(result.metadata).not.toHaveProperty('usageUnavailable');
       // Polling continued until the usage deadline instead of stopping after the grace period.
       expect(sessionReads).toBeGreaterThanOrEqual(8);
+    });
+
+    // Shapes follow live sessions: session totals equaled the root turn's usage, and each subagent
+    // turn reported its own usage from GET /subagents/{id}/turns.
+    const subagentTurn = (id: string, input: number, output: number) => ({
+      id,
+      object: 'agent.session.turn',
+      subagent_id: 'subagent_a',
+      status: 'completed',
+      usage: {
+        input_tokens: input,
+        input_tokens_details: { cached_tokens: 10 },
+        output_tokens: output,
+        output_tokens_details: { reasoning_tokens: 3 },
+        total_tokens: input + output,
+      },
+    });
+    const mockSubagentTurns = (turnsFor: (subagentId: string, after: string | null) => Response) =>
+      vi.mocked(fetchWithRetries).mockImplementation(async (url, options) => {
+        const { pathname, searchParams } = new URL(String(url));
+        const method = options?.method ?? 'GET';
+        const subagentTurns = pathname.match(/\/subagents\/([^/]+)\/turns$/);
+        if (subagentTurns) {
+          return turnsFor(subagentTurns[1], searchParams.get('after'));
+        }
+        if (pathname.endsWith('/subagents')) {
+          return json(page([{ id: 'subagent_a' }, { id: 'subagent_b' }]));
+        }
+        return method === 'GET' && pathname.endsWith('/sess_test')
+          ? json({ ...session, agent })
+          : defaultResponse(pathname, method);
+      });
+
+    it('records subagent turn usage beside populated session totals without adding it', async () => {
+      vi.useFakeTimers();
+      mockSubagentTurns((subagentId, after) => {
+        if (subagentId === 'subagent_b') {
+          return json(page([subagentTurn('turn_b1', 300, 30)]));
+        }
+        // Subagent A's turns span two pages.
+        return after === 'turn_a1'
+          ? json(page([subagentTurn('turn_a2', 200, 20)]))
+          : json(page([subagentTurn('turn_a1', 100, 10)], true, 'turn_a1'));
+      });
+      const pending = provider().callApi('hi');
+      await vi.advanceTimersByTimeAsync(1_000);
+      const result = await pending;
+      // Session totals stay as reported, so subagent usage is never double counted.
+      expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+      expect(result.metadata).toMatchObject({
+        usageMayExcludeSubagents: true,
+        subagentUsage: {
+          prompt: 600,
+          completion: 60,
+          total: 660,
+          cached: 30,
+          completionDetails: { reasoning: 9 },
+        },
+        sessionDeleted: true,
+      });
+      expect(result.metadata).not.toHaveProperty('usageFromRootTurn');
+    });
+
+    it.each([
+      { reason: 'a failed turns read', respond: () => apiError(403, 'missing api.agents.read') },
+      {
+        reason: 'a turn without usage',
+        respond: () => json(page([{ ...subagentTurn('turn_a1', 1, 1), usage: null }])),
+      },
+    ])(
+      'keeps marked session totals and omits subagent usage after $reason',
+      async ({ respond }) => {
+        vi.useFakeTimers();
+        mockSubagentTurns(respond);
+        const pending = provider().callApi('hi');
+        await vi.advanceTimersByTimeAsync(1_000);
+        const result = await pending;
+        expect(result.output).toBe('42');
+        expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+        expect(result.metadata).toMatchObject({
+          usageMayExcludeSubagents: true,
+          sessionDeleted: true,
+        });
+        expect(result.metadata).not.toHaveProperty('subagentUsage');
+      },
+    );
+
+    it('propagates eval cancellation while reading subagent turns', async () => {
+      const controller = new AbortController();
+      mockSubagentTurns(() => {
+        controller.abort(new Error('cancel eval'));
+        return apiError(403, 'cancelled');
+      });
+      await expect(
+        provider().callApi('hi', undefined, { abortSignal: controller.signal }),
+      ).rejects.toThrow('cancel eval');
+      expect(calls().at(-1)?.method).toBe('DELETE');
     });
   });
 
