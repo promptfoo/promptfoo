@@ -169,7 +169,7 @@ function validateLegacyAnchorContract(rootDir: string, errors: string[]) {
       const usage = `<LegacyHeadingAnchors page="${page}" section="${section}" />`;
       const precedingHeading = markdown
         .slice(0, markdown.indexOf(usage))
-        .match(/(?:^|\n)#{1,6} ([^\n]+)\n\s*$/)?.[1];
+        .match(/(?:^|\n)#{1,6} ([^\r\n]+)\r?\n\s*$/)?.[1];
       if (precedingHeading !== section || markdown.split(usage).length !== 2) {
         errors.push(`${GUIDE_PAGES[page]} must render ${usage} immediately after its heading`);
       }

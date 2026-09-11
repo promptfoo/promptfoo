@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: PromptFunction'
-description: "<!-- prettier-ignore --> > PromptFunction = (context) => Promise\\<PromptContent \\| PromptFunctionResult\\> See supported imports and signatures for this symbol."
+description: 'Function form accepted anywhere the Node.js API accepts a prompt. See the supported promptfoo Node.js API imports, signatures, fields, and application examples.'
 sidebar_position: 7
 ---
 

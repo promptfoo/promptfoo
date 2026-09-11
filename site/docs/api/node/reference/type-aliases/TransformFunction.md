@@ -1,6 +1,6 @@
 ---
-title: "Type Alias: TransformFunction\\<TIn, TOut\\>"
-description: "<!-- prettier-ignore --> > TransformFunction\\<TIn, TOut\\> = (output, context) => TOut \\| Promise\\<TOut\\> See supported imports and signatures for this symbol."
+title: 'Type Alias: TransformFunction<TIn, TOut>'
+description: 'A function that transforms output or vars at various stages of the evaluation pipeline. See supported imports, signatures, fields, and examples for this symbol.'
 sidebar_position: 12
 ---
 

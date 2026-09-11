@@ -1,6 +1,6 @@
 ---
 title: 'Function: evaluate()'
-description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
+description: 'Run an eval from a JavaScript or TypeScript program. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 1
 ---
 

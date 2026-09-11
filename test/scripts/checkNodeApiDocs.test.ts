@@ -31,6 +31,14 @@ describe('validateNodeApiDocs', () => {
     expect(() => validateNodeApiDocs()).not.toThrow();
   });
 
+  it('accepts Windows line endings around legacy anchors', () => {
+    const root = copyContract();
+    const target = path.join(root, 'site/docs/usage/node-api-examples.md');
+    const contents = fs.readFileSync(target, 'utf8').replace(/\r?\n/g, '\r\n');
+    fs.writeFileSync(target, contents);
+    expect(() => validateNodeApiDocs(root)).not.toThrow();
+  });
+
   it('rejects corrupted generic signatures', () => {
     const root = copyContract();
     const target = path.join(root, 'site/docs/api/node/reference/functions/evaluate.md');

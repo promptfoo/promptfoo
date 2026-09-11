@@ -1,6 +1,6 @@
 ---
 title: 'Function: loadApiProvider()'
-description: "<!-- prettier-ignore --> > loadApiProvider(providerPath, context?): Promise\\<ApiProvider\\> See supported imports, signatures, and fields for this symbol."
+description: 'Load one provider by id or config-file reference. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 4
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: 'Function: fetchWithCache()'
-description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
+description: "Fetch a URL through promptfoo's retrying cache wrapper. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol."
 sidebar_position: 4
 ---
 

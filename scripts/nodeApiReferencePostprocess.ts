@@ -76,6 +76,7 @@ function stripMarkdown(value: string) {
 
 function getDescription(markdown: string) {
   const paragraphs = markdown
+    .replace(/^<!-- prettier-ignore -->\r?\n/gm, '')
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
@@ -234,7 +235,7 @@ function rewriteGeneratedPages() {
       return;
     }
 
-    const title = firstHeading[1];
+    const title = firstHeading[1].trim().replace(/\\([<>])/g, '$1');
     const afterHeading = original
       .slice(firstHeading.index + firstHeading[0].length)
       .replace(/^\n+/, '');

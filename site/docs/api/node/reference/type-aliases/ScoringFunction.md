@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: ScoringFunction'
-description: "<!-- prettier-ignore --> > ScoringFunction = (namedScores, context?) => Promise\\<GradingResult\\> \\| GradingResult See supported imports and signatures."
+description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
 sidebar_position: 11
 ---
 

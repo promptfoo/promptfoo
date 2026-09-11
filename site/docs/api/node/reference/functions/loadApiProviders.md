@@ -1,6 +1,6 @@
 ---
 title: 'Function: loadApiProviders()'
-description: "<!-- prettier-ignore --> > loadApiProviders(providerPaths, options?): Promise\\<ApiProvider[]\\> See supported imports, signatures, and fields for this symbol."
+description: 'Load one or more providers from provider config input. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 5
 ---
 

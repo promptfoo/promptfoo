@@ -1,6 +1,6 @@
 ---
 title: 'Function: withCacheNamespace()'
-description: "<!-- prettier-ignore --> > withCacheNamespace\\<T\\>(namespace, fn): Promise\\<T\\> See supported imports, signatures, fields, and examples for this symbol."
+description: 'Run an async operation inside an isolated cache namespace. See supported Node.js imports, exact signatures, fields, and application examples for this symbol.'
 sidebar_position: 7
 ---
 

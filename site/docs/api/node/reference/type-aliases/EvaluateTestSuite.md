@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: EvaluateTestSuite'
-description: "<!-- prettier-ignore --> > EvaluateTestSuite = object & Omit\\<TestSuiteConfig, \"prompts\" \\| \"providers\"\\> See supported imports and signatures for this symbol."
+description: 'Test-suite shape accepted by the Node.js evaluate() API. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
 sidebar_position: 5
 ---
 

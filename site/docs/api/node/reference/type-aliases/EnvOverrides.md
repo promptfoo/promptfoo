@@ -1,6 +1,6 @@
 ---
 title: 'Type Alias: EnvOverrides'
-description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
+description: 'Environment-variable overrides accepted by provider-loading APIs. See the supported promptfoo Node.js API imports, signatures, fields, and application examples.'
 sidebar_position: 3
 ---
 

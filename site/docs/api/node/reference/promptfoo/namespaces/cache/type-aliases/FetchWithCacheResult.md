@@ -1,6 +1,6 @@
 ---
-title: "Type Alias: FetchWithCacheResult\\<T\\>"
-description: "<!-- prettier-ignore --> > FetchWithCacheResult\\<T\\> = object See supported Node.js imports, exact signatures, fields, and application examples for this symbol."
+title: 'Type Alias: FetchWithCacheResult<T>'
+description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
 sidebar_position: 1
 ---
 
