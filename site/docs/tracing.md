@@ -915,6 +915,11 @@ Span names come from your application's instrumentation, so choose patterns that
 names in your traces. An explicit filter can also include an operation that Promptfoo would
 otherwise leave out.
 
+SQL injection grading also honors `includeInGrading`. Its trace summary includes tool names,
+status, query text, and explicit authorization and row-count outcomes when available. It omits
+bound parameter values and returned rows. Query text honors `tracing.otlp.http.redactAttributes`;
+for example, a `query` pattern removes query text from the grading summary.
+
 ### Strategy-Specific Configuration
 
 Different attack strategies can use different tracing settings:
