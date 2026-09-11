@@ -38,7 +38,7 @@ const MOCK_CONFIG = {
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
-  getApiBaseUrl: vi.fn(() => ''),
+  getApiBaseUrl: () => '',
 }));
 
 const callApiMock = vi.mocked(callApi);
