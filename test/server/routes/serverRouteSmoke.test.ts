@@ -530,6 +530,12 @@ const smokeCases: SmokeCase[] = [
   { method: 'get', openApiPath: '/api/media/stats', path: '/api/media/stats', expectedStatus: 200 },
   {
     method: 'get',
+    openApiPath: '/api/media',
+    path: '/api/media?key=tenant%2Fcampaign%2Finvoice.pdf',
+    expectedStatus: 404,
+  },
+  {
+    method: 'get',
     openApiPath: '/api/media/info/{type}/{filename}',
     path: `/api/media/info/audio/${validMediaFilename}`,
     expectedStatus: 404,
