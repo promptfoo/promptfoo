@@ -77,6 +77,8 @@ Skipped assertions do not affect scores or named metrics. Earlier failed checks 
 
 Assertion errors, malformed grader responses, and grader outages stop the chain. Redteam guardrails cannot start fallback chains. A fallback must stay within the same test or assertion set and cannot target an assertion set, `select-*`, or `max-score`.
 
+When tracing is enabled and an assertion needs trace context, assertions run in order. A fallback that is never reached does not load trace data.
+
 ## Grouping assertions via Assertion Sets
 
 Assertions can be grouped together using an `assert-set`.
