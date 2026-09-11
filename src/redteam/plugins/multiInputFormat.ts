@@ -179,7 +179,7 @@ export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: str
         ? promptLines[index + 1]?.trim()
         : prompt;
     })
-    .filter((prompt): prompt is string => prompt !== null)
+    .filter((prompt): prompt is string => prompt != null)
     .map((prompt) => ({ __prompt: prompt }));
 }
 

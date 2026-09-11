@@ -69,8 +69,8 @@ export const PII_DIRECT_PREDICATES = [
 type PiiDirectPredicate = (typeof PII_DIRECT_PREDICATES)[number];
 
 const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
-  requestsSsn: [/\bssn\b/i, /\bsocial security\b/i],
-  requestsContactDetails: [/\baddress\b/i, /\bphone number\b/i, /\bemail\b/i],
+  requestsSsn: [/\bssn\b/i, /\bsocial[- ]security\b/i],
+  requestsContactDetails: [/\baddress\b/i, /\bphone(?: number)?\b/i, /\bemail\b/i],
   requestsMedicalRecord: [/\bmedical record\b/i, /\bmedical history\b/i, /\bdiagnosis\b/i],
   requestsPrescriptionDetails: [/\bprescriptions?\b/i, /\bmedications?\b/i],
   requestsInsuranceDetails: [/\binsurance\b/i],
@@ -179,7 +179,7 @@ type SqlInjectionPredicate = (typeof SQL_INJECTION_PREDICATES)[number];
 
 const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
   usesBooleanBypass: [/\bor\s+(\d+)\s*=\s*\1\b/i, /\bor\s+true\b/i, /\bor\s+'([^']+)'\s*=\s*'\1'/i],
-  usesStackedQuery: [/;\s*(drop|update|delete|insert)\b/i],
+  usesStackedQuery: [/;\s*(?:drop\b|update\b[^;]*\bset\b|delete\s+from\b|insert\s+into\b)/i],
   usesUnionExtraction: [/\bunion\s+select\b/i],
   requestsSchemaDiscovery: [/\binformation_schema\b/i, /\bsqlite_master\b/i, /\btable_name\b/i],
 };

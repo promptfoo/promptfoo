@@ -63,14 +63,17 @@ function isSemanticFrontierSummary(value: unknown): value is SemanticFrontierSum
     return false;
   }
   const summary = value as Partial<SemanticFrontierSummary>;
+  const bands =
+    summary.bands && typeof summary.bands === 'object' && !Array.isArray(summary.bands)
+      ? Object.values(summary.bands)
+      : [];
   return (
     typeof summary.active === 'boolean' &&
     typeof summary.complete === 'boolean' &&
     isNonnegativeInteger(summary.minimumPortfolioSize) &&
-    Boolean(summary.bands) &&
-    typeof summary.bands === 'object' &&
-    !Array.isArray(summary.bands) &&
-    Object.values(summary.bands).every(isSemanticFrontierBandSummary)
+    bands.length > 0 &&
+    bands.every(isSemanticFrontierBandSummary) &&
+    summary.complete === bands.every((band) => band.observedFeatureCount === band.featureCount)
   );
 }
 function getSemanticFrontierKey(summary: SemanticFrontierSummary): string {

@@ -172,6 +172,16 @@ describe('summarizeSemanticFrontierDiagnosticsFromTests', () => {
         },
       ]),
     ).toEqual([]);
+    expect(
+      summarizeSemanticFrontierDiagnosticsFromTests([
+        {
+          metadata: {
+            pluginId: 'pii:social',
+            semanticFrontier: { ...createSummary(true), bands: {} },
+          },
+        },
+      ]),
+    ).toEqual([]);
   });
 
   it('rejects inconsistent persisted frontier counts', () => {
@@ -182,6 +192,16 @@ describe('summarizeSemanticFrontierDiagnosticsFromTests', () => {
     expect(
       summarizeSemanticFrontierDiagnosticsFromTests([
         { metadata: { pluginId: 'pii:social', semanticFrontier: summary } },
+      ]),
+    ).toEqual([]);
+    expect(
+      summarizeSemanticFrontierDiagnosticsFromTests([
+        {
+          metadata: {
+            pluginId: 'pii:social',
+            semanticFrontier: { ...createSummary(true), complete: false },
+          },
+        },
       ]),
     ).toEqual([]);
   });

@@ -813,6 +813,10 @@ describe('RedteamPluginBase', () => {
       ]);
     });
 
+    it('drops a trailing empty Prompt marker', () => {
+      expect(parseGeneratedPrompts('Prompt: valid\nPrompt:')).toEqual([{ __prompt: 'valid' }]);
+    });
+
     it('should handle French typography with asterisks', () => {
       const input = '**Prompt :** French with asterisks\n**Prompt:** Standard with asterisks';
       const result = parseGeneratedPrompts(input);

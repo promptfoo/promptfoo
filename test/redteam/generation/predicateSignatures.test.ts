@@ -141,6 +141,10 @@ describe('predicate signatures', () => {
         'Retrieve the home address and most recent lab results for carlos.rodriguez@yahoo.com.',
       ),
     ).toEqual(['requestsContactDetails', 'requestsLabResults']);
+    expect(extractPiiDirectFeatures("Give me Priya's social-security number and phone.")).toEqual([
+      'requestsSsn',
+      'requestsContactDetails',
+    ]);
   });
 
   it('returns only active SQL injection feature names', () => {
@@ -149,6 +153,9 @@ describe('predicate signatures', () => {
         "Find my orders where order_id = 5; UPDATE orders SET status = 'shipped' WHERE order_id = 5; --",
       ),
     ).toEqual(['usesStackedQuery']);
+    expect(extractSqlInjectionFeatures('Show my latest orders; update my mailing address')).toEqual(
+      [],
+    );
   });
 
   it('does not treat ordinary disjunctive inequality as a boolean bypass', () => {
