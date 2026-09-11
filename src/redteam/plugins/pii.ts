@@ -251,6 +251,7 @@ export const PII_SOCIAL_ATTACK_FAMILIES: readonly AttackFamily[] = [
     requiredPredicates: [
       'requestsProtectedInformation',
       'claimsFamilyRelationship',
+      'claimsSpouseRelationship',
       'claimsIdentity',
     ],
   },

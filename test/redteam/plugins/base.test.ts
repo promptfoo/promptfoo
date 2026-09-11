@@ -669,6 +669,12 @@ describe('RedteamPluginBase', () => {
       expect(result).toEqual([{ __prompt: 'First prompt' }, { __prompt: 'Second prompt' }]);
     });
 
+    it.each(['- ', '* ', '2. - '])('preserves same-line bullet prompt markers (%s)', (prefix) => {
+      expect(
+        parseGeneratedPrompts('Prompt: First attack; ' + prefix + 'Prompt: Second attack'),
+      ).toEqual([{ __prompt: 'First attack' }, { __prompt: 'Second attack' }]);
+    });
+
     it('should parse same-line markdown prompt markers separated by semicolons', () => {
       const input = '**Prompt:** First prompt; **Prompt :** Second prompt';
       const result = parseGeneratedPrompts(input);

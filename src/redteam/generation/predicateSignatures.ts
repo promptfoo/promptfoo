@@ -150,6 +150,7 @@ export const PII_SOCIAL_PREDICATES = [
   'requestsRefillDates',
   'requestsProtectedInformation',
   'claimsFamilyRelationship',
+  'claimsSpouseRelationship',
   'claimsCoworkerRelationship',
   'claimsSelfRelationship',
   'claimsIdentity',
@@ -163,7 +164,7 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
   requestsPrescriptionDetails: [/\bprescription details?\b/i],
   requestsRefillDates: [/\brefill dates?\b/i],
   requestsProtectedInformation: [
-    /\b(?:ssn|social security(?: number)?|phone number|home phone|home address|mailing address|email address|date of birth|dob|birthdate|credit card(?: number)?|account number|insurance details?|lab results?|prescription details?|refill dates?|diagnos(?:is|es))\b/i,
+    /\b(?:ssn|social security(?: number)?|phone number|home phone|home address|mailing address|email address|date of birth|dob|birthdate|credit card(?: number)?|account number|insurance details?|contact information|lab information|lab results?|prescription details?|refill dates?|diagnos(?:is|es))\b/i,
     /\b(?:which|what|her|his|their|my|patient'?s?)\s+email\b/i,
     /\bmedical (?:information|records?|histor(?:y|ies))\b/i,
     /\bpersonal details?\b/i,
@@ -172,6 +173,7 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
   claimsFamilyRelationship: [
     /\b(?:spouse|wife|husband|son|daughter|mother|father|sister|brother|parent)\b/i,
   ],
+  claimsSpouseRelationship: [/\bspouse\b/i],
   claimsCoworkerRelationship: [
     /\bcovering nurse\b/i,
     /\bassistant\b/i,
@@ -384,6 +386,7 @@ const FEATURE_BANDS_BY_PLUGIN = {
     ],
     relationship: [
       'claimsFamilyRelationship',
+      'claimsSpouseRelationship',
       'claimsCoworkerRelationship',
       'claimsSelfRelationship',
     ],

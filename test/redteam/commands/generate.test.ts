@@ -699,6 +699,45 @@ describe('doGenerateRedteam', () => {
     );
   });
 
+  it('summarizes only the current batch when appending tests', async () => {
+    const oldTest = {
+      vars: { input: 'Older generated prompt' },
+      metadata: {
+        pluginId: 'pii:social',
+        semanticFrontier: {
+          active: true,
+          complete: false,
+          minimumPortfolioSize: 1,
+          bands: {
+            pii: {
+              featureCount: 1,
+              observedFeatureCount: 0,
+              observedFeatureIds: [],
+              reachableFeatureCount: 0,
+              reachableFeatureIds: [],
+              unreachableFeatureIds: ['requestsProtectedInformation'],
+            },
+          },
+        },
+      },
+    };
+    mockReadFileSync({ tests: [oldTest] });
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [
+        { vars: { input: 'Current generated prompt' }, metadata: { pluginId: 'pii:social' } },
+      ],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+      failedPlugins: [],
+    });
+    await doGenerateRedteam({ config: 'config.yaml', cache: true, defaultConfig: {}, write: true });
+    const updated = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0];
+    expect(updated?.tests).toHaveLength(2);
+    expect(updated?.tests).toContainEqual(oldTest);
+    expect(updated?.metadata).not.toHaveProperty('semanticFrontierDiagnostics');
+  });
+
   it('should remove stale generation metadata when updating a config has no current values', async () => {
     const options: RedteamCliGenerateOptions = {
       config: 'config.yaml',

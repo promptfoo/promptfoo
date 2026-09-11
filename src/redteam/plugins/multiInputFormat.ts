@@ -202,7 +202,7 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
     if (!hasPromptMarker(line)) {
       return null;
     }
-    let prompt = removePrefix(line, 'Prompt');
+    let prompt = removePrefix(line.replace(/^\s*[-*]\s+(?=\**prompt\s*:)/i, ''), 'Prompt');
     prompt = cleanPrompt(prompt);
 
     if (prompt.length === 0) {
@@ -216,7 +216,7 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
   // prompts commonly contain semicolons as content.
   const promptLines = lines.flatMap((line, lineIndex) =>
     line
-      .split(/;\s*(?=(?:\d+[\.\)\-]?\s*)?\**Prompt\s*:\**)/i)
+      .split(/;\s*(?=(?:\d+[\.\)\-]?\s*)?(?:[-*]\s*)?\**Prompt\s*:\**)/i)
       .map((segment) => ({ line: segment, lineIndex })),
   );
 

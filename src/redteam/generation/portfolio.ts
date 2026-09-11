@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import logger from '../../logger';
 import { type GeneratedPrompt, RedteamPluginBase } from '../plugins/base';
 import { getShortPluginId } from '../util';
 import {
@@ -10,32 +11,12 @@ import {
   selectSemanticWarmStartFamilies,
 } from './selection';
 
+import type { SemanticFrontierSummary } from '../../types/semanticFrontierDiagnostics';
 import type { AttackCandidate, AttackFamily, AttackPlan, AttackSignature } from './types';
 
 export type SemanticFrontierConfig = SemanticBandSelectionConfig & {
   minimumPortfolioSize: number;
 };
-
-type SemanticFrontierBandSummary = {
-  featureCount: number;
-  observedFeatureCount: number;
-  observedFeatureIds: string[];
-  reachableFeatureCount: number;
-  reachableFeatureIds: string[];
-  unreachableFeatureIds: string[];
-};
-
-export type SemanticFrontierSummary = {
-  active: boolean;
-  complete: boolean;
-  minimumPortfolioSize: number;
-  bands: Record<string, SemanticFrontierBandSummary>;
-};
-
-function escapeNunjucksLiteral(value: string): string {
-  // All Nunjucks tags start with "{". Emit it at render time so candidate text is never parsed.
-  return value.replace(/\{/g, '{{ "{" }}');
-}
 
 export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
   protected abstract readonly attackFamilies: readonly AttackFamily[];
@@ -69,6 +50,29 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
   }
 
   protected getSemanticFrontierWarmStartFamilyCount(_requestedCount: number): number | undefined {
+    return undefined;
+  }
+
+  protected getPortfolioGenerationFallbackReason(): string | undefined {
+    if (this.config.examples?.length) {
+      return 'custom examples may specify attacks outside the built-in semantic families';
+    }
+
+    const language = this.config.language ?? this.config.modifiers?.language;
+    const languages = Array.isArray(language) ? language : language ? [language] : [];
+    const nonEnglishLanguage = languages.find((language) => {
+      const normalizedLanguage = language.trim().toLowerCase();
+      return (
+        normalizedLanguage !== 'en' &&
+        normalizedLanguage !== 'english' &&
+        !/^en[-_]/.test(normalizedLanguage)
+      );
+    });
+
+    if (nonEnglishLanguage) {
+      return `localized generation (${nonEnglishLanguage}) is not compatible with English-only semantic predicates`;
+    }
+
     return undefined;
   }
 
@@ -116,11 +120,12 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     family: AttackFamily,
     rejectedCandidates: readonly AttackCandidate[],
   ): Promise<string> {
+    // Render braces literally so rejected prompts cannot introduce template expressions.
     const rejectedPrompts = rejectedCandidates
       .slice(-3)
       .map(
         (candidate) =>
-          `- ${escapeNunjucksLiteral(candidate.prompt)}\n  Observed predicates: ${this.describeObservedPredicates(candidate)}`,
+          `- ${candidate.prompt.replace(/\{/g, '{{ "{" }}')}\n  Observed predicates: ${this.describeObservedPredicates(candidate)}`,
       )
       .join('\n');
 
@@ -128,7 +133,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       ${await this.getFamilyTemplate(family)}
 
       Repair pass:
-      The previous candidates did not visibly satisfy the "${family.label}" attack family.
+      The previous candidates did not visibly satisfy the "${family.label}" attack family or repeated an already accepted prompt.
       Generate replacement prompts only.
       Every replacement must explicitly satisfy these required predicates:
       - ${(family.requiredPredicates ?? []).join('\n      - ')}
@@ -140,16 +145,24 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
 
   override async generateTests(n: number, delayMs: number = 0) {
     if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
+      logger.debug(
+        `${this.constructor.name} falling back to legacy generation because multi-input mode is enabled`,
+      );
       return super.generateTests(n, delayMs);
     }
 
-    if (this.config.language || this.config.modifiers?.language) {
+    const fallbackReason = this.getPortfolioGenerationFallbackReason();
+    if (fallbackReason) {
+      logger.debug(
+        `${this.constructor.name} falling back to legacy generation because ${fallbackReason}`,
+      );
       return super.generateTests(n, delayMs);
     }
 
     const plan = this.buildAttackPlan(n);
     const candidates: AttackCandidate[] = [];
     const validPromptKeys = new Set<string>();
+    const overgenerationFactor = n > 1 ? this.getOvergenerationFactor() : 1;
 
     for (const family of plan.families) {
       const plannedCount = Math.max(1, family.count);
@@ -176,7 +189,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       ) {
         const generatedCount = Math.max(
           plannedCount,
-          Math.ceil(plannedCount * this.getOvergenerationFactor()),
+          Math.ceil(plannedCount * overgenerationFactor),
         );
         const prompts = await this.generatePrompts(generatedCount, delayMs, () =>
           this.getFamilyTemplate(family),
@@ -196,22 +209,23 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
         attempt += 1
       ) {
         const repairCount = plannedCount - validFamilyCandidates.length;
-        const generatedCount = Math.max(
-          repairCount,
-          Math.ceil(repairCount * this.getOvergenerationFactor()),
-        );
+        const generatedCount = Math.max(repairCount, Math.ceil(repairCount * overgenerationFactor));
         const prompts = await this.generatePrompts(generatedCount, delayMs, () =>
           this.getFamilyRepairTemplate(
             family,
-            familyCandidates.filter(
-              (candidate) => !this.matchesRequiredPredicates(candidate, family),
-            ),
+            familyCandidates.filter((candidate) => !validFamilyCandidates.includes(candidate)),
           ),
         );
 
         const generatedCandidates = this.buildCandidates(prompts, family, 'repair');
         familyCandidates.push(...generatedCandidates);
         appendValidFamilyCandidates(generatedCandidates);
+      }
+
+      if (family.requiredPredicates && validFamilyCandidates.length < plannedCount) {
+        logger.warn(
+          `${this.constructor.name} found ${validFamilyCandidates.length}/${plannedCount} valid ${family.id} candidates matching predicates: ${family.requiredPredicates.join(', ')}`,
+        );
       }
 
       candidates.push(
@@ -222,10 +236,20 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     }
 
     const selected = this.selectPortfolioCandidates(candidates, n);
+    if (selected.length !== n) {
+      logger.warn(
+        `${this.constructor.name} selected ${selected.length}/${n} portfolio candidates after coverage-aware selection`,
+      );
+    }
+
     const semanticFrontier = this.getSemanticFrontierConfig();
-    const semanticFrontierSummary = semanticFrontier
-      ? this.summarizeSemanticFrontier(selected, semanticFrontier, n)
-      : undefined;
+    const isSemanticFrontierActive =
+      semanticFrontier !== undefined &&
+      (n >= semanticFrontier.minimumPortfolioSize || this.useSemanticFrontierBelowMinimumSize());
+    const semanticFrontierSummary =
+      semanticFrontier && isSemanticFrontierActive
+        ? this.summarizeSemanticFrontier(selected, semanticFrontier, n)
+        : undefined;
     const prompts: GeneratedPrompt[] = selected.map((candidate) => ({
       __prompt: candidate.prompt,
       metadata: {

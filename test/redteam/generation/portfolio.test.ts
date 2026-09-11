@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PortfolioRedteamPluginBase } from '../../../src/redteam/generation/portfolio';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
@@ -101,7 +101,56 @@ class ProviderDrivenPortfolioPlugin extends PortfolioRedteamPluginBase {
   }
 }
 
+class CrossFamilyPortfolioPlugin extends ProviderDrivenPortfolioPlugin {
+  protected override readonly attackFamilies = ['first', 'second'].map((id) => ({
+    id,
+    label: id,
+    description: id,
+    instructions: id,
+    requiredPredicates: ['accepted'],
+  }));
+}
+
 describe('PortfolioRedteamPluginBase', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('includes cross-family duplicates in repair feedback', async () => {
+    const repeated = 'accepted repeated prompt';
+    const provider = createMockProvider();
+    provider.callApi.mockImplementation(async (prompt) =>
+      createProviderResponse({
+        output: `Prompt: ${prompt.includes('Repair pass:') && prompt.includes(repeated) ? 'accepted replacement prompt' : repeated}`,
+      }),
+    );
+    const plugin = new CrossFamilyPortfolioPlugin(provider, 'test purpose', 'prompt');
+
+    const tests = await plugin.generateTests(2);
+
+    expect(tests.map((test) => test.vars?.prompt)).toEqual([
+      repeated,
+      'accepted replacement prompt',
+    ]);
+    expect(tests.map((test) => test.metadata?.attackFamily)).toEqual(['first', 'second']);
+    expect(provider.callApi).toHaveBeenCalledTimes(3);
+  });
+
+  it('retains custom-example prompts outside the built-in family predicates', async () => {
+    const provider = createMockProvider({
+      response: createProviderResponse({ output: 'Prompt: Custom scenario.' }),
+    });
+    const plugin = new ProviderDrivenPortfolioPlugin(provider, 'test purpose', 'prompt', {
+      examples: ['Custom scenario.'],
+    });
+
+    const tests = await plugin.generateTests(1);
+
+    expect(tests[0]?.vars?.prompt).toBe('Custom scenario.');
+    expect(tests[0]?.metadata?.generationMode).toBeUndefined();
+    expect(plugin.familyTemplateCalls).toBe(0);
+  });
+
   it('repairs a required family when generation attempts repeat one valid prompt', async () => {
     const plugin = new DuplicateCandidatePortfolioPlugin(
       createMockProvider(),

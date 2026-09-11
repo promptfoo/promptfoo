@@ -25,7 +25,6 @@ import { EMAIL_OK_STATUS } from '../../types/email';
 import {
   type ApiProvider,
   summarizeSemanticFrontierDiagnosticsFromTests,
-  type TestCase,
   type TestSuite,
   type UnifiedConfig,
 } from '../../types/index';
@@ -979,9 +978,8 @@ async function doGenerateRedteamInternal(
       }
       existingConfig.tests = [...testsArray, ...redteamTests];
       existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
-      const semanticFrontierDiagnostics = summarizeSemanticFrontierDiagnosticsFromTests(
-        existingConfig.tests as TestCase[],
-      );
+      const semanticFrontierDiagnostics =
+        summarizeSemanticFrontierDiagnosticsFromTests(redteamTests);
       const existingMetadata = { ...(existingConfig.metadata || {}) };
       delete existingMetadata.generationTokenUsage;
       delete existingMetadata.generationAccounting;
