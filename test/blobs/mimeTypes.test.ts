@@ -15,6 +15,21 @@ describe('sanitizeBlobMimeType', () => {
     expect(sanitizeBlobMimeType('audio/x-wav')).toBe('audio/x-wav');
   });
 
+  it.each([
+    'video/quicktime',
+    'video/mpeg',
+    'video/wmv',
+    'video/mpg',
+    'video/avi',
+    'video/x-msvideo',
+    'video/x-matroska',
+    'video/x-flv',
+    'video/x-ms-wmv',
+    'video/3gpp',
+  ])('preserves supported passive video type %s', (mimeType) => {
+    expect(sanitizeBlobMimeType(mimeType)).toBe(mimeType);
+  });
+
   it('downgrades active or unknown content types to octet-stream', () => {
     // These would be stored-XSS vectors if reflected back as Content-Type from our origin.
     expect(sanitizeBlobMimeType('text/html')).toBe('application/octet-stream');

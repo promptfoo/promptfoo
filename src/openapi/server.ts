@@ -1272,6 +1272,7 @@ export function createServerOpenApiRegistry() {
     summary: 'Fetch blob bytes or redirect to blob storage',
     request: {
       params: params('GetBlobParams', BlobsSchemas.Get.Params),
+      query: query('GetBlobQuery', BlobsSchemas.Get.Query),
     },
     responses: {
       200: binaryResponse('Blob bytes'),

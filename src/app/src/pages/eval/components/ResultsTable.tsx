@@ -346,6 +346,7 @@ function getVariableCellValue({
 }
 
 function renderMediaVariableCell({
+  evaluationId,
   output,
   mediaMetadata,
   value,
@@ -354,6 +355,7 @@ function renderMediaVariableCell({
   maxTextLength,
   toggleLightbox,
 }: {
+  evaluationId?: string;
   output: EvaluateTableOutput | null;
   mediaMetadata?: { path: string; type: string; format?: string };
   value: string | object;
@@ -367,14 +369,20 @@ function renderMediaVariableCell({
   }
 
   const { type: mediaType, format = '' } = mediaMetadata;
-  const normalizedValue = normalizeMediaText(value);
+  const normalizedValue = normalizeMediaText(value, evaluationId);
   const isRefValue = isBlobRef(value) || isStorageRef(value);
   const audioSource =
     mediaType === 'audio'
-      ? resolveAudioSource(isRefValue ? { format, blobRef: value } : { data: value, format })
+      ? resolveAudioSource(
+          isRefValue ? { format, blobRef: value } : { data: value, format },
+          undefined,
+          evaluationId,
+        )
       : null;
   const imageSrc =
-    mediaType === 'image' ? resolveImageSource({ data: value, format, blobRef: value }) : undefined;
+    mediaType === 'image'
+      ? resolveImageSource({ data: value, format, blobRef: value }, evaluationId)
+      : undefined;
   const videoSrc =
     normalizedValue.startsWith('data:') ||
     normalizedValue.startsWith('http') ||
@@ -517,6 +525,7 @@ function renderDecodedVariableCell({
 }
 
 function renderVariableCell({
+  evaluationId,
   info,
   varName,
   injectVarName,
@@ -526,6 +535,7 @@ function renderVariableCell({
   lightboxImage,
   toggleLightbox,
 }: {
+  evaluationId?: string;
   info: CellContext<EvaluateTableRow, string>;
   varName: string;
   injectVarName: string;
@@ -548,6 +558,7 @@ function renderVariableCell({
     | Record<string, { path: string; type: string; format?: string }>
     | undefined;
   const mediaCell = renderMediaVariableCell({
+    evaluationId,
     output,
     mediaMetadata: fileMetadata?.[varName],
     value,
@@ -1359,12 +1370,14 @@ function hasFileMetadataForColumn({
 }
 
 function getImageSourceForCell({
+  evaluationId,
   columnId,
   value,
   row,
   headVars,
   injectVarName,
 }: {
+  evaluationId?: string;
   columnId: string;
   value: unknown;
   row: Row<EvaluateTableRow>;
@@ -1385,7 +1398,7 @@ function getImageSourceForCell({
       })
     : value;
 
-  return typeof imageValue === 'string' ? resolveImageSource(imageValue) : undefined;
+  return typeof imageValue === 'string' ? resolveImageSource(imageValue, evaluationId) : undefined;
 }
 
 function renderImageCellContent({
@@ -1454,6 +1467,7 @@ function renderImageCellContent({
 }
 
 function renderResultsTableCell({
+  evaluationId,
   cell,
   row,
   headVars,
@@ -1464,6 +1478,7 @@ function renderResultsTableCell({
   lightboxImage,
   toggleLightbox,
 }: {
+  evaluationId?: string;
   cell: Cell<EvaluateTableRow, unknown>;
   row: Row<EvaluateTableRow>;
   headVars: string[];
@@ -1479,8 +1494,11 @@ function renderResultsTableCell({
   const renderedCellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
   const value = cell.getValue();
   const renderedImgSrc =
-    typeof renderedCellContent === 'string' ? resolveImageSource(renderedCellContent) : undefined;
+    typeof renderedCellContent === 'string'
+      ? resolveImageSource(renderedCellContent, evaluationId)
+      : undefined;
   const rawImgSrc = getImageSourceForCell({
+    evaluationId,
     columnId,
     value,
     row,
@@ -1524,6 +1542,7 @@ function renderResultsTableCell({
 }
 
 function ResultsTableBodyRow({
+  evaluationId,
   row,
   pageSize,
   headVars,
@@ -1533,6 +1552,7 @@ function ResultsTableBodyRow({
   lightboxImage,
   toggleLightbox,
 }: {
+  evaluationId?: string;
   row: Row<EvaluateTableRow>;
   pageSize: number;
   headVars: string[];
@@ -1553,6 +1573,7 @@ function ResultsTableBodyRow({
         }
 
         return renderResultsTableCell({
+          evaluationId,
           cell,
           row,
           headVars,
@@ -2117,6 +2138,7 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) =>
                 renderVariableCell({
+                  evaluationId: evalId || undefined,
                   info,
                   varName,
                   injectVarName,
@@ -2143,6 +2165,7 @@ function ResultsTable({
     lightboxImage,
     injectVarName,
     variableColumnSizes,
+    evalId,
   ]);
 
   // Extract transformDisplayVars from output metadata (used by per-turn layer transforms like indirect-web-pwn)
@@ -2296,7 +2319,14 @@ function ResultsTable({
                     searchText={debouncedSearchText}
                     showStats={showStats}
                     isRedteam={isRedteam}
-                    evaluationId={evalId || undefined}
+                    evaluationId={
+                      inComparisonMode &&
+                      output.sourceEvalId &&
+                      (output.sourceEvalId === evalId ||
+                        comparisonEvalIds.includes(output.sourceEvalId))
+                        ? output.sourceEvalId
+                        : evalId || undefined
+                    }
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
                   />
                 </ErrorBoundary>
@@ -2311,6 +2341,9 @@ function ResultsTable({
     ];
   }, [
     body.length,
+    evalId,
+    inComparisonMode,
+    comparisonEvalIds,
     config?.providers,
     columnHelper,
     failureFilter,
@@ -2613,6 +2646,7 @@ function ResultsTable({
           <tbody>
             {reactTable.getRowModel().rows.map((row) => (
               <ResultsTableBodyRow
+                evaluationId={evalId || undefined}
                 key={row.id}
                 row={row}
                 pageSize={pagination.pageSize}

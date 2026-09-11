@@ -498,21 +498,15 @@ function remapResultTraceLinkage(
   localEvalId: string,
   remoteEvalId: string,
 ): EvalResult[] {
-  if (!traceIds) {
-    return chunk;
-  }
-
   return chunk.map((result) => {
-    if (!result.traceId) {
-      return result;
-    }
     const localTraceId = result.traceId;
-    const remoteTraceId = getRemoteTraceId(traceIds, localTraceId);
+    const remoteTraceId =
+      traceIds && localTraceId ? getRemoteTraceId(traceIds, localTraceId) : undefined;
     const remapMetadata = (metadata: Record<string, unknown> | undefined) =>
       remapKnownLinkage(
         metadata,
         ['evaluationId'],
-        ['traceId'],
+        remoteTraceId ? ['traceId'] : [],
         localEvalId,
         remoteEvalId,
         localTraceId,
@@ -520,9 +514,11 @@ function remapResultTraceLinkage(
       );
     return {
       ...result,
-      traceId: remoteTraceId,
-      evaluationId: remoteEvalId,
-      metadata: persistTraceMetadata(remapMetadata(result.metadata), remoteTraceId, remoteEvalId),
+      ...(remoteTraceId && { traceId: remoteTraceId }),
+      ...((result.evaluationId || remoteTraceId) && { evaluationId: remoteEvalId }),
+      metadata: remoteTraceId
+        ? persistTraceMetadata(remapMetadata(result.metadata), remoteTraceId, remoteEvalId)
+        : remapMetadata(result.metadata),
       ...(result.testCase && {
         testCase: {
           ...result.testCase,
@@ -545,8 +541,8 @@ function remapKnownLinkage(
   traceKeys: string[],
   localEvalId: string,
   remoteEvalId: string,
-  localTraceId: string,
-  remoteTraceId: string,
+  localTraceId: string | undefined,
+  remoteTraceId: string | undefined,
 ): Record<string, unknown> | undefined {
   if (!value) {
     return value;

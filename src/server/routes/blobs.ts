@@ -387,7 +387,7 @@ blobsRouter.get('/library', async (req: Request, res: Response): Promise<void> =
         sizeBytes: item.sizeBytes,
         kind: item.kind || getKindFromMimeType(item.mimeType),
         createdAt: parseTimestamp(item.createdAt),
-        url: `/api/blobs/${item.hash}`,
+        url: `/api/blobs/${item.hash}?evalId=${encodeURIComponent(item.evalId)}`,
         context: {
           evalId: item.evalId,
           evalDescription: item.evalDescription || undefined,
@@ -504,6 +504,12 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     return;
   }
   const { hash } = paramsResult.data;
+  const queryResult = BlobsSchemas.Get.Query.safeParse(req.query);
+  if (!queryResult.success) {
+    replyValidationError(res, queryResult.error);
+    return;
+  }
+  const { evalId } = queryResult.data;
 
   const db = await getDb();
   const asset = await db
@@ -522,16 +528,12 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
-  // Security: Check that a reference exists for this blob
-  // NOTE: In the OSS version, this is a local-only server with no user authentication.
-  // For multi-tenant deployments (e.g., Promptfoo Cloud), additional authorization is needed:
-  // - Verify the requesting user has access to the evaluation (reference.evalId)
-  // - Check user/team ownership before serving the blob
-  // - Implement proper session/token-based authentication
+  // Blob references are scoped to the evaluation being viewed. Deployments with user
+  // authentication must additionally verify access to that evaluation.
   const reference = await db
     .select({ evalId: blobReferencesTable.evalId })
     .from(blobReferencesTable)
-    .where(eq(blobReferencesTable.blobHash, hash))
+    .where(and(eq(blobReferencesTable.blobHash, hash), eq(blobReferencesTable.evalId, evalId)))
     .get();
 
   if (!reference) {

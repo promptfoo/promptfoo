@@ -651,14 +651,18 @@ export function mergeComparisonTables(
     },
     body: mainTable.body.map((row) => {
       const testIdx = row.testIdx;
-      // Find matching rows in comparison tables by test index
-      const matchingRows = comparisonData
-        .map(({ table }) => table.body.find((compRow) => compRow.testIdx === testIdx))
-        .filter((r): r is EvaluateTableRow => r !== undefined);
+      const comparedOutputs = comparisonData.flatMap(({ evalId, table }) =>
+        (table.body.find((compRow) => compRow.testIdx === testIdx)?.outputs ?? []).map(
+          (output) => ({ ...output, sourceEvalId: evalId }),
+        ),
+      );
 
       return {
         ...row,
-        outputs: [...row.outputs, ...matchingRows.flatMap((r) => r.outputs)],
+        outputs: [
+          ...row.outputs.map((output) => ({ ...output, sourceEvalId: mainEvalId })),
+          ...comparedOutputs,
+        ],
       };
     }),
   };

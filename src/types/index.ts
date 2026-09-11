@@ -422,6 +422,8 @@ export interface EvaluateResult {
 }
 
 export interface EvaluateTableOutput {
+  /** Evaluation owning this output in a server-generated comparison table. */
+  sourceEvalId?: string;
   cost: number;
   failureReason: ResultFailureReason;
   gradingResult?: GradingResult | null;

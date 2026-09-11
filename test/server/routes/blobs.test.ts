@@ -338,7 +338,7 @@ describe('Blobs Routes', () => {
     it('should return 404 when blob storage is disabled', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(false);
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: 'Blob storage disabled' });
@@ -351,7 +351,7 @@ describe('Blobs Routes', () => {
     ])('should return 400 for invalid hash (%s)', async (_label, hash) => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
 
-      const response = await api.get(`/api/blobs/${hash}`);
+      const response = await api.get(`/api/blobs/${hash}?evalId=eval-123`);
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -361,7 +361,7 @@ describe('Blobs Routes', () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
       mockedGetDb.mockReturnValue(createMockDb(undefined));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: 'Blob not found' });
@@ -377,10 +377,55 @@ describe('Blobs Routes', () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
       mockedGetDb.mockReturnValue(createMockDb(mockAsset, undefined));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(403);
       expect(response.body).toEqual({ error: 'Not authorized to access this blob' });
+    });
+
+    it('rejects downloads without an evaluation context before loading the blob', async () => {
+      setupDbWithAssetAndReference({
+        hash: validHash,
+        mimeType: 'image/png',
+        sizeBytes: 1024,
+        provider: 'local',
+      });
+      const response = await api.get(`/api/blobs/${validHash}`);
+      expect(response.status).toBe(400);
+      expect(mockedGetBlobUrl).not.toHaveBeenCalled();
+      expect(mockedGetBlobByHash).not.toHaveBeenCalled();
+    });
+
+    it('does not borrow a blob reference from another evaluation', async () => {
+      const { createClient } = await import('@libsql/client/node');
+      const { drizzle } = await import('drizzle-orm/libsql/node');
+      const client = createClient({ url: ':memory:' });
+      try {
+        await client.executeMultiple(`
+          CREATE TABLE blob_assets (hash TEXT PRIMARY KEY, mime_type TEXT, size_bytes INTEGER, provider TEXT);
+          CREATE TABLE blob_references (blob_hash TEXT, eval_id TEXT);
+        `);
+        await client.execute({
+          sql: 'INSERT INTO blob_assets VALUES (?, ?, ?, ?)',
+          args: [validHash, 'image/png', 10, 's3'],
+        });
+        await client.execute({
+          sql: 'INSERT INTO blob_references VALUES (?, ?)',
+          args: [validHash, 'private-eval'],
+        });
+        mockedIsBlobStorageEnabled.mockReturnValue(true);
+        mockedGetDb.mockResolvedValue(drizzle(client));
+        mockedGetBlobUrl.mockResolvedValue('https://storage.example.com/image.png');
+
+        const denied = await api.get(`/api/blobs/${validHash}?evalId=shared-eval`);
+        expect(denied.status).toBe(403);
+        expect(mockedGetBlobUrl).not.toHaveBeenCalled();
+        expect(mockedGetBlobByHash).not.toHaveBeenCalled();
+        const allowed = await api.get(`/api/blobs/${validHash}?evalId=private-eval`);
+        expect(allowed.status).toBe(302);
+      } finally {
+        client.close();
+      }
     });
 
     it('should redirect 302 when presigned URL is available', async () => {
@@ -394,7 +439,7 @@ describe('Blobs Routes', () => {
       const presignedUrl = 'https://s3.amazonaws.com/bucket/blob?signature=xyz';
       mockedGetBlobUrl.mockResolvedValue(presignedUrl);
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(302);
       expect(response.header.location).toBe(presignedUrl);
@@ -413,7 +458,7 @@ describe('Blobs Routes', () => {
       mockedGetBlobUrl.mockResolvedValue(null);
       mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/png', 1024));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('image/png');
@@ -437,7 +482,7 @@ describe('Blobs Routes', () => {
       mockedGetBlobUrl.mockResolvedValue(null);
       mockedGetBlobByHash.mockResolvedValue(createBlobResponse('audio/wav.html', 2048));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('application/octet-stream');
@@ -453,7 +498,7 @@ describe('Blobs Routes', () => {
       mockedGetBlobUrl.mockResolvedValue('https://storage.example/unsafe-svg');
       mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/svg+xml', 2048));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('application/octet-stream');
@@ -473,7 +518,7 @@ describe('Blobs Routes', () => {
       mockedGetBlobUrl.mockResolvedValue('https://storage.example/normalized-legacy-svg');
       mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/svg+xml', 2048));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('application/octet-stream');
@@ -491,7 +536,7 @@ describe('Blobs Routes', () => {
       // Blob metadata has different MIME type and size than the asset record
       mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/jpeg', 2048));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(200);
       expect(response.header['content-type']).toBe('image/jpeg');
@@ -513,7 +558,7 @@ describe('Blobs Routes', () => {
       mockedGetBlobUrl.mockResolvedValue(null);
       mockedGetBlobByHash.mockRejectedValue(new Error('File system error'));
 
-      const response = await api.get(`/api/blobs/${validHash}`);
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(404);
       expect(response.body).toEqual({ error: 'Blob not found' });
@@ -651,7 +696,7 @@ describe('Blobs Routes', () => {
       expect(item.mimeType).toBe('image/png');
       expect(item.sizeBytes).toBe(1024);
       expect(item.kind).toBe('image');
-      expect(item.url).toBe(`/api/blobs/${hash1}`);
+      expect(item.url).toBe(`/api/blobs/${hash1}?evalId=eval-1`);
       expect(item.context.evalId).toBe('eval-1');
       expect(item.context.evalDescription).toBe('Test eval');
       expect(item.context.provider).toBe('GPT-4');

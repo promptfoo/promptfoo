@@ -42,6 +42,10 @@ export const GetBlobParamsSchema = z.object({
   hash: z.string().regex(BLOB_HASH_REGEX, 'Invalid blob hash'),
 });
 
+export const GetBlobQuerySchema = z.object({
+  evalId: z.string().min(1).max(128),
+});
+
 export const BlobBinaryResponseSchema = z.instanceof(Uint8Array);
 
 export type GetBlobParams = z.infer<typeof GetBlobParamsSchema>;
@@ -136,6 +140,7 @@ export const BlobsSchemas = {
   },
   Get: {
     Params: GetBlobParamsSchema,
+    Query: GetBlobQuerySchema,
     BinaryResponse: BlobBinaryResponseSchema,
   },
   Library: {

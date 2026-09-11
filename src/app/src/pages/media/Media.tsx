@@ -440,7 +440,7 @@ export default function Media() {
 
         setDownloadProgress({ current: i, total: itemsToDownload.length, currentFile: filename });
 
-        downloadFile(`${baseUrl}/api/blobs/${item.hash}`, filename);
+        downloadFile(`${baseUrl}${item.url}`, filename);
 
         setDownloadProgress({ current: i + 1, total: itemsToDownload.length, currentFile: '' });
 

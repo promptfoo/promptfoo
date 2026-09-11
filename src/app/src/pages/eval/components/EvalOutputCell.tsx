@@ -11,6 +11,7 @@ import {
   markMediaLoadSucceeded,
   normalizeMediaText,
   resolveAudioSource,
+  resolveBlobUri,
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
@@ -196,12 +197,15 @@ export function extractMarkdownImageSources(markdown: string): string[] {
   return [...sources];
 }
 
-export function resolveEvalImageOutputSource(image: ImageOutput): string | undefined {
+export function resolveEvalImageOutputSource(
+  image: ImageOutput,
+  evaluationId?: string,
+): string | undefined {
   if (typeof image.data === 'string' && /^https?:\/\//.test(image.data)) {
-    return image.data;
+    return resolveBlobUri(image.data, evaluationId) || image.data;
   }
 
-  return resolveImageSource(image);
+  return resolveImageSource(image, evaluationId);
 }
 
 function isImageLikeDataUri(text: string): boolean {
@@ -335,11 +339,13 @@ function renderHighlightedTextNode(text: string, searchText: string): React.Reac
 }
 
 function renderMediaNode({
+  evaluationId,
   output,
   outputAudioSource,
   primaryRenderedImageSrc,
   toggleLightbox,
 }: {
+  evaluationId?: string;
   output: EvaluateTableOutput;
   outputAudioSource: ReturnType<typeof resolveAudioSource>;
   primaryRenderedImageSrc?: string;
@@ -399,7 +405,7 @@ function renderMediaNode({
 
   if (output.video || output.response?.video) {
     const videoData = output.video || output.response?.video;
-    const videoSource = resolveVideoSource(videoData);
+    const videoSource = resolveVideoSource(videoData, evaluationId);
     if (videoSource) {
       return (
         <div className="video-output">
@@ -486,6 +492,7 @@ function renderMarkdownOrJsonNode({
 }
 
 function renderStructuredImages({
+  evaluationId,
   node,
   output,
   normalizedText,
@@ -493,6 +500,7 @@ function renderStructuredImages({
   renderedMarkdownOutput,
   toggleLightbox,
 }: {
+  evaluationId?: string;
   node?: React.ReactNode;
   output: EvaluateTableOutput;
   normalizedText: string;
@@ -516,7 +524,7 @@ function renderStructuredImages({
 
   const imageElements = output.images
     .map((img: ImageOutput, idx: number) => {
-      const src = resolveEvalImageOutputSource(img);
+      const src = resolveEvalImageOutputSource(img, evaluationId);
       if (!src || hasImageSrcComparisonKey(renderedImageSrcs, src)) {
         return null;
       }
@@ -551,6 +559,7 @@ function renderStructuredImages({
 }
 
 function renderOutputNode({
+  evaluationId,
   output,
   firstOutput,
   showDiffs,
@@ -565,6 +574,7 @@ function renderOutputNode({
   outputAudioSource,
   primaryRenderedImageSrc,
 }: {
+  evaluationId?: string;
   output: EvaluateTableOutput;
   firstOutput?: EvaluateTableOutput | null;
   showDiffs: boolean;
@@ -590,6 +600,7 @@ function renderOutputNode({
   if (!node) {
     node =
       renderMediaNode({
+        evaluationId,
         output,
         outputAudioSource,
         primaryRenderedImageSrc,
@@ -617,6 +628,7 @@ function renderOutputNode({
   }
 
   return renderStructuredImages({
+    evaluationId,
     node,
     output,
     normalizedText,
@@ -1410,20 +1422,23 @@ function EvalOutputCell({
   // @see https://github.com/promptfoo/promptfoo/issues/969
   const markdownComponents = useMemo(
     () => ({
-      img: ({ src, alt }: { src?: string; alt?: string }) => (
-        <img
-          key={`markdown-image-${getMediaRefreshKey(src)}-${src}`}
-          loading="lazy"
-          src={src}
-          alt={alt}
-          onError={(event) => markMediaLoadFailed(src, event.currentTarget)}
-          onLoad={(event) => markMediaLoadSucceeded(src, event.currentTarget)}
-          onClick={() => toggleLightbox(src)}
-          style={{ cursor: 'pointer' }}
-        />
-      ),
+      img: ({ src: rawSrc, alt }: { src?: string; alt?: string }) => {
+        const src = resolveBlobUri(rawSrc, evaluationId) || rawSrc;
+        return (
+          <img
+            key={`markdown-image-${getMediaRefreshKey(src)}-${src}`}
+            loading="lazy"
+            src={src}
+            alt={alt}
+            onError={(event) => markMediaLoadFailed(src, event.currentTarget)}
+            onLoad={(event) => markMediaLoadSucceeded(src, event.currentTarget)}
+            onClick={() => toggleLightbox(src)}
+            style={{ cursor: 'pointer' }}
+          />
+        );
+      },
     }),
-    [toggleLightbox],
+    [toggleLightbox, evaluationId],
   );
 
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
@@ -1469,10 +1484,10 @@ function EvalOutputCell({
   };
 
   const text = stringifyOutputText(output.text);
-  const normalizedText = normalizeMediaText(text);
-  const inlineImageSrc = resolveImageSource(text);
+  const normalizedText = normalizeMediaText(text, evaluationId);
+  const inlineImageSrc = resolveImageSource(text, evaluationId);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
-  const outputAudioSource = resolveAudioSource(output.audio);
+  const outputAudioSource = resolveAudioSource(output.audio, undefined, evaluationId);
   const { failReasons, passReasons } = getFailAndPassReasons(output);
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
@@ -1481,9 +1496,10 @@ function EvalOutputCell({
   const responseAudio = lastTurn?.outputAudio as
     | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
     | undefined;
-  const responseAudioSource = resolveAudioSource(responseAudio);
+  const responseAudioSource = resolveAudioSource(responseAudio, undefined, evaluationId);
 
   const node = renderOutputNode({
+    evaluationId,
     output,
     firstOutput,
     showDiffs,

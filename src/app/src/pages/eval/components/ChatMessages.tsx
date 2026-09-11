@@ -35,10 +35,12 @@ const ChatMessage = ({
   message,
   index,
   mediaRefreshToken,
+  evaluationId,
 }: {
   message: Message;
   index: number;
   mediaRefreshToken?: unknown;
+  evaluationId?: string;
 }) => {
   const isUser = message?.role === 'user';
   const isAssistant = message?.role === 'assistant';
@@ -74,7 +76,11 @@ const ChatMessage = ({
 
     switch (contentType) {
       case 'audio': {
-        const audioSource = resolveAudioSource(loadedMessage.audio, loadedMessage.content);
+        const audioSource = resolveAudioSource(
+          loadedMessage.audio,
+          loadedMessage.content,
+          evaluationId,
+        );
         if (!audioSource) {
           return null;
         }
@@ -99,7 +105,10 @@ const ChatMessage = ({
         );
       }
       case 'image': {
-        const imageSrc = resolveImageSource(loadedMessage.image || loadedMessage.content);
+        const imageSrc = resolveImageSource(
+          loadedMessage.image || loadedMessage.content,
+          evaluationId,
+        );
         if (!imageSrc) {
           return null;
         }
@@ -118,7 +127,8 @@ const ChatMessage = ({
       }
       case 'video': {
         const videoSrc =
-          resolveBlobUri(loadedMessage.content) ?? `data:video/mp4;base64,${loadedMessage.content}`;
+          resolveBlobUri(loadedMessage.content, evaluationId) ??
+          `data:video/mp4;base64,${loadedMessage.content}`;
         return (
           <div className="flex w-full max-w-[500px] justify-center">
             <video
@@ -140,8 +150,8 @@ const ChatMessage = ({
         );
       }
       case 'text': {
-        const audioSource = resolveAudioSource(loadedMessage.audio);
-        const imageSrc = resolveImageSource(loadedMessage.image);
+        const audioSource = resolveAudioSource(loadedMessage.audio, undefined, evaluationId);
+        const imageSrc = resolveImageSource(loadedMessage.image, evaluationId);
         const hasAudio = Boolean(audioSource);
         const hasImage = Boolean(imageSrc);
 
@@ -198,6 +208,7 @@ const ChatMessage = ({
     (message as LoadedMessage)?.audio,
     (message as LoadedMessage)?.image,
     mediaRefreshToken,
+    evaluationId,
     textClasses,
   ]);
 
@@ -249,6 +260,7 @@ interface ChatMessagesProps {
   maxTurns?: number;
   /** Changes when the backing eval row refreshes after an out-of-band blob upload. */
   mediaRefreshToken?: unknown;
+  evaluationId?: string;
 }
 
 export default function ChatMessages({
@@ -256,6 +268,7 @@ export default function ChatMessages({
   displayTurnCount = false,
   maxTurns = 1,
   mediaRefreshToken,
+  evaluationId,
 }: ChatMessagesProps) {
   if (!messages || messages.length === 0) {
     return null;
@@ -275,6 +288,7 @@ export default function ChatMessages({
             message={message}
             index={index}
             mediaRefreshToken={mediaRefreshToken}
+            evaluationId={evaluationId}
           />
         );
         const shouldDisplayTurnCount = displayTurnCount && index % 2 === 0;

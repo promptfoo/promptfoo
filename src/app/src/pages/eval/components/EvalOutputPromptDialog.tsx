@@ -518,6 +518,7 @@ export default function EvalOutputPromptDialog({
               <TabsContent value="messages" className="mt-0">
                 {parsedMessages.length > 0 && (
                   <ChatMessages
+                    evaluationId={evaluationId}
                     messages={parsedMessages}
                     displayTurnCount={parsedMessages.length > 2}
                     maxTurns={Math.ceil(parsedMessages.length / 2)}
@@ -527,6 +528,7 @@ export default function EvalOutputPromptDialog({
                 {redteamHistoryMessages.length > 0 && (
                   <div className={parsedMessages.length > 0 ? 'mt-6' : ''}>
                     <ChatMessages
+                      evaluationId={evaluationId}
                       messages={redteamHistoryMessages}
                       displayTurnCount={redteamHistoryMessages.length > 2}
                       maxTurns={Math.ceil(redteamHistoryMessages.length / 2)}

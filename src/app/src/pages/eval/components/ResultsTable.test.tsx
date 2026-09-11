@@ -64,11 +64,13 @@ vi.mock('./EvalOutputCell', () => {
       rowIndex,
       rowPositionIndex,
       searchText,
+      evaluationId,
     }: {
       onRating: any;
       rowIndex?: number;
       rowPositionIndex?: number;
       searchText?: string;
+      evaluationId?: string;
     }) => {
       return (
         <div
@@ -76,6 +78,7 @@ vi.mock('./EvalOutputCell', () => {
           data-rowindex={rowIndex}
           data-rowpositionindex={rowPositionIndex}
           data-searchtext={searchText}
+          data-evaluationid={evaluationId}
         >
           <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
             Rate
@@ -845,6 +848,50 @@ describe('ResultsTable Metrics Display', () => {
       );
     });
 
+    it.each([
+      ['comparison-eval', 'comparison-eval'],
+      ['unselected-eval', '123'],
+    ])(
+      'scopes comparison media from %s to a selected evaluation',
+      (sourceEvalId, expectedEvalId) => {
+        const hash = 'a'.repeat(64);
+        vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+          inComparisonMode: true,
+          comparisonEvalIds: ['comparison-eval'],
+          renderMarkdown: true,
+        });
+        vi.mocked(useTableStore).mockReturnValue({
+          config: {},
+          evalId: '123',
+          setTable: vi.fn(),
+          version: 4,
+          fetchEvalData: vi.fn(),
+          filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+          table: {
+            head: mockTable.head,
+            body: [
+              {
+                ...mockTable.body[0],
+                outputs: [
+                  {
+                    pass: true,
+                    score: 1,
+                    text: `promptfoo://blob/${hash}`,
+                    sourceEvalId,
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+        expect(container.querySelector('[data-testid=eval-output-cell]')).toHaveAttribute(
+          'data-evaluationid',
+          expectedEvalId,
+        );
+      },
+    );
+
     it('remounts a failed blob image and its open lightbox after a table refresh', async () => {
       const user = userEvent.setup();
       const blobHash = '2'.repeat(64);
@@ -907,7 +954,7 @@ describe('ResultsTable Metrics Display', () => {
       const refreshedLightboxImage = screen.getByRole('img', { name: 'Lightbox' });
       expect(refreshedImage).not.toBe(openMainImage);
       expect(refreshedLightboxImage).not.toBe(firstLightboxImage);
-      expect(refreshedLightboxImage).toHaveAttribute('src', `/api/blobs/${blobHash}`);
+      expect(refreshedLightboxImage).toHaveAttribute('src', `/api/blobs/${blobHash}?evalId=123`);
     });
 
     it('renders variable video from file metadata', () => {

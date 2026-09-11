@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { Server } from 'node:http';
 
+import { sql } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { getDb } from '../../src/database';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import * as evalMutation from '../../src/models/evalMutation';
@@ -157,6 +159,34 @@ describe('eval routes', () => {
         ],
       };
     }
+
+    it.each(['trace', 'span'])(
+      'rejects oversized unknown %s fields before writing',
+      async (record) => {
+        const eval_ = await EvalFactory.create();
+        testEvalIds.add(eval_.id);
+        const traceId = randomUUID().replaceAll('-', '');
+        const payload = trace(traceId);
+        Object.assign(record === 'trace' ? payload : payload.spans[0], {
+          extension: 'x'.repeat(1_000_001),
+        });
+        const response = await api.post(`/api/eval/${eval_.id}/traces`).send([payload]);
+        expect(response.status).toBe(400);
+        expect(await getTraceStore().getTrace(traceId)).toBeNull();
+      },
+    );
+
+    it('bounds the complete trace request across individually valid records', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const traces = Array.from({ length: 10 }, () => ({
+        ...trace(randomUUID().replaceAll('-', '')),
+        extension: 'x'.repeat(900_000),
+      }));
+      const response = await api.post(`/api/eval/${eval_.id}/traces`).send(traces);
+      expect(response.status).toBe(400);
+      expect(await getTraceStore().getTracesByEvaluation(eval_.id)).toEqual([]);
+    });
 
     it('persists a trace and makes retries idempotent', async () => {
       const eval_ = await EvalFactory.create();
@@ -342,6 +372,34 @@ describe('eval routes', () => {
       );
       expect(await getTraceStore().getTrace(freshId)).toBeNull();
       expect(await getTraceStore().getTracesByEvaluation(secondEval.id)).toEqual([]);
+    });
+
+    it('rolls back earlier traces when ownership changes after insertion', async () => {
+      const owner = await EvalFactory.create();
+      const recipient = await EvalFactory.create();
+      testEvalIds.add(owner.id);
+      testEvalIds.add(recipient.id);
+      await owner.appendTraces([trace('ownership-conflict-owner')]);
+      const db = await getDb();
+      // Reproduce a late conflict after the preflight checks have already passed.
+      await db.run(sql`CREATE TRIGGER trace_import_ownership_conflict AFTER INSERT ON traces
+        WHEN NEW.trace_id = 'ownership-conflict-new'
+        BEGIN
+          UPDATE traces SET evaluation_id = (
+            SELECT evaluation_id FROM traces WHERE trace_id = 'ownership-conflict-owner'
+          ) WHERE trace_id = NEW.trace_id;
+        END`);
+      try {
+        const freshId = randomUUID().replaceAll('-', '');
+        await expect(
+          recipient.appendTraces([trace(freshId), trace('ownership-conflict-new')]),
+        ).resolves.toBe(false);
+        expect(await getTraceStore().getTrace(freshId)).toBeNull();
+        expect(await getTraceStore().getTrace('ownership-conflict-new')).toBeNull();
+        expect(await getTraceStore().getTracesByEvaluation(recipient.id)).toEqual([]);
+      } finally {
+        await db.run(sql`DROP TRIGGER trace_import_ownership_conflict`);
+      }
     });
 
     it('deduplicates repeated span IDs within a single imported trace', async () => {

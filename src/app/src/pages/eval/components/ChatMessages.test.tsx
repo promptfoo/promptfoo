@@ -356,3 +356,21 @@ describe('ChatMessages', () => {
     expect(screen.getByAltText('Input')).toBe(firstImage);
   });
 });
+
+it('scopes chat media to the displayed evaluation', () => {
+  const hash = 'a'.repeat(64);
+  const { container } = render(
+    <ChatMessages
+      evaluationId="chat-eval"
+      messages={[
+        { role: 'user', contentType: 'image', content: `promptfoo://blob/${hash}` },
+        { role: 'assistant', contentType: 'audio', content: `/api/blobs/${hash}?evalId=other` },
+        { role: 'assistant', contentType: 'video', content: `promptfoo://blob/${hash}` },
+      ]}
+    />,
+  );
+  for (const element of container.querySelectorAll('img, source')) {
+    expect(element).toHaveAttribute('src', `/api/blobs/${hash}?evalId=chat-eval`);
+  }
+  expect(container.querySelectorAll('img, source')).toHaveLength(3);
+});

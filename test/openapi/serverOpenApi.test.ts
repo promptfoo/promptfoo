@@ -90,6 +90,13 @@ describe('server OpenAPI generation', () => {
     const getMediaInfoOperation = paths['/api/media/info/{type}/{filename}']?.get as any;
     const getBlobOperation = paths['/api/blobs/{hash}']?.get as any;
     const listBlobLibraryOperation = paths['/api/blobs/library']?.get as any;
+    expect(getBlobOperation.parameters).toContainEqual(
+      expect.objectContaining({
+        in: 'query',
+        name: 'evalId',
+        required: true,
+      }),
+    );
     const modelAuditScanOperation = paths['/api/model-audit/scan']?.post as any;
     const shareResultOperation = paths['/api/results/share']?.post as any;
     const userEmailStatusOperation = paths['/api/user/email/status']?.get as any;

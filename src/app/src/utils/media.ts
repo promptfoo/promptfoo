@@ -146,19 +146,16 @@ function withApiBase(apiPath: string): string {
  * Resolves a URL that could be a storage ref, blob URI, legacy API path, or external URL.
  * Returns the resolved URL or undefined if unrecognized.
  */
-function resolveMediaUrl(url?: string | null): string | undefined {
+function resolveMediaUrl(url?: string | null, evaluationId?: string): string | undefined {
   if (!url) {
     return undefined;
   }
 
-  // Legacy API path - prepend base URL (check before resolveBlobUri since
-  // that function returns paths starting with '/' directly without apiBaseUrl)
-  if (url.startsWith('/api/')) {
+  if (url.startsWith('/api/') && !url.startsWith('/api/blobs/')) {
     return withApiBase(url);
   }
 
-  // Try resolving as blob/storage ref
-  const blobUrl = resolveBlobUri(url);
+  const blobUrl = resolveBlobUri(url, evaluationId);
   if (blobUrl) {
     return blobUrl;
   }
@@ -171,13 +168,22 @@ function resolveMediaUrl(url?: string | null): string | undefined {
   return undefined;
 }
 
-export function resolveBlobUri(uri?: string | null): string | undefined {
+export function resolveBlobUri(uri?: string | null, evaluationId?: string): string | undefined {
   if (!uri) {
     return undefined;
   }
 
-  if (uri.startsWith(BLOB_URI_PREFIX)) {
-    return withApiBase(`/api/blobs/${uri.slice(BLOB_URI_PREFIX.length)}`);
+  const apiBase = getApiBaseUrl() || window.location.origin;
+  const blobPath = uri.startsWith(`${apiBase}/api/blobs/`) ? uri.slice(apiBase.length) : uri;
+  const blobPrefix = blobPath.startsWith(BLOB_URI_PREFIX)
+    ? BLOB_URI_PREFIX
+    : blobPath.startsWith('/api/blobs/')
+      ? '/api/blobs/'
+      : undefined;
+  if (blobPrefix) {
+    const hash = blobPath.slice(blobPrefix.length).split(/[?#]/, 1)[0];
+    const query = evaluationId ? `?evalId=${encodeURIComponent(evaluationId)}` : '';
+    return withApiBase(`/api/blobs/${encodeURIComponent(hash)}${query}`);
   }
 
   if (uri.startsWith(STORAGE_REF_PREFIX)) {
@@ -195,24 +201,29 @@ export function resolveBlobUri(uri?: string | null): string | undefined {
   return undefined;
 }
 
-export function resolveBlobRef(blobRef?: BlobLike | null): string | undefined {
+export function resolveBlobRef(
+  blobRef?: BlobLike | null,
+  evaluationId?: string,
+): string | undefined {
   if (!blobRef) {
     return undefined;
   }
 
   if (typeof blobRef === 'string') {
-    return resolveBlobUri(blobRef);
+    return resolveBlobUri(blobRef, evaluationId);
   }
 
   const uri = blobRef.uri || (blobRef.hash ? `${BLOB_URI_PREFIX}${blobRef.hash}` : undefined);
-  return resolveBlobUri(uri);
+  return resolveBlobUri(uri, evaluationId);
 }
 
 export function resolveAudioSource(
   audio?: { data?: string; format?: string; blobRef?: BlobLike } | null,
   fallbackContent?: string,
+  evaluationId?: string,
 ): { src: string; type?: string } | null {
-  const blobUrl = resolveBlobRef(audio?.blobRef) || resolveBlobUri(fallbackContent);
+  const blobUrl =
+    resolveBlobRef(audio?.blobRef, evaluationId) || resolveBlobUri(fallbackContent, evaluationId);
   if (blobUrl) {
     return {
       src: blobUrl,
@@ -236,9 +247,10 @@ export function resolveAudioSource(
 
 export function resolveImageSource(
   image?: { data?: string; format?: string; blobRef?: BlobLike } | string | null,
+  evaluationId?: string,
 ): string | undefined {
   if (typeof image === 'string') {
-    const blobUrl = resolveBlobUri(image);
+    const blobUrl = resolveBlobUri(image, evaluationId);
     if (blobUrl) {
       return blobUrl;
     }
@@ -253,7 +265,7 @@ export function resolveImageSource(
     return undefined;
   }
 
-  const blobUrl = resolveBlobRef(image?.blobRef);
+  const blobUrl = resolveBlobRef(image?.blobRef, evaluationId);
   if (blobUrl) {
     return blobUrl;
   }
@@ -281,6 +293,7 @@ export function resolveVideoSource(
     format?: string;
     thumbnail?: string;
   } | null,
+  evaluationId?: string,
 ): { src: string; type?: string; poster?: string } | null {
   if (!video) {
     return null;
@@ -288,11 +301,11 @@ export function resolveVideoSource(
 
   // Try blob reference first, then storage reference, then URL
   const src =
-    resolveBlobRef(video.blobRef) ||
+    resolveBlobRef(video.blobRef, evaluationId) ||
     (video.storageRef?.key
       ? withApiBase(`/api/media/${normalizePath(video.storageRef.key)}`)
       : undefined) ||
-    resolveMediaUrl(video.url);
+    resolveMediaUrl(video.url, evaluationId);
 
   if (!src) {
     return null;
@@ -302,13 +315,20 @@ export function resolveVideoSource(
   return {
     src,
     type: `video/${format}`,
-    poster: resolveMediaUrl(video.thumbnail),
+    poster: resolveMediaUrl(video.thumbnail, evaluationId),
   };
 }
 
-export function normalizeMediaText(text: string): string {
+export function normalizeMediaText(text: string, evaluationId?: string): string {
   return text
-    .replace(BLOB_URI_REGEX, (_match, hash) => withApiBase(`/api/blobs/${hash}`))
+    .replace(
+      BLOB_URI_REGEX,
+      (_match, hash) => resolveBlobUri(`${BLOB_URI_PREFIX}${hash}`, evaluationId)!,
+    )
+    .replace(
+      /(?:https?:\/\/[^/\s)'"`<>]+)?\/api\/blobs\/[^\s)'"`<>]+/gi,
+      (url) => resolveBlobUri(url, evaluationId) || url,
+    )
     .replace(STORAGE_REF_REGEX, (_match, path) => withApiBase(`/api/media/${normalizePath(path)}`));
 }
 

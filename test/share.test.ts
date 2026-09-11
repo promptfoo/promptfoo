@@ -1292,6 +1292,38 @@ describe('createShareableUrl', () => {
       }
     });
 
+    it('remaps evaluation linkage for results without a trace', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      const remoteEvalId = 'remote-untraced-eval';
+      const result = {
+        id: 'untraced-result',
+        promptIdx: 0,
+        testIdx: 0,
+        evaluationId: mockEval.id,
+        metadata: { evaluationId: mockEval.id },
+        testCase: { metadata: { evaluationId: mockEval.id } },
+        response: { output: 'ok', metadata: { evaluationId: mockEval.id } },
+      } as unknown as EvalResult;
+      mockEval.getTotalResultRowCount = vi.fn().mockResolvedValue(1);
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [result];
+      });
+      mockEval.getTraces = vi.fn().mockResolvedValue([]);
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: remoteEvalId }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      await createShareableUrl(mockEval as Eval, { silent: true });
+      const body = JSON.parse(mockFetch.mock.calls[1][1].body)[0];
+      expect(body).toMatchObject({
+        evaluationId: remoteEvalId,
+        metadata: { evaluationId: remoteEvalId },
+        testCase: { metadata: { evaluationId: remoteEvalId } },
+        response: { metadata: { evaluationId: remoteEvalId } },
+      });
+      expect(body.traceId).toBeUndefined();
+      expect(result.evaluationId).toBe(mockEval.id);
+    });
+
     it('remaps trace ids so the local trace id never appears in any outbound payload', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       const localTraceId = 'local-only-trace-id';

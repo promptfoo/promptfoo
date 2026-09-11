@@ -241,73 +241,83 @@ export class TraceStore {
   async importTraces(evaluationId: string, traces: TraceData[]): Promise<boolean> {
     const db = await this.getDatabase();
 
-    return db.transaction(async (tx) => {
-      const existingSpanIdsByTrace = new Map<string, Set<string>>();
+    const ownershipConflict = new Error('Trace ID already exists');
+    try {
+      return await db.transaction(async (tx) => {
+        const existingSpanIdsByTrace = new Map<string, Set<string>>();
 
-      for (const trace of traces) {
-        const existing = await tx
-          .select({ evaluationId: tracesTable.evaluationId })
-          .from(tracesTable)
-          .where(eq(tracesTable.traceId, trace.traceId))
-          .limit(1);
-
-        if (existing.length > 0) {
-          if (existing[0].evaluationId !== evaluationId) {
-            return false;
-          }
-
-          const spans = await tx
-            .select({ spanId: spansTable.spanId })
-            .from(spansTable)
-            .where(eq(spansTable.traceId, trace.traceId));
-          existingSpanIdsByTrace.set(trace.traceId, new Set(spans.map((span) => span.spanId)));
-        }
-      }
-
-      for (const trace of traces) {
-        const existingSpanIds = existingSpanIdsByTrace.get(trace.traceId);
-        if (!existingSpanIds) {
-          await tx
-            .insert(tracesTable)
-            .values(buildTraceRecord(trace.traceId, evaluationId, trace.testCaseId, trace.metadata))
-            .onConflictDoNothing({ target: tracesTable.traceId })
-            .run();
-          const stored = await tx
+        for (const trace of traces) {
+          const existing = await tx
             .select({ evaluationId: tracesTable.evaluationId })
             .from(tracesTable)
             .where(eq(tracesTable.traceId, trace.traceId))
-            .get();
-          if (stored?.evaluationId !== evaluationId) {
-            return false;
+            .limit(1);
+
+          if (existing.length > 0) {
+            if (existing[0].evaluationId !== evaluationId) {
+              throw ownershipConflict;
+            }
+
+            const spans = await tx
+              .select({ spanId: spansTable.spanId })
+              .from(spansTable)
+              .where(eq(spansTable.traceId, trace.traceId));
+            existingSpanIdsByTrace.set(trace.traceId, new Set(spans.map((span) => span.spanId)));
           }
         }
 
-        const seenSpanIds = new Set(existingSpanIds);
-        const spansToAdd = trace.spans.filter((span) => {
-          if (seenSpanIds.has(span.spanId)) {
-            return false;
-          }
-          seenSpanIds.add(span.spanId);
-          return true;
-        });
-
-        if (spansToAdd.length > 0) {
-          for (let offset = 0; offset < spansToAdd.length; offset += SPAN_INSERT_BATCH_SIZE) {
+        for (const trace of traces) {
+          const existingSpanIds = existingSpanIdsByTrace.get(trace.traceId);
+          if (!existingSpanIds) {
             await tx
-              .insert(spansTable)
+              .insert(tracesTable)
               .values(
-                spansToAdd
-                  .slice(offset, offset + SPAN_INSERT_BATCH_SIZE)
-                  .map((span) => buildSpanRecord(trace.traceId, span)),
+                buildTraceRecord(trace.traceId, evaluationId, trace.testCaseId, trace.metadata),
               )
-              .onConflictDoNothing()
+              .onConflictDoNothing({ target: tracesTable.traceId })
               .run();
+            const stored = await tx
+              .select({ evaluationId: tracesTable.evaluationId })
+              .from(tracesTable)
+              .where(eq(tracesTable.traceId, trace.traceId))
+              .get();
+            if (stored?.evaluationId !== evaluationId) {
+              throw ownershipConflict;
+            }
+          }
+
+          const seenSpanIds = new Set(existingSpanIds);
+          const spansToAdd = trace.spans.filter((span) => {
+            if (seenSpanIds.has(span.spanId)) {
+              return false;
+            }
+            seenSpanIds.add(span.spanId);
+            return true;
+          });
+
+          if (spansToAdd.length > 0) {
+            for (let offset = 0; offset < spansToAdd.length; offset += SPAN_INSERT_BATCH_SIZE) {
+              await tx
+                .insert(spansTable)
+                .values(
+                  spansToAdd
+                    .slice(offset, offset + SPAN_INSERT_BATCH_SIZE)
+                    .map((span) => buildSpanRecord(trace.traceId, span)),
+                )
+                .onConflictDoNothing()
+                .run();
+            }
           }
         }
-      }
 
-      return true;
-    });
+        return true;
+      });
+    } catch (error) {
+      if (error === ownershipConflict) {
+        return false;
+      }
+      throw error;
+    }
   }
 
   async addSpans(

@@ -243,9 +243,10 @@ const MAX_TRACE_IDENTIFIER_LENGTH = 512;
 const MAX_TRACE_NAME_LENGTH = 4_096;
 const MAX_TRACE_STATUS_MESSAGE_LENGTH = 4_096;
 const MAX_TRACE_RECORD_LENGTH = 1_000_000;
+const MAX_TRACE_REQUEST_LENGTH = 8 * 1024 * 1024;
 
 function serializedLengthWithin(limit: number) {
-  return (value: Record<string, unknown>) => JSON.stringify(value).length <= limit;
+  return (value: Record<string, unknown> | unknown[]) => JSON.stringify(value).length <= limit;
 }
 
 const TraceSpanRequestSchema = z
@@ -256,10 +257,7 @@ const TraceSpanRequestSchema = z
     name: z.string().max(MAX_TRACE_NAME_LENGTH),
     startTime: z.number().finite(),
     endTime: z.number().finite().optional(),
-    attributes: z
-      .record(z.string(), z.unknown())
-      .refine(serializedLengthWithin(MAX_TRACE_RECORD_LENGTH), 'Span attributes are too large')
-      .optional(),
+    attributes: z.record(z.string(), z.unknown()).optional(),
     status: z
       .object({
         code: z.union([z.enum(['unset', 'ok', 'error']), z.number().int().min(0).max(2)]),
@@ -269,7 +267,8 @@ const TraceSpanRequestSchema = z
     statusCode: z.number().int().min(0).max(2).optional(),
     statusMessage: z.string().max(MAX_TRACE_STATUS_MESSAGE_LENGTH).optional(),
   })
-  .passthrough();
+  .passthrough()
+  .refine(serializedLengthWithin(MAX_TRACE_RECORD_LENGTH), 'Span is too large');
 
 export const AddTracesRequestSchema = z
   .array(
@@ -279,15 +278,17 @@ export const AddTracesRequestSchema = z
         evaluationId: z.string().min(1).max(128),
         // Empty legacy test-case IDs have historically been storable and must remain shareable.
         testCaseId: z.string().max(MAX_TRACE_IDENTIFIER_LENGTH),
-        metadata: z
-          .record(z.string(), z.unknown())
-          .refine(serializedLengthWithin(MAX_TRACE_RECORD_LENGTH), 'Trace metadata is too large')
-          .optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
         spans: z.array(TraceSpanRequestSchema).max(MAX_SPANS_PER_TRACE),
       })
-      .passthrough(),
+      .passthrough()
+      .refine(
+        (trace) => serializedLengthWithin(MAX_TRACE_RECORD_LENGTH)({ ...trace, spans: undefined }),
+        'Trace fields are too large',
+      ),
   )
   .max(MAX_TRACES_PER_APPEND_REQUEST)
+  .refine(serializedLengthWithin(MAX_TRACE_REQUEST_LENGTH), 'Trace request is too large')
   .superRefine((traces, ctx) => {
     const spanCount = traces.reduce((total, trace) => total + trace.spans.length, 0);
     if (spanCount > MAX_SPANS_PER_APPEND_REQUEST) {
@@ -298,7 +299,7 @@ export const AddTracesRequestSchema = z
     }
   })
   .describe(
-    `Accepts at most ${MAX_TRACES_PER_APPEND_REQUEST} traces, ${MAX_SPANS_PER_TRACE} spans per trace, and ${MAX_SPANS_PER_APPEND_REQUEST} spans total. Trace metadata and each span attributes object must serialize to at most ${MAX_TRACE_RECORD_LENGTH} characters.`,
+    `Accepts at most ${MAX_TRACES_PER_APPEND_REQUEST} traces, ${MAX_SPANS_PER_TRACE} spans per trace, and ${MAX_SPANS_PER_APPEND_REQUEST} spans total. Trace fields outside spans and each complete span must serialize to at most ${MAX_TRACE_RECORD_LENGTH} characters. The complete request must serialize to at most ${MAX_TRACE_REQUEST_LENGTH} characters.`,
   );
 
 export type AddTracesParams = z.infer<typeof AddTracesParamsSchema>;
