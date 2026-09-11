@@ -934,6 +934,7 @@ export async function fetchWithCache<T = unknown>(
 
   const inflightCacheKey = getInflightFetchCacheKey(cacheKey, url, options);
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);
+  let responsePrepared = false;
   const coalesced = inflightResponse !== undefined;
   if (!inflightResponse) {
     inflightResponse = (async () => {
@@ -945,9 +946,16 @@ export async function fetchWithCache<T = unknown>(
         isIdempotent,
         format,
       );
+      responsePrepared = true;
       if (preparedResponse.cacheable) {
-        signal?.throwIfAborted();
-        await awaitCache(cache.set(cacheKey, preparedResponse.response));
+        try {
+          signal?.throwIfAborted();
+          await awaitCache(cache.set(cacheKey, preparedResponse.response));
+        } catch (error) {
+          if (!signal?.aborted) {
+            throw error;
+          }
+        }
       }
       return preparedResponse.response;
     })().finally(() => {
@@ -956,8 +964,18 @@ export async function fetchWithCache<T = unknown>(
     inflightFetchResponses.set(inflightCacheKey, inflightResponse);
   }
 
-  const response = await awaitCache(inflightResponse);
-  signal?.throwIfAborted();
+  let response: SerializedFetchResponse;
+  try {
+    response = await awaitCache(inflightResponse);
+  } catch (error) {
+    if (coalesced || !signal?.aborted || !responsePrepared) {
+      throw error;
+    }
+    response = await inflightResponse;
+  }
+  if (coalesced) {
+    signal?.throwIfAborted();
+  }
   const result = deserializeFetchResponse<T>(response, false, cache, cacheKey);
   return coalesced ? { ...result, coalesced: true } : result;
 }
