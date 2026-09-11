@@ -632,7 +632,7 @@ The `total` field sets the token budget for the task. The model uses this to pac
 
 ## Additional Directories
 
-Grant the agent access to directories beyond the working directory:
+Grant the agent access to directories beyond the working directory. SDK 0.3.257 and newer reject network paths such as UNC shares and `/net/<host>` automounts; on Windows, use a mapped drive letter:
 
 ```yaml
 providers:
@@ -1142,6 +1142,10 @@ providers:
     config:
       forward_subagent_text: true
 ```
+
+## Token Usage
+
+With SDK 0.3.257 and newer, reported thinking tokens appear in `tokenUsage.completionDetails.reasoning`. They are already included in completion and total token counts. Sessions resumed from older SDK versions may report only a partial thinking-token count.
 
 ## Error Diagnostics
 
