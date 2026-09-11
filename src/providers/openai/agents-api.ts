@@ -119,24 +119,49 @@ function addCredential(credentials: Set<string>, value: unknown): void {
   }
 }
 
-/** Collect credential values from credential-named keys and secret URL query parameters. */
+function decodeUrlComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * Credential values carried by a URL: userinfo, which promptfoo's fetch sends as Basic auth, and
+ * credential-named query parameters. Raw and decoded spellings are both returned for redaction.
+ */
+function getUrlCredentials(value: string): string[] {
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(value)) {
+    return [];
+  }
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    // Strings that are not valid URLs carry no URL credentials.
+    return [];
+  }
+  const found = [url.username, url.password].flatMap((part) => [part, decodeUrlComponent(part)]);
+  for (const segment of url.search.slice(1).split('&')) {
+    const separator = segment.indexOf('=');
+    const [param] = new URLSearchParams(segment);
+    if (separator !== -1 && param && isCredentialName(param[0])) {
+      // A raw `+` decodes to a space; keep both spellings a server might echo.
+      found.push(segment.slice(separator + 1), param[1]);
+    }
+  }
+  return found.filter((credential) => credential.trim().length > 0);
+}
+
+/** Collect credential values from credential-named keys and credential-bearing URLs. */
 function collectConfigCredentials(value: unknown, credentials: Set<string>, key = ''): void {
   if (typeof value === 'string') {
     if (key && isCredentialName(key)) {
       addCredential(credentials, value);
     }
-    if (/^[a-z][a-z\d+.-]*:\/\//i.test(value)) {
-      try {
-        const url = new URL(value);
-        addCredential(credentials, decodeURIComponent(url.password));
-        for (const [name, param] of url.searchParams) {
-          if (isCredentialName(name)) {
-            addCredential(credentials, param);
-          }
-        }
-      } catch {
-        // Strings that are not valid URLs contain no query credentials.
-      }
+    for (const credential of getUrlCredentials(value)) {
+      addCredential(credentials, credential);
     }
     return;
   }
@@ -151,6 +176,15 @@ function collectConfigCredentials(value: unknown, credentials: Set<string>, key 
       collectConfigCredentials(item, credentials, childKey);
     }
   }
+}
+
+/** Credentials a call can send or echo: its resolved key, effective base URL, and config values. */
+function collectCallCredentials(provider: OpenAiGenericProvider, credentials: Set<string>): void {
+  addCredential(credentials, provider.getApiKey());
+  for (const credential of getUrlCredentials(provider.getApiUrl())) {
+    addCredential(credentials, credential);
+  }
+  collectConfigCredentials(provider.config, credentials);
 }
 
 function sortCredentials(credentials: Set<string>): string[] {
@@ -368,11 +402,12 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const mergedConfig = { ...this.config, ...context?.prompt?.config };
     // Promptfoo can attach a live provider here; do not render its methods or state.
     delete mergedConfig.provider;
+    let config = mergedConfig as AgentsApiOptions;
     try {
       const vars = context?.vars;
-      const config = (
-        vars ? renderConfigTemplates(mergedConfig, vars, Object.keys(vars)) : mergedConfig
-      ) as AgentsApiOptions;
+      if (vars) {
+        config = renderConfigTemplates(mergedConfig, vars, Object.keys(vars)) as AgentsApiOptions;
+      }
       // Keep request credentials and lifecycle settings isolated across concurrent calls.
       const callProvider = new OpenAiAgentsApiProvider(this.modelOverride, {
         config,
@@ -396,9 +431,15 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       );
     } catch (error) {
       options?.abortSignal?.throwIfAborted();
+      // Redact this call's own key, key variable, and base URL, including prompt-level overrides.
       const credentials = new Set<string>();
-      addCredential(credentials, this.getApiKey());
-      collectConfigCredentials(mergedConfig, credentials);
+      collectCallCredentials(this, credentials);
+      for (const callConfig of new Set([mergedConfig, config])) {
+        collectCallCredentials(
+          new OpenAiGenericProvider('', { config: callConfig, env: this.env }),
+          credentials,
+        );
+      }
       return {
         cached: false,
         error: redactCredentials(
@@ -425,9 +466,10 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const headers = new Headers(this.getOpenAiRequestHeaders());
     const apiKey = this.getApiKey();
     const credentials = new Set<string>();
-    addCredential(credentials, apiKey);
+    collectCallCredentials(this, credentials);
     let hasHeaderCredential = false;
-    let hasGatewayCredential = false;
+    // Userinfo and credential query parameters authenticate a gateway just as headers do.
+    let hasGatewayCredential = getUrlCredentials(this.getApiUrl()).length > 0;
     headers.forEach((value, name) => {
       if (isCredentialName(name)) {
         const present = value.trim().length > 0;
@@ -436,13 +478,12 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         addCredential(credentials, value);
       }
     });
-    collectConfigCredentials(this.config, credentials);
     this.credentials = sortCredentials(credentials);
-    if (!apiKey && !hasHeaderCredential && this.requiresApiKey()) {
+    if (!apiKey && !hasHeaderCredential && !hasGatewayCredential && this.requiresApiKey()) {
       return { error: this.getMissingApiKeyErrorMessage() };
     }
     // Don't forward an ambient OPENAI_API_KEY to a gateway that authenticates with its own
-    // credential header; an explicit apiKey or apiKeyEnvar still sends it.
+    // credential header or URL credentials; an explicit apiKey or apiKeyEnvar still sends it.
     const sendApiKey =
       Boolean(this.config.apiKey || this.config.apiKeyEnvar) ||
       !hasGatewayCredential ||
@@ -488,10 +529,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         headers,
         signal,
       );
-      const items = (await this.list<Item>(`${endpoint}/items`, headers, signal)).filter(
-        (item) => item.turn_id === turn.id,
-      );
-      const output = this.getFinalAnswer(items);
+      const sessionItems = await this.list<Item>(`${endpoint}/items`, headers, signal);
+      // Only root-turn messages are scored; tool summaries also cover subagent turns.
+      const output = this.getFinalAnswer(sessionItems.filter((item) => item.turn_id === turn.id));
       const { session: finished, turn: finishedTurn } = await this.waitForFinalUsage(
         completedSession,
         turn,
@@ -516,7 +556,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         : undefined;
       const hasSubagents =
         finished.agent.multi_agent?.enabled ||
-        items.some((item) => item.type === 'create_subagent_call');
+        sessionItems.some((item) => item.type === 'create_subagent_call');
       // Aggregate session tokens do not identify each subagent's model or service tier.
       if (!hasSubagents) {
         result.cost = calculateOpenAIUsageCost(model, this.config, usage, {
@@ -530,9 +570,15 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         costScope: hasSubagents
           ? 'unavailable for aggregate subagent usage'
           : 'model tokens only; excludes tools and sandbox charges',
-        toolCalls: items
+        toolCalls: sessionItems
           .filter((item) => item.type !== 'message' && item.type !== 'reasoning')
-          .map(({ id, type, name, status }) => ({ id, type, name, status })),
+          .map((item) => ({
+            id: item.id,
+            type: item.type,
+            name: item.name,
+            status: item.status,
+            turnId: item.turn_id,
+          })),
         ...(usage ? {} : { usageUnavailable: true }),
       });
       completed = true;

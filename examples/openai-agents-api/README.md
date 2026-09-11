@@ -23,7 +23,7 @@ Add `--env-file .env` if your key is in that file.
 
 ## Inspect the results
 
-Both tests should pass, returning sums of `60` and `10` with counts of `3` and `4`. Inspect `results.results` in the JSON export for `success`, `score`, errors, and `response.output`. The response metadata includes the session ID, turn ID, tool-call types and statuses, and whether session deletion succeeded. Check for a completed `command_execution` to confirm the agent used its sandbox.
+Both tests should pass, returning sums of `60` and `10` with counts of `3` and `4`. Inspect `results.results` in the JSON export for `success`, `score`, errors, and `response.output`. The response metadata includes the session ID, the root turn ID, tool-call types, statuses, and turn IDs, and whether session deletion succeeded. Check for a completed `command_execution` to confirm the agent used its sandbox.
 
 Each test creates its own session, and Promptfoo deletes it after collecting the output and final token usage. Set `retainSession: true` in provider config to keep successful sessions for inspecting or downloading artifacts. Retained sessions must be deleted separately when no longer needed. Executions are not cached.
 

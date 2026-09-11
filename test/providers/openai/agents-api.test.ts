@@ -92,7 +92,14 @@ describe('OpenAiAgentsApiProvider', () => {
   let restoreEnv: () => void;
 
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
+    // Endpoint and organization overrides from the outer shell would change URLs and headers.
+    restoreEnv = mockProcessEnv({
+      OPENAI_API_KEY: undefined,
+      OPENAI_API_HOST: undefined,
+      OPENAI_API_BASE_URL: undefined,
+      OPENAI_BASE_URL: undefined,
+      OPENAI_ORGANIZATION: undefined,
+    });
     vi.mocked(fetchWithRetries).mockReset();
     vi.mocked(fetchWithRetries).mockImplementation(async (url, options) =>
       defaultResponse(new URL(String(url)).pathname, options?.method),
@@ -232,6 +239,101 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(await authorizationHeaders({})).toContain('Bearer ambient-openai-key');
   });
 
+  describe('URL-authenticated gateways', () => {
+    const queryGatewayUrl = 'https://gateway.example/v1?api-key=gateway-query-secret';
+    const userinfoGatewayUrl = 'https://gateway-user:gateway-password@gateway.example/v1';
+    const authorizations = () =>
+      vi
+        .mocked(fetchWithRetries)
+        .mock.calls.map(([, request]) => new Headers(request!.headers).get('Authorization'));
+
+    it.each([
+      { source: 'a query parameter', config: { apiBaseUrl: queryGatewayUrl }, processEnv: {} },
+      { source: 'userinfo', config: { apiBaseUrl: userinfoGatewayUrl }, processEnv: {} },
+      {
+        source: 'username-only userinfo in apiHost',
+        config: { apiHost: 'gateway-token-value@gateway.example' },
+        processEnv: {},
+      },
+      {
+        source: 'an OPENAI_BASE_URL query parameter',
+        config: {},
+        processEnv: { OPENAI_BASE_URL: 'https://gateway.example/v1?key=gateway-query-secret' },
+      },
+      {
+        source: 'OPENAI_API_HOST userinfo',
+        config: {},
+        processEnv: { OPENAI_API_HOST: 'gateway-user:gateway-password@gateway.example' },
+      },
+    ])(
+      'never sends an ambient OpenAI key to a gateway authenticated by $source',
+      async ({ config, processEnv }) => {
+        mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key', ...processEnv });
+        const gateway = new OpenAiAgentsApiProvider('', { config });
+        expect((await gateway.callApi('hi')).output).toBe('42');
+        // A failed turn also exercises cancellation before deletion.
+        mockApi((pathname) =>
+          pathname.endsWith('/turns')
+            ? json(page([{ ...turn, status: 'failed', error: { message: 'stopped' } }]))
+            : undefined,
+        );
+        expect(await gateway.callApi('hi')).toMatchObject({
+          error: expect.stringContaining('turn failed: stopped'),
+          metadata: { sessionCancelled: true, sessionDeleted: true },
+        });
+        expect(new Set(calls().map(({ method, pathname }) => `${method} ${pathname}`))).toEqual(
+          new Set([
+            'POST /v1/agents/sessions',
+            'GET /v1/agents/sessions/sess_test/turns',
+            'GET /v1/agents/sessions/sess_test',
+            'GET /v1/agents/sessions/sess_test/items',
+            'POST /v1/agents/sessions/sess_test/events',
+            'DELETE /v1/agents/sessions/sess_test',
+          ]),
+        );
+        expect(authorizations().every((value) => value === null)).toBe(true);
+      },
+    );
+
+    it('accepts a URL credential for a compatible gateway without an API key', async () => {
+      const result = await new OpenAiAgentsApiProvider('', {
+        config: { apiBaseUrl: queryGatewayUrl },
+      }).callApi('hi');
+      expect(result.output).toBe('42');
+      for (const [url] of vi.mocked(fetchWithRetries).mock.calls) {
+        expect(new URL(String(url)).searchParams.get('api-key')).toBe('gateway-query-secret');
+      }
+      expect(authorizations().every((value) => value === null)).toBe(true);
+    });
+
+    it.each([
+      {
+        description: 'the apiKeyEnvar key to a gateway',
+        config: { apiBaseUrl: queryGatewayUrl, apiKeyEnvar: 'GATEWAY_OPENAI_KEY' },
+        expected: 'Bearer explicit-gateway-key',
+      },
+      {
+        description: 'an explicit apiKey to a gateway',
+        config: { apiBaseUrl: userinfoGatewayUrl, apiKey: 'literal-gateway-key' },
+        expected: 'Bearer literal-gateway-key',
+      },
+      {
+        description: 'the ambient key to the official API',
+        config: { apiBaseUrl: 'https://api.openai.com/v1?api-key=unused-query-value' },
+        expected: 'Bearer ambient-openai-key',
+      },
+    ])('sends $description despite URL credentials', async ({ config, expected }) => {
+      mockProcessEnv({
+        OPENAI_API_KEY: 'ambient-openai-key',
+        GATEWAY_OPENAI_KEY: 'explicit-gateway-key',
+      });
+      await new OpenAiAgentsApiProvider('', { config }).callApi('hi');
+      const values = authorizations();
+      expect(values.length).toBeGreaterThan(0);
+      expect(values.every((value) => value === expected)).toBe(true);
+    });
+  });
+
   it('renders nested config once and preserves variable values as literal data', async () => {
     const agentProvider = provider({
       agent: { instructions: 'Follow {{role}}', tools: [{ server_label: '{{tool}}' }] },
@@ -351,6 +453,58 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(results[1].metadata?.sessionDeleted).toBe(true);
     expect(agentProvider.config.apiKey).toBe('test-key');
     expect(agentProvider.config.apiBaseUrl).toBeUndefined();
+  });
+
+  it('resolves prompt-level keys, key opt-in, and URL credentials from the merged config', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key', PROMPT_OPENAI_KEY: 'prompt-envar-key' });
+    const authorizationsFor = async (
+      agentProvider: OpenAiAgentsApiProvider,
+      config: Record<string, unknown>,
+    ) => {
+      vi.mocked(fetchWithRetries).mockClear();
+      const result = await agentProvider.callApi('hi', {
+        vars: {},
+        prompt: { raw: 'hi', label: 'test', config },
+      });
+      expect(result.output).toBe('42');
+      return new Set(
+        vi
+          .mocked(fetchWithRetries)
+          .mock.calls.map(([, request]) => new Headers(request!.headers).get('Authorization')),
+      );
+    };
+    const headerGateway = new OpenAiAgentsApiProvider('', {
+      config: {
+        apiBaseUrl: 'https://gateway.example/v1',
+        headers: { 'api-key': 'gateway-credential' },
+      },
+    });
+    expect(await authorizationsFor(headerGateway, {})).toEqual(new Set([null]));
+    expect(await authorizationsFor(headerGateway, { apiKeyEnvar: 'PROMPT_OPENAI_KEY' })).toEqual(
+      new Set(['Bearer prompt-envar-key']),
+    );
+    expect(await authorizationsFor(headerGateway, { apiKey: 'prompt-literal-key' })).toEqual(
+      new Set(['Bearer prompt-literal-key']),
+    );
+    // A prompt-level base URL credential identifies a gateway as well.
+    expect(
+      await authorizationsFor(new OpenAiAgentsApiProvider(), {
+        apiBaseUrl: 'https://gateway.example/v1?api-key=prompt-gateway-secret',
+      }),
+    ).toEqual(new Set([null]));
+  });
+
+  it('redacts a prompt-level key variable when request headers cannot be built', async () => {
+    // Header validation errors quote the rejected value, which here includes the API key.
+    mockProcessEnv({ PROMPT_OPENAI_KEY: 'prompt!envar!secret\nsecond!line' });
+    const result = await new OpenAiAgentsApiProvider().callApi('hi', {
+      vars: {},
+      prompt: { raw: 'hi', label: 'test', config: { apiKeyEnvar: 'PROMPT_OPENAI_KEY' } },
+    });
+    expect(result.error).toContain('invalid header value');
+    expect(result.error).not.toContain('prompt!envar!secret');
+    expect(result.error).not.toContain('second!line');
+    expect(fetchWithRetries).not.toHaveBeenCalled();
   });
 
   it('validates per-prompt lifecycle settings before creating a session', async () => {
@@ -600,8 +754,60 @@ describe('OpenAiAgentsApiProvider', () => {
     const result = await provider().callApi('hi');
     expect(result.output).toBe('42');
     expect(result.metadata?.toolCalls).toEqual([
-      { id: 'cmd', type: 'command_execution', status: 'failed' },
+      { id: 'cmd', type: 'command_execution', status: 'failed', turnId: turn.id },
     ]);
+  });
+
+  it('reports subagent tool calls with their turn IDs without scoring subagent messages', async () => {
+    const childTurnId = 'turn_child';
+    const childMessage = (id: string, phase: string, text: string) => ({
+      ...message,
+      id,
+      phase,
+      turn_id: childTurnId,
+      content: [{ type: 'output_text', text }],
+    });
+    vi.mocked(fetchWithRetries)
+      .mockResolvedValueOnce(json(session))
+      .mockResolvedValueOnce(json(page([turn, { ...turn, id: childTurnId, subagent_id: 'child' }])))
+      .mockResolvedValueOnce(json(session))
+      .mockResolvedValueOnce(
+        json(
+          page(
+            [
+              { id: 'spawn', type: 'create_subagent_call', status: 'completed', turn_id: turn.id },
+              childMessage('child_note', 'commentary', 'Running Python'),
+              childMessage('child_answer', 'final_answer', '99'),
+            ],
+            true,
+            'child_answer',
+          ),
+        ),
+      )
+      // The failed subagent command arrives on the second page of session items.
+      .mockResolvedValueOnce(
+        json(
+          page([
+            { id: 'child_cmd', type: 'command_execution', status: 'failed', turn_id: childTurnId },
+            { id: 'child_reasoning', type: 'reasoning', turn_id: childTurnId },
+            message,
+          ]),
+        ),
+      );
+    const result = await provider().callApi('hi');
+    expect(result.output).toBe('42');
+    expect(result.metadata).toMatchObject({ turnId: turn.id, sessionDeleted: true });
+    expect(result.metadata?.toolCalls).toEqual([
+      { id: 'spawn', type: 'create_subagent_call', status: 'completed', turnId: turn.id },
+      { id: 'child_cmd', type: 'command_execution', status: 'failed', turnId: childTurnId },
+    ]);
+    // Observed subagents still leave aggregate usage unpriced.
+    expect(result.cost).toBeUndefined();
+    expect(
+      vi
+        .mocked(fetchWithRetries)
+        .mock.calls.some(([url]) => String(url).includes('after=child_answer')),
+    ).toBe(true);
   });
 
   it('retains successful sessions only when requested and never caches executions', async () => {
@@ -942,6 +1148,38 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(result.error).not.toContain(secret);
     }
     expect(result.metadata).toMatchObject({ sessionDeleted: true });
+  });
+
+  const credentialUrl =
+    'https://gateway-user-name:gateway-password-value@gateway.example/v1?api-key=query+secret/value';
+
+  it.each([
+    {
+      source: 'provider config',
+      options: { config: { apiKey: 'test-key', apiBaseUrl: credentialUrl } },
+      processEnv: {},
+    },
+    {
+      source: 'OPENAI_BASE_URL',
+      options: { config: { apiKey: 'test-key' } },
+      processEnv: { OPENAI_BASE_URL: credentialUrl },
+    },
+    {
+      source: 'scoped env overrides',
+      options: { config: { apiKey: 'test-key' }, env: { OPENAI_API_BASE_URL: credentialUrl } },
+      processEnv: {},
+    },
+  ])('redacts base URL credentials from $source in API errors', async ({ options, processEnv }) => {
+    mockProcessEnv(processEnv);
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      apiError(401, `Gateway rejected ${credentialUrl}`),
+    );
+    const result = await new OpenAiAgentsApiProvider('', options).callApi('hi');
+    expect(result.error).toContain('HTTP 401');
+    expect(result.error).toContain('Gateway rejected https://');
+    for (const secret of ['gateway-user-name', 'gateway-password-value', 'query+secret/value']) {
+      expect(result.error).not.toContain(secret);
+    }
   });
 
   it('redacts failed session errors and OpenAI-style keys', async () => {
