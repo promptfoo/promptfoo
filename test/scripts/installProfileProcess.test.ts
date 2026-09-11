@@ -89,7 +89,10 @@ describe('npmInvocation', () => {
     const exists = vi.spyOn(fs, 'existsSync');
     const exec = vi.spyOn(childProcess, 'execFileSync');
 
-    expect(npmInvocation({ platform: 'linux' })).toEqual({ command: 'npm', prefix: [] });
+    expect(npmInvocation({ platform: 'linux' })).toEqual({
+      command: 'npm',
+      prefix: ['--workspaces=false'],
+    });
     expect(exists).not.toHaveBeenCalled();
     expect(exec).not.toHaveBeenCalled();
   });
@@ -101,7 +104,7 @@ describe('npmInvocation', () => {
 
     expect(npmInvocation({ platform: 'win32', nodePath, npmExecPath })).toEqual({
       command: nodePath,
-      prefix: [npmExecPath],
+      prefix: [npmExecPath, '--workspaces=false'],
     });
     expect(exec).not.toHaveBeenCalled();
   });
@@ -115,7 +118,7 @@ describe('npmInvocation', () => {
 
     expect(npmInvocation({ platform: 'win32', nodePath, npmExecPath: '' })).toEqual({
       command: nodePath,
-      prefix: [cli],
+      prefix: [cli, '--workspaces=false'],
     });
     expect(exec).toHaveBeenCalledExactlyOnceWith('where.exe', ['npm'], {
       encoding: 'utf8',
@@ -133,7 +136,7 @@ describe('npmInvocation', () => {
 
       expect(npmInvocation({ platform: 'win32', nodePath, npmExecPath })).toEqual({
         command: nodePath,
-        prefix: [cli],
+        prefix: [cli, '--workspaces=false'],
       });
       expect(exec).toHaveBeenCalledTimes(1);
       expect(exec.mock.calls[0][0]).toBe('where.exe');
@@ -149,7 +152,7 @@ describe('npmInvocation', () => {
 
     expect(npmInvocation({ platform: 'win32', nodePath, npmExecPath: '' })).toEqual({
       command: nodePath,
-      prefix: [cli],
+      prefix: [cli, '--workspaces=false'],
     });
   });
 
@@ -229,7 +232,9 @@ describe('install profile commands', () => {
     await expect(pending).resolves.toMatchObject({ code, signal: null, timedOut: false });
     expect(process.listeners('SIGINT')).toEqual(listeners[0]);
     expect(process.listeners('SIGTERM')).toEqual(listeners[1]);
-    expect(process.kill).not.toHaveBeenCalled();
+    if (process.platform !== 'win32') {
+      expect(process.kill).toHaveBeenCalledExactlyOnceWith(-1234, 'SIGKILL');
+    }
   });
 
   it('removes handlers when spawning fails', async () => {
@@ -252,4 +257,42 @@ describe('install profile commands', () => {
     await expect(pending).resolves.toMatchObject({ code: null, timedOut: true });
     expect(vi.getTimerCount()).toBe(0);
   });
+});
+
+it('keeps npm lockfiles inside consumers matched by an ancestor workspace', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'install-profile-workspace-'));
+  try {
+    const consumer = path.join(root, 'packages', 'consumer');
+    fs.mkdirSync(consumer, { recursive: true });
+    fs.writeFileSync(
+      path.join(root, 'package.json'),
+      JSON.stringify({
+        name: 'untouched-host',
+        private: true,
+        workspaces: ['packages/**'],
+      }),
+    );
+    fs.writeFileSync(
+      path.join(consumer, 'package.json'),
+      JSON.stringify({
+        name: 'fixture-consumer',
+        private: true,
+      }),
+    );
+    const npm = npmInvocation();
+    childProcess.execFileSync(
+      npm.command,
+      [...npm.prefix, 'install', '--package-lock-only', '--ignore-scripts', '--offline'],
+      {
+        cwd: consumer,
+        env: { ...process.env, npm_config_cache: path.join(root, 'cache') },
+        encoding: 'utf8',
+        timeout: 10_000,
+      },
+    );
+    expect(fs.existsSync(path.join(root, 'package-lock.json'))).toBe(false);
+    expect(fs.existsSync(path.join(consumer, 'package-lock.json'))).toBe(true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

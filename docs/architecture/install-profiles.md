@@ -75,7 +75,7 @@ A failed install, dependency-tree check, startup probe, or eval makes the tool e
 nonzero. Every command timeout is a failure, including a timeout that races with
 an expected exit code. Timeout and interruption cleanup terminates process groups on POSIX and
 uses `taskkill /T /F` on Windows; unsuccessful cleanup stops measurement before
-an inventory can be trusted. SIGINT or SIGTERM stops the measurement after the active command closes. Completed evidence remains available. Partial inventories after install
+an inventory can be trusted. SIGINT or SIGTERM stops the measurement after the active command closes. On POSIX, surviving descendants are also terminated after a command exits. Completed evidence remains available. Partial inventories after install
 failure are diagnostic; they cannot establish a smaller usable profile.
 
 ## Comparison rules

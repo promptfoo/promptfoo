@@ -69,6 +69,9 @@ export async function runInstallProfileCommand(
       });
       child.once('close', (code, signal) => {
         cleanup();
+        if (process.platform !== 'win32' && child.pid && !timedOut && !interrupted) {
+          terminate();
+        }
         if (terminationError) {
           reject(
             new Error('Unable to terminate command process tree; measurement stopped', {
@@ -124,13 +127,13 @@ export function npmInvocation(
   options: { platform?: NodeJS.Platform; nodePath?: string; npmExecPath?: string } = {},
 ): { command: string; prefix: string[] } {
   if ((options.platform ?? process.platform) !== 'win32') {
-    return { command: 'npm', prefix: [] };
+    return { command: 'npm', prefix: ['--workspaces=false'] };
   }
 
   const nodePath = options.nodePath ?? process.execPath;
   const npmExecPath = options.npmExecPath ?? process.env.npm_execpath;
   if (existingNpmCli(npmExecPath)) {
-    return { command: nodePath, prefix: [npmExecPath] };
+    return { command: nodePath, prefix: [npmExecPath, '--workspaces=false'] };
   }
 
   let npmPaths: string[] = [];
@@ -155,7 +158,7 @@ export function npmInvocation(
   for (const directory of directories) {
     const candidate = path.win32.join(directory, 'node_modules', 'npm', 'bin', 'npm-cli.js');
     if (existingNpmCli(candidate)) {
-      return { command: nodePath, prefix: [candidate] };
+      return { command: nodePath, prefix: [candidate, '--workspaces=false'] };
     }
   }
 

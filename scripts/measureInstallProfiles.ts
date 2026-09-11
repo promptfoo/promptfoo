@@ -322,8 +322,6 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
   );
   const scripts = values['install-scripts'] && !values['no-install-scripts'];
   const npm = npmInvocation();
-  // Use a CLI flag so npm also disables implicit ancestor workspace selection.
-  npm.prefix.push('--workspaces=false');
   // Respect a configured registry (e.g. a company mirror) without copying any
   // other npm configuration or credentials into the isolated consumer.
   const registry = parseRegistryUrl(

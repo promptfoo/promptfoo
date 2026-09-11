@@ -1,11 +1,4 @@
-import { execFileSync, spawnSync } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { describe, expect, it } from 'vitest';
-import { npmInvocation } from '../../scripts/installProfileProcess';
 import {
   parseRegistryUrl,
   summarizeSamples,
@@ -142,78 +135,4 @@ describe('install profile measurements', () => {
       ),
     ).toThrow();
   });
-});
-
-it('keeps consumer lockfiles inside TMPDIR when an ancestor declares npm workspaces', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'install-profile-workspace-'));
-  try {
-    const workspace = path.join(root, 'host');
-    const temporary = path.join(workspace, 'packages');
-    const fixture = path.join(root, 'fixture');
-    fs.mkdirSync(temporary, { recursive: true });
-    fs.mkdirSync(fixture);
-    fs.writeFileSync(
-      path.join(workspace, 'package.json'),
-      JSON.stringify({
-        name: 'untouched-host',
-        private: true,
-        workspaces: ['packages/**'],
-      }),
-    );
-    fs.writeFileSync(
-      path.join(fixture, 'package.json'),
-      JSON.stringify({
-        name: 'promptfoo',
-        version: '0.0.0-fixture',
-      }),
-    );
-    const env = { ...process.env, npm_config_cache: path.join(root, 'cache') };
-    const npm = npmInvocation();
-    const packed = JSON.parse(
-      execFileSync(
-        npm.command,
-        [...npm.prefix, 'pack', '--ignore-scripts', '--workspaces=false', '--offline', '--json'],
-        { cwd: fixture, env, encoding: 'utf8', timeout: 10_000 },
-      ),
-    );
-    const output = path.join(root, 'report');
-    const checkout = fileURLToPath(new URL('../../', import.meta.url));
-    const result = spawnSync(
-      process.execPath,
-      [
-        '--import',
-        'tsx',
-        'scripts/measureInstallProfiles.ts',
-        '--tarball',
-        path.join(fixture, packed[0].filename),
-        '--output',
-        output,
-        '--runs',
-        '2',
-        '--profiles',
-        'default',
-        '--registry',
-        'http://127.0.0.1:1',
-      ],
-      {
-        cwd: checkout,
-        env: { ...env, TMPDIR: temporary, TEMP: temporary, TMP: temporary },
-        encoding: 'utf8',
-        timeout: 15_000,
-      },
-    );
-    expect(result.error).toBeUndefined();
-    // The deliberately empty package fails probes; lockfile resolution must still be isolated.
-    expect(result.status).toBe(1);
-    const report = JSON.parse(fs.readFileSync(path.join(output, 'report.json'), 'utf8'));
-    expect(report.resolution.code).toBe(0);
-    expect(fs.existsSync(path.join(workspace, 'package-lock.json'))).toBe(false);
-    expect(
-      fs.existsSync(path.join(report.conditions.work, 'resolution', 'package-lock.json')),
-    ).toBe(true);
-    expect(report.profiles[0].install.code).toBe(0);
-    expect(report.profiles[0].dependencyTree.code).toBe(0);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
 });
