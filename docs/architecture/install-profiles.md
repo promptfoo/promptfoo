@@ -37,7 +37,10 @@ Temporary roots are resolved through symlinks and must be outside the checkout,
 without an ancestor `node_modules` directory. If `TMPDIR` selects an unsafe root,
 the tool rejects it before writing reports or installing. Node probes also disable
 global module search paths so undeclared dependencies cannot come from the host.
-Outbound proxy settings are preserved without recording their values. Explicit
+Credential-free outbound proxy settings and `NO_PROXY` host lists are preserved.
+Proxy URLs with credentials, query strings, or fragments are rejected before
+commands run or evidence is written, because lifecycle scripts can copy these
+values into retained files. Explicit
 asset-cache paths cover the documented browser/model tooling; this is not a
 sandbox for arbitrary dependency lifecycle scripts.
 
@@ -73,9 +76,12 @@ The report records:
 
 A failed install, dependency-tree check, startup probe, or eval makes the tool exit
 nonzero. Every command timeout is a failure, including a timeout that races with
-an expected exit code. Timeout and interruption cleanup terminates process groups on POSIX and
-uses `taskkill /T /F` on Windows; unsuccessful cleanup stops measurement before
-an inventory can be trusted. SIGINT or SIGTERM stops the measurement after the active command closes. On POSIX, surviving descendants are also terminated after a command exits. Completed evidence remains available. Partial inventories after install
+an expected exit code. Measurement requires POSIX process groups; Windows is
+rejected before running commands because successful command descendants cannot
+be contained there. Timeout, interruption, and ordinary-exit cleanup terminate
+surviving group members. Unsuccessful cleanup stops measurement before inventory.
+SIGINT or SIGTERM stops measurement after the active command closes. Completed
+evidence remains available. Partial inventories after install
 failure are diagnostic; they cannot establish a smaller usable profile.
 
 ## Comparison rules

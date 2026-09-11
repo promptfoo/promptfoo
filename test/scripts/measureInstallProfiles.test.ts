@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import childProcess from 'node:child_process';
+import fs from 'node:fs';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  measureInstallProfiles,
   parseRegistryUrl,
   summarizeSamples,
   validateEvalCommand,
@@ -134,5 +138,78 @@ describe('install profile measurements', () => {
         false,
       ),
     ).toThrow();
+  });
+});
+
+describe('measurement environment preflight', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ['HTTP_PROXY', 'http://user:fixture-secret@proxy.example:8080'],
+    ['HTTPS_PROXY', 'http://:fixture-secret@proxy.example'],
+    ['ALL_PROXY', 'socks5://user:fixture%2Dsecret@proxy.example'],
+    ['http_proxy', 'user:fixture-secret@proxy.example:8080'],
+    ['https_proxy', 'https://proxy.example/?token=fixture-secret'],
+    ['all_proxy', 'http://proxy.example/#fixture-secret'],
+  ])(
+    'rejects credential-bearing %s before running commands or creating evidence',
+    async (key, value) => {
+      vi.stubGlobal('process', { ...process, platform: 'linux', env: { [key]: value } });
+      const command = vi.spyOn(childProcess, 'execFileSync');
+      const mkdir = vi.spyOn(fs, 'mkdirSync');
+      await expect(
+        measureInstallProfiles([
+          '--tarball',
+          '/unused.tgz',
+          '--output',
+          '/unused-output',
+          '--registry',
+          'https://registry.npmjs.org/',
+        ]),
+      ).rejects.toThrow(`${key} must be a credential-free proxy URL`);
+      expect(command).not.toHaveBeenCalled();
+      expect(mkdir).not.toHaveBeenCalled();
+    },
+  );
+
+  it('allows a plain proxy and NO_PROXY host list through to artifact validation', async () => {
+    vi.stubGlobal('process', {
+      ...process,
+      platform: 'linux',
+      env: {
+        HTTP_PROXY: 'proxy.example:8080',
+        HTTPS_PROXY: 'http://proxy.example:8080',
+        NO_PROXY: 'localhost,127.0.0.1,.example.test',
+      },
+    });
+    const stat = vi.spyOn(fs, 'statSync').mockImplementation(() => {
+      throw new Error('fixture artifact validation');
+    });
+    await expect(
+      measureInstallProfiles([
+        '--tarball',
+        '/unused.tgz',
+        '--output',
+        '/unused-output',
+        '--registry',
+        'https://registry.npmjs.org/',
+      ]),
+    ).rejects.toThrow('fixture artifact validation');
+    expect(stat).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects Windows measurement before an uncontained process can run', async () => {
+    vi.stubGlobal('process', { ...process, platform: 'win32' });
+    const command = vi.spyOn(childProcess, 'execFileSync');
+    const mkdir = vi.spyOn(fs, 'mkdirSync');
+    await expect(
+      measureInstallProfiles(['--tarball', '/unused.tgz', '--output', '/unused-output']),
+    ).rejects.toThrow('Install profile measurement requires POSIX process groups');
+    expect(command).not.toHaveBeenCalled();
+    expect(mkdir).not.toHaveBeenCalled();
   });
 });

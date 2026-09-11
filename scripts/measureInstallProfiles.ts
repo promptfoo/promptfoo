@@ -42,7 +42,8 @@ Options:
   --help              Print usage
 
 Retains consumers, npm cache, lockfile, command logs and JSON reports. Uses no
-provider APIs. Timings are fresh-process measurements with uncontrolled OS cache,
+provider APIs. Requires POSIX process groups and credential-free proxy URLs.
+Timings are fresh-process measurements with uncontrolled OS cache,
 not cold-disk benchmarks. Install order and cache conditions are recorded.
 `;
 
@@ -137,7 +138,7 @@ function environment(root: string): NodeJS.ProcessEnv {
     'TMP',
     'TEMP',
     'TMPDIR',
-    // Required on networks with an outbound proxy. Values are never included in reports.
+    // Preflight permits only credential-free proxy URLs.
     'HTTP_PROXY',
     'HTTPS_PROXY',
     'ALL_PROXY',
@@ -320,6 +321,34 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
       profiles.every((profile) => ['default', 'omit-optional'].includes(profile)),
     '--profiles must contain unique default and/or omit-optional entries',
   );
+  assert(
+    process.platform !== 'win32',
+    'Install profile measurement requires POSIX process groups to terminate command descendants',
+  );
+  // Lifecycle scripts can copy their environment into retained logs and caches.
+  for (const key of [
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'ALL_PROXY',
+    'http_proxy',
+    'https_proxy',
+    'all_proxy',
+  ]) {
+    const value = process.env[key];
+    if (!value) {
+      continue;
+    }
+    let proxy: URL;
+    try {
+      proxy = new URL(value.includes('://') ? value : `http://${value}`);
+    } catch {
+      throw new Error(`${key} must be a credential-free proxy URL`);
+    }
+    assert(
+      !proxy.username && !proxy.password && !proxy.search && !proxy.hash,
+      `${key} must be a credential-free proxy URL`,
+    );
+  }
   const scripts = values['install-scripts'] && !values['no-install-scripts'];
   const npm = npmInvocation();
   // Respect a configured registry (e.g. a company mirror) without copying any
