@@ -714,6 +714,23 @@ describe('dependency ownership report', () => {
     expect(report.runtimeDeclarationGaps).toEqual([]);
   });
 
+  it('does not read prose after a Closure JSDoc type', () => {
+    write(
+      'src/index.js',
+      "/** @type {?import('schema').Node} Example: import('prose') */\nexport {};",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'schema' }),
+    ]);
+  });
+
+  it('scans package-root dotfiles', () => {
+    write('.releaserc.cjs', "require('release-tool');");
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'release-tool' }),
+    ]);
+  });
+
   it.each([true, false])('reports unresolved src packages with declared=%s', (declared) => {
     json('package.json', { dependencies: declared ? { src: '1' } : {} });
     write('src/internal.ts', 'export {};');
@@ -924,6 +941,20 @@ describe('dependency ownership report', () => {
 
   it('ignores require calls shadowed by a function parameter', () => {
     write('src/index.js', "export function load(require) { return require('local-only'); }");
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
+  });
+
+  it('ignores require calls shadowed in nested lexical scopes', () => {
+    write(
+      'src/index.js',
+      "export function load() { function require() {} require('function-local'); { const require = () => {}; require('block-local'); } }",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
+  });
+
+  it('ignores require imported under that name', () => {
+    write('src/index.js', "import require from './local.js'; require('local-only');");
+    write('src/local.js', 'export default () => {};');
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
 
