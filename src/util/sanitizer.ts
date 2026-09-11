@@ -409,7 +409,7 @@ function isCredentialPathName(name: string): boolean {
   // Google ADC is the common locator whose name does not identify it as a path.
   // Other SDKs use forms such as CREDENTIAL_FILE_OVERRIDE, AUTH_LOCATION, or AUTH_SOCK.
   const words = getFieldNameWords(name);
-  const lastWord = words.at(-1) ?? '';
+  const lastWord = words[words.length - 1] ?? '';
   return (
     name.toLowerCase() === 'google_application_credentials' ||
     CREDENTIAL_PATH_WORDS.has(lastWord) ||
