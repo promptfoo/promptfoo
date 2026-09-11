@@ -243,11 +243,34 @@ async function resolveNestedProviders(
   providerMap: Record<string, ApiProvider>,
   ownedProviders: Set<ApiProvider>,
 ): Promise<void> {
+  const callerOwnedProviders = new Set<ApiProvider>();
+  const collectCallerOwned = (provider: GradingConfig['provider']) => {
+    if (isApiProvider(provider)) {
+      callerOwnedProviders.add(provider);
+    } else if (isProviderTypeMap(provider)) {
+      Object.values(provider).forEach(collectCallerOwned);
+    }
+  };
+  if (typeof constructedTestSuite.defaultTest === 'object') {
+    collectCallerOwned(constructedTestSuite.defaultTest?.options?.provider);
+  }
+  for (const test of constructedTestSuite.tests || []) {
+    collectCallerOwned(test.options?.provider);
+    for (const assertion of test.assert || []) {
+      if (assertion.type !== 'assert-set') {
+        collectCallerOwned(assertion.provider);
+      }
+    }
+  }
   const track = async (provider: Promise<GradingConfig['provider']>) => {
     const resolved = await provider;
     const providers = isProviderTypeMap(resolved) ? Object.values(resolved) : [resolved];
     for (const provider of providers) {
-      if (isApiProvider(provider) && !Object.values(providerMap).includes(provider)) {
+      if (
+        isApiProvider(provider) &&
+        !callerOwnedProviders.has(provider) &&
+        !Object.values(providerMap).includes(provider)
+      ) {
         ownedProviders.add(provider);
       }
     }

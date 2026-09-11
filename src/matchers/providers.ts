@@ -171,9 +171,11 @@ export async function getGradingProvider(
   defaultProvider: ApiProvider | null,
 ): Promise<ApiProvider | null> {
   let finalProvider: ApiProvider | null;
+  let created = false;
   if (typeof provider === 'string') {
     // Defined as a string
     finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath });
+    created = true;
   } else if (
     provider != null &&
     typeof provider === 'object' &&
@@ -189,6 +191,7 @@ export async function getGradingProvider(
     } else if ((provider as ProviderOptions).id) {
       // Defined as ProviderOptions
       finalProvider = await loadFromProviderOptions(provider as ProviderOptions);
+      created = true;
     } else if (Array.isArray(provider)) {
       throw new Error(
         `Provider must be an object or string, but received an array.\n\nCheck that the provider ${JSON.stringify(
@@ -241,7 +244,7 @@ export async function getGradingProvider(
       finalProvider = defaultProvider;
     }
   }
-  if (finalProvider) {
+  if (created && finalProvider) {
     gradingProviderTracker.getStore()?.(finalProvider);
   }
   return finalProvider;

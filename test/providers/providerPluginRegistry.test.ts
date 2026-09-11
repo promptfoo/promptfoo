@@ -233,6 +233,29 @@ describe('ProviderPluginRegistry', () => {
     }
   });
 
+  it('leaves caller-supplied nested grading providers with their caller', async () => {
+    const cleanup = vi.fn();
+    const grader = {
+      id: () => 'caller-grader',
+      callApi: async () => ({ output: '{"pass":true,"score":1,"reason":"ok"}' }),
+      cleanup,
+    };
+
+    await evaluateWithSource({
+      prompts: ['hello'],
+      providers: [{ id: 'echo' }],
+      tests: [
+        {
+          vars: {},
+          options: { provider: { text: grader } },
+          assert: [{ type: 'llm-rubric', value: 'returns hello' }],
+        },
+      ],
+    });
+
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
   it('cleans created providers when a later provider load fails', async () => {
     const cleanup = vi.fn();
     const dispose = registerProviderPlugin(
