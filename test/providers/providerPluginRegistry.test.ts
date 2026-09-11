@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { describe, expect, it, vi } from 'vitest';
 import { evaluateWithSource } from '../../src/evaluate';
 import {
@@ -203,7 +207,7 @@ describe('ProviderPluginRegistry', () => {
             test: () => true,
             create: async () => ({
               id: () => 'nested-cleanup:model',
-              callApi: async () => ({ output: 'ok' }),
+              callApi: async () => ({ output: '{"pass":true,"score":1,"reason":"ok"}' }),
               cleanup,
             }),
           },
@@ -218,8 +222,8 @@ describe('ProviderPluginRegistry', () => {
         tests: [
           {
             vars: {},
-            options: { provider: 'nested-cleanup:model' },
-            assert: [{ type: 'equals', value: 'hello' }],
+            options: { provider: { text: 'nested-cleanup:model' } },
+            assert: [{ type: 'llm-rubric', value: 'returns hello' }],
           },
         ],
       });
@@ -263,6 +267,41 @@ describe('ProviderPluginRegistry', () => {
     }
   });
 
+  it('cleans created providers when another entry in the same file fails', async () => {
+    const cleanup = vi.fn();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'provider-file-cleanup-'));
+    const config = path.join(root, 'providers.json');
+    fs.writeFileSync(
+      config,
+      JSON.stringify([{ id: 'partial-file:ok' }, { id: 'partial-file:fail' }]),
+    );
+    const dispose = registerProviderPlugin(
+      createManifest(
+        'partial-file',
+        (id) => id.startsWith('partial-file:'),
+        async () => [
+          {
+            test: () => true,
+            create: async (id) => {
+              if (id.endsWith(':fail')) {
+                throw new Error('file load failed');
+              }
+              return { id: () => id, callApi: async () => ({ output: 'ok' }), cleanup };
+            },
+          },
+        ],
+      ),
+    );
+
+    try {
+      await expect(loadApiProviders(`file://${config}`)).rejects.toThrow('file load failed');
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('continues evaluation-owned cleanup after one hook fails', async () => {
     const secondCleanup = vi.fn();
     const dispose = registerProviderPlugin(
@@ -296,6 +335,38 @@ describe('ProviderPluginRegistry', () => {
         }),
       ).rejects.toThrow('cleanup failed');
       expect(secondCleanup).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('preserves an evaluation failure when cleanup also fails', async () => {
+    const dispose = registerProviderPlugin(
+      createManifest(
+        'primary-error',
+        (id) => id === 'primary-error:model',
+        async () => [
+          {
+            test: () => true,
+            create: async () => ({
+              id: () => 'primary-error:model',
+              callApi: async () => ({ output: 'ok' }),
+              cleanup: async () => {
+                throw new Error('cleanup failed');
+              },
+            }),
+          },
+        ],
+      ),
+    );
+
+    try {
+      const error = await evaluateWithSource({
+        prompts: ['file:///definitely/missing-prompt.txt'],
+        providers: ['primary-error:model'],
+        tests: [{ vars: {}, assert: [{ type: 'equals', value: 'ok' }] }],
+      }).catch((error) => error);
+      expect(error.message).not.toBe('cleanup failed');
     } finally {
       dispose();
     }

@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
@@ -22,6 +24,15 @@ import type {
   TestCase,
   VarValue,
 } from '../types/index';
+
+const gradingProviderTracker = new AsyncLocalStorage<(provider: ApiProvider) => void>();
+
+export function withGradingProviderTracker<T>(
+  track: (provider: ApiProvider) => void,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return gradingProviderTracker.run(track, fn);
+}
 
 // These wrappers keep src/matchers' imports of the redteam layer confined to this file.
 // Inlining shouldGenerateRemote (or a context-payload helper) into similarity.ts and
@@ -229,6 +240,9 @@ export async function getGradingProvider(
     } else {
       finalProvider = defaultProvider;
     }
+  }
+  if (finalProvider) {
+    gradingProviderTracker.getStore()?.(finalProvider);
   }
   return finalProvider;
 }
