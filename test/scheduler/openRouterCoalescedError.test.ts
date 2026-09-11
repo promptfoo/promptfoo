@@ -317,11 +317,15 @@ describe('public OpenRouter and Chat coalesced completed outcomes', () => {
     expect(retrying).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
     if (!pendingBody) {
-      expect(warningObservations).toEqual([
-        expect.objectContaining({ key: loaded.baseKey, bodyUsed: true, aborted: false }),
-      ]);
+      const expectedKeys = status === 200 ? [loaded.baseKey, loaded.routerKey] : [loaded.baseKey];
+      expect(warningObservations.map(({ key }) => key).sort()).toEqual(expectedKeys.sort());
+      for (const observation of warningObservations) {
+        expect(observation.bodyUsed).toBe(true);
+      }
+      const baseWarning = warningObservations.find(({ key }) => key === loaded.baseKey);
+      expect(baseWarning).toMatchObject({ bodyUsed: true, aborted: false });
       if (!separate && status === 200) {
-        expect(warningObservations[0].active).toEqual([1, 1]);
+        expect(baseWarning?.active).toEqual([1, 1]);
       }
       expect(events).toEqual(abort ? ['base warning', 'caller abort'] : ['base warning']);
     }
