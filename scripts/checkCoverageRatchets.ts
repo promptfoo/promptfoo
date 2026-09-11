@@ -110,7 +110,7 @@ export const COVERAGE_RATCHET_REPORTS: CoverageReportConfig[] = [
     name: 'frontend',
     coverageFile: 'src/app/coverage/coverage-final.json',
     sourcePrefix: 'src/app/src/',
-    excludePrefixes: [],
+    excludePrefixes: ['src/app/src/tests/browser-mode/'],
     excludeFiles: ['src/app/src/setupTests.ts'],
     criticalPrefixes: ['src/app/src/store/', 'src/app/src/stores/', 'src/app/src/tests/'],
     criticalFiles: ['src/app/src/utils/api.ts'],
@@ -268,7 +268,7 @@ function isSourceFile(filePath: string): boolean {
   return (
     (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) &&
     !filePath.endsWith('.d.ts') &&
-    !/\.(?:test|spec|browser)\.tsx?$/.test(filePath) &&
+    !/\.(?:test|spec)\.tsx?$/.test(filePath) &&
     !filePath.endsWith('.stories.tsx')
   );
 }
