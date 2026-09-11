@@ -463,7 +463,10 @@ function resolveGradingProviderPaths(
     );
   }
   if (provider && typeof provider === 'object' && typeof provider.id === 'string') {
-    return { ...provider, id: resolveGradingProviderPaths(provider.id, basePath, env) as string };
+    return {
+      ...provider,
+      id: resolveGradingProviderPaths(provider.id, basePath, { ...env, ...provider.env }) as string,
+    };
   }
   return provider;
 }
