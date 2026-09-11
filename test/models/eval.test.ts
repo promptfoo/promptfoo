@@ -11,6 +11,7 @@ import Eval, {
   EvalQueries,
   escapeJsonPathKey,
   getEvalSummaries,
+  projectConfigForOutput,
 } from '../../src/models/eval';
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
@@ -3309,6 +3310,22 @@ describe('evaluator', () => {
       }
     });
 
+    it('strips scalar and mapped config prompts', () => {
+      const flags = {
+        shouldStripPromptText: true,
+        shouldStripResponseOutput: false,
+        shouldStripTestVars: false,
+        shouldStripGradingResult: false,
+        shouldStripMetadata: false,
+      };
+      expect(projectConfigForOutput({ prompts: 'secret prompt' } as any, flags).prompts).toBe(
+        '[prompt stripped]',
+      );
+      expect(
+        projectConfigForOutput({ prompts: { first: 'secret prompt' } } as any, flags).prompts,
+      ).toEqual({ first: '[prompt stripped]' });
+    });
+
     it('honors output strip flags in legacy compact projections', async () => {
       const eval1 = new Eval({});
       const legacyPrompt = createCompletedPrompt('sensitive legacy table raw', {
@@ -3739,7 +3756,6 @@ describe('evaluator', () => {
           ),
         );
         const promptIds = projectedResults.map((results) => results[0].promptId);
-
         expect(new Set(promptIds).size).toBe(1);
         for (const results of projectedResults) {
           expect(results[0].prompt).toMatchObject({
@@ -3908,10 +3924,20 @@ describe('evaluator', () => {
       const cases = values.map((prompt, testIdx) =>
         createEvaluateResult({
           testIdx,
+          prompt: { raw: longText, label: longText, display: longText },
           vars: { prompt: longText, query: { nested: longText } },
           testCase: { vars: { prompt: longText, query: { nested: longText } } },
           response: { prompt, output: longText },
-          gradingResult: { pass: false, score: 0, reason: longText },
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: longText,
+            suggestions: Array.from({ length: 30 }, () => ({
+              type: 'note',
+              action: 'note',
+              value: longText,
+            })),
+          },
         }),
       );
       const persisted = await EvalFactory.create({ numResults: 0 });
@@ -3930,8 +3956,13 @@ describe('evaluator', () => {
         for (const result of compact.results.results) {
           expect(JSON.stringify(result.response?.prompt).length).toBeLessThanOrEqual(10_250);
           expect(result.response?.output).toBe(longText.slice(0, 10_240));
+          expect(result.prompt.raw.length).toBeLessThanOrEqual(10_240);
+          expect(result.prompt.label.length).toBeLessThanOrEqual(10_240);
+          expect(result.prompt.display?.length).toBeLessThanOrEqual(10_240);
           expect(JSON.stringify(result.vars).length).toBeLessThanOrEqual(20_500);
           expect(result.gradingResult?.reason?.length).toBeLessThanOrEqual(10_240);
+          expect(result.gradingResult?.suggestions).toHaveLength(25);
+          expect(result.gradingResult?.suggestions?.[0].value.length).toBeLessThanOrEqual(10_240);
         }
         expect(compact.results.results[2].response?.prompt).toBe('');
         const full = await eval_.toResultsFile({ includeTraces: false });

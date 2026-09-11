@@ -159,23 +159,25 @@ function projectSuggestionsForRedteamReport(
     return undefined;
   }
 
-  return suggestions.flatMap((suggestion) => {
-    if (
-      !isRecord(suggestion) ||
-      typeof suggestion.type !== 'string' ||
-      !isResultSuggestionAction(suggestion.action) ||
-      typeof suggestion.value !== 'string'
-    ) {
-      return [];
-    }
-    return [
-      {
-        type: suggestion.type,
-        action: suggestion.action,
-        value: suggestion.value,
-      },
-    ];
-  });
+  return suggestions
+    .flatMap((suggestion) => {
+      if (
+        !isRecord(suggestion) ||
+        typeof suggestion.type !== 'string' ||
+        !isResultSuggestionAction(suggestion.action) ||
+        typeof suggestion.value !== 'string'
+      ) {
+        return [];
+      }
+      return [
+        {
+          type: suggestion.type,
+          action: suggestion.action,
+          value: suggestion.value.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
+        },
+      ];
+    })
+    .slice(0, 25);
 }
 
 function projectAssertionForRedteamReport(
@@ -297,7 +299,7 @@ function jsonSuggestionsOrNull(value: SQLWrapper, path: string): SQL<string | nu
         json_object(
           'type', json_extract(report_suggestion.value, '$.type'),
           'action', json_extract(report_suggestion.value, '$.action'),
-          'value', json_extract(report_suggestion.value, '$.value')
+          'value', substr(json_extract(report_suggestion.value, '$.value'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
         )
       )
       FROM json_each(${value}, ${path}) AS report_suggestion
@@ -308,6 +310,7 @@ function jsonSuggestionsOrNull(value: SQLWrapper, path: string): SQL<string | nu
           'replace-prompt', 'pre-filter', 'post-filter', 'note'
         )
         AND json_type(report_suggestion.value, '$.value') = 'text'
+        AND report_suggestion.key < 25
     )
     ELSE NULL
   END`;
@@ -425,12 +428,18 @@ function normalizePromptForRedteamReport(prompt: unknown): Prompt {
     return { raw: '', label: '' };
   }
 
-  const raw = typeof prompt.raw === 'string' ? prompt.raw : '';
+  const raw =
+    typeof prompt.raw === 'string' ? prompt.raw.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH) : '';
   return {
     ...(typeof prompt.id === 'string' && { id: prompt.id }),
     raw,
-    label: typeof prompt.label === 'string' ? prompt.label : raw,
-    ...(typeof prompt.display === 'string' && { display: prompt.display }),
+    label:
+      typeof prompt.label === 'string'
+        ? prompt.label.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
+        : raw,
+    ...(typeof prompt.display === 'string' && {
+      display: prompt.display.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
+    }),
   };
 }
 
@@ -578,7 +587,7 @@ function createRedteamReportResult(
       ...(Object.keys(testCaseMetadata).length > 0 && { metadata: testCaseMetadata }),
     },
     promptId: shouldStripPromptText
-      ? hashPrompt(storedPrompt)
+      ? (row.promptId ?? hashPrompt(storedPrompt))
       : (row.promptId ?? hashPrompt(prompt)),
     provider: {
       id: row.providerId ?? '',
@@ -876,13 +885,18 @@ export function projectConfigForOutput(
             : { defaultTest: projectTest(scenario.defaultTest) }),
         }
       : scenario;
+  const prompts = stripFlags.shouldStripPromptText
+    ? Array.isArray(config.prompts)
+      ? config.prompts.map((prompt) => projectPromptForOutput(prompt as Prompt, true))
+      : isRecord(config.prompts)
+        ? Object.fromEntries(Object.keys(config.prompts).map((key) => [key, '[prompt stripped]']))
+        : config.prompts === undefined
+          ? undefined
+          : '[prompt stripped]'
+    : config.prompts;
   return {
     ...config,
-    ...(Array.isArray(config.prompts) && {
-      prompts: config.prompts.map((prompt) =>
-        stripFlags.shouldStripPromptText ? projectPromptForOutput(prompt as Prompt, true) : prompt,
-      ),
-    }),
+    ...(prompts !== undefined && { prompts }),
     ...(Array.isArray(config.tests) && { tests: config.tests.map(projectTest) }),
     ...(config.defaultTest !== undefined && { defaultTest: projectTest(config.defaultTest) }),
     ...(Array.isArray(config.scenarios) && { scenarios: config.scenarios.map(projectScenario) }),
@@ -2495,15 +2509,23 @@ export default class Eval {
         promptObjectId: sql<
           string | null
         >`CASE WHEN json_type(${validPromptJson}, '$.id') = 'text' THEN json_extract(${validPromptJson}, '$.id') ELSE NULL END`,
-        promptRaw: sql<
-          string | null
-        >`CASE WHEN json_type(${validPromptJson}, '$.raw') = 'text' THEN json_extract(${validPromptJson}, '$.raw') ELSE NULL END`,
-        promptLabel: sql<
-          string | null
-        >`CASE WHEN json_type(${validPromptJson}, '$.label') = 'text' THEN json_extract(${validPromptJson}, '$.label') ELSE NULL END`,
-        promptDisplay: sql<
-          string | null
-        >`CASE WHEN json_type(${validPromptJson}, '$.display') = 'text' THEN json_extract(${validPromptJson}, '$.display') ELSE NULL END`,
+        promptRaw: stripFlags.shouldStripPromptText
+          ? sql<string | null>`'[prompt stripped]'`
+          : sql<
+              string | null
+            >`CASE WHEN json_type(${validPromptJson}, '$.raw') = 'text' THEN substr(json_extract(${validPromptJson}, '$.raw'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}) ELSE NULL END`,
+        promptLabel: stripFlags.shouldStripPromptText
+          ? sql<string | null>`'[prompt stripped]'`
+          : sql<
+              string | null
+            >`CASE WHEN json_type(${validPromptJson}, '$.label') = 'text' THEN substr(json_extract(${validPromptJson}, '$.label'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}) ELSE NULL END`,
+        promptDisplay: stripFlags.shouldStripPromptText
+          ? sql<
+              string | null
+            >`CASE WHEN json_type(${validPromptJson}, '$.display') = 'text' THEN '[prompt stripped]' ELSE NULL END`
+          : sql<
+              string | null
+            >`CASE WHEN json_type(${validPromptJson}, '$.display') = 'text' THEN substr(json_extract(${validPromptJson}, '$.display'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}) ELSE NULL END`,
         // Build the payload-heavy projections from stripFlags so classes an active
         // strip discards never cross the SQLite/Drizzle boundary (they are otherwise
         // materialized in full and only dropped later in createRedteamReportResult,

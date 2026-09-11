@@ -1960,11 +1960,28 @@ describe('EvalResult', () => {
       const result = projectEvaluateResultForOutput(
         createEvaluateResult({
           metadata: {
-            redteamHistory: [{ prompt, output, promptAudio, inputVars: { secret: 'value' } }],
+            redteamHistory: [
+              {
+                prompt,
+                output,
+                promptAudio,
+                guardrails: { passed: true },
+                traceSummary: { spanCount: 2 },
+                inputVars: { secret: 'value' },
+              },
+            ],
           },
         }),
       );
-      expect(result.metadata?.redteamHistory).toEqual([{ prompt, output, promptAudio }]);
+      expect(result.metadata?.redteamHistory).toEqual([
+        {
+          prompt,
+          output,
+          promptAudio,
+          guardrails: { passed: true },
+          traceSummary: { spanCount: 2 },
+        },
+      ]);
     } finally {
       restore();
     }

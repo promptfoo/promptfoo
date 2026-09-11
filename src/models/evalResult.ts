@@ -190,6 +190,20 @@ function projectRedteamHistoryForOutput(
   if (!Array.isArray(history)) {
     return undefined;
   }
+  if (
+    !forceProjection &&
+    stripFlags.shouldStripTestVars &&
+    !stripFlags.shouldStripPromptText &&
+    !stripFlags.shouldStripResponseOutput
+  ) {
+    return history.map((entry) => {
+      if (!isRecord(entry)) {
+        return entry;
+      }
+      const { inputVars: _inputVars, ...projected } = entry;
+      return projected;
+    });
+  }
 
   return history.filter(isRecord).map((entry) => {
     const boundedPrompt = forceProjection ? boundHistoryText(entry.prompt) : entry.prompt;
