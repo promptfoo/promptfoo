@@ -39,10 +39,10 @@ export async function fetchLocalModels(apiBaseUrl: string, signal?: AbortSignal)
     );
     signal?.throwIfAborted();
     return data?.data ?? [];
-  } catch (e: any) {
+  } catch (error) {
     signal?.throwIfAborted();
     throw new Error(
-      `Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner. \n${e.message}`,
+      `Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner. \n${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
