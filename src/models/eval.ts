@@ -345,6 +345,13 @@ function jsonHistoryForRedteamReport(
                 THEN '[prompt stripped]'
               WHEN history_field.key IN ('prompt', 'output')
                 THEN substr(history_field.value, 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+              WHEN history_field.key IN ('promptAudio', 'promptImage', 'outputAudio', 'outputImage')
+                THEN (
+                  SELECT json_group_object(media_field.key, media_field.value)
+                  FROM json_each(history_field.value) AS media_field
+                  WHERE media_field.key IN ('data', 'format', 'blobRef')
+                    AND media_field.type = 'text'
+                )
               WHEN history_field.type IN ('object', 'array') THEN json(history_field.value)
               ELSE history_field.value
             END
@@ -811,16 +818,24 @@ export function projectConfigForOutput(
   if (!stripFlags.shouldStripPromptText && !stripFlags.shouldStripTestVars) {
     return config;
   }
-  const projectTest = (test: unknown) =>
-    isRecord(test)
-      ? {
-          ...test,
-          ...(stripFlags.shouldStripPromptText && 'prompt' in test
-            ? { prompt: '[prompt stripped]' }
-            : {}),
-          ...(stripFlags.shouldStripTestVars && 'vars' in test ? { vars: {} } : {}),
-        }
-      : test;
+  const projectTest = (test: unknown) => {
+    if (!isRecord(test)) {
+      return test;
+    }
+    const options = isRecord(test.options) ? { ...test.options } : undefined;
+    if (stripFlags.shouldStripPromptText && options) {
+      delete options.prefix;
+      delete options.suffix;
+    }
+    return {
+      ...test,
+      ...(stripFlags.shouldStripPromptText && 'prompt' in test
+        ? { prompt: '[prompt stripped]' }
+        : {}),
+      ...(options && { options }),
+      ...(stripFlags.shouldStripTestVars && 'vars' in test ? { vars: {} } : {}),
+    };
+  };
   const projectScenario = (scenario: unknown) =>
     isRecord(scenario)
       ? {
@@ -2487,7 +2502,11 @@ export default class Eval {
         responseExists: jsonIsObject(evalResultsTable.response),
         responseOutput: stripFlags.shouldStripResponseOutput
           ? sql<string | null>`NULL`
-          : sql<string | null>`${validResponseJson} -> '$.output'`,
+          : sql<string | null>`CASE
+              WHEN json_type(${validResponseJson}, '$.output') = 'text'
+              THEN json_quote(substr(json_extract(${validResponseJson}, '$.output'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}))
+              ELSE NULL
+            END`,
         responsePrompt: stripFlags.shouldStripPromptText
           ? sql<string | null>`NULL`
           : sql<string | null>`${validResponseJson} -> '$.prompt'`,

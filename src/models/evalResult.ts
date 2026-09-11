@@ -159,11 +159,16 @@ function boundHistoryMedia(value: unknown): Record<string, unknown> | undefined 
   if (!isRecord(value)) {
     return undefined;
   }
-  const serialized = safeJsonStringify(value);
+  const media = {
+    ...(typeof value.data === 'string' && { data: value.data }),
+    ...(typeof value.format === 'string' && { format: value.format }),
+    ...(typeof value.blobRef === 'string' && { blobRef: value.blobRef }),
+  };
+  const serialized = safeJsonStringify(media);
   if (typeof serialized !== 'string' || serialized.length > MAX_COMPACT_HISTORY_MEDIA_LENGTH) {
     return undefined;
   }
-  return value;
+  return Object.keys(media).length > 0 ? media : undefined;
 }
 
 function projectRedteamHistoryForOutput(
@@ -273,8 +278,8 @@ export function projectMetadataForOutput(
   if (stripFlags.shouldStripMetadata) {
     return undefined;
   }
-  if (!metadata) {
-    return metadata;
+  if (!isRecord(metadata)) {
+    return undefined;
   }
 
   const projectedMetadata = { ...metadata };
@@ -468,22 +473,20 @@ function projectGradingResultForOutput<T>(gradingResult: T, stripFlags: OutputSt
 
   const projected: Record<string, unknown> = { ...gradingResult };
 
-  if (isRecord(projected.metadata)) {
-    if (stripFlags.shouldStripMetadata) {
-      delete projected.metadata;
+  if (stripFlags.shouldStripMetadata) {
+    delete projected.metadata;
+  } else if (isRecord(projected.metadata)) {
+    const gradingMetadata = { ...projected.metadata };
+    if (removeRenderedPrompt) {
+      delete gradingMetadata[GRADING_RENDERED_PROMPT_KEY];
+    }
+    if (removeRenderedAssertion) {
+      delete gradingMetadata[GRADING_RENDERED_ASSERTION_KEY];
+    }
+    if (Object.keys(gradingMetadata).length > 0) {
+      projected.metadata = gradingMetadata;
     } else {
-      const gradingMetadata = { ...projected.metadata };
-      if (removeRenderedPrompt) {
-        delete gradingMetadata[GRADING_RENDERED_PROMPT_KEY];
-      }
-      if (removeRenderedAssertion) {
-        delete gradingMetadata[GRADING_RENDERED_ASSERTION_KEY];
-      }
-      if (Object.keys(gradingMetadata).length > 0) {
-        projected.metadata = gradingMetadata;
-      } else {
-        delete projected.metadata;
-      }
+      delete projected.metadata;
     }
   }
 
@@ -1107,9 +1110,34 @@ export function projectTracesForOutput(traces: TraceData[]): TraceData[] {
         }
 
         const { attributes: _attributes, ...spanWithoutAttributes } = projectedSpan;
+        const events = (
+          projectedSpan as typeof projectedSpan & {
+            events?: Array<{ attributes?: Record<string, unknown> }>;
+          }
+        ).events?.map((event) => {
+          if (!event.attributes) {
+            return event;
+          }
+          const attributes = { ...event.attributes };
+          if (stripFlags.shouldStripPromptText) {
+            for (const key of TRACE_PROMPT_TEXT_ATTRIBUTE_KEYS) {
+              delete attributes[key];
+            }
+          }
+          if (stripFlags.shouldStripResponseOutput) {
+            for (const key of TRACE_RESPONSE_OUTPUT_ATTRIBUTE_KEYS) {
+              delete attributes[key];
+            }
+          }
+          return {
+            ...event,
+            ...(Object.keys(attributes).length > 0 && { attributes }),
+          };
+        });
         return {
           ...spanWithoutAttributes,
           name: projectTraceSpanName(span, stripFlags.shouldStripResponseOutput),
+          ...(events && { events }),
           ...(Object.keys(projectedAttributes).length > 0 && {
             attributes: projectedAttributes,
           }),

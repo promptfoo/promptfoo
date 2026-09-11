@@ -1063,7 +1063,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     expect(await screen.findByLabelText('10 target probes')).toHaveTextContent('Depth: 10 probes');
     const tokenBadge = screen.getByLabelText('100 total tokens');
@@ -1084,7 +1084,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     expect(await screen.findByLabelText('0 target probes')).toHaveTextContent('Depth: 0 probes');
   });
@@ -1121,7 +1121,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     const tokenBadge = await screen.findByLabelText('240 total tokens');
     expect(tokenBadge).toHaveTextContent('Total Tokens: 240');
@@ -1170,7 +1170,7 @@ describe('App component target selector rendering', () => {
       json: () => Promise.resolve({ data: evalData }),
     });
 
-    renderWithProviders(<App />);
+    renderWithProviders(<App evalId="test-eval-id" />);
 
     expect(await screen.findByLabelText('10 target probes')).toHaveTextContent('Depth: 10 probes');
     const tokenBadge = screen.getByLabelText('100 total tokens');

@@ -2867,7 +2867,6 @@ describe('evaluator', () => {
 
       expect(result.vars).toEqual({ prompt: false, question: { nested: true } });
       expect(result.response).toEqual({
-        output: { accepted: false },
         prompt: [{ role: 'user', content: 'Full provider prompt' }],
       });
       expect(result.gradingResult).toMatchObject({
@@ -3905,7 +3904,7 @@ describe('evaluator', () => {
     // the summary (kept behind full row-detail hydration).
     it('bounds compact history media and rejects non-string prompt/output', async () => {
       const hugeAudio = 'A'.repeat(1_500_000); // well over the media byte budget
-      const smallImage = { data: 'A'.repeat(32), format: 'png' };
+      const smallImage = { data: 'A'.repeat(32), format: 'png', apiKey: 'MEDIA_SECRET' };
       const createResult = () =>
         createEvaluateResult({
           metadata: {
@@ -3942,7 +3941,7 @@ describe('evaluator', () => {
 
         // Oversized media dropped from the summary; small media retained.
         expect(history[0]).not.toHaveProperty('promptAudio');
-        expect(history[0].outputImage).toEqual(smallImage);
+        expect(history[0].outputImage).toEqual({ data: smallImage.data, format: 'png' });
         expect(history[0].prompt).toBe('small prompt');
         // Non-string prompt/output rejected: never reaches the summary (would crash the
         // report's ChatMessages renderer as a React child).
@@ -3952,6 +3951,7 @@ describe('evaluator', () => {
         const serialized = JSON.stringify(result);
         expect(serialized).not.toContain('OBJECT_PROMPT_SECRET');
         expect(serialized).not.toContain('OBJECT_OUTPUT_SECRET');
+        expect(serialized).not.toContain('MEDIA_SECRET');
         expect(serialized).not.toContain(hugeAudio);
         expect(serialized.length).toBeLessThan(200_000);
       }

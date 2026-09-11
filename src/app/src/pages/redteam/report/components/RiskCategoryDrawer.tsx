@@ -280,6 +280,9 @@ const RiskCategoryDrawer = ({
         detailsCacheRef.current = createDetailsCache(evalId);
       }
       let fullResult = detailsCacheRef.current.results.get(detailsKey)?.result;
+      if (fullResult) {
+        retainRowDetail(detailsCacheRef.current, detailsKey, fullResult);
+      }
       if (!fullResult) {
         const resultIdQuery = compactResult.id
           ? `?resultId=${encodeURIComponent(compactResult.id)}`

@@ -1972,6 +1972,12 @@ describe('EvalResult', () => {
                 'codex.error': 'sensitive Codex error',
                 safe: 'retained',
               },
+              events: [
+                {
+                  name: 'codex.message',
+                  attributes: { 'codex.message': 'sensitive event output', safe: 'retained' },
+                },
+              ],
             },
             {
               spanId: 'span-without-attributes',
@@ -2053,6 +2059,11 @@ describe('EvalResult', () => {
           for (const key of retained) {
             expect(span.attributes).toHaveProperty(key);
           }
+          const event = (span as typeof span & { events: Array<{ attributes: object }> }).events[0];
+          for (const key of removed) {
+            expect(event.attributes).not.toHaveProperty(key);
+          }
+          expect(event.attributes).toHaveProperty('safe', 'retained');
           expect(span.attributes).toHaveProperty('safe', 'retained');
           expect(span.attributes).toHaveProperty('codex.error', '[error details stripped]');
           expect(span.name).toBe(expectedSearchName);
