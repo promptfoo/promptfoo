@@ -856,25 +856,27 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
       }
     }
 
+    const redactRawHttpHeaders = (value: string) =>
+      value.replace(
+        /^(authorization|cookie|x-(?:api-key|client-secret|session-token)):[^\r\n]*$/gim,
+        '$1: [REDACTED]',
+      );
     const rawHttpBoundary = str.search(/\r?\n\r?\n/);
     if (rawHttpBoundary !== -1) {
       const separator = str.slice(rawHttpBoundary).match(/^\r?\n\r?\n/)?.[0] ?? '\n\n';
-      const headers = str
-        .slice(0, rawHttpBoundary)
-        .replace(
-          /^(authorization|cookie|x-(?:api-key|client-secret|session-token)):[^\r\n]*$/gim,
-          '$1: [REDACTED]',
-        );
+      const rawHeaders = str.slice(0, rawHttpBoundary);
+      const headers = redactRawHttpHeaders(rawHeaders);
       const body = str.slice(rawHttpBoundary + separator.length);
-      const sanitizedBody = sanitizeJsonString(body, depth, maxDepth);
-      if (headers !== str.slice(0, rawHttpBoundary) || sanitizedBody !== body) {
+      const isRawHttp =
+        headers !== rawHeaders ||
+        /^(?:[A-Z]+\s+\S+\s+HTTP\/\d(?:\.\d)?|HTTP\/\d(?:\.\d)?\s+\d{3})/i.test(rawHeaders);
+      const sanitizedBody =
+        isRawHttp && depth < maxDepth ? sanitizeJsonString(body, depth + 1, maxDepth) : body;
+      if (headers !== rawHeaders || sanitizedBody !== body) {
         return `${headers}${separator}${sanitizedBody}`;
       }
     }
-    const sanitizedRawHttp = str.replace(
-      /^(authorization|cookie|x-(?:api-key|client-secret|session-token)):[^\r\n]*$/gim,
-      '$1: [REDACTED]',
-    );
+    const sanitizedRawHttp = redactRawHttpHeaders(str);
     if (sanitizedRawHttp !== str) {
       return sanitizedRawHttp;
     }

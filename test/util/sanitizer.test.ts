@@ -392,6 +392,10 @@ describe('sanitizeObject', () => {
           'POST /v1 HTTP/1.1\nX-Client-Secret: header-secret\n\n{"apiKey":"body-secret"}',
         ),
       ).toBe('POST /v1 HTTP/1.1\nX-Client-Secret: [REDACTED]\n\n{"apiKey":"[REDACTED]"}');
+      expect(sanitizeObject('X-Session-Token: header-secret')).toBe('X-Session-Token: [REDACTED]');
+      expect(sanitizeObject('ordinary text\n\n'.repeat(1000))).toBe(
+        'ordinary text\n\n'.repeat(1000),
+      );
     });
 
     it('should redact SAS tokens embedded in Azure Blob test URIs', () => {
