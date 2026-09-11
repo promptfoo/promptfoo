@@ -46,10 +46,24 @@ export async function matchesSelectBest(
     templateVars,
     providerCallContext,
   );
+  const tokensUsed = normalizeMatcherTokenUsage(
+    resp.cached
+      ? {
+          ...resp.tokenUsage,
+          cached: Math.max(
+            resp.tokenUsage?.cached ?? 0,
+            resp.tokenUsage?.total ??
+              (resp.tokenUsage?.prompt ?? 0) + (resp.tokenUsage?.completion ?? 0),
+          ),
+        }
+      : resp.tokenUsage,
+  );
+  const cacheMetadata = resp.cached ? { metadata: { cachedResponse: true } } : {};
   if (resp.error || !resp.output) {
-    return Array.from({ length: outputs.length }, () =>
-      fail(resp.error || 'No output', resp.tokenUsage),
-    );
+    return Array.from({ length: outputs.length }, () => ({
+      ...fail(resp.error || 'No output', tokensUsed),
+      ...cacheMetadata,
+    }));
   }
 
   invariant(typeof resp.output === 'string', 'select-best produced malformed response');
@@ -58,12 +72,12 @@ export async function matchesSelectBest(
   const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
-    return Array.from({ length: outputs.length }, () =>
-      fail(`Invalid select-best verdict: ${verdict}`, resp.tokenUsage),
-    );
+    return Array.from({ length: outputs.length }, () => ({
+      ...fail(`Invalid select-best verdict: ${verdict}`, tokensUsed),
+      ...cacheMetadata,
+    }));
   }
 
-  const tokensUsed = normalizeMatcherTokenUsage(resp.tokenUsage);
   return outputs.map((_output, index) => {
     if (index === verdict) {
       return {
@@ -71,6 +85,7 @@ export async function matchesSelectBest(
         score: 1,
         reason: `Output selected as the best: ${criteria}`,
         tokensUsed,
+        ...cacheMetadata,
       };
     } else {
       return {
@@ -78,6 +93,7 @@ export async function matchesSelectBest(
         score: 0,
         reason: `Output not selected: ${criteria}`,
         tokensUsed,
+        ...cacheMetadata,
       };
     }
   });

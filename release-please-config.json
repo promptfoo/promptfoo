@@ -3,8 +3,9 @@
   "include-component-in-tag": false,
   "include-v-in-tag": false,
   "include-v-in-release-name": false,
-  "commit-batch-size": 1,
-  "last-release-sha": "af7ec0b5f1072685a919015faf5799cc0886d71e",
+  "commit-batch-size": 25,
+  "commit-search-depth": 500,
+  "last-release-sha": "89052308bce06f53645b1f189ada5ac9d1897347",
   "separate-pull-requests": true,
   "packages": {
     ".": {

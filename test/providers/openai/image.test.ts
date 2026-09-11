@@ -249,19 +249,16 @@ describe('OpenAiImageProvider', () => {
 
   describe('Error handling', () => {
     it('should handle missing API key', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3');
-
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: { error: { message: 'OpenAI API key is not set' } },
-        cached: false,
-        status: 401,
-        statusText: 'Unauthorized',
-      });
-
-      const result = await provider.callApi('test prompt');
-
-      expect(result).toHaveProperty('error');
-      expect(result.error).toContain('OpenAI API key is not set');
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
+      try {
+        const provider = new OpenAiImageProvider('dall-e-3');
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('OPENAI_API_KEY'),
+        );
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('should handle API errors', async () => {
@@ -610,6 +607,119 @@ describe('OpenAiImageProvider', () => {
         'json',
         true,
       );
+    });
+  });
+
+  describe('GPT Image 2.5 support', () => {
+    const usage = {
+      input_tokens: 12,
+      output_tokens: 34,
+      total_tokens: 46,
+      input_tokens_details: { text_tokens: 12, image_tokens: 0 },
+    };
+
+    beforeEach(() => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...mockBase64Response,
+        data: { ...mockBase64Response.data, usage },
+      });
+    });
+
+    it.each([
+      'gpt-image-2.5-sunburst',
+      'gpt-image-2.5-sunburst-2026-09-08',
+      'gpt-image-2.5-flare',
+      'gpt-image-2.5-flare-2026-09-08',
+    ])('generates transparent images and bills actual usage for %s', async (model) => {
+      const provider = new OpenAiImageProvider(model, {
+        config: {
+          apiKey: 'test-key',
+          size: '1536x864',
+          quality: 'max',
+          background: 'transparent',
+          output_format: 'webp',
+          output_compression: 80,
+        },
+      });
+
+      const result = await provider.callApi('A blue mug');
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+
+      expect(body).toMatchObject({
+        model,
+        size: '1536x864',
+        quality: 'max',
+        background: 'transparent',
+        output_format: 'webp',
+        output_compression: 80,
+      });
+      expect(body).not.toHaveProperty('response_format');
+      expect(result).toMatchObject({
+        output: 'data:image/webp;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/webp;base64,base64EncodedImageData', mimeType: 'image/webp' }],
+        tokenUsage: { prompt: 12, completion: 34, total: 46, numRequests: 1 },
+      });
+      expect(result.cost).toBeCloseTo((12 * 5 + 34 * 30) / 1e6, 12);
+    });
+
+    it('uses per-prompt model and quality overrides', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2', { config: { apiKey: 'test-key' } });
+      const result = await provider.callApi('A blue mug', {
+        prompt: {
+          raw: 'A blue mug',
+          label: 'image',
+          config: { model: 'gpt-image-2.5-flare', quality: 'xhigh' },
+        },
+        vars: {},
+      });
+
+      expect(result.error).toBeUndefined();
+      const body = JSON.parse(vi.mocked(fetchWithCache).mock.calls[0][1]!.body as string);
+      expect(body).toMatchObject({ model: 'gpt-image-2.5-flare', quality: 'xhigh' });
+      expect(body).not.toHaveProperty('response_format');
+    });
+
+    it('leaves cost unset without a usage ledger instead of reusing GPT Image 2 estimates', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue(mockBase64Response);
+      const provider = new OpenAiImageProvider('gpt-image-2.5-sunburst', {
+        config: { apiKey: 'test-key', quality: 'low', size: '1024x1024' },
+      });
+
+      expect(await provider.callApi('A blue mug')).not.toHaveProperty('cost');
+    });
+
+    it('reports a cache hit with zero cost', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({ ...mockBase64Response, cached: true });
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', {
+        config: { apiKey: 'test-key' },
+      });
+
+      expect(await provider.callApi('A blue mug')).toMatchObject({ cached: true, cost: 0 });
+    });
+
+    it.each([
+      { size: '4096x4096' },
+      { quality: 'ultra' },
+      { background: 'transparent', output_format: 'jpeg' },
+    ])('rejects unsupported settings before a request: %j', async (config) => {
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', {
+        config: { apiKey: 'test-key', ...config } as any,
+      });
+
+      expect((await provider.callApi('A blue mug')).error).toBeDefined();
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'gpt-image-2',
+      'gpt-image-1.5',
+    ])('keeps max quality unavailable for %s', async (model) => {
+      const provider = new OpenAiImageProvider(model, {
+        config: { apiKey: 'test-key', quality: 'max' },
+      });
+
+      expect((await provider.callApi('A blue mug')).error).toContain('Invalid quality');
+      expect(fetchWithCache).not.toHaveBeenCalled();
     });
   });
 

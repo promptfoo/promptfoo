@@ -66,6 +66,18 @@ describe('OpenAI Provider', () => {
       vi.clearAllMocks();
     });
 
+    it('keeps OpenAI provider identity when a custom ID omits a provider prefix', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', { id: 'customer-judge' });
+
+      expect(provider['getGenAISystem']()).toBe('openai');
+    });
+
+    it('keeps OpenAI provider identity when a custom ID has an unrelated prefix', () => {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', { id: 'customer:judge' });
+
+      expect(provider['getGenAISystem']()).toBe('openai');
+    });
+
     it('should reject a per-prompt Codex-only chat model override before dispatch', async () => {
       const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: { apiKey: 'test-key' },
@@ -107,15 +119,22 @@ describe('OpenAI Provider', () => {
     it('should record GPT-5.6 cache writes in the chat span', async () => {
       const spanAttributes: Record<string, unknown> = {};
       const getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({
-        startActiveSpan: (_name: string, _options: unknown, _context: unknown, callback: any) =>
-          callback({
+        startActiveSpan: (
+          _name: string,
+          options: { attributes?: Record<string, unknown> },
+          _context: unknown,
+          callback: any,
+        ) => {
+          Object.assign(spanAttributes, options.attributes);
+          return callback({
             setAttribute: (key: string, value: unknown) => {
               spanAttributes[key] = value;
             },
             setStatus: vi.fn(),
             recordException: vi.fn(),
             end: vi.fn(),
-          }),
+          });
+        },
       } as any);
       mockFetchWithCache.mockResolvedValue({
         data: {
@@ -140,8 +159,9 @@ describe('OpenAI Provider', () => {
           cacheReadInputTokens: 2,
           cacheCreationInputTokens: 3,
         });
-        expect(spanAttributes['gen_ai.usage.cache_read_input_tokens']).toBe(2);
-        expect(spanAttributes['gen_ai.usage.cache_creation_input_tokens']).toBe(3);
+        expect(spanAttributes['gen_ai.usage.cache_read.input_tokens']).toBe(2);
+        expect(spanAttributes['gen_ai.usage.cache_creation.input_tokens']).toBe(3);
+        expect(spanAttributes['openai.api.type']).toBe('chat_completions');
       } finally {
         getTracerSpy.mockRestore();
       }
@@ -1054,6 +1074,100 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.output).toBe(expectedOutput);
     });
 
+    it('publishes executed MCP tool calls as metadata.toolCalls', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  {
+                    id: 'call_abc',
+                    function: { name: 'read_file', arguments: '{"path":"README.md"}' },
+                  },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      (provider as any).mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn().mockResolvedValue({ content: '# Title' }),
+      };
+
+      const result = await provider.callApi('Read the file');
+
+      expect(result.metadata?.toolCalls).toEqual([
+        {
+          id: 'call_abc',
+          name: 'read_file',
+          input: { path: 'README.md' },
+          output: '# Title',
+          is_error: false,
+        },
+      ]);
+    });
+
+    it('records a failed MCP tool call, and the raw arguments when they will not parse', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  { id: 'call_bad', function: { name: 'read_file', arguments: '{not json' } },
+                ],
+              },
+            },
+          ],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      (provider as any).mcpClient = {
+        getAllTools: vi.fn().mockReturnValue([{ name: 'read_file' }]),
+        callTool: vi.fn(),
+      };
+
+      const result = await provider.callApi('Read the file');
+
+      // The argument JSON never parsed, so the call never ran — the raw payload is
+      // kept so the bad arguments are still visible to an assertion.
+      expect(result.metadata?.toolCalls).toMatchObject([
+        { id: 'call_bad', name: 'read_file', input: '{not json', is_error: true },
+      ]);
+    });
+
+    it('omits metadata.toolCalls when no MCP tool ran', async () => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'Hello' } }],
+          usage: { total_tokens: 15, prompt_tokens: 10, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+      const result = await provider.callApi('Say hi');
+
+      expect(result.metadata?.toolCalls).toBeUndefined();
+    });
+
     it('should handle multiple function tool calls', async () => {
       const mockResponse = {
         data: {
@@ -1359,6 +1473,10 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
           testFunction: mockExternalFunction,
         });
 
+        // Use 'C:/' as basePath so the resolved Windows absolute path stays
+        // inside the base directory on real Windows (where the path-traversal
+        // guard would otherwise reject it).
+        cliState.basePath = 'C:/';
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
           config: {
             tools: [
@@ -1386,7 +1504,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         const result = await provider.callApi('Call external function');
 
         expect(mockImportModule).toHaveBeenCalledWith(
-          path.resolve('/test/base/path', 'C:/test/callbacks.js'),
+          path.resolve('C:/', 'C:/test/callbacks.js'),
           'testFunction',
         );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');
@@ -1394,6 +1512,65 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
       });
 
+      it('rejects path traversal attempts in external function refs', async () => {
+        const mockResponse = {
+          data: {
+            choices: [
+              {
+                message: {
+                  content: null,
+                  tool_calls: [
+                    {
+                      function: {
+                        name: 'evil_function',
+                        arguments: '{}',
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+            usage: { total_tokens: 5, prompt_tokens: 3, completion_tokens: 2 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: {
+            tools: [
+              {
+                type: 'function',
+                function: {
+                  name: 'evil_function',
+                  description: 'Path traversal attempt',
+                  parameters: { type: 'object', properties: {} },
+                },
+              },
+            ],
+            functionToolCallbacks: {
+              evil_function: 'file://../../../etc/passwd:handler',
+            },
+          },
+        });
+
+        const result = await provider.callApi('Call evil function');
+
+        // Loader must reject the path before importing the module. The
+        // provider catches loader errors and falls back to surfacing the
+        // raw tool call to the caller.
+        expect(mockImportModule).not.toHaveBeenCalled();
+        expect(result.output).toEqual([
+          {
+            function: {
+              name: 'evil_function',
+              arguments: '{}',
+            },
+          },
+        ]);
+      });
       it('should cache external functions and not reload them on subsequent calls', async () => {
         const mockResponse = {
           data: {
@@ -2553,6 +2730,37 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         format: 'wav', // Default format
       });
       expect(result.tokenUsage).toEqual({ total: 18, prompt: 12, completion: 6, numRequests: 1 });
+    });
+
+    it.each([
+      false,
+      true,
+    ])('preserves the effective requested audio format (cached=%s)', async (cached) => {
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            { message: { audio: { id: 'audio-mp3', data: 'SUQz', transcript: 'Hello.' } } },
+          ],
+        },
+        cached,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-audio-1.5', {
+        config: { audio: { voice: 'alloy', format: 'wav' } },
+      });
+      const result = await provider.callApi('Say hello', {
+        prompt: {
+          raw: 'Say hello',
+          label: 'audio',
+          config: { audio: { voice: 'alloy', format: 'mp3' } },
+        },
+        vars: {},
+      });
+      const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]!.body as string);
+      expect(body.audio.format).toBe('mp3');
+      expect(result.audio).toMatchObject({ data: 'SUQz', format: 'mp3' });
+      expect(result.cached).toBe(cached);
     });
 
     it('should handle cached audio responses correctly', async () => {

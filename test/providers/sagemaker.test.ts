@@ -1,3 +1,6 @@
+import crypto from 'crypto';
+
+import { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 
@@ -23,10 +26,12 @@ vi.mock('../../src/cache', () => ({
 
 // Mock AWS SDK
 vi.mock('@aws-sdk/client-sagemaker-runtime', () => ({
-  SageMakerRuntimeClient: vi.fn().mockImplementation(() => ({
-    send: mockSend,
-  })),
-  InvokeEndpointCommand: vi.fn().mockImplementation((params) => params),
+  SageMakerRuntimeClient: vi.fn().mockImplementation(function ({ region }) {
+    return { send: (command: unknown) => mockSend(command, region) };
+  }),
+  InvokeEndpointCommand: vi.fn().mockImplementation(function (params) {
+    return params;
+  }),
 }));
 
 import {
@@ -46,6 +51,7 @@ describe('SageMakerCompletionProvider', () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
   describe('cache flag behavior', () => {
@@ -101,6 +107,411 @@ describe('SageMakerCompletionProvider', () => {
       expect(result.cached).toBe(true);
       expect(result.metadata?.transformed).toBe(true);
       expect(result.metadata?.originalPrompt).toBe('original prompt');
+    });
+  });
+
+  describe('cache identity', () => {
+    beforeEach(() => {
+      const entries = new Map<string, string>();
+      mockIsCacheEnabled.mockReturnValue(true);
+      mockCacheGet.mockImplementation(async (key: string) => entries.get(key));
+      mockCacheSet.mockImplementation(async (key: string, value: string) => {
+        entries.set(key, value);
+      });
+    });
+
+    it('keeps outputs separate for different stop sequences and replays matching requests', async () => {
+      mockSend.mockImplementation(async ({ Body }) => ({
+        Body: new TextEncoder().encode(
+          JSON.stringify({ choices: [{ text: JSON.parse(Body).stop[0] }] }),
+        ),
+      }));
+      const providers = ['END', 'STOP'].map(
+        (stop) =>
+          new SageMakerCompletionProvider('test-endpoint', {
+            config: { region: 'us-east-1', modelType: 'openai', stopSequences: [stop] },
+          }),
+      );
+
+      for (const provider of providers) {
+        const fresh = await provider.callApi('A quiet garden');
+        expect(fresh.output).toBe(provider.config.stopSequences?.[0]);
+        expect(fresh.cached).not.toBe(true);
+        const cached = await provider.callApi('A quiet garden');
+        expect(cached.output).toBe(fresh.output);
+        expect(cached.cached).toBe(true);
+        expect(cached.tokenUsage?.cached).toBe(fresh.tokenUsage?.total);
+      }
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps differently extracted outputs separate for the same request', async () => {
+      mockSend.mockResolvedValue({
+        Body: new TextEncoder().encode(JSON.stringify({ answer: 'A garden', summary: 'Flowers' })),
+      });
+      for (const [path, output] of [
+        ['json.answer', 'A garden'],
+        ['json.summary', 'Flowers'],
+      ]) {
+        const provider = new SageMakerCompletionProvider('test-endpoint', {
+          config: { region: 'us-east-1', modelType: 'custom', responseFormat: { path } },
+        });
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output });
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output, cached: true });
+      }
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      ['AWS_SAGEMAKER_MAX_TOKENS', '128', '256', 'max_tokens'],
+      ['AWS_SAGEMAKER_TEMPERATURE', '0.2', '0.8', 'temperature'],
+      ['AWS_SAGEMAKER_TOP_P', '0.5', '0.9', 'top_p'],
+    ])('uses effective %s values when caching requests', async (env, first, second, field) => {
+      mockSend.mockImplementation(async ({ Body }) => ({
+        Body: new TextEncoder().encode(
+          JSON.stringify({ choices: [{ text: String(JSON.parse(Body)[field]) }] }),
+        ),
+      }));
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'openai' },
+      });
+
+      for (const value of [first, second]) {
+        vi.stubEnv(env, value);
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output: value });
+        expect(await provider.callApi('A quiet garden')).toMatchObject({
+          output: value,
+          cached: true,
+        });
+      }
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it('reuses explicit zero settings when environment defaults change', async () => {
+      mockSend.mockResolvedValue({
+        Body: new TextEncoder().encode(JSON.stringify({ choices: [{ text: 'A garden' }] })),
+      });
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'openai', maxTokens: 0, temperature: 0, topP: 0 },
+      });
+      await provider.callApi('A quiet garden');
+      vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '256');
+      vi.stubEnv('AWS_SAGEMAKER_TEMPERATURE', '0.8');
+      vi.stubEnv('AWS_SAGEMAKER_TOP_P', '0.9');
+
+      expect(await provider.callApi('A quiet garden')).toMatchObject({
+        output: 'A garden',
+        cached: true,
+      });
+      expect(mockSend).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(mockSend.mock.calls[0][0].Body)).toMatchObject({
+        max_tokens: 0,
+        temperature: 0,
+        top_p: 0,
+      });
+    });
+
+    it.each([
+      'cache lookup',
+      'endpoint request',
+    ])('keeps the request and cache identity together when defaults change during %s', async (stage) => {
+      vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '128');
+      const getCached = mockCacheGet.getMockImplementation()!;
+      mockCacheGet.mockImplementation(async (key: string) => {
+        const cached = await getCached(key);
+        if (stage === 'cache lookup' && mockCacheGet.mock.calls.length === 1) {
+          vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '256');
+        }
+        return cached;
+      });
+      mockSend.mockImplementation(async ({ Body }) => {
+        const output = String(JSON.parse(Body).max_tokens);
+        if (stage === 'endpoint request') {
+          vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '256');
+        }
+        return {
+          Body: new TextEncoder().encode(JSON.stringify({ choices: [{ text: output }] })),
+        };
+      });
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'openai' },
+      });
+
+      expect(await provider.callApi('A quiet garden')).toMatchObject({ output: '128' });
+      expect(await provider.callApi('A quiet garden')).toMatchObject({ output: '256' });
+      expect(await provider.callApi('A quiet garden')).toMatchObject({
+        output: '256',
+        cached: true,
+      });
+      vi.stubEnv('AWS_SAGEMAKER_MAX_TOKENS', '128');
+      expect(await provider.callApi('A quiet garden')).toMatchObject({
+        output: '128',
+        cached: true,
+      });
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      ['endpoint', 'EndpointName', 'first-endpoint', 'second-endpoint'],
+      ['contentType', 'ContentType', 'application/json', 'application/x-json'],
+      ['acceptType', 'Accept', 'application/json', 'application/x-json'],
+    ] as const)('keeps %s bound to its request across cache lookup', async (field, wireField, first, second) => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'custom', [field]: first },
+      });
+      const getCached = mockCacheGet.getMockImplementation()!;
+      mockCacheGet.mockImplementation(async (key: string) => {
+        const cached = await getCached(key);
+        if (mockCacheGet.mock.calls.length === 1) {
+          provider.config[field] = second;
+        }
+        return cached;
+      });
+      mockSend.mockImplementation(async (command) => ({
+        Body: new TextEncoder().encode(JSON.stringify({ output: command[wireField] })),
+      }));
+
+      expect(await provider.callApi('A quiet garden')).toMatchObject({ output: first });
+      expect(await provider.callApi('A quiet garden')).toMatchObject({ output: second });
+      expect(await provider.callApi('A quiet garden')).toMatchObject({
+        output: second,
+        cached: true,
+      });
+      provider.config[field] = first;
+      expect(await provider.callApi('A quiet garden')).toMatchObject({
+        output: first,
+        cached: true,
+      });
+      expect(mockSend).toHaveBeenCalledTimes(2);
+      expect(mockSend.mock.calls.map(([command]) => command[wireField])).toEqual([first, second]);
+    });
+
+    it.each([
+      ['cache lookup', undefined],
+      ['cache lookup', 'json.first'],
+      ['endpoint request', undefined],
+      ['endpoint request', 'json.first'],
+    ] as const)('keeps response path %s / %s bound to its cached output', async (stage, path) => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'custom', responseFormat: { path } },
+      });
+      const getCached = mockCacheGet.getMockImplementation()!;
+      mockCacheGet.mockImplementation(async (key: string) => {
+        const cached = await getCached(key);
+        if (stage === 'cache lookup' && mockCacheGet.mock.calls.length === 1) {
+          provider.config.responseFormat!.path = 'json.second';
+        }
+        return cached;
+      });
+      mockSend.mockImplementation(async () => {
+        if (stage === 'endpoint request') {
+          provider.config.responseFormat!.path = 'json.second';
+        }
+        return {
+          Body: new TextEncoder().encode(
+            JSON.stringify({ output: 'first', first: 'first', second: 'second' }),
+          ),
+        };
+      });
+
+      expect(await provider.callApi('A quiet garden')).toMatchObject({ output: 'first' });
+      expect(await provider.callApi('A quiet garden')).toMatchObject({ output: 'second' });
+      expect(await provider.callApi('A quiet garden')).toMatchObject({
+        output: 'second',
+        cached: true,
+      });
+      provider.config.responseFormat!.path = path;
+      expect(await provider.callApi('A quiet garden')).toMatchObject({
+        output: 'first',
+        cached: true,
+      });
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      'cache lookup',
+      'credential loading',
+    ])('keeps the runtime region bound to its request during %s', async (stage) => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'custom' },
+      });
+      const getCached = mockCacheGet.getMockImplementation()!;
+      mockCacheGet.mockImplementation(async (key: string) => {
+        const cached = await getCached(key);
+        if (stage === 'cache lookup' && mockCacheGet.mock.calls.length === 1) {
+          provider.config.region = 'us-west-2';
+        }
+        return cached;
+      });
+      const credentials = vi.spyOn(provider, 'getCredentials').mockImplementation(async () => {
+        if (stage === 'credential loading') {
+          provider.config.region = 'us-west-2';
+        }
+        return undefined;
+      });
+      mockSend.mockImplementation(async (_command, region) => ({
+        Body: new TextEncoder().encode(JSON.stringify({ output: region })),
+      }));
+
+      expect(await provider.callApi('A quiet garden')).toMatchObject({ output: 'us-east-1' });
+      expect(await provider.callApi('A quiet garden')).toMatchObject({ output: 'us-west-2' });
+      expect(await provider.callApi('A second garden')).toMatchObject({ output: 'us-west-2' });
+      expect(await provider.callApi('A quiet garden')).toMatchObject({
+        output: 'us-west-2',
+        cached: true,
+      });
+      provider.config.region = 'us-east-1';
+      expect(await provider.callApi('A quiet garden')).toMatchObject({
+        output: 'us-east-1',
+        cached: true,
+      });
+      expect(mockSend).toHaveBeenCalledTimes(3);
+      expect(SageMakerRuntimeClient).toHaveBeenCalledTimes(2);
+      expect(credentials).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps concurrent requests on their captured runtime regions', async () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'custom' },
+      });
+      let release!: () => void;
+      let started!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const pendingCredentials = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.spyOn(provider, 'getCredentials')
+        .mockImplementationOnce(async () => {
+          started();
+          await pendingCredentials;
+          return undefined;
+        })
+        .mockResolvedValue(undefined);
+      mockSend.mockImplementation(async (_command, region) => ({
+        Body: new TextEncoder().encode(JSON.stringify({ output: region })),
+      }));
+
+      const first = provider.callApi('A quiet garden');
+      await waiting;
+      provider.config.region = 'us-west-2';
+      const second = await provider.callApi('A quiet garden');
+      release();
+      expect(await first).toMatchObject({ output: 'us-east-1' });
+      expect(second).toMatchObject({ output: 'us-west-2' });
+      expect(await provider.callApi('A quiet garden')).toMatchObject({
+        output: 'us-west-2',
+        cached: true,
+      });
+      provider.config.region = 'us-east-1';
+      expect(await provider.callApi('A quiet garden')).toMatchObject({
+        output: 'us-east-1',
+        cached: true,
+      });
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it('preserves an injected runtime without loading credentials', async () => {
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'custom' },
+      });
+      const send = vi
+        .fn()
+        .mockResolvedValue({ Body: new TextEncoder().encode('{"output":"injected"}') });
+      provider.sagemakerRuntime = { send };
+      const credentials = vi.spyOn(provider, 'getCredentials');
+      for (const region of ['us-east-1', 'us-west-2']) {
+        provider.config.region = region;
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output: 'injected' });
+      }
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(SageMakerRuntimeClient).not.toHaveBeenCalled();
+      expect(credentials).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { cacheEnabled: false, bustCache: false },
+      { cacheEnabled: true, bustCache: true },
+    ])('does not hash unused cache keys for %j', async ({ cacheEnabled, bustCache }) => {
+      mockIsCacheEnabled.mockReturnValue(cacheEnabled);
+      mockSend.mockResolvedValue({ Body: new TextEncoder().encode('{"output":"A garden"}') });
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'custom' },
+      });
+      const createHash = vi.spyOn(crypto, 'createHash');
+
+      expect(
+        await provider.callApi('A quiet garden', {
+          vars: {},
+          prompt: { raw: 'A quiet garden', label: 'Garden' },
+          bustCache,
+        }),
+      ).toMatchObject({
+        output: 'A garden',
+      });
+      expect(createHash).not.toHaveBeenCalled();
+      expect(mockCacheGet).not.toHaveBeenCalled();
+      expect(mockCacheSet).not.toHaveBeenCalled();
+    });
+
+    it('uses the original request when caching is enabled during the endpoint response', async () => {
+      mockIsCacheEnabled.mockReturnValue(false);
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'custom', endpoint: 'first-endpoint' },
+      });
+      mockSend.mockImplementation(async ({ EndpointName }) => {
+        provider.config.endpoint = 'second-endpoint';
+        mockIsCacheEnabled.mockReturnValue(true);
+        return { Body: new TextEncoder().encode(JSON.stringify({ output: EndpointName })) };
+      });
+
+      expect(await provider.callApi('A quiet garden')).toMatchObject({ output: 'first-endpoint' });
+      provider.config.endpoint = 'first-endpoint';
+      expect(await provider.callApi('A quiet garden')).toMatchObject({
+        output: 'first-endpoint',
+        cached: true,
+      });
+      expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses the model type resolved from the provider ID for response caching', async () => {
+      mockSend.mockResolvedValue({
+        Body: new TextEncoder().encode(
+          JSON.stringify({ generation: 'Llama output', choices: [{ text: 'OpenAI output' }] }),
+        ),
+      });
+      for (const [modelType, output] of [
+        ['openai', 'OpenAI output'],
+        ['llama', 'Llama output'],
+      ]) {
+        const provider = new SageMakerCompletionProvider('test-endpoint', {
+          id: `sagemaker:${modelType}:test-endpoint`,
+          config: { region: 'us-east-1' },
+        });
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output });
+        expect(await provider.callApi('A quiet garden')).toMatchObject({ output, cached: true });
+      }
+      expect(mockSend).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not replay a cached success when a changed request fails', async () => {
+      mockSend
+        .mockResolvedValueOnce({
+          Body: new TextEncoder().encode(JSON.stringify({ choices: [{ text: 'A garden' }] })),
+        })
+        .mockRejectedValue(new Error('Endpoint unavailable'));
+      const provider = new SageMakerCompletionProvider('test-endpoint', {
+        config: { region: 'us-east-1', modelType: 'openai', stopSequences: ['END'] },
+      });
+      await provider.callApi('A quiet garden');
+      provider.config.stopSequences = ['STOP'];
+
+      expect(await provider.callApi('A quiet garden')).toEqual({
+        error: 'SageMaker API error: Endpoint unavailable',
+      });
+      expect(mockSend).toHaveBeenCalledTimes(2);
+      expect(mockCacheSet).toHaveBeenCalledTimes(1);
     });
   });
 

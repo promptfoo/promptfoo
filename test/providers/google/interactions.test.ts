@@ -24,6 +24,7 @@ describe('GoogleInteractionsProvider', () => {
     vi.stubEnv('GOOGLE_CLOUD_LOCATION', '');
     vi.stubEnv('VERTEX_API_HOST', '');
     vi.stubEnv('GOOGLE_API_HOST', '');
+    vi.stubEnv('PALM_API_HOST', '');
     mockStoreBlob.mockResolvedValue({
       ref: { uri: 'blob://video/omni', hash: 'omni', mimeType: 'video/mp4', sizeBytes: 5 },
       deduplicated: false,
@@ -34,7 +35,10 @@ describe('GoogleInteractionsProvider', () => {
     vi.unstubAllEnvs();
   });
 
-  it('routes Omni Flash through the Interactions API and prices video output tokens', async () => {
+  it.each([
+    'gemini-omni-flash-preview',
+    'gemini-omni-1.1-flash',
+  ])('routes %s through the Interactions API and prices video output tokens', async (modelName) => {
     mockFetchWithCache.mockResolvedValue({
       data: {
         id: 'interaction-1',
@@ -62,7 +66,7 @@ describe('GoogleInteractionsProvider', () => {
       },
       cached: false,
     } as any);
-    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+    const provider = new GoogleInteractionsProvider(modelName, {
       config: {
         apiKey: 'test-key',
         aspectRatio: '9:16',
@@ -112,7 +116,7 @@ describe('GoogleInteractionsProvider', () => {
           'x-goog-api-key': 'test-key',
         }),
         body: JSON.stringify({
-          model: 'gemini-omni-flash-preview',
+          model: modelName,
           input: 'A city at dusk',
           response_format: { type: 'video', aspect_ratio: '9:16' },
           previous_interaction_id: 'interaction-0',
@@ -145,7 +149,7 @@ describe('GoogleInteractionsProvider', () => {
       id: 'interaction-1',
       url: 'blob://video/omni',
       format: 'webm',
-      model: 'gemini-omni-flash-preview',
+      model: modelName,
       aspectRatio: '9:16',
     });
     expect(result.tokenUsage).toEqual({
@@ -732,6 +736,7 @@ describe('GoogleInteractionsProvider', () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
         status: 'completed',
+        usage: { total_input_tokens: 100, total_output_tokens: 600 },
         steps: [
           {
             type: 'model_output',
@@ -741,8 +746,8 @@ describe('GoogleInteractionsProvider', () => {
       },
       cached: false,
     } as any);
-    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
-      id: 'vertex:gemini-omni-flash-preview',
+    const provider = new GoogleInteractionsProvider('gemini-omni-1.1-flash-preview', {
+      id: 'vertex:gemini-omni-1.1-flash-preview',
       config: {
         vertexai: true,
         projectId: 'configured-project',
@@ -755,6 +760,7 @@ describe('GoogleInteractionsProvider', () => {
     const result = await provider.callApi('A city at dusk');
 
     expect(result.error).toBeUndefined();
+    expect(result.cost).toBeCloseTo((100 * 1.5 + 600 * 9) / 1e6, 12);
     expect(mockFetchWithCache).toHaveBeenCalledWith(
       'https://aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/global/interactions',
       expect.objectContaining({
@@ -764,7 +770,7 @@ describe('GoogleInteractionsProvider', () => {
           'x-goog-user-project': 'quota-project',
         }),
         body: JSON.stringify({
-          model: 'gemini-omni-flash-preview',
+          model: 'gemini-omni-1.1-flash-preview',
           input: [{ type: 'text', text: 'A city at dusk' }],
           response_format: [{ type: 'video', aspect_ratio: '16:9' }],
           generation_config: { temperature: 0.2, top_p: 0.9 },
@@ -1005,6 +1011,7 @@ describe('GoogleInteractionsProvider', () => {
 
   it.each([
     [{ GOOGLE_API_HOST: 'proxy-host.example' }, 'https://proxy-host.example/v1beta/interactions'],
+    [{ PALM_API_HOST: 'palm-proxy.example' }, 'https://palm-proxy.example/v1beta/interactions'],
     [
       { GOOGLE_API_BASE_URL: 'https://proxy.example/google' },
       'https://proxy.example/google/v1beta/interactions',
@@ -1039,14 +1046,85 @@ describe('GoogleInteractionsProvider', () => {
   });
 
   it.each([
+    {
+      env: { GOOGLE_API_HOST: 'scoped-google.example', PALM_API_HOST: 'scoped-palm.example' },
+      processEnv: {
+        GOOGLE_API_HOST: 'process-google.example',
+        PALM_API_HOST: 'process-palm.example',
+      },
+      endpoint: 'https://scoped-google.example/v1beta/interactions',
+    },
+    {
+      env: { PALM_API_HOST: 'http://scoped-palm.example/proxy/' },
+      processEnv: {
+        GOOGLE_API_HOST: 'process-google.example',
+        PALM_API_HOST: 'process-palm.example',
+      },
+      endpoint: 'http://scoped-palm.example/proxy/v1beta/interactions',
+    },
+    {
+      env: {},
+      processEnv: {
+        GOOGLE_API_HOST: 'process-google.example',
+        PALM_API_HOST: 'process-palm.example',
+      },
+      endpoint: 'https://process-google.example/v1beta/interactions',
+    },
+    {
+      env: {},
+      processEnv: { GOOGLE_API_HOST: '', PALM_API_HOST: 'http://process-palm.example/proxy/' },
+      endpoint: 'http://process-palm.example/proxy/v1beta/interactions',
+    },
+  ])('preserves Google/Palm host precedence for $endpoint', async ({
+    env,
+    processEnv,
+    endpoint,
+  }) => {
+    for (const [name, value] of Object.entries(processEnv)) {
+      vi.stubEnv(name, value);
+    }
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          {
+            type: 'model_output',
+            content: [{ type: 'video', mime_type: 'video/mp4', data: 'aGVsbG8=' }],
+          },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-1.1-flash', {
+      config: { apiKey: 'test-key' },
+      env,
+    });
+
+    const result = await provider.callApi('Describe a quiet garden', {
+      prompt: { raw: 'Describe a quiet garden', label: 'garden', config: { vertexai: true } },
+      vars: {},
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toContain('[Video:');
+    expect(mockFetchWithCache).toHaveBeenCalledWith(
+      endpoint,
+      expect.any(Object),
+      expect.any(Number),
+      'json',
+      true,
+    );
+  });
+
+  it.each([
     [
-      { apiHost: 'http://127.0.0.1:15500/proxy' },
-      { GOOGLE_API_HOST: 'wrong.example' },
+      { apiHost: 'http://127.0.0.1:15500/proxy', apiBaseUrl: 'http://wrong-base.example' },
+      { GOOGLE_API_HOST: 'wrong.example', PALM_API_HOST: 'palm-wrong.example' },
       'http://127.0.0.1:15500/proxy/v1beta/interactions',
     ],
     [
       { apiBaseUrl: 'http://127.0.0.1:15500/proxy' },
-      { GOOGLE_API_HOST: 'wrong.example' },
+      { GOOGLE_API_HOST: 'wrong.example', PALM_API_HOST: 'palm-wrong.example' },
       'http://127.0.0.1:15500/proxy/v1beta/interactions',
     ],
   ])('prefers explicit interaction endpoints and preserves HTTP schemes', async (config, env, endpoint) => {
@@ -1106,14 +1184,17 @@ describe('GoogleInteractionsProvider', () => {
     });
   });
 
-  it('surfaces gateway errors without a Google-shaped error body', async () => {
+  it.each([
+    'gemini-omni-flash-preview',
+    'gemini-omni-1.1-flash',
+  ])('surfaces gateway errors for %s without a Google-shaped error body', async (modelName) => {
     mockFetchWithCache.mockResolvedValue({
       data: { message: 'Service Unavailable' },
       cached: false,
       status: 503,
       statusText: 'Service Unavailable',
     } as any);
-    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+    const provider = new GoogleInteractionsProvider(modelName, {
       config: { apiKey: 'test-key' },
     });
 

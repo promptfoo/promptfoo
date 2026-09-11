@@ -92,6 +92,22 @@ describe('LlamaProvider', () => {
         getRequestTimeoutMs(),
       );
     });
+    it.each([
+      0, -1, 128,
+    ])('preserves an explicit n_predict=%s in the native request', async (nPredict) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { content: '' },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new LlamaProvider(modelName, { config: { n_predict: nPredict } });
+      const result = await provider.callApi('Hello');
+      const request = vi.mocked(fetchWithCache).mock.calls[0][1];
+      expect(JSON.parse(request?.body as string).n_predict).toBe(nPredict);
+      expect(result).toMatchObject({ output: '', cached: false });
+    });
+
     it('should return the correct response on success', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: { content: 'test response' },

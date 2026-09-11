@@ -20,7 +20,7 @@ MCP enables AI models to use tools, maintain context, and perform complex intera
 3. Techniques that manipulate tool usage in unintended ways
 4. Methods to bypass security controls in MCP implementations
 
-## How It Works
+## How it Works
 
 The MCP Plugin:
 
@@ -54,11 +54,9 @@ redteam:
 
   strategies:
     - basic
-    - jailbreak:meta
-    - jailbreak:hydra
+    - best-of-n
+    - jailbreak
 ```
-
-Use `basic` to establish a baseline for MCP-specific prompts. Add `jailbreak:meta` to probe tool disclosure and unauthorized calls with varied single-turn attacks, and `jailbreak:hydra` to test whether tool or permission boundaries weaken over a conversation.
 
 ### Recommended Plugin Combinations for MCP Testing
 
@@ -91,7 +89,7 @@ Here's an example configuration for testing an MCP-enabled customer support agen
 description: Red Teaming MCP with tool use
 
 providers:
-  - id: anthropic:messages:claude-haiku-4-5-20251001
+  - id: anthropic:messages:claude-haiku-4-5
     config:
       mcp:
         enabled: true
@@ -123,8 +121,8 @@ redteam:
 
   strategies:
     - basic
-    - jailbreak:meta
-    - jailbreak:hydra
+    - best-of-n
+    - jailbreak
 ```
 
 ## Working With Results

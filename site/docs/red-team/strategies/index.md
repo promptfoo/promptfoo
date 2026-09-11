@@ -61,6 +61,8 @@ For example, `jailbreak:meta` tries different single-turn approaches until an at
 
 Multi-turn strategies use an attacker agent to probe the target across a conversation. They can reveal failures that appear only after context builds up, at the cost of more model calls than single-turn strategies.
 
+Multi-turn scans track target, attacker, and grading tokens separately. Probe counts include only requests to the target; grading request counts include one request per grading task, while cached responses do not create additional requests.
+
 ### Indirect Prompt Injection Strategies
 
 Indirect prompt injection strategies test whether agents follow malicious instructions hidden in external content. [`indirect-web-pwn`](/docs/red-team/strategies/indirect-web-pwn/) generates pages with injected payloads and tests browsing agents for data leaks and behavior changes.

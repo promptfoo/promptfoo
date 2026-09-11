@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { hasSpecificDocumentation } from './providerDocumentationMap';
+import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
 describe('hasSpecificDocumentation', () => {
   it.each([
     { providerType: 'openai', description: 'a common foundation model provider' },
+    { providerType: 'codex-security', description: 'a native Codex Security SDK provider' },
     { providerType: 'a2a', description: 'an Agent2Agent provider' },
     { providerType: 'openinterpreter', description: 'a coding-agent provider' },
     { providerType: 'go', description: 'a newly added code-based provider' },
@@ -27,6 +28,10 @@ describe('hasSpecificDocumentation', () => {
     expect(result).toBe(false);
   });
 
+  it('should return false for the retired GitHub Models provider', () => {
+    expect(hasSpecificDocumentation('github')).toBe(false);
+  });
+
   it('should return false when providerType is not a key in PROVIDER_DOCUMENTATION_MAP', () => {
     const providerType = 'notarealprovider';
 
@@ -41,5 +46,15 @@ describe('hasSpecificDocumentation', () => {
     const result = hasSpecificDocumentation(providerType);
 
     expect(result).toBe(false);
+  });
+
+  it.each([
+    'codex-security',
+    'openai:codex-security',
+    'openai:codex-security:gpt-5.6-luna',
+  ])('links %s to the Codex Security provider documentation', (providerType) => {
+    expect(getProviderDocumentationUrl(providerType)).toBe(
+      'https://www.promptfoo.dev/docs/providers/openai-codex-security',
+    );
   });
 });

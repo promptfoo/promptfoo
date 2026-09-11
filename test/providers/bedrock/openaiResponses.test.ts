@@ -149,6 +149,7 @@ describe('bedrock openaiResponses helper', () => {
         config: { region: 'us-west-2', apiKey: 'bedrock-key' },
       });
       expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
+      expect(provider['getGenAISystem']()).toBe('bedrock');
       expect((provider.config as any).apiBaseUrl).toBe(
         'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
       );
@@ -277,10 +278,10 @@ describe('bedrock openaiResponses helper', () => {
     });
 
     it.each([
-      ['openai.gpt-5.6-sol', 5, 30],
-      ['openai.gpt-5.6-terra', 2.5, 15],
-      ['openai.gpt-5.6-luna', 1, 6],
-    ])('applies first-party-equivalent cache read/write and output rates to %s', (modelId, input, output) => {
+      ['openai.gpt-5.6-sol', 4.4, 22],
+      ['openai.gpt-5.6-terra', 2.2, 13.2],
+      ['openai.gpt-5.6-luna', 0.22, 1.32],
+    ])('applies the published Bedrock regional cache read/write and output rates to %s', (modelId, input, output) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },
       });
@@ -301,7 +302,11 @@ describe('bedrock openaiResponses helper', () => {
       );
     });
 
-    it.each(GPT_5_6_MODELS)('leaves %s cost unset when cache-write usage is missing', (modelId) => {
+    it.each([
+      ['openai.gpt-5.6-sol', 4.4, 0.44, 22],
+      ['openai.gpt-5.6-terra', 2.2, 0.22, 13.2],
+      ['openai.gpt-5.6-luna', 0.22, 0.022, 1.32],
+    ])('prices %s when cache-write usage is missing', (modelId, input, cachedInput, output) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key' },
       });
@@ -312,14 +317,24 @@ describe('bedrock openaiResponses helper', () => {
           output_tokens: 500,
           input_tokens_details: { cached_tokens: 200 },
         }),
-      ).toBeUndefined();
+      ).toBeCloseTo((800 * input + 200 * cachedInput + 500 * output) / 1e6, 10);
+    });
+
+    it('applies Bedrock regional rates through a custom proxy', async () => {
+      const provider = createBedrockOpenAiResponsesProvider('openai.gpt-5.6-terra', {
+        config: { apiKey: 'bedrock-key', apiBaseUrl: 'http://localhost:15571/openai/v1' },
+      });
+
+      const result = await provider.callApi('hello');
+
+      expect(result.cost).toBeCloseTo((10 * 2.2 + 5 * 13.2) / 1e6, 10);
     });
 
     it.each([
-      ['openai.gpt-5.6-sol', 5, 30],
-      ['openai.gpt-5.6-terra', 2.5, 15],
-      ['openai.gpt-5.6-luna', 1, 6],
-    ])('applies the long-context rates without a first-party regional uplift to %s', (modelId, input, output) => {
+      ['openai.gpt-5.6-sol', 4.4, 22],
+      ['openai.gpt-5.6-terra', 2.2, 13.2],
+      ['openai.gpt-5.6-luna', 0.22, 1.32],
+    ])('applies Bedrock long-context rates with the AWS regional-processing uplift to %s', (modelId, input, output) => {
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
         config: { apiKey: 'bedrock-key', region: 'us-east-1' },
       });
@@ -562,7 +577,11 @@ describe('bedrock openaiResponses helper', () => {
         headers: { 'content-type': 'text/event-stream', 'x-request-id': 'r1' },
       });
       const provider = createBedrockOpenAiResponsesProvider(modelId, {
-        config: { stream: true, reasoning_effort: 'max', include: ['reasoning.encrypted_content'] },
+        config: {
+          stream: true,
+          reasoning_effort: 'max',
+          include: ['reasoning.encrypted_content'],
+        },
       });
 
       const result = await provider.callApi('hello');
