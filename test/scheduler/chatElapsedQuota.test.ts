@@ -282,4 +282,114 @@ describe('loaded Chat elapsed selected quota with two active calls and queued de
     expect(metrics()).toMatchObject({ activeRequests: 0, queueDepth: 0 });
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('learns a completed terminal429 before releasing its aborted owner to same-key queued B', async () => {
+    const target = await loadApiProvider('openai:chat:gpt-4o-mini', {
+      options: {
+        config: {
+          apiBaseUrl: 'https://completed-quota.fixture.test/v1',
+          apiKey: 'fixture-key',
+          maxRetries: 0,
+        },
+      },
+    });
+    const unrelated = await loadApiProvider('openai:chat:gpt-4o-mini', {
+      options: {
+        config: {
+          apiBaseUrl: 'https://unrelated-quota.fixture.test/v1',
+          apiKey: 'fixture-key',
+          maxRetries: 0,
+        },
+      },
+    });
+    providers.push(target, unrelated);
+    expect(target).toBeInstanceOf(OpenAiChatCompletionProvider);
+    const registry = new RateLimitRegistry({ maxConcurrency: 1, minConcurrency: 1 });
+    registries.push(registry);
+    const wrapped = wrapProviderWithRateLimiting(target, registry);
+    const other = wrapProviderWithRateLimiting(unrelated, registry);
+    const held = heldResponse('A');
+    const startedA = createDeferred<void>();
+    const dispatches: { caller: string; at: number }[] = [];
+    vi.mocked(globalThis.fetch).mockImplementation(async (_url, options) => {
+      const caller = JSON.parse(String(options?.body)).messages[0].content as string;
+      dispatches.push({ caller, at: Date.now() });
+      if (caller === 'A') {
+        startedA.resolve();
+        return held.promise;
+      }
+      return success(caller);
+    });
+    const first = start(wrapped, 'A');
+    const owner = controllers[0];
+    await startedA.promise;
+    const queued = start(wrapped, 'B');
+    const companion = start(other, 'C');
+    await companion.done;
+    expect(companion.state.value).toMatchObject({ output: 'C output' });
+    expect(dispatches.map(({ caller }) => caller)).toEqual(['A', 'C']);
+    const responseHeaders = {
+      ...headers,
+      'retry-after': '5',
+      'x-ratelimit-remaining-requests': '0',
+      'x-ratelimit-reset-requests': '5s',
+      'x-request-id': 'terminal429',
+    };
+    const response = new Response(
+      JSON.stringify({ error: { code: 'rate_limit_exceeded', message: 'fixture limit' } }),
+      { status: 429, statusText: 'Too Many Requests', headers: responseHeaders },
+    );
+    const events: string[] = [];
+    const clone = response.clone.bind(response);
+    vi.spyOn(response, 'clone').mockImplementation(() => {
+      const copy = clone();
+      const reader = copy.body!.getReader();
+      const read = reader.read.bind(reader);
+      vi.spyOn(reader, 'read').mockImplementation(async () => {
+        const chunk = await read();
+        if (chunk.done) {
+          events.push('EOF');
+          owner.abort(new Error('cancel after terminal EOF'));
+          events.push('abort');
+        }
+        return chunk;
+      });
+      vi.spyOn(copy.body!, 'getReader').mockReturnValue(reader);
+      return copy;
+    });
+    held.resolve(response);
+    await first.done;
+    expect.soft(first.state.error).toBeUndefined();
+    expect.soft(first.state.value).toEqual({
+      error:
+        'Rate limit exceeded: HTTP 429 Too Many Requests (code: rate_limit_exceeded) [retry after 5s]',
+      metadata: {
+        rateLimitKind: 'rate_limit',
+        http: { status: 429, statusText: 'Too Many Requests', headers: responseHeaders },
+      },
+    });
+    expect(events).toEqual(['EOF', 'abort']);
+    await vi.advanceTimersByTimeAsync(4999);
+    expect.soft(queued.state.settled).toBe(false);
+    expect.soft(dispatches.map(({ caller }) => caller)).toEqual(['A', 'C']);
+    await vi.advanceTimersByTimeAsync(1);
+    await queued.done;
+    expect(queued.state.value).toMatchObject({ output: 'B output' });
+    expect(dispatches).toEqual([
+      { caller: 'A', at: startAt },
+      { caller: 'C', at: startAt },
+      { caller: 'B', at: startAt + 5000 },
+    ]);
+    const metrics = Object.values(registry.getMetrics());
+    expect(metrics).toHaveLength(2);
+    expect(
+      metrics.every(
+        (value) =>
+          value.activeRequests === 0 && value.queueDepth === 0 && value.retriedRequests === 0,
+      ),
+    ).toBe(true);
+    expect(metrics.reduce((total, value) => total + value.totalRequests, 0)).toBe(3);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

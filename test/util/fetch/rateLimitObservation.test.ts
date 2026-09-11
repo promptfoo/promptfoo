@@ -221,7 +221,7 @@ describe('explicit selected rate-limit backoff observation', () => {
     },
   );
 
-  it('emits nothing while a 429 body is held or after its owner aborts', async () => {
+  it.each([0, 1])('cancels an unfinished 429 body with maxRetries %s', async (maxRetries) => {
     let body!: ReadableStreamDefaultController<Uint8Array>;
     const response = new Response(
       new ReadableStream<Uint8Array>({
@@ -241,9 +241,13 @@ describe('explicit selected rate-limit backoff observation', () => {
     const observe = vi.fn();
     const controller = new AbortController();
     const reason = Object.assign(new Error('cancel incomplete429'), { name: 'AbortError' });
-    const outcome = fetchWithRetries(url, { signal: controller.signal }, 10_000, 1, observe).catch(
-      (error: unknown) => error,
-    );
+    const outcome = fetchWithRetries(
+      url,
+      { signal: controller.signal },
+      10_000,
+      maxRetries,
+      observe,
+    ).catch((error: unknown) => error);
     try {
       await peekStarted.promise;
       expect(observe).not.toHaveBeenCalled();
@@ -258,6 +262,137 @@ describe('explicit selected rate-limit backoff observation', () => {
       await outcome;
     }
   });
+
+  it.each([
+    { code: 'rate_limit_exceeded', maxRetries: 0, kind: 'rate_limit', abortAtEof: false },
+    { code: 'rate_limit_exceeded', maxRetries: 0, kind: 'rate_limit', abortAtEof: true },
+    { code: 'insufficient_quota', maxRetries: 2, kind: 'quota', abortAtEof: false },
+    { code: 'insufficient_quota', maxRetries: 2, kind: 'quota', abortAtEof: true },
+  ])(
+    'preserves completed $code with EOF abort=$abortAtEof',
+    async ({ code, maxRetries, kind, abortAtEof }) => {
+      const owner = new AbortController();
+      const reason = Object.assign(new Error('cancel after actual 429 EOF'), {
+        name: 'AbortError',
+      });
+      const payload = { error: { code, message: 'fixture quota diagnostic' } };
+      const headers = {
+        'content-type': 'application/json',
+        'x-request-id': 'completed429',
+        'x-ratelimit-remaining-requests': '0',
+        'x-ratelimit-reset-requests': '5s',
+      };
+      const response = new Response(JSON.stringify(payload), {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers,
+      });
+      const events: string[] = [];
+      const clone = response.clone.bind(response);
+      vi.spyOn(response, 'clone').mockImplementation(() => {
+        const copy = clone();
+        const reader = copy.body!.getReader();
+        const read = reader.read.bind(reader);
+        vi.spyOn(reader, 'read').mockImplementation(async () => {
+          const chunk = await read();
+          if (chunk.done) {
+            events.push('EOF');
+            if (abortAtEof) {
+              owner.abort(reason);
+              events.push('abort');
+            }
+          }
+          return chunk;
+        });
+        vi.spyOn(copy.body!, 'getReader').mockReturnValue(reader);
+        return copy;
+      });
+      transport.mockResolvedValueOnce(response);
+      const observe = vi.fn();
+      const result = await fetchWithRetries(
+        url,
+        { signal: owner.signal },
+        10_000,
+        maxRetries,
+        observe,
+      ).catch((error: unknown) => error);
+      expect(result).toBeInstanceOf(HttpRateLimitError);
+      expect(result).toMatchObject({
+        name: 'HttpRateLimitError',
+        status: 429,
+        statusText: 'Too Many Requests',
+        code,
+        kind,
+        body: payload,
+        headers,
+        resetAt: now + 5000,
+      });
+      expect(events).toEqual(abortAtEof ? ['EOF', 'abort'] : ['EOF']);
+      expect(observe).not.toHaveBeenCalled();
+      expect(transport).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each([0, 1])(
+    'does not manufacture a terminal429 from an aborted failed clone with maxRetries %s',
+    async (maxRetries) => {
+      const owner = new AbortController();
+      const reason = new Error('custom clone cancellation');
+      const response = rateLimit();
+      vi.spyOn(response, 'clone').mockImplementation(() => {
+        owner.abort(reason);
+        throw new TypeError('fixture clone unavailable');
+      });
+      transport.mockResolvedValueOnce(response);
+      const observe = vi.fn();
+      const result = await fetchWithRetries(
+        url,
+        { signal: owner.signal },
+        10_000,
+        maxRetries,
+        observe,
+      ).catch((error: unknown) => error);
+      expect(result).toMatchObject({ name: 'AbortError', message: reason.message });
+      expect(result).not.toBeInstanceOf(HttpRateLimitError);
+      expect(observe).not.toHaveBeenCalled();
+      expect(transport).toHaveBeenCalledOnce();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(['clone', 'read'] as const)(
+    'keeps the ordinary non-aborted %s failure fallback',
+    async (failure) => {
+      const response = rateLimit();
+      if (failure === 'clone') {
+        vi.spyOn(response, 'clone').mockImplementation(() => {
+          throw new TypeError('fixture clone unavailable');
+        });
+      } else {
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.error(new Error('fixture read failed'));
+          },
+        });
+        vi.spyOn(response, 'clone').mockReturnValue(new Response(body, { status: 429 }));
+      }
+      transport.mockResolvedValueOnce(response);
+      const observe = vi.fn();
+      const result = await fetchWithRetries(url, {}, 10_000, 0, observe).catch(
+        (error: unknown) => error,
+      );
+      expect(result).toBeInstanceOf(HttpRateLimitError);
+      expect(result).toMatchObject({
+        status: 429,
+        kind: 'rate_limit',
+        body: undefined,
+        code: undefined,
+      });
+      expect(observe).not.toHaveBeenCalled();
+      expect(transport).toHaveBeenCalledOnce();
+    },
+  );
 
   it.each(['inherited', 'explicit', 'null'] as const)(
     'respects the %s Request signal for a selected wait',
