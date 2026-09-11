@@ -32,7 +32,7 @@ Homoglyph attacks exploit the visual similarity between different Unicode charac
 
 Use it in your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - homoglyph
 ```

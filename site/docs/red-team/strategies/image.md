@@ -42,7 +42,7 @@ iVBORw0KGgoAAAANSUhEUgAAA...
 
 Use it in your promptfooconfig.yaml like this:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'Multimodal red team'
 targets:

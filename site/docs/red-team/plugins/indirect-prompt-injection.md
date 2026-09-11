@@ -41,7 +41,7 @@ The model follows the injected instruction instead of answering the travel quest
 
 ## Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - |
     You are a travel agent. The user's name is {{name}}.

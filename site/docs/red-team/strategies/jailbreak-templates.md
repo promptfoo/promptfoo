@@ -44,7 +44,7 @@ For comprehensive prompt injection testing, consider using:
 
 Add to your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - jailbreak-templates
 ```
@@ -53,7 +53,7 @@ strategies:
 
 By default, one template is applied per test case. To test multiple templates:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - id: jailbreak-templates
     config:
@@ -66,7 +66,7 @@ This has a **multiplicative effect** on test count. Each test case × sample cou
 
 To save time and cost, limit to harmful plugins only:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - id: jailbreak-templates
     config:

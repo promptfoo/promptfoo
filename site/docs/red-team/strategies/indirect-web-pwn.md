@@ -25,7 +25,7 @@ This strategy is **plugin-agnostic** and works with any plugin to test two disti
 
 Test whether injected instructions can trick the agent into leaking sensitive data to external URLs:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 targets:
   - id: file://provider.js
     label: AI assistant with web fetch
@@ -46,7 +46,7 @@ For a runnable provider that implements the required `web_fetch` tool, initializ
 
 Test whether injected instructions can manipulate the agent's behavior or output:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - harmful:violent-crime
@@ -90,7 +90,7 @@ The strategy works as follows:
 
 Use with the `data-exfil` plugin for deterministic detection of data leaks:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - data-exfil
@@ -102,7 +102,7 @@ redteam:
 
 Combine with a jailbreak strategy using `layer` to test adaptive web-injection attacks:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - id: data-exfil
@@ -119,7 +119,7 @@ redteam:
 
 Use with other plugins to test behavior manipulation:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - harmful:violent-crime
@@ -131,7 +131,7 @@ redteam:
 
 #### With Multiple Plugin Categories
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - pii:direct
@@ -150,7 +150,7 @@ redteam:
 
 For persistent multi-turn attacks with embedding rotation:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - data-exfil

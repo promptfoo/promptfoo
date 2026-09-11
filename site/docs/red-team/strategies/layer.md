@@ -12,7 +12,7 @@ The Layer strategy composes multiple red team strategies sequentially by feeding
 
 Apply multiple strategies in sequence:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer
@@ -72,7 +72,7 @@ redteam:
           - audio
 ```
 
-## Limitations and Ordering Rules
+## Ordering Rules
 
 Layer supports one orchestrating attack strategy. Put `jailbreak:hydra`, `jailbreak:goblin`, `crescendo`, `goat`, `custom`, `jailbreak:meta`, or `jailbreak:tree` first when later steps should transform each turn or attempt. Chain text transforms such as `base64`, `rot13`, and `leetspeak` after it, then add an output transform such as `audio` or `image`.
 
@@ -107,7 +107,7 @@ steps: [jailbreak:hydra]
 steps: [jailbreak:hydra, audio]
 ```
 
-### Patterns to Avoid
+### Invalid Patterns
 
 ```yaml
 # Transforms the initial goal, not each turn
@@ -135,7 +135,7 @@ steps: [audio, image]
 
 Use the `label` field to differentiate multiple layer strategies in the same config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     # Multiple layer strategies with unique labels
@@ -160,7 +160,7 @@ Without labels, layer strategies are deduplicated based on their steps. With lab
 
 Simple string-based steps for built-in strategies:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer
@@ -175,7 +175,7 @@ redteam:
 
 Object-based steps with individual configurations:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer
@@ -199,7 +199,7 @@ redteam:
 
 Control which plugins each step applies to:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer
@@ -226,7 +226,7 @@ redteam:
 
 Test a browsing agent with adaptive attacks that place prompt injections in fetched web content:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   purpose: An assistant that can fetch and summarize public web pages.
   plugins:
@@ -247,7 +247,7 @@ Hydra adapts the conversation while `indirect-web-pwn` generates and tracks an i
 
 Test voice-enabled AI agents with adaptive jailbreak attempts:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer
@@ -263,7 +263,7 @@ Goblin orchestrates the attack, and each turn's prompt is converted to audio bef
 
 Test vision-enabled AI agents:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer
@@ -277,7 +277,7 @@ redteam:
 
 For multi-attempt strategies such as `jailbreak:meta` and `jailbreak:tree`, each independent attempt is converted to audio:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer
@@ -291,7 +291,7 @@ redteam:
 
 Apply multiple encoding layers to evade detection:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer
@@ -305,7 +305,7 @@ redteam:
 
 Stack multiple encoding techniques for maximum obfuscation:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer
@@ -320,7 +320,7 @@ redteam:
 
 Combine jailbreak templates with encoding:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer
@@ -334,7 +334,7 @@ redteam:
 
 Use custom scripts in your pipeline:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer

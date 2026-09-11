@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 400" role="img" aria-labelledby="title desc">
   <title id="title">Best-of-N candidate selection flow</title>
-  <desc id="desc">Promptfoo generates text candidates, calls the target, returns the first response without an error for grading, or tries the next candidate until none remain.</desc>
+  <desc id="desc">Promptfoo generates text candidates, calls the target, selects a response without an error for grading, or tries the next candidate until none remain.</desc>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
       <path d="M0 0L10 4L0 8Z" fill="#64748b" />
@@ -38,7 +38,7 @@
   <text class="label" x="683" y="153" text-anchor="middle" fill="#15803d">No</text>
   <rect x="715" y="122" width="170" height="88" rx="10" fill="#f0fdf4" stroke="#16a34a" stroke-width="2" />
   <text class="heading" x="800" y="152" text-anchor="middle">Grade response</text>
-  <text class="body" x="800" y="176" text-anchor="middle">Return the first valid</text>
+  <text class="body" x="800" y="176" text-anchor="middle">Select a valid</text>
   <text class="body" x="800" y="196" text-anchor="middle">response and stop</text>
 
   <path class="arrow" d="M575 224V275" />

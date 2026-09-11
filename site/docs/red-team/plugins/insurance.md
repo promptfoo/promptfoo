@@ -1,7 +1,7 @@
 ---
 sidebar_label: Insurance Plugins
 title: Insurance Red-Teaming Plugins - AI Security for Insurance Systems
-description: Test insurance AI systems for protected-data disclosure, inaccurate network information, and discriminatory coverage decisions.
+description: Test insurance AI systems for protected-data disclosure, inaccurate network information, and discriminatory coverage decisions with custom red team plugins.
 ---
 
 # Insurance Red-Teaming Plugins
@@ -46,7 +46,7 @@ Example risk: discouraging an eligible customer from coverage because of disabil
 
 Use the `insurance` collection to include all four insurance plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   purpose: 'An insurance assistant that explains benefits and claim status after authentication but cannot disclose another member or policyholder record.'
   plugins:
@@ -55,7 +55,7 @@ redteam:
 
 To focus on specific workflows, configure individual plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - insurance:phi-disclosure

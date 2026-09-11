@@ -62,7 +62,7 @@ The [Custom Strategy](/docs/red-team/strategies/custom-strategy/) lets you descr
 
 Multi-turn strategies can be enabled either in the UI Strategies page, or by adding them to your YAML config:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   # ...
 
@@ -79,7 +79,7 @@ redteam:
 
 Or tune them with the following parameters:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: crescendo
@@ -126,7 +126,7 @@ If your system maintains a conversation history and only expects the latest mess
 
 By default, Crescendo, GOAT, and Custom strategies stop immediately upon finding a successful attack. You can configure them to continue searching for additional successful attacks until `maxTurns` is reached:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - id: crescendo
     config:

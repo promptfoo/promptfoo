@@ -1,12 +1,12 @@
 ---
 sidebar_label: Best-of-N
 title: Best-of-N Jailbreaking Strategy
-description: Generate and test text variations against a target using the Best-of-N strategy
+description: Generate text variations with the Best-of-N strategy, configure candidate limits, and understand how target responses affect selection and final grading.
 ---
 
 # Best-of-N (BoN) Jailbreaking Strategy
 
-Best-of-N (BoN) generates text variations of a prompt and tests them against your target. Promptfoo returns the first target response that does not produce an error, then grades that response with the configured assertion.
+Best-of-N (BoN) generates text variations of a prompt and tests them against your target. Promptfoo stops scheduling candidates after a target response without an error. Requests already in flight can still finish; one successful response is then graded with the configured assertion.
 
 The strategy is inspired by [Hughes et al. (2024)](https://arxiv.org/abs/2412.03556). The paper repeatedly samples text, vision, and audio variations until a harmful response is found; Promptfoo currently generates text variations only and does not grade each candidate while selecting a response.
 
@@ -16,7 +16,7 @@ The paper reports 89% ASR on GPT-4o and 78% on Claude 3.5 Sonnet with 10,000 tex
 
 Use it like so in your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - id: best-of-n
     config:
@@ -36,7 +36,7 @@ Promptfoo's BoN strategy works in three steps:
 
 2. **Test candidates**: Sends candidates to the target with the configured concurrency limit.
 
-3. **Grade the selected response**: Returns the first response without a target error and applies the configured assertion. A normal refusal is still a valid response and stops candidate selection.
+3. **Grade the selected response**: Applies the configured assertion to a successful response after the target calls finish. A normal refusal is still a valid response and stops further candidate scheduling.
 
 Small input changes can still produce different target behavior, so review the final assertion result before interpreting the test.
 
@@ -63,7 +63,7 @@ Maximum number of prompt variations to test simultaneously. Higher values increa
 **Type:** `number`  
 **Default:** `5`
 
-Number of candidate-generation steps. Each step generates `maxCandidatesPerStep` variations. The hosted service accepts up to `20000` steps. Generating more candidates does not guarantee that the target will receive them, because selection stops after the first response without an error.
+Number of candidate-generation steps. Each step generates `maxCandidatesPerStep` variations. The hosted service accepts up to `20000` steps. Generating more candidates does not guarantee that the target will receive them, because scheduling stops after a response without an error.
 
 ### maxCandidatesPerStep
 
@@ -72,7 +72,7 @@ Number of candidate-generation steps. Each step generates `maxCandidatesPerStep`
 
 Number of text variations generated per step. The hosted service accepts up to `100` candidates per step. Higher values increase the candidate pool, but concurrent calls already in progress may still complete after a response is selected.
 
-Start with `1`. A larger candidate pool is useful only when earlier target calls return errors, because a normal response stops selection.
+Start with `1`. A larger pool mainly affects error retries and requests already running when a normal response stops further scheduling.
 
 :::tip
 Start with `useBasicRefusal: true` and low candidate counts to confirm that the target accepts the transformed input and that the final grade matches expectations.

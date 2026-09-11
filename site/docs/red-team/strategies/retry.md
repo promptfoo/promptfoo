@@ -16,7 +16,7 @@ The retry strategy is target-specific. It retries test cases that previously fai
 
 To include the retry strategy in your red teaming setup:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: 'retry'
@@ -36,7 +36,7 @@ For example, with the above configuration and two plugins specified, the retry s
 
 For basic usage without configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: retry
@@ -55,7 +55,7 @@ The retry strategy works by:
 
 If you have a test suite with:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - id: harmful:hate

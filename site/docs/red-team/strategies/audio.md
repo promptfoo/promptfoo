@@ -18,7 +18,7 @@ This strategy is useful for:
 
 Use it like so in your promptfooconfig.yaml:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - audio
 ```

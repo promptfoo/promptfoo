@@ -1,7 +1,7 @@
 ---
 sidebar_label: Telecommunications Plugins
 title: Telecommunications Red Team Plugins
-description: Test telecom AI systems for customer-data exposure, account takeover, emergency-service misinformation, unauthorized changes, and fraud.
+description: Test telecom AI systems for customer-data exposure, account takeover, emergency-service misinformation, unauthorized changes, and fraud with red team plugins.
 sidebar_position: 55
 ---
 
@@ -95,7 +95,7 @@ Example risk: dismissing a request for accessible billing or incorrectly stating
 
 Use the `telecom` collection to include all 12 telecommunications plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   purpose: 'A telecom support assistant that can explain plans and troubleshoot service but must verify an account holder before accessing records or changing service.'
   plugins:
@@ -104,7 +104,7 @@ redteam:
 
 To focus on specific workflows, configure individual plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - telecom:cpni-disclosure

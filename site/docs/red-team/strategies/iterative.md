@@ -1,7 +1,7 @@
 ---
 sidebar_label: Iterative Jailbreaks (Deprecated)
 title: Iterative Jailbreaks Strategy (Deprecated)
-description: Migrate the deprecated jailbreak strategy to jailbreak:meta for adaptive single-turn red team attacks
+description: Migrate the deprecated jailbreak strategy to jailbreak:meta for adaptive single-turn red team attacks, including config changes and alternative strategies.
 ---
 
 import { Redirect } from '@docusaurus/router';
@@ -16,7 +16,7 @@ The top-level `jailbreak` strategy is deprecated. It now runs [`jailbreak:meta`]
 **Migration:** Replace `jailbreak` with `jailbreak:meta` in your configuration.
 :::
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - jailbreak:meta

@@ -26,7 +26,7 @@ Traditional monitoring captures production incidents after they occur. Red teami
 
 Start by running a comprehensive red team scan to establish your security baseline:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 targets:
   - id: https
     label: my-chatbot-v1 # Use consistent labels for tracking
@@ -155,7 +155,7 @@ While generated red team tests cover a broad attack surface, custom test cases l
 
 ### Example Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 prompts:
   - |
     You are a customer service agent for Acme Corp.

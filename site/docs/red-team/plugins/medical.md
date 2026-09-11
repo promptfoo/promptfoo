@@ -1,7 +1,7 @@
 ---
 sidebar_label: Medical Plugins
 title: Medical Red-Teaming Plugins - AI Security for Healthcare
-description: Test healthcare AI systems for unsafe clinical guidance, hallucinations, prioritization errors, and medical-device security risks.
+description: Test healthcare AI systems for unsafe clinical guidance, hallucinations, prioritization errors, and medical-device security risks with red team plugins.
 ---
 
 # Medical Red-Teaming Plugins
@@ -80,7 +80,7 @@ The clinical categories are informed by the paper [Red Teaming Large Language Mo
 
 Use the `medical` collection to include all nine medical plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   purpose: 'A clinical-support assistant that summarizes information for clinicians but cannot diagnose, prescribe, or change device settings.'
   plugins:
@@ -89,7 +89,7 @@ redteam:
 
 To focus on specific risks, configure individual plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - medical:hallucination

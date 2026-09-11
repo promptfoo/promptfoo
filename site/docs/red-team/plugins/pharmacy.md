@@ -1,7 +1,7 @@
 ---
 sidebar_label: Pharmacy Plugins
 title: Pharmacy Red-Teaming Plugins - AI Security for Pharmacy Systems
-description: Test pharmacy AI systems for missed drug interactions, unsafe dosage calculations, and controlled-substance workflow failures.
+description: Test pharmacy AI systems for missed drug interactions, unsafe dosage calculations, and controlled-substance workflow failures with custom red team plugins.
 ---
 
 # Pharmacy Red-Teaming Plugins
@@ -40,7 +40,7 @@ Example risk: approving an early refill or accepting an invalid prescription wit
 
 Use the `pharmacy` collection to include all three pharmacy plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   purpose: 'A pharmacy-support assistant that explains prescriptions but cannot approve refills, override safety checks, or provide patient-specific dosing without pharmacist review.'
   plugins:
@@ -49,7 +49,7 @@ redteam:
 
 To focus on specific workflows, configure individual plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - pharmacy:drug-interaction

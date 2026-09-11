@@ -19,7 +19,7 @@ Hydra has two target-delivery modes:
 
 Add the strategy to your `promptfooconfig.yaml` to enable multi-turn adaptive testing:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - jailbreak:hydra
@@ -27,7 +27,7 @@ redteam:
 
 To configure the strategy:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: jailbreak:hydra

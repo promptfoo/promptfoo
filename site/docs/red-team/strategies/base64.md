@@ -19,7 +19,7 @@ The Base64 Encoding strategy tests an AI system's ability to resist encoded inpu
 
 Use it in your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - base64
 ```

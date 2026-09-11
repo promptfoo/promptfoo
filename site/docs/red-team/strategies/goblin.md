@@ -12,7 +12,7 @@ Goblin complements Hydra by testing edge cases inspired by [Involuntary In-Conte
 
 ## Implementation
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: jailbreak:goblin

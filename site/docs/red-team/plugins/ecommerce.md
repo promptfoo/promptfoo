@@ -1,6 +1,6 @@
 ---
 sidebar_label: E-commerce
-description: Test e-commerce AI systems for payment-data exposure, price manipulation, compliance bypass, and order fraud.
+description: Test e-commerce AI systems for payment-data exposure, price manipulation, compliance bypass, and order fraud using Promptfoo's configurable plugin collection.
 ---
 
 # E-commerce Red Teaming Plugins
@@ -43,7 +43,7 @@ Example risk: changing a post-purchase shipping address or issuing a refund with
 
 Use the `ecommerce` collection to include all four e-commerce plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   purpose: 'An online retail assistant that can explain products and order status but cannot change prices, disclose payment data, or modify an order without authorization.'
   plugins:
@@ -52,7 +52,7 @@ redteam:
 
 To focus on specific workflows, configure individual plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - ecommerce:pci-dss
@@ -65,7 +65,7 @@ redteam:
 
 Apply adversarial strategies to test whether reframing or known templates weaken e-commerce safeguards:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   purpose: 'An online retail shopping assistant with access to product, pricing, and order tools.'
   plugins:

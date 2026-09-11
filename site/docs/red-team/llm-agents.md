@@ -389,7 +389,7 @@ This is optional. The main red-team workflow remains plugin-driven; trajectory a
 
 Enable root-level tracing so Promptfoo can receive spans, then enable red-team tracing where you want trace summaries used:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 tracing:
   enabled: true
   otlp:

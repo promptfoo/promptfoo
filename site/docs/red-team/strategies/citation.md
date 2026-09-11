@@ -12,14 +12,14 @@ This approach exploits LLM bias toward authority. It was introduced in [research
 
 Use it like so in your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - citation
 ```
 
 You can apply it to specific plugins by adding a `plugins` config. For example:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - id: citation
     config:

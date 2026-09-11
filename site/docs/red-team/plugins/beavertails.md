@@ -38,7 +38,7 @@ export HF_TOKEN=your_huggingface_token  # or HF_API_TOKEN
 
 2. Enable the plugin in your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - beavertails

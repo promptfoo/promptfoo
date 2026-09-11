@@ -12,7 +12,7 @@ The Leetspeak strategy tests an AI system's ability to resist encoded inputs tha
 
 Use it in your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - leetspeak
 ```

@@ -12,14 +12,14 @@ The Math Prompt strategy tests an AI system's ability to handle harmful inputs u
 
 Use it in your promptfooconfig.yaml like this:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - math-prompt
 ```
 
 To choose the mathematical concepts used for local generation:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - id: math-prompt
     config:

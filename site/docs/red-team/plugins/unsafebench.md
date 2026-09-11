@@ -27,7 +27,7 @@ export HF_TOKEN=your_huggingface_token  # or HF_API_TOKEN
 
 2. Enable the plugin in your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - unsafebench # Use all categories
@@ -65,7 +65,7 @@ The UnsafeBench dataset contains 3,271 unsafe images across the following catego
 
 The UnsafeBench plugin supports the following configuration options:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - id: unsafebench

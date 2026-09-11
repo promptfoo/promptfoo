@@ -1,7 +1,7 @@
 ---
 sidebar_label: Overview
 title: Red Team Strategies
-description: Catalog of red team strategies for finding vulnerabilities in LLM applications
+description: Compare red team strategies for LLM applications, including text transforms, adaptive jailbreaks, multi-turn conversations, and indirect prompt injection.
 ---
 
 import StrategyTable from '@site/docs/\_shared/StrategyTable';
@@ -16,11 +16,11 @@ Strategies change how adversarial inputs reach an LLM application. [Plugins](/do
 
 Start with a single-turn and a multi-turn strategy, then add specialized strategies for the attack surfaces your application exposes.
 
-### Meta Agent: Single-Turn Coverage
+### Meta Agent: Single-Turn Coverage {#meta-agent-best-for-single-turn}
 
 The [Meta Agent](/docs/red-team/strategies/meta/) builds an attack taxonomy, tracks earlier attempts, and adapts single-turn attacks to your target.
 
-### Hydra Multi-Turn: Adaptive Conversations
+### Hydra Multi-Turn: Adaptive Conversations {#hydra-multi-turn-best-for-multi-turn}
 
 [Hydra](/docs/red-team/strategies/hydra/) adapts across conversation turns and shares attacker learnings across a scan. It can replay the full transcript to a stateless target or use a target-managed session when the application stores prior turns.
 
@@ -32,7 +32,7 @@ The [Meta Agent](/docs/red-team/strategies/meta/) builds an attack taxonomy, tra
 
 For most applications, start with:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - jailbreak:meta # Single-turn agentic attacks
@@ -79,7 +79,7 @@ All single-turn strategies can be applied to multi-turn applications. Multi-turn
 
 ### Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - jailbreak:meta # string syntax
@@ -90,7 +90,7 @@ redteam:
 
 Strategies apply to all plugins by default. To limit a strategy to specific plugins, set its `plugins` option:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: jailbreak:tree
@@ -103,7 +103,7 @@ redteam:
 
 Chain strategies in order with the `layer` strategy. This is useful when you want to apply a transformation first, then another technique:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer

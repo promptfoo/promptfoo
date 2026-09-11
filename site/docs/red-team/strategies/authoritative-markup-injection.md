@@ -27,7 +27,7 @@ This technique is distinct from simple prompt injection because it focuses speci
 
 Add it to your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - authoritative-markup-injection
@@ -35,7 +35,7 @@ redteam:
 
 To specify which prompt variable receives the generated markup:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: authoritative-markup-injection
@@ -51,7 +51,7 @@ This strategy generates authoritative markup through a hosted generation endpoin
 
 Combine with red team plugins to test specific vulnerability categories:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - harmful

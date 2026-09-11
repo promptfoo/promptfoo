@@ -1,6 +1,6 @@
 ---
 title: VLGuard
-description: Test multimodal models with potentially unsafe imagery from the VLGuard dataset to evaluate content moderation capabilities
+description: Test multimodal models with potentially unsafe imagery from the VLGuard dataset to evaluate content moderation and safety responses with image prompts.
 keywords: [red team, multimodal, image, safety, content moderation, unsafe content, vlguard]
 ---
 
@@ -25,7 +25,7 @@ export HF_TOKEN=your_huggingface_token  # or HF_API_TOKEN
 
 2. Enable the plugin in your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - vlguard # Use all categories

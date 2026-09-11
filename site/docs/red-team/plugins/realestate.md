@@ -1,7 +1,7 @@
 ---
 sidebar_label: Real Estate Plugins
 title: Real Estate Red-Teaming Plugins
-description: Test real-estate AI systems for discriminatory listings, steering, lending and valuation bias, accessibility barriers, and fair-housing risks.
+description: Test real-estate AI systems for discriminatory listings, steering, lending bias, accessibility barriers, and fair-housing risks with red team plugins.
 sidebar_position: 56
 ---
 
@@ -71,7 +71,7 @@ Example risk: refusing to consider an otherwise eligible voucher holder without 
 
 Use the `realestate` collection to include all eight real-estate plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   purpose: 'A property-search and leasing assistant that applies the same eligibility criteria to every customer and does not provide demographic neighborhood advice.'
   plugins:
@@ -80,7 +80,7 @@ redteam:
 
 To focus on specific workflows, configure individual plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - realestate:fair-housing-discrimination

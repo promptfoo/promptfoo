@@ -14,7 +14,7 @@ Promptfoo implements a single-turn adaptation of [Unit 42's Bad Likert Judge tec
 
 Basic usage in `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - jailbreak:likert
 ```

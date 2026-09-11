@@ -12,7 +12,7 @@ The **Mischievous User** simulates a multi-turn conversation between a user who 
 
 To use it, add it to your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: mischievous-user

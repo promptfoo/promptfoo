@@ -1,6 +1,6 @@
 ---
 title: VLSU
-description: Test multimodal models for compositional safety where individually safe images and text combine to produce harmful outputs
+description: Test multimodal models for compositional safety, where individually safe images and text combine to produce harmful outputs, using the VLSU red team dataset.
 keywords: [red team, multimodal, image, safety, compositional, vlsu, vision-language]
 ---
 
@@ -14,7 +14,7 @@ This is a critical evaluation because models often achieve 90%+ accuracy on indi
 
 Enable the plugin in your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - vlsu # All categories
@@ -138,7 +138,7 @@ redteam:
 
 To specifically test cases where safe inputs combine to create unsafe outputs:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - id: vlsu
@@ -148,7 +148,7 @@ redteam:
 
 ### Testing Specific Severity Patterns
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - id: vlsu

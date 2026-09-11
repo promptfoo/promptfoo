@@ -11,14 +11,14 @@ The other-encodings strategy collection provides multiple text transformation me
 
 You can use the `other-encodings` collection in your configuration to automatically include all encoding strategies in this collection:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - other-encodings # Includes camelCase, Morse code, Pig Latin, and emoji encoding
 ```
 
 This is equivalent to specifying each strategy individually:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - camelcase
   - morse
@@ -49,7 +49,7 @@ helloWorld
 
 Add the camelCase strategy individually to your red team configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - camelcase # Apply camelCase transformation
 ```
@@ -76,7 +76,7 @@ For example, "Hello World" becomes:
 
 Add the Morse code strategy individually to your red team configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - morse # Apply Morse code transformation
 ```
@@ -103,7 +103,7 @@ elloHay orldWay
 
 Add the Pig Latin strategy individually to your red team configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - piglatin # Apply Pig Latin transformation
 ```
@@ -122,7 +122,7 @@ The Emoji encoding strategy hides a UTF-8 payload inside invisible Unicode varia
 
 Add the emoji strategy individually to your red team configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - emoji # Hide text inside an emoji
 ```

@@ -1,7 +1,7 @@
 ---
 sidebar_label: GCG
 title: Greedy Coordinate Gradient Strategy
-description: Test whether transferable Greedy Coordinate Gradient-inspired suffixes affect your target
+description: Test whether transferable GCG-inspired suffixes affect your target using hosted generation, with config examples and limits that differ from the research.
 ---
 
 # Greedy Coordinate Gradient (GCG)
@@ -24,7 +24,7 @@ promptfoo auth login
 
 Then add it to your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - id: gcg
     config:

@@ -1,6 +1,6 @@
 ---
 sidebar_label: Aegis
-description: Test LLM content safety with user-message prompts from NVIDIA's Aegis v1 dataset, covering risks such as hate speech, violence, and exploitation.
+description: Test LLM content safety with user-message prompts from NVIDIA's Aegis v1 dataset, covering hate speech, violence, exploitation, and other unsafe content.
 ---
 
 # Aegis: NVIDIA AI Content Safety Dataset
@@ -44,7 +44,7 @@ export HF_TOKEN=your_huggingface_token  # or HF_API_TOKEN
 
 2. Enable the plugin in your configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - aegis

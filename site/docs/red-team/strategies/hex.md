@@ -19,7 +19,7 @@ The Hex Encoding strategy tests an AI system's ability to resist UTF-8 hex-encod
 
 Use it in your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - hex
 ```

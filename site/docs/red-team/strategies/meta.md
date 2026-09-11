@@ -1,7 +1,7 @@
 ---
 sidebar_label: Meta-Agent Jailbreaks
 title: Meta-Agent Jailbreaks Strategy
-description: Adapt single-turn jailbreak attacks based on how the target responds
+description: Adapt single-turn jailbreak attacks based on target responses with jailbreak:meta. Configure attempt limits, attack generation, and grading for red team tests.
 ---
 
 # Meta-Agent Jailbreaks Strategy
@@ -14,7 +14,7 @@ Instead of repeatedly refining one prompt, the meta-agent builds an attack taxon
 
 Add it to your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - jailbreak:meta
@@ -22,7 +22,7 @@ redteam:
 
 To configure the number of attempts:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: jailbreak:meta
@@ -47,7 +47,7 @@ This strategy requires Promptfoo Cloud to maintain persistent memory and strateg
 
 The meta-agent remembers earlier attempts. When one approach fails, it can switch to a different technique instead of repeating the same pattern. The broader search requires additional API calls.
 
-## Deprecated Jailbreak Alias
+## Deprecated Jailbreak Alias {#meta-agent-vs-standard-jailbreak}
 
 The top-level `jailbreak` strategy is deprecated and now runs `jailbreak:meta`. Replace `jailbreak` with `jailbreak:meta` in existing configurations to avoid the deprecation warning.
 

@@ -1,7 +1,7 @@
 ---
 sidebar_label: Finance Plugins
 title: Financial Red-Teaming Plugins - AI Security for Finance
-description: Test financial AI systems for unsafe advice, market misconduct, data exposure, inaccurate calculations, and compliance risks.
+description: Test financial AI systems for unsafe advice, market misconduct, data exposure, inaccurate calculations, and compliance risks with configurable red team plugins.
 ---
 
 # Financial Red-Teaming Plugins
@@ -101,7 +101,7 @@ Example risk: agreeing that a customer should concentrate retirement savings in 
 
 Use the `financial` collection to include all 12 financial plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   purpose: 'A banking assistant that can explain products but cannot provide personalized investment advice or execute trades.'
   plugins:
@@ -110,7 +110,7 @@ redteam:
 
 To run a smaller suite or add representative examples, configure individual plugins:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - id: financial:misconduct

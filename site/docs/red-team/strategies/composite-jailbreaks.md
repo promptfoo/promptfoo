@@ -14,14 +14,14 @@ It works by chaining together individual techniques in different combinations to
 
 Add it to your `promptfooconfig.yaml`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - jailbreak:composite
 ```
 
 You can customize the behavior with these options:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - id: jailbreak:composite
     config:
@@ -33,7 +33,7 @@ strategies:
 
 For fine-grained control over which techniques and evasions are combined, use the pipeline configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 strategies:
   - id: jailbreak:composite
     config:

@@ -127,7 +127,7 @@ You can also compare the results of multiple foundation models. To do this, crea
 
 Here is a sample Promptfoo configuration file to run a red team scan against multiple foundation models at once:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 description: DeepSeek R1 0528 vs. GPT-5.4 Red Team
 
 targets:

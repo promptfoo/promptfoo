@@ -1,6 +1,6 @@
 ---
 sidebar_label: FERPA
-description: Test AI systems for FERPA risks involving unauthorized disclosure of student education records, grades, and personally identifiable information.
+description: Test AI systems for FERPA risks involving unauthorized disclosure of student education records, grades, and personal information with red team prompts.
 ---
 
 # FERPA
