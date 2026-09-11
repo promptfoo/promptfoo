@@ -3,6 +3,7 @@ import {
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
+  stripLeadingHeaders,
 } from '../../src/matchers/shared';
 
 describe('normalizeMatcherTokenUsage', () => {
@@ -77,6 +78,79 @@ describe('normalizeMatcherTokenUsage', () => {
   });
 });
 
+describe('stripLeadingHeaders', () => {
+  it('strips leading markdown headers on standalone lines', () => {
+    expect(stripLeadingHeaders('# Extracted sentences\nParis is the capital.')).toBe(
+      'Paris is the capital.',
+    );
+    expect(stripLeadingHeaders('## Relevant Context:\nParis is the capital.')).toBe(
+      'Paris is the capital.',
+    );
+    expect(stripLeadingHeaders('### Candidate Sentences:\n1. First sentence.')).toBe(
+      '1. First sentence.',
+    );
+  });
+
+  it('strips leading preamble labels with markdown formatting or colons', () => {
+    expect(stripLeadingHeaders('**Extracted sentences:**\nParis is the capital.')).toBe(
+      'Paris is the capital.',
+    );
+    expect(stripLeadingHeaders('*Relevant context:*\nParis is the capital.')).toBe(
+      'Paris is the capital.',
+    );
+    expect(stripLeadingHeaders('Candidate sentences:\nParis is the capital.')).toBe(
+      'Paris is the capital.',
+    );
+    expect(stripLeadingHeaders('Extracted sentences\nParis is the capital.')).toBe(
+      'Paris is the capital.',
+    );
+    expect(stripLeadingHeaders('Candidate sentence(s):\nParis is the capital.')).toBe(
+      'Paris is the capital.',
+    );
+  });
+
+  it('strips inline leading headers and labels on the same line', () => {
+    expect(stripLeadingHeaders('# Extracted sentences: Paris is the capital.')).toBe(
+      'Paris is the capital.',
+    );
+    expect(stripLeadingHeaders('## Relevant Context: Paris is the capital.')).toBe(
+      'Paris is the capital.',
+    );
+    expect(stripLeadingHeaders('**Candidate sentences:** Paris is the capital.')).toBe(
+      'Paris is the capital.',
+    );
+    expect(stripLeadingHeaders('Candidate sentences: Paris is the capital.')).toBe(
+      'Paris is the capital.',
+    );
+  });
+
+  it('strips multiple leading headers and blank lines', () => {
+    expect(
+      stripLeadingHeaders(
+        '# Context Relevance\n\n## Extracted sentences:\n\nParis is the capital.',
+      ),
+    ).toBe('Paris is the capital.');
+  });
+
+  it('returns empty string when input contains only headers and labels', () => {
+    expect(stripLeadingHeaders('# Extracted sentences')).toBe('');
+    expect(stripLeadingHeaders('## Relevant Context:')).toBe('');
+    expect(stripLeadingHeaders('**Candidate sentences:**')).toBe('');
+    expect(stripLeadingHeaders('')).toBe('');
+    expect(stripLeadingHeaders('   \n  \n  ')).toBe('');
+  });
+
+  it('preserves regular content, numbers, and sentences without leading headers', () => {
+    expect(stripLeadingHeaders('Paris is the capital of France. France is in Europe.')).toBe(
+      'Paris is the capital of France. France is in Europe.',
+    );
+    expect(stripLeadingHeaders('1. First item\n2. Second item')).toBe(
+      '1. First item\n2. Second item',
+    );
+    expect(stripLeadingHeaders('Insufficient Information')).toBe('Insufficient Information');
+  });
+});
+
 describe('splitIntoSentences', () => {
   it('splits on newlines and drops blank lines', () => {
     expect(splitIntoSentences('a\n\nb\n  \nc')).toEqual(['a', 'b', 'c']);
@@ -92,6 +166,17 @@ describe('splitIntoSentences', () => {
       '2. France is in Europe.',
     ]);
   });
+
+  it('strips leading markdown headers and labels before splitting', () => {
+    expect(
+      splitIntoSentences(
+        '# Extracted sentences\n1. Paris is the capital.\n2. France is in Europe.',
+      ),
+    ).toEqual(['1. Paris is the capital.', '2. France is in Europe.']);
+    expect(
+      splitIntoSentences('## Relevant Context:\nParis is the capital.\nFrance is in Europe.'),
+    ).toEqual(['Paris is the capital.', 'France is in Europe.']);
+  });
 });
 
 describe('splitTextIntoSentences', () => {
@@ -99,6 +184,29 @@ describe('splitTextIntoSentences', () => {
     expect(
       splitTextIntoSentences('Paris is the capital of France. France is in Europe. Nice weather.'),
     ).toEqual(['Paris is the capital of France.', 'France is in Europe.', 'Nice weather.']);
+  });
+
+  it('strips leading markdown headers without polluting extracted sentences or splitting', () => {
+    expect(
+      splitTextIntoSentences(
+        '# Extracted sentences\nParis is the capital of France. France is in Europe.',
+      ),
+    ).toEqual(['Paris is the capital of France.', 'France is in Europe.']);
+    expect(
+      splitTextIntoSentences(
+        '## Relevant Context:\n1. Paris is the capital.\n2. France is in Europe.',
+      ),
+    ).toEqual(['1. Paris is the capital.', '2. France is in Europe.']);
+    expect(
+      splitTextIntoSentences(
+        '# Extracted sentences: Paris is the capital of France. France is in Europe.',
+      ),
+    ).toEqual(['Paris is the capital of France.', 'France is in Europe.']);
+    expect(
+      splitTextIntoSentences(
+        '**Candidate sentences:**\nParis is the capital of France. France is in Europe.',
+      ),
+    ).toEqual(['Paris is the capital of France.', 'France is in Europe.']);
   });
 
   it('is unaffected by an incidental leading/trailing newline (regression for the prose fix)', () => {
