@@ -76,6 +76,7 @@ fi
       path.join(binDir, 'promptfoo'),
       `#!/bin/sh
 if [ "\${1:-}" = '--version' ]; then
+  printf '%s\\n' "$PWD" > '${path.join(tempDir, 'version-cwd')}'
   if [ -n "\${OPENAI_API_KEY:-}" ] || [ -n "\${PROMPTFOO_GITLAB_TOKEN:-}" ]; then
     printf 'Provider or GitLab credentials reached version validation\\n' >&2
     exit 70
@@ -422,6 +423,13 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
 
     expect(result.status).toBe(0);
     expect(fs.existsSync(path.join(tempDir, 'npm-args'))).toBe(false);
+  });
+
+  it('runs version validation outside the untrusted checkout', async () => {
+    const result = await runScript(job.before_script[0]);
+
+    expect(result.status).toBe(0);
+    expect(fs.readFileSync(path.join(tempDir, 'version-cwd'), 'utf8').trim()).toBe('/');
   });
 
   it.each(['latest', '^0.123.0', '01.121.19', '0.123.0 --registry=https://example.invalid'])(

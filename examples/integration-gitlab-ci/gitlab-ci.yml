@@ -37,7 +37,7 @@
         exit 1
       fi
 
-      actual_version="$(env -i PATH="$PATH" HOME="${HOME:-/home/promptfoo}" promptfoo --version)"
+      actual_version="$(cd / && env -i PATH="$PATH" HOME="${HOME:-/home/promptfoo}" promptfoo --version)"
       if [ "$actual_version" != "$PROMPTFOO_VERSION" ]; then
         echo "Pinned Promptfoo image contains $actual_version, expected $PROMPTFOO_VERSION." >&2
         exit 1
