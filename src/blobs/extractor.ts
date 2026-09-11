@@ -4,7 +4,7 @@ import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { extractBlobHashesFromValue } from './blobRefs';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
-import { type BlobRef, recordBlobReference, storeBlob } from './index';
+import { type BlobRef, isEvalPersisted, recordBlobReference, storeBlob } from './index';
 
 import type { ProviderResponse } from '../types/providers';
 
@@ -390,6 +390,12 @@ export async function extractAndStoreBinaryData(
   context?: BlobContext,
 ): Promise<ProviderResponse | null | undefined> {
   if (!response) {
+    return response;
+  }
+
+  // Evals run with --no-write have no database row to own stored media, and an unreferenced blob
+  // cannot be served or shared, so keep their media inline as PROMPTFOO_INLINE_MEDIA does.
+  if (context?.evalId && !(await isEvalPersisted(context.evalId))) {
     return response;
   }
 

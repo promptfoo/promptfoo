@@ -318,4 +318,11 @@ describe('blob references for evals without a database row', () => {
     const { references } = await getRows();
     expect(references).toHaveLength(0);
   });
+
+  it('reports whether an eval has a database row', async () => {
+    const { isEvalPersisted } = await import('../../src/blobs');
+
+    await expect(isEvalPersisted(savedEvalId)).resolves.toBe(true);
+    await expect(isEvalPersisted(unsavedEvalId)).resolves.toBe(false);
+  });
 });

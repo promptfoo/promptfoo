@@ -150,22 +150,21 @@ export async function getBlobUrl(hash: string, expiresInSeconds?: number): Promi
 
 type BlobReferenceDb = Pick<Awaited<ReturnType<typeof getDb>>, 'select'>;
 
-/**
- * Evals run with `--no-write` never get an `evals` row, so a reference to them would violate
- * the foreign key and discard the stored media. Keep the blob without an eval association.
- */
 async function isPersistedEval(db: BlobReferenceDb, evalId: string): Promise<boolean> {
   const row = await db
     .select({ id: evalsTable.id })
     .from(evalsTable)
     .where(eq(evalsTable.id, evalId))
     .get();
-  if (!row) {
-    logger.debug('[BlobStorage] Skipping blob reference for an eval without a database row', {
-      evalId,
-    });
-  }
   return Boolean(row);
+}
+
+/**
+ * Whether an eval has a database row. Evals run with `--no-write` never do, so a blob reference to
+ * them would violate the foreign key, and an unreferenced blob cannot be served or shared.
+ */
+export async function isEvalPersisted(evalId: string): Promise<boolean> {
+  return isPersistedEval(await getDb(), evalId);
 }
 
 export async function recordBlobReference(
@@ -184,6 +183,10 @@ export async function recordBlobReference(
 
   const db = await getDb();
   if (!(await isPersistedEval(db, refContext.evalId))) {
+    logger.debug('[BlobStorage] Skipping blob reference for an eval without a database row', {
+      hash,
+      evalId: refContext.evalId,
+    });
     return;
   }
 
