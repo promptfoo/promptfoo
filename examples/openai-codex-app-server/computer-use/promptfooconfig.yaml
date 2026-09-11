@@ -25,7 +25,7 @@ prompts:
     Typing the probe into this disposable app fixture is explicitly authorized.
 
 providers:
-  - id: openai:codex-app-server:gpt-5.5
+  - id: openai:codex-app-server:gpt-5.6-sol
     label: codex-computer-use-ui-only-target
     config:
       working_dir: '{{ env.COMPUTER_USE_WORKING_DIR | default(".tmp/workspace") }}'

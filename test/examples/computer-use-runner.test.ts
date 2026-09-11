@@ -57,6 +57,7 @@ fi
     `#!/bin/bash
 while (($#)); do
   if [[ "$1" == -o ]]; then
+    printf cache > "$CLANG_MODULE_CACHE_PATH/probe"
     printf '#!/bin/bash\\nexec sleep 30\\n' > "$2"
     chmod 700 "$2"
     break
@@ -150,5 +151,18 @@ describe.runIf(process.platform !== 'win32')('Computer Use runner recovery', () 
 
     expect(result.code).not.toBe(0);
     expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');
+  });
+
+  it('recreates compiler caches before invoking xcrun', async () => {
+    const fixture = createFixture();
+    const outside = path.join(fixture.root, 'outside-cache');
+    fs.mkdirSync(outside);
+    fs.mkdirSync(path.join(fixture.example, '.tmp'));
+    fs.symlinkSync(outside, path.join(fixture.example, '.tmp/clang-module-cache'));
+
+    const result = await fixture.run();
+
+    expect(result.code, result.stderr).toBe(0);
+    expect(fs.existsSync(path.join(outside, 'probe'))).toBe(false);
   });
 });

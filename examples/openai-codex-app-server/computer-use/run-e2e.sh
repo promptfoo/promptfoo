@@ -233,7 +233,7 @@ isolated_codex plugin list --json >"$TMP_DIR/plugin-list.json"
 rm -rf -- "$WORKSPACE_DIR"
 mkdir -p "$WORKSPACE_DIR"
 
-rm -rf -- "$TARGET_APP_DIR"
+rm -rf -- "$TARGET_APP_DIR" "$TMP_DIR/clang-module-cache" "$TMP_DIR/swift-module-cache"
 mkdir -p \
   "$TARGET_APP_DIR/Contents/MacOS" \
   "$TMP_DIR/clang-module-cache" \
