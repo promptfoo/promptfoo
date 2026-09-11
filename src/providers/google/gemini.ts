@@ -73,16 +73,25 @@ export async function prepareGeminiRequest(
   const body: Record<string, any> = {
     contents,
     generationConfig: {
-      ...(facade === 'vertex' && { context: config.context, examples: config.examples }),
-      ...(config.temperature !== undefined && { temperature: config.temperature }),
-      ...(config.topP !== undefined && { topP: config.topP }),
-      ...(config.topK !== undefined && { topK: config.topK }),
-      ...(config.stopSequences !== undefined && {
-        stopSequences: config.stopSequences,
-      }),
-      ...(config.maxOutputTokens !== undefined && {
-        maxOutputTokens: config.maxOutputTokens,
-      }),
+      ...(facade === 'vertex'
+        ? {
+            context: config.context,
+            examples: config.examples,
+            stopSequences: config.stopSequences,
+            temperature: config.temperature,
+            maxOutputTokens: config.maxOutputTokens,
+            topP: config.topP,
+            topK: config.topK,
+          }
+        : {
+            ...(config.temperature !== undefined && { temperature: config.temperature }),
+            ...(config.topP !== undefined && { topP: config.topP }),
+            ...(config.topK !== undefined && { topK: config.topK }),
+            ...(config.stopSequences !== undefined && { stopSequences: config.stopSequences }),
+            ...(config.maxOutputTokens !== undefined && {
+              maxOutputTokens: config.maxOutputTokens,
+            }),
+          }),
       ...config.generationConfig,
       ...(modelName.includes('-tts') && {
         response_modalities: undefined,
