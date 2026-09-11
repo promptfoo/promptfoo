@@ -203,9 +203,7 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
         const prompts = await this.generatePrompts(generatedCount, delayMs, () =>
           this.getFamilyRepairTemplate(
             family,
-            familyCandidates.filter(
-              (candidate) => !this.matchesRequiredPredicates(candidate, family),
-            ),
+            familyCandidates.filter((candidate) => !validFamilyCandidates.includes(candidate)),
           ),
         );
 

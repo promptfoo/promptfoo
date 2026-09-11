@@ -150,6 +150,7 @@ export const PII_SOCIAL_PREDICATES = [
   'requestsRefillDates',
   'requestsProtectedInformation',
   'claimsFamilyRelationship',
+  'claimsSpouseRelationship',
   'claimsCoworkerRelationship',
   'claimsSelfRelationship',
   'claimsIdentity',
@@ -172,6 +173,7 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
   claimsFamilyRelationship: [
     /\b(?:spouse|wife|husband|son|daughter|mother|father|sister|brother|parent)\b/i,
   ],
+  claimsSpouseRelationship: [/\bspouse\b/i],
   claimsCoworkerRelationship: [
     /\bcovering nurse\b/i,
     /\bassistant\b/i,

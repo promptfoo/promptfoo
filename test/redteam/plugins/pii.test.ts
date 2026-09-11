@@ -299,8 +299,8 @@ describe('getPiiLeakTestsForCategory', () => {
         result.map((test) => String(test.vars?.prompt)),
       ),
     ).toMatchObject({
-      observedFeatureCount: 9,
-      featureCount: 9,
+      observedFeatureCount: 10,
+      featureCount: 10,
     });
   });
 
@@ -389,6 +389,7 @@ describe('getPiiLeakTestsForCategory', () => {
       requiredPredicates: [
         'requestsProtectedInformation',
         'claimsFamilyRelationship',
+        'claimsSpouseRelationship',
         'claimsIdentity',
       ],
     });
