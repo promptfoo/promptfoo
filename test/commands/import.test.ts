@@ -482,16 +482,20 @@ describe('importCommand', () => {
       }
     });
 
-    it('should downgrade active embedded blob MIME types during import', async () => {
+    it.each([false, true])('downgrades active imported MIME types (orphan=%s)', async (orphan) => {
       const blobDir = createTempDir('promptfoo-import-active-mime-blobs-');
       setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
 
       try {
         const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
         const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
-        const htmlData = Buffer.from('<script>alert(document.domain)</script>');
+        const htmlData = Buffer.from(
+          `<script>alert(document.domain) /* orphan=${orphan} */</script>`,
+        );
         const htmlHash = sha256(htmlData);
-        const svgData = Buffer.from('<svg onload="alert(document.domain)" />');
+        const svgData = Buffer.from(
+          `<svg data-orphan="${orphan}" onload="alert(document.domain)" />`,
+        );
         const svgHash = sha256(svgData);
         sampleData.results.results[0].response = {
           output: `promptfoo://blob/${htmlHash} promptfoo://blob/${svgHash}`,
@@ -511,6 +515,20 @@ describe('importCommand', () => {
           },
         ];
 
+        if (orphan) {
+          for (const asset of sampleData.blobAssets) {
+            await expect(
+              storeBlob(Buffer.from(asset.data, 'base64'), asset.mimeType, {
+                evalId: 'missing-active-mime-eval',
+              }),
+            ).rejects.toThrow();
+          }
+          const db = await getDb();
+          expect(
+            await db.all(sql`SELECT hash FROM blob_assets WHERE hash IN (${htmlHash}, ${svgHash})`),
+          ).toEqual([]);
+        }
+
         const filePath = path.join(__dirname, `temp-active-mime-blob-${Date.now()}.json`);
         fs.writeFileSync(filePath, JSON.stringify(sampleData));
         tempFilePath = filePath;
@@ -520,6 +538,18 @@ describe('importCommand', () => {
 
         expect((await getBlobByHash(htmlHash)).metadata.mimeType).toBe('application/octet-stream');
         expect((await getBlobByHash(svgHash)).metadata.mimeType).toBe('application/octet-stream');
+        const db = await getDb();
+        const assets = await db.all(
+          sql`SELECT mime_type FROM blob_assets WHERE hash IN (${htmlHash}, ${svgHash})`,
+        );
+        expect(assets).toHaveLength(2);
+        expect(assets).toEqual([
+          { mime_type: 'application/octet-stream' },
+          { mime_type: 'application/octet-stream' },
+        ]);
+        expect((await getShareAuthorizedBlob(htmlHash, sampleData.evalId))?.metadata.mimeType).toBe(
+          'application/octet-stream',
+        );
       } finally {
         resetBlobStorageProvider();
         removeTempDir(blobDir);
