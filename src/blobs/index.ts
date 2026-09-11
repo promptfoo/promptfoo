@@ -71,44 +71,39 @@ export async function storeBlob(
     ref: { ...result.ref, mimeType: safeMimeType },
   };
 
-  try {
-    // Track asset and reference in DB for dedup/auth/cascade
-    await db.transaction(async (tx) => {
-      await tx
-        .insert(blobAssetsTable)
-        .values({
-          hash: normalizedResult.ref.hash,
-          sizeBytes: normalizedResult.ref.sizeBytes,
-          mimeType: normalizedResult.ref.mimeType,
-          provider: normalizedResult.ref.provider,
-        })
-        .onConflictDoUpdate({
-          target: blobAssetsTable.hash,
-          set: { mimeType: normalizedResult.ref.mimeType },
-        })
-        .run();
+  // Track asset and reference in DB for dedup/auth/cascade. Do not delete provider bytes if this
+  // fails: a concurrent writer may already have registered and started using identical bytes.
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(blobAssetsTable)
+      .values({
+        hash: normalizedResult.ref.hash,
+        sizeBytes: normalizedResult.ref.sizeBytes,
+        mimeType: normalizedResult.ref.mimeType,
+        provider: normalizedResult.ref.provider,
+      })
+      .onConflictDoUpdate({
+        target: blobAssetsTable.hash,
+        set: { mimeType: normalizedResult.ref.mimeType },
+      })
+      .run();
 
-      if (refContext?.evalId && evalExists) {
-        await tx
-          .insert(blobReferencesTable)
-          .values({
-            id: randomUUID(),
-            blobHash: normalizedResult.ref.hash,
-            evalId: refContext.evalId,
-            testIdx: refContext.testIdx,
-            promptIdx: refContext.promptIdx,
-            location: refContext.location,
-            kind: refContext.kind,
-          })
-          .onConflictDoNothing()
-          .run();
-      }
-    });
-  } catch (error) {
-    // A concurrent writer may register identical bytes after this transaction fails, so physical
-    // cleanup here can delete a blob that another successful result owns.
-    throw error;
-  }
+    if (refContext?.evalId && evalExists) {
+      await tx
+        .insert(blobReferencesTable)
+        .values({
+          id: randomUUID(),
+          blobHash: normalizedResult.ref.hash,
+          evalId: refContext.evalId,
+          testIdx: refContext.testIdx,
+          promptIdx: refContext.promptIdx,
+          location: refContext.location,
+          kind: refContext.kind,
+        })
+        .onConflictDoNothing()
+        .run();
+    }
+  });
 
   return normalizedResult;
 }

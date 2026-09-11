@@ -421,6 +421,7 @@ describe('Blobs Routes', () => {
         mockedIsBlobStorageEnabled.mockReturnValue(true);
         mockedGetDb.mockResolvedValue(drizzle(client));
         mockedGetBlobUrl.mockResolvedValue('https://storage.example.com/image.png');
+        mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/png', 10));
 
         const denied = await api.get(`/api/blobs/${validHash}?evalId=shared-eval`);
         expect(denied.status).toBe(403);
@@ -443,13 +444,14 @@ describe('Blobs Routes', () => {
 
       const presignedUrl = 'https://s3.amazonaws.com/bucket/blob?signature=xyz';
       mockedGetBlobUrl.mockResolvedValue(presignedUrl);
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/png', 1024));
 
       const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(302);
       expect(response.header.location).toBe(presignedUrl);
       expect(mockedGetBlobUrl).toHaveBeenCalledWith(validHash);
-      expect(mockedGetBlobByHash).not.toHaveBeenCalled();
+      expect(mockedGetBlobByHash).toHaveBeenCalledWith(validHash);
     });
 
     it('should serve blob data directly when no presigned URL', async () => {
@@ -538,7 +540,7 @@ describe('Blobs Routes', () => {
       );
 
       mockedGetBlobUrl.mockResolvedValue(null);
-      // Blob metadata has different MIME type and size than the asset record
+      // Blob metadata has different MIME type and size than the asset record.
       mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/jpeg', 2048));
 
       const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
@@ -547,6 +549,7 @@ describe('Blobs Routes', () => {
       expect(response.header['content-type']).toBe('image/jpeg');
       expect(response.header['cache-control']).toBe('public, max-age=31536000, immutable');
       expect(response.header['accept-ranges']).toBe('none');
+      expect(mockedGetBlobUrl).not.toHaveBeenCalled();
       // Content-Length may be absent if response is gzipped
       expect(
         response.header['content-length'] === '2048' ||
@@ -1033,7 +1036,7 @@ describe('Blobs Routes', () => {
       expect(mockDb.where).toHaveBeenCalled();
     });
 
-    it('should not add where clause when search is empty', async () => {
+    it('should keep the trusted-reference filter when search is empty', async () => {
       mockedIsBlobStorageEnabled.mockReturnValue(true);
       const mockDb = createEvalsMockDb([]);
       mockedGetDb.mockReturnValue(mockDb);
@@ -1041,8 +1044,7 @@ describe('Blobs Routes', () => {
       const response = await api.get('/api/blobs/library/evals');
 
       expect(response.status).toBe(200);
-      // where is called with undefined (no conditions)
-      expect(mockDb.where).toHaveBeenCalledWith(undefined);
+      expect(mockDb.where).toHaveBeenCalledWith(expect.anything());
     });
 
     it('should reject search strings exceeding max length', async () => {

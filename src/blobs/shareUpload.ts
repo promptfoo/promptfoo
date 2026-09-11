@@ -1,3 +1,4 @@
+import async from 'async';
 import logger from '../logger';
 import { BLOB_SCAN_MAX_DEPTH, BLOB_SCAN_MAX_STRING_LENGTH, collectBlobHashes } from './blobRefs';
 import { getShareAuthorizedBlob } from './index';
@@ -129,11 +130,12 @@ export async function uploadRecordedResultBlobRefsForShare(
   cache: RemoteBlobUploadCache,
   target?: RemoteBlobUploadTarget,
 ): Promise<void> {
-  for (const [hash, contexts] of cache.resultContexts) {
-    for (const context of contexts.values()) {
-      await uploadBlobForShare(hash, cache, context, target);
-    }
-  }
+  const uploads = [...cache.resultContexts].flatMap(([hash, contexts]) =>
+    [...contexts.values()].map((context) => ({ hash, context })),
+  );
+  await async.mapLimit(uploads, 4, async ({ hash, context }: (typeof uploads)[number]) =>
+    uploadBlobForShare(hash, cache, context, target),
+  );
 }
 
 export async function uploadTraceBlobRefsForShare(

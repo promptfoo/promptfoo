@@ -36,21 +36,22 @@ const storedBlob: StoredBlob = {
     sizeBytes: 11,
   },
 };
+const remoteBlobResult = {
+  deduplicated: false,
+  ref: {
+    hash: 'a'.repeat(64),
+    mimeType: 'image/png',
+    provider: 'cloud',
+    sizeBytes: 11,
+    uri: 'promptfoo://blob/' + 'a'.repeat(64),
+  },
+};
 
 describe('share-time blob upload', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(getShareAuthorizedBlob).mockResolvedValue(storedBlob);
-    vi.mocked(uploadBlobRemote).mockResolvedValue({
-      deduplicated: false,
-      ref: {
-        hash: 'a'.repeat(64),
-        mimeType: 'image/png',
-        provider: 'cloud',
-        sizeBytes: 11,
-        uri: `promptfoo://blob/${'a'.repeat(64)}`,
-      },
-    });
+    vi.mocked(uploadBlobRemote).mockResolvedValue(remoteBlobResult);
   });
 
   it('uploads each referenced blob only once when the share context is unchanged', async () => {
@@ -175,6 +176,30 @@ describe('share-time blob upload', () => {
     await uploadRecordedResultBlobRefsForShare(cache);
     expect(getShareAuthorizedBlob).toHaveBeenCalledWith(hash, 'local-eval-plan');
     expect(uploadBlobRemote).toHaveBeenCalledOnce();
+  });
+
+  it('bounds recorded result uploads while allowing independent rows to overlap', async () => {
+    const cache = createRemoteBlobUploadCache();
+    let activeUploads = 0;
+    let maxActiveUploads = 0;
+    vi.mocked(uploadBlobRemote).mockImplementation(async () => {
+      activeUploads += 1;
+      maxActiveUploads = Math.max(maxActiveUploads, activeUploads);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      activeUploads -= 1;
+      return remoteBlobResult;
+    });
+    for (let i = 0; i < 5; i++) {
+      recordResultBlobRefsForShare('promptfoo://blob/' + String(i).repeat(64), cache, {
+        localEvalId: 'local-eval-plan',
+        remoteEvalId: 'remote-eval-plan',
+        promptIdx: i,
+      });
+    }
+
+    await uploadRecordedResultBlobRefsForShare(cache);
+    expect(uploadBlobRemote).toHaveBeenCalledTimes(5);
+    expect(maxActiveUploads).toBe(4);
   });
 
   it('uses recorded result provenance for a blob later referenced by a trace', async () => {

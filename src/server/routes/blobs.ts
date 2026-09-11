@@ -457,7 +457,9 @@ blobsRouter.get('/library/evals', async (req: Request, res: Response): Promise<v
   try {
     const db = await getDb();
 
-    const conditions = [];
+    const conditions = [
+      or(isNotNull(blobReferencesTable.kind), eq(blobReferencesTable.location, 'import')),
+    ];
     if (search) {
       // Escape SQL LIKE wildcards so user input is treated as literal text.
       // First escape backslashes (the ESCAPE character), then escape % and _.
@@ -542,20 +544,23 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
 
   let blob: Awaited<ReturnType<typeof getBlobByHash>>;
   try {
-    // Do not redirect legacy active-content metadata to a provider URL whose response headers
-    // this server cannot sanitize. Fallback metadata may itself be the sanitized remnant of a
-    // legacy unsafe provider object, so stream it through the inert MIME boundary below too.
+    blob = await getBlobByHash(hash);
+    // Do not redirect when either metadata source is unsafe or disagrees with the other. The
+    // provider controls redirect response headers, so both records must independently clear the
+    // same MIME boundary before bytes leave this server.
     const assetMimeType = sanitizeBlobMimeType(asset.mimeType);
+    const blobMimeType = blob.metadata.mimeType;
     const presigned =
       assetMimeType !== BLOB_MIME_TYPE_FALLBACK &&
-      assetMimeType === asset.mimeType.trim().toLowerCase()
+      blobMimeType !== BLOB_MIME_TYPE_FALLBACK &&
+      assetMimeType === asset.mimeType.trim().toLowerCase() &&
+      assetMimeType === blobMimeType
         ? await getBlobUrl(hash)
         : null;
     if (presigned) {
       res.redirect(302, presigned);
       return;
     }
-    blob = await getBlobByHash(hash);
   } catch (error) {
     logger.error('[BlobRoute] Failed to load blob', { error, hash });
     res.status(404).json({ error: 'Blob not found' });
