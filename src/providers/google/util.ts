@@ -1906,29 +1906,6 @@ export function resolveGoogleConfigFileReference(reference: string, basePath?: s
   return `file://${isAbsolute ? filePath : path.resolve(basePath, filePath)}`;
 }
 
-const GEMINI_MODELS_WITHOUT_SAMPLING_CONTROLS = new Set([
-  'gemini-3.6-flash',
-  'gemini-3.5-flash-lite',
-]);
-
-/** Remove sampling controls rejected by adaptive-only Gemini models. */
-export function omitUnsupportedGeminiSamplingControls<T extends Record<string, any>>(
-  modelName: string,
-  generationConfig: T,
-): T {
-  if (!GEMINI_MODELS_WITHOUT_SAMPLING_CONTROLS.has(modelName)) {
-    return generationConfig;
-  }
-
-  const compatibleConfig = { ...generationConfig } as T;
-  delete compatibleConfig.temperature;
-  delete compatibleConfig.topP;
-  delete compatibleConfig.topK;
-  delete compatibleConfig.top_p;
-  delete compatibleConfig.top_k;
-  return compatibleConfig;
-}
-
 export function geminiFormatAndSystemInstructions(
   prompt: string,
   contextVars?: Record<string, VarValue>,
