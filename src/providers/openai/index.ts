@@ -68,20 +68,21 @@ export class OpenAiGenericProvider implements ApiProvider {
     return `[OpenAI Provider ${this.modelName}]`;
   }
 
-  getOrganization(): string | undefined {
+  getOrganization(config: OpenAiSharedOptions = this.config): string | undefined {
     return (
-      this.config.organization ||
-      this.env?.OPENAI_ORGANIZATION ||
-      getEnvString('OPENAI_ORGANIZATION')
+      config.organization || this.env?.OPENAI_ORGANIZATION || getEnvString('OPENAI_ORGANIZATION')
     );
   }
 
+  /** Pass a prompt-merged config to derive that call's endpoint-dependent defaults. */
   getOpenAiRequestHeaders(
     customHeaders: Record<string, string> | undefined = this.config.headers,
+    config: OpenAiSharedOptions = this.config,
   ): Record<string, string> {
     let sendsToOpenAiApi = false;
     try {
-      sendsToOpenAiApi = new URL(this.getApiUrl()).hostname.toLowerCase() === 'api.openai.com';
+      sendsToOpenAiApi =
+        new URL(this.getApiUrl(config)).hostname.toLowerCase() === 'api.openai.com';
     } catch {
       // Leave malformed custom URLs to the request path to validate.
     }
@@ -93,7 +94,7 @@ export class OpenAiGenericProvider implements ApiProvider {
     const hasOrganizationOverride = hasHeaderOverride(customHeaders, OPENAI_ORGANIZATION_HEADER);
 
     const sendOriginatorDefault = !hasOriginatorOverride && sendsToOpenAiApi;
-    const organization = hasOrganizationOverride ? undefined : this.getOrganization();
+    const organization = hasOrganizationOverride ? undefined : this.getOrganization(config);
 
     return {
       ...(sendOriginatorDefault ? { [OPENAI_ORIGINATOR_HEADER]: DEFAULT_OPENAI_ORIGINATOR } : {}),
@@ -106,12 +107,13 @@ export class OpenAiGenericProvider implements ApiProvider {
     return 'https://api.openai.com/v1';
   }
 
-  getApiUrl(): string {
-    if (this.config.apiHost) {
-      return `https://${this.config.apiHost}/v1`;
+  /** Pass a prompt-merged config to resolve that call's endpoint. */
+  getApiUrl(config: OpenAiSharedOptions = this.config): string {
+    if (config.apiHost) {
+      return `https://${config.apiHost}/v1`;
     }
-    if (this.config.apiBaseUrl) {
-      return this.config.apiBaseUrl;
+    if (config.apiBaseUrl) {
+      return config.apiBaseUrl;
     }
     const envApiHost = this.env?.OPENAI_API_HOST || getEnvString('OPENAI_API_HOST');
     if (envApiHost) {

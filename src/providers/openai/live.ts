@@ -81,7 +81,9 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     url: string;
     headers: Record<string, string>;
   } {
-    const url = new URL(appendOpenAiApiPath(this.getApiUrl(), 'live/sessions'));
+    // A prompt-level apiBaseUrl or apiHost selects this call's endpoint, which then decides the
+    // host-dependent headers and which credentials may be sent.
+    const url = new URL(appendOpenAiApiPath(this.getApiUrl(config), 'live/sessions'));
     url.protocol = ['http:', 'ws:'].includes(url.protocol) ? 'ws:' : 'wss:';
     if (url.search) {
       throw new Error('GPT-Live session URLs do not accept query parameters.');
@@ -96,7 +98,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     url.password = '';
     // A prompt-level apiKey or apiKeyEnvar selects this call's credential.
     const apiKey = this.getApiKey(config);
-    const headers = this.getOpenAiRequestHeaders(config.headers);
+    const headers = this.getOpenAiRequestHeaders(config.headers, config);
     const credentialHeaders = Object.entries(headers).filter(
       ([name, value]) => isLiveCredentialHeader(name) && String(value).trim().length > 0,
     );

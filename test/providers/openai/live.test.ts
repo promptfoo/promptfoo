@@ -1033,6 +1033,86 @@ describe('OpenAiLiveProvider', () => {
     expect(sockets).toHaveLength(0);
   });
 
+  it('connects to a prompt-level endpoint with that prompt’s credentials and header defaults', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
+    const timeouts = { responseWindowMs: 100, websocketTimeout: 200, closeTimeoutMs: 100 };
+    const official = new OpenAiLiveProvider('gpt-live-1', { config: timeouts });
+    const gateway = new OpenAiLiveProvider('gpt-live-1', {
+      config: { ...timeouts, apiBaseUrl: 'http://provider-gateway.example/v1' },
+    });
+    const connectWith = async (live: OpenAiLiveProvider, config?: OpenAiLiveOptions) => {
+      const result = live.callApi('Hi', config && promptContext(config));
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      closed(socket);
+      expect((await result).error).toBeUndefined();
+      return { url: socket.url, headers: socket.options.headers };
+    };
+
+    // Provider-level config alone is unchanged.
+    expect(await connectWith(official)).toEqual({
+      url: 'wss://api.openai.com/v1/live/sessions',
+      headers: { Authorization: 'Bearer ambient-openai-key', 'X-OpenAI-Originator': 'promptfoo' },
+    });
+    expect(await connectWith(gateway)).toEqual({
+      url: 'ws://provider-gateway.example/v1/live/sessions',
+      headers: { Authorization: 'Bearer ambient-openai-key' },
+    });
+    // Prompt-level endpoints get that prompt's key and organization, without OpenAI's originator.
+    expect(
+      await connectWith(official, {
+        apiBaseUrl: 'http://prompt-gateway.example/v1',
+        apiKey: 'prompt-key',
+        organization: 'org-prompt',
+      }),
+    ).toEqual({
+      url: 'ws://prompt-gateway.example/v1/live/sessions',
+      headers: { Authorization: 'Bearer prompt-key', 'OpenAI-Organization': 'org-prompt' },
+    });
+    expect(
+      await connectWith(gateway, { apiHost: 'prompt-host.example', apiKey: 'prompt-key' }),
+    ).toEqual({
+      url: 'wss://prompt-host.example/v1/live/sessions',
+      headers: { Authorization: 'Bearer prompt-key' },
+    });
+    expect(await connectWith(gateway, { apiHost: 'api.openai.com' })).toEqual({
+      url: 'wss://api.openai.com/v1/live/sessions',
+      headers: { Authorization: 'Bearer ambient-openai-key', 'X-OpenAI-Originator': 'promptfoo' },
+    });
+    // The merged endpoint also decides ambient-key suppression, userinfo, and query rejection.
+    expect(
+      await connectWith(official, {
+        apiBaseUrl: 'http://prompt-gateway.example/v1',
+        headers: { 'api-key': 'gateway-key' },
+      }),
+    ).toEqual({
+      url: 'ws://prompt-gateway.example/v1/live/sessions',
+      headers: { 'api-key': 'gateway-key' },
+    });
+    expect(
+      await connectWith(official, { apiBaseUrl: 'http://user:secret@prompt-gateway.example/v1' }),
+    ).toEqual({
+      url: 'ws://prompt-gateway.example/v1/live/sessions',
+      headers: { Authorization: `Basic ${Buffer.from('user:secret').toString('base64')}` },
+    });
+    const query = await official.callApi(
+      'Hi',
+      promptContext({ apiBaseUrl: 'http://prompt-gateway.example/v1?api-key=secret' }),
+    );
+    expect(query.error).toBe('GPT-Live session URLs do not accept query parameters.');
+    // Nothing for a prompt-level endpoint reached the provider-level endpoint.
+    expect(sockets.map((socket) => new URL(socket.url).host)).toEqual([
+      'api.openai.com',
+      'provider-gateway.example',
+      'prompt-gateway.example',
+      'prompt-host.example',
+      'api.openai.com',
+      'prompt-gateway.example',
+      'prompt-gateway.example',
+    ]);
+  });
+
   it('sends URL userinfo as Basic authorization instead of an ambient key or socket URL credential', async () => {
     mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
     const apiBaseUrl = 'http://gateway-user:gateway%21secret@localhost:1234/v1';
@@ -1098,6 +1178,64 @@ describe('OpenAiLiveProvider', () => {
     expect(JSON.stringify(response)).not.toMatch(/gateway!secret|gateway%21secret/);
     expect(JSON.stringify(response)).not.toContain(token);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('redacts a short credential header echoed by a rejected handshake as whole tokens only', async () => {
+    const result = new OpenAiLiveProvider('gpt-live-1', {
+      config: {
+        apiBaseUrl: 'http://localhost:1234/v1',
+        headers: { 'api-key': 'k9z' },
+        responseWindowMs: 100,
+        websocketTimeout: 200,
+        closeTimeoutMs: 100,
+      },
+    }).callApi('Hi');
+    await vi.advanceTimersByTimeAsync(0);
+    sockets[0].emit(
+      'unexpected-response',
+      {},
+      httpResponse(
+        401,
+        JSON.stringify({
+          error: {
+            message:
+              'Invalid api-key k9z for "api-key":"k9z" and key=k9z (k9zz and xk9z are unrelated).',
+          },
+        }),
+      ),
+    );
+    expect((await result).error).toBe(
+      'GPT-Live WebSocket handshake failed (HTTP 401): Invalid api-key [REDACTED] for "api-key":"[REDACTED]" and key=[REDACTED] (k9zz and xk9z are unrelated).',
+    );
+  });
+
+  it('redacts a short userinfo password from Live error text and apiErrors', async () => {
+    const result = new OpenAiLiveProvider('gpt-live-1', {
+      config: {
+        apiBaseUrl: 'http://gateway-user:abc@localhost:1234/v1',
+        responseWindowMs: 100,
+        websocketTimeout: 200,
+        closeTimeoutMs: 100,
+      },
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket);
+    apiError(socket, {
+      type: 'server_error',
+      code: 'upstream_error',
+      message:
+        'Upstream rejected password abc for gateway-user:abc@localhost; abcd and xabc are unrelated. Retry abc.',
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    closed(socket);
+    const response = await result;
+    const message =
+      'Upstream rejected password [REDACTED] for [REDACTED]@localhost; abcd and xabc are unrelated. Retry [REDACTED].';
+    expect(response.error).toBe(`GPT-Live API error (upstream_error): ${message}`);
+    expect(response.metadata?.apiErrors).toEqual([
+      expect.objectContaining({ code: 'upstream_error', message }),
+    ]);
   });
 
   it('uses prompt-scoped headers, including a case-insensitive authorization override', async () => {
@@ -1233,6 +1371,76 @@ describe('OpenAiLiveProvider', () => {
       );
     },
   );
+
+  const lookupDelegation: OpenAiLiveOptions['delegation'] = {
+    type: 'responses',
+    responses: {
+      model: 'gpt-4.1-mini',
+      tools: [{ type: 'function', name: 'lookup', parameters: {}, strict: false }],
+    },
+  };
+  const functionCall = (id: string) => ({
+    type: 'function_call',
+    call_id: id,
+    name: 'lookup',
+    arguments: '{}',
+  });
+
+  it('stops a looping delegation at maxToolIterations before invoking the handler again', async () => {
+    const handler = vi.fn().mockResolvedValue('result');
+    const result = provider({
+      delegation: lookupDelegation,
+      functionCallHandler: handler,
+      maxToolIterations: 2,
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    for (const round of [1, 2, 3]) {
+      backend(socket, { type: 'response.created', response: { id: `resp_${round}` } });
+      backend(socket, { type: 'response.output_item.done', item: functionCall(`call_${round}`) });
+      backend(socket, {
+        type: 'response.completed',
+        response: { id: `resp_${round}`, output: [] },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(sentTypes(socket).filter((type) => type === 'response.create')).toHaveLength(2);
+    expect(
+      socket.sent
+        .filter((event) => event.type === 'response.item.create')
+        .map((event) => event.item.call_id),
+    ).toEqual(['call_1', 'call_2']);
+    expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+    closed(socket);
+    expect((await result).error).toBe(
+      'GPT-Live backend function calls exceeded maxToolIterations=2. Increase maxToolIterations if the eval needs more calls.',
+    );
+  });
+
+  it('bounds a single oversized batch of function calls by the default maxToolIterations', async () => {
+    const handler = vi.fn().mockResolvedValue('result');
+    const result = provider({
+      delegation: lookupDelegation,
+      functionCallHandler: handler,
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+    for (const index of [1, 2, 3, 4, 5, 6, 7, 8, 9]) {
+      backend(socket, { type: 'response.output_item.done', item: functionCall(`call_${index}`) });
+    }
+    backend(socket, { type: 'response.completed', response: { id: 'resp_1', output: [] } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(handler).toHaveBeenCalledTimes(8);
+    expect(sentTypes(socket).filter((type) => type === 'response.item.create')).toHaveLength(8);
+    expect(sentTypes(socket)).not.toContain('response.create');
+    expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+    closed(socket);
+    expect((await result).error).toBe(
+      'GPT-Live backend function calls exceeded maxToolIterations=8. Increase maxToolIterations if the eval needs more calls.',
+    );
+  });
 
   it.each(['response.failed', 'response.incomplete'])(
     'reports a backend %s and closes the capture',

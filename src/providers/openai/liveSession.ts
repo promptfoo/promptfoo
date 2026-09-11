@@ -7,7 +7,7 @@ import { isSecretField, REDACTED } from '../../util/sanitizer';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { convertG711ToPcm16, convertPcm16ToWav } from './audio';
 import { calculateOpenAIUsageCost } from './billing';
-import { getOpenAICompletionTokenDetails } from './util';
+import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from './util';
 import type OpenAI from 'openai';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
@@ -90,7 +90,7 @@ function collectCredentials(headers: Record<string, string>): string[] {
   return Object.entries(headers)
     .filter(([name, value]) => typeof value === 'string' && isLiveCredentialHeader(name))
     .flatMap(([, value]) => credentialForms(value))
-    .filter((value) => value.trim().length >= 4)
+    .filter((value) => value.length > 0)
     .sort((left, right) => right.length - left.length);
 }
 
@@ -297,7 +297,7 @@ export class LiveSession {
   private redact(text: string): string {
     let redacted = text;
     for (const credential of this.credentials) {
-      redacted = redacted.split(credential).join(REDACTED);
+      redacted = redactCredential(redacted, credential);
     }
     return redacted
       .replace(/\b(Bearer|Basic)\s+(?!\[REDACTED\])[\w.~+/=-]{8,}/gi, `$1 ${REDACTED}`)
@@ -694,6 +694,7 @@ export class LiveSession {
     this.runHandler(async () => {
       const delegation = this.options.config.delegation;
       const tools = delegation?.type === 'responses' ? delegation.responses.tools : [];
+      const maxToolIterations = resolveMaxToolIterations(this.options.config.maxToolIterations);
       for (const call of calls) {
         if (this.done || this.closing) {
           return;
@@ -707,6 +708,15 @@ export class LiveSession {
         }
         if (this.completedToolCalls.has(call.call_id)) {
           throw new Error('Repeated function call ID');
+        }
+        // Every handler call counts toward the session cap across batches and follow-up rounds.
+        // The check and the call run synchronously, so concurrent batches can't overshoot it.
+        if (this.completedToolCalls.size >= maxToolIterations) {
+          this.setError(
+            `GPT-Live backend function calls exceeded maxToolIterations=${maxToolIterations}. Increase maxToolIterations if the eval needs more calls.`,
+          );
+          this.closeSession();
+          return;
         }
         this.completedToolCalls.add(call.call_id);
         const output = await handler(call.name, call.arguments, this.handlerController.signal);
@@ -901,11 +911,48 @@ export class LiveSession {
 
 /** Redaction forms of a credential header: its value, bare token, and decoded Basic password. */
 function credentialForms(value: string): string[] {
-  const token = value.replace(/^(?:Bearer|Basic)\s+/i, '');
-  if (!/^Basic\s/i.test(value)) {
-    return [value, token];
+  // HTTP drops surrounding whitespace, so a gateway echoes the trimmed value.
+  const trimmed = value.trim();
+  const token = trimmed.replace(/^(?:Bearer|Basic)\s+/i, '');
+  if (!/^Basic\s/i.test(trimmed)) {
+    return [trimmed, token];
   }
   // A gateway can echo the decoded user:password pair or the password alone.
   const pair = Buffer.from(token, 'base64').toString('utf8');
-  return [value, token, pair, pair.slice(pair.indexOf(':') + 1)];
+  return [trimmed, token, pair, pair.slice(pair.indexOf(':') + 1)];
+}
+
+/** Characters that continue a credential-like token, such as base64 or URL-safe text. */
+const TOKEN_CHARACTER = /[A-Za-z0-9._~+/=-]/;
+
+/**
+ * Replace a credential in diagnostic text. Values of eight or more characters are replaced
+ * anywhere. Shorter values are replaced only as whole tokens, so `api-key abc`,
+ * `"api-key":"abc"`, and `user:abc@` lose the secret while longer words containing it stay intact.
+ */
+function redactCredential(text: string, credential: string): string {
+  if (credential.length >= 8) {
+    return text.split(credential).join(REDACTED);
+  }
+  let redacted = '';
+  let copied = 0;
+  let index = text.indexOf(credential);
+  while (index !== -1) {
+    const end = index + credential.length;
+    const before = text.charAt(index - 1);
+    const after = text.charAt(end);
+    // A key=value separator can precede a token, and a sentence-ending period can follow it.
+    const startsToken = before === '=' || !TOKEN_CHARACTER.test(before);
+    const endsToken =
+      !TOKEN_CHARACTER.test(after) ||
+      (after === '.' && !TOKEN_CHARACTER.test(text.charAt(end + 1)));
+    if (startsToken && endsToken) {
+      redacted += text.slice(copied, index) + REDACTED;
+      copied = end;
+      index = text.indexOf(credential, end);
+    } else {
+      index = text.indexOf(credential, index + 1);
+    }
+  }
+  return redacted + text.slice(copied);
 }

@@ -44,6 +44,15 @@ export function hasSensitiveOpenAiCachePath(value: string): boolean {
   return hasInlineSecret(value) || OPAQUE_CREDENTIAL_PATH_SEGMENT.test(value);
 }
 
+const DEFAULT_MAX_TOOL_ITERATIONS = 8;
+
+/** Resolve a tool-call cap from 1 to 64, falling back to 8 for missing or out-of-range values. */
+export function resolveMaxToolIterations(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 64
+    ? Math.floor(value)
+    : DEFAULT_MAX_TOOL_ITERATIONS;
+}
+
 export function appendOpenAiApiPath(apiUrl: string, endpoint: string, query?: string): string {
   const fragmentIndex = apiUrl.indexOf('#');
   const fragment = fragmentIndex === -1 ? '' : apiUrl.slice(fragmentIndex);

@@ -9,6 +9,7 @@ import {
   appendOpenAiApiPath,
   NON_CONVERSATIONAL_REALTIME_MODELS,
   OPENAI_REALTIME_MODELS,
+  resolveMaxToolIterations,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
@@ -23,7 +24,6 @@ import type { OpenAiCompletionOptions } from './types';
 const MAX_RESPONSE_OUTPUT_TOKENS_MAX = 4096;
 
 const DEFAULT_TOOL_CALL_TIMEOUT_MS = 30_000;
-const DEFAULT_MAX_TOOL_ITERATIONS = 8;
 // Generic, redacted error string sent back to the model when functionCallHandler
 // throws. We do NOT use String(err) — Node Error objects often contain absolute
 // paths, connection strings, and stack snippets that would otherwise be fed back
@@ -479,11 +479,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
   // Resolve a tool-iteration cap with a sane default and clamp on absurd values.
   private getMaxToolIterations(): number {
-    const value = this.config.maxToolIterations;
-    if (typeof value === 'number' && Number.isFinite(value) && value >= 1 && value <= 64) {
-      return Math.floor(value);
-    }
-    return DEFAULT_MAX_TOOL_ITERATIONS;
+    return resolveMaxToolIterations(this.config.maxToolIterations);
   }
 
   // Resolve per-call tool timeout. Falls back to websocketTimeout, then a hard default.

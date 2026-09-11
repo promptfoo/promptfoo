@@ -7,7 +7,7 @@ description: Test GPT-Live voice conversations with paced audio input, timestamp
 
 Use `openai:live:gpt-live-1` to evaluate [OpenAI's GPT-Live API](https://developers.openai.com/api/docs/guides/live). It connects to `/v1/live/sessions` and supports full-duplex audio, where the model can listen and speak simultaneously. `openai:gpt-live-1` and `openai:live` select the same provider, and dated `openai:gpt-live-*` snapshots also use it.
 
-Set `OPENAI_API_KEY` to an OpenAI project key with Live access. For a compatible gateway, set `apiBaseUrl` and authenticate with `apiKey`, a credential header in `headers` (such as `Authorization` or `api-key`), or userinfo in `apiBaseUrl`, which is sent as a Basic `Authorization` header. When a gateway uses its own credential header or URL userinfo, an `OPENAI_API_KEY` from the environment is not sent to it unless the provider or prompt config sets `apiKey` or `apiKeyEnvar`.
+Set `OPENAI_API_KEY` to an OpenAI project key with Live access. For a compatible gateway, set `apiBaseUrl` and authenticate with `apiKey`, a credential header in `headers` (such as `Authorization` or `api-key`), or userinfo in `apiBaseUrl`, which is sent as a Basic `Authorization` header. When a gateway uses its own credential header or URL userinfo, an `OPENAI_API_KEY` from the environment is not sent to it unless the provider or prompt config sets `apiKey` or `apiKeyEnvar`. A prompt's `config` can set its own `apiBaseUrl`, `apiHost`, `organization`, and credentials; each session uses the merged endpoint, default headers, and credentials together.
 
 ## Quickstart
 
@@ -83,6 +83,8 @@ Live has no authoritative speech-completed event. The response window is a fixed
 For managed Responses delegation, set `delegation.type: responses` and `delegation.responses.model`. The backend can use `function` and `web_search` tools. It has its own instructions, token limit, reasoning settings, and service tier. Follow [OpenAI's delegation configuration](https://developers.openai.com/api/docs/guides/live-delegation) for supported settings.
 
 For custom functions, set `functionCallHandler: file://tools.js`. Export an async function `(name, args, signal) => string`, where `args` is the JSON argument string. Promptfoo checks the function name against configured tools, collects completed calls, returns every result, and then continues the backend response. Handlers must enforce permissions for actions they execute.
+
+`maxToolIterations` limits the function calls a session hands to the handler, counted across batches and follow-up responses (default: 8, allowed range 1 to 64). At the limit, Promptfoo does not call the handler, sends no further results, ends the capture, and reports an error.
 
 For your own model or agent harness, use `delegation.type: client` and `delegationHandler: file://backend.js`:
 
