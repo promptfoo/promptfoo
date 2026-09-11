@@ -6,11 +6,8 @@ function getEnumerableOwnKeys(value: object): Array<string | symbol> {
   );
 }
 
-function isJsonDeepEqual(
-  left: unknown,
-  right: unknown,
-  compared = new WeakMap<object, WeakSet<object>>(),
-): boolean {
+// The right operand comes from JSON.parse, so recursive comparisons cannot cycle.
+function isJsonDeepEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) {
     return true;
   }
@@ -29,16 +26,6 @@ function isJsonDeepEqual(
     return false;
   }
 
-  const comparedWithLeft = compared.get(leftRecord);
-  if (comparedWithLeft?.has(rightRecord)) {
-    return true;
-  }
-  if (comparedWithLeft) {
-    comparedWithLeft.add(rightRecord);
-  } else {
-    compared.set(leftRecord, new WeakSet([rightRecord]));
-  }
-
   const leftKeys = getEnumerableOwnKeys(leftRecord);
   const rightKeys = getEnumerableOwnKeys(rightRecord);
   const rightKeySet = new Set(rightKeys);
@@ -47,7 +34,7 @@ function isJsonDeepEqual(
   }
 
   return leftKeys.every((key) =>
-    isJsonDeepEqual(Reflect.get(leftRecord, key), Reflect.get(rightRecord, key), compared),
+    isJsonDeepEqual(Reflect.get(leftRecord, key), Reflect.get(rightRecord, key)),
   );
 }
 

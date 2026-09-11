@@ -188,9 +188,26 @@ for (const provider of providers) {
 
 ## Assertions API
 
+For deterministic checks such as `contains`, `equals`, or `regex`, import the standalone
+runner. It supports ESM and CommonJS without loading Node services or provider packages:
+
+```typescript
+import { runPureAssertion } from 'promptfoo/assertions/pure';
+
+const result = await runPureAssertion({
+  assertion: { type: 'contains', value: 'expected' },
+  providerResponse: { output: 'expected output' },
+});
+```
+
+Pass already-rendered values to this runner; template expressions and file references are
+literal content. Use `assertions.runAssertion` for templates, scripts, and model graders.
+
 ### `assertions.runAssertion(params)`
 
-Execute a single assertion against provider output. **Powerful for custom evaluation logic.**
+Execute a single assertion against provider output. To register custom assertion names,
+parameterize `AssertionParams<Type>` and `GradingResult<Type>` with those names, then pass
+the matching `AssertionRegistry` as `registry`. Custom names require an explicit registry.
 
 ```typescript
 async function runAssertion({
@@ -203,6 +220,7 @@ async function runAssertion({
   providerResponse: ProviderResponse;
   traceId?: string;
   traceData?: TraceData | null;
+  registry?: AssertionRegistry<AssertionParams, GradingResult>;
 }): Promise<GradingResult>
 ```
 
@@ -547,11 +565,13 @@ export PROMPTFOO_CACHE_ENABLED=false
 
 ## Guardrails API
 
-Content safety and security layer. Use guardrails to detect PII, harmful content, and other safety concerns.
+Content safety and security helpers. `guard()`, `pii()`, and `harm()` call the configured Promptfoo guardrails service and return classifier results; `adaptive()` returns an adapted prompt and modification list. None returns the flat `ProviderResponse.guardrails` object consumed by the [`guardrails` assertion](/docs/configuration/expected-outputs/guardrails).
+
+Requests use the standard Promptfoo response cache. The service base URL comes from `PROMPTFOO_REMOTE_API_BASE_URL`, the configured Promptfoo Cloud host, or the public API host, in that order. Treat the input as data sent to that service.
 
 ### `guardrails.guard(input)`
 
-Run general content moderation.
+Run the general guardrail classifier.
 
 ```typescript
 async function guard(input: string): Promise<GuardResult>;
@@ -566,6 +586,14 @@ interface GuardResult {
     categories: Record<string, boolean>; // e.g., { hate: false, violence: true }
     category_scores: Record<string, number>; // Scores 0-1
     flagged: boolean; // Any category flagged?
+    payload?: {
+      pii?: Array<{
+        entity_type: string;
+        start: number;
+        end: number;
+        pii: string;
+      }>;
+    };
   }>;
 }
 ```
@@ -610,7 +638,7 @@ if (result.results[0].flagged) {
   console.log('PII detected:');
   if (result.results[0].payload?.pii) {
     result.results[0].payload.pii.forEach((item) => {
-      console.log(`  ${item.type}: ${item.value}`);
+      console.log(`  ${item.entity_type} at offsets ${item.start}-${item.end}`);
     });
   }
 }
@@ -630,10 +658,28 @@ async function harm(input: string): Promise<GuardResult>;
 
 ### `guardrails.adaptive(request)`
 
-Run adaptive guardrails with custom configuration.
+Rewrite a prompt to follow the supplied policies and return the modifications that were applied.
 
 ```typescript
 async function adaptive(request: AdaptiveRequest): Promise<AdaptiveResult>;
+```
+
+```typescript
+interface AdaptiveRequest {
+  prompt: string;
+  policies?: string[];
+}
+
+interface AdaptiveResult {
+  model: string;
+  adaptedPrompt: string;
+  modifications: Array<{
+    type: string;
+    reason: string;
+    original: string;
+    modified: string;
+  }>;
+}
 ```
 
 ---
@@ -674,8 +720,8 @@ interface Plugins {
 }
 
 // Example plugins
-Plugins['prompt-injection']; // Injection attacks
-Plugins['jailbreak']; // Jailbreak attempts
+Plugins['indirect-prompt-injection']; // Indirect prompt injection
+Plugins['hijacking']; // Hijacking attempts
 Plugins['rbac']; // RBAC bypasses
 Plugins['sql-injection']; // SQL injection
 // ... and many more

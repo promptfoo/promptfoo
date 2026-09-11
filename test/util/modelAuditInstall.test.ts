@@ -17,15 +17,14 @@ describe('checkModelAuditInstalled', () => {
     mockedGetModelAuditCurrentVersion.mockReset();
   });
 
-  it.each([
-    '0.2.16',
-    '1.0.0',
-    '0.2.19',
-  ])('returns the installed version when modelaudit reports %s', async (version) => {
-    mockedGetModelAuditCurrentVersion.mockResolvedValue(version);
+  it.each(['0.2.16', '1.0.0', '0.2.19'])(
+    'returns the installed version when modelaudit reports %s',
+    async (version) => {
+      mockedGetModelAuditCurrentVersion.mockResolvedValue(version);
 
-    await expect(checkModelAuditInstalled()).resolves.toEqual({ installed: true, version });
-  });
+      await expect(checkModelAuditInstalled()).resolves.toEqual({ installed: true, version });
+    },
+  );
 
   it('returns installed false when modelaudit is not installed', async () => {
     mockedGetModelAuditCurrentVersion.mockResolvedValue(null);

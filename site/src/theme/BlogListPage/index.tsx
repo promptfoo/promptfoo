@@ -82,7 +82,11 @@ function BlogListPageContent(props: Props): React.ReactElement {
             ))}
           </div>
         )}
-        <BlogPostGrid posts={displayPosts.map((item) => item.content)} title={gridTitle} />
+        <BlogPostGrid
+          posts={displayPosts.map((item) => item.content)}
+          title={gridTitle}
+          isPaginated={!isFirstPage}
+        />
       </div>
       <BlogListPaginator metadata={metadata} />
     </BlogLayout>

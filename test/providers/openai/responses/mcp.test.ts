@@ -397,7 +397,8 @@ describe('OpenAiResponsesProvider MCP request handling', () => {
 
       expect(body.tools).toHaveLength(2);
       expect(body.tools[0].type).toBe('function');
-      expect(body.tools[0].function.name).toBe('get_weather');
+      expect(body.tools[0].name).toBe('get_weather');
+      expect(body.tools[0].function).toBeUndefined();
       expect(body.tools[1].type).toBe('mcp');
       expect(body.tools[1].server_label).toBe('deepwiki');
     });

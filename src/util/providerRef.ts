@@ -1,9 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 
-import yaml from 'js-yaml';
 import { maybeLoadConfigFromExternalFile } from './file';
 import invariant from './invariant';
+import { loadYaml } from './yamlLoad';
 
 import type { ProviderOptions, ProviderOptionsMap } from '../types/providers';
 
@@ -147,7 +147,7 @@ export function readProviderConfigFile(
 
   let rawContent: unknown;
   try {
-    rawContent = yaml.load(fs.readFileSync(resolvedPath, 'utf8'));
+    rawContent = loadYaml(fs.readFileSync(resolvedPath, 'utf8'));
   } catch (err) {
     throw new Error(
       `Failed to load provider config ${relativePath}: ${err instanceof Error ? err.message : err}`,

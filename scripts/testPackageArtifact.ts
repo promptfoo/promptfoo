@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createServer } from 'node:http';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { brotliCompressSync, gzipSync } from 'node:zlib';
 
+import { satisfies } from 'semver';
 import { shouldCopyDrizzlePath } from './postbuild';
 
 type PackFile = {
@@ -19,13 +23,33 @@ type PackResult = {
   version: string;
 };
 
+type ArtifactEvalOutput = {
+  results?: {
+    results?: Array<{
+      error?: string;
+      response?: {
+        error?: string;
+        output?: unknown;
+      };
+      success?: boolean;
+    }>;
+  };
+};
+
 const ROOT = path.resolve(import.meta.dirname, '..');
 const drizzleDir = path.join(ROOT, 'drizzle');
+// The August 2026 undici advisories were fixed in 6.28.0, 7.29.0 and 8.9.0. Keep this in sync
+// with PATCHED_UNDICI_RANGE in test/package-manifests.test.ts.
+const PATCHED_UNDICI_RANGE = '^6.28.0 || ^7.29.0 || >=8.9.0';
 const requiredPackagedPaths = [
   'dist/drizzle/meta/_journal.json',
   'dist/src/app/index.html',
   'dist/src/entrypoint.js',
   'dist/src/golang/wrapper.go',
+  'dist/src/assertions/pure.js',
+  'dist/src/assertions/pure.cjs',
+  'dist/src/assertions/pure.d.ts',
+  'dist/src/assertions/pure.d.cts',
   'dist/src/contracts.cjs',
   'dist/src/contracts.d.cts',
   'dist/src/contracts.d.ts',
@@ -99,6 +123,47 @@ function run(
     }
     throw error;
   }
+}
+
+async function runAsync(
+  command: string,
+  args: string[],
+  cwd: string,
+  envOverrides: NodeJS.ProcessEnv = {},
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      command,
+      args,
+      {
+        cwd,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          npm_config_audit: 'false',
+          npm_config_fund: 'false',
+          ...envOverrides,
+        },
+        maxBuffer: 128 * 1024 * 1024,
+        timeout: 60_000,
+      },
+      (error, stdout, stderr) => {
+        if (!error) {
+          resolve(stdout);
+          return;
+        }
+
+        const details = [error.message];
+        if (stdout.length > 0) {
+          details.push(`stdout:\n${stdout}`);
+        }
+        if (stderr.length > 0 && !error.message.includes(stderr)) {
+          details.push(`stderr:\n${stderr}`);
+        }
+        reject(new Error(details.join('\n'), { cause: error }));
+      },
+    );
+  });
 }
 
 function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {}): string {
@@ -179,6 +244,28 @@ function assertInstalledWebApp(installedPackageDir: string): void {
 }
 
 /**
+ * The ref parser fetches remote `$ref`s through its own nested undici, and consumers install
+ * from the published tarball rather than this repo's lockfile — so the version they actually
+ * resolve is only observable here. Asserting it against the parser's declared range would be a
+ * tautology (npm cannot install outside it); the patched floor per undici major is the check
+ * that can fail.
+ */
+function assertInstalledRefParserTransport(installedPackageDir: string): void {
+  const packageRequire = createRequire(path.join(installedPackageDir, 'package.json'));
+  const parserRequire = createRequire(
+    packageRequire.resolve('@apidevtools/json-schema-ref-parser/package.json'),
+  );
+  const transportManifest = JSON.parse(
+    fs.readFileSync(parserRequire.resolve('undici/package.json'), 'utf8'),
+  ) as { version: string };
+
+  assert(
+    satisfies(transportManifest.version, PATCHED_UNDICI_RANGE),
+    `Installed ref parser resolved vulnerable undici ${transportManifest.version}`,
+  );
+}
+
+/**
  * Asserts every file path declared in the installed package's `exports` and `typesVersions`
  * resolves to a real file. The consumer `tsc` checks can't catch a wrong declared `types` path on
  * their own — TypeScript falls through to the `default` condition and auto-discovers the sibling
@@ -254,6 +341,112 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   return run(binPath, ['--version'], consumerDir, envOverrides);
 }
 
+function writeAssertionConsumerScripts(consumerDir: string): void {
+  fs.writeFileSync(
+    path.join(consumerDir, 'pure-assertions.mjs'),
+    `
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { createRequire, registerHooks } from 'node:module';
+import { runInNewContext } from 'node:vm';
+const require = createRequire(import.meta.url);
+const packageRoot = new URL('./node_modules/promptfoo/', import.meta.url).href;
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    const resolved = nextResolve(specifier, context);
+    assert.ok(resolved.url.startsWith(packageRoot), 'Pure assertions imported ' + resolved.url);
+    return resolved;
+  },
+});
+for (const api of [await import('promptfoo/assertions/pure'), require('promptfoo/assertions/pure')]) {
+  const result = await api.runPureAssertion({
+    assertion: { type: 'not-contains', value: 'missing' },
+    providerResponse: { output: 'expected output' },
+  });
+  assert.equal(result.pass, true);
+  assert.equal(result.score, 1);
+  await assert.rejects(api.runPureAssertion({
+    assertion: { type: 'latency', threshold: 100 },
+    providerResponse: { output: 'expected output' },
+  }), /latency/i);
+}
+// The standalone CJS bundle must also run without Node globals or a module loader.
+const module = { exports: {} };
+runInNewContext(fs.readFileSync(require.resolve('promptfoo/assertions/pure'), 'utf8'), { module, exports: module.exports });
+const result = await module.exports.runPureAssertion({
+  assertion: { type: 'contains', value: 'portable' },
+  providerResponse: { output: 'portable runtime' },
+});
+assert.equal(result.pass, true);
+`,
+  );
+  const pureConsumer = `
+const result: Promise<pure.PureGradingResult> = pure.runPureAssertion({
+  assertion: { type: 'contains', value: 'expected' },
+  providerResponse: { output: 'expected' },
+});
+void result;
+// @ts-expect-error Model graders are not available in the pure runner.
+pure.runPureAssertion({ assertion: { type: 'llm-rubric' }, providerResponse: { output: 'expected' } });
+`;
+  fs.writeFileSync(
+    path.join(consumerDir, 'import-pure.mts'),
+    "import * as pure from 'promptfoo/assertions/pure';\n" + pureConsumer,
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'require-pure.cts'),
+    "import pure = require('promptfoo/assertions/pure');\n" + pureConsumer,
+  );
+  // The full host entry still exposes upstream Drizzle declarations that need skipLibCheck.
+  // Keep the dependency-light contracts/pure consumers above on strict declaration checks.
+  fs.writeFileSync(
+    path.join(consumerDir, 'tsconfig.host-assertions.json'),
+    JSON.stringify({
+      compilerOptions: {
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        noEmit: true,
+        strict: true,
+        skipLibCheck: true,
+      },
+      include: ['import-assertions.mts', 'require-assertions.cts'],
+    }),
+  );
+  const customAssertionConsumer = `
+type CustomType = 'custom-check' | 'not-custom-check';
+const registry = new promptfoo.AssertionRegistry<promptfoo.AssertionParams<CustomType>, promptfoo.GradingResult<CustomType>>([
+  { name: 'custom', handlers: {
+    'custom-check': ({ assertion, outputString, renderedValue, inverse }) => {
+      const pass = (outputString === renderedValue) !== inverse;
+      return { pass, score: pass ? 1 : 0, reason: 'custom comparison', assertion };
+    },
+  } },
+]);
+const result: Promise<promptfoo.GradingResult<CustomType>> = promptfoo.assertions.runAssertion({
+  assertion: { type: 'custom-check', value: '{{ expected }}' },
+  registry,
+  providerResponse: { output: 'expected' },
+  test: { vars: { expected: 'expected' } },
+});
+void result;
+// @ts-expect-error Custom assertion names need a registry.
+promptfoo.assertions.runAssertion({ assertion: { type: 'custom-check' }, test: {}, providerResponse: { output: 'expected' } });
+pure.runPureAssertion({ assertion: { type: 'contains', value: 'expected' }, providerResponse: { output: 'expected' } });
+// @ts-expect-error Model graders are not available in the pure runner.
+pure.runPureAssertion({ assertion: { type: 'llm-rubric' }, providerResponse: { output: 'expected' } });
+`;
+  fs.writeFileSync(
+    path.join(consumerDir, 'import-assertions.mts'),
+    "import * as promptfoo from 'promptfoo';\nimport * as pure from 'promptfoo/assertions/pure';\n" +
+      customAssertionConsumer,
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'require-assertions.cts'),
+    "import promptfoo = require('promptfoo');\nimport pure = require('promptfoo/assertions/pure');\n" +
+      customAssertionConsumer,
+  );
+}
+
 function writeConsumerScripts(consumerDir: string): void {
   fs.writeFileSync(
     path.join(consumerDir, 'import-package.mjs'),
@@ -320,20 +513,7 @@ function writeConsumerScripts(consumerDir: string): void {
         noEmit: true,
         strict: true,
       },
-      include: ['import-contracts.ts'],
-    }),
-  );
-  fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.legacy.json'),
-    JSON.stringify({
-      compilerOptions: {
-        ignoreDeprecations: '6.0',
-        module: 'CommonJS',
-        moduleResolution: 'node',
-        noEmit: true,
-        strict: true,
-      },
-      include: ['import-contracts.ts'],
+      include: ['import-contracts.ts', 'import-pure.mts'],
     }),
   );
   fs.writeFileSync(
@@ -364,12 +544,148 @@ function writeConsumerScripts(consumerDir: string): void {
         noEmit: true,
         strict: true,
       },
-      include: ['require-contracts.cts'],
+      include: ['require-contracts.cts', 'require-pure.cts'],
     }),
   );
 }
 
-function main(): void {
+async function runInstalledCompressionEval(consumerDir: string, configDir: string): Promise<void> {
+  const expectedOutput = 'compressed response';
+  const requestedPaths: string[] = [];
+  const server = createServer((request, response) => {
+    const requestPath = request.url;
+    if (requestPath !== '/gzip' && requestPath !== '/br') {
+      response.writeHead(404).end();
+      return;
+    }
+
+    const encoding = requestPath === '/gzip' ? 'gzip' : 'br';
+    requestedPaths.push(requestPath);
+    const rawBody = Buffer.from(JSON.stringify({ output: expectedOutput }));
+    const body = encoding === 'gzip' ? gzipSync(rawBody) : brotliCompressSync(rawBody);
+    response.writeHead(200, {
+      'content-encoding': encoding,
+      'content-length': String(body.length),
+      'content-type': 'application/json',
+    });
+    response.end(body);
+  });
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        server.off('error', reject);
+        resolve();
+      });
+    });
+
+    const address = server.address();
+    assert(address && typeof address !== 'string', 'Failed to bind compressed response server');
+
+    const configPath = path.join(consumerDir, 'promptfooconfig.json');
+    const outputPath = path.join(consumerDir, 'compression-results.json');
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          prompts: ['compression artifact test'],
+          providers: ['gzip', 'br'].map((encoding) => ({
+            id: `${baseUrl}/${encoding}`,
+            config: {
+              maxRetries: 0,
+              method: 'GET',
+              transformResponse: 'json.output',
+            },
+          })),
+          tests: [
+            {
+              assert: [{ type: 'equals', value: expectedOutput }],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+
+    const entrypointPath = path.join(
+      consumerDir,
+      'node_modules',
+      'promptfoo',
+      'dist',
+      'src',
+      'entrypoint.js',
+    );
+    assert(
+      fs.existsSync(entrypointPath),
+      `Missing installed promptfoo entrypoint: ${entrypointPath}`,
+    );
+
+    await runAsync(
+      process.execPath,
+      [
+        entrypointPath,
+        'eval',
+        '--config',
+        configPath,
+        '--output',
+        outputPath,
+        '--no-cache',
+        '--no-write',
+        '--no-table',
+        '--no-progress-bar',
+        '--max-concurrency',
+        '1',
+      ],
+      consumerDir,
+      {
+        ALL_PROXY: '',
+        HTTP_PROXY: '',
+        HTTPS_PROXY: '',
+        NO_PROXY: '127.0.0.1,localhost',
+        PROMPTFOO_CONFIG_DIR: configDir,
+        PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_UPDATE: 'true',
+        all_proxy: '',
+        http_proxy: '',
+        https_proxy: '',
+        no_proxy: '127.0.0.1,localhost',
+      },
+    );
+
+    assert(fs.existsSync(outputPath), `Installed promptfoo did not write results: ${outputPath}`);
+    const evalOutput = JSON.parse(fs.readFileSync(outputPath, 'utf8')) as ArtifactEvalOutput;
+    const results = evalOutput.results?.results;
+    assert(Array.isArray(results), 'Installed promptfoo output is missing evaluation results');
+    assert.equal(results.length, 2, 'Expected one result for each compressed provider');
+    for (const result of results) {
+      assert.equal(result.success, true, `Compressed provider failed: ${JSON.stringify(result)}`);
+      assert.equal(
+        result.error,
+        undefined,
+        `Compressed provider errored: ${JSON.stringify(result)}`,
+      );
+      assert.equal(
+        result.response?.error,
+        undefined,
+        `Compressed provider response errored: ${JSON.stringify(result)}`,
+      );
+      assert.equal(result.response?.output, expectedOutput);
+    }
+    assert.deepEqual(requestedPaths.sort(), ['/br', '/gzip']);
+  } finally {
+    if (server.listening) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  }
+}
+
+async function main(): Promise<void> {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-package-artifact-'));
   const artifactsDir = path.join(tempDir, 'artifacts');
   const configDir = path.join(tempDir, 'config');
@@ -436,12 +752,19 @@ function main(): void {
     };
     assert.equal(installedPackageJson.version, packResult.version);
     assertExportsResolve(installedPackageDir, installedPackageJson);
+    assertInstalledRefParserTransport(installedPackageDir);
 
     writeConsumerScripts(consumerDir);
+    writeAssertionConsumerScripts(consumerDir);
+    run(process.execPath, ['pure-assertions.mjs'], consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of ['tsconfig.json', 'tsconfig.legacy.json', 'tsconfig.node16-cjs.json']) {
+    for (const tsconfig of [
+      'tsconfig.json',
+      'tsconfig.node16-cjs.json',
+      'tsconfig.host-assertions.json',
+    ]) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
@@ -452,6 +775,7 @@ function main(): void {
         packResult.version,
       );
     }
+    await runInstalledCompressionEval(consumerDir, configDir);
 
     console.log(`Verified installed package artifact: ${packResult.filename}`);
   } finally {
@@ -459,4 +783,7 @@ function main(): void {
   }
 }
 
-main();
+main().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});
