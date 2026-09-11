@@ -263,6 +263,21 @@ describe('calculateFilteredMetrics', () => {
       });
     });
 
+    it('keeps canonical generation on prompt zero when only another prompt matches', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, { testIdx: 0, promptIdx: 0, tokenUsage: { total: 10 } });
+      await addTokenResult(eval_, { testIdx: 0, promptIdx: 1, tokenUsage: { total: 20 } });
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 2,
+        whereSql: sql`eval_id = ${eval_.id} AND prompt_idx = 1`,
+        generationTokenUsage: { total: 7, numRequests: 1 },
+      });
+      expect(metrics[0].tokenUsage.generation).toMatchObject({ total: 7, numRequests: 1 });
+      expect(metrics[1].tokenUsage.generation).toBeUndefined();
+      expect(metrics[1].tokenUsage.total).toBe(20);
+    });
+
     it('falls back to a row carrier when canonical generation usage is empty', async () => {
       const eval_ = await Eval.create({ metadata: { generationAccounting: { tokenUsage: {} } } }, [
         { raw: 'Test prompt', label: 'Test prompt' },

@@ -313,10 +313,10 @@ async function getFilteredGenerationCarriers(whereSql: SQL<unknown>) {
       AND json_valid(test_case)
       AND json_type(test_case, '$.metadata.providerTokenUsage') = 'object'
     ORDER BY prompt_idx, test_idx
-  `)) as Array<{ prompt_idx: number; usage: string | unknown }>;
+  `)) as Array<{ prompt_idx: number; usage: unknown }>;
 }
 
-function parseGenerationCarrier(usage: string | unknown) {
+function parseGenerationCarrier(usage: unknown) {
   if (typeof usage !== 'string') {
     return usage;
   }
@@ -479,19 +479,18 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
     };
   }
 
-  const generationCarriers = [
-    ...(generationTokenUsage
-      ? [{ prompt_idx: basicResults[0]?.prompt_idx, usage: generationTokenUsage }]
-      : []),
-    ...(await getFilteredGenerationCarriers(whereSql)),
-  ];
-  for (const { prompt_idx, usage } of generationCarriers) {
-    const metric = metrics[prompt_idx];
-    if (
-      metric &&
-      accumulateGenerationTokenUsage(metric.tokenUsage, parseGenerationCarrier(usage))
-    ) {
-      break;
+  // Canonical generation belongs to prompt zero, even when its result rows are filtered out.
+  const recordedCanonicalUsage =
+    metrics[0] && accumulateGenerationTokenUsage(metrics[0].tokenUsage, generationTokenUsage);
+  if (!recordedCanonicalUsage) {
+    for (const { prompt_idx, usage } of await getFilteredGenerationCarriers(whereSql)) {
+      const metric = metrics[prompt_idx];
+      if (
+        metric &&
+        accumulateGenerationTokenUsage(metric.tokenUsage, parseGenerationCarrier(usage))
+      ) {
+        break;
+      }
     }
   }
 

@@ -1285,6 +1285,34 @@ describe('evaluator', () => {
       expect(eval1.getStats().tokenUsage.generation).toMatchObject({ cached: 7 });
     });
 
+    it('does not replay canonical usage when only incurred generation was recorded', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generationAccounting: {
+            tokenUsage: {
+              total: 0,
+              numRequests: 0,
+              incurredTokenUsage: { total: 12, numRequests: 1 },
+            },
+          },
+        },
+      });
+      eval1.prompts = [
+        {
+          metrics: {
+            tokenUsage: {
+              generation: { total: 0, numRequests: 0 },
+              incurredTokenUsage: { generation: { total: 12, numRequests: 1 } },
+            },
+          },
+        },
+      ] as any;
+      expect(eval1.getStats().tokenUsage.incurredTokenUsage?.generation).toMatchObject({
+        total: 12,
+        numRequests: 1,
+      });
+    });
+
     it('does not attribute historical suite generation metadata without a run charge', () => {
       const eval1 = new Eval({
         metadata: {

@@ -3,6 +3,7 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { evaluate, runEval } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
@@ -65,6 +66,39 @@ describeEvaluator('evaluator token usage', () => {
     await evaluate(testSuite, evalRecord, {});
 
     expect(evalRecord.prompts[0].metrics?.tokenUsage.generation).toMatchObject(generationUsage);
+  });
+
+  it('preserves incurred-only generation when resuming a completed evaluation', async () => {
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create(
+      {
+        metadata: {
+          generationAccounting: {
+            tokenUsage: {
+              total: 0,
+              numRequests: 0,
+              incurredTokenUsage: { total: 12, numRequests: 1 },
+            },
+          },
+        },
+      },
+      testSuite.prompts,
+      { id: randomUUID() },
+    );
+    await evaluate(testSuite, evalRecord, {});
+    expect(evalRecord.prompts[0].metrics?.tokenUsage.incurredTokenUsage?.generation?.total).toBe(
+      12,
+    );
+    cliState.resume = true;
+    await evaluate(testSuite, evalRecord, {});
+    expect(evalRecord.prompts[0].metrics?.tokenUsage.incurredTokenUsage?.generation).toMatchObject({
+      total: 12,
+      numRequests: 1,
+    });
   });
 
   it.each([1, 2])(

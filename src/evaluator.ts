@@ -3371,8 +3371,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     this.generationUsageRecorded = Boolean(
       cliState.resume &&
         store.prompts.some((prompt) => {
-          const generation = prompt.metrics?.tokenUsage?.generation;
-          return hasObservableTokenUsage(generation);
+          const usage = prompt.metrics?.tokenUsage;
+          return (
+            hasObservableTokenUsage(usage?.generation) ||
+            hasObservableTokenUsage(usage?.incurredTokenUsage?.generation)
+          );
         }),
     );
     this.conversations = {};
@@ -3466,6 +3469,26 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (row.tokenUsage) {
       accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
     }
+  }
+
+  private recordGenerationUsage(
+    testCase: AtomicTestCase,
+    metrics: PromptMetrics | undefined,
+  ): AtomicTestCase {
+    if (!this.generationUsageRecorded && metrics) {
+      this.generationUsageRecorded = accumulateGenerationTokenUsage(
+        metrics.tokenUsage,
+        testCase.metadata?.providerTokenUsage,
+      );
+      if (this.generationUsageRecorded) {
+        return testCase;
+      }
+    }
+    if (this.generationUsageRecorded && testCase.metadata?.providerTokenUsage) {
+      const { providerTokenUsage: _recordedUsage, ...metadata } = testCase.metadata;
+      return { ...testCase, metadata };
+    }
+    return testCase;
   }
 
   // Buffer the authoritative copy of a row only once a DB persistence failure has been
@@ -3675,22 +3698,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
       const metrics = context.prompts[row.promptIdx].metrics;
       invariant(metrics, 'Expected prompt.metrics to be set');
-      const ownsGenerationUsage =
-        !this.generationUsageRecorded &&
-        accumulateGenerationTokenUsage(
-          metrics.tokenUsage,
-          row.testCase.metadata?.providerTokenUsage,
-        );
-      this.generationUsageRecorded ||= ownsGenerationUsage;
-      if (
-        !ownsGenerationUsage &&
-        this.generationUsageRecorded &&
-        row.testCase.metadata?.providerTokenUsage
-      ) {
-        const metadata = { ...row.testCase.metadata };
-        delete metadata.providerTokenUsage;
-        row.testCase = { ...row.testCase, metadata };
-      }
+      row.testCase = this.recordGenerationUsage(row.testCase, metrics);
 
       await this.persistEvalRow(row);
 
@@ -3830,28 +3838,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const sanitizedTestCase = { ...evalStep.test };
     delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
     const { metrics } = context.prompts[evalStep.promptIdx];
-    const ownsGenerationUsage =
-      !this.generationUsageRecorded &&
-      Boolean(
-        metrics &&
-          accumulateGenerationTokenUsage(
-            metrics.tokenUsage,
-            sanitizedTestCase.metadata?.providerTokenUsage,
-          ),
-      );
-    this.generationUsageRecorded ||= ownsGenerationUsage;
-    if (
-      !ownsGenerationUsage &&
-      this.generationUsageRecorded &&
-      sanitizedTestCase.metadata?.providerTokenUsage
-    ) {
-      sanitizedTestCase.metadata = { ...sanitizedTestCase.metadata };
-      delete sanitizedTestCase.metadata.providerTokenUsage;
-    }
 
     const timeoutResult = createEvalStepTimeoutResult(
       evalStep,
-      sanitizedTestCase,
+      this.recordGenerationUsage(sanitizedTestCase, metrics),
       timeoutMs,
       error,
     );
@@ -3862,12 +3852,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (metrics) {
       metrics.testErrorCount += 1;
       metrics.totalLatencyMs += timeoutMs;
-      if (!this.generationUsageRecorded) {
-        this.generationUsageRecorded = accumulateGenerationTokenUsage(
-          metrics.tokenUsage,
-          sanitizedTestCase.metadata?.providerTokenUsage,
-        );
-      }
     }
 
     context.numComplete++;
@@ -4705,26 +4689,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const testCase = { ...evalStep.test };
       delete (testCase as Partial<AtomicTestCase>).provider;
       const { metrics } = prompts[evalStep.promptIdx];
-      const ownsGenerationUsage =
-        !this.generationUsageRecorded &&
-        Boolean(
-          metrics &&
-            accumulateGenerationTokenUsage(
-              metrics.tokenUsage,
-              testCase.metadata?.providerTokenUsage,
-            ),
-        );
-      this.generationUsageRecorded ||= ownsGenerationUsage;
-      if (
-        !ownsGenerationUsage &&
-        this.generationUsageRecorded &&
-        testCase.metadata?.providerTokenUsage
-      ) {
-        testCase.metadata = { ...testCase.metadata };
-        delete testCase.metadata.providerTokenUsage;
-      }
       const timeoutResult = createMaxDurationTimeoutResult(
-        { ...evalStep, test: testCase },
+        { ...evalStep, test: this.recordGenerationUsage(testCase, metrics) },
         maxEvalTimeMs,
         startTime,
       );
