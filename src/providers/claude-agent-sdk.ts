@@ -1638,7 +1638,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       permissionMode: config.permission_mode === 'manual' ? 'default' : config.permission_mode,
       planModeInstructions: config.plan_mode_instructions,
       systemPrompt:
-        config.custom_system_prompt === undefined
+        config.custom_system_prompt == null
           ? {
               type: 'preset',
               preset: 'claude_code',

@@ -307,6 +307,7 @@ describe('ClaudeCodeSDKProvider', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     cliState.setActiveOtlpReceiver();
     await clearCache();
   });
@@ -319,21 +320,27 @@ describe('ClaudeCodeSDKProvider', () => {
     expect(result.error).toContain('npm install @anthropic-ai/claude-agent-sdk');
   });
 
-  it('honors an explicitly empty system prompt', async () => {
-    mockQuery.mockReturnValue(createMockResponse('Response'));
-    const provider = new ClaudeCodeSDKProvider({
-      config: { apiKey: 'test-key', custom_system_prompt: '' },
-    });
-    await provider.callApi('Empty system prompt');
-    expect(mockQuery).toHaveBeenCalledWith(
-      expect.objectContaining({
-        options: expect.objectContaining({ systemPrompt: '' }),
-      }),
-    );
-  });
+  it.each(['', null])(
+    'honors empty system prompts while defaulting null (%j)',
+    async (systemPrompt) => {
+      mockQuery.mockReturnValue(createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test-key', custom_system_prompt: systemPrompt as unknown as string },
+      });
+      await provider.callApi('Empty system prompt');
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            systemPrompt:
+              systemPrompt === null ? expect.objectContaining({ preset: 'claude_code' }) : '',
+          }),
+        }),
+      );
+    },
+  );
 
   it('uses prompt API keys without reusing responses across credentials', async () => {
-    mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
+    vi.stubEnv('ANTHROPIC_API_KEY', undefined);
     enableCache();
     const provider = new ClaudeCodeSDKProvider();
     for (const key of ['prompt-key-one', 'prompt-key-two']) {

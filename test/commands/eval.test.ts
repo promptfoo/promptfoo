@@ -1482,7 +1482,7 @@ describe('evalCommand', () => {
   });
 
   it('allows prompt-only Claude SDK credentials through CLI preflight', async () => {
-    mockProcessEnv({
+    const restoreEnv = mockProcessEnv({
       ANTHROPIC_API_KEY: undefined,
       CLAUDE_CODE_USE_VERTEX: undefined,
       CLAUDE_CODE_USE_BEDROCK: undefined,
@@ -1506,6 +1506,7 @@ describe('evalCommand', () => {
         expect.anything(),
       );
     } finally {
+      restoreEnv();
       vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
     }
   });
