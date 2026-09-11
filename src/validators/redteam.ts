@@ -19,7 +19,7 @@ import {
   SeveritySchema,
 } from '../redteam/constants';
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../redteam/constants/codingAgents';
-import { isCustomStrategy } from '../redteam/constants/strategies';
+import { isCustomStrategy, MULTI_MODAL_STRATEGIES } from '../redteam/constants/strategies';
 import { isAttackProvider } from '../redteam/shared/attackProviders';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
@@ -207,15 +207,25 @@ export const RedteamStrategySchema = z
       typeof id === 'string' && isAttackProvider(id) ? [index] : [],
     );
     const indirectIndex = ids.indexOf('indirect-web-pwn');
+    const mediaIndexes = ids.flatMap((id, index) =>
+      typeof id === 'string' && (MULTI_MODAL_STRATEGIES as readonly string[]).includes(id)
+        ? [index]
+        : [],
+    );
+    const hasMischievousUser = ids.includes('mischievous-user');
     const invalid =
+      ids.includes('layer') ||
       attackIndexes.length > 1 ||
       (indirectIndex >= 0 && attackIndexes.some((index) => index > indirectIndex)) ||
-      (indirectIndex >= 0 && ids.includes('mischievous-user'));
+      (hasMischievousUser && (attackIndexes.length > 0 || indirectIndex >= 0)) ||
+      mediaIndexes.length > 1 ||
+      (mediaIndexes.length === 1 && mediaIndexes[0] !== ids.length - 1);
     if (invalid) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['config', 'steps'],
-        message: 'Layer steps contain incompatible or misordered agentic strategies',
+        message:
+          'Layer steps cannot recurse; use at most one attack provider before indirect-web-pwn, do not combine either with mischievous-user, and use at most one final media transform',
       });
     }
   });

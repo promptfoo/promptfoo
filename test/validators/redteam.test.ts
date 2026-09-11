@@ -744,6 +744,17 @@ describe('redteam validators', () => {
     });
 
     describe('integration with actual use cases', () => {
+      it.each([
+        ['recursive layer', ['layer']],
+        ['mischievous user with an attack provider', ['mischievous-user', 'jailbreak:hydra']],
+        ['media before a later transform', ['audio', 'base64']],
+        ['multiple media transforms', ['audio', 'image']],
+      ])('rejects %s steps', (_name, steps) => {
+        expect(() => RedteamStrategySchema.parse({ id: 'layer', config: { steps } })).toThrow(
+          /cannot recurse|agentic providers|media transform/,
+        );
+      });
+
       it('should validate realistic custom strategy configurations', () => {
         const realisticConfigurations = [
           'custom:greeting-strategy',
