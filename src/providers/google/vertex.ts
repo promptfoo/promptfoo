@@ -484,6 +484,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
     }
 
+    let response: ProviderResponse | undefined;
     try {
       const output = outputFromMessage(data as any, showThinking);
 
@@ -514,7 +515,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         data.usage?.cache_read_input_tokens,
         data.usage?.cache_creation_input_tokens,
       );
-      const response = {
+      response = {
         cached: false,
         output,
         tokenUsage,
@@ -540,6 +541,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return response;
     } catch (err) {
       return {
+        ...response,
         error: `Claude API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
     }
@@ -987,6 +989,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         options?.abortSignal?.throwIfAborted();
       } catch (err) {
         return {
+          ...response,
           error: `Gemini API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
         };
       }
@@ -999,8 +1002,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
         options?.abortSignal,
       );
     } catch (error) {
-      options?.abortSignal?.throwIfAborted();
-      return { ...response, output: undefined, error: String(error) };
+      return {
+        ...response,
+        ...(options?.abortSignal?.aborted ? {} : { output: undefined }),
+        error: String(error),
+      };
     }
     return response;
   }
@@ -1089,6 +1095,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
     }
 
+    let response: ProviderResponse | undefined;
     try {
       if (data.error) {
         return {
@@ -1103,7 +1110,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       }
       const output = prediction.candidates[0].content;
 
-      const response = {
+      response = {
         output,
         cached: false,
       };
@@ -1120,6 +1127,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return response;
     } catch (err) {
       return {
+        ...response,
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }
@@ -1287,6 +1295,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       };
     }
 
+    let response: ProviderResponse | undefined;
     try {
       // Extract the completion text from the response
       let output = '';
@@ -1308,7 +1317,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         numRequests: 1,
       };
 
-      const response = {
+      response = {
         cached: false,
         output,
         tokenUsage,
@@ -1326,6 +1335,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return response;
     } catch (err) {
       return {
+        ...response,
         error: `Llama API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
     }
