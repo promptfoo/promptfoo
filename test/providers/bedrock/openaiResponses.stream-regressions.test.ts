@@ -216,41 +216,42 @@ describe('Responses stream regressions', () => {
     ).rejects.toThrow(/exceeded.*(?:event|delta|stream input)/i);
   });
 
-  it.each(['\n', '\r\n', '\r'])(
-    'parses single-byte-chunk SSE events with %j line endings',
-    async (eol) => {
-      const body = new TextEncoder().encode(
-        [
-          'event: response.output_text.done',
-          'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"hello"}',
-          '',
-          'event: response.completed',
-          'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}]}}',
-          '',
-          '',
-        ].join(eol),
-      );
-      let index = 0;
-      const stream = new ReadableStream<Uint8Array>({
-        pull(controller) {
-          if (index >= body.length) {
-            controller.close();
-            return;
-          }
-          controller.enqueue(body.subarray(index, ++index));
-        },
-      });
+  it.each([
+    '\n',
+    '\r\n',
+    '\r',
+  ])('parses single-byte-chunk SSE events with %j line endings', async (eol) => {
+    const body = new TextEncoder().encode(
+      [
+        'event: response.output_text.done',
+        'data: {"type":"response.output_text.done","output_index":0,"content_index":0,"text":"hello"}',
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hello"}]}]}}',
+        '',
+        '',
+      ].join(eol),
+    );
+    let index = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (index >= body.length) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(body.subarray(index, ++index));
+      },
+    });
 
-      const parsed = await readResponsesStream(new Response(stream), 'test', { debug: vi.fn() });
+    const parsed = await readResponsesStream(new Response(stream), 'test', { debug: vi.fn() });
 
-      expect(parsed.output).toEqual([
-        expect.objectContaining({
-          type: 'message',
-          content: [expect.objectContaining({ type: 'output_text', text: 'hello' })],
-        }),
-      ]);
-    },
-  );
+    expect(parsed.output).toEqual([
+      expect.objectContaining({
+        type: 'message',
+        content: [expect.objectContaining({ type: 'output_text', text: 'hello' })],
+      }),
+    ]);
+  });
 
   it('rejects malformed SSE after streamed draft text', async () => {
     const response = new Response(
@@ -971,76 +972,77 @@ describe('Responses stream regressions', () => {
     { name: 'repeated streamed citations', streamed: [0, 0], terminal: [], expected: [0] },
     { name: 'distinct streamed citations', streamed: [0, 1], terminal: [], expected: [0, 1] },
     { name: 'repeated terminal citations', streamed: [0], terminal: [0, 0], expected: [0] },
-  ])(
-    'deduplicates $name without dropping distinct citations',
-    async ({ streamed, terminal, expected }) => {
-      const citations = [
+  ])('deduplicates $name without dropping distinct citations', async ({
+    streamed,
+    terminal,
+    expected,
+  }) => {
+    const citations = [
+      {
+        type: 'url_citation',
+        url: 'https://example.test/one',
+        title: 'One',
+        start_index: 0,
+        end_index: 3,
+      },
+      {
+        type: 'url_citation',
+        url: 'https://example.test/two',
+        title: 'Two',
+        start_index: 4,
+        end_index: 7,
+      },
+    ];
+    const parsed = await readResponsesStream(
+      createSseResponse([
         {
-          type: 'url_citation',
-          url: 'https://example.test/one',
-          title: 'One',
-          start_index: 0,
-          end_index: 3,
+          type: 'response.output_text.done',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm_1',
+          text: 'SAFE FINAL TEXT',
         },
+        ...streamed.map((citationIndex, annotationIndex) => ({
+          type: 'response.output_text.annotation.added',
+          output_index: 0,
+          content_index: 0,
+          item_id: 'm_1',
+          annotation_index: annotationIndex,
+          annotation: citations[citationIndex],
+        })),
         {
-          type: 'url_citation',
-          url: 'https://example.test/two',
-          title: 'Two',
-          start_index: 4,
-          end_index: 7,
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                id: 'm_1',
+                role: 'assistant',
+                content: [
+                  {
+                    type: 'output_text',
+                    text: 'SAFE FINAL TEXT',
+                    annotations: terminal.map((citationIndex) => citations[citationIndex]),
+                  },
+                ],
+              },
+            ],
+          },
         },
-      ];
-      const parsed = await readResponsesStream(
-        createSseResponse([
-          {
-            type: 'response.output_text.done',
-            output_index: 0,
-            content_index: 0,
-            item_id: 'm_1',
-            text: 'SAFE FINAL TEXT',
-          },
-          ...streamed.map((citationIndex, annotationIndex) => ({
-            type: 'response.output_text.annotation.added',
-            output_index: 0,
-            content_index: 0,
-            item_id: 'm_1',
-            annotation_index: annotationIndex,
-            annotation: citations[citationIndex],
-          })),
-          {
-            type: 'response.completed',
-            response: {
-              status: 'completed',
-              output: [
-                {
-                  type: 'message',
-                  id: 'm_1',
-                  role: 'assistant',
-                  content: [
-                    {
-                      type: 'output_text',
-                      text: 'SAFE FINAL TEXT',
-                      annotations: terminal.map((citationIndex) => citations[citationIndex]),
-                    },
-                  ],
-                },
-              ],
-            },
-          },
-        ]),
-        'test',
-        { debug: vi.fn() },
-      );
-      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
-      const expectedAnnotations = expected.map((citationIndex) => citations[citationIndex]);
+      ]),
+      'test',
+      { debug: vi.fn() },
+    );
+    const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+    const expectedAnnotations = expected.map((citationIndex) => citations[citationIndex]);
 
-      expect(parsed.output?.[0]?.content?.[0]?.annotations).toEqual(expectedAnnotations);
-      expect(processed.metadata?.annotations).toEqual(expectedAnnotations);
-      expect(processed.raw?.annotations).toEqual(expectedAnnotations);
-      expect(parsed.output?.[0]?.content?.[0]?.text).toBe('SAFE FINAL TEXT');
-      expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
-    },
-  );
+    expect(parsed.output?.[0]?.content?.[0]?.annotations).toEqual(expectedAnnotations);
+    expect(processed.metadata?.annotations).toEqual(expectedAnnotations);
+    expect(processed.raw?.annotations).toEqual(expectedAnnotations);
+    expect(parsed.output?.[0]?.content?.[0]?.text).toBe('SAFE FINAL TEXT');
+    expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
+  });
 
   it('never restores unmatched streamed citation text after a completed terminal snapshot', async () => {
     const annotation = {
@@ -1267,149 +1269,151 @@ describe('Responses stream regressions', () => {
         response: { status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' } },
       },
       { eventType: 'response.cancelled', response: { status: 'cancelled' } },
-    ])(
-      'never executes a tool call supplied only by a $eventType terminal snapshot',
-      async ({ eventType, response }) => {
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: eventType,
-              response: {
-                ...response,
-                output: [
-                  {
-                    type: 'function_call',
-                    name: 'dangerous_action',
-                    arguments: '{"path":"/tmp/secret"}',
-                    call_id: 'call_terminal',
-                  },
-                ],
-              },
+    ])('never executes a tool call supplied only by a $eventType terminal snapshot', async ({
+      eventType,
+      response,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: eventType,
+            response: {
+              ...response,
+              output: [
+                {
+                  type: 'function_call',
+                  name: 'dangerous_action',
+                  arguments: '{"path":"/tmp/secret"}',
+                  call_id: 'call_terminal',
+                },
+              ],
             },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
 
-        expect(parsed.output).not.toEqual(
-          expect.arrayContaining([expect.objectContaining({ type: 'function_call' })]),
-        );
-        expect(processCalls).not.toHaveBeenCalled();
-      },
-    );
+      expect(parsed.output).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'function_call' })]),
+      );
+      expect(processCalls).not.toHaveBeenCalled();
+    });
 
     it.each([
       { eventType: 'response.failed', status: 'failed' },
       { eventType: 'response.incomplete', status: 'incomplete' },
       { eventType: 'response.cancelled', status: 'cancelled' },
-    ])(
-      'never borrows executable tool metadata from a $eventType terminal snapshot',
-      async ({ eventType, status }) => {
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.function_call_arguments.done',
-              output_index: 0,
-              item_id: 'safe_item',
-              arguments: '{"ok":true}',
+    ])('never borrows executable tool metadata from a $eventType terminal snapshot', async ({
+      eventType,
+      status,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.function_call_arguments.done',
+            output_index: 0,
+            item_id: 'safe_item',
+            arguments: '{"ok":true}',
+          },
+          {
+            type: eventType,
+            response: {
+              status,
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'evil_item',
+                  call_id: 'evil_call',
+                  name: 'dangerous_action',
+                  arguments: '{"path":"/tmp/secret"}',
+                },
+              ],
             },
-            {
-              type: eventType,
-              response: {
-                status,
-                output: [
-                  {
-                    type: 'function_call',
-                    id: 'evil_item',
-                    call_id: 'evil_call',
-                    name: 'dangerous_action',
-                    arguments: '{"path":"/tmp/secret"}',
-                  },
-                ],
-              },
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
 
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
-      },
-    );
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+    });
 
     it.each([
       { eventType: 'response.failed', status: 'failed' },
       { eventType: 'response.incomplete', status: 'incomplete' },
       { eventType: 'response.cancelled', status: 'cancelled' },
-    ])(
-      'ignores a late finalized tool call after a $eventType terminal snapshot',
-      async ({ eventType, status }) => {
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            { type: eventType, response: { status, output: [] } },
-            {
-              type: 'response.output_item.done',
-              output_index: 0,
-              item: {
-                type: 'function_call',
-                id: 'late_item',
-                call_id: 'late_call',
-                name: 'dangerous_action',
-                arguments: '{"path":"/tmp/secret"}',
-              },
+    ])('ignores a late finalized tool call after a $eventType terminal snapshot', async ({
+      eventType,
+      status,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: eventType, response: { status, output: [] } },
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'late_item',
+              call_id: 'late_call',
+              name: 'dangerous_action',
+              arguments: '{"path":"/tmp/secret"}',
             },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
 
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
-      },
-    );
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+    });
 
-    it.each(['completed', 'failed', 'incomplete', 'cancelled'])(
-      'ignores a late stream error after a %s terminal snapshot',
-      async (status) => {
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: `response.${status}`,
-              response: {
-                status,
-                output: [
-                  {
-                    type: 'message',
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'SAFE FINAL' }],
-                  },
-                ],
-              },
+    it.each([
+      'completed',
+      'failed',
+      'incomplete',
+      'cancelled',
+    ])('ignores a late stream error after a %s terminal snapshot', async (status) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: `response.${status}`,
+            response: {
+              status,
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE FINAL' }],
+                },
+              ],
             },
-            {
-              type: 'error',
-              error: { code: 'late_error', message: 'SECRET_LATE_ERROR' },
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
+          },
+          {
+            type: 'error',
+            error: { code: 'late_error', message: 'SECRET_LATE_ERROR' },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
 
-        expect(parsed.output).toEqual([
-          expect.objectContaining({
-            content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FINAL' })],
-          }),
-        ]);
-        expect(JSON.stringify(parsed)).not.toContain('SECRET_LATE_ERROR');
-      },
-    );
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FINAL' })],
+        }),
+      ]);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET_LATE_ERROR');
+    });
 
     it.each([
       {
@@ -1762,161 +1766,161 @@ describe('Responses stream regressions', () => {
     it.each([
       { name: 'compacted', firstIndex: 2, secondIndex: 3 },
       { name: 'sparse', firstIndex: 100, secondIndex: 101 },
-    ])(
-      'never executes a displaced duplicate tool from $name finalized indices',
-      async ({ firstIndex, secondIndex }) => {
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_item.done',
-              output_index: firstIndex,
-              item: {
-                type: 'function_call',
-                id: 'safe_a',
-                call_id: 'call_a',
-                name: 'lookup_a',
-                arguments: '{"q":"final-a"}',
-              },
+    ])('never executes a displaced duplicate tool from $name finalized indices', async ({
+      firstIndex,
+      secondIndex,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: firstIndex,
+            item: {
+              type: 'function_call',
+              id: 'safe_a',
+              call_id: 'call_a',
+              name: 'lookup_a',
+              arguments: '{"q":"final-a"}',
             },
-            {
-              type: 'response.output_item.done',
-              output_index: secondIndex,
-              item: {
-                type: 'function_call',
-                id: 'safe_b',
-                call_id: 'call_b',
-                name: 'lookup_b',
-                arguments: '{"q":"final-b"}',
-              },
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: secondIndex,
+            item: {
+              type: 'function_call',
+              id: 'safe_b',
+              call_id: 'call_b',
+              name: 'lookup_b',
+              arguments: '{"q":"final-b"}',
             },
-            {
-              type: 'response.incomplete',
-              response: {
-                status: 'incomplete',
-                output: [
-                  {
-                    type: 'function_call',
-                    id: 'safe_a',
-                    call_id: 'call_a',
-                    name: 'lookup_a',
-                    arguments: '{"q":"draft-a"}',
-                  },
-                  {
-                    type: 'function_call',
-                    id: 'safe_a',
-                    call_id: 'call_a',
-                    name: 'delete_file',
-                    arguments: '{"path":"/tmp/secret"}',
-                  },
-                ],
-              },
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'safe_a',
+                  call_id: 'call_a',
+                  name: 'lookup_a',
+                  arguments: '{"q":"draft-a"}',
+                },
+                {
+                  type: 'function_call',
+                  id: 'safe_a',
+                  call_id: 'call_a',
+                  name: 'delete_file',
+                  arguments: '{"path":"/tmp/secret"}',
+                },
+              ],
             },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
 
-        expect(processCalls).toHaveBeenCalledTimes(1);
-        expect(processCalls).toHaveBeenNthCalledWith(
-          1,
-          expect.objectContaining({
-            call_id: 'call_a',
-            name: 'lookup_a',
-            arguments: '{"q":"final-a"}',
-          }),
-          undefined,
-        );
-        expect(JSON.stringify(parsed)).not.toContain('delete_file');
-        expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
-        expect(JSON.stringify(parsed)).not.toContain('draft-a');
-        expect(JSON.stringify(parsed)).not.toContain('lookup_b');
-      },
-    );
+      expect(processCalls).toHaveBeenCalledTimes(1);
+      expect(processCalls).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          call_id: 'call_a',
+          name: 'lookup_a',
+          arguments: '{"q":"final-a"}',
+        }),
+        undefined,
+      );
+      expect(JSON.stringify(parsed)).not.toContain('delete_file');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+      expect(JSON.stringify(parsed)).not.toContain('draft-a');
+      expect(JSON.stringify(parsed)).not.toContain('lookup_b');
+    });
 
     it.each([
       { name: 'compacted', firstIndex: 2, secondIndex: 3 },
       { name: 'sparse', firstIndex: 100, secondIndex: 101 },
-    ])(
-      'executes two independently finalized tools from $name indices',
-      async ({ firstIndex, secondIndex }) => {
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_item.done',
-              output_index: firstIndex,
-              item: {
-                type: 'function_call',
-                id: 'safe_a',
-                call_id: 'call_a',
-                name: 'lookup_a',
-                arguments: '{"q":"final-a"}',
-              },
+    ])('executes two independently finalized tools from $name indices', async ({
+      firstIndex,
+      secondIndex,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: firstIndex,
+            item: {
+              type: 'function_call',
+              id: 'safe_a',
+              call_id: 'call_a',
+              name: 'lookup_a',
+              arguments: '{"q":"final-a"}',
             },
-            {
-              type: 'response.output_item.done',
-              output_index: secondIndex,
-              item: {
-                type: 'function_call',
-                id: 'safe_b',
-                call_id: 'call_b',
-                name: 'lookup_b',
-                arguments: '{"q":"final-b"}',
-              },
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: secondIndex,
+            item: {
+              type: 'function_call',
+              id: 'safe_b',
+              call_id: 'call_b',
+              name: 'lookup_b',
+              arguments: '{"q":"final-b"}',
             },
-            {
-              type: 'response.incomplete',
-              response: {
-                status: 'incomplete',
-                output: [
-                  {
-                    type: 'function_call',
-                    id: 'safe_a',
-                    call_id: 'call_a',
-                    name: 'lookup_a',
-                    arguments: '{"q":"draft-a"}',
-                  },
-                  {
-                    type: 'function_call',
-                    id: 'safe_b',
-                    call_id: 'call_b',
-                    name: 'lookup_b',
-                    arguments: '{"q":"draft-b"}',
-                  },
-                ],
-              },
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'safe_a',
+                  call_id: 'call_a',
+                  name: 'lookup_a',
+                  arguments: '{"q":"draft-a"}',
+                },
+                {
+                  type: 'function_call',
+                  id: 'safe_b',
+                  call_id: 'call_b',
+                  name: 'lookup_b',
+                  arguments: '{"q":"draft-b"}',
+                },
+              ],
             },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
 
-        expect(processCalls).toHaveBeenCalledTimes(2);
-        expect(processCalls).toHaveBeenNthCalledWith(
-          1,
-          expect.objectContaining({
-            call_id: 'call_a',
-            name: 'lookup_a',
-            arguments: '{"q":"final-a"}',
-          }),
-          undefined,
-        );
-        expect(processCalls).toHaveBeenNthCalledWith(
-          2,
-          expect.objectContaining({
-            call_id: 'call_b',
-            name: 'lookup_b',
-            arguments: '{"q":"final-b"}',
-          }),
-          undefined,
-        );
-        expect(JSON.stringify(parsed)).not.toContain('draft-a');
-        expect(JSON.stringify(parsed)).not.toContain('draft-b');
-      },
-    );
+      expect(processCalls).toHaveBeenCalledTimes(2);
+      expect(processCalls).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          call_id: 'call_a',
+          name: 'lookup_a',
+          arguments: '{"q":"final-a"}',
+        }),
+        undefined,
+      );
+      expect(processCalls).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          call_id: 'call_b',
+          name: 'lookup_b',
+          arguments: '{"q":"final-b"}',
+        }),
+        undefined,
+      );
+      expect(JSON.stringify(parsed)).not.toContain('draft-a');
+      expect(JSON.stringify(parsed)).not.toContain('draft-b');
+    });
 
     it('executes one independently finalized tool when argument item_id is missing', async () => {
       const processCalls = vi.fn().mockResolvedValue('executed');
@@ -1972,82 +1976,80 @@ describe('Responses stream regressions', () => {
       expect(processCalls).toHaveBeenCalledTimes(1);
     });
 
-    it.each(['failed', 'cancelled'])(
-      'preserves independently finalized text over a truncated %s terminal snapshot',
-      async (status) => {
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_text.done',
-              output_index: 0,
-              content_index: 0,
-              text: 'SAFE FINALIZED TEXT',
+    it.each([
+      'failed',
+      'cancelled',
+    ])('preserves independently finalized text over a truncated %s terminal snapshot', async (status) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            text: 'SAFE FINALIZED TEXT',
+          },
+          {
+            type: `response.${status}`,
+            response: {
+              status,
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE' }],
+                },
+              ],
             },
-            {
-              type: `response.${status}`,
-              response: {
-                status,
-                output: [
-                  {
-                    type: 'message',
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'SAFE' }],
-                  },
-                ],
-              },
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
 
-        expect(parsed.output).toEqual([
-          expect.objectContaining({
-            content: [
-              expect.objectContaining({ type: 'output_text', text: 'SAFE FINALIZED TEXT' }),
-            ],
-          }),
-        ]);
-      },
-    );
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FINALIZED TEXT' })],
+        }),
+      ]);
+    });
 
-    it.each(['failed', 'cancelled'])(
-      'never recovers an unfinalized text delta over a %s terminal snapshot',
-      async (status) => {
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_text.delta',
-              output_index: 0,
-              content_index: 0,
-              delta: 'SECRET OR UNSAFE DRAFT',
+    it.each([
+      'failed',
+      'cancelled',
+    ])('never recovers an unfinalized text delta over a %s terminal snapshot', async (status) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            delta: 'SECRET OR UNSAFE DRAFT',
+          },
+          {
+            type: `response.${status}`,
+            response: {
+              status,
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT' }],
+                },
+              ],
             },
-            {
-              type: `response.${status}`,
-              response: {
-                status,
-                output: [
-                  {
-                    type: 'message',
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT' }],
-                  },
-                ],
-              },
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
 
-        expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
-        expect(parsed.output).toEqual([
-          expect.objectContaining({
-            content: [expect.objectContaining({ type: 'output_text', text: 'SAFE TERMINAL TEXT' })],
-          }),
-        ]);
-      },
-    );
+      expect(JSON.stringify(parsed)).not.toContain('SECRET OR UNSAFE DRAFT');
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE TERMINAL TEXT' })],
+        }),
+      ]);
+    });
 
     it('removes blocked audio and transcripts from content-filtered raw output', async () => {
       const parsed = await readResponsesStream(
@@ -2280,53 +2282,54 @@ describe('Responses stream regressions', () => {
           delta: 'I cannot help with that.',
         },
       },
-    ])(
-      'keeps a finalized refusal $name authoritative over a draft',
-      async ({ event, terminalType, status }) => {
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            event,
-            {
-              type: terminalType,
-              response: {
-                status,
-                output_text: 'SECRET_RESPONSE_TEXT',
-                raw_output: 'SECRET_RESPONSE_RAW',
-                audio: 'SECRET_RESPONSE_AUDIO',
-                transcript: 'SECRET RESPONSE TRANSCRIPT',
-                incomplete_details: {
-                  reason: 'max_output_tokens',
-                  raw_output: 'SECRET_DETAILS',
-                },
-                usage: { input_tokens: 1, raw_output: 'SECRET_USAGE' },
-                output: [
-                  {
-                    type: 'message',
-                    role: 'assistant',
-                    status: { raw_output: 'SECRET_STATUS' },
-                    content: [
-                      { type: 'output_text', text: 'SECRET OR UNSAFE DRAFT' },
-                      {
-                        type: 'output_audio',
-                        audio: 'SECRET_AUDIO',
-                        transcript: 'SECRET_TRANSCRIPT',
-                      },
-                    ],
-                  },
-                ],
+    ])('keeps a finalized refusal $name authoritative over a draft', async ({
+      event,
+      terminalType,
+      status,
+    }) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          event,
+          {
+            type: terminalType,
+            response: {
+              status,
+              output_text: 'SECRET_RESPONSE_TEXT',
+              raw_output: 'SECRET_RESPONSE_RAW',
+              audio: 'SECRET_RESPONSE_AUDIO',
+              transcript: 'SECRET RESPONSE TRANSCRIPT',
+              incomplete_details: {
+                reason: 'max_output_tokens',
+                raw_output: 'SECRET_DETAILS',
               },
+              usage: { input_tokens: 1, raw_output: 'SECRET_USAGE' },
+              output: [
+                {
+                  type: 'message',
+                  role: 'assistant',
+                  status: { raw_output: 'SECRET_STATUS' },
+                  content: [
+                    { type: 'output_text', text: 'SECRET OR UNSAFE DRAFT' },
+                    {
+                      type: 'output_audio',
+                      audio: 'SECRET_AUDIO',
+                      transcript: 'SECRET_TRANSCRIPT',
+                    },
+                  ],
+                },
+              ],
             },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
 
-        expect(JSON.stringify(parsed)).not.toContain('SECRET');
-        expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
-        expect(processed.isRefusal).toBe(true);
-      },
-    );
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+      expect(processed.isRefusal).toBe(true);
+    });
 
     it('keeps distinct malformed output/content index pairs separate', async () => {
       const parsed = await readResponsesStream(
@@ -2515,41 +2518,40 @@ describe('Responses stream regressions', () => {
         ],
       },
       { name: 'discarded output', output: [] },
-    ])(
-      'never resurrects a finalized tool after an incomplete terminal $name',
-      async ({ output }) => {
-        const processCalls = vi.fn().mockResolvedValue('CALLED');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_item.done',
-              output_index: 0,
-              item: {
-                type: 'function_call',
-                id: 'delete_item',
-                call_id: 'delete_call',
-                name: 'delete_file',
-                arguments: '{"path":"/tmp/secret"}',
-                status: 'completed',
-              },
+    ])('never resurrects a finalized tool after an incomplete terminal $name', async ({
+      output,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('CALLED');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'delete_item',
+              call_id: 'delete_call',
+              name: 'delete_file',
+              arguments: '{"path":"/tmp/secret"}',
+              status: 'completed',
             },
-            { type: 'response.incomplete', response: { status: 'incomplete', output } },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
+          },
+          { type: 'response.incomplete', response: { status: 'incomplete', output } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(JSON.stringify(parsed)).not.toContain('delete_file');
-        expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
-        expect(JSON.stringify(processed)).not.toContain('CALLED');
-      },
-    );
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('delete_file');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+      expect(JSON.stringify(processed)).not.toContain('CALLED');
+    });
 
     it('executes a finalized tool explicitly retained by an incomplete terminal identity', async () => {
       const processCalls = vi.fn().mockResolvedValue('CALLED');
@@ -2626,41 +2628,40 @@ describe('Responses stream regressions', () => {
           },
         ],
       },
-    ])(
-      'never resurrects a finalized tool after an in-progress EOF snapshot $name',
-      async ({ output }) => {
-        const processCalls = vi.fn().mockResolvedValue('CALLED');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_item.done',
-              output_index: 0,
-              item: {
-                type: 'function_call',
-                id: 'delete_item',
-                call_id: 'delete_call',
-                name: 'delete_file',
-                arguments: '{"path":"/tmp/secret"}',
-                status: 'completed',
-              },
+    ])('never resurrects a finalized tool after an in-progress EOF snapshot $name', async ({
+      output,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('CALLED');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'delete_item',
+              call_id: 'delete_call',
+              name: 'delete_file',
+              arguments: '{"path":"/tmp/secret"}',
+              status: 'completed',
             },
-            { type: 'response.in_progress', response: { status: 'in_progress', output } },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
+          },
+          { type: 'response.in_progress', response: { status: 'in_progress', output } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(JSON.stringify(parsed)).not.toContain('delete_file');
-        expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
-        expect(JSON.stringify(processed)).not.toContain('CALLED');
-      },
-    );
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('delete_file');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+      expect(JSON.stringify(processed)).not.toContain('CALLED');
+    });
 
     it('executes a finalized tool explicitly retained by an in-progress EOF identity', async () => {
       const processCalls = vi.fn().mockResolvedValue('CALLED');
@@ -2760,41 +2761,40 @@ describe('Responses stream regressions', () => {
         event: { type: 'response.unknown', response: { status: 'unknown', output: [] } },
       },
       { name: 'unknown top-level output', event: { type: 'response.unknown', output: [] } },
-    ])(
-      'never resurrects a finalized tool after a $name EOF snapshot discards output',
-      async ({ event }) => {
-        const processCalls = vi.fn().mockResolvedValue('CALLED');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_item.done',
-              output_index: 0,
-              item: {
-                type: 'function_call',
-                id: 'delete_item',
-                call_id: 'delete_call',
-                name: 'delete_file',
-                arguments: '{"path":"/tmp/secret"}',
-                status: 'completed',
-              },
+    ])('never resurrects a finalized tool after a $name EOF snapshot discards output', async ({
+      event,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('CALLED');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'delete_item',
+              call_id: 'delete_call',
+              name: 'delete_file',
+              arguments: '{"path":"/tmp/secret"}',
+              status: 'completed',
             },
-            event,
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
+          },
+          event,
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(JSON.stringify(parsed)).not.toContain('delete_file');
-        expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
-        expect(JSON.stringify(processed)).not.toContain('CALLED');
-      },
-    );
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('delete_file');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+      expect(JSON.stringify(processed)).not.toContain('CALLED');
+    });
 
     it.each([
       {
@@ -2908,34 +2908,23 @@ describe('Responses stream regressions', () => {
           if (!sent) {
             sent = true;
             controller.enqueue(body);
+            queueMicrotask(() => abortController.abort());
           }
         },
         cancel() {
           cancelled = true;
         },
       });
-      const started = performance.now();
-      let abortDelay = Number.POSITIVE_INFINITY;
-      const timer = setTimeout(() => {
-        abortDelay = performance.now() - started;
-        abortController.abort();
-      }, 10);
-
-      try {
-        await expect(
-          readResponsesStream(
-            new Response(stream),
-            'test',
-            { debug: vi.fn() },
-            abortController.signal,
-          ),
-        ).rejects.toThrow(/abort/i);
-      } finally {
-        clearTimeout(timer);
-      }
+      await expect(
+        readResponsesStream(
+          new Response(stream),
+          'test',
+          { debug: vi.fn() },
+          abortController.signal,
+        ),
+      ).rejects.toThrow(/abort/i);
 
       expect(cancelled).toBe(true);
-      expect(abortDelay).toBeLessThan(250);
     });
 
     it.each([
@@ -2983,47 +2972,47 @@ describe('Responses stream regressions', () => {
       expect(parsed.output).toEqual([item]);
     });
 
-    it.each(['tool_use', 'function_call'])(
-      'preserves finalized audio-only content without reviving a draft or nested %s',
-      async (nestedType) => {
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const audio = { type: 'output_audio', audio: 'QUJD', transcript: 'hello' };
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_text.delta',
-              output_index: 0,
-              content_index: 0,
-              item_id: 'm_audio',
-              delta: 'SECRET DRAFT',
+    it.each([
+      'tool_use',
+      'function_call',
+    ])('preserves finalized audio-only content without reviving a draft or nested %s', async (nestedType) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const audio = { type: 'output_audio', audio: 'QUJD', transcript: 'hello' };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_audio',
+            delta: 'SECRET DRAFT',
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'message',
+              id: 'm_audio',
+              role: 'assistant',
+              status: 'completed',
+              content: [
+                audio,
+                { type: nestedType, name: 'dangerous_action', arguments: '{}', call_id: 'c_1' },
+              ],
             },
-            {
-              type: 'response.output_item.done',
-              output_index: 0,
-              item: {
-                type: 'message',
-                id: 'm_audio',
-                role: 'assistant',
-                status: 'completed',
-                content: [
-                  audio,
-                  { type: nestedType, name: 'dangerous_action', arguments: '{}', call_id: 'c_1' },
-                ],
-              },
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      await createProcessor(processCalls).processResponseOutput(parsed, {}, false);
 
-        expect(parsed.output).toEqual([
-          expect.objectContaining({ type: 'message', id: 'm_audio', content: [audio] }),
-        ]);
-        expect(JSON.stringify(parsed)).not.toContain('SECRET DRAFT');
-        expect(processCalls).not.toHaveBeenCalled();
-      },
-    );
+      expect(parsed.output).toEqual([
+        expect.objectContaining({ type: 'message', id: 'm_audio', content: [audio] }),
+      ]);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET DRAFT');
+      expect(processCalls).not.toHaveBeenCalled();
+    });
 
     it('compacts malformed terminal slots while preserving indexed non-text output', async () => {
       const item = {
@@ -3229,26 +3218,26 @@ describe('Responses stream regressions', () => {
         }),
         field: 'code',
       },
-    ])(
-      'accepts a finalized nine-mebibyte $name duplicated by the terminal snapshot',
-      async ({ item, field }) => {
-        const payload = 'x'.repeat(9 * 1024 * 1024);
-        const finalized = item(payload);
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            { type: 'response.output_item.done', output_index: 0, item: finalized },
-            {
-              type: 'response.completed',
-              response: { status: 'completed', output: [finalized] },
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
+    ])('accepts a finalized nine-mebibyte $name duplicated by the terminal snapshot', async ({
+      item,
+      field,
+    }) => {
+      const payload = 'x'.repeat(9 * 1024 * 1024);
+      const finalized = item(payload);
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.output_item.done', output_index: 0, item: finalized },
+          {
+            type: 'response.completed',
+            response: { status: 'completed', output: [finalized] },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
 
-        expect(parsed.output?.[0]?.[field]).toHaveLength(9 * 1024 * 1024);
-      },
-    );
+      expect(parsed.output?.[0]?.[field]).toHaveLength(9 * 1024 * 1024);
+    });
 
     it.each([
       {
@@ -3345,22 +3334,21 @@ describe('Responses stream regressions', () => {
           },
         ],
       },
-    ])(
-      'fails closed on a malformed $name at EOF without leaking draft text',
-      async ({ events }) => {
-        const parsed = await readResponsesStream(createSseResponse(events), 'test', {
-          debug: vi.fn(),
-        });
-        const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+    ])('fails closed on a malformed $name at EOF without leaking draft text', async ({
+      events,
+    }) => {
+      const parsed = await readResponsesStream(createSseResponse(events), 'test', {
+        debug: vi.fn(),
+      });
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
 
-        expect(processed.isRefusal).toBe(true);
-        expect(processed.output).toBe('');
-        expect(JSON.stringify(parsed)).not.toContain('SECRET');
-        expect(JSON.stringify(parsed)).not.toContain('leaked');
-        expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
-        expect(JSON.stringify(processed.raw)).not.toContain('leaked');
-      },
-    );
+      expect(processed.isRefusal).toBe(true);
+      expect(processed.output).toBe('');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('leaked');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('leaked');
+    });
 
     it.each([
       {
@@ -3392,33 +3380,32 @@ describe('Responses stream regressions', () => {
           item_id: 'm',
         },
       },
-    ])(
-      'fails closed on a malformed $name refusal delta at EOF without leaking draft text',
-      async ({ event }) => {
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            event,
-            {
-              type: 'response.output_text.done',
-              output_index: 0,
-              content_index: 0,
-              item_id: 'm',
-              text: 'SECRET DRAFT',
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+    ])('fails closed on a malformed $name refusal delta at EOF without leaking draft text', async ({
+      event,
+    }) => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          event,
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm',
+            text: 'SECRET DRAFT',
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
 
-        expect(processed.isRefusal).toBe(true);
-        expect(processed.output).toBe('');
-        expect(JSON.stringify(parsed)).not.toContain('SECRET');
-        expect(JSON.stringify(parsed)).not.toContain('leaked');
-        expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
-        expect(JSON.stringify(processed.raw)).not.toContain('leaked');
-      },
-    );
+      expect(processed.isRefusal).toBe(true);
+      expect(processed.output).toBe('');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('leaked');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('leaked');
+    });
 
     it.each([
       { name: 'truncated function_call', nestedType: 'function_call', terminalType: undefined },
@@ -3445,147 +3432,146 @@ describe('Responses stream regressions', () => {
         terminalType: 'response.completed',
       },
       { name: 'completed tool_use', nestedType: 'tool_use', terminalType: 'response.completed' },
-    ])(
-      'never executes nested content from a $name finalized message',
-      async ({ nestedType, terminalType }) => {
-        const annotation = {
-          type: 'url_citation',
-          url: 'https://example.test/safe',
-          title: 'Safe',
-          start_index: 0,
-          end_index: 4,
-        };
-        const item = {
-          type: 'message',
-          id: 'm_safe',
-          role: 'assistant',
-          content: [
-            { type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [annotation] },
-            {
-              type: nestedType,
-              call_id: 'call_1',
-              name: 'delete_file',
-              arguments: '{"path":"/tmp/secret"}',
+    ])('never executes nested content from a $name finalized message', async ({
+      nestedType,
+      terminalType,
+    }) => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/safe',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const item = {
+        type: 'message',
+        id: 'm_safe',
+        role: 'assistant',
+        content: [
+          { type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [annotation] },
+          {
+            type: nestedType,
+            call_id: 'call_1',
+            name: 'delete_file',
+            arguments: '{"path":"/tmp/secret"}',
+          },
+        ],
+      };
+      const terminal = terminalType
+        ? {
+            type: terminalType,
+            response: {
+              ...(terminalType === 'response.incomplete'
+                ? { status: 'incomplete' }
+                : terminalType === 'response.in_progress'
+                  ? { status: 'in_progress' }
+                  : { status: 'completed' }),
+              output: [item],
             },
-          ],
-        };
-        const terminal = terminalType
-          ? {
-              type: terminalType,
-              response: {
-                ...(terminalType === 'response.incomplete'
-                  ? { status: 'incomplete' }
-                  : terminalType === 'response.in_progress'
-                    ? { status: 'in_progress' }
-                    : { status: 'completed' }),
-                output: [item],
-              },
-            }
-          : undefined;
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            { type: 'response.output_item.done', output_index: 0, item },
-            ...(terminal ? [terminal] : []),
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
+          }
+        : undefined;
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.output_item.done', output_index: 0, item },
+          ...(terminal ? [terminal] : []),
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(processed.output).toBe('SAFE FINAL TEXT');
-        expect(processed.metadata?.annotations).toEqual([annotation]);
-        expect(JSON.stringify(parsed)).not.toContain('delete_file');
-        expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
-      },
-    );
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+      expect(JSON.stringify(parsed)).not.toContain('delete_file');
+      expect(JSON.stringify(parsed)).not.toContain('/tmp/secret');
+    });
 
     it.each([
       { name: 'output_text.done', finalizer: 'text' },
       { name: 'output_item.done', finalizer: 'item' },
-    ])(
-      'does not attach a stale streamed citation from $name to different completed text',
-      async ({ finalizer }) => {
-        const stale = {
-          type: 'url_citation',
-          url: 'https://wrong.example/SECRET',
-          title: 'SECRET SOURCE',
-          start_index: 0,
-          end_index: 6,
-        };
-        const finalized =
-          finalizer === 'text'
-            ? [
-                {
-                  type: 'response.output_text.done',
-                  output_index: 0,
-                  content_index: 0,
-                  item_id: 'm_safe',
-                  text: 'SECRET STREAM TEXT',
-                },
-                {
-                  type: 'response.output_text.annotation.added',
-                  output_index: 0,
-                  content_index: 0,
-                  item_id: 'm_safe',
-                  annotation_index: 0,
-                  annotation: stale,
-                },
-              ]
-            : [
-                {
-                  type: 'response.output_item.done',
-                  output_index: 0,
-                  item: {
-                    type: 'message',
-                    id: 'm_safe',
-                    role: 'assistant',
-                    content: [
-                      {
-                        type: 'output_text',
-                        text: 'SECRET STREAM TEXT',
-                        annotations: [stale],
-                      },
-                    ],
-                  },
-                },
-              ];
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            ...finalized,
-            {
-              type: 'response.completed',
-              response: {
-                status: 'completed',
-                output: [
-                  {
-                    type: 'message',
-                    id: 'm_safe',
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [] }],
-                  },
-                ],
+    ])('does not attach a stale streamed citation from $name to different completed text', async ({
+      finalizer,
+    }) => {
+      const stale = {
+        type: 'url_citation',
+        url: 'https://wrong.example/SECRET',
+        title: 'SECRET SOURCE',
+        start_index: 0,
+        end_index: 6,
+      };
+      const finalized =
+        finalizer === 'text'
+          ? [
+              {
+                type: 'response.output_text.done',
+                output_index: 0,
+                content_index: 0,
+                item_id: 'm_safe',
+                text: 'SECRET STREAM TEXT',
               },
+              {
+                type: 'response.output_text.annotation.added',
+                output_index: 0,
+                content_index: 0,
+                item_id: 'm_safe',
+                annotation_index: 0,
+                annotation: stale,
+              },
+            ]
+          : [
+              {
+                type: 'response.output_item.done',
+                output_index: 0,
+                item: {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [
+                    {
+                      type: 'output_text',
+                      text: 'SECRET STREAM TEXT',
+                      annotations: [stale],
+                    },
+                  ],
+                },
+              },
+            ];
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          ...finalized,
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [] }],
+                },
+              ],
             },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
 
-        expect(processed.output).toBe('SAFE FINAL TEXT');
-        expect(parsed.output?.[0]?.content?.[0]?.annotations ?? []).toEqual([]);
-        expect(processed.metadata?.annotations ?? []).toEqual([]);
-        expect(JSON.stringify(parsed)).not.toContain('wrong.example');
-        expect(JSON.stringify(processed.metadata)).not.toContain('wrong.example');
-        expect(JSON.stringify(parsed)).not.toContain('SECRET');
-      },
-    );
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(parsed.output?.[0]?.content?.[0]?.annotations ?? []).toEqual([]);
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.metadata)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+    });
 
     it('does not attach a citation finalized with empty text to different completed text', async () => {
       const stale = {
@@ -3709,60 +3695,59 @@ describe('Responses stream regressions', () => {
         name: 'object',
         terminalContent: { type: 'output_text', text: { value: 'SAFE' }, annotations: [] },
       },
-    ])(
-      'does not attach a stale streamed citation when completed text is $name',
-      async ({ terminalContent }) => {
-        const stale = {
-          type: 'url_citation',
-          url: 'https://wrong.example/SECRET',
-          title: 'SECRET SOURCE',
-          start_index: 0,
-          end_index: 6,
-        };
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_text.done',
-              output_index: 0,
-              content_index: 0,
-              item_id: 'm_safe',
-              text: 'SECRET STREAM TEXT',
+    ])('does not attach a stale streamed citation when completed text is $name', async ({
+      terminalContent,
+    }) => {
+      const stale = {
+        type: 'url_citation',
+        url: 'https://wrong.example/SECRET',
+        title: 'SECRET SOURCE',
+        start_index: 0,
+        end_index: 6,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            text: 'SECRET STREAM TEXT',
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_safe',
+            annotation_index: 0,
+            annotation: stale,
+          },
+          {
+            type: 'response.completed',
+            response: {
+              status: 'completed',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [terminalContent],
+                },
+              ],
             },
-            {
-              type: 'response.output_text.annotation.added',
-              output_index: 0,
-              content_index: 0,
-              item_id: 'm_safe',
-              annotation_index: 0,
-              annotation: stale,
-            },
-            {
-              type: 'response.completed',
-              response: {
-                status: 'completed',
-                output: [
-                  {
-                    type: 'message',
-                    id: 'm_safe',
-                    role: 'assistant',
-                    content: [terminalContent],
-                  },
-                ],
-              },
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
 
-        expect(parsed.output?.[0]?.content?.[0]?.annotations ?? []).toEqual([]);
-        expect(processed.metadata?.annotations ?? []).toEqual([]);
-        expect(JSON.stringify(parsed)).not.toContain('wrong.example');
-        expect(JSON.stringify(processed.metadata)).not.toContain('wrong.example');
-        expect(JSON.stringify(parsed)).not.toContain('SECRET');
-      },
-    );
+      expect(parsed.output?.[0]?.content?.[0]?.annotations ?? []).toEqual([]);
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.metadata)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+    });
 
     it.each([
       { name: 'equal non-empty', text: 'SAFE FINAL TEXT' },
@@ -3975,69 +3960,69 @@ describe('Responses stream regressions', () => {
       ['incomplete', 'in_progress', 'failed', 'cancelled', 'completed'].flatMap((status) =>
         ['text', 'item'].map((source) => ({ terminalType: `response.${status}`, source })),
       ),
-    )(
-      'never replaces a different terminal message identity after $terminalType ($source)',
-      async ({ terminalType, source }) => {
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            source === 'item'
-              ? {
-                  type: 'response.output_item.done',
-                  output_index: 0,
-                  item: {
-                    type: 'message',
-                    id: 'm_secret',
-                    role: 'assistant',
-                    content: [
-                      { type: 'output_text', text: 'SECRET FINALIZED TEXT', annotations: [] },
-                    ],
-                  },
-                }
-              : {
-                  type: 'response.output_text.done',
-                  output_index: 0,
-                  content_index: 0,
-                  item_id: 'm_secret',
-                  text: 'SECRET FINALIZED TEXT',
+    )('never replaces a different terminal message identity after $terminalType ($source)', async ({
+      terminalType,
+      source,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          source === 'item'
+            ? {
+                type: 'response.output_item.done',
+                output_index: 0,
+                item: {
+                  type: 'message',
+                  id: 'm_secret',
+                  role: 'assistant',
+                  content: [
+                    { type: 'output_text', text: 'SECRET FINALIZED TEXT', annotations: [] },
+                  ],
                 },
-            {
-              type: terminalType,
-              response: {
-                status: terminalType.slice('response.'.length),
-                output: [
-                  {
-                    type: 'message',
-                    id: 'm_safe',
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT' }],
-                  },
-                ],
+              }
+            : {
+                type: 'response.output_text.done',
+                output_index: 0,
+                content_index: 0,
+                item_id: 'm_secret',
+                text: 'SECRET FINALIZED TEXT',
               },
+          {
+            type: terminalType,
+            response: {
+              status: terminalType.slice('response.'.length),
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT' }],
+                },
+              ],
             },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(parsed.output).toEqual([
-          expect.objectContaining({
-            type: 'message',
-            id: 'm_safe',
-            content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT' }],
-          }),
-        ]);
-        expect(processed.output).toBe('SAFE TERMINAL TEXT');
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(JSON.stringify(parsed)).not.toContain('SECRET FINALIZED TEXT');
-        expect(JSON.stringify(processed.raw)).not.toContain('SECRET FINALIZED TEXT');
-      },
-    );
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          type: 'message',
+          id: 'm_safe',
+          content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT' }],
+        }),
+      ]);
+      expect(processed.output).toBe('SAFE TERMINAL TEXT');
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('SECRET FINALIZED TEXT');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET FINALIZED TEXT');
+    });
 
     it.each([
       {
@@ -4112,63 +4097,64 @@ describe('Responses stream regressions', () => {
         annotationOutputIndex: 0,
         annotationItemId: 'm_other',
       },
-    ])(
-      'never attaches an index-mismatched streamed citation after $name',
-      async ({ terminalType, annotationOutputIndex, annotationItemId }) => {
-        const annotation = {
-          type: 'url_citation',
-          url: 'https://wrong.example',
-          title: 'Wrong',
-          start_index: 0,
-          end_index: 6,
-        };
-        const item = {
-          type: 'message',
-          id: 'm_1',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [] }],
-        };
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            { type: 'response.output_item.done', output_index: 0, item },
-            {
-              type: 'response.output_text.annotation.added',
-              output_index: annotationOutputIndex,
-              content_index: 0,
-              item_id: annotationItemId,
-              annotation_index: 0,
-              annotation,
-            },
-            ...(terminalType
-              ? [
-                  {
-                    type: terminalType,
-                    response: {
-                      status: terminalType.slice('response.'.length),
-                      output: [item],
-                    },
+    ])('never attaches an index-mismatched streamed citation after $name', async ({
+      terminalType,
+      annotationOutputIndex,
+      annotationItemId,
+    }) => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://wrong.example',
+        title: 'Wrong',
+        start_index: 0,
+        end_index: 6,
+      };
+      const item = {
+        type: 'message',
+        id: 'm_1',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'SAFE FINAL TEXT', annotations: [] }],
+      };
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.output_item.done', output_index: 0, item },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: annotationOutputIndex,
+            content_index: 0,
+            item_id: annotationItemId,
+            annotation_index: 0,
+            annotation,
+          },
+          ...(terminalType
+            ? [
+                {
+                  type: terminalType,
+                  response: {
+                    status: terminalType.slice('response.'.length),
+                    output: [item],
                   },
-                ]
-              : []),
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
+                },
+              ]
+            : []),
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(parsed.output).toEqual([item]);
-        expect(processed.output).toBe('SAFE FINAL TEXT');
-        expect(processed.metadata?.annotations ?? []).toEqual([]);
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(JSON.stringify(parsed)).not.toContain('wrong.example');
-        expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
-      },
-    );
+      expect(parsed.output).toEqual([item]);
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
+    });
 
     it('preserves a matching streamed citation and finalized text after a truncated stream', async () => {
       const annotation = {
@@ -4276,59 +4262,60 @@ describe('Responses stream regressions', () => {
         annotationOutputIndex: 1,
         annotationItemId: 'm_safe',
       },
-    ])(
-      'never attaches a conflicting citation to a terminal-only message after $name',
-      async ({ terminalType, annotationOutputIndex, annotationItemId }) => {
-        const item = {
-          type: 'message',
-          id: 'm_safe',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT', annotations: [] }],
-        };
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_text.annotation.added',
-              output_index: annotationOutputIndex,
-              content_index: 0,
-              item_id: annotationItemId,
-              annotation_index: 0,
-              annotation: {
-                type: 'url_citation',
-                url: 'https://wrong.example/SECRET',
-                title: 'SECRET SOURCE',
-                start_index: 0,
-                end_index: 6,
-              },
+    ])('never attaches a conflicting citation to a terminal-only message after $name', async ({
+      terminalType,
+      annotationOutputIndex,
+      annotationItemId,
+    }) => {
+      const item = {
+        type: 'message',
+        id: 'm_safe',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT', annotations: [] }],
+      };
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: annotationOutputIndex,
+            content_index: 0,
+            item_id: annotationItemId,
+            annotation_index: 0,
+            annotation: {
+              type: 'url_citation',
+              url: 'https://wrong.example/SECRET',
+              title: 'SECRET SOURCE',
+              start_index: 0,
+              end_index: 6,
             },
-            {
-              type: terminalType,
-              response: {
-                status: terminalType.slice('response.'.length),
-                output: [item],
-              },
+          },
+          {
+            type: terminalType,
+            response: {
+              status: terminalType.slice('response.'.length),
+              output: [item],
             },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(parsed.output).toEqual([item]);
-        expect(processed.output).toBe('SAFE TERMINAL TEXT');
-        expect(processed.metadata?.annotations ?? []).toEqual([]);
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(JSON.stringify(parsed)).not.toContain('wrong.example');
-        expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
-        expect(JSON.stringify(parsed)).not.toContain('SECRET');
-        expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
-      },
-    );
+      expect(parsed.output).toEqual([item]);
+      expect(processed.output).toBe('SAFE TERMINAL TEXT');
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+    });
 
     it.each([
       'response.incomplete',
@@ -4440,85 +4427,85 @@ describe('Responses stream regressions', () => {
         terminalType: 'response.completed',
         mode: 'item-id',
       },
-    ])(
-      'rejects a citation when finalized and terminal message identities contradict after $name',
-      async ({ terminalType, mode }) => {
-        const finalizedItem = {
-          type: 'message',
-          id: 'm_final',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: 'FINALIZED SAFE', annotations: [] }],
-        };
-        const terminalOutput =
-          mode === 'index'
-            ? [
-                {
-                  type: 'message',
-                  id: 'm_other',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'OTHER SAFE', annotations: [] }],
-                },
-                {
-                  type: 'message',
-                  id: 'm_final',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'TERMINAL SAFE', annotations: [] }],
-                },
-              ]
-            : [
-                {
-                  type: 'message',
-                  id: 'm_terminal',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'TERMINAL SAFE', annotations: [] }],
-                },
-              ];
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            { type: 'response.output_item.done', output_index: 0, item: finalizedItem },
-            {
-              type: 'response.output_text.annotation.added',
-              output_index: mode === 'index' ? 1 : 0,
-              content_index: 0,
-              item_id: mode === 'index' ? 'm_final' : 'm_terminal',
-              annotation_index: 0,
-              annotation: {
-                type: 'url_citation',
-                url: 'https://wrong.example/SECRET',
-                title: 'SECRET SOURCE',
-                start_index: 0,
-                end_index: 6,
+    ])('rejects a citation when finalized and terminal message identities contradict after $name', async ({
+      terminalType,
+      mode,
+    }) => {
+      const finalizedItem = {
+        type: 'message',
+        id: 'm_final',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'FINALIZED SAFE', annotations: [] }],
+      };
+      const terminalOutput =
+        mode === 'index'
+          ? [
+              {
+                type: 'message',
+                id: 'm_other',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'OTHER SAFE', annotations: [] }],
               },
-            },
-            {
-              type: terminalType,
-              response: {
-                status: terminalType.slice('response.'.length),
-                output: terminalOutput,
+              {
+                type: 'message',
+                id: 'm_final',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'TERMINAL SAFE', annotations: [] }],
               },
+            ]
+          : [
+              {
+                type: 'message',
+                id: 'm_terminal',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'TERMINAL SAFE', annotations: [] }],
+              },
+            ];
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.output_item.done', output_index: 0, item: finalizedItem },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: mode === 'index' ? 1 : 0,
+            content_index: 0,
+            item_id: mode === 'index' ? 'm_final' : 'm_terminal',
+            annotation_index: 0,
+            annotation: {
+              type: 'url_citation',
+              url: 'https://wrong.example/SECRET',
+              title: 'SECRET SOURCE',
+              start_index: 0,
+              end_index: 6,
             },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
+          },
+          {
+            type: terminalType,
+            response: {
+              status: terminalType.slice('response.'.length),
+              output: terminalOutput,
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(
-          parsed.output?.filter((item: any) => item?.id === 'm_final').length ?? 0,
-        ).toBeLessThanOrEqual(1);
-        expect(processed.metadata?.annotations ?? []).toEqual([]);
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(JSON.stringify(parsed)).not.toContain('wrong.example');
-        expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
-        expect(JSON.stringify(parsed)).not.toContain('SECRET');
-        expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
-      },
-    );
+      expect(
+        parsed.output?.filter((item: any) => item?.id === 'm_final').length ?? 0,
+      ).toBeLessThanOrEqual(1);
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+    });
 
     it.each([
       'response.incomplete',
@@ -4526,62 +4513,59 @@ describe('Responses stream regressions', () => {
       'response.failed',
       'response.cancelled',
       'response.completed',
-    ])(
-      'preserves a citation when finalized and terminal identities agree after %s',
-      async (terminalType) => {
-        const annotation = {
-          type: 'url_citation',
-          url: 'https://example.test/safe',
-          title: 'Safe',
-          start_index: 0,
-          end_index: 4,
-        };
-        const item = {
-          type: 'message',
-          id: 'm_final',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: 'CONSISTENT SAFE', annotations: [] }],
-        };
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            { type: 'response.output_item.done', output_index: 0, item },
-            {
-              type: 'response.output_text.annotation.added',
-              output_index: 0,
-              content_index: 0,
-              item_id: 'm_final',
-              annotation_index: 0,
-              annotation,
-            },
-            {
-              type: terminalType,
-              response: {
-                status: terminalType.slice('response.'.length),
-                output: [item],
-              },
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
-
-        expect(parsed.output).toEqual([
+    ])('preserves a citation when finalized and terminal identities agree after %s', async (terminalType) => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/safe',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const item = {
+        type: 'message',
+        id: 'm_final',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'CONSISTENT SAFE', annotations: [] }],
+      };
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.output_item.done', output_index: 0, item },
           {
-            ...item,
-            content: [{ type: 'output_text', text: 'CONSISTENT SAFE', annotations: [annotation] }],
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_final',
+            annotation_index: 0,
+            annotation,
           },
-        ]);
-        expect(processed.output).toBe('CONSISTENT SAFE');
-        expect(processed.metadata?.annotations).toEqual([annotation]);
-        expect(processCalls).not.toHaveBeenCalled();
-      },
-    );
+          {
+            type: terminalType,
+            response: {
+              status: terminalType.slice('response.'.length),
+              output: [item],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(parsed.output).toEqual([
+        {
+          ...item,
+          content: [{ type: 'output_text', text: 'CONSISTENT SAFE', annotations: [annotation] }],
+        },
+      ]);
+      expect(processed.output).toBe('CONSISTENT SAFE');
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
 
     it.each([
       {
@@ -4634,85 +4618,85 @@ describe('Responses stream regressions', () => {
         terminalType: 'response.completed',
         mode: 'item-id',
       },
-    ])(
-      'rejects a citation when finalized message snapshots contradict after $name',
-      async ({ terminalType, mode }) => {
-        const firstId = mode === 'index' ? 'm_final' : 'm_first';
-        const secondId = mode === 'index' ? 'm_final' : 'm_second';
-        const secondIndex = mode === 'index' ? 1 : 0;
-        const terminalItem = {
-          type: 'message',
-          id: firstId,
-          role: 'assistant',
-          content: [{ type: 'output_text', text: 'TERMINAL SAFE', annotations: [] }],
-        };
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_item.done',
-              output_index: 0,
-              item: {
-                type: 'message',
-                id: firstId,
-                role: 'assistant',
-                content: [{ type: 'output_text', text: 'FIRST FINAL', annotations: [] }],
-              },
+    ])('rejects a citation when finalized message snapshots contradict after $name', async ({
+      terminalType,
+      mode,
+    }) => {
+      const firstId = mode === 'index' ? 'm_final' : 'm_first';
+      const secondId = mode === 'index' ? 'm_final' : 'm_second';
+      const secondIndex = mode === 'index' ? 1 : 0;
+      const terminalItem = {
+        type: 'message',
+        id: firstId,
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'TERMINAL SAFE', annotations: [] }],
+      };
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'message',
+              id: firstId,
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'FIRST FINAL', annotations: [] }],
             },
-            {
-              type: 'response.output_item.done',
-              output_index: secondIndex,
-              item: {
-                type: 'message',
-                id: secondId,
-                role: 'assistant',
-                content: [{ type: 'output_text', text: 'SECOND FINAL', annotations: [] }],
-              },
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: secondIndex,
+            item: {
+              type: 'message',
+              id: secondId,
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'SECOND FINAL', annotations: [] }],
             },
-            {
-              type: 'response.output_text.annotation.added',
-              output_index: secondIndex,
-              content_index: 0,
-              item_id: secondId,
-              annotation_index: 0,
-              annotation: {
-                type: 'url_citation',
-                url: 'https://wrong.example/SECRET',
-                title: 'SECRET SOURCE',
-                start_index: 0,
-                end_index: 6,
-              },
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: secondIndex,
+            content_index: 0,
+            item_id: secondId,
+            annotation_index: 0,
+            annotation: {
+              type: 'url_citation',
+              url: 'https://wrong.example/SECRET',
+              title: 'SECRET SOURCE',
+              start_index: 0,
+              end_index: 6,
             },
-            {
-              type: terminalType,
-              response: {
-                status: terminalType.slice('response.'.length),
-                output: [terminalItem],
-              },
+          },
+          {
+            type: terminalType,
+            response: {
+              status: terminalType.slice('response.'.length),
+              output: [terminalItem],
             },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(
-          parsed.output?.filter((item: any) => item?.id === firstId).length ?? 0,
-        ).toBeLessThanOrEqual(1);
-        expect(processed.metadata?.annotations ?? []).toEqual([]);
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(JSON.stringify(parsed)).not.toContain('wrong.example');
-        expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
-        expect(JSON.stringify(parsed)).not.toContain('SECRET');
-        expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
-        expect(JSON.stringify(parsed)).not.toContain('SECOND FINAL');
-        expect(JSON.stringify(processed.raw)).not.toContain('SECOND FINAL');
-      },
-    );
+      expect(
+        parsed.output?.filter((item: any) => item?.id === firstId).length ?? 0,
+      ).toBeLessThanOrEqual(1);
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('SECOND FINAL');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECOND FINAL');
+    });
 
     it.each([
       'response.incomplete',
@@ -4720,63 +4704,60 @@ describe('Responses stream regressions', () => {
       'response.failed',
       'response.cancelled',
       'response.completed',
-    ])(
-      'preserves a citation when repeated finalized snapshots agree after %s',
-      async (terminalType) => {
-        const annotation = {
-          type: 'url_citation',
-          url: 'https://example.test/repeated',
-          title: 'Safe',
-          start_index: 0,
-          end_index: 4,
-        };
-        const item = {
-          type: 'message',
-          id: 'm_consistent',
-          role: 'assistant',
-          content: [{ type: 'output_text', text: 'CONSISTENT SAFE', annotations: [] }],
-        };
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            { type: 'response.output_item.done', output_index: 0, item },
-            { type: 'response.output_item.done', output_index: 0, item },
-            {
-              type: 'response.output_text.annotation.added',
-              output_index: 0,
-              content_index: 0,
-              item_id: 'm_consistent',
-              annotation_index: 0,
-              annotation,
-            },
-            {
-              type: terminalType,
-              response: {
-                status: terminalType.slice('response.'.length),
-                output: [item],
-              },
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
-
-        expect(parsed.output).toEqual([
+    ])('preserves a citation when repeated finalized snapshots agree after %s', async (terminalType) => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/repeated',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const item = {
+        type: 'message',
+        id: 'm_consistent',
+        role: 'assistant',
+        content: [{ type: 'output_text', text: 'CONSISTENT SAFE', annotations: [] }],
+      };
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.output_item.done', output_index: 0, item },
+          { type: 'response.output_item.done', output_index: 0, item },
           {
-            ...item,
-            content: [{ type: 'output_text', text: 'CONSISTENT SAFE', annotations: [annotation] }],
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_consistent',
+            annotation_index: 0,
+            annotation,
           },
-        ]);
-        expect(processed.output).toBe('CONSISTENT SAFE');
-        expect(processed.metadata?.annotations).toEqual([annotation]);
-        expect(processCalls).not.toHaveBeenCalled();
-      },
-    );
+          {
+            type: terminalType,
+            response: {
+              status: terminalType.slice('response.'.length),
+              output: [item],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
+
+      expect(parsed.output).toEqual([
+        {
+          ...item,
+          content: [{ type: 'output_text', text: 'CONSISTENT SAFE', annotations: [annotation] }],
+        },
+      ]);
+      expect(processed.output).toBe('CONSISTENT SAFE');
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+      expect(processCalls).not.toHaveBeenCalled();
+    });
 
     it.each([
       {
@@ -4787,65 +4768,64 @@ describe('Responses stream regressions', () => {
         name: 'different item IDs at the same finalized index',
         mode: 'item-id',
       },
-    ])(
-      'rejects a conflicting citation from text.done-only output at EOF with $name',
-      async ({ mode }) => {
-        const firstId = 'm_first';
-        const secondId = mode === 'index' ? firstId : 'm_second';
-        const secondIndex = mode === 'index' ? 1 : 0;
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_text.done',
-              output_index: 0,
-              content_index: 0,
-              item_id: firstId,
-              text: 'FIRST FINAL',
+    ])('rejects a conflicting citation from text.done-only output at EOF with $name', async ({
+      mode,
+    }) => {
+      const firstId = 'm_first';
+      const secondId = mode === 'index' ? firstId : 'm_second';
+      const secondIndex = mode === 'index' ? 1 : 0;
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: firstId,
+            text: 'FIRST FINAL',
+          },
+          {
+            type: 'response.output_text.done',
+            output_index: secondIndex,
+            content_index: 0,
+            item_id: secondId,
+            text: 'SECOND FINAL',
+          },
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: secondIndex,
+            content_index: 0,
+            item_id: secondId,
+            annotation_index: 0,
+            annotation: {
+              type: 'url_citation',
+              url: 'https://wrong.example/SECRET',
+              title: 'SECRET SOURCE',
+              start_index: 0,
+              end_index: 6,
             },
-            {
-              type: 'response.output_text.done',
-              output_index: secondIndex,
-              content_index: 0,
-              item_id: secondId,
-              text: 'SECOND FINAL',
-            },
-            {
-              type: 'response.output_text.annotation.added',
-              output_index: secondIndex,
-              content_index: 0,
-              item_id: secondId,
-              annotation_index: 0,
-              annotation: {
-                type: 'url_citation',
-                url: 'https://wrong.example/SECRET',
-                title: 'SECRET SOURCE',
-                start_index: 0,
-                end_index: 6,
-              },
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(parsed.output).toHaveLength(1);
-        expect(processed.output).toBe('FIRST FINAL');
-        expect(processed.metadata?.annotations ?? []).toEqual([]);
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(JSON.stringify(parsed)).not.toContain('wrong.example');
-        expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
-        expect(JSON.stringify(parsed)).not.toContain('SECRET');
-        expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
-        expect(JSON.stringify(parsed)).not.toContain('SECOND FINAL');
-        expect(JSON.stringify(processed.raw)).not.toContain('SECOND FINAL');
-      },
-    );
+      expect(parsed.output).toHaveLength(1);
+      expect(processed.output).toBe('FIRST FINAL');
+      expect(processed.metadata?.annotations ?? []).toEqual([]);
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(JSON.stringify(parsed)).not.toContain('wrong.example');
+      expect(JSON.stringify(processed.raw)).not.toContain('wrong.example');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('SECOND FINAL');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECOND FINAL');
+    });
 
     it('preserves a matching text.done-only citation at EOF', async () => {
       const annotation = {
@@ -4974,51 +4954,51 @@ describe('Responses stream regressions', () => {
     it.each([
       { name: 'annotation-only', includeText: false, expected: '' },
       { name: 'annotation and text.done', includeText: true, expected: 'ANSWER' },
-    ])(
-      'never exposes undefined for a sparse $name output-text slot',
-      async ({ includeText, expected }) => {
-        const annotation = {
-          type: 'url_citation',
-          url: 'https://example.test/sparse-slot',
-          title: 'Safe',
-          start_index: 0,
-          end_index: 4,
-        };
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_text.annotation.added',
-              output_index: 0,
-              content_index: 1,
-              item_id: 'm_sparse',
-              annotation_index: 0,
-              annotation,
-            },
-            ...(includeText
-              ? [
-                  {
-                    type: 'response.output_text.done',
-                    output_index: 0,
-                    content_index: 1,
-                    item_id: 'm_sparse',
-                    text: 'ANSWER',
-                  },
-                ]
-              : []),
-            { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+    ])('never exposes undefined for a sparse $name output-text slot', async ({
+      includeText,
+      expected,
+    }) => {
+      const annotation = {
+        type: 'url_citation',
+        url: 'https://example.test/sparse-slot',
+        title: 'Safe',
+        start_index: 0,
+        end_index: 4,
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.annotation.added',
+            output_index: 0,
+            content_index: 1,
+            item_id: 'm_sparse',
+            annotation_index: 0,
+            annotation,
+          },
+          ...(includeText
+            ? [
+                {
+                  type: 'response.output_text.done',
+                  output_index: 0,
+                  content_index: 1,
+                  item_id: 'm_sparse',
+                  text: 'ANSWER',
+                },
+              ]
+            : []),
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
 
-        expect(processed.error).toBeUndefined();
-        expect(processed.output).toBe(expected);
-        expect(String(processed.output)).not.toContain('undefined');
-        expect(JSON.stringify(parsed)).not.toContain('"text":null');
-        expect(processed.metadata?.annotations).toEqual([annotation]);
-      },
-    );
+      expect(processed.error).toBeUndefined();
+      expect(processed.output).toBe(expected);
+      expect(String(processed.output)).not.toContain('undefined');
+      expect(JSON.stringify(parsed)).not.toContain('"text":null');
+      expect(processed.metadata?.annotations).toEqual([annotation]);
+    });
 
     it.each([
       {
@@ -5235,44 +5215,43 @@ describe('Responses stream regressions', () => {
           },
         }),
       },
-    ])(
-      'cancels a Responses stream when cumulative $name bytes exceed the bound',
-      async ({ event }) => {
-        const encoder = new TextEncoder();
-        const payload = 'x'.repeat(1024 * 1024);
-        let sent = 0;
-        let cancelled = false;
-        const stream = new ReadableStream<Uint8Array>({
-          pull(controller) {
-            if (sent >= 48) {
-              controller.enqueue(
-                encoder.encode(
-                  'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SAFE"}]}]}}\n\n',
-                ),
-              );
-              controller.close();
-              return;
-            }
-            sent++;
-            const payloadEvent = event(payload);
+    ])('cancels a Responses stream when cumulative $name bytes exceed the bound', async ({
+      event,
+    }) => {
+      const encoder = new TextEncoder();
+      const payload = 'x'.repeat(1024 * 1024);
+      let sent = 0;
+      let cancelled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (sent >= 48) {
             controller.enqueue(
               encoder.encode(
-                `event: ${payloadEvent.type}\ndata: ${JSON.stringify(payloadEvent)}\n\n`,
+                'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"SAFE"}]}]}}\n\n',
               ),
             );
-          },
-          cancel() {
-            cancelled = true;
-          },
-        });
+            controller.close();
+            return;
+          }
+          sent++;
+          const payloadEvent = event(payload);
+          controller.enqueue(
+            encoder.encode(
+              `event: ${payloadEvent.type}\ndata: ${JSON.stringify(payloadEvent)}\n\n`,
+            ),
+          );
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
 
-        await expect(
-          readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
-        ).rejects.toThrow(/streaming response exceeded.*(input|ignored|output)/i);
-        expect(sent).toBeLessThan(48);
-        expect(cancelled).toBe(true);
-      },
-    );
+      await expect(
+        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*(input|ignored|output)/i);
+      expect(sent).toBeLessThan(48);
+      expect(cancelled).toBe(true);
+    });
 
     it.each([
       {
@@ -5376,48 +5355,48 @@ describe('Responses stream regressions', () => {
           item: { type: 'function_call', id: 'bad', arguments: text },
         }),
       },
-    ])(
-      'cancels a Responses stream when $name replays ignored retained payloads',
-      async ({ event, late }) => {
-        const encoder = new TextEncoder();
-        const text = 'X'.repeat(7 * 1024 * 1024);
-        const completed =
-          'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","id":"safe","role":"assistant","content":[{"type":"output_text","text":"SAFE"}]}]}}\n\n';
-        let sent = 0;
-        let terminalSent = false;
-        let cancelled = false;
-        const stream = new ReadableStream<Uint8Array>({
-          pull(controller) {
-            if (late && !terminalSent) {
-              terminalSent = true;
-              controller.enqueue(encoder.encode(completed));
-              return;
-            }
-            if (sent >= 12) {
-              controller.enqueue(encoder.encode(completed));
-              controller.close();
-              return;
-            }
-            sent++;
-            const payloadEvent = event(text);
-            controller.enqueue(
-              encoder.encode(
-                `event: ${payloadEvent.type}\ndata: ${JSON.stringify(payloadEvent)}\n\n`,
-              ),
-            );
-          },
-          cancel() {
-            cancelled = true;
-          },
-        });
+    ])('cancels a Responses stream when $name replays ignored retained payloads', async ({
+      event,
+      late,
+    }) => {
+      const encoder = new TextEncoder();
+      const text = 'X'.repeat(7 * 1024 * 1024);
+      const completed =
+        'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed","output":[{"type":"message","id":"safe","role":"assistant","content":[{"type":"output_text","text":"SAFE"}]}]}}\n\n';
+      let sent = 0;
+      let terminalSent = false;
+      let cancelled = false;
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (late && !terminalSent) {
+            terminalSent = true;
+            controller.enqueue(encoder.encode(completed));
+            return;
+          }
+          if (sent >= 12) {
+            controller.enqueue(encoder.encode(completed));
+            controller.close();
+            return;
+          }
+          sent++;
+          const payloadEvent = event(text);
+          controller.enqueue(
+            encoder.encode(
+              `event: ${payloadEvent.type}\ndata: ${JSON.stringify(payloadEvent)}\n\n`,
+            ),
+          );
+        },
+        cancel() {
+          cancelled = true;
+        },
+      });
 
-        await expect(
-          readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
-        ).rejects.toThrow(/streaming response exceeded.*(?:unretained|total).*stream input/i);
-        expect(sent).toBeLessThan(12);
-        expect(cancelled).toBe(true);
-      },
-    );
+      await expect(
+        readResponsesStream(new Response(stream), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow(/streaming response exceeded.*(?:unretained|total).*stream input/i);
+      expect(sent).toBeLessThan(12);
+      expect(cancelled).toBe(true);
+    });
 
     it('cancels a Responses stream at the hard input ceiling when snapshot kinds evade retained repetition tracking', async () => {
       const encoder = new TextEncoder();
@@ -5546,58 +5525,59 @@ describe('Responses stream regressions', () => {
         finalizer: 'item',
         includeStatus: true,
       },
-    ])(
-      'keeps finalized text authoritative for $name',
-      async ({ eventType, finalizer, includeStatus }) => {
-        const finalized =
-          finalizer === 'text'
-            ? {
-                type: 'response.output_text.done',
-                output_index: 0,
-                content_index: 0,
-                item_id: 'm_1',
-                text: 'SAFE FINAL TEXT',
-              }
-            : {
-                type: 'response.output_item.done',
-                output_index: 0,
-                item: {
+    ])('keeps finalized text authoritative for $name', async ({
+      eventType,
+      finalizer,
+      includeStatus,
+    }) => {
+      const finalized =
+        finalizer === 'text'
+          ? {
+              type: 'response.output_text.done',
+              output_index: 0,
+              content_index: 0,
+              item_id: 'm_1',
+              text: 'SAFE FINAL TEXT',
+            }
+          : {
+              type: 'response.output_item.done',
+              output_index: 0,
+              item: {
+                type: 'message',
+                id: 'm_1',
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'SAFE FINAL TEXT' }],
+              },
+            };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          finalized,
+          {
+            type: eventType,
+            response: {
+              ...(includeStatus
+                ? { status: eventType === 'response.incomplete' ? 'incomplete' : 'in_progress' }
+                : {}),
+              output: [
+                {
                   type: 'message',
                   id: 'm_1',
                   role: 'assistant',
-                  content: [{ type: 'output_text', text: 'SAFE FINAL TEXT' }],
+                  content: [{ type: 'output_text', text: 'SECRET TERMINAL DRAFT' }],
                 },
-              };
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            finalized,
-            {
-              type: eventType,
-              response: {
-                ...(includeStatus
-                  ? { status: eventType === 'response.incomplete' ? 'incomplete' : 'in_progress' }
-                  : {}),
-                output: [
-                  {
-                    type: 'message',
-                    id: 'm_1',
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'SECRET TERMINAL DRAFT' }],
-                  },
-                ],
-              },
+              ],
             },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor().processResponseOutput(parsed, {}, false);
 
-        expect(processed.output).toBe('SAFE FINAL TEXT');
-        expect(JSON.stringify(parsed)).not.toContain('SECRET TERMINAL DRAFT');
-        expect(JSON.stringify(processed.raw)).not.toContain('SECRET TERMINAL DRAFT');
-      },
-    );
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET TERMINAL DRAFT');
+      expect(JSON.stringify(processed.raw)).not.toContain('SECRET TERMINAL DRAFT');
+    });
 
     it('keeps citations and finalized text while stripping a statusless in-progress tool draft', async () => {
       const annotation = {
@@ -6074,6 +6054,26 @@ describe('Responses stream regressions', () => {
       ).rejects.toThrow(/exceeded.*annotation/i);
     }, 20_000);
 
+    it('bounds sparse annotation content expansion across output items', async () => {
+      const annotation = { type: 'url_citation', url: 'https://example.test/safe' };
+
+      await expect(
+        readResponsesStream(
+          createSseResponse(
+            [0, 1].map((output_index) => ({
+              type: 'response.output_text.annotation.added',
+              output_index,
+              content_index: 600,
+              annotation_index: 0,
+              annotation,
+            })),
+          ),
+          'test',
+          { debug: vi.fn() },
+        ),
+      ).rejects.toThrow(/exceeded.*content parts/i);
+    });
+
     it('does not retain oversized annotation item identifiers', async () => {
       const oversizedItemId = 'x'.repeat(4097);
       const annotation = {
@@ -6145,49 +6145,48 @@ describe('Responses stream regressions', () => {
       expect(parsed.output?.[0]?.content?.[0]?.text).toHaveLength(9 * 1024 * 1024);
     });
 
-    it.each([7, 8, 16])(
-      'accepts a valid %i-mebibyte output text repeated across final stream snapshots',
-      async (mebibytes) => {
-        const text = 'A'.repeat(mebibytes * 1024 * 1024);
-        const item = {
-          type: 'message',
-          id: 'm_1',
-          role: 'assistant',
-          content: [{ type: 'output_text', text }],
-        };
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_text.delta',
-              output_index: 0,
-              content_index: 0,
-              item_id: 'm_1',
-              delta: text,
-            },
-            {
-              type: 'response.output_text.done',
-              output_index: 0,
-              content_index: 0,
-              item_id: 'm_1',
-              text,
-            },
-            {
-              type: 'response.content_part.done',
-              output_index: 0,
-              content_index: 0,
-              item_id: 'm_1',
-              part: { type: 'output_text', text },
-            },
-            { type: 'response.output_item.done', output_index: 0, item },
-            { type: 'response.completed', response: { status: 'completed', output: [item] } },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
+    it.each([
+      7, 8, 16,
+    ])('accepts a valid %i-mebibyte output text repeated across final stream snapshots', async (mebibytes) => {
+      const text = 'A'.repeat(mebibytes * 1024 * 1024);
+      const item = {
+        type: 'message',
+        id: 'm_1',
+        role: 'assistant',
+        content: [{ type: 'output_text', text }],
+      };
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_1',
+            delta: text,
+          },
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_1',
+            text,
+          },
+          {
+            type: 'response.content_part.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_1',
+            part: { type: 'output_text', text },
+          },
+          { type: 'response.output_item.done', output_index: 0, item },
+          { type: 'response.completed', response: { status: 'completed', output: [item] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
 
-        expect(parsed.output?.[0]?.content?.[0]?.text).toHaveLength(mebibytes * 1024 * 1024);
-      },
-    );
+      expect(parsed.output?.[0]?.content?.[0]?.text).toHaveLength(mebibytes * 1024 * 1024);
+    });
 
     it('does not let an empty refusal delta replace a completed answer', async () => {
       const parsed = await readResponsesStream(
@@ -6310,55 +6309,56 @@ describe('Responses stream regressions', () => {
       { eventIds: true, messageIds: true, count: 2 },
       { eventIds: false, messageIds: true, count: 2 },
       { eventIds: false, messageIds: false, count: 2 },
-    ])(
-      'realigns finalized text at EOF after dropping an invalid call ($eventIds/$messageIds/$count)',
-      async ({ eventIds, messageIds, count }) => {
-        const processCalls = vi.fn();
-        const events: unknown[] = [
+    ])('realigns finalized text at EOF after dropping an invalid call ($eventIds/$messageIds/$count)', async ({
+      eventIds,
+      messageIds,
+      count,
+    }) => {
+      const processCalls = vi.fn();
+      const events: unknown[] = [
+        {
+          type: 'response.output_item.done',
+          output_index: 0,
+          item: { type: 'function_call', name: 'lookup', arguments: '{}' },
+        },
+      ];
+      for (let index = 1; index <= count; index++) {
+        events.push(
+          {
+            type: 'response.output_text.done',
+            output_index: index,
+            content_index: 0,
+            ...(eventIds ? { item_id: `message_${index}` } : {}),
+            text: `Final answer ${index}`,
+          },
           {
             type: 'response.output_item.done',
-            output_index: 0,
-            item: { type: 'function_call', name: 'lookup', arguments: '{}' },
+            output_index: index,
+            item: {
+              type: 'message',
+              role: 'assistant',
+              ...(messageIds ? { id: `message_${index}` } : {}),
+              content: [{ type: 'output_text', text: 'Stale draft', annotations: [] }],
+            },
           },
-        ];
-        for (let index = 1; index <= count; index++) {
-          events.push(
-            {
-              type: 'response.output_text.done',
-              output_index: index,
-              content_index: 0,
-              ...(eventIds ? { item_id: `message_${index}` } : {}),
-              text: `Final answer ${index}`,
-            },
-            {
-              type: 'response.output_item.done',
-              output_index: index,
-              item: {
-                type: 'message',
-                role: 'assistant',
-                ...(messageIds ? { id: `message_${index}` } : {}),
-                content: [{ type: 'output_text', text: 'Stale draft', annotations: [] }],
-              },
-            },
-          );
-        }
-        const parsed = await readResponsesStream(createSseResponse(events), 'test', {
-          debug: vi.fn(),
-        });
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
         );
+      }
+      const parsed = await readResponsesStream(createSseResponse(events), 'test', {
+        debug: vi.fn(),
+      });
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(parsed.output).toHaveLength(count);
-        expect(processed.output).toBe(
-          Array.from({ length: count }, (_, index) => `Final answer ${index + 1}`).join('\n'),
-        );
-        expect(JSON.stringify(parsed)).not.toContain('Stale draft');
-        expect(processCalls).not.toHaveBeenCalled();
-      },
-    );
+      expect(parsed.output).toHaveLength(count);
+      expect(processed.output).toBe(
+        Array.from({ length: count }, (_, index) => `Final answer ${index + 1}`).join('\n'),
+      );
+      expect(JSON.stringify(parsed)).not.toContain('Stale draft');
+      expect(processCalls).not.toHaveBeenCalled();
+    });
 
     it('keeps finalized message text and citations aligned after an unfinalized tool is removed', async () => {
       const annotation = {
@@ -6438,137 +6438,137 @@ describe('Responses stream regressions', () => {
       { eventIds: true, terminalIds: true },
       { eventIds: false, terminalIds: true },
       { eventIds: false, terminalIds: false },
-    ])(
-      'replaces a single shifted message draft after an unfinalized tool is removed ($eventIds/$terminalIds)',
-      async ({ eventIds, terminalIds }) => {
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_text.done',
-              output_index: 1,
-              content_index: 0,
-              ...(eventIds ? { item_id: 'm_safe' } : {}),
-              text: 'SAFE FINAL TEXT',
+    ])('replaces a single shifted message draft after an unfinalized tool is removed ($eventIds/$terminalIds)', async ({
+      eventIds,
+      terminalIds,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 1,
+            content_index: 0,
+            ...(eventIds ? { item_id: 'm_safe' } : {}),
+            text: 'SAFE FINAL TEXT',
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  call_id: 'call_dangerous',
+                  name: 'dangerous_action',
+                  arguments: '{"path":"/tmp/secret"}',
+                },
+                {
+                  type: 'message',
+                  ...(terminalIds ? { id: 'm_safe' } : {}),
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET TEXT DRAFT' }],
+                },
+              ],
             },
-            {
-              type: 'response.incomplete',
-              response: {
-                status: 'incomplete',
-                output: [
-                  {
-                    type: 'function_call',
-                    call_id: 'call_dangerous',
-                    name: 'dangerous_action',
-                    arguments: '{"path":"/tmp/secret"}',
-                  },
-                  {
-                    type: 'message',
-                    ...(terminalIds ? { id: 'm_safe' } : {}),
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'SECRET TEXT DRAFT' }],
-                  },
-                ],
-              },
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(processed.output).toBe('SAFE FINAL TEXT');
-        expect(parsed.output).toEqual([
-          expect.objectContaining({
-            ...(terminalIds ? { id: 'm_safe' } : {}),
-            content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FINAL TEXT' })],
-          }),
-        ]);
-        expect(JSON.stringify(parsed)).not.toContain('SECRET');
-        expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
-      },
-    );
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(processed.output).toBe('SAFE FINAL TEXT');
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          ...(terminalIds ? { id: 'm_safe' } : {}),
+          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FINAL TEXT' })],
+        }),
+      ]);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+    });
 
     it.each([
       { eventIds: true, terminalIds: true },
       { eventIds: false, terminalIds: true },
       { eventIds: false, terminalIds: false },
-    ])(
-      'replaces two shifted message drafts after an unfinalized tool is removed ($eventIds/$terminalIds)',
-      async ({ eventIds, terminalIds }) => {
-        const processCalls = vi.fn().mockResolvedValue('executed');
-        const parsed = await readResponsesStream(
-          createSseResponse([
-            {
-              type: 'response.output_text.done',
-              output_index: 1,
-              content_index: 0,
-              ...(eventIds ? { item_id: 'm_first' } : {}),
-              text: 'SAFE FIRST',
+    ])('replaces two shifted message drafts after an unfinalized tool is removed ($eventIds/$terminalIds)', async ({
+      eventIds,
+      terminalIds,
+    }) => {
+      const processCalls = vi.fn().mockResolvedValue('executed');
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 1,
+            content_index: 0,
+            ...(eventIds ? { item_id: 'm_first' } : {}),
+            text: 'SAFE FIRST',
+          },
+          {
+            type: 'response.output_text.done',
+            output_index: 2,
+            content_index: 0,
+            ...(eventIds ? { item_id: 'm_second' } : {}),
+            text: 'SAFE SECOND',
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  call_id: 'call_dangerous',
+                  name: 'dangerous_action',
+                  arguments: '{"path":"/tmp/secret"}',
+                },
+                {
+                  type: 'message',
+                  ...(terminalIds ? { id: 'm_first' } : {}),
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET FIRST DRAFT' }],
+                },
+                {
+                  type: 'message',
+                  ...(terminalIds ? { id: 'm_second' } : {}),
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SECRET SECOND DRAFT' }],
+                },
+              ],
             },
-            {
-              type: 'response.output_text.done',
-              output_index: 2,
-              content_index: 0,
-              ...(eventIds ? { item_id: 'm_second' } : {}),
-              text: 'SAFE SECOND',
-            },
-            {
-              type: 'response.incomplete',
-              response: {
-                status: 'incomplete',
-                output: [
-                  {
-                    type: 'function_call',
-                    call_id: 'call_dangerous',
-                    name: 'dangerous_action',
-                    arguments: '{"path":"/tmp/secret"}',
-                  },
-                  {
-                    type: 'message',
-                    ...(terminalIds ? { id: 'm_first' } : {}),
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'SECRET FIRST DRAFT' }],
-                  },
-                  {
-                    type: 'message',
-                    ...(terminalIds ? { id: 'm_second' } : {}),
-                    role: 'assistant',
-                    content: [{ type: 'output_text', text: 'SECRET SECOND DRAFT' }],
-                  },
-                ],
-              },
-            },
-          ]),
-          'test',
-          { debug: vi.fn() },
-        );
-        const processed = await createProcessor(processCalls).processResponseOutput(
-          parsed,
-          {},
-          false,
-        );
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      const processed = await createProcessor(processCalls).processResponseOutput(
+        parsed,
+        {},
+        false,
+      );
 
-        expect(processCalls).not.toHaveBeenCalled();
-        expect(processed.output).toBe('SAFE FIRST\nSAFE SECOND');
-        expect(parsed.output).toEqual([
-          expect.objectContaining({
-            ...(terminalIds ? { id: 'm_first' } : {}),
-            content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FIRST' })],
-          }),
-          expect.objectContaining({
-            ...(terminalIds ? { id: 'm_second' } : {}),
-            content: [expect.objectContaining({ type: 'output_text', text: 'SAFE SECOND' })],
-          }),
-        ]);
-        expect(JSON.stringify(parsed)).not.toContain('SECRET');
-        expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
-      },
-    );
+      expect(processCalls).not.toHaveBeenCalled();
+      expect(processed.output).toBe('SAFE FIRST\nSAFE SECOND');
+      expect(parsed.output).toEqual([
+        expect.objectContaining({
+          ...(terminalIds ? { id: 'm_first' } : {}),
+          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE FIRST' })],
+        }),
+        expect.objectContaining({
+          ...(terminalIds ? { id: 'm_second' } : {}),
+          content: [expect.objectContaining({ type: 'output_text', text: 'SAFE SECOND' })],
+        }),
+      ]);
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+      expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
+    });
   });
 });

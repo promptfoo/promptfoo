@@ -1881,6 +1881,7 @@ export async function readResponsesStream(
     }
   }
 
+  let materializedAnnotationContentParts = 0;
   for (const [key, streamedItem] of streamedAnnotations) {
     if (
       streamedItem.itemId &&
@@ -1896,6 +1897,13 @@ export async function readResponsesStream(
         : terminalMessageByIndex.get(streamedItem.outputIndex));
     const content = Array.isArray(existingItem?.content) ? [...existingItem.content] : [];
     for (const [contentIndex, annotations] of streamedItem.content) {
+      const newContentParts = Math.max(0, contentIndex + 1 - content.length);
+      if (materializedAnnotationContentParts + newContentParts > MAX_STREAM_CONTENT_PARTS) {
+        throw new Error(
+          `${providerName} streaming response exceeded ${MAX_STREAM_CONTENT_PARTS} content parts`,
+        );
+      }
+      materializedAnnotationContentParts += newContentParts;
       while (content.length <= contentIndex) {
         content.push({ type: 'output_text', text: '' });
       }
