@@ -489,7 +489,46 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let logProbs: any;
     let finishReason: string;
 
+    let completedResponse: ProviderResponse | undefined;
     try {
+      completedResponse = {
+        tokenUsage: cached
+          ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
+          : {
+              total: data.usage?.total_tokens,
+              prompt: data.usage?.prompt_tokens,
+              completion: data.usage?.completion_tokens,
+              ...(data.usage?.prompt_tokens_details?.cached_tokens !== undefined && {
+                cached: data.usage.prompt_tokens_details.cached_tokens,
+              }),
+              ...(data.usage?.completion_tokens_details
+                ? {
+                    completionDetails: {
+                      reasoning: data.usage.completion_tokens_details.reasoning_tokens,
+                      acceptedPrediction:
+                        data.usage.completion_tokens_details.accepted_prediction_tokens,
+                      rejectedPrediction:
+                        data.usage.completion_tokens_details.rejected_prediction_tokens,
+                    },
+                  }
+                : {}),
+            },
+        cached,
+        latencyMs,
+        cost: calculateAzureCost(
+          config.modelName ?? this.deploymentName,
+          config,
+          data.usage?.prompt_tokens,
+          data.usage?.completion_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens,
+          data.usage?.prompt_tokens_details?.audio_tokens,
+          data.usage?.completion_tokens_details?.audio_tokens,
+          data.usage?.prompt_tokens_details?.image_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens,
+          data.usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens,
+          data.usage?.completion_tokens_details?.image_tokens,
+        ),
+      };
       if (data.error) {
         // Was the input prompt deemed inappropriate?
         if (data.error.status === 400 && data.error.code === FINISH_REASON_MAP.content_filter) {
@@ -554,6 +593,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               allCalls.push(functionCall);
             }
 
+            completedResponse.output = allCalls.length === 1 ? allCalls[0] : allCalls;
             output = await this.functionCallbackHandler.processCalls(
               allCalls.length === 1 ? allCalls[0] : allCalls,
               config.functionToolCallbacks,
@@ -581,45 +621,10 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       }
 
       return {
+        ...completedResponse,
         output,
-        tokenUsage: cached
-          ? { cached: data.usage?.total_tokens, total: data?.usage?.total_tokens }
-          : {
-              total: data.usage?.total_tokens,
-              prompt: data.usage?.prompt_tokens,
-              completion: data.usage?.completion_tokens,
-              ...(data.usage?.prompt_tokens_details?.cached_tokens !== undefined && {
-                cached: data.usage.prompt_tokens_details.cached_tokens,
-              }),
-              ...(data.usage?.completion_tokens_details
-                ? {
-                    completionDetails: {
-                      reasoning: data.usage.completion_tokens_details.reasoning_tokens,
-                      acceptedPrediction:
-                        data.usage.completion_tokens_details.accepted_prediction_tokens,
-                      rejectedPrediction:
-                        data.usage.completion_tokens_details.rejected_prediction_tokens,
-                    },
-                  }
-                : {}),
-            },
-        cached,
-        latencyMs,
         logProbs,
         finishReason,
-        cost: calculateAzureCost(
-          config.modelName ?? this.deploymentName,
-          config,
-          data.usage?.prompt_tokens,
-          data.usage?.completion_tokens,
-          data.usage?.prompt_tokens_details?.cached_tokens,
-          data.usage?.prompt_tokens_details?.audio_tokens,
-          data.usage?.completion_tokens_details?.audio_tokens,
-          data.usage?.prompt_tokens_details?.image_tokens,
-          data.usage?.prompt_tokens_details?.cached_tokens_details?.audio_tokens,
-          data.usage?.prompt_tokens_details?.cached_tokens_details?.image_tokens,
-          data.usage?.completion_tokens_details?.image_tokens,
-        ),
         guardrails: {
           flagged: flaggedInput || flaggedOutput,
           flaggedInput,
@@ -628,6 +633,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       };
     } catch (err) {
       return {
+        ...completedResponse,
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
       };
     }

@@ -125,7 +125,7 @@ it.each([
   },
 );
 
-const vertexModels = ['gemini-2.5-flash', 'claude-sonnet-4', 'llama-3', 'chat-bison'];
+const vertexModels = ['gemini-2.5-flash', 'claude-sonnet-4@20250514', 'llama-3', 'chat-bison'];
 const googleOperations = [
   ...vertexModels.map((model) => ({
     name: `Vertex ${model}`,
@@ -149,6 +149,57 @@ const googleOperations = [
       }).callApi('hello', undefined, { abortSignal: signal }),
   },
 ];
+
+it.each(vertexModels)('retains Vertex %s output when caching is cancelled', async (model) => {
+  const controller = new AbortController();
+  const started = createDeferred<void>();
+  vi.spyOn(GoogleAuthManager, 'getApiKey').mockReturnValue({ apiKey: undefined, source: 'none' });
+  vi.mocked(isCacheEnabled).mockReturnValue(true);
+  vi.mocked(getCache).mockReturnValue({
+    get: vi.fn().mockResolvedValue(undefined),
+    set: vi.fn(() => {
+      started.resolve();
+      return waitForAbort(controller.signal);
+    }),
+  } as unknown as ReturnType<typeof getCache>);
+  const data = model.startsWith('gemini')
+    ? {
+        candidates: [{ content: { parts: [{ text: 'completed output' }] }, finishReason: 'STOP' }],
+        usageMetadata: { promptTokenCount: 7, candidatesTokenCount: 4, totalTokenCount: 11 },
+      }
+    : model.startsWith('claude')
+      ? {
+          content: [{ type: 'text', text: 'completed output' }],
+          usage: { input_tokens: 7, output_tokens: 4 },
+        }
+      : model.startsWith('llama')
+        ? {
+            choices: [{ message: { content: 'completed output' } }],
+            usage: { prompt_tokens: 7, completion_tokens: 4, total_tokens: 11 },
+          }
+        : { predictions: [{ candidates: [{ content: 'completed output' }] }] };
+  mocks.request.mockResolvedValue({ data });
+  const provider = new VertexChatProvider(model, {
+    config: { projectId: 'fixture-project', region: 'us-central1', cost: 0.001 },
+  });
+  const pending = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+  await Promise.race([
+    started.promise,
+    pending.then(() => {
+      throw new Error('Cache write was not started');
+    }),
+  ]);
+  controller.abort(new Error('cancelled cache write'));
+  const result = await pending;
+  expect(result.output).toBe('completed output');
+  expect(result.error).toContain('cancelled cache write');
+  if (model !== 'chat-bison') {
+    expect(result.tokenUsage?.total).toBe(11);
+  }
+  if (model.startsWith('gemini') || model.startsWith('claude')) {
+    expect(result.cost).toBeGreaterThan(0);
+  }
+});
 
 describe.each(googleOperations)('$name SDK cancellation', ({ call }) => {
   beforeEach(() => {
