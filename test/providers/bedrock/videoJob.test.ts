@@ -109,7 +109,10 @@ describe('Bedrock async video jobs', () => {
       mocks.send
         .mockResolvedValueOnce({ invocationArn: 'job-1' })
         .mockResolvedValueOnce({ status: 'Failed', failureMessage });
-      expect((await runBedrockVideoJob(provider, config)).error).toBe(expected);
+      expect(await runBedrockVideoJob(provider, config)).toEqual({
+        error: expected,
+        invocationArn: 'job-1',
+      });
       expect(mocks.send).toHaveBeenCalledTimes(2);
       expect(mocks.destroy).toHaveBeenCalledOnce();
     },
@@ -125,7 +128,10 @@ describe('Bedrock async video jobs', () => {
     const pending = runBedrockVideoJob(provider, config);
     await entered.promise;
     await vi.advanceTimersByTimeAsync(250);
-    expect((await pending).error).toBe('Video generation timed out after 0.25 seconds');
+    expect(await pending).toEqual({
+      error: 'Video generation timed out after 0.25 seconds',
+      invocationArn: 'job-1',
+    });
     expect(mocks.send).toHaveBeenCalledTimes(2);
     expect(mocks.destroy).toHaveBeenCalledOnce();
   });
@@ -165,7 +171,10 @@ describe('Bedrock async video jobs', () => {
     const pending = runBedrockVideoJob(provider, config, controller.signal);
     await entered.promise;
     controller.abort(new Error('cancelled poll'));
-    await expect(pending).rejects.toThrow('cancelled poll');
+    await expect(pending).resolves.toEqual({
+      error: 'Polling error: cancelled poll',
+      invocationArn: 'job-1',
+    });
     expect(mocks.destroy).toHaveBeenCalledOnce();
   });
 });

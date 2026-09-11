@@ -46,7 +46,7 @@ export async function runBedrockVideoJob(
     maxPollTimeMs: number;
   },
   signal?: AbortSignal,
-): Promise<{ response?: CompletedInvocation; error?: string }> {
+): Promise<{ response?: CompletedInvocation; invocationArn?: string; error?: string }> {
   signal?.throwIfAborted();
   let client: BedrockRuntimeClient | undefined;
   let invocationArn: string | undefined;
@@ -97,6 +97,7 @@ export async function runBedrockVideoJob(
       if (invocation.status === 'Failed') {
         return {
           error: `Video generation failed: ${invocation.failureMessage || 'Unknown failure'}`,
+          invocationArn,
         };
       }
       const delay = Math.max(0, Math.min(pollIntervalMs, maxPollTimeMs - (Date.now() - startTime)));
@@ -106,16 +107,24 @@ export async function runBedrockVideoJob(
         await sleep(delay);
       }
     }
-    return { error: `Video generation timed out after ${maxPollTimeMs / 1000} seconds` };
+    return {
+      error: `Video generation timed out after ${maxPollTimeMs / 1000} seconds`,
+      invocationArn,
+    };
   } catch (error) {
-    signal?.throwIfAborted();
+    if (!invocationArn) {
+      signal?.throwIfAborted();
+    }
     logger.error(`[${label}] ${phase}`, { error, invocationArn });
     if (isMissingPackageImportError(error, '@aws-sdk/client-bedrock-runtime')) {
       return {
         error: `The @aws-sdk/client-bedrock-runtime package is required for ${label} video generation. Install it with: npm install @aws-sdk/client-bedrock-runtime`,
       };
     }
-    return { error: `${phase}: ${error instanceof Error ? error.message : String(error)}` };
+    return {
+      error: `${phase}: ${error instanceof Error ? error.message : String(error)}`,
+      invocationArn,
+    };
   } finally {
     client?.destroy();
   }

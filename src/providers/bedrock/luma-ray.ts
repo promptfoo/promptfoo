@@ -275,7 +275,11 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
       s3OutputUri,
     });
 
-    const { response, error: jobError } = await runBedrockVideoJob(
+    const {
+      response,
+      error: jobError,
+      invocationArn: submittedArn,
+    } = await runBedrockVideoJob(
       this,
       {
         label: 'Luma Ray',
@@ -287,78 +291,94 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
       options?.abortSignal,
     );
     if (jobError || !response) {
-      return { error: jobError || 'Polling failed' };
+      return {
+        error: jobError || 'Polling failed',
+        ...(submittedArn && {
+          metadata: { invocationArn: submittedArn, model: this.modelName, s3OutputUri },
+        }),
+      };
     }
     const invocationArn = response.invocationArn;
+    const metadata = { invocationArn, model: this.modelName, s3OutputUri };
 
-    options?.abortSignal?.throwIfAborted();
-
-    // Get S3 output location
-    const outputS3Uri = response.outputDataConfig?.s3OutputDataConfig?.s3Uri;
-    if (!outputS3Uri) {
-      return { error: 'No output location in response' };
-    }
-
-    // Download and store video (if enabled)
-    let blobRef: BlobRef | undefined;
-    const outputUrl = `${outputS3Uri}/output.mp4`;
-
-    if (config.downloadFromS3 !== false) {
-      const { blobRef: ref, error: downloadError } = await storeBedrockVideo(
-        this,
-        'Luma Ray',
-        outputS3Uri,
-        context,
-        options?.abortSignal,
-      );
-      options?.abortSignal?.throwIfAborted();
-      if (downloadError) {
-        logger.warn(`[Luma Ray] Failed to download video: ${downloadError}. Using S3 URL.`);
-      } else {
-        blobRef = ref;
+    try {
+      // Get S3 output location
+      const outputS3Uri = response.outputDataConfig?.s3OutputDataConfig?.s3Uri;
+      if (!outputS3Uri) {
+        return { error: 'No output location in response', metadata };
       }
+
+      metadata.s3OutputUri = outputS3Uri;
+      options?.abortSignal?.throwIfAborted();
+
+      // Download and store video (if enabled)
+      let blobRef: BlobRef | undefined;
+      const outputUrl = `${outputS3Uri}/output.mp4`;
+
+      if (config.downloadFromS3 !== false) {
+        const { blobRef: ref, error: downloadError } = await storeBedrockVideo(
+          this,
+          'Luma Ray',
+          outputS3Uri,
+          context,
+          options?.abortSignal,
+        );
+        options?.abortSignal?.throwIfAborted();
+        if (downloadError) {
+          logger.warn(`[Luma Ray] Failed to download video: ${downloadError}. Using S3 URL.`);
+        } else {
+          blobRef = ref;
+        }
+      }
+
+      const latencyMs = Date.now() - startTime;
+      const duration = config.duration || DEFAULT_DURATION;
+      const resolution = config.resolution || DEFAULT_RESOLUTION;
+      const aspectRatio = config.aspectRatio || DEFAULT_ASPECT_RATIO;
+      const durationSeconds = this.getDurationSeconds(duration);
+      const dimensions = this.getVideoDimensions(aspectRatio, resolution);
+
+      // Format output
+      const sanitizedPrompt = prompt
+        .replace(/\r?\n|\r/g, ' ')
+        .replace(/\[/g, '(')
+        .replace(/\]/g, ')');
+      const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+      const videoUrl = blobRef?.uri || outputUrl;
+      const output = `[Video: ${ellipsizedPrompt}](${videoUrl})`;
+
+      return {
+        output,
+        cached: false,
+        latencyMs,
+        video: {
+          id: invocationArn,
+          blobRef,
+          url: blobRef ? undefined : outputUrl,
+          format: 'mp4',
+          size: dimensions,
+          duration: durationSeconds,
+          model: this.modelName,
+          resolution: dimensions,
+        },
+        metadata: {
+          ...metadata,
+          duration,
+          resolution,
+          aspectRatio,
+          loop: config.loop,
+          ...(blobRef && { blobHash: blobRef.hash }),
+        },
+      };
+    } catch (error) {
+      if (!options?.abortSignal?.aborted) {
+        throw error;
+      }
+      return {
+        error: error instanceof Error ? error.message : String(error),
+        latencyMs: Date.now() - startTime,
+        metadata,
+      };
     }
-
-    const latencyMs = Date.now() - startTime;
-    const duration = config.duration || DEFAULT_DURATION;
-    const resolution = config.resolution || DEFAULT_RESOLUTION;
-    const aspectRatio = config.aspectRatio || DEFAULT_ASPECT_RATIO;
-    const durationSeconds = this.getDurationSeconds(duration);
-    const dimensions = this.getVideoDimensions(aspectRatio, resolution);
-
-    // Format output
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-    const videoUrl = blobRef?.uri || outputUrl;
-    const output = `[Video: ${ellipsizedPrompt}](${videoUrl})`;
-
-    return {
-      output,
-      cached: false,
-      latencyMs,
-      video: {
-        id: invocationArn,
-        blobRef,
-        url: blobRef ? undefined : outputUrl,
-        format: 'mp4',
-        size: dimensions,
-        duration: durationSeconds,
-        model: this.modelName,
-        resolution: dimensions,
-      },
-      metadata: {
-        invocationArn,
-        model: this.modelName,
-        duration,
-        resolution,
-        aspectRatio,
-        loop: config.loop,
-        s3OutputUri: outputS3Uri,
-        ...(blobRef && { blobHash: blobRef.hash }),
-      },
-    };
   }
 }
