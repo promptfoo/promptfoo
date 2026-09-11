@@ -57,7 +57,7 @@ describe('StrategyConfigDialog', () => {
       />,
     );
     await user.click(screen.getByRole('combobox'));
-    expect(screen.queryByRole('option', { name: 'pdf', exact: true }) !== null).toBe(available);
+    expect(screen.queryByRole('option', { name: /^pdf$/ }) !== null).toBe(available);
   });
 
   it('preserves the PDF input and scanned mode when adding it to a layer', async () => {
@@ -75,7 +75,7 @@ describe('StrategyConfigDialog', () => {
       />,
     );
     await user.click(screen.getByRole('combobox'));
-    await user.click(screen.getByRole('option', { name: 'pdf', exact: true }));
+    await user.click(screen.getByRole('option', { name: /^pdf$/ }));
     await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['rot13', pdf] });
   });
