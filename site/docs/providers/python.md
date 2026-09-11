@@ -167,7 +167,7 @@ Contains your provider configuration and metadata:
     "id": "file://my_provider.py",
     "config": {
         # Your custom configuration from promptfooconfig.yaml
-        "model_name": "gpt-3.5-turbo",
+        "model": "gpt-4.1-mini",
         "temperature": 0.7,
         "max_tokens": 100,
 
@@ -321,7 +321,7 @@ def call_api(prompt, options, context):
     # Make API call
     try:
         response = client.chat.completions.create(
-            model=config.get('model', 'gpt-3.5-turbo'),
+            model=config.get('model', 'gpt-4.1-mini'),
             messages=messages,
             temperature=config.get('temperature', 0.7),
             max_tokens=config.get('max_tokens', 150)

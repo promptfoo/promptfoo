@@ -917,6 +917,7 @@ export async function fetchWithCache<T = unknown>(
   const cache = getCacheInstance();
 
   const cachedResponse = await awaitCache(cache.get<SerializedFetchResponse>(cacheKey));
+  signal?.throwIfAborted();
   if (cachedResponse != null) {
     logger.debug(
       `Returning cached response for ${sanitizeUrlForLogging(getRequestUrlString(url))}: ${cachedResponse}`,
@@ -949,6 +950,7 @@ export async function fetchWithCache<T = unknown>(
   }
 
   const response = await awaitCache(inflightResponse);
+  signal?.throwIfAborted();
   const result = deserializeFetchResponse<T>(response, false, cache, cacheKey);
   return coalesced ? { ...result, coalesced: true } : result;
 }

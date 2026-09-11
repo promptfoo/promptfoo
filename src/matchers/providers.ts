@@ -42,6 +42,11 @@ export function shouldUseRemoteGrading(
   return shouldGenerateRemote(options);
 }
 
+export function getGradingProviderCallOptions(): CallApiOptionsParams | undefined {
+  const abortSignal = getProviderCallExecutionContext()?.abortSignal;
+  return abortSignal ? { abortSignal } : undefined;
+}
+
 /**
  * Apply tracing, rate limits, and grouped scheduling to every grading-provider modality.
  */
@@ -88,7 +93,7 @@ export function callGradingProvider<T extends ProviderResponse>(
     return executionContext.providerCallQueue.enqueue(
       provider.id(),
       executeCall,
-      ...(callOptions?.abortSignal ? ([callOptions.abortSignal] as const) : ([] as const)),
+      callOptions?.abortSignal,
     );
   }
 
@@ -111,10 +116,7 @@ export function callProviderWithContext(
     },
     vars,
   };
-  const executionContext = getProviderCallExecutionContext();
-  const callApiOptions = executionContext?.abortSignal
-    ? { abortSignal: executionContext.abortSignal }
-    : undefined;
+  const callApiOptions = getGradingProviderCallOptions();
   return callGradingProvider(
     provider,
     label,

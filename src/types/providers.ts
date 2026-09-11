@@ -227,29 +227,40 @@ export function hasProviderCapability<K extends ProviderCapability>(
   provider: unknown,
   capability: K,
 ): provider is ProviderIdentity & Pick<ProviderOperations, K> {
-  const delegate =
-    typeof provider === 'object' && provider !== null
-      ? (provider as Record<symbol, unknown>)[Symbol.for('promptfoo.capabilityDelegate')]
-      : undefined;
+  if (
+    typeof provider !== 'object' ||
+    provider === null ||
+    !('id' in provider) ||
+    typeof provider.id !== 'function' ||
+    !(capability in provider) ||
+    typeof (provider as Record<string, unknown>)[capability] !== 'function'
+  ) {
+    return false;
+  }
+
+  const override = getSubclassCapabilityOverride(provider, capability);
+  if (override !== undefined) {
+    return override;
+  }
+  const capabilities =
+    'promptfooCapabilities' in provider ? provider.promptfooCapabilities : undefined;
+  if (capabilities === undefined) {
+    return true;
+  }
+  if (!Array.isArray(capabilities)) {
+    return false;
+  }
+  if (capabilities.includes(capability)) {
+    return true;
+  }
+
+  const delegate = (provider as Record<symbol, unknown>)[
+    Symbol.for('promptfoo.capabilityDelegate')
+  ];
   return (
-    typeof provider === 'object' &&
-    provider !== null &&
-    'id' in provider &&
-    typeof provider.id === 'function' &&
-    capability in provider &&
-    typeof (provider as Record<string, unknown>)[capability] === 'function' &&
-    (getSubclassCapabilityOverride(provider, capability) ??
-      (!('promptfooCapabilities' in provider) ||
-        provider.promptfooCapabilities === undefined ||
-        (Array.isArray(provider.promptfooCapabilities) &&
-          provider.promptfooCapabilities.includes(capability)) ||
-        (Array.isArray(provider.promptfooCapabilities) &&
-          Object.prototype.hasOwnProperty.call(
-            provider.promptfooCapabilities,
-            inheritedProviderCapabilities,
-          ) &&
-          delegate !== provider &&
-          hasProviderCapability(delegate, capability))))
+    Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities) &&
+    delegate !== provider &&
+    hasProviderCapability(delegate, capability)
   );
 }
 
@@ -263,6 +274,8 @@ export interface ApiProvider<TConfig = any> extends MinimalApiProvider, Provider
   callModerationApi?: ProviderOperations['callModerationApi'];
   delay?: number;
   getSessionId?: () => string;
+  /** Native audio input content format accepted by this provider and its configured model. */
+  getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
   transform?: string | TransformFunction;

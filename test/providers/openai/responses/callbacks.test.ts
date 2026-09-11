@@ -5,6 +5,8 @@ import './setup';
 import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
+import { wrapProviderWithRateLimiting } from '../../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../../src/scheduler/rateLimitRegistry';
 
 describe('OpenAiResponsesProvider function callbacks', () => {
   describe('Function Tool Callbacks', () => {
@@ -49,39 +51,55 @@ describe('OpenAiResponsesProvider function callbacks', () => {
       expect(result.output).toBe('11');
     });
 
-    it('cancels a pending callback after the model responds', async () => {
-      const controller = new AbortController();
-      let started!: () => void;
-      const callbackStarted = new Promise<void>((resolve) => {
-        started = resolve;
-      });
-      vi.mocked(cache.fetchWithCache).mockResolvedValue({
-        data: {
-          id: 'resp_pending_callback',
-          model: 'gpt-4o',
-          output: [{ type: 'function_call', name: 'wait', arguments: '{"id":1}' }],
-          usage: { input_tokens: 2, output_tokens: 1 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
-      const provider = new OpenAiResponsesProvider('gpt-4o', {
-        config: {
-          apiKey: 'test-key',
-          functionToolCallbacks: {
-            wait: () => {
-              started();
-              return new Promise(() => {});
+    it.each([false, true])(
+      'retains billing when a callback is cancelled (scheduler: %s)',
+      async (scheduled) => {
+        const controller = new AbortController();
+        let started!: () => void;
+        const callbackStarted = new Promise<void>((resolve) => {
+          started = resolve;
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue({
+          data: {
+            id: 'resp_pending_callback',
+            model: 'gpt-4o',
+            output: [{ type: 'function_call', name: 'wait', arguments: '{"id":1}' }],
+            usage: { input_tokens: 2, output_tokens: 1 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+        const provider = new OpenAiResponsesProvider('gpt-4o', {
+          config: {
+            apiKey: 'test-key',
+            functionToolCallbacks: {
+              wait: () => {
+                started();
+                return new Promise(() => {});
+              },
             },
           },
-        },
-      });
-      const pending = provider.callApi('wait', undefined, { abortSignal: controller.signal });
-      await callbackStarted;
-      controller.abort(new Error('cancelled response callback'));
-      await expect(pending).rejects.toThrow('cancelled response callback');
-    });
+        });
+        const activeProvider = scheduled
+          ? wrapProviderWithRateLimiting(provider, new RateLimitRegistry({ maxConcurrency: 1 }))
+          : provider;
+        const pending = activeProvider.callApi('wait', undefined, {
+          abortSignal: controller.signal,
+        });
+        await callbackStarted;
+        controller.abort(new Error('cancelled response callback'));
+        const result = await pending;
+        expect(result).toMatchObject({
+          error: 'cancelled response callback',
+          tokenUsage: { prompt: 2, completion: 1, total: 3, numRequests: 1 },
+          cached: false,
+          raw: { id: 'resp_pending_callback', output: [{ type: 'function_call', name: 'wait' }] },
+          metadata: { responseId: 'resp_pending_callback', http: { status: 200 } },
+        });
+        expect(result.cost).toBeGreaterThan(0);
+      },
+    );
 
     it('should handle multiple function calls including status updates', async () => {
       const mockApiResponse = {

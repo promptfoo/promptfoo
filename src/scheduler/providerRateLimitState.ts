@@ -175,7 +175,6 @@ export class ProviderRateLimitState extends EventEmitter {
       try {
         options.abortSignal?.throwIfAborted();
         const result = await callFn();
-        options.abortSignal?.throwIfAborted();
         const latencyMs = Date.now() - startTime;
         this.latencies.push(latencyMs);
 
@@ -195,7 +194,13 @@ export class ProviderRateLimitState extends EventEmitter {
 
         if (isRateLimited) {
           this.handleRateLimit(retryAfterMs);
+        }
+        if (options.abortSignal?.aborted) {
+          this.failedRequests++;
+          return result;
+        }
 
+        if (isRateLimited) {
           // Check if we should retry
           if (shouldRetry(attempt, undefined, true, retryPolicy)) {
             attempt++;
