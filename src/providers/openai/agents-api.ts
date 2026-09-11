@@ -137,9 +137,41 @@ function decodeUrlComponent(value: string): string {
   }
 }
 
+/** Decode URL userinfo as Node's HTTP client does, keeping a malformed escape as written. */
+function decodeUserinfo(url: URL): string | undefined {
+  return url.username || url.password
+    ? `${decodeUrlComponent(url.username)}:${decodeUrlComponent(url.password)}`
+    : undefined;
+}
+
+function basicCredential(userinfo: string): string {
+  return `Basic ${Buffer.from(userinfo).toString('base64')}`;
+}
+
 /**
- * Credential values carried by a URL: userinfo, which promptfoo's fetch sends as Basic auth, and
- * credential-named query parameters. Raw and decoded spellings are both returned for redaction.
+ * Promptfoo's fetch helper would Base64-encode URL userinfo while it is still percent-encoded, so
+ * request URLs omit it and the provider sends a decoded Basic credential instead.
+ */
+function splitUserinfo(apiUrl: string): { url: string; userinfo?: string } {
+  let url: URL;
+  try {
+    url = new URL(apiUrl);
+  } catch {
+    return { url: apiUrl };
+  }
+  const userinfo = decodeUserinfo(url);
+  if (!userinfo) {
+    return { url: apiUrl };
+  }
+  url.username = '';
+  url.password = '';
+  return { url: url.toString(), userinfo };
+}
+
+/**
+ * Credential values carried by a URL: userinfo, including the decoded pair and the Basic
+ * credential derived from it, and credential-named query parameters. Raw and decoded spellings
+ * are both returned for redaction.
  */
 function getUrlCredentials(value: string): string[] {
   if (!/^[a-z][a-z\d+.-]*:\/\//i.test(value)) {
@@ -153,6 +185,10 @@ function getUrlCredentials(value: string): string[] {
     return [];
   }
   const found = [url.username, url.password].flatMap((part) => [part, decodeUrlComponent(part)]);
+  const userinfo = decodeUserinfo(url);
+  if (userinfo) {
+    found.push(userinfo, basicCredential(userinfo));
+  }
   for (const segment of url.search.slice(1).split('&')) {
     const separator = segment.indexOf('=');
     const [param] = new URLSearchParams(segment);
@@ -307,7 +343,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     for (let attempt = 0; ; attempt++) {
       signal.throwIfAborted();
       const response = await fetchWithRetries(
-        appendOpenAiApiPath(this.getApiUrl(), endpoint, query),
+        appendOpenAiApiPath(splitUserinfo(this.getApiUrl()).url, endpoint, query),
         {
           method,
           headers,
@@ -529,6 +565,26 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     }
   }
 
+  /**
+   * A configured Authorization header takes precedence over this value. An explicit key, or any
+   * key sent to the OpenAI API, uses Bearer auth; otherwise URL userinfo uses decoded Basic auth.
+   * An ambient OPENAI_API_KEY never reaches a gateway that has its own header or URL credential.
+   */
+  private getAuthorization(
+    apiKey: string | undefined,
+    hasGatewayCredential: boolean,
+  ): string | undefined {
+    const sendApiKey =
+      Boolean(this.config.apiKey || this.config.apiKeyEnvar) ||
+      !hasGatewayCredential ||
+      this.sendsToOpenAiApi();
+    if (apiKey && sendApiKey) {
+      return `Bearer ${apiKey}`;
+    }
+    const { userinfo } = splitUserinfo(this.getApiUrl());
+    return userinfo && basicCredential(userinfo);
+  }
+
   private async runSession(
     prompt: string,
     options?: CallApiOptionsParams,
@@ -553,14 +609,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     if (!apiKey && !hasHeaderCredential && !hasGatewayCredential && this.requiresApiKey()) {
       return { error: this.getMissingApiKeyErrorMessage() };
     }
-    // Don't forward an ambient OPENAI_API_KEY to a gateway that authenticates with its own
-    // credential header or URL credentials; an explicit apiKey or apiKeyEnvar still sends it.
-    const sendApiKey =
-      Boolean(this.config.apiKey || this.config.apiKeyEnvar) ||
-      !hasGatewayCredential ||
-      this.sendsToOpenAiApi();
-    if (apiKey && sendApiKey && !headers.has('Authorization')) {
-      headers.set('Authorization', `Bearer ${apiKey}`);
+    const authorization = this.getAuthorization(apiKey, hasGatewayCredential);
+    if (authorization && !headers.has('Authorization')) {
+      headers.set('Authorization', authorization);
     }
     headers.set('Content-Type', 'application/json');
     headers.set('OpenAI-Beta', 'agents=v1');

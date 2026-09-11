@@ -249,28 +249,49 @@ describe('OpenAiAgentsApiProvider', () => {
       vi
         .mocked(fetchWithRetries)
         .mock.calls.map(([, request]) => new Headers(request!.headers).get('Authorization'));
+    const basic = (userinfo: string) => `Basic ${Buffer.from(userinfo).toString('base64')}`;
+    // The fetch helper would Base64-encode URL userinfo while still escaped, so none may reach it.
+    const noRequestUrlHasUserinfo = () =>
+      vi
+        .mocked(fetchWithRetries)
+        .mock.calls.every(
+          ([url]) => !new URL(String(url)).username && !new URL(String(url)).password,
+        );
 
     it.each([
-      { source: 'a query parameter', config: { apiBaseUrl: queryGatewayUrl }, processEnv: {} },
-      { source: 'userinfo', config: { apiBaseUrl: userinfoGatewayUrl }, processEnv: {} },
+      {
+        source: 'a query parameter',
+        config: { apiBaseUrl: queryGatewayUrl },
+        processEnv: {},
+        authorization: null,
+      },
+      {
+        source: 'userinfo',
+        config: { apiBaseUrl: userinfoGatewayUrl },
+        processEnv: {},
+        authorization: basic('gateway-user:gateway-password'),
+      },
       {
         source: 'username-only userinfo in apiHost',
         config: { apiHost: 'gateway-token-value@gateway.example' },
         processEnv: {},
+        authorization: basic('gateway-token-value:'),
       },
       {
         source: 'an OPENAI_BASE_URL query parameter',
         config: {},
         processEnv: { OPENAI_BASE_URL: 'https://gateway.example/v1?key=gateway-query-secret' },
+        authorization: null,
       },
       {
         source: 'OPENAI_API_HOST userinfo',
         config: {},
         processEnv: { OPENAI_API_HOST: 'gateway-user:gateway-password@gateway.example' },
+        authorization: basic('gateway-user:gateway-password'),
       },
     ])(
       'never sends an ambient OpenAI key to a gateway authenticated by $source',
-      async ({ config, processEnv }) => {
+      async ({ config, processEnv, authorization }) => {
         mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key', ...processEnv });
         const gateway = new OpenAiAgentsApiProvider('', { config });
         expect((await gateway.callApi('hi')).output).toBe('42');
@@ -294,7 +315,26 @@ describe('OpenAiAgentsApiProvider', () => {
             'DELETE /v1/agents/sessions/sess_test',
           ]),
         );
-        expect(authorizations().every((value) => value === null)).toBe(true);
+        // Only the gateway's own URL credential is sent, never the ambient key.
+        expect(new Set(authorizations())).toEqual(new Set([authorization]));
+        expect(noRequestUrlHasUserinfo()).toBe(true);
+      },
+    );
+
+    it.each([
+      { userinfo: 'us%40er:p%40ss%3Aword', decoded: 'us@er:p@ss:word' },
+      // A malformed escape is kept as written, as Node's HTTP client does.
+      { userinfo: 'gateway-user:bad%zz%40secret', decoded: 'gateway-user:bad%zz%40secret' },
+    ])(
+      'sends userinfo $userinfo as decoded Basic auth outside the request URL',
+      async ({ userinfo, decoded }) => {
+        mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
+        const result = await new OpenAiAgentsApiProvider('', {
+          config: { apiBaseUrl: `https://${userinfo}@gateway.example/v1` },
+        }).callApi('hi');
+        expect(result.output).toBe('42');
+        expect(new Set(authorizations())).toEqual(new Set([basic(decoded)]));
+        expect(noRequestUrlHasUserinfo()).toBe(true);
       },
     );
 
@@ -321,6 +361,14 @@ describe('OpenAiAgentsApiProvider', () => {
         expected: 'Bearer literal-gateway-key',
       },
       {
+        description: 'only the apiKeyEnvar key to a userinfo gateway',
+        config: {
+          apiBaseUrl: 'https://gateway-user:p%40ss@gateway.example/v1',
+          apiKeyEnvar: 'GATEWAY_OPENAI_KEY',
+        },
+        expected: 'Bearer explicit-gateway-key',
+      },
+      {
         description: 'the ambient key to the official API',
         config: { apiBaseUrl: 'https://api.openai.com/v1?api-key=unused-query-value' },
         expected: 'Bearer ambient-openai-key',
@@ -334,6 +382,40 @@ describe('OpenAiAgentsApiProvider', () => {
       const values = authorizations();
       expect(values.length).toBeGreaterThan(0);
       expect(values.every((value) => value === expected)).toBe(true);
+      // Without userinfo in the URL, the fetch helper cannot append a second Basic credential.
+      expect(noRequestUrlHasUserinfo()).toBe(true);
+    });
+
+    it('lets a configured Authorization header win over keys and URL userinfo', async () => {
+      mockProcessEnv({
+        OPENAI_API_KEY: 'ambient-openai-key',
+        GATEWAY_OPENAI_KEY: 'explicit-gateway-key',
+      });
+      const result = await new OpenAiAgentsApiProvider('', {
+        config: {
+          apiBaseUrl: 'https://gateway-user:p%40ss@gateway.example/v1',
+          apiKeyEnvar: 'GATEWAY_OPENAI_KEY',
+          headers: { Authorization: 'Bearer configured-token' },
+        },
+      }).callApi('hi');
+      expect(result.output).toBe('42');
+      expect(new Set(authorizations())).toEqual(new Set(['Bearer configured-token']));
+      expect(noRequestUrlHasUserinfo()).toBe(true);
+    });
+
+    it('redacts an echoed Basic token and decoded userinfo from errors', async () => {
+      const decoded = 'gateway-user-name:p@ss:word-value';
+      const token = Buffer.from(decoded).toString('base64');
+      vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+        apiError(401, `Rejected ${token} with password p@ss:word-value for ${decoded}`),
+      );
+      const result = await new OpenAiAgentsApiProvider('', {
+        config: { apiBaseUrl: 'https://gateway-user-name:p%40ss%3Aword-value@gateway.example/v1' },
+      }).callApi('hi');
+      expect(result.error).toContain('HTTP 401');
+      for (const secret of [token, 'p@ss:word-value', decoded]) {
+        expect(result.error).not.toContain(secret);
+      }
     });
   });
 
