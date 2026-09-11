@@ -622,6 +622,12 @@ function sanitizeCredentialText(value: string): string {
     return '<redacted>';
   }
 
+  for (const [, key] of value.matchAll(/<(?:[\w.-]+:)?([A-Za-z_][A-Za-z\d_.-]*)\b[^>]*>/gi)) {
+    if (isCredentialAttributeKey(key)) {
+      return '<redacted>';
+    }
+  }
+
   // YAML values can span lines, including flow collections under credential keys.
   for (const [, , key, scalar] of value.matchAll(
     /(?:^|[\r\n])[ \t]*(?:-[ \t]+)?(["']?)([A-Za-z_][A-Za-z\d_.-]*)\1[ \t]*:[ \t]*([^\r\n]*)/g,
@@ -832,7 +838,10 @@ function isCredentialAttributeKey(key: string): boolean {
     }
     return (
       (part === 'key' || part === 'keys') &&
-      ['api', 'access', 'private', 'client', 'ssl', 'tls'].includes(parts[index - 1])
+      !['algorithm', 'type', 'format', 'id'].includes(parts[index + 1]) &&
+      ['api', 'access', 'private', 'client', 'ssl', 'tls', 'signing', 'encryption'].includes(
+        parts[index - 1],
+      )
     );
   });
 }
@@ -939,6 +948,7 @@ function sanitizeStructuredAttribute(
 
       let sanitized: unknown;
       if (
+        ArrayBuffer.isView(entry) ||
         isCredentialPairValue(source, key) ||
         isCredentialAttributeKey(key) ||
         isPrivateJwkParameter(source, key) ||

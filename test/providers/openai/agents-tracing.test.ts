@@ -227,6 +227,7 @@ describe('OTLPTracingExporter', () => {
           nested: "config: [{password: 'opaque''nested'}]",
           odbc: 'Driver={ODBC Driver};UID=buildbot;PWD={opaque;credential};Database=public',
           escapedOdbc: 'Driver={ODBC Driver};PWD={opaque}};suffix};Database=public',
+          xml: '<settings><password>opaque/xml</password></settings>',
           public: 'config: {description: "public phrase"}',
         },
         format,
@@ -238,6 +239,7 @@ describe('OTLPTracingExporter', () => {
         'Driver={ODBC Driver};UID=buildbot;PWD=<redacted>;Database=public',
       );
       expect(attributes.escapedOdbc).toBe('Driver={ODBC Driver};PWD=<redacted>;Database=public');
+      expect(attributes.xml).toBe('<redacted>');
       expect(attributes.public).toBe('config: {description: "public phrase"}');
       expect(JSON.stringify(payload)).not.toMatch(/opaque|suffix|credential/);
     },
@@ -251,6 +253,11 @@ describe('OTLPTracingExporter', () => {
         client_key: 'opaque/client',
         ssl_key: 'opaque/ssl',
         tlsKey: 'opaque/tls',
+        signing_key: 'opaque/signing',
+        encryptionKey: 'opaque/encryption',
+        tls_key_algorithm: 'RSA',
+        ssl_key_type: 'EC',
+        client_key_id: 'kid-123',
         'client-certificate-data': 'public certificate',
       };
       const { attributes, payload } = await exportCustomData(
@@ -269,12 +276,27 @@ describe('OTLPTracingExporter', () => {
           client_key: '<redacted>',
           ssl_key: '<redacted>',
           tlsKey: '<redacted>',
+          signing_key: '<redacted>',
+          encryptionKey: '<redacted>',
+          tls_key_algorithm: 'RSA',
+          ssl_key_type: 'EC',
+          client_key_id: 'kid-123',
           'client-certificate-data': 'public certificate',
         });
       }
       expect(JSON.stringify(payload)).not.toContain('opaque/');
     },
   );
+
+  it.each(['json', 'protobuf'] as const)('redacts byte array attributes in %s', async (format) => {
+    const { attributes, payload } = await exportCustomData(
+      { native: { bytes: Buffer.from('sk-opaque-byte-secret') } },
+      format,
+    );
+
+    expect(JSON.parse(attributes.native as string)).toEqual({ bytes: '<redacted>' });
+    expect(JSON.stringify(payload)).not.toContain('opaque-byte-secret');
+  });
 
   it.each(['json', 'protobuf'] as const)('redacts plural key collections in %s', async (format) => {
     const input = {
