@@ -856,8 +856,23 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
       }
     }
 
+    const rawHttpBoundary = str.search(/\r?\n\r?\n/);
+    if (rawHttpBoundary !== -1) {
+      const separator = str.slice(rawHttpBoundary).match(/^\r?\n\r?\n/)?.[0] ?? '\n\n';
+      const headers = str
+        .slice(0, rawHttpBoundary)
+        .replace(
+          /^(authorization|cookie|x-(?:api-key|client-secret|session-token)):[^\r\n]*$/gim,
+          '$1: [REDACTED]',
+        );
+      const body = str.slice(rawHttpBoundary + separator.length);
+      const sanitizedBody = sanitizeJsonString(body, depth, maxDepth);
+      if (headers !== str.slice(0, rawHttpBoundary) || sanitizedBody !== body) {
+        return `${headers}${separator}${sanitizedBody}`;
+      }
+    }
     const sanitizedRawHttp = str.replace(
-      /^(authorization|cookie|x-api-key):[^\r\n]*$/gim,
+      /^(authorization|cookie|x-(?:api-key|client-secret|session-token)):[^\r\n]*$/gim,
       '$1: [REDACTED]',
     );
     if (sanitizedRawHttp !== str) {
@@ -1029,10 +1044,16 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
   const sanitized: any = {};
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
-    if (typeof value === 'string' && (key === 'url' || /^https?:\/\//i.test(value))) {
-      sanitized[key] = sanitizeUrl(value);
-    } else if (isSecretKey(key) && (!value || typeof value !== 'object')) {
+    if (
+      (isSecretKey(key) && (!value || typeof value !== 'object')) ||
+      (key === 'value' && obj.type === 'api_key')
+    ) {
       sanitized[key] = REDACTED;
+    } else if (
+      typeof value === 'string' &&
+      (key === 'url' || /^(?:https?|wss?):\/\//i.test(value))
+    ) {
+      sanitized[key] = sanitizeUrl(value);
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact values that look like secrets (API keys, tokens, etc.)
       sanitized[key] = REDACTED;

@@ -375,6 +375,25 @@ describe('sanitizeObject', () => {
       expect(sanitizeObject(invalidJson)).toBe(invalidJson);
     });
 
+    it('redacts credential-shaped URLs, auth values, and raw HTTP payloads', () => {
+      expect(
+        sanitizeObject({
+          env: { SERVICE_TOKEN: 'https://hooks.example.test/opaque-value' },
+          auth: { type: 'api_key', value: 'xyz789', label: 'public' },
+          websocketUrl: 'wss://gateway.example/ws?token=secret',
+        }),
+      ).toEqual({
+        env: { SERVICE_TOKEN: '[REDACTED]' },
+        auth: { type: 'api_key', value: '[REDACTED]', label: 'public' },
+        websocketUrl: 'wss://gateway.example/ws?token=%5BREDACTED%5D',
+      });
+      expect(
+        sanitizeObject(
+          'POST /v1 HTTP/1.1\nX-Client-Secret: header-secret\n\n{"apiKey":"body-secret"}',
+        ),
+      ).toBe('POST /v1 HTTP/1.1\nX-Client-Secret: [REDACTED]\n\n{"apiKey":"[REDACTED]"}');
+    });
+
     it('should redact SAS tokens embedded in Azure Blob test URIs', () => {
       const result = sanitizeObject({
         tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',

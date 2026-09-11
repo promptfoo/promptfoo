@@ -17,7 +17,11 @@ import {
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { redactAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './util/sanitizer';
+import {
+  redactAzureBlobSasTokens,
+  sanitizeObject,
+  sanitizeTracingConfigForPersistence,
+} from './util/sanitizer';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -142,7 +146,7 @@ async function sendEvalRecord(
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
   const redactedConfig = redactAzureBlobSasTokens(
-    sanitizeTracingConfigForPersistence(evalRecord.config),
+    sanitizeObject(sanitizeTracingConfigForPersistence(evalRecord.config)),
   );
 
   // Preserve the verified runtime team on server-issued unified configs. For
