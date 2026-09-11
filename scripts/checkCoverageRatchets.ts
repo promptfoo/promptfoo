@@ -268,10 +268,7 @@ function isSourceFile(filePath: string): boolean {
   return (
     (filePath.endsWith('.ts') || filePath.endsWith('.tsx')) &&
     !filePath.endsWith('.d.ts') &&
-    !filePath.endsWith('.test.ts') &&
-    !filePath.endsWith('.test.tsx') &&
-    !filePath.endsWith('.spec.ts') &&
-    !filePath.endsWith('.spec.tsx') &&
+    !/\.(?:test|spec|browser)\.tsx?$/.test(filePath) &&
     !filePath.endsWith('.stories.tsx')
   );
 }

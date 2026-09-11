@@ -104,6 +104,18 @@ describe('coverage ratchets', () => {
     );
   });
 
+  it.each(['ts', 'tsx'])('excludes browser tests from source coverage floors (%s)', (extension) => {
+    const file = `src/app/src/tests/browser-mode/navigation.browser.${extension}`;
+    const result = evaluateCoverageRatchets({
+      changedFiles: [{ path: file, status: 'A' }],
+      coverageMap: { [file]: coverageFile(file, { statements: { covered: 0, total: 4 } }) },
+      repoRoot,
+      report: frontendReport,
+    });
+    expect(result.checkedFiles).toEqual([]);
+    expect(result.failures).toEqual([]);
+  });
+
   it('does not gate ordinary modified legacy source files', () => {
     const result = evaluateCoverageRatchets({
       changedFiles: [{ path: 'src/legacy.ts', status: 'M' }],
