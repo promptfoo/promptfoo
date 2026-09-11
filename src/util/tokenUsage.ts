@@ -1,6 +1,10 @@
 import logger from '../logger';
 import { sanitizeProviderIdForLog } from './provider';
-import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
+import {
+  accumulateResponseTokenUsage,
+  accumulateTokenUsage,
+  createEmptyTokenUsage,
+} from './tokenUsageUtils';
 
 import type { TokenUsage } from '../types/shared';
 
@@ -12,11 +16,9 @@ import type { TokenUsage } from '../types/shared';
  *
  * For new implementations, use the OTEL-based tracing infrastructure:
  * - Enable tracing with `PROMPTFOO_OTEL_ENABLED=true`
- * - Use `getTokenUsageFromTrace()` from `src/util/tokenUsageCompat.ts` for per-trace usage
  * - Token usage is automatically captured as GenAI semantic convention span attributes
  *
  * @see src/tracing/genaiTracer.ts for the new tracing implementation
- * @see src/util/tokenUsageCompat.ts for the compatibility layer
  */
 export class TokenUsageTracker {
   private static instance: TokenUsageTracker;
@@ -47,6 +49,28 @@ export class TokenUsageTracker {
     this.providersMap.set(providerId, updated);
     logger.debug(
       `Tracked token usage for ${sanitizeProviderIdForLog(providerId)}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
+    );
+  }
+
+  /**
+   * Track token usage from one provider response while preserving the shared
+   * response-aware request-counting contract.
+   */
+  public trackResponseUsage(
+    providerId: string,
+    response: { cached?: boolean; tokenUsage?: TokenUsage } | undefined,
+  ): void {
+    const current = this.providersMap.get(providerId) ?? createEmptyTokenUsage();
+    const updated = { ...current };
+    const accounting = createEmptyTokenUsage();
+    accumulateResponseTokenUsage(accounting, response);
+    accumulateTokenUsage(updated, {
+      ...(accounting.incurredTokenUsage ?? accounting),
+      cached: accounting.cached,
+    });
+    this.providersMap.set(providerId, updated);
+    logger.debug(
+      `Tracked response usage for ${sanitizeProviderIdForLog(providerId)}: total=${response?.tokenUsage?.total ?? 0}, cached=${response?.tokenUsage?.cached ?? 0}`,
     );
   }
 

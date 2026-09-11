@@ -663,6 +663,39 @@ describe('GeminiImageProvider', () => {
         numRequests: 1,
       });
     });
+
+    it('should count cached responses as one logical request', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image-preview');
+
+      mockFetchWithCache.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'cached response' }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+          usageMetadata: {
+            promptTokenCount: 4,
+            candidatesTokenCount: 6,
+            totalTokenCount: 10,
+          },
+        },
+        cached: true,
+        statusText: 'OK',
+      });
+
+      const result = await provider.callApi('Generate a picture of a cat');
+
+      expect(result.tokenUsage).toEqual({
+        cached: 10,
+        total: 10,
+        numRequests: 1,
+      });
+    });
   });
 
   describe('Multi-image responses', () => {
@@ -939,33 +972,32 @@ describe('GeminiImageProvider', () => {
       { model: 'gemini-3.1-flash-image', imageSize: '4K', expected: 0.151 },
       { model: 'gemini-3-pro-image', imageSize: '2K', expected: 0.134 },
       { model: 'gemini-3-pro-image', imageSize: '4K', expected: 0.24 },
-    ] as const)('should scale per-image cost by imageSize ($model @ $imageSize)', async ({
-      model,
-      imageSize,
-      expected,
-    }) => {
-      const provider = new GeminiImageProvider(model, { config: { imageSize } });
+    ] as const)(
+      'should scale per-image cost by imageSize ($model @ $imageSize)',
+      async ({ model, imageSize, expected }) => {
+        const provider = new GeminiImageProvider(model, { config: { imageSize } });
 
-      mockFetchWithCache.mockResolvedValueOnce({
-        status: 200,
-        data: {
-          candidates: [
-            {
-              content: {
-                parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+        mockFetchWithCache.mockResolvedValueOnce({
+          status: 200,
+          data: {
+            candidates: [
+              {
+                content: {
+                  parts: [{ inlineData: { mimeType: 'image/png', data: 'base64data' } }],
+                },
+                finishReason: 'STOP',
               },
-              finishReason: 'STOP',
-            },
-          ],
-        },
-        cached: false,
-        statusText: 'OK',
-      });
+            ],
+          },
+          cached: false,
+          statusText: 'OK',
+        });
 
-      const result = await provider.callApi('Test prompt');
+        const result = await provider.callApi('Test prompt');
 
-      expect(result.cost).toBe(expected);
-    });
+        expect(result.cost).toBe(expected);
+      },
+    );
 
     it('should default resolution-tiered cost to the 1K price when imageSize is unset', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image');
