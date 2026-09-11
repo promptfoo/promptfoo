@@ -164,6 +164,7 @@ describe('evaluator trace integration', () => {
     // Verify trace was fetched for assertion
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
       sanitizeAttributes: false,
+      includeInternalSpans: false,
     });
     expect(mockFlushOtel).toHaveBeenCalled();
     expect(mockShutdownOtel).toHaveBeenCalledOnce();
@@ -345,6 +346,7 @@ describe('evaluator trace integration', () => {
     // Verify trace was fetched with the correct traceId
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith(testTraceId, {
       sanitizeAttributes: false,
+      includeInternalSpans: false,
     });
 
     // Verify result was added with passing assertion
