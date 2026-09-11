@@ -148,8 +148,8 @@ export function createNovitaProvider(
   providerPath: string,
   options: ProviderCreatorOptions = {},
 ): ApiProvider {
-  const { providerOptions, parsedPath } = resolveProviderCreatorInput(providerPath, options);
-  const splits = parsedPath.segments;
+  const providerOptions = resolveProviderCreatorInput(options);
+  const splits = providerPath.split(':');
   const type = splits[1];
   const isTypedProvider = NOVITA_SUBTYPES.has(type);
 

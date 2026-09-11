@@ -31,8 +31,8 @@ export function createCerebrasProvider(
   providerPath: string,
   options: ProviderCreatorOptions = {},
 ): ApiProvider {
-  const { providerOptions, parsedPath } = resolveProviderCreatorInput(providerPath, options);
-  const splits = parsedPath.segments;
+  const providerOptions = resolveProviderCreatorInput(options);
+  const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
   const { providerOptions: settings, passthrough } = splitOpenAiCompatibleConfig(

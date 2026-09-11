@@ -142,11 +142,11 @@ export function createLiteLLMProvider(
   providerPath: string,
   options: ProviderCreatorOptions = {},
 ): ApiProvider {
-  const { providerOptions, parsedPath } = resolveProviderCreatorInput(providerPath, {
+  const providerOptions = resolveProviderCreatorInput({
     ...options,
     id: options.config?.id ?? options.id,
   });
-  const splits = parsedPath.segments;
+  const splits = providerPath.split(':');
   const providerType = splits[1];
 
   // Extract model name based on provider type
