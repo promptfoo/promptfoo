@@ -836,7 +836,12 @@ export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T 
 /**
  * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
-function sanitizeJsonString(str: string, depth: number, maxDepth: number): string {
+function sanitizeJsonString(
+  str: string,
+  depth: number,
+  maxDepth: number,
+  throwOnError: boolean,
+): string {
   const redactedAzureBlobUri = redactAzureBlobSasToken(str);
   if (redactedAzureBlobUri !== str) {
     return redactedAzureBlobUri;
@@ -859,8 +864,17 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
     }
   }
   if (parsed && typeof parsed === 'object') {
-    const sanitized = recursiveSanitize(parsed, depth, maxDepth);
-    return JSON.stringify(sanitized);
+    try {
+      const sanitized = recursiveSanitize(parsed, depth, maxDepth, false, throwOnError);
+      return JSON.stringify(sanitized);
+    } catch (error) {
+      // Non-throwing persistence must keep sanitizing sibling fields if one
+      // nested JSON string exceeds recursion limits. Strict artifact exports and
+      // top-level failures retain the caller's existing error policy.
+      if (throwOnError || depth === 0) {
+        throw error;
+      }
+    }
   }
   return str;
 }
@@ -1018,7 +1032,13 @@ export function sanitizeUrlEncodedString(value: string): string {
 /**
  * Sanitize plain object fields
  */
-function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap = false): any {
+function sanitizePlainObject(
+  obj: any,
+  depth: number,
+  maxDepth: number,
+  isEnvMap: boolean,
+  throwOnError: boolean,
+): any {
   const sanitized: any = {};
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
@@ -1032,7 +1052,7 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.
-      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth, key === 'env');
+      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth, key === 'env', throwOnError);
     }
   }
   return sanitized;
@@ -1041,14 +1061,20 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
 /**
  * Recursively sanitize an object, redacting secret fields at any depth
  */
-function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap = false): any {
+function recursiveSanitize(
+  obj: any,
+  depth = 0,
+  maxDepth = MAX_DEPTH,
+  isEnvMap = false,
+  throwOnError = false,
+): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
 
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
-    return sanitizeJsonString(obj, depth, maxDepth);
+    return sanitizeJsonString(obj, depth, maxDepth, throwOnError);
   }
 
   // Handle primitives and null/undefined
@@ -1063,7 +1089,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth));
+    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth, false, throwOnError));
   }
 
   // Handle class instances
@@ -1073,7 +1099,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap);
+  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap, throwOnError);
 }
 
 /**
@@ -1100,7 +1126,7 @@ export function sanitizeObject(
 
     // Handle strings - check if they're JSON and sanitize if so
     if (typeof obj === 'string') {
-      return sanitizeJsonString(obj, 0, maxDepth);
+      return sanitizeJsonString(obj, 0, maxDepth, throwOnError);
     }
 
     // Handle other primitives
@@ -1132,7 +1158,7 @@ export function sanitizeObject(
     );
 
     // Apply recursive sanitization with depth limiting
-    return recursiveSanitize(safeObj, 0, maxDepth);
+    return recursiveSanitize(safeObj, 0, maxDepth, false, throwOnError);
   } catch (error) {
     if (throwOnError) {
       throw error;

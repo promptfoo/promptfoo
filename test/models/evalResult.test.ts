@@ -12,6 +12,7 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
+import { sanitizeObject } from '../../src/util/sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -450,6 +451,47 @@ describe('EvalResult', () => {
     // Regression context (PR #8688): provider credentials such as apiKey/token
     // were leaking into persisted eval results and API-visible response payloads.
     describe('credential redaction (regression for PR #8688 review)', () => {
+      it.each(['single', 'batch'] as const)(
+        'keeps sibling credentials redacted after nested JSON failure in %s persistence',
+        async (mode) => {
+          // A shallow outer object avoids failing its initial JSON copy. On the
+          // supported runtime, recursion into this valid string exceeds the stack.
+          const payload = '{"child":'.repeat(6000) + '{}' + '}'.repeat(6000);
+          expect(() => JSON.parse(payload)).not.toThrow();
+          expect(() =>
+            sanitizeObject({ payload }, { maxDepth: Infinity, throwOnError: true }),
+          ).toThrow(RangeError);
+          const testCase = {
+            options: {
+              provider: { id: 'echo', config: { apiKey: 'fixture-before', temperature: 0.2 } },
+            },
+            vars: { payload },
+            metadata: { provider: { config: { token: 'fixture-after', temperature: 0.3 } } },
+          };
+          const input = { ...mockEvaluateResult, testCase };
+          const original = structuredClone(input);
+          const evalId = 'nested-json-persistence-' + mode;
+          const [result] =
+            mode === 'single'
+              ? [await EvalResult.createFromEvaluateResult(evalId, input, { persist: true })]
+              : await EvalResult.createManyFromEvaluateResult([input], evalId);
+          const retrieved = await EvalResult.findById(result.id);
+          expect(retrieved).not.toBeNull();
+          for (const stored of [result, retrieved!]) {
+            expect(stored.testCase.options?.provider).toEqual({
+              id: 'echo',
+              config: { apiKey: '[REDACTED]', temperature: 0.2 },
+            });
+            expect(stored.testCase.metadata?.provider).toEqual({
+              config: { token: '[REDACTED]', temperature: 0.3 },
+            });
+            expect(stored.testCase.vars?.payload).toBe(payload);
+          }
+          expect(input).toEqual(original);
+          expect(input.testCase).toBe(testCase);
+        },
+      );
+
       it('redacts apiKey in testCase.options.provider.config', async () => {
         const evalId = 'test-eval-redact-options-provider';
         const result = await EvalResult.createFromEvaluateResult(

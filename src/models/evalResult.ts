@@ -106,17 +106,18 @@ function projectPromptMetadata<T>(metadata: T, stripPromptText: boolean): T {
 }
 
 function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
-  return (
-    stripPromptText
-      ? {
-          ...prompt,
-          ...('display' in prompt ? { display: '[prompt stripped]' } : {}),
-          ...('template' in prompt ? { template: '[prompt stripped]' } : {}),
-          label: '[prompt stripped]',
-          raw: '[prompt stripped]',
-        }
-      : prompt
-  ) as T;
+  if (!stripPromptText) {
+    return prompt;
+  }
+  // Older imported rows may carry a primitive prompt with a valid promptId.
+  const record = asRecord(prompt) ?? {};
+  return {
+    ...record,
+    ...('display' in record ? { display: '[prompt stripped]' } : {}),
+    ...('template' in record ? { template: '[prompt stripped]' } : {}),
+    label: '[prompt stripped]',
+    raw: '[prompt stripped]',
+  } as T;
 }
 
 export function sanitizePromptForArtifact<T extends Prompt>(
@@ -131,14 +132,13 @@ export function sanitizePromptForArtifact<T extends Prompt>(
   const sanitizedMetrics = asRecord(asRecord(sanitized)?.metrics);
   if (metrics && sanitizedMetrics) {
     // Custom metric names may be credential-shaped, but these schema-defined
-    // maps contain numeric aggregates. Keep other values under normal redaction.
+    // maps contain numeric aggregates. JSON normalizes nonfinite numbers to null;
+    // preserve those nulls on re-export too. Keep other values under redaction.
     for (const key of ['namedScores', 'namedScoresCount', 'namedScoreWeights']) {
       const values = asRecord(metrics[key]);
       if (values) {
         const numericValues = Object.fromEntries(
-          Object.entries(values).filter(
-            ([, value]) => typeof value === 'number' && Number.isFinite(value),
-          ),
+          Object.entries(values).filter(([, value]) => typeof value === 'number' || value === null),
         );
         sanitizedMetrics[key] = {
           ...asRecord(sanitizedMetrics[key]),
