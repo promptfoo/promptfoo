@@ -72,6 +72,7 @@ const MAX_STREAM_FRAGMENT_BATCH = 1024;
 const MAX_STREAM_EVENT_COUNT = 1024 * 1024;
 const MAX_STREAM_ANNOTATION_COUNT = 8192;
 const STREAM_READ_YIELD_INTERVAL = 1024;
+const STREAM_SCAN_YIELD_INTERVAL = 64 * 1024;
 
 function getOutputTextDelta(event: ResponsesStreamEvent): string | undefined {
   if (typeof event.delta === 'string') {
@@ -1024,6 +1025,7 @@ export async function readResponsesStream(
   let skipLineFeed = false;
   let readsSinceYield = 0;
   let eventsSinceYield = 0;
+  let scannedSinceYield = 0;
   let latestResponse: any;
   let sawMalformedSsePayload = false;
   let latestResponseEventType: string | undefined;
@@ -1130,6 +1132,13 @@ export async function readResponsesStream(
       (key && finalizedOutputTextKeys.has(key)) ||
       (invalidKey && finalizedInvalidOutputTextKeys.has(invalidKey)) ||
       (!key && !invalidKey && finalizedUnindexedOutputText)
+    ) {
+      return;
+    }
+    if (
+      key &&
+      typeof event.item_id === 'string' &&
+      event.item_id.length > MAX_STREAM_FUNCTION_METADATA_CHARS
     ) {
       return;
     }
@@ -1309,7 +1318,10 @@ export async function readResponsesStream(
     }
 
     const event = parseSseEvent(chunk, providerName, logger);
-    if (event === null) {
+    if (
+      event === null &&
+      !isTerminalStreamResponse(latestResponseEventType, latestResponse?.status)
+    ) {
       sawMalformedSsePayload = true;
     }
     const snapshotOutput = Array.isArray(event?.response?.output)
@@ -1708,6 +1720,11 @@ export async function readResponsesStream(
   const processDecodedText = async (decoded: string): Promise<void> => {
     let segmentStart = 0;
     for (let index = 0; index < decoded.length; index++) {
+      if (signal && ++scannedSinceYield >= STREAM_SCAN_YIELD_INTERVAL) {
+        scannedSinceYield = 0;
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        throwIfAborted();
+      }
       const char = decoded[index];
       if (skipLineFeed && char === '\n') {
         segmentStart = index + 1;
@@ -1966,6 +1983,29 @@ export async function readResponsesStream(
     invalidlyIndexedOutputTextByContent,
     ([key, text]) => (finalizedInvalidOutputTextKeys.has(key) ? text : undefined),
   ).filter((text): text is string => text !== undefined);
+  const terminalOutputWithFinalizedText = latestResponse?.output?.map(
+    (item: any, outputIndex: number) =>
+      item?.type === 'message' && Array.isArray(item.content)
+        ? {
+            ...item,
+            content: item.content.map((content: any, contentIndex: number) => {
+              const key = `${outputIndex}:${contentIndex}`;
+              const text = finalizedOutputTextByContent.get(key);
+              const itemId = outputTextItemIds.get(key);
+              return content?.type === 'output_text' &&
+                text !== undefined &&
+                item.content
+                  .slice(0, contentIndex)
+                  .some(
+                    (part: any) => part?.type === 'tool_use' || part?.type === 'function_call',
+                  ) &&
+                (!itemId || item.id === itemId)
+                ? { ...content, text }
+                : content;
+            }),
+          }
+        : item,
+  );
   const refusalTerminalOutput = filterExecutableToolCalls(latestResponse?.output, true);
   const outputWithFinalizedText =
     useFinalizedRefusals && !hasTerminalSafetyDecision(latestResponse)
@@ -1977,7 +2017,7 @@ export async function readResponsesStream(
           finalizedOutputTextKeys,
           completedUnindexedOutputTexts.length + finalizedInvalidOutputTexts.length,
         ) ?? refusalTerminalOutput)
-      : latestResponse?.output;
+      : terminalOutputWithFinalizedText;
   const mergedStreamOutput = mergeFinalizedStreamOutput(
     outputWithFinalizedText,
     Array.from(finalizedNonMessageItems.values()),
