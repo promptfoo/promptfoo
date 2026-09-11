@@ -247,6 +247,27 @@ describe('writeOutput', () => {
     expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
   });
 
+  it.each(['json', 'yaml'])('redacts gateway URL credentials in %s exports', async (extension) => {
+    const url = 'https://gateway-user:gateway-password@gateway.example/v1?token=short-secret';
+    const eval_ = new Eval({
+      env: { ENVOY_API_BASE_URL: url },
+      providers: [{ id: 'envoy:route', config: { apiBaseUrl: url } }],
+    });
+
+    await writeOutput(`output.${extension}`, eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = yaml.load(written) as Record<string, any>;
+    expect(parsed.config.env.ENVOY_API_BASE_URL).toBe(
+      'https://***:***@gateway.example/v1?token=%5BREDACTED%5D',
+    );
+    expect(parsed.config.providers[0].config.apiBaseUrl).toBe(parsed.config.env.ENVOY_API_BASE_URL);
+    expect(written).not.toContain('gateway-user');
+    expect(written).not.toContain('gateway-password');
+    expect(written).not.toContain('short-secret');
+    expect(eval_.config.env).toEqual({ ENVOY_API_BASE_URL: url });
+  });
+
   it.each([
     {
       extension: 'json',

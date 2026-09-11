@@ -568,23 +568,51 @@ describe('suite environment loading', () => {
     expect(testSuite.prompts).toHaveLength(3);
   });
 
-  it('loads scenario tests relative to each config directory', async () => {
-    const paths = ['first', 'second'].map((name) => {
-      const configPath = writeConfig(name, {});
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      config.scenarios = [{ config: [{}], tests: ['cases.yaml'] }];
-      fs.writeFileSync(configPath, JSON.stringify(config));
-      fs.writeFileSync(
-        path.join(path.dirname(configPath), 'cases.yaml'),
-        `- vars:\n    source: ${name}\n`,
-      );
-      return configPath;
+  it.each(['inline', 'file', 'scalar'])(
+    'loads %s scenarios relative to each config directory',
+    async (form) => {
+      const paths = ['first', 'second'].map((name) => {
+        const configPath = writeConfig(name, {});
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        config.scenarios =
+          form === 'inline'
+            ? [{ config: [{}], tests: ['cases.yaml'] }]
+            : form === 'file'
+              ? ['file://scenarios.yaml']
+              : 'file://scenarios.yaml';
+        fs.writeFileSync(configPath, JSON.stringify(config));
+        fs.writeFileSync(
+          path.join(path.dirname(configPath), 'cases.yaml'),
+          `- vars:\n    source: ${name}\n`,
+        );
+        fs.writeFileSync(
+          path.join(path.dirname(configPath), 'scenarios.yaml'),
+          `- config: [{}]\n  tests:\n    - vars:\n        source: ${name}\n`,
+        );
+        return configPath;
+      });
+      const { testSuite } = await resolveConfigs({ config: paths }, {});
+      expect(testSuite.scenarios?.map((scenario) => scenario.tests?.[0].vars?.source)).toEqual([
+        'first',
+        'second',
+      ]);
+    },
+  );
+
+  it("uses a grading provider's own env when resolving its file path", async () => {
+    const test = await readTest(
+      {
+        options: {
+          provider: { id: 'file://{{ env.GRADER_PATH }}', env: { GRADER_PATH: 'provider.js' } },
+        },
+      },
+      tempDir,
+      false,
+      { GRADER_PATH: 'suite.js' },
+    );
+    expect(test.options?.provider).toMatchObject({
+      id: `file://${path.join(tempDir, 'provider.js')}`,
     });
-    const { testSuite } = await resolveConfigs({ config: paths }, {});
-    expect(testSuite.scenarios?.map((scenario) => scenario.tests?.[0].vars?.source)).toEqual([
-      'first',
-      'second',
-    ]);
   });
 
   it.each(['string', 'object'] as const)(

@@ -715,22 +715,18 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     tests: [],
     scenarios: configs.some((config) => config.scenarios !== undefined)
       ? configs.flatMap((config, index) =>
-          Array.isArray(config.scenarios)
-            ? config.scenarios.map((scenario) =>
-                typeof scenario === 'object' && scenario?.tests
-                  ? {
-                      ...scenario,
-                      tests: [scenario.tests]
-                        .flat()
-                        .map(
-                          (test) => makeTestAbsolute(resolvedConfigPaths[index], test) as TestCase,
-                        ),
-                    }
-                  : scenario,
-              )
-            : config.scenarios
-              ? [config.scenarios]
-              : [],
+          [config.scenarios || []].flat().map((scenario) =>
+            typeof scenario === 'object' && scenario?.tests
+              ? {
+                  ...scenario,
+                  tests: [scenario.tests]
+                    .flat()
+                    .map((test) => makeTestAbsolute(resolvedConfigPaths[index], test) as TestCase),
+                }
+              : typeof scenario === 'string' && scenario.startsWith('file://')
+                ? (makeTestAbsolute(resolvedConfigPaths[index], scenario) as string)
+                : scenario,
+          ),
         )
       : undefined,
     defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr, index) => {

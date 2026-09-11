@@ -262,6 +262,24 @@ describe('isSecretEnvVarName', () => {
 
 describe('sanitizeObject', () => {
   describe('environment variable maps', () => {
+    it('redacts credentials in gateway URLs without changing the runtime config', () => {
+      const url = 'https://gateway-user:gateway-password@gateway.example/v1?token=short-secret';
+      const config = {
+        env: { ENVOY_API_BASE_URL: url, SECRET_URL: url },
+        providers: [{ config: { apiBaseUrl: url } }],
+      };
+
+      const result = sanitizeObject(config, { maxDepth: Number.POSITIVE_INFINITY });
+
+      expect(result.env.ENVOY_API_BASE_URL).toBe(
+        'https://***:***@gateway.example/v1?token=%5BREDACTED%5D',
+      );
+      expect(result.env.SECRET_URL).toBe('[REDACTED]');
+      expect(result.providers[0].config.apiBaseUrl).toBe(result.env.ENVOY_API_BASE_URL);
+      expect(config.env.ENVOY_API_BASE_URL).toBe(url);
+      expect(config.providers[0].config.apiBaseUrl).toBe(url);
+    });
+
     it('redacts credential-named variables inside an env map', () => {
       // Regression: `env` is handed verbatim to a subprocess, so it is where a config
       // legitimately carries credentials. Exact-name matching against SECRET_FIELD_NAMES

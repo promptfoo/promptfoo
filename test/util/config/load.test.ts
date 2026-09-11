@@ -1656,7 +1656,9 @@ describe('resolveConfigs', () => {
 
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios.yaml']);
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith([
+      `file://${path.resolve('/mock/cwd/scenarios.yaml')}`,
+    ]);
     expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://tests.yaml');
 
     expect(testSuite).toMatchObject({
