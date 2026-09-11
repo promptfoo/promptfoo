@@ -1,7 +1,11 @@
 import logger from '../../logger';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
-import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
+import {
+  type OpenAiChatCompletionCostData,
+  OpenAiChatCompletionProvider,
+  throwIfAborted,
+} from '../openai/chat';
 import { clampCachedTokens } from '../shared';
 
 import type { ApiProvider, ProviderOptions } from '../../types/index';
@@ -830,7 +834,7 @@ class XAIProvider extends OpenAiChatCompletionProvider {
             'cause' in err &&
             (err as Error & { cause?: unknown }).cause === signal.reason))
       ) {
-        throw err;
+        throwIfAborted(signal);
       }
       // Handle JSON parsing errors and other API errors
       const errorMessage = err instanceof Error ? err.message : String(err);

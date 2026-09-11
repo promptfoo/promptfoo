@@ -298,7 +298,10 @@ describe('RateLimitRegistry integration - cancellation', () => {
       const pending = registry.execute(createProvider(), callFn, {
         abortSignal: controller.signal,
       });
-      const rejected = expect(pending).rejects.toBe(reason);
+      const rejected = expect(pending).rejects.toMatchObject({
+        name: 'AbortError',
+        cause: reason,
+      });
       await vi.advanceTimersByTimeAsync(0);
       controller.abort(reason);
       await rejected;

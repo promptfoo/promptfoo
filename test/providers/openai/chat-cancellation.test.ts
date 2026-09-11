@@ -97,6 +97,25 @@ describe('OpenAI-compatible chat cancellation', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('does not await canceled MCP initialization during cleanup', async () => {
+    const initialization = createDeferred<void>();
+    vi.spyOn(MCPClient.prototype, 'initialize').mockReturnValue(initialization.promise);
+    const cleanup = vi.spyOn(MCPClient.prototype, 'cleanup').mockResolvedValue();
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: { apiKey: 'fixture-key', mcp: { enabled: true } },
+    });
+    const controller = new AbortController();
+    const pending = target.callApi('fixture', undefined, { abortSignal: controller.signal });
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+
+    await expect(target.cleanup()).resolves.toBeUndefined();
+    expect(cleanup).not.toHaveBeenCalled();
+    initialization.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
   it('observes a late MCP initialization failure after a pre-aborted first call', async () => {
     const initialization = createDeferred<void>();
     vi.spyOn(MCPClient.prototype, 'initialize').mockReturnValue(initialization.promise);

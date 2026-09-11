@@ -151,6 +151,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   config: OpenAiCompletionOptions;
   private mcpClient: MCPClient | null = null;
   private initializationPromise: Promise<void> | null = null;
+  private initializationSettled = false;
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(
@@ -164,7 +165,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     this.config = options.config ? { ...options.config } : {};
 
     if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
+      this.initializationPromise = this.initializeMCP().finally(() => {
+        this.initializationSettled = true;
+      });
       // A canceled call may return before awaiting this shared initialization.
       void this.initializationPromise.catch(() => undefined);
     }
@@ -180,11 +183,16 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   async cleanup(): Promise<void> {
-    if (this.mcpClient) {
-      await this.initializationPromise;
-      await this.mcpClient.cleanup();
-      this.mcpClient = null;
+    const client = this.mcpClient;
+    if (!client) {
+      return;
     }
+    this.mcpClient = null;
+    if (!this.initializationSettled) {
+      void this.initializationPromise?.finally(() => client.cleanup()).catch(() => undefined);
+      return;
+    }
+    await client.cleanup();
   }
 
   /**

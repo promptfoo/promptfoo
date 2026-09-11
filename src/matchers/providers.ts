@@ -70,11 +70,10 @@ export function callGradingProvider<T extends ProviderResponse>(
 
   const executeCall = () => {
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
-      return executionContext.rateLimitRegistry.execute(
-        provider,
-        callProvider,
-        createProviderRateLimitOptions(),
-      );
+      return executionContext.rateLimitRegistry.execute(provider, callProvider, {
+        ...createProviderRateLimitOptions(),
+        ...getGradingProviderCallOptions(),
+      });
     }
 
     return callProvider();

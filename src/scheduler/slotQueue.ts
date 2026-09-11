@@ -17,8 +17,11 @@ export interface SlotQueueOptions {
 
 const DEFAULT_QUEUE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
-function abortError(reason: unknown): Error {
-  if (reason instanceof Error && reason.name === 'AbortError') {
+export function abortError(reason: unknown): Error {
+  if (
+    reason instanceof Error &&
+    (reason.name === 'AbortError' || reason.name === 'AbortException')
+  ) {
     return reason;
   }
   const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');

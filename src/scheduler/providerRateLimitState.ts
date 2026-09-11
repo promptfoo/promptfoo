@@ -7,7 +7,7 @@ import {
 } from './adaptiveConcurrency';
 import { parseRateLimitHeaders } from './headerParser';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
-import { SlotQueue } from './slotQueue';
+import { abortError, SlotQueue } from './slotQueue';
 
 /**
  * Sentinel error for rate limit exhaustion.
@@ -155,6 +155,11 @@ export class ProviderRateLimitState extends EventEmitter {
       try {
         await this.slotQueue.acquire(`${requestId}-${attempt}`, options.abortSignal);
         ownsSlot = true;
+        if (options.abortSignal?.aborted) {
+          this.slotQueue.release();
+          ownsSlot = false;
+          throw abortError(options.abortSignal.reason);
+        }
       } catch (acquireError) {
         this.failedRequests++;
         const event =
@@ -395,7 +400,7 @@ export class ProviderRateLimitState extends EventEmitter {
       const abort = () => {
         clearTimeout(timeout);
         signal?.removeEventListener('abort', abort);
-        reject(signal?.reason);
+        reject(abortError(signal?.reason));
       };
       if (signal?.aborted) {
         abort();
