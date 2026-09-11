@@ -293,9 +293,18 @@ defaultTest:
 
 - This fallback applies to the output-based assertions listed above. `agent-rubric` and
   `search-rubric` use capability-specific provider selection and are not affected.
-- For **red-team** runs (`promptfoo redteam run`), grader selection follows a separate code path
-  (`RedteamProviderManager`). Neither `defaultTest.options.provider` nor `--grader` is guaranteed
-  to override the judge there; consult the red-team configuration docs for the correct override.
+  **Red-team runs (`promptfoo redteam run`):** `RedteamProviderManager` selects `defaultTest.provider`
+  _before_ `defaultTest.options.provider`, so setting `defaultTest.options.provider` alone does not
+  override the judge. The reliable pattern is to move the target to the top-level `providers` list
+  and reserve `defaultTest.options.provider` for the judge:
+
+```yaml
+providers:
+  - openai:gpt-4.1 # target — no longer in defaultTest.provider
+defaultTest:
+  options:
+    provider: openai:gpt-5.6 # judge — now effective in both standard and red-team grading
+```
 
 :::
 
