@@ -45,7 +45,7 @@ export interface OpenAiLiveOptions extends OpenAiSharedOptions {
   delegation?: { type: 'client' } | { type: 'responses'; responses: ResponsesBackend };
   delegationHandler?: LiveDelegationHandler | string;
   functionCallHandler?: LiveFunctionCallHandler | string;
-  /** Per-session limit, counted separately, on function calls and client delegations (1-64, default 8). */
+  /** Per-session limit, counted separately, on function calls and distinct delegations (1-64, default 8). */
   maxToolIterations?: number;
   /** Silence streamed after the input clip (or for the entire text-seeded eval). */
   responseWindowMs?: number;

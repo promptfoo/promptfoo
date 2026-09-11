@@ -4,6 +4,7 @@ import type { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiLiveProvider } from '../../../src/providers/openai/live';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
+import { checkProviderApiKeys } from '../../../src/util/provider';
 import { mockProcessEnv } from '../../util/utils';
 
 import type { OpenAiLiveOptions } from '../../../src/providers/openai/liveTypes';
@@ -788,12 +789,26 @@ describe('OpenAiLiveProvider', () => {
     expect(response.metadata?.transcript).toHaveLength(1);
   });
 
-  it.each(['!!!', 'AQ=A', 'AR=='])('rejects malformed output audio %s', async (delta) => {
+  it.each(['', '!!!', 'AQ=A', 'AR=='])('rejects malformed output audio %s', async (delta) => {
     const result = provider().callApi('Hi');
     const socket = await connect();
     start(socket);
     emit(socket, { type: 'session.output_audio.delta', delta });
+    closed(socket);
     expect((await result).error).toBe('Invalid GPT-Live audio delta.');
+  });
+
+  it('bounds the number of tiny output audio chunks', async () => {
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    for (let index = 0; index <= 50_000; index++) {
+      emit(socket, { type: 'session.output_audio.delta', delta: 'AAA=' });
+    }
+    closed(socket);
+    const response = await result;
+    expect(response.error).toBe('GPT-Live audio exceeded the capture limit.');
+    expect(Buffer.from(response.audio!.data!, 'base64').length).toBe(100_044);
   });
 
   it('accepts canonical output audio with or without padding', async () => {
@@ -906,6 +921,51 @@ describe('OpenAiLiveProvider', () => {
         )
       ).error,
     ).toContain('backend model');
+    expect(sockets).toHaveLength(0);
+  });
+
+  it.each([false, true])('honors prompt apiKeyRequired=%s', async (apiKeyRequired) => {
+    const p = provider({ apiKey: undefined, apiKeyRequired: !apiKeyRequired });
+    expect(checkProviderApiKeys([p])).toEqual(new Map());
+    const result = p.callApi(
+      'Hi',
+      promptContext({ apiBaseUrl: 'http://localhost:1234/v1', apiKeyRequired }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    if (sockets.length) {
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      closed(socket);
+    }
+    const response = await result;
+    expect(sockets).toHaveLength(apiKeyRequired ? 0 : 1);
+    if (apiKeyRequired) {
+      expect(response.error).toContain('API key is not set');
+    } else {
+      expect(response.error).toBeUndefined();
+    }
+  });
+
+  it.each(
+    ['', '  ', [{ type: 'text', text: '' }], [{ type: 'text', text: '  ' }]].map((content) => ({
+      content,
+    })),
+  )('rejects empty final chat content $content before connecting', async ({ content }) => {
+    const result = provider().callApi(
+      JSON.stringify([
+        { role: 'assistant', content: 'Earlier answer' },
+        { role: 'user', content },
+      ]),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    if (sockets.length) {
+      const socket = await connect();
+      start(socket);
+      text(socket);
+      closed(socket);
+    }
+    expect((await result).error).toContain('nonempty text or input_audio');
     expect(sockets).toHaveLength(0);
   });
 
@@ -1685,6 +1745,28 @@ describe('OpenAiLiveProvider', () => {
     );
   const clientCapError =
     'GPT-Live client delegations exceeded maxToolIterations=2. Increase maxToolIterations if the eval needs more delegations.';
+
+  it('caps managed Responses delegations without counting repeated IDs', async () => {
+    const result = provider({
+      delegation: { type: 'responses', responses: { model: 'gpt-4.1-mini' } },
+      maxToolIterations: 2,
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    for (const id of ['d1', 'd1', 'd2']) {
+      emit(socket, { type: 'session.delegation.created', delegation: { id, target: 'responses' } });
+    }
+    expect(sentTypes(socket)).not.toContain('session.close');
+    for (const id of ['d3', 'd4']) {
+      emit(socket, { type: 'session.delegation.created', delegation: { id, target: 'responses' } });
+    }
+    const closeRequested = socket.sent.at(-1)?.type === 'session.close';
+    closed(socket);
+    const response = await result;
+    expect(closeRequested).toBe(true);
+    expect(response.error).toContain('Responses delegations exceeded maxToolIterations=2');
+    expect(response.metadata?.delegations).toHaveLength(2);
+  });
 
   it('stops a client delegation loop at maxToolIterations without counting repeated IDs', async () => {
     const handler = vi.fn().mockResolvedValue('The order shipped.');

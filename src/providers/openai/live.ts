@@ -59,6 +59,11 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     return `openai:live:${this.modelName}`;
   }
 
+  /** Validate credentials per call, after merging prompt settings and gateway authentication. */
+  requiresApiKey(): boolean {
+    return false;
+  }
+
   getAudioInputFormat(): 'openai' {
     return 'openai';
   }
@@ -102,7 +107,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     const credentialHeaders = Object.entries(headers).filter(
       ([name, value]) => isLiveCredentialHeader(name) && String(value).trim().length > 0,
     );
-    if (!apiKey && this.requiresApiKey() && !credentialHeaders.length && !userinfo) {
+    if (!apiKey && (config.apiKeyRequired ?? true) && !credentialHeaders.length && !userinfo) {
       throw new Error(this.getMissingApiKeyErrorMessage(config));
     }
     // Don't forward an ambient OPENAI_API_KEY to a gateway that authenticates with its own

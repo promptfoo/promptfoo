@@ -134,7 +134,9 @@ function prepareContent(
       ['text', 'input_text', 'output_text'].includes(part.type) &&
       typeof part.text === 'string'
     ) {
-      text.push(part.text);
+      if (part.text.trim()) {
+        text.push(part.text);
+      }
       continue;
     }
     if (part?.type !== 'input_audio' || !part.input_audio) {
@@ -162,6 +164,9 @@ function prepareContent(
       throw new Error(AUDIO_DURATION_ERROR);
     }
     audio.push(bytes);
+  }
+  if (!text.length && !audioBytes) {
+    throw new Error('GPT-Live chat messages require nonempty text or input_audio content.');
   }
   return { text, audio: Buffer.concat(audio) };
 }

@@ -71,6 +71,7 @@ const MAX_ERROR_MESSAGE_LENGTH = 500;
 const MAX_TRANSCRIPT_BYTES = 1024 * 1024;
 const MAX_TRANSCRIPT_DELTAS = 20_000;
 const MAX_AUDIO_BYTES = 32 * 1024 * 1024;
+const MAX_AUDIO_CHUNKS = 50_000;
 const MAX_HANDSHAKE_BODY_BYTES = 8 * 1024;
 const HANDSHAKE_BODY_TIMEOUT_MS = 2_000;
 const PENDING_WORK_ERROR =
@@ -154,7 +155,6 @@ export class LiveSession {
   private backendCost: number | undefined = 0;
   private backendResponses: { id: string; model: string; usage: unknown }[] = [];
   private delegations: LiveDelegation[] = [];
-  private clientDelegations = 0;
   private pendingHandlers = 0;
   private backendTurns = new Map<string, BackendTurn>();
   private finishedResponses = new Set<string>();
@@ -455,15 +455,18 @@ export class LiveSession {
         break;
       case 'session.output_audio.delta': {
         const bytes = typeof event.delta === 'string' ? decodeBase64(event.delta) : undefined;
-        if (!bytes) {
+        if (!bytes?.length) {
           this.fail('Invalid GPT-Live audio delta.');
           return;
         }
-        this.audioBytes += bytes.length;
-        if (this.audioBytes > MAX_AUDIO_BYTES) {
+        if (
+          this.audioBytes + bytes.length > MAX_AUDIO_BYTES ||
+          this.audioChunks.length >= MAX_AUDIO_CHUNKS
+        ) {
           this.fail('GPT-Live audio exceeded the capture limit.');
           return;
         }
+        this.audioBytes += bytes.length;
         this.audioChunks.push(bytes);
         break;
       }
@@ -572,6 +575,15 @@ export class LiveSession {
       this.fail('Invalid GPT-Live delegation target.');
       return;
     }
+    const maxToolIterations = resolveMaxToolIterations(this.options.config.maxToolIterations);
+    if (this.delegations.length >= maxToolIterations) {
+      const target = delegation.target === 'responses' ? 'Responses' : 'client';
+      this.setError(
+        `GPT-Live ${target} delegations exceeded maxToolIterations=${maxToolIterations}. Increase maxToolIterations if the eval needs more delegations.`,
+      );
+      this.closeSession();
+      return;
+    }
     this.delegations.push({
       id: delegation.id,
       target: delegation.target,
@@ -588,21 +600,11 @@ export class LiveSession {
       });
       return;
     }
-    // Count each distinct client delegation before its handler runs, separately from function calls.
-    this.clientDelegations++;
     this.backendCost = undefined;
     const handler = this.options.delegationHandler;
     if (!handler) {
       this.setError(
         'GPT-Live requested client delegation, but no delegationHandler is configured. Configure a handler or Responses delegation.',
-      );
-      this.closeSession();
-      return;
-    }
-    const maxToolIterations = resolveMaxToolIterations(this.options.config.maxToolIterations);
-    if (this.clientDelegations > maxToolIterations) {
-      this.setError(
-        `GPT-Live client delegations exceeded maxToolIterations=${maxToolIterations}. Increase maxToolIterations if the eval needs more delegations.`,
       );
       this.closeSession();
       return;
@@ -860,7 +862,7 @@ export class LiveSession {
       this.finalized &&
       voiceCost !== undefined &&
       this.backendCost !== undefined &&
-      !this.clientDelegations &&
+      !this.delegations.some((delegation) => delegation.target === 'client') &&
       !this.backendTurns.size &&
       !this.pendingHandlers
         ? voiceCost + this.backendCost
