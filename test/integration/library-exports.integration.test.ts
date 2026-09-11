@@ -118,23 +118,26 @@ describe('declaration module resolution', () => {
     ['entry.d.ts', 'dep.js', 'dep.d.ts'],
     ['entry.d.cts', 'dep.cjs', 'dep.d.cts'],
     ['entry.d.mts', 'dep.mjs', 'dep.d.mts'],
-  ])('prefers declaration siblings for %s imports', (importerName, emittedName, declarationName) => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-contract-resolution-'));
-    try {
-      const importerPath = path.join(tempDir, importerName);
-      fs.writeFileSync(importerPath, `export * from './${emittedName}';`);
-      fs.writeFileSync(path.join(tempDir, emittedName), 'export const runtime = true;');
-      fs.writeFileSync(
-        path.join(tempDir, declarationName),
-        "import 'declaration-only-dependency';",
-      );
+  ])(
+    'prefers declaration siblings for %s imports',
+    (importerName, emittedName, declarationName) => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-contract-resolution-'));
+      try {
+        const importerPath = path.join(tempDir, importerName);
+        fs.writeFileSync(importerPath, `export * from './${emittedName}';`);
+        fs.writeFileSync(path.join(tempDir, emittedName), 'export const runtime = true;');
+        fs.writeFileSync(
+          path.join(tempDir, declarationName),
+          "import 'declaration-only-dependency';",
+        );
 
-      const { bareSpecifiers } = readModuleClosure(importerPath);
-      expect([...bareSpecifiers]).toEqual(['declaration-only-dependency']);
-    } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
-  });
+        const { bareSpecifiers } = readModuleClosure(importerPath);
+        expect([...bareSpecifiers]).toEqual(['declaration-only-dependency']);
+      } finally {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it('resolves extensionless declaration directory indexes as files', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-contract-resolution-'));

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BaseTokenUsageSchema } from '../shared.js';
 import { JsonObjectSchema, MessageResponseSchema } from './common.js';
 
 const UnknownArraySchema = z.array(z.unknown());
@@ -184,6 +185,7 @@ export const RedteamResponseSchemas = {
       z.object({
         testCases: z.array(GeneratedTestCaseResponseSchema),
         count: z.number().int().nonnegative(),
+        tokenUsage: BaseTokenUsageSchema.optional(),
       }),
     ]),
   },

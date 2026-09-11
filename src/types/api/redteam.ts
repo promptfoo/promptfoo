@@ -11,6 +11,35 @@ import type { Plugin, Strategy } from '../../redteam/constants';
 
 // POST /api/redteam/generate-test
 
+const PreviewInputBaseSchema = z.object({
+  benign: z.boolean().optional(),
+  inputPurpose: z.string().min(1).optional(),
+});
+const previewInput = (type: 'pdf' | 'docx' | 'image', placements: [string, ...string[]]) =>
+  z.object({
+    description: z.string().min(1),
+    type: z.literal(type),
+    config: PreviewInputBaseSchema.extend({
+      injectionPlacements: z.array(z.enum(placements)).optional(),
+    }).optional(),
+  });
+const PreviewInputsSchema = z.record(
+  z.string(),
+  z.union([
+    z.string().min(1),
+    z.object({
+      description: z.string().min(1),
+      type: z.literal('text').optional(),
+      config: PreviewInputBaseSchema.extend({
+        injectionPlacements: z.array(z.string()).optional(),
+      }).optional(),
+    }),
+    previewInput('pdf', ['body', 'header', 'footer']),
+    previewInput('docx', ['body', 'comment', 'footnote', 'header', 'footer']),
+    previewInput('image', ['body', 'header', 'footer']),
+  ]),
+);
+
 export const TestCaseGenerationSchema = z.object({
   plugin: z.object({
     id: z.string().refine((val) => ALL_PLUGINS.includes(val as Plugin), {
@@ -29,6 +58,22 @@ export const TestCaseGenerationSchema = z.object({
       purpose: z.string().nullable().optional(),
     }),
   }),
+  provider: z
+    .union([
+      z.string(),
+      z
+        .object({
+          id: z.string().optional(),
+          label: z.string().optional(),
+          config: z.record(z.string(), z.unknown()).optional(),
+          prompts: z.array(z.string()).optional(),
+          transform: z.string().optional(),
+          delay: z.number().optional(),
+          inputs: PreviewInputsSchema.optional(),
+        })
+        .passthrough(),
+    ])
+    .optional(),
   turn: z.int().min(0).optional().prefault(0),
   maxTurns: z.int().min(1).optional(),
   history: z.array(ConversationMessageSchema).optional().prefault([]),

@@ -62,127 +62,119 @@ describe('downloadResultsFile', () => {
     expect(options?.query?.toString()).toBe(`format=${format}`);
   }
 
-  it.each(
-    formats,
-  )('should return a Blob containing the file data for format "$format" on successful API response', async ({
-    format,
-  }) => {
-    const mockResponse = createSuccessfulMockResponse(mockBlob);
-    vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
+  it.each(formats)(
+    'should return a Blob containing the file data for format "$format" on successful API response',
+    async ({ format }) => {
+      const mockResponse = createSuccessfulMockResponse(mockBlob);
+      vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
 
-    const result = await downloadResultsFile(evalId, format);
+      const result = await downloadResultsFile(evalId, format);
 
-    expectRequest(evalId, format);
+      expectRequest(evalId, format);
 
-    expect(result).toBeInstanceOf(Blob);
-    expect(result).toBe(mockBlob);
+      expect(result).toBeInstanceOf(Blob);
+      expect(result).toBe(mockBlob);
 
-    expect(mockResponse.blob).toHaveBeenCalledTimes(1);
-  });
+      expect(mockResponse.blob).toHaveBeenCalledTimes(1);
+    },
+  );
 
-  it.each(
-    formats,
-  )('should call callApiResponse with the correct params when evalId is empty and format is $format', async ({
-    format,
-  }) => {
-    const mockResponse = createSuccessfulMockResponse(mockBlob);
-    vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
+  it.each(formats)(
+    'should call callApiResponse with the correct params when evalId is empty and format is $format',
+    async ({ format }) => {
+      const mockResponse = createSuccessfulMockResponse(mockBlob);
+      vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
 
-    await downloadResultsFile(emptyEvalId, format);
+      await downloadResultsFile(emptyEvalId, format);
 
-    expectRequest(emptyEvalId, format);
-  });
+      expectRequest(emptyEvalId, format);
+    },
+  );
 
-  it.each(
-    formats,
-  )('should throw an error with the "error" field from the JSON response when the API returns an error with a JSON body containing an error field for format "$format"', async ({
-    format,
-  }) => {
-    const mockError = 'This is a test error message from the error field.';
-    const mockResponse = createErrorJsonResponse(400, 'Bad Request', { error: mockError });
-    vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
+  it.each(formats)(
+    'should throw an error with the "error" field from the JSON response when the API returns an error with a JSON body containing an error field for format "$format"',
+    async ({ format }) => {
+      const mockError = 'This is a test error message from the error field.';
+      const mockResponse = createErrorJsonResponse(400, 'Bad Request', { error: mockError });
+      vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
 
-    await expect(downloadResultsFile(evalId, format)).rejects.toThrowError(
-      `Failed to download ${format.toUpperCase()}: ${mockError}`,
-    );
+      await expect(downloadResultsFile(evalId, format)).rejects.toThrowError(
+        `Failed to download ${format.toUpperCase()}: ${mockError}`,
+      );
 
-    expectRequest(evalId, format);
-  });
+      expectRequest(evalId, format);
+    },
+  );
 
-  it.each(
-    formats,
-  )('should use the "message" field from the JSON error response when the "error" field is absent for format "$format"', async ({
-    format,
-  }) => {
-    const mockMessage = 'This is an error message from the message field.';
-    const mockResponse = createErrorJsonResponse(400, 'Bad Request', { message: mockMessage });
-    vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
+  it.each(formats)(
+    'should use the "message" field from the JSON error response when the "error" field is absent for format "$format"',
+    async ({ format }) => {
+      const mockMessage = 'This is an error message from the message field.';
+      const mockResponse = createErrorJsonResponse(400, 'Bad Request', { message: mockMessage });
+      vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
 
-    await expect(downloadResultsFile(evalId, format)).rejects.toThrowError(
-      `Failed to download ${format.toUpperCase()}: ${mockMessage}`,
-    );
+      await expect(downloadResultsFile(evalId, format)).rejects.toThrowError(
+        `Failed to download ${format.toUpperCase()}: ${mockMessage}`,
+      );
 
-    expectRequest(evalId, format);
-  });
+      expectRequest(evalId, format);
+    },
+  );
 
-  it.each(
-    formats,
-  )('should throw an error with the raw text when the API returns an error response with a non-JSON body for format "$format"', async ({
-    format,
-  }) => {
-    const mockErrorText = 'Non-JSON error message from the API';
-    const mockResponse = createErrorTextResponse(400, 'Bad Request', mockErrorText);
-    vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
+  it.each(formats)(
+    'should throw an error with the raw text when the API returns an error response with a non-JSON body for format "$format"',
+    async ({ format }) => {
+      const mockErrorText = 'Non-JSON error message from the API';
+      const mockResponse = createErrorTextResponse(400, 'Bad Request', mockErrorText);
+      vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
 
-    await expect(downloadResultsFile(evalId, format)).rejects.toThrowError(
-      `Failed to download ${format.toUpperCase()}: ${mockErrorText}`,
-    );
+      await expect(downloadResultsFile(evalId, format)).rejects.toThrowError(
+        `Failed to download ${format.toUpperCase()}: ${mockErrorText}`,
+      );
 
-    expectRequest(evalId, format);
-  });
+      expectRequest(evalId, format);
+    },
+  );
 
-  it.each(
-    formats,
-  )('should include the format in the error message when the API returns an error', async ({
-    format,
-  }) => {
-    const errorMessage = 'API Error Message';
-    const mockResponse = createErrorTextResponse(500, 'Internal Server Error', errorMessage);
-    vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
+  it.each(formats)(
+    'should include the format in the error message when the API returns an error',
+    async ({ format }) => {
+      const errorMessage = 'API Error Message';
+      const mockResponse = createErrorTextResponse(500, 'Internal Server Error', errorMessage);
+      vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
 
-    await expect(downloadResultsFile(evalId, format)).rejects.toThrowError(
-      `Failed to download ${format.toUpperCase()}: ${errorMessage}`,
-    );
-    expectRequest(evalId, format);
-  });
+      await expect(downloadResultsFile(evalId, format)).rejects.toThrowError(
+        `Failed to download ${format.toUpperCase()}: ${errorMessage}`,
+      );
+      expectRequest(evalId, format);
+    },
+  );
 
-  it.each(
-    formats,
-  )('should throw an error with a fallback message when the API returns an error and reading the response body fails for format "$format"', async ({
-    format,
-  }) => {
-    const mockStatus = 500;
-    const mockStatusText = 'Internal Server Error';
-    const mockResponse = createErrorResponseWithFailingText(mockStatus, mockStatusText);
-    vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
+  it.each(formats)(
+    'should throw an error with a fallback message when the API returns an error and reading the response body fails for format "$format"',
+    async ({ format }) => {
+      const mockStatus = 500;
+      const mockStatusText = 'Internal Server Error';
+      const mockResponse = createErrorResponseWithFailingText(mockStatus, mockStatusText);
+      vi.mocked(callApiResponse).mockResolvedValue(mockResponse);
 
-    await expect(downloadResultsFile(evalId, format)).rejects.toThrowError(
-      `Failed to download ${format.toUpperCase()}: HTTP ${mockStatus}: ${mockStatusText}`,
-    );
+      await expect(downloadResultsFile(evalId, format)).rejects.toThrowError(
+        `Failed to download ${format.toUpperCase()}: HTTP ${mockStatus}: ${mockStatusText}`,
+      );
 
-    expectRequest(evalId, format);
-  });
+      expectRequest(evalId, format);
+    },
+  );
 
-  it.each(
-    formats,
-  )('should throw an error when the network request fails for format "$format"', async ({
-    format,
-  }) => {
-    const networkError = new Error('Network error');
-    vi.mocked(callApiResponse).mockRejectedValue(networkError);
+  it.each(formats)(
+    'should throw an error when the network request fails for format "$format"',
+    async ({ format }) => {
+      const networkError = new Error('Network error');
+      vi.mocked(callApiResponse).mockRejectedValue(networkError);
 
-    await expect(downloadResultsFile(evalId, format)).rejects.toThrowError(networkError);
+      await expect(downloadResultsFile(evalId, format)).rejects.toThrowError(networkError);
 
-    expectRequest(evalId, format);
-  });
+      expectRequest(evalId, format);
+    },
+  );
 });

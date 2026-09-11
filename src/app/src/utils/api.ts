@@ -71,9 +71,20 @@ async function readErrorResponse(response: Response): Promise<ApiResponseError> 
   let body: ErrorResponse = { error: `Request failed (${response.status})` };
   const text = await response.text();
   try {
-    const parsed = ErrorResponseSchema.safeParse(JSON.parse(text));
+    const json = JSON.parse(text);
+    const parsed = ErrorResponseSchema.safeParse(json);
     if (parsed.success) {
       body = parsed.data;
+    } else if (json && typeof json === 'object') {
+      const message =
+        'error' in json && typeof json.error === 'string'
+          ? json.error
+          : 'message' in json && typeof json.message === 'string'
+            ? json.message
+            : undefined;
+      if (message) {
+        body = { error: message };
+      }
     }
   } catch {
     if (text.trim()) {

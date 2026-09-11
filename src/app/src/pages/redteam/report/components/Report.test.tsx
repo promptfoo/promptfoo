@@ -701,9 +701,7 @@ describe('App component target selector rendering', () => {
     const user = userEvent.setup();
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -722,9 +720,7 @@ describe('App component target selector rendering', () => {
   it('preserves a reported target probe count of zero', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results, 0);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -759,9 +755,7 @@ describe('App component target selector rendering', () => {
         },
       },
     };
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -808,9 +802,7 @@ describe('App component target selector rendering', () => {
         },
       },
     };
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 

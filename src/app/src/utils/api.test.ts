@@ -205,6 +205,19 @@ describe('typed route API helpers', () => {
       expect(result.error.message).toBe('Upstream unavailable');
     }
   });
+
+  it('preserves legacy JSON message errors', async () => {
+    mockFetch.mockResolvedValue(
+      new Response(JSON.stringify({ message: 'Legacy failure' }), { status: 400 }),
+    );
+
+    const result = await callApiResult(ApiRoutes.User.Get, UserSchemas.Get.Response);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.message).toBe('Legacy failure');
+    }
+  });
 });
 
 describe('fetchUserEmail', () => {

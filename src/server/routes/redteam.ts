@@ -7,7 +7,6 @@ import {
   isMultiTurnStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
-  REDTEAM_MODEL,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
@@ -58,6 +57,7 @@ redteamRouter.post(
         goal: goalOverride,
         stateful,
         count,
+        provider,
       } = parsedBody.data;
 
       const pluginConfigurationError = getPluginConfigurationError(plugin);
@@ -91,7 +91,17 @@ redteamRouter.post(
       const injectVar = 'query';
 
       // Get the red team provider
-      const redteamProvider = await redteamProviderManager.getProvider({ provider: REDTEAM_MODEL });
+      const previewProvider =
+        typeof provider === 'string'
+          ? provider.trim() || undefined
+          : provider?.id?.trim()
+            ? provider
+            : undefined;
+      const providerSelection = await redteamProviderManager.getProviderSelection({
+        provider: previewProvider,
+        ignoreCliState: true,
+      });
+      const redteamProvider = providerSelection.provider;
 
       const testCases = await pluginFactory.action({
         provider: redteamProvider,
@@ -124,6 +134,7 @@ redteamRouter.post(
             injectVar,
             strategy.config || {},
             strategy.id,
+            { generationProviderSelection: providerSelection },
           );
 
           if (strategyTestCases && strategyTestCases.length > 0) {

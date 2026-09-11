@@ -31,7 +31,7 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
-import { ApiResponseError, callApi, callApiJson } from '@app/utils/api';
+import { ApiResponseError, callApiJson } from '@app/utils/api';
 import { ApiRoutes, EvalResponseSchemas, RedteamResponseSchemas } from '@promptfoo/contracts';
 import { isFoundationModelProvider } from '@promptfoo/providers/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
@@ -684,8 +684,7 @@ export default function Review({
     setEvalId(null);
 
     try {
-      const response = await callApi('/redteam/run', {
-        method: 'POST',
+      const { id } = await callApiJson(ApiRoutes.Redteam.Run, RedteamResponseSchemas.Run.Response, {
         headers: {
           'Content-Type': 'application/json',
         },
@@ -697,8 +696,6 @@ export default function Review({
           delay: latestConfig.target.config?.delay,
         }),
       });
-
-      const { id } = await response.json();
 
       // Save job ID to persistent store and start polling
       setJob(id);
@@ -716,9 +713,7 @@ export default function Review({
 
   const handleCancel = async () => {
     try {
-      await callApi('/redteam/cancel', {
-        method: 'POST',
-      });
+      await callApiJson(ApiRoutes.Redteam.Cancel, RedteamResponseSchemas.Cancel.Response);
 
       invalidatePolling();
 
@@ -727,6 +722,16 @@ export default function Review({
       showToast('Cancel request submitted', 'success');
     } catch (error) {
       console.error('Error cancelling job:', error);
+      if (
+        error instanceof ApiResponseError &&
+        error.status === 400 &&
+        error.message === 'No job currently running'
+      ) {
+        invalidatePolling();
+        setIsRunning(false);
+        clearJob();
+        return;
+      }
       showToast('Failed to cancel job', 'error');
     }
   };

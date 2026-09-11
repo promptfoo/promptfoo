@@ -432,43 +432,42 @@ describe('Eval Routes - Zod Validation', () => {
         provider: { id: 'explicit-provider', label: 'Current label' },
         expectedProvider: { id: 'explicit-provider', label: 'Current label' },
       },
-    ])('normalizes $name before persistence', async ({
-      storedProvider,
-      provider,
-      expectedProvider,
-    }) => {
-      const mockSetResults = vi.fn().mockResolvedValue(undefined);
-      mockFindById.mockResolvedValue({
-        id: 'test-id',
-        config: {},
-        prompts: [
-          {
-            raw: 'Say hello',
-            label: 'Greeting',
-            ...(storedProvider ? { provider: storedProvider } : {}),
-          },
-        ],
-        setResults: mockSetResults,
-      });
+    ])(
+      'normalizes $name before persistence',
+      async ({ storedProvider, provider, expectedProvider }) => {
+        const mockSetResults = vi.fn().mockResolvedValue(undefined);
+        mockFindById.mockResolvedValue({
+          id: 'test-id',
+          config: {},
+          prompts: [
+            {
+              raw: 'Say hello',
+              label: 'Greeting',
+              ...(storedProvider ? { provider: storedProvider } : {}),
+            },
+          ],
+          setResults: mockSetResults,
+        });
 
-      const response = await api.post('/api/eval/test-id/results').send([
-        {
-          promptIdx: 0,
-          testIdx: 0,
+        const response = await api.post('/api/eval/test-id/results').send([
+          {
+            promptIdx: 0,
+            testIdx: 0,
+            success: true,
+            score: 1,
+            provider,
+          },
+        ]);
+
+        expect(response.status).toBe(204);
+        expect(mockSetResults).toHaveBeenCalledOnce();
+        expect(mockSetResults.mock.calls[0][0][0]).toMatchObject({
+          provider: expectedProvider,
           success: true,
           score: 1,
-          provider,
-        },
-      ]);
-
-      expect(response.status).toBe(204);
-      expect(mockSetResults).toHaveBeenCalledOnce();
-      expect(mockSetResults.mock.calls[0][0][0]).toMatchObject({
-        provider: expectedProvider,
-        success: true,
-        score: 1,
-      });
-    });
+        });
+      },
+    );
 
     it('should reject a prompt index that is not present in the stored eval', async () => {
       const mockSetResults = vi.fn().mockResolvedValue(undefined);

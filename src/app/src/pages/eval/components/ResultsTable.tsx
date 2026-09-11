@@ -707,12 +707,17 @@ function renderTokenMetrics({
   filteredMetrics: PromptMetrics['filtered'];
   testCount?: PromptSummaryMetric;
 }): React.ReactNode {
-  if (!metrics?.tokenUsage?.total) {
+  const getTotal = (usage: NonNullable<typeof metrics>['tokenUsage'] | undefined) =>
+    (usage?.total ?? 0) +
+    (usage?.attacker?.total ?? 0) +
+    (usage?.assertions?.total ?? 0) +
+    (usage?.generation?.total ?? 0);
+  const totalTokens = getTotal(metrics?.tokenUsage);
+  if (!totalTokens) {
     return null;
   }
 
-  const totalTokens = metrics.tokenUsage.total;
-  const filteredTokens = filteredMetrics?.tokenUsage?.total;
+  const filteredTokens = getTotal(filteredMetrics?.tokenUsage);
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
     filteredTokens && testCount?.filtered ? filteredTokens / testCount.filtered : undefined;
@@ -2181,6 +2186,7 @@ function ResultsTable({
                     showStats={showStats}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
+                    isRedteam={isRedteam}
                   />
                 </ErrorBoundary>
               ) : (

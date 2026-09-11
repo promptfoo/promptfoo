@@ -911,26 +911,27 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     expect(smokeKeys).toEqual(documentedKeys);
   });
 
-  it.each(
-    smokeCases,
-  )('$method $openApiPath validates its executed response contract', async (testCase) => {
-    testCase.setup?.();
+  it.each(smokeCases)(
+    '$method $openApiPath validates its executed response contract',
+    async (testCase) => {
+      testCase.setup?.();
 
-    const response = await sendRequest(baseUrl, testCase);
+      const response = await sendRequest(baseUrl, testCase);
 
-    expect(
-      response.status,
-      `${routeKey(testCase)} expected ${testCase.expectedStatus}, got ${response.status}: ${response.text}`,
-    ).toBe(testCase.expectedStatus);
-
-    if (response.status !== 204) {
-      expect(response.headers.get('content-type')).toContain('application/json');
       expect(
-        getResponseSchema(testCase).safeParse(response.body).success,
-        `${routeKey(testCase)} returned a body outside its executed response contract: ${response.text}`,
-      ).toBe(true);
-    }
-  });
+        response.status,
+        `${routeKey(testCase)} expected ${testCase.expectedStatus}, got ${response.status}: ${response.text}`,
+      ).toBe(testCase.expectedStatus);
+
+      if (response.status !== 204) {
+        expect(response.headers.get('content-type')).toContain('application/json');
+        expect(
+          getResponseSchema(testCase).safeParse(response.body).success,
+          `${routeKey(testCase)} returned a body outside its executed response contract: ${response.text}`,
+        ).toBe(true);
+      }
+    },
+  );
 
   it.each(adversarialCases)('$label', async (testCase) => {
     testCase.setup?.();

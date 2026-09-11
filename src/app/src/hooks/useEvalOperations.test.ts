@@ -181,18 +181,19 @@ describe('useEvalOperations', () => {
       expect(callApiJson).toHaveBeenCalledTimes(1);
     });
 
-    it.each([
-      400, 404, 500,
-    ])('should throw an error with the correct status code when the API call returns an HTTP error (status %s)', async (statusCode) => {
-      vi.mocked(callApiJson).mockRejectedValue(new Error(`HTTP error! status: ${statusCode}`));
+    it.each([400, 404, 500])(
+      'should throw an error with the correct status code when the API call returns an HTTP error (status %s)',
+      async (statusCode) => {
+        vi.mocked(callApiJson).mockRejectedValue(new Error(`HTTP error! status: ${statusCode}`));
 
-      const { result } = renderHook(() => useEvalOperations());
+        const { result } = renderHook(() => useEvalOperations());
 
-      await expect(
-        result.current.fetchTraces('test-eval-id', new AbortController().signal),
-      ).rejects.toThrowError(`HTTP error! status: ${statusCode}`);
-      expect(callApiJson).toHaveBeenCalledTimes(1);
-    });
+        await expect(
+          result.current.fetchTraces('test-eval-id', new AbortController().signal),
+        ).rejects.toThrowError(`HTTP error! status: ${statusCode}`);
+        expect(callApiJson).toHaveBeenCalledTimes(1);
+      },
+    );
 
     it('should handle AbortError when the API call is aborted', async () => {
       const abortController = new AbortController();
