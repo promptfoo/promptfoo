@@ -65,6 +65,11 @@ config:
   response_format: { type: 'json_object' }
 ```
 
+<a id="popular-models"></a>
+<a id="deepseek-models"></a>
+<a id="llama-3-models"></a>
+<a id="qwen-models"></a>
+
 ## Current Serverless Models
 
 Together AI's serverless catalog changes frequently. These selected current chat model IDs are
@@ -82,6 +87,11 @@ useful starting points:
 | `Qwen/Qwen3.5-9B`                         |          262,144 |
 | `openai/gpt-oss-120b`                     |          131,072 |
 | `meta-llama/Llama-3.3-70B-Instruct-Turbo` |          131,072 |
+
+<a id="llama-4-models"></a>
+<a id="mixtral-models"></a>
+<a id="vision-models"></a>
+<a id="free-endpoints"></a>
 
 Check Together AI's [recommended models](https://docs.together.ai/docs/inference/recommended-models),
 [live serverless catalog](https://docs.together.ai/docs/serverless/models), and
