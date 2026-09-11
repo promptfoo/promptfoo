@@ -18,6 +18,21 @@ function createProcessor(processCalls = vi.fn()) {
 }
 
 describe('Responses stream regressions', () => {
+  it.each([
+    { name: 'indexed', index: { output_index: 0, content_index: 0 } },
+    { name: 'unindexed', index: {} },
+  ])('recovers empty finalized $name text at EOF', async ({ index }) => {
+    const parsed = await readResponsesStream(
+      createSseResponse([{ type: 'response.output_text.done', ...index, text: '' }]),
+      'test',
+      { debug: vi.fn() },
+    );
+
+    expect(parsed.output).toEqual([
+      { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '' }] },
+    ]);
+  });
+
   it('cancels an aborted Responses stream that stalls after headers', async () => {
     const abortController = new AbortController();
     let cancelled = false;
@@ -3867,59 +3882,73 @@ describe('Responses stream regressions', () => {
       expect(processed.metadata?.annotations).toEqual([annotation]);
     });
 
-    it.each([
-      'response.incomplete',
-      'response.in_progress',
-      'response.failed',
-      'response.cancelled',
-      'response.completed',
-    ])('never replaces a different terminal message identity after %s', async (terminalType) => {
-      const processCalls = vi.fn().mockResolvedValue('executed');
-      const parsed = await readResponsesStream(
-        createSseResponse([
-          {
-            type: 'response.output_text.done',
-            output_index: 0,
-            content_index: 0,
-            item_id: 'm_secret',
-            text: 'SECRET FINALIZED TEXT',
-          },
-          {
-            type: terminalType,
-            response: {
-              status: terminalType.slice('response.'.length),
-              output: [
-                {
-                  type: 'message',
-                  id: 'm_safe',
-                  role: 'assistant',
-                  content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT' }],
+    it.each(
+      ['incomplete', 'in_progress', 'failed', 'cancelled', 'completed'].flatMap((status) =>
+        ['text', 'item'].map((source) => ({ terminalType: `response.${status}`, source })),
+      ),
+    )(
+      'never replaces a different terminal message identity after $terminalType ($source)',
+      async ({ terminalType, source }) => {
+        const processCalls = vi.fn().mockResolvedValue('executed');
+        const parsed = await readResponsesStream(
+          createSseResponse([
+            source === 'item'
+              ? {
+                  type: 'response.output_item.done',
+                  output_index: 0,
+                  item: {
+                    type: 'message',
+                    id: 'm_secret',
+                    role: 'assistant',
+                    content: [
+                      { type: 'output_text', text: 'SECRET FINALIZED TEXT', annotations: [] },
+                    ],
+                  },
+                }
+              : {
+                  type: 'response.output_text.done',
+                  output_index: 0,
+                  content_index: 0,
+                  item_id: 'm_secret',
+                  text: 'SECRET FINALIZED TEXT',
                 },
-              ],
+            {
+              type: terminalType,
+              response: {
+                status: terminalType.slice('response.'.length),
+                output: [
+                  {
+                    type: 'message',
+                    id: 'm_safe',
+                    role: 'assistant',
+                    content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT' }],
+                  },
+                ],
+              },
             },
-          },
-        ]),
-        'test',
-        { debug: vi.fn() },
-      );
-      const processed = await createProcessor(processCalls).processResponseOutput(
-        parsed,
-        {},
-        false,
-      );
+          ]),
+          'test',
+          { debug: vi.fn() },
+        );
+        const processed = await createProcessor(processCalls).processResponseOutput(
+          parsed,
+          {},
+          false,
+        );
 
-      expect(parsed.output).toEqual([
-        expect.objectContaining({
-          type: 'message',
-          id: 'm_safe',
-          content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT' }],
-        }),
-      ]);
-      expect(processed.output).toBe('SAFE TERMINAL TEXT');
-      expect(processCalls).not.toHaveBeenCalled();
-      expect(JSON.stringify(parsed)).not.toContain('SECRET FINALIZED TEXT');
-      expect(JSON.stringify(processed.raw)).not.toContain('SECRET FINALIZED TEXT');
-    });
+        expect(parsed.output).toEqual([
+          expect.objectContaining({
+            type: 'message',
+            id: 'm_safe',
+            content: [{ type: 'output_text', text: 'SAFE TERMINAL TEXT' }],
+          }),
+        ]);
+        expect(processed.output).toBe('SAFE TERMINAL TEXT');
+        expect(processCalls).not.toHaveBeenCalled();
+        expect(JSON.stringify(parsed)).not.toContain('SECRET FINALIZED TEXT');
+        expect(JSON.stringify(processed.raw)).not.toContain('SECRET FINALIZED TEXT');
+      },
+    );
 
     it.each([
       {

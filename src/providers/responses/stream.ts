@@ -720,6 +720,15 @@ function mergeFinalizedStreamOutput(
               outputIndex === finalizedItem.outputIndex &&
               item?.type === finalizedItem.item?.type,
           );
+    const existingItem = entries[existingIndex]?.item;
+    if (
+      existingIdentityIndex < 0 &&
+      typeof existingItem?.id === 'string' &&
+      typeof finalizedItem.item?.id === 'string' &&
+      existingItem.id !== finalizedItem.item.id
+    ) {
+      continue;
+    }
     if (existingIndex < 0 && preferFinalizedNonMessageItems) {
       entries.push(finalizedItem);
     } else if (preferFinalizedNonMessageItems) {
@@ -2015,21 +2024,19 @@ export async function readResponsesStream(
     );
   }
 
+  const hasStreamedOutputText =
+    outputText.length > 0 ||
+    finalizedOutputTextKeys.size > 0 ||
+    completedUnindexedOutputTexts.length > 0 ||
+    finalizedInvalidOutputTextKeys.size > 0;
   if (
     sawMalformedSsePayload &&
-    (latestResponse || outputText || finalizedNonMessageItems.size > 0)
+    (latestResponse || hasStreamedOutputText || finalizedNonMessageItems.size > 0)
   ) {
     throw new Error(`${providerName} streaming response included malformed SSE payload`);
   }
 
-  if (
-    latestResponse &&
-    (outputText ||
-      finalizedOutputTextKeys.size > 0 ||
-      completedUnindexedOutputTexts.length > 0 ||
-      finalizedInvalidOutputTextKeys.size > 0 ||
-      finalizedNonMessageItems.size > 0)
-  ) {
+  if (latestResponse && (hasStreamedOutputText || finalizedNonMessageItems.size > 0)) {
     if (
       unassignedUnindexedOutputText &&
       !isFailedOrCancelledResponse &&
@@ -2169,7 +2176,7 @@ export async function readResponsesStream(
     );
   }
 
-  if (outputText) {
+  if (hasStreamedOutputText) {
     const remainingUnindexedOutputText = unassignedUnindexedOutputText + pendingUnindexedOutputText;
     const recoverableOutputTextByContent = new Map(
       Array.from(outputTextByContent).filter(([key]) => {
