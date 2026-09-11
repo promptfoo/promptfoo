@@ -82,6 +82,12 @@ describe('OpenAI billing helpers', () => {
     expect(
       calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'priority' }),
     ).toBeUndefined();
+
+    expect(
+      calculateOpenAIUsageCost('chat-latest', { inputCost: 2e-6, outputCost: 3e-6 }, usage, {
+        serviceTier: 'priority',
+      }),
+    ).toBeCloseTo(1_000 * 2e-6 + 100 * 3e-6);
   });
 
   it('uses non-reasoning web search preview pricing for chat-latest aliases', () => {

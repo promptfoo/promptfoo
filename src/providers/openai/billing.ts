@@ -979,7 +979,13 @@ export function calculateOpenAIUsageCost(
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
   const tier = normalizeServiceTier(options.serviceTier);
-  const modelRates = getModelRates(modelName, tier, usage.totalInputTokens);
+  const modelRates =
+    getModelRates(modelName, tier, usage.totalInputTokens) ??
+    (modelName === 'chat-latest' &&
+    tier !== 'standard' &&
+    (config.cost !== undefined || config.inputCost !== undefined || config.outputCost !== undefined)
+      ? { text: { input: 0 } }
+      : undefined);
   if (!modelRates) {
     return undefined;
   }
