@@ -1447,7 +1447,7 @@ describe('RedteamIterativeProvider', () => {
             }),
           });
 
-          await runRedteamConversation({
+          const result = await runRedteamConversation({
             context: {
               vars,
               prompt,
@@ -1478,6 +1478,8 @@ describe('RedteamIterativeProvider', () => {
           expect(targetPrompt).not.toContain(originalMessage);
           expect(targetContext.vars.user_message).not.toBe(originalMessage);
           expect(targetContext.vars.retrieved_context).toBe(benignContext);
+          expect(result.prompt).toBe(targetContext.vars.__prompt);
+          expect(result.metadata.redteamFinalPrompt).toBe(targetContext.vars.__prompt);
         } finally {
           restoreEnv();
         }

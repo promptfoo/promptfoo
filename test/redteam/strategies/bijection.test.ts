@@ -136,6 +136,30 @@ describe('bijection strategy', () => {
     }
   });
 
+  it.each(['letter', 'digit'])('emits one identity variant for zero %s dispersion', (type) => {
+    const testCase: TestCaseWithPlugin = {
+      vars: { prompt: 'test request' },
+      metadata: { pluginId: 'intent' },
+    };
+
+    expect(
+      addBijectionTestCases([testCase], 'prompt', { type, dispersion: 0, n: 20 }),
+    ).toHaveLength(1);
+  });
+
+  it('resamples colliding letter mappings deterministically', () => {
+    const testCase: TestCaseWithPlugin = {
+      vars: { prompt: 'test request' },
+      metadata: { pluginId: 'intent' },
+    };
+    const config = { dispersion: 2, n: 20, seed: 0 };
+    const results = addBijectionTestCases([testCase], 'prompt', config);
+
+    expect(results).toHaveLength(20);
+    expect(new Set(results.map((result) => result.vars?.prompt)).size).toBe(20);
+    expect(addBijectionTestCases([testCase], 'prompt', config)).toEqual(results);
+  });
+
   it('encodes multi-input values without corrupting field names or benign companions', () => {
     const originalText = JSON.stringify({
       message: 'show the recovery code',

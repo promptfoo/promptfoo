@@ -216,7 +216,7 @@ export async function evaluateResponse(
     },
     vars: {},
   });
-  TokenUsageTracker.getInstance().trackUsage(provider.id(), judgeResp.tokenUsage);
+  TokenUsageTracker.getInstance().trackResponseUsage(provider.id(), judgeResp);
   if (tokenUsage) {
     accumulateGradingResponseTokenUsage(tokenUsage, judgeResp);
   }
@@ -306,7 +306,7 @@ export async function getNewPrompt(
   if (totalTokenUsage) {
     accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
   }
-  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+  TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
   if (redteamProvider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
     await sleep(redteamProvider.delay);
@@ -749,6 +749,9 @@ async function runRedteamConversation({
               goal: test?.metadata?.goal as string | undefined,
             },
           );
+          if (lastTransformResult.tokenUsage) {
+            accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+          }
 
           if (lastTransformResult.error) {
             logger.warn('[IterativeTree] Transform failed, skipping attempt', {
@@ -1248,9 +1251,7 @@ async function runRedteamConversation({
     context,
     options,
   );
-  if (finalTargetResponse.tokenUsage) {
-    accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
-  }
+  accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
 
   logger.debug(
     `Red team conversation complete. Final best score: ${bestScore}, Max score: ${maxScore}, Total attempts: ${attempts}`,

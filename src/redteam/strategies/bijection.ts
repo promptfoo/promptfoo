@@ -177,16 +177,25 @@ export function addBijectionTestCases(
 
   return testCases.flatMap((testCase) => {
     const originalText = String(testCase.vars?.[injectVar]);
-    return Array.from({ length: options.n }, (_, variant) => {
+    const variants: StrategyTestCases = [];
+    const seen = new Set<string>();
+    // Bound retries when the input or mapping space cannot produce n distinct prompts.
+    const maxAttempts = options.dispersion === 0 ? 1 : options.n * 10;
+    for (let variant = 0; variant < maxAttempts && variants.length < options.n; variant++) {
       const variantSeed = `${options.seed}\u0000${originalText}\u0000${variant}`;
       const mapping = generateBijectionMapping(options, variantSeed);
-      return {
+      const transformed = transformStrategyInput(testCase, injectVar, 'bijection', (value) =>
+        buildBijectionPrompt(encodeBijection(value, mapping), mapping, options.includeExamples),
+      );
+      if (seen.has(transformed)) {
+        continue;
+      }
+      seen.add(transformed);
+      variants.push({
         ...testCase,
         vars: {
           ...testCase.vars,
-          [injectVar]: transformStrategyInput(testCase, injectVar, 'bijection', (value) =>
-            buildBijectionPrompt(encodeBijection(value, mapping), mapping, options.includeExamples),
-          ),
+          [injectVar]: transformed,
         },
         metadata: {
           ...testCase.metadata,
@@ -204,7 +213,8 @@ export function addBijectionTestCases(
           ...assertion,
           metric: assertion.metric ? `${assertion.metric}/Bijection` : assertion.metric,
         })),
-      };
-    });
+      });
+    }
+    return variants;
   });
 }

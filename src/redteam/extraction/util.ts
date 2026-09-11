@@ -110,7 +110,9 @@ export async function fetchRemoteGeneration(
 export async function materializeMcpToolCallRemote(
   options: PromptfooMcpMaterializationOptions,
   callApiOptions?: CallApiOptionsParams,
-): Promise<{ prompt: string; tokenUsage?: ProviderResponse['tokenUsage'] } | undefined> {
+): Promise<
+  { cached?: boolean; prompt: string; tokenUsage?: ProviderResponse['tokenUsage'] } | undefined
+> {
   if (!shouldGenerateRemote()) {
     return undefined;
   }
@@ -158,6 +160,7 @@ export async function materializeMcpToolCallRemote(
     }
 
     return {
+      cached: response.cached,
       prompt: stringifyMcpToolCall(toolCall),
       tokenUsage: response.data.tokenUsage,
     };

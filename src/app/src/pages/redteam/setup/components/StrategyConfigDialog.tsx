@@ -1074,6 +1074,9 @@ export default function StrategyConfigDialog({
             min={1}
             max={20}
           />
+          <p className="text-xs text-muted-foreground">
+            Maximum distinct prompts per test. Zero changed letters produces one variant.
+          </p>
         </div>
 
         <div className="space-y-2">

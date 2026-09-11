@@ -438,11 +438,10 @@ describe('CustomProvider', () => {
 
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1); // Only original call
       expect(result.metadata?.stopReason).toBe('Max rounds reached');
-      expect(result.tokenUsage?.attacker).toMatchObject({
+      expect(result.tokenUsage?.assertions).toMatchObject({
         total: 16,
         prompt: 10,
         completion: 6,
-        numRequests: 2,
       });
     });
   });

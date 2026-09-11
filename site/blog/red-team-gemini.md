@@ -223,8 +223,8 @@ targets:
     label: gpt-5
 
   # Or Claude
-  - id: anthropic:messages:claude-sonnet-4-20250514
-    label: claude-sonnet-4
+  - id: anthropic:messages:claude-sonnet-5
+    label: claude-sonnet-5
 ```
 
 ## Advanced Techniques

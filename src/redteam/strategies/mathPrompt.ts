@@ -24,6 +24,7 @@ export async function generateMathPrompt(
   testCases: TestCase[],
   injectVar: string,
   config: Record<string, any>,
+  runtimeContext?: StrategyRuntimeContext,
 ): Promise<TestCase[]> {
   try {
     const batchSize = 8;
@@ -65,7 +66,10 @@ export async function generateMathPrompt(
         result?: TestCase[];
       }
 
-      const { data } = await postRemoteGenerationTask<MathPromptGenerationResponse>(payload);
+      const { data } = await postRemoteGenerationTask<MathPromptGenerationResponse>(
+        payload,
+        runtimeContext,
+      );
 
       logger.debug(
         `Got remote MathPrompt generation result for batch ${Number(index) + 1}: ${JSON.stringify(data)}`,
@@ -147,7 +151,12 @@ export async function addMathPrompt(
   // Keep every request-, cache-, or route-selected provider local so this phase
   // cannot silently switch backends.
   if (shouldGenerateRemote() && canGenerateRemoteWithSelection(runtimeContext)) {
-    const mathPromptTestCases = await generateMathPrompt(testCases, injectVar, config);
+    const mathPromptTestCases = await generateMathPrompt(
+      testCases,
+      injectVar,
+      config,
+      runtimeContext,
+    );
     if (mathPromptTestCases.length > 0) {
       return mathPromptTestCases;
     }

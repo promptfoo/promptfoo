@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  isSecretEnvVarName,
+  looksLikeSecret,
   preserveTracingCredentialReferences,
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -36,6 +38,34 @@ describe('sanitizeRuntimeOptions', () => {
         providerFilter: 'selected-target',
       }),
     ).toEqual({ providerFilter: 'selected-target' });
+  });
+});
+
+describe('looksLikeSecret', () => {
+  it.each([
+    ['below the minimum length', 'A'.repeat(63), false],
+    ['at the minimum length', 'A'.repeat(64), true],
+    ['above the minimum length', 'A'.repeat(65), true],
+    ['the complete token alphabet', 'aZ09+/=_-'.repeat(8), true],
+    ['a trailing space', `${'A'.repeat(64)} `, false],
+    ['a trailing newline', `${'A'.repeat(64)}\n`, false],
+    ['a trailing carriage return', `${'A'.repeat(64)}\r`, false],
+    ['a trailing CRLF', `${'A'.repeat(64)}\r\n`, false],
+    ['a line separator', `${'A'.repeat(64)}\u2028`, false],
+    ['a paragraph separator', `${'A'.repeat(64)}\u2029`, false],
+    ['an embedded tab', `${'A'.repeat(32)}\t${'A'.repeat(32)}`, false],
+    ['a non-ASCII letter', `${'A'.repeat(63)}é`, false],
+    ['an astral character', `${'A'.repeat(63)}😀`, false],
+    ['a NUL character', `${'A'.repeat(64)}\0`, false],
+  ])('classifies %s without changing token detection', (_name, value, expected) => {
+    expect(looksLikeSecret(value as string)).toBe(expected);
+  });
+
+  it('classifies very large token-like values without overflowing the stack', () => {
+    const value = 'A'.repeat(16_369_336);
+
+    expect(looksLikeSecret(value)).toBe(true);
+    expect(looksLikeSecret(`${value}.`)).toBe(false);
   });
 });
 
@@ -170,7 +200,135 @@ describe('sanitizeTracingConfigForPersistence', () => {
   });
 });
 
+describe('isSecretEnvVarName', () => {
+  it.each([
+    'GITHUB_TOKEN',
+    'STRIPE_SECRET_KEY',
+    'PGPASSWORD',
+    'MY_SERVICE_SECRET',
+    'DB_PASSWD',
+    'OPENAI_API_KEY',
+    'SIGNING_PASSPHRASE',
+    'AUTH_TOKEN',
+    // Case is normalized: nothing requires an env var to be uppercase, and a lowercase name
+    // reaches the subprocess exactly the same way.
+    'github_token',
+    'Database_Password',
+    // Leading underscores are legal in env var names and must not be a way around the check.
+    '_GITHUB_TOKEN',
+    // Fused credential compounds: caught by the key-compound suffixes derived from
+    // SECRET_FIELD_NAMES, not by a blanket `KEY` suffix (which would swallow PORTKEY).
+    // A prefix defeats the exact-name match, which is why deriving them matters.
+    'AWS_SECRETKEY',
+    'GCP_PRIVATEKEY',
+    'APP_ENCRYPTIONKEY',
+    'VENDOR_CERTKEY',
+    'SVC_SIGNINGKEY',
+    'DBPWD',
+    'DATABASEDSN',
+    // `AUTH` as the final word carries the credential (MLFLOW_BASIC_AUTH is a documented
+    // promptfoo variable holding basic-auth creds).
+    'MLFLOW_BASIC_AUTH',
+    'NPM_CONFIG__AUTH',
+  ])('treats %s as credential-bearing', (name) => {
+    expect(isSecretEnvVarName(name)).toBe(true);
+  });
+
+  it.each([
+    // Plurals: suffix words are singular, and TOKENS does not end with TOKEN.
+    'MAX_TOKENS',
+    'RETRY_KEYS',
+    'LOG_LEVEL',
+    'AWS_REGION',
+    'SERVICE_URL',
+    'NODE_ENV',
+    // `KEY` matches as a whole word only, so a vendor name ending in it is not a credential.
+    // PORTKEY_API_BASE_URL is a documented endpoint.
+    'PORTKEY_API_BASE_URL',
+    'MONKEY',
+    'TURKEY',
+    // `AUTH` only counts as the final word: these name a method and a scope.
+    'WATSONX_AI_AUTH_TYPE',
+    'OAUTH_SCOPE',
+    // Ordinary config fields keep the exact-name behavior.
+    'maxTokens',
+    'tokenCount',
+    'keyName',
+    'cacheKey',
+  ])('leaves %s alone', (name) => {
+    expect(isSecretEnvVarName(name)).toBe(false);
+  });
+});
+
 describe('sanitizeObject', () => {
+  describe('environment variable maps', () => {
+    it('redacts credential-named variables inside an env map', () => {
+      // Regression: `env` is handed verbatim to a subprocess, so it is where a config
+      // legitimately carries credentials. Exact-name matching against SECRET_FIELD_NAMES
+      // caught only `API_KEY`, leaving project-specific names in cleartext in the
+      // provider config persisted with every eval result.
+      const result = sanitizeObject({
+        env: {
+          API_KEY: 'sk-value',
+          github_token: 'ghp_lowercase_value',
+          PORTKEY_API_BASE_URL: 'https://api.portkey.ai/v1',
+          GITHUB_TOKEN: 'ghp_value',
+          MY_SERVICE_SECRET: 'plainvalue123',
+          PGPASSWORD: 'hunter2',
+          LOG_LEVEL: 'debug',
+          MAX_TOKENS: '4096',
+          AWS_REGION: 'us-east-1',
+        },
+      });
+
+      expect(result.env).toEqual({
+        API_KEY: '[REDACTED]',
+        github_token: '[REDACTED]',
+        // A vendor name ending in KEY is not a credential.
+        PORTKEY_API_BASE_URL: 'https://api.portkey.ai/v1',
+        GITHUB_TOKEN: '[REDACTED]',
+        MY_SERVICE_SECRET: '[REDACTED]',
+        PGPASSWORD: '[REDACTED]',
+        // Non-credential variables stay readable - they are what makes a failed run
+        // debuggable from the persisted config.
+        LOG_LEVEL: 'debug',
+        MAX_TOKENS: '4096',
+        AWS_REGION: 'us-east-1',
+      });
+    });
+
+    it('reaches an env map nested in a provider config', () => {
+      const result = sanitizeObject(
+        {
+          config: {
+            mcp: { servers: [{ command: 'node', env: { GITHUB_TOKEN: 'ghp_value' } }] },
+          },
+        },
+        // Match the persistence boundary, which lifts the default depth cap so nested
+        // provider configs are walked in full.
+        { maxDepth: Number.POSITIVE_INFINITY },
+      );
+
+      expect(result.config.mcp.servers[0].env.GITHUB_TOKEN).toBe('[REDACTED]');
+    });
+
+    it('does not widen redaction outside env maps', () => {
+      const result = sanitizeObject({
+        maxTokens: 4096,
+        tokenCount: 12,
+        keyName: 'X-Api-Key',
+        MAX_TOKENS: '2048',
+      });
+
+      expect(result).toEqual({
+        maxTokens: 4096,
+        tokenCount: 12,
+        keyName: 'X-Api-Key',
+        MAX_TOKENS: '2048',
+      });
+    });
+  });
+
   describe('primitives and basic types', () => {
     it('should handle null', () => {
       expect(sanitizeObject(null)).toBeNull();
@@ -568,6 +726,52 @@ describe('sanitizeObject', () => {
       it('should redact AWS_BEARER_TOKEN_BEDROCK', () => {
         expect(sanitizeObject({ AWS_BEARER_TOKEN_BEDROCK: 'bedrock-token' })).toEqual({
           AWS_BEARER_TOKEN_BEDROCK: '[REDACTED]',
+        });
+      });
+
+      // AWS SigV4 credentials are documented Bedrock provider config fields and env
+      // vars. Before this coverage they reached logs and shared configs in clear text,
+      // even though bedrock/knowledgeBase.ts already treated them as sensitive locally.
+      it.each([
+        'AWS_SECRET_ACCESS_KEY',
+        'AWS_SESSION_TOKEN',
+        'AWS_ACCESS_KEY_ID',
+        'secretAccessKey',
+        'sessionToken',
+        'accessKeyId',
+      ])('should redact %s', (field) => {
+        expect(sanitizeObject({ [field]: 'aws-credential-value' })).toEqual({
+          [field]: '[REDACTED]',
+        });
+      });
+
+      it('should redact AWS credentials nested in a Bedrock provider config', () => {
+        expect(
+          sanitizeObject({
+            providers: [
+              {
+                id: 'bedrock:anthropic.claude-sonnet-5',
+                config: {
+                  region: 'us-east-1',
+                  accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+                  secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+                  sessionToken: 'FwoGZXIvYXdzEExampleSessionToken',
+                },
+              },
+            ],
+          }),
+        ).toEqual({
+          providers: [
+            {
+              id: 'bedrock:anthropic.claude-sonnet-5',
+              config: {
+                region: 'us-east-1',
+                accessKeyId: '[REDACTED]',
+                secretAccessKey: '[REDACTED]',
+                sessionToken: '[REDACTED]',
+              },
+            },
+          ],
         });
       });
 
@@ -1236,8 +1440,10 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject(awsConfig);
       expect(result.region).toBe('us-east-1');
       expect(result.accessKeyId).toBe('[REDACTED]');
-      expect(result.secretAccessKey).toBe('wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY');
-      expect(result.sessionToken).toBe('session-token-value');
+      // Previously asserted to pass through in clear text, which contradicted this
+      // test's own name: secretAccessKey and sessionToken are the actual secrets.
+      expect(result.secretAccessKey).toBe('[REDACTED]');
+      expect(result.sessionToken).toBe('[REDACTED]');
     });
 
     it('should sanitize provider response with metadata', () => {

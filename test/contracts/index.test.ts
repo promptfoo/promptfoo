@@ -96,6 +96,15 @@ describe('contracts leaf surface', () => {
       }
     });
 
+    it('preserves ANTHROPIC_CUSTOM_HEADERS so provider-scoped header clearing is valid', () => {
+      const parsed = ProviderEnvOverridesSchema.safeParse({ ANTHROPIC_CUSTOM_HEADERS: '' });
+
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data).toHaveProperty('ANTHROPIC_CUSTOM_HEADERS', '');
+      }
+    });
+
     it('strips unknown keys at parse time (strict z.object)', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({
         OPENAI_API_KEY: 'sk-known',

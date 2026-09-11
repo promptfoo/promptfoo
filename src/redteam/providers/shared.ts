@@ -31,7 +31,10 @@ import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import {
+  accumulateGradingResponseTokenUsage,
+  accumulateTokenUsage,
+} from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -43,6 +46,21 @@ import type { TransformContext, TransformFunction } from '../../types/transform'
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
+
+/** Count a blocking-analysis task as grading without treating it as a target or attacker call. */
+export function accumulateUnblockingTokenUsage(
+  totalTokenUsage: TokenUsage,
+  result: { attempted?: boolean; cached?: boolean; tokenUsage?: TokenUsage },
+): void {
+  if (!result.attempted && !result.tokenUsage) {
+    return;
+  }
+
+  accumulateGradingResponseTokenUsage(totalTokenUsage, {
+    cached: result.cached,
+    tokenUsage: result.tokenUsage?.assertions ?? result.tokenUsage,
+  });
+}
 
 /**
  * The subset of `loadApiProviders` inputs the redteam code actually supplies
@@ -969,7 +987,7 @@ export async function tryUnblocking({
       vars: {},
     });
 
-    TokenUsageTracker.getInstance().trackUsage(unblockingProvider.id(), response.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(unblockingProvider.id(), response);
 
     if (response.error) {
       logger.error(`[Unblocking] Unblocking provider error: ${response.error}`);

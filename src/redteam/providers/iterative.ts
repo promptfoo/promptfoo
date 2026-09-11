@@ -285,7 +285,7 @@ export async function runRedteamConversation({
       },
       options,
     );
-    TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(redteamProvider.id(), redteamResp);
     accumulateAttackerTokenUsage(totalTokenUsage, redteamResp);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
@@ -371,6 +371,9 @@ export async function runRedteamConversation({
           inputs,
         },
       );
+      if (lastTransformResult.tokenUsage) {
+        accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+      }
 
       if (lastTransformResult.error) {
         logger.warn('[Iterative] Transform failed, skipping iteration', {
@@ -685,7 +688,7 @@ export async function runRedteamConversation({
       options,
     );
 
-    TokenUsageTracker.getInstance().trackUsage(gradingProvider.id(), judgeResp.tokenUsage);
+    TokenUsageTracker.getInstance().trackResponseUsage(gradingProvider.id(), judgeResp);
     accumulateGradingResponseTokenUsage(totalTokenUsage, judgeResp);
     if (gradingProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${gradingProvider.delay}ms`);
@@ -745,7 +748,7 @@ export async function runRedteamConversation({
       if (currentScore > highestScore) {
         highestScore = currentScore;
         bestResponse = targetResponse.output;
-        bestInjectVar = newInjectVar;
+        bestInjectVar = finalInjectVar;
       }
 
       // Check if we should exit early (but don't break yet)

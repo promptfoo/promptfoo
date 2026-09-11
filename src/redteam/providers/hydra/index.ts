@@ -593,6 +593,9 @@ export class HydraProvider implements ApiProvider {
             goal: test?.metadata?.goal as string | undefined,
           },
         );
+        if (lastTransformResult.tokenUsage) {
+          accumulateAttackerTokenUsage(totalTokenUsage, lastTransformResult);
+        }
 
         // Skip turn if transform failed
         if (lastTransformResult.error) {
