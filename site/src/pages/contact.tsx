@@ -95,7 +95,20 @@ function Contact(): React.ReactElement {
                 </Typography>
               </Box>
 
-              <form action="https://submit-form.com/ghriv7voL" className={styles.contactForm}>
+              <form
+                action="https://submit-form.com/ghriv7voL"
+                method="POST"
+                className={styles.contactForm}
+              >
+                {/* Formspark discards submissions when bots check this hidden field. */}
+                <input
+                  type="checkbox"
+                  name="_gotcha"
+                  style={{ display: 'none' }}
+                  tabIndex={-1}
+                  autoComplete="off"
+                  aria-hidden="true"
+                />
                 <Box className={styles.formGrid}>
                   <TextField
                     fullWidth
@@ -146,6 +159,7 @@ function Contact(): React.ReactElement {
                     id="interested-in"
                     name="interested-in"
                     label="I'm interested in"
+                    defaultValue=""
                   >
                     <MenuItem value="Enterprise Security">
                       Enterprise Security & Red Teaming

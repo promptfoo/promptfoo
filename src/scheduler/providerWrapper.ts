@@ -116,13 +116,17 @@ export function wrapProviderWithRateLimiting(
       options?: CallApiOptionsParams,
     ): Promise<ProviderResponse> => {
       const queuedCallAbortSignal = getProviderCallExecutionContext()?.queuedCallAbortSignal;
+      const abortSignal =
+        options?.abortSignal && queuedCallAbortSignal
+          ? AbortSignal.any([options.abortSignal, queuedCallAbortSignal])
+          : (options?.abortSignal ?? queuedCallAbortSignal);
       return registry.execute(
         provider,
         () => {
-          queuedCallAbortSignal?.throwIfAborted();
+          abortSignal?.throwIfAborted();
           return originalCallApi(prompt, context, options);
         },
-        createProviderRateLimitOptions(queuedCallAbortSignal),
+        createProviderRateLimitOptions(abortSignal),
       );
     },
   };
