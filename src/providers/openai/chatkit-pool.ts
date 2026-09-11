@@ -56,6 +56,7 @@ export class ChatKitBrowserPool {
   private server: http.Server | null = null;
   private serverPort: number = 0;
   private pages: PooledPage[] = [];
+  private pendingPageCreations = 0;
   private waitQueue: Array<{ templateKey: string; resolve: (page: PooledPage) => void }> = [];
   private config: ChatKitPoolConfig;
   private templates: Map<string, ChatKitTemplateRegistration> = new Map();
@@ -326,8 +327,8 @@ export class ChatKitBrowserPool {
     }
 
     // Create new page if under limit
-    if (this.pages.length < this.config.maxConcurrency) {
-      const pooledPage = await this.createPooledPage(templateKey);
+    if (this.pages.length + this.pendingPageCreations < this.config.maxConcurrency) {
+      const pooledPage = await this.createReservedPooledPage(templateKey);
       pooledPage.inUse = true;
       this.pages.push(pooledPage);
       logger.debug('[ChatKitPool] Created new page', {
@@ -393,7 +394,7 @@ export class ChatKitBrowserPool {
       // Create replacement - if this fails, we just reduce pool size
       // The pool will recover by creating new pages on demand
       try {
-        const newPage = await this.createPooledPage(originalTemplateKey);
+        const newPage = await this.createReservedPooledPage(originalTemplateKey);
         this.pages.push(newPage);
         pooledPage = newPage;
       } catch (createError) {
@@ -430,7 +431,7 @@ export class ChatKitBrowserPool {
     // template is capacity too: close it before recreating so isolated templates
     // cannot strand the queue at the pool limit.
     while (this.waitQueue.length > 0) {
-      if (this.pages.length >= this.config.maxConcurrency) {
+      if (this.pages.length + this.pendingPageCreations >= this.config.maxConcurrency) {
         const idlePage = this.pages.find((page) => !page.inUse);
         if (!idlePage) {
           break;
@@ -448,7 +449,7 @@ export class ChatKitBrowserPool {
       }
 
       try {
-        const newPage = await this.createPooledPage(waiter.templateKey);
+        const newPage = await this.createReservedPooledPage(waiter.templateKey);
         newPage.inUse = true;
         this.pages.push(newPage);
         waiter.resolve(newPage);
@@ -554,6 +555,15 @@ export class ChatKitBrowserPool {
         // Ignore close errors
       }
       throw error;
+    }
+  }
+
+  private async createReservedPooledPage(templateKey: string): Promise<PooledPage> {
+    this.pendingPageCreations++;
+    try {
+      return await this.createPooledPage(templateKey);
+    } finally {
+      this.pendingPageCreations--;
     }
   }
 

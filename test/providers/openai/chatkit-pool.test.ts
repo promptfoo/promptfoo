@@ -598,6 +598,35 @@ describe('ChatKitBrowserPool', () => {
       expect(instance.getStats().total).toBeLessThanOrEqual(2);
     });
 
+    it('reserves reclaimed capacity while creating replacement pages', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      for (const key of ['one', 'two', 'three']) {
+        instance.setTemplate(key, '<html></html>');
+      }
+      const page1 = await instance.acquirePage('one');
+      const pendingPage2 = instance.acquirePage('two');
+      let resolveContext!: (context: typeof mockContext) => void;
+      mockBrowser.newContext.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveContext = resolve;
+          }),
+      );
+
+      const release = instance.releasePage(page1);
+      await vi.waitFor(() => expect(mockBrowser.newContext).toHaveBeenCalledTimes(2));
+      const pendingPage3 = instance.acquirePage('three');
+      await Promise.resolve();
+      expect(mockBrowser.newContext).toHaveBeenCalledTimes(2);
+
+      resolveContext(mockContext);
+      await release;
+      const page2 = await pendingPage2;
+      await instance.releasePage(page2);
+      await pendingPage3;
+      expect(instance.getStats().total).toBeLessThanOrEqual(1);
+    });
+
     it('should not reuse pages across different templates', async () => {
       const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 4 });
       const key1 = 'wf_workflow1:default:default';
