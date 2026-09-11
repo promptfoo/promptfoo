@@ -5,7 +5,7 @@ import Clone from 'rfdc';
 import { z } from 'zod';
 import logger from '../../logger';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import { getLoadedFileMimeType, maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
@@ -1800,9 +1800,8 @@ function processImagesInContents(
       if (
         mimeType === 'video/mp4' &&
         !isDataUrl(value) &&
-        typeof source === 'string' &&
-        source.startsWith('file://') &&
-        /\.m4a$/i.test(source)
+        (getLoadedFileMimeType(contextVars, value) === 'audio/mp4' ||
+          (typeof source === 'string' && source.startsWith('file://') && /\.m4a$/i.test(source)))
       ) {
         mimeType = 'audio/mp4';
       }

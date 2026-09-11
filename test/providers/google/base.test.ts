@@ -520,16 +520,17 @@ describe('GoogleGenericProvider', () => {
   });
 
   describe('executeFunctionToolCallbacks()', () => {
-    it('assembles Vertex continuation chunks that omit the initial function-call ID', async () => {
-      const callback = vi.fn().mockImplementation((args) => {
-        const { a, b } = JSON.parse(args);
-        return String(a + b);
-      });
-      const span = vi.mocked(withGenAIToolSpan);
-      const provider = new TestGoogleProvider('gemini-3.8-flash');
+    it.each(['native', 'JSON'])(
+      'assembles %s continuation chunks that omit the initial function-call ID and name',
+      async (form) => {
+        const callback = vi.fn().mockImplementation((args) => {
+          const { a, b } = JSON.parse(args);
+          return String(a + b);
+        });
+        const span = vi.mocked(withGenAIToolSpan);
+        const provider = new TestGoogleProvider('gemini-3.8-flash');
 
-      const result = await provider['executeFunctionToolCallbacks'](
-        [
+        const parts = [
           { functionCall: { name: 'addNumbers', id: 'call-1', willContinue: true } },
           {
             functionCall: {
@@ -540,21 +541,83 @@ describe('GoogleGenericProvider', () => {
             },
           },
           { text: '' },
-        ],
-        {
-          streaming: true,
-          toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
-          functionToolCallbacks: { addNumbers: callback },
-        },
-        false,
-      );
+        ];
+        const result = await provider['executeFunctionToolCallbacks'](
+          form === 'JSON' ? JSON.stringify(parts) : parts,
+          {
+            streaming: true,
+            toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+            functionToolCallbacks: { addNumbers: callback },
+          },
+          false,
+        );
 
-      expect(result).toBe('30');
-      expect(callback).toHaveBeenCalledExactlyOnceWith('{"a":10,"b":20}');
-      expect(span).toHaveBeenCalledWith(
-        { name: 'addNumbers', arguments: '{"a":10,"b":20}', callId: 'call-1' },
-        expect.any(Function),
-      );
+        expect(result).toBe('30');
+        expect(callback).toHaveBeenCalledExactlyOnceWith('{"a":10,"b":20}');
+        expect(span).toHaveBeenCalledWith(
+          { name: 'addNumbers', arguments: '{"a":10,"b":20}', callId: 'call-1' },
+          expect.any(Function),
+        );
+      },
+    );
+
+    it.each(
+      ['object', 'array'].flatMap((form) =>
+        ['willContinue', 'partialArgs'].flatMap((field) =>
+          ['absent', 'empty', 'unrelated', 'inherited'].map((mapping) => ({
+            form,
+            field,
+            mapping,
+          })),
+        ),
+      ),
+    )(
+      'preserves ordinary JSON $form with $field and $mapping callbacks',
+      async ({ form, field, mapping }) => {
+        const callback = vi.fn();
+        const provider = new TestGoogleProvider('gemini-3.8-flash');
+        const envelope = {
+          functionCall: {
+            name: 'example',
+            ...(field === 'willContinue'
+              ? { willContinue: true }
+              : { partialArgs: [{ jsonPath: '$.value', numberValue: 1 }] }),
+          },
+        };
+        const output = `\n${JSON.stringify(form === 'array' ? [envelope] : envelope, null, 2)}\n`;
+        const callbacks: Record<string, typeof callback> =
+          mapping === 'inherited'
+            ? Object.create({ example: callback })
+            : mapping === 'unrelated'
+              ? { other: callback }
+              : {};
+        const result = await provider['executeFunctionToolCallbacks'](
+          output,
+          mapping === 'absent' ? {} : { functionToolCallbacks: callbacks },
+          false,
+        );
+        expect(result).toBe(output);
+        expect(callback).not.toHaveBeenCalled();
+      },
+    );
+
+    it('preserves an unrelated JSON envelope even when argument streaming is enabled', async () => {
+      const callback = vi.fn();
+      const provider = new TestGoogleProvider('gemini-3.8-flash');
+      const output =
+        '[{"functionCall":{"name":"example","partialArgs":[{"jsonPath":"$.value","numberValue":1}]}}]';
+      expect(
+        await provider['executeFunctionToolCallbacks'](
+          output,
+          {
+            streaming: true,
+            toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
+            functionToolCallbacks: { other: callback },
+          },
+          false,
+        ),
+      ).toBe(output);
+      expect(callback).not.toHaveBeenCalled();
     });
 
     it('preserves part order when restoring calls whose continuation omits the ID', async () => {

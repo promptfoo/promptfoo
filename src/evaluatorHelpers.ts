@@ -23,7 +23,7 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { renderVarsInObject } from './util/index';
+import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
@@ -246,6 +246,9 @@ export async function renderPrompt(
   skipRenderVars?: string[],
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
+  // Reusing vars for another render must not inherit provenance from earlier loads.
+  setLoadedFileMimeTypes(vars);
+  const loadedMimeTypes = new Map<string, string>();
 
   let basePrompt = prompt.raw;
 
@@ -350,6 +353,14 @@ export async function renderPrompt(
           } else {
             // Keep existing behavior for video/audio files (raw base64)
             vars[varName] = base64Data;
+            if (
+              fileType === 'audio' &&
+              fileExtension?.toLowerCase() === 'm4a' &&
+              provider?.getAudioInputFormat?.() === 'google'
+            ) {
+              loadedMimeTypes.set(base64Data, 'audio/mp4');
+              setLoadedFileMimeTypes(vars, loadedMimeTypes);
+            }
           }
         } catch (error) {
           throw new Error(

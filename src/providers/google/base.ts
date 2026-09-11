@@ -676,6 +676,22 @@ export abstract class GoogleGenericProvider implements ApiProvider {
       }
     }
     const parts = Array.isArray(parsedOutput) ? parsedOutput : [parsedOutput];
+    // JSON text opts into tool handling only through an explicitly mapped name.
+    // A mapped opening fragment can still own later nameless continuations.
+    if (
+      typeof output === 'string' &&
+      !parts.some(
+        (part) =>
+          typeof part?.functionCall?.name === 'string' &&
+          config.functionToolCallbacks &&
+          Object.prototype.hasOwnProperty.call(
+            config.functionToolCallbacks,
+            part.functionCall.name,
+          ),
+      )
+    ) {
+      return output;
+    }
     const { toolConfig } = resolveGoogleToolConfig(config);
     const streamsFunctionCallArguments =
       config.streaming === true &&

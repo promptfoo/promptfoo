@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withCacheEnabled } from '../../../src/cache';
 import cliState from '../../../src/cliState';
+import { runEval } from '../../../src/evaluator';
 import { renderPrompt } from '../../../src/evaluatorHelpers';
 import { loadApiProvider, loadApiProviders } from '../../../src/providers';
 import { GoogleProvider } from '../../../src/providers/google/provider';
@@ -120,6 +121,81 @@ describe('Google media and tool-policy input boundaries', () => {
   }
 
   describe.each<Route>(['Studio', 'Vertex Express', 'standalone'])('%s', (route) => {
+    it.each(
+      ['object', 'array'].flatMap((form) =>
+        ['willContinue', 'partialArgs'].map((field) => ({ form, field })),
+      ),
+    )(
+      'preserves ordinary JSON $form containing $field in the response',
+      async ({ form, field }) => {
+        const envelope = {
+          functionCall: {
+            name: 'example',
+            ...(field === 'willContinue'
+              ? { willContinue: true }
+              : { partialArgs: [{ jsonPath: '$.value', numberValue: 1 }] }),
+          },
+        };
+        const output = JSON.stringify(form === 'array' ? [envelope] : envelope, null, 2);
+        fetchMock.mockImplementation(async () =>
+          Response.json({
+            candidates: [{ content: { parts: [{ text: output }] } }],
+            usageMetadata: { promptTokenCount: 8, candidatesTokenCount: 2, totalTokenCount: 10 },
+          }),
+        );
+        const provider = await load(route);
+        const response = await withCacheEnabled(false, () =>
+          provider.callApi('Explain this example'),
+        );
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe(output);
+        expect(response.tokenUsage).toMatchObject({ prompt: 8, completion: 2, total: 10 });
+        expect(response.cost).toEqual(expect.any(Number));
+        if (route === 'Vertex Express') {
+          expect(response).not.toHaveProperty('raw');
+        } else {
+          expect(response.raw).toBeDefined();
+        }
+        expect(response.cached).not.toBe(true);
+        requestBody(route);
+      },
+    );
+
+    it.each(['isom', 'mp42'])(
+      'keeps loaded %s M4A provenance when callApi omits the optional test',
+      async (brand) => {
+        // A BMFF identification prefix proves representation, not audio decoding.
+        const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
+        bytes.write(brand, 8, 'ascii');
+        const file = path.join(temporaryDirectory, 'recording.m4a');
+        await writeFile(file, bytes);
+        const encoded = bytes.toString('base64');
+        const vars = { alias: '{{audio}}', audio: `file://${file}` };
+        const prompt = { raw: '{{alias}}', label: 'loaded-m4a' };
+        const provider = await load(route, {}, 'My Gemini');
+        const rendered = await renderPrompt(prompt, vars, {}, provider);
+        expect(rendered).toBe(encoded);
+        expect(Object.keys(vars)).toEqual(['alias', 'audio']);
+        expect(JSON.stringify(vars)).toBe(JSON.stringify({ alias: encoded, audio: encoded }));
+        expect({ ...vars }).toEqual({ alias: encoded, audio: encoded });
+        expect(Object.getOwnPropertySymbols({ ...vars })).toHaveLength(0);
+
+        const response = await withCacheEnabled(false, () =>
+          provider.callApi(rendered, { vars, prompt }),
+        );
+        expect(response.error).toBeUndefined();
+        expect(response.output).toBe('ok');
+        const body = requestBody(route);
+        expect(body.contents[0].parts[0].inlineData.mimeType).toBe('audio/mp4');
+        expect(body).toEqual({
+          contents: [
+            { role: 'user', parts: [{ inlineData: { mimeType: 'audio/mp4', data: encoded } }] },
+          ],
+          generationConfig: {},
+        });
+      },
+    );
+
     it.each([
       ['vorbis-theora.ogg', 'audio/ogg'],
       ['opus-theora.ogg', 'audio/ogg'],
@@ -378,6 +454,146 @@ export function getTools() { return { functionDeclarations: ${JSON.stringify(dec
       },
     );
   });
+
+  it.each(['isom', 'mp42'])(
+    'loads an M4A %s register produced by a previous actual runEval',
+    async (brand) => {
+      const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
+      bytes.write(brand, 8, 'ascii');
+      const file = path.join(temporaryDirectory, 'stored.m4a');
+      await writeFile(file, bytes);
+      const fileUrl = `file://${file}`;
+      const encoded = bytes.toString('base64');
+      const provider = await load('Studio');
+      const registers = {};
+      const options = {
+        provider,
+        registers,
+        conversations: {},
+        delay: 0,
+        testIdx: 0,
+        promptIdx: 0,
+        repeatIndex: 0,
+        isRedteam: false,
+      };
+      fetchMock.mockImplementationOnce(async () =>
+        Response.json({ candidates: [{ content: { parts: [{ text: fileUrl }] } }] }),
+      );
+      const first = await withCacheEnabled(false, () =>
+        runEval({
+          ...options,
+          prompt: { raw: 'Return the recording path', label: 'producer' },
+          test: { options: { storeOutputAs: 'audio' } },
+        }),
+      );
+      expect(first[0].success).toBe(true);
+      expect(registers).toEqual({ audio: fileUrl });
+      requestBody('Studio');
+      fetchMock.mockClear();
+
+      const originalTest = { vars: { alias: '{{audio}}' } };
+      const second = await withCacheEnabled(false, () =>
+        runEval({
+          ...options,
+          testIdx: 1,
+          prompt: { raw: '{{alias}}', label: 'consumer' },
+          test: originalTest,
+        }),
+      );
+      expect(second[0].success).toBe(true);
+      expect(second[0].response?.error).toBeUndefined();
+      expect(second[0].response?.output).toBe('ok');
+      const body = requestBody('Studio');
+      expect(body.contents[0].parts[0].inlineData.mimeType).toBe('audio/mp4');
+      expect(body).toEqual({
+        contents: [
+          { role: 'user', parts: [{ inlineData: { mimeType: 'audio/mp4', data: encoded } }] },
+        ],
+        generationConfig: {},
+      });
+      expect(originalTest).toEqual({ vars: { alias: '{{audio}}' } });
+      expect(registers).toEqual({ audio: fileUrl });
+      expect(second[0].vars).toEqual({ alias: encoded, audio: encoded });
+      expect(Object.getOwnPropertySymbols(second[0].vars)).toHaveLength(0);
+      expect(JSON.parse(JSON.stringify(second[0])).vars).toEqual({
+        alias: encoded,
+        audio: encoded,
+      });
+    },
+  );
+
+  it('does not retain loaded MIME across a new vars object or a new render', async () => {
+    const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
+    const file = path.join(temporaryDirectory, 'recording.m4a');
+    await writeFile(file, bytes);
+    const encoded = bytes.toString('base64');
+    const vars = { audio: `file://${file}` };
+    const prompt = { raw: '{{audio}}', label: 'reuse' };
+    const provider = await load('Studio');
+    await renderPrompt(prompt, vars, {}, provider);
+    expect(geminiFormatAndSystemInstructions(encoded, vars).contents[0].parts).toEqual([
+      { inlineData: { mimeType: 'audio/mp4', data: encoded } },
+    ]);
+    expect(geminiFormatAndSystemInstructions(encoded, { ...vars }).contents[0].parts).toEqual([
+      { inlineData: { mimeType: 'video/mp4', data: encoded } },
+    ]);
+    await renderPrompt(prompt, vars, {}, provider);
+    expect(geminiFormatAndSystemInstructions(encoded, vars).contents[0].parts).toEqual([
+      { inlineData: { mimeType: 'video/mp4', data: encoded } },
+    ]);
+  });
+
+  it('binds loaded MIME to the original bytes and preserves explicit and native MIME', async () => {
+    const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
+    const file = path.join(temporaryDirectory, 'recording.m4a');
+    await writeFile(file, bytes);
+    const encoded = bytes.toString('base64');
+    const vars = { audio: `file://${file}` };
+    const provider = await load('Studio');
+    await renderPrompt({ raw: '{{audio}}', label: 'provenance' }, vars, {}, provider);
+    const otherBytes = Buffer.from(bytes);
+    otherBytes.write('mp42', 8, 'ascii');
+    vars.audio = otherBytes.toString('base64');
+    expect(geminiFormatAndSystemInstructions(vars.audio, vars).contents[0].parts).toEqual([
+      { inlineData: { mimeType: 'video/mp4', data: vars.audio } },
+    ]);
+    vars.audio = `data:video/mp4;base64,${encoded}`;
+    expect(geminiFormatAndSystemInstructions(vars.audio, vars).contents[0].parts).toEqual([
+      { inlineData: { mimeType: 'video/mp4', data: encoded } },
+    ]);
+    vars.audio = encoded;
+    const parts = [{ inlineData: { mimeType: 'video/mp4', data: encoded } }];
+    const native = JSON.stringify([{ role: 'user', parts }]);
+    expect(geminiFormatAndSystemInstructions(native, vars).contents[0].parts).toEqual(parts);
+  });
+
+  it.each(['no provider', 'non-Gemini provider', 'unknown bytes'])(
+    'preserves the raw input contract for %s',
+    async (boundary) => {
+      const bytes =
+        boundary === 'unknown bytes'
+          ? Buffer.from('unknown audio content')
+          : Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
+      const file = path.join(temporaryDirectory, 'recording.m4a');
+      await writeFile(file, bytes);
+      const encoded = bytes.toString('base64');
+      const vars = { audio: `file://${file}` };
+      const provider =
+        boundary === 'no provider'
+          ? undefined
+          : boundary === 'non-Gemini provider'
+            ? { id: () => 'custom', callApi: async () => ({ output: 'unused' }) }
+            : await load('Studio');
+      const rendered = await renderPrompt({ raw: '{{audio}}', label: 'raw' }, vars, {}, provider);
+      expect(rendered).toBe(encoded);
+      expect(vars.audio).toBe(encoded);
+      expect(geminiFormatAndSystemInstructions(rendered, vars).contents[0].parts).toEqual(
+        boundary === 'unknown bytes'
+          ? [{ text: encoded }]
+          : [{ inlineData: { mimeType: 'video/mp4', data: encoded } }],
+      );
+    },
+  );
 
   it('preserves explicit MIME and unregistered raw-text behavior', () => {
     const encoded = readFileSync(path.join(fixtures, 'opus-theora.ogg')).toString('base64');
