@@ -698,7 +698,7 @@ describe('ResultsCharts', () => {
       expect(
         screen.getByRole('img', { name: 'Named score metric chart' }),
       ).toHaveAccessibleDescription(
-        'Normalized named scores by provider. test-provider-1: accuracy 100.00%, precision 100.00%, recall 100.00%; test-provider-2: accuracy 88.89%, precision 87.50%, recall 85.71%.',
+        'Normalized named scores by provider. Prompt 1 (test-provider-1): accuracy 100.00%, precision 100.00%, recall 100.00%; Prompt 2 (test-provider-2): accuracy 88.89%, precision 87.50%, recall 85.71%.',
       );
     });
 

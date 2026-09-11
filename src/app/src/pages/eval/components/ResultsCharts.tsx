@@ -621,7 +621,7 @@ function MetricChart({ table }: ChartProps) {
       }),
     );
     const datasets = table.head.prompts.map((prompt, promptIdx) => ({
-      label: `${prompt.provider}`,
+      label: getPromptLabel(prompt, promptIdx),
       data: labels.map((key) => {
         const value = prompt.metrics?.namedScores[key] || 0;
         const normalizationValue = normalizationValueByKey.get(key) ?? 0;
