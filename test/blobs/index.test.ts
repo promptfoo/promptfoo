@@ -379,6 +379,14 @@ describe('storeBlob persistence failures with shared files', () => {
     expect(await provider.exists(hash)).toBe(true);
     const files = await snapshotFiles();
     await expect(getShareAuthorizedBlob(hash, firstEvalId)).resolves.toBeNull();
+
+    await expect(
+      recordBlobReference(hash, { evalId: firstEvalId, location: 'import' }),
+    ).resolves.toBeUndefined();
+    expect(await snapshotRows()).toEqual({ assets: [], references: [] });
+    expect(await snapshotFiles()).toEqual(files);
+    await expect(getShareAuthorizedBlob(hash, firstEvalId)).resolves.toBeNull();
+
     const adopted = await storeBlob(data, mimeType, { evalId: firstEvalId, location: 'import' });
 
     expect(adopted.deduplicated).toBe(true);
@@ -413,6 +421,12 @@ describe('storeBlob persistence failures with shared files', () => {
     expect((await snapshotRows()).assets).toHaveLength(1);
     expect((await snapshotRows()).references).toHaveLength(0);
     await expect(getShareAuthorizedBlob(hash, firstEvalId)).resolves.toBeNull();
+
+    // A registered asset does not make an invalid eval association safe to ignore.
+    await expect(
+      recordBlobReference(hash, { evalId: missingEvalId, location: 'import' }),
+    ).rejects.toThrow();
+    expect((await snapshotRows()).references).toHaveLength(0);
 
     await recordBlobReference(hash, { evalId: firstEvalId, location: 'response.output' });
     await expect(getShareAuthorizedBlob(hash, firstEvalId)).resolves.toBeNull();

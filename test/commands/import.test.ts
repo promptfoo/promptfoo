@@ -5,7 +5,13 @@ import { createClient } from '@libsql/client/node';
 import { Command } from 'commander';
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getBlobByHash, resetBlobStorageProvider, setBlobStorageProvider } from '../../src/blobs';
+import {
+  getBlobByHash,
+  getShareAuthorizedBlob,
+  resetBlobStorageProvider,
+  setBlobStorageProvider,
+  storeBlob,
+} from '../../src/blobs';
 import * as blobRefs from '../../src/blobs/blobRefs';
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { importCommand } from '../../src/commands/import';
@@ -417,6 +423,61 @@ describe('importCommand', () => {
         });
       } finally {
         resetBlobStorageProvider();
+        removeTempDir(blobDir);
+      }
+    });
+
+    it('imports a reference-only v3 result without adopting a file from a failed store', async () => {
+      const blobDir = createTempDir('promptfoo-import-unregistered-blob-');
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'false' });
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+
+      try {
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+        const data = Buffer.from(
+          'unregistered file retained after failed import-store transaction',
+        );
+        const hash = sha256(data);
+        const uri = `promptfoo://blob/${hash}`;
+        const db = await getDb();
+
+        await expect(
+          storeBlob(data, 'image/png', { evalId: 'missing-blob-import-eval' }),
+        ).rejects.toThrow();
+        const blobPath = path.join(blobDir, hash.slice(0, 2), hash.slice(2, 4), hash);
+        const metadata = fs.readFileSync(`${blobPath}.meta.json`, 'utf8');
+        expect(fs.readFileSync(blobPath)).toEqual(data);
+        expect(await db.all(sql`SELECT hash FROM blob_assets WHERE hash = ${hash}`)).toEqual([]);
+        expect(await db.all(sql`SELECT id FROM blob_references WHERE blob_hash = ${hash}`)).toEqual(
+          [],
+        );
+
+        expect(sampleData.results.version).toBe(3);
+        sampleData.results.results = [sampleData.results.results[0]];
+        sampleData.results.results[0].response = { output: uri };
+        delete sampleData.blobAssets;
+        const filePath = path.join(blobDir, 'reference-only.json');
+        fs.writeFileSync(filePath, JSON.stringify(sampleData));
+
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', filePath]);
+
+        expect(process.exitCode).toBeUndefined();
+        expect(logger.error).not.toHaveBeenCalled();
+        const imported = await EvalResult.findManyByEvalId(sampleData.evalId);
+        expect(imported).toHaveLength(1);
+        expect(imported[0].toEvaluateResult().response?.output).toBe(uri);
+        expect(await db.all(sql`SELECT hash FROM blob_assets WHERE hash = ${hash}`)).toEqual([]);
+        expect(await db.all(sql`SELECT id FROM blob_references WHERE blob_hash = ${hash}`)).toEqual(
+          [],
+        );
+        expect(fs.readFileSync(blobPath)).toEqual(data);
+        expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
+        await expect(getShareAuthorizedBlob(hash, sampleData.evalId)).resolves.toBeNull();
+      } finally {
+        resetBlobStorageProvider();
+        restoreEnv();
         removeTempDir(blobDir);
       }
     });

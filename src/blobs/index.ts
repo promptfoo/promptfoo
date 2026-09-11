@@ -163,6 +163,17 @@ export async function recordBlobReference(
   }
 
   const db = await getDb();
+  // A failed store can retain bytes without committing their asset registration.
+  // Referencing those bytes must not adopt them or create an invalid foreign key.
+  const asset = await db
+    .select({ hash: blobAssetsTable.hash })
+    .from(blobAssetsTable)
+    .where(eq(blobAssetsTable.hash, hash))
+    .get();
+  if (!asset) {
+    return;
+  }
+
   const existing = await db
     .select({
       id: blobReferencesTable.id,
