@@ -1421,7 +1421,8 @@ export default class Eval {
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
 
-    if (!stats.tokenUsage.generation) {
+    const generation = stats.tokenUsage.generation;
+    if (!generation || ((generation.total ?? 0) === 0 && (generation.numRequests ?? 0) === 0)) {
       accumulateGenerationTokenUsage(
         stats.tokenUsage,
         this.config.metadata?.generationAccounting?.tokenUsage,

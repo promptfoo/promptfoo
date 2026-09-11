@@ -710,6 +710,19 @@ describe('tokenUsageUtils', () => {
       });
     });
 
+    it('keeps detail-only grading usage', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, {
+        tokenUsage: { numRequests: 0, completionDetails: { reasoning: 4 } },
+      });
+
+      expect(target.assertions).toMatchObject({
+        numRequests: 1,
+        completionDetails: { reasoning: 4 },
+      });
+    });
+
     it('does not count fully cached strategy grading responses as new requests', () => {
       const target = createEmptyTokenUsage();
 

@@ -1257,6 +1257,23 @@ describe('evaluator', () => {
       });
     });
 
+    it('uses canonical generation metadata after an empty prompt bucket', () => {
+      const eval1 = new Eval({
+        metadata: {
+          generationAccounting: { tokenUsage: { total: 7, prompt: 4, completion: 3 } },
+        },
+      });
+      eval1.prompts = [
+        { metrics: { tokenUsage: { total: 10, generation: { total: 0, numRequests: 0 } } } },
+      ] as any;
+
+      expect(eval1.getStats().tokenUsage.generation).toMatchObject({
+        total: 7,
+        prompt: 4,
+        completion: 3,
+      });
+    });
+
     it('does not attribute historical suite generation metadata without a run charge', () => {
       const eval1 = new Eval({
         metadata: {

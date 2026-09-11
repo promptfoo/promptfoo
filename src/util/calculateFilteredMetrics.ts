@@ -74,7 +74,7 @@ function jsonUsageTotal(column: SQL, usagePath: string, cachedResponsePath?: str
 
 function jsonUsageRequests(column: SQL, usagePath: string, cachedResponsePath?: string): SQL {
   const requests = sql`CAST(json_extract(${column}, ${`${usagePath}.numRequests`}) AS INTEGER)`;
-  const hasUsage = sql`${jsonUsageTotal(column, usagePath)} > 0`;
+  const hasUsage = sql`${jsonUsageTotal(column, usagePath, cachedResponsePath)} > 0`;
   const explicitlyCached = cachedResponsePath
     ? sql`COALESCE(json_extract(${column}, ${cachedResponsePath}), 0) = 1`
     : sql`0`;

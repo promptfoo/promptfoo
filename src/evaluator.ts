@@ -3374,6 +3374,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           return (generation?.total ?? 0) > 0 || (generation?.numRequests ?? 0) > 0;
         }),
     );
+    if (!this.generationUsageRecorded && store.prompts[0]?.metrics) {
+      this.generationUsageRecorded = accumulateGenerationTokenUsage(
+        store.prompts[0].metrics.tokenUsage,
+        store.config.metadata?.generationAccounting?.tokenUsage,
+      );
+    }
     this.conversations = {};
     this.registers = {};
 
@@ -3672,7 +3678,20 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
       }
 
-      if (this.generationUsageRecorded && row.testCase.metadata?.providerTokenUsage) {
+      const metrics = context.prompts[row.promptIdx].metrics;
+      invariant(metrics, 'Expected prompt.metrics to be set');
+      const ownsGenerationUsage =
+        !this.generationUsageRecorded &&
+        accumulateGenerationTokenUsage(
+          metrics.tokenUsage,
+          row.testCase.metadata?.providerTokenUsage,
+        );
+      this.generationUsageRecorded ||= ownsGenerationUsage;
+      if (
+        !ownsGenerationUsage &&
+        this.generationUsageRecorded &&
+        row.testCase.metadata?.providerTokenUsage
+      ) {
         const metadata = { ...row.testCase.metadata };
         delete metadata.providerTokenUsage;
         row.testCase = { ...row.testCase, metadata };
@@ -3684,8 +3703,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         break;
       }
 
-      const metrics = context.prompts[row.promptIdx].metrics;
-      invariant(metrics, 'Expected prompt.metrics to be set');
       this.updatePromptMetricsForRow({
         derivedMetrics: context.testSuite.derivedMetrics,
         evalStep,
@@ -3817,7 +3834,22 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   ) {
     const sanitizedTestCase = { ...evalStep.test };
     delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
-    if (this.generationUsageRecorded && sanitizedTestCase.metadata?.providerTokenUsage) {
+    const { metrics } = context.prompts[evalStep.promptIdx];
+    const ownsGenerationUsage =
+      !this.generationUsageRecorded &&
+      Boolean(
+        metrics &&
+          accumulateGenerationTokenUsage(
+            metrics.tokenUsage,
+            sanitizedTestCase.metadata?.providerTokenUsage,
+          ),
+      );
+    this.generationUsageRecorded ||= ownsGenerationUsage;
+    if (
+      !ownsGenerationUsage &&
+      this.generationUsageRecorded &&
+      sanitizedTestCase.metadata?.providerTokenUsage
+    ) {
       sanitizedTestCase.metadata = { ...sanitizedTestCase.metadata };
       delete sanitizedTestCase.metadata.providerTokenUsage;
     }
@@ -3832,7 +3864,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     await this.store.appendResult(timeoutResult);
     this.stats.errors++;
 
-    const { metrics } = context.prompts[evalStep.promptIdx];
     if (metrics) {
       metrics.testErrorCount += 1;
       metrics.totalLatencyMs += timeoutMs;

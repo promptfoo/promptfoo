@@ -28,6 +28,27 @@ describeEvaluator('evaluator token usage', () => {
     });
   });
 
+  it('claims shared generation usage once before concurrent rows persist', async () => {
+    const generationUsage = { total: 7, prompt: 4, completion: 3 };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        { metadata: { providerTokenUsage: generationUsage } },
+        { metadata: { providerTokenUsage: generationUsage } },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
+    const results = await evalRecord.getResults();
+
+    expect(evalRecord.prompts[0].metrics?.tokenUsage.generation).toMatchObject(generationUsage);
+    expect(results.filter((result) => result.testCase.metadata?.providerTokenUsage)).toHaveLength(
+      1,
+    );
+  });
+
   it.each([1, 2])(
     'separates cached target footprint from fresh grading at concurrency %i',
     async (maxConcurrency) => {
