@@ -11,6 +11,7 @@ import { loadApiProviders, resolveProvider } from './providers/index';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
+import { isCloudProvider } from './util/cloud';
 import { maybeLoadFromExternalFile } from './util/file';
 import {
   buildConfiguredProviderMap,
@@ -215,7 +216,11 @@ async function resolveGradingProvider(
       const options = 'loadOptions' in ref ? ref.loadOptions : { id: ref.loadProviderPath };
       const env = context.env || options.env ? { ...context.env, ...options.env } : undefined;
       const renderedPath = renderEnvOnlyInObject(ref.loadProviderPath, env);
-      if (isProviderConfigFileReference(renderedPath) || hasProviderConfigTemplates(options)) {
+      if (
+        isProviderConfigFileReference(renderedPath) ||
+        isCloudProvider(renderedPath) ||
+        hasProviderConfigTemplates(options)
+      ) {
         // Files and inline templates need final case vars. Preserve map loader
         // paths separately from custom IDs, and carry suite env to construction.
         const deferredOptions = env ? { ...options, env } : options;

@@ -297,6 +297,30 @@ describe('OpenAICodexSDKProvider', () => {
   });
 
   describe('callApi', () => {
+    it('grades with a custom ID while validating the actual Codex factory identity', async () => {
+      mockRun.mockResolvedValue(
+        createMockResponse(JSON.stringify({ pass: true, score: 1, reason: 'ok' })),
+      );
+      const result = await matchesAgentRubric(
+        'Inspect',
+        'done',
+        {
+          provider: {
+            'openai:codex-sdk': {
+              id: 'custom-grader',
+              config: { working_dir: './evidence/{{trace_id}}' },
+            },
+          },
+        },
+        { trace_id: 'abc' },
+      );
+      expect(result.pass).toBe(true);
+      expect(result.metadata?.agentProvider).toBe('custom-grader');
+      expect(mockStartThread).toHaveBeenCalledWith(
+        expect.objectContaining({ workingDirectory: path.resolve('./evidence/abc') }),
+      );
+    });
+
     it.each(['{{missing}}', '{{env.OPENAI_API_KEY}}', '{% if true %}changed{% endif %}'])(
       'rejects case data containing %s before a real Codex provider can render it again',
       async (traceId) => {

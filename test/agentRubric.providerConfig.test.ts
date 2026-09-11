@@ -5,6 +5,7 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesAgentRubric } from '../src/matchers/agent';
 import { evaluate } from '../src/node/evaluate';
+import * as cloudUtils from '../src/util/cloud';
 import { mockProcessEnv } from './util/utils';
 
 import type { EvaluateTestSuite, ProviderOptions } from '../src/types/index';
@@ -30,7 +31,7 @@ vi.mock('../src/providers/registry', async (importOriginal) => {
           create: async (_path: string, options: ProviderOptions) => {
             configs.push(options);
             return {
-              id: () => graderId,
+              id: () => options.id || graderId,
               config: options.config,
               callApi: async () => ({
                 output: JSON.stringify({
@@ -124,6 +125,24 @@ function makeSuite(location: string): EvaluateTestSuite {
 }
 
 describe('agent-rubric per-case provider config', () => {
+  it('loads a cloud-only grader definition after per-case vars are available', async () => {
+    const cloudProvider = vi.spyOn(cloudUtils, 'getProviderFromCloud').mockResolvedValue({
+      id: graderId,
+      config: { working_dir: '{{env.EVIDENCE_ROOT}}/{{trace_id}}' },
+      env: { EVIDENCE_ROOT: './evidence' },
+    });
+    const suite = makeSuite('assertion');
+    const tests = suite.tests as Array<{ assert: Array<{ provider: unknown }> }>;
+    tests[0].assert[0].provider = 'promptfoo://provider/12345678-1234-1234-1234-123456789abc';
+    const result = await evaluate(suite, { cache: false });
+    expect((await result.toEvaluateSummary()).results.every((row) => row.success)).toBe(true);
+    expect(cloudProvider).toHaveBeenCalledTimes(2);
+    expect(configs.map(({ config }) => config?.working_dir).sort()).toEqual([
+      './evidence/abc',
+      './evidence/def',
+    ]);
+  });
+
   it('renders a raw provider options map without eager evaluation resolution', async () => {
     const result = await matchesAgentRubric(
       'Inspect',

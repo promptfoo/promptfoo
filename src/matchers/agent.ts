@@ -1,5 +1,6 @@
 import { DEFAULT_AGENT_GRADING_PROMPT } from '../prompts/grading';
 import { isAgenticGradingProvider } from '../providers/agentic-utils';
+import { getProviderLoadPath } from '../providers/index';
 import { getCodexDefaultProviders } from '../providers/openai/codexDefaults';
 import { renderGradingProviderConfig } from '../util/gradingProviderConfig';
 import { getGradingProvider } from './providers';
@@ -36,7 +37,14 @@ export async function matchesAgentRubric(
     : null;
   const agentProvider = configuredProvider || getCodexDefaultProviders().llmRubricProvider;
 
-  if (!agentProvider || !isAgenticGradingProvider(agentProvider)) {
+  const providerPath = agentProvider && getProviderLoadPath(agentProvider);
+  // Factory identity recognizes custom IDs, while custom file providers retain
+  // their existing ability to identify themselves as an agentic runtime.
+  const runtimeProvider =
+    providerPath && !isAgenticGradingProvider(agentProvider)
+      ? { ...agentProvider, id: () => providerPath }
+      : agentProvider;
+  if (!agentProvider || !isAgenticGradingProvider(runtimeProvider)) {
     throw new Error(
       'agent-rubric assertion requires an agentic grading provider. ' +
         'Use openai:codex-sdk, openai:codex-app-server, anthropic:claude-agent-sdk, openinterpreter, or opencode:sdk.',

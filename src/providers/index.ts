@@ -78,6 +78,13 @@ function describeInvalidProvider(provider: unknown): string {
   }
 }
 
+const providerLoadPaths = new WeakMap<ApiProvider, string>();
+
+/** Factory identity stays distinct from an optional display/custom provider ID. */
+export function getProviderLoadPath(provider: ApiProvider): string | undefined {
+  return providerLoadPaths.get(provider);
+}
+
 // NOTE: loadApiProvider only accepts string paths. Callers use normalizeProviderRef
 // (src/util/providerRef.ts) to classify provider shapes before calling this function.
 export async function loadApiProvider(
@@ -90,28 +97,6 @@ export async function loadApiProvider(
   // options.env (provider-specific) takes precedence for per-provider customization
   const mergedEnv: EnvOverrides | undefined =
     env || options.env ? { ...env, ...options.env } : undefined;
-
-  // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
-  // This allows constructors to access real env values while preserving runtime templates
-  // like {{ vars.* }} for per-test customization at callApi() time
-  const renderedConfig = options.config
-    ? (context.configTransform ?? renderEnvOnlyInObject)(options.config, mergedEnv)
-    : undefined;
-  const renderedId = options.id ? renderEnvOnlyInObject(options.id, mergedEnv) : undefined;
-
-  const providerOptions: ProviderOptions = {
-    id: renderedId,
-    config: {
-      ...renderedConfig,
-      basePath,
-    },
-    env: mergedEnv,
-  };
-
-  // Validate linkedTargetId if present (Promptfoo Cloud feature)
-  if (providerOptions.config?.linkedTargetId) {
-    await validateLinkedTargetId(providerOptions.config.linkedTargetId);
-  }
 
   // Render only env templates in provider path to avoid blanking unresolved placeholders.
   // This keeps behavior consistent with provider id/config rendering and file:// provider refs.
@@ -198,9 +183,32 @@ export async function loadApiProvider(
     });
   }
 
+  // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
+  // This allows constructors to access real env values while preserving runtime templates
+  // like {{ vars.* }} for per-test customization at callApi() time
+  const renderedConfig = options.config
+    ? (context.configTransform ?? renderEnvOnlyInObject)(options.config, mergedEnv)
+    : undefined;
+  const renderedId = options.id ? renderEnvOnlyInObject(options.id, mergedEnv) : undefined;
+
+  const providerOptions: ProviderOptions = {
+    id: renderedId,
+    config: {
+      ...renderedConfig,
+      basePath,
+    },
+    env: mergedEnv,
+  };
+
+  // Validate linkedTargetId if present (Promptfoo Cloud feature)
+  if (providerOptions.config?.linkedTargetId) {
+    await validateLinkedTargetId(providerOptions.config.linkedTargetId);
+  }
+
   for (const factory of await getProviderFactories(renderedProviderPath)) {
     if (factory.test(renderedProviderPath)) {
       const ret = await factory.create(renderedProviderPath, providerOptions, context);
+      providerLoadPaths.set(ret, renderedProviderPath);
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;

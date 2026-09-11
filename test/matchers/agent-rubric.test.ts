@@ -40,6 +40,7 @@ vi.mock('../../src/providers/defaults', () => ({
 
 vi.mock('../../src/providers/index', () => ({
   loadApiProvider: mocks.loadApiProvider,
+  getProviderLoadPath: () => undefined,
 }));
 
 describe('matchesAgentRubric', () => {
