@@ -61,7 +61,9 @@ function getPdfGradingInput(test: AtomicTestCase) {
           ? [materialized.bodyText, materialized.injectedInstruction]
               .filter((part) => typeof part === 'string' && part)
               .join('\n\n')
-          : test.metadata?.inputVars?.[key];
+          : typeof materialized?.injectedInstruction === 'string'
+            ? `[DOCX wrapper body was not recorded]\n\n${materialized.injectedInstruction}`
+            : test.metadata?.inputVars?.[key];
       vars[key] =
         typeof readable === 'string' && !readable.startsWith('data:')
           ? readable
