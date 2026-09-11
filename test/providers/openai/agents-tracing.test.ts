@@ -217,6 +217,65 @@ describe('OTLPTracingExporter', () => {
     },
   );
 
+  it.each(['json', 'protobuf'] as const)(
+    'redacts complete quoted YAML and ODBC credentials in %s',
+    async (format) => {
+      const { attributes, payload } = await exportCustomData(
+        {
+          yaml: "password: 'opaque''suffix'",
+          flow: 'config: {passphrase: "opaque nested phrase"}',
+          nested: "config: [{password: 'opaque''nested'}]",
+          odbc: 'Driver={ODBC Driver};UID=buildbot;PWD={opaque;credential};Database=public',
+          escapedOdbc: 'Driver={ODBC Driver};PWD={opaque}};suffix};Database=public',
+          public: 'config: {description: "public phrase"}',
+        },
+        format,
+      );
+      expect(attributes.yaml).toBe("password: '<redacted>'");
+      expect(attributes.flow).toBe('config: {passphrase: "<redacted>"}');
+      expect(attributes.nested).toBe("config: [{password: '<redacted>'}]");
+      expect(attributes.odbc).toBe(
+        'Driver={ODBC Driver};UID=buildbot;PWD=<redacted>;Database=public',
+      );
+      expect(attributes.escapedOdbc).toBe('Driver={ODBC Driver};PWD=<redacted>;Database=public');
+      expect(attributes.public).toBe('config: {description: "public phrase"}');
+      expect(JSON.stringify(payload)).not.toMatch(/opaque|suffix|credential/);
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)(
+    'redacts PGP armor and TLS private-key fields in %s',
+    async (format) => {
+      const keys = {
+        'client-key-data': 'opaque/base64',
+        client_key: 'opaque/client',
+        ssl_key: 'opaque/ssl',
+        tlsKey: 'opaque/tls',
+        'client-certificate-data': 'public certificate',
+      };
+      const { attributes, payload } = await exportCustomData(
+        {
+          armor:
+            '-----BEGIN PGP PRIVATE KEY BLOCK-----\nopaque/base64\n-----END PGP PRIVATE KEY BLOCK-----',
+          native: keys,
+          serialized: JSON.stringify(keys),
+        },
+        format,
+      );
+      expect(attributes.armor).toBe('<redacted>');
+      for (const name of ['native', 'serialized']) {
+        expect(JSON.parse(attributes[name] as string)).toEqual({
+          'client-key-data': '<redacted>',
+          client_key: '<redacted>',
+          ssl_key: '<redacted>',
+          tlsKey: '<redacted>',
+          'client-certificate-data': 'public certificate',
+        });
+      }
+      expect(JSON.stringify(payload)).not.toContain('opaque/');
+    },
+  );
+
   it.each(['json', 'protobuf'] as const)('redacts plural key collections in %s', async (format) => {
     const input = {
       api_keys: ['opaque/one', 'opaque/two'],

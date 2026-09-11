@@ -618,7 +618,7 @@ function parseStructuredJson(value: string): unknown {
 }
 
 function sanitizeCredentialText(value: string): string {
-  if (/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/.test(value)) {
+  if (/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY(?: BLOCK)?-----/.test(value)) {
     return '<redacted>';
   }
 
@@ -719,14 +719,19 @@ function sanitizeCredentialText(value: string): string {
 function redactQuotedCredentials(value: string): string {
   return value
     .replace(
-      /(["'])([A-Za-z_][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])(?:\\(?:[\s\S]|$)|(?!\4)[^\\])*(?:\4|$)/g,
+      /(^|[\s;])([A-Za-z_][A-Za-z\d_.-]*)(\s*=\s*)\{(?:}}|[^}])*(?:}|$)/gi,
+      (match, prefix: string, key: string, separator: string) =>
+        isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
+    )
+    .replace(
+      /(["'])([A-Za-z_][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])(?:\\(?:[\s\S]|$)|\4\4|(?!\4)[^\\])*(?:\4|$)/g,
       (match, keyQuote: string, key: string, separator: string, valueQuote: string) =>
         isCredentialAttributeKey(key)
           ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}<redacted>${valueQuote}`
           : match,
     )
     .replace(
-      /(^|[\s;,:])([A-Za-z_][A-Za-z\d_.-]*)(\s*[:=]\s*)(["'])(?:\\(?:[\s\S]|$)|(?!\4)[^\\])*(?:\4|$)/gi,
+      /(^|[\s;,:{\[])([A-Za-z_][A-Za-z\d_.-]*)(\s*[:=]\s*)(["'])(?:\\(?:[\s\S]|$)|\4\4|(?!\4)[^\\])*(?:\4|$)/gi,
       (match, prefix: string, key: string, separator: string, quote: string) =>
         isCredentialAttributeKey(key)
           ? `${prefix}${key}${separator}${quote}<redacted>${quote}`
@@ -826,7 +831,8 @@ function isCredentialAttributeKey(key: string): boolean {
       return true;
     }
     return (
-      (part === 'key' || part === 'keys') && ['api', 'access', 'private'].includes(parts[index - 1])
+      (part === 'key' || part === 'keys') &&
+      ['api', 'access', 'private', 'client', 'ssl', 'tls'].includes(parts[index - 1])
     );
   });
 }
