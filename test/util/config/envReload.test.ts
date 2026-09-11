@@ -615,6 +615,22 @@ describe('suite environment loading', () => {
     });
   });
 
+  it('does not inherit a stale grader path with an explicit empty environment', async () => {
+    const restore = mockProcessEnv({ GRADER_PATH: 'process.js' });
+    cliState.config = { env: { GRADER_PATH: 'stale.js' } };
+    try {
+      const test = await readTest(
+        { options: { provider: 'file://{{ env.GRADER_PATH }}' } },
+        tempDir,
+        false,
+        {},
+      );
+      expect(test.options?.provider).toBe(`file://${path.join(tempDir, 'process.js')}`);
+    } finally {
+      restore();
+    }
+  });
+
   it.each(['string', 'object'] as const)(
     'resolves standalone %s test providers during evaluation',
     async (form) => {
