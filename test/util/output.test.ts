@@ -29,6 +29,10 @@ import {
 import {
   createCompletedPrompt,
   createEvaluateResult,
+  createEvaluateSummaryV2,
+  createEvaluateTable,
+  createEvaluateTableOutput,
+  createEvaluateTableRow,
   createPromptMetrics,
 } from '../factories/eval';
 import { createGradingResult } from '../factories/gradingResult';
@@ -2915,6 +2919,174 @@ describe('writeOutput', () => {
     expect(html).toContain('data-variable-name="input"');
     expect(html).not.toContain('<span class="detail-variable-name">');
     expect(html).toContain('appendVariableDetails(trigger);');
+  });
+
+  describe('Sheets result column preservation', () => {
+    function createSheetsEval(
+      prompts = [
+        { label: 'Alpha prompt canary', provider: 'echo' },
+        { label: 'Beta prompt canary', provider: 'echo' },
+      ],
+      vars = ['input'],
+    ) {
+      const table = createEvaluateTable({
+        head: {
+          prompts: prompts.map((prompt, index) =>
+            createCompletedPrompt(`raw prompt canary ${index}`, prompt),
+          ),
+          vars,
+        },
+        body: [0, 1].map((testIdx) =>
+          createEvaluateTableRow({
+            testIdx,
+            vars: vars.map((_, index) => `variable-${testIdx}-${index}`),
+            outputs: prompts.map((prompt, promptIdx) => {
+              const pass = promptIdx === 0;
+              const score = pass ? 0.75 : 0.25;
+              return createEvaluateTableOutput({
+                id: `cell-${testIdx}-${promptIdx}`,
+                provider: prompt.provider,
+                prompt: `raw prompt canary ${promptIdx}`,
+                pass,
+                failureReason: pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+                score,
+                namedScores: { quality: score },
+                text: `output-${testIdx}-${promptIdx}`,
+                gradingResult: createGradingResult({
+                  pass,
+                  score,
+                  reason: `grade-${testIdx}-${promptIdx}`,
+                }),
+              });
+            }),
+          }),
+        ),
+      });
+      const eval_ = new Eval({});
+      eval_.oldResults = createEvaluateSummaryV2({ table });
+      return eval_;
+    }
+
+    it.each(['none', 'prompt', 'output', 'vars', 'grading', 'metadata', 'all'])(
+      'keeps both same-provider cells with independent %s stripping',
+      async (flag) => {
+        const strips = (category: string) => flag === 'all' || flag === category;
+        const eval_ = createSheetsEval();
+        const input = eval_.oldResults!;
+        const before = structuredClone(input);
+        const promptRefs = [...input.table.head.prompts];
+        const outputRefs = input.table.body.map((row) => [...row.outputs]);
+        const restore = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(strips('prompt')),
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strips('output')),
+          PROMPTFOO_STRIP_TEST_VARS: String(strips('vars')),
+          PROMPTFOO_STRIP_GRADING_RESULT: String(strips('grading')),
+          PROMPTFOO_STRIP_METADATA: String(strips('metadata')),
+        });
+        try {
+          await writeOutput('https://docs.google.com/spreadsheets/d/fixture', eval_, null);
+          const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
+          const keys = Object.keys(rows[0]);
+          expect(rows).toHaveLength(2);
+          expect(keys).toEqual([
+            'input',
+            strips('prompt') ? '[echo] [prompt stripped]' : '[echo] Alpha prompt canary',
+            strips('prompt') ? '[echo] [prompt stripped] (2)' : '[echo] Beta prompt canary',
+          ]);
+          rows.forEach((row, testIdx) => {
+            expect(Object.keys(row)).toEqual(keys);
+            expect(row.input).toBe(strips('vars') ? '' : `variable-${testIdx}-0`);
+            for (let promptIdx = 0; promptIdx < 2; promptIdx++) {
+              const cell = String(row[keys[promptIdx + 1]]);
+              expect(cell).toContain(
+                promptIdx === 0 ? '[PASS] (0.75, quality: 0.75)' : '[FAIL] (0.25, quality: 0.25)',
+              );
+              expect(cell).toContain(
+                strips('output') ? '[output stripped]' : `output-${testIdx}-${promptIdx}`,
+              );
+              expect(cell.includes(`grade-${testIdx}-${promptIdx}`)).toBe(!strips('grading'));
+            }
+          });
+          if (strips('prompt')) {
+            expect(JSON.stringify(rows)).not.toContain('prompt canary');
+          }
+          expect(eval_.oldResults).toBe(input);
+          expect(input).toEqual(before);
+          input.table.head.prompts.forEach((prompt, index) =>
+            expect(prompt).toBe(promptRefs[index]),
+          );
+          input.table.body.forEach((row, rowIdx) =>
+            row.outputs.forEach((output, colIdx) =>
+              expect(output).toBe(outputRefs[rowIdx][colIdx]),
+            ),
+          );
+        } finally {
+          restore();
+        }
+      },
+    );
+
+    it.each([
+      { name: 'a single prompt', prompts: [{ label: 'Alpha', provider: 'echo' }] },
+      {
+        name: 'different providers',
+        prompts: [
+          { label: 'Alpha', provider: 'echo' },
+          { label: 'Beta', provider: 'other' },
+        ],
+      },
+    ])('preserves available projected headings for $name', async ({ prompts }) => {
+      const eval_ = createSheetsEval(prompts);
+      const restore = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false',
+        PROMPTFOO_STRIP_TEST_VARS: 'false',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'false',
+        PROMPTFOO_STRIP_METADATA: 'false',
+      });
+      try {
+        await writeOutput('https://docs.google.com/spreadsheets/d/fixture', eval_, null);
+        const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
+        expect(Object.keys(rows[0])).toEqual([
+          'input',
+          ...prompts.map((prompt) => `[${prompt.provider}] [prompt stripped]`),
+        ]);
+      } finally {
+        restore();
+      }
+    });
+
+    it('keeps variable and result cells when projected names and suffixes collide', async () => {
+      const vars = [
+        '[echo] [prompt stripped]',
+        '[echo] [prompt stripped] (1)',
+        '[echo] [prompt stripped] (2)',
+      ];
+      const eval_ = createSheetsEval(undefined, vars);
+      const before = structuredClone(eval_.oldResults);
+      const restore = mockProcessEnv({
+        PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false',
+        PROMPTFOO_STRIP_TEST_VARS: 'false',
+        PROMPTFOO_STRIP_GRADING_RESULT: 'false',
+        PROMPTFOO_STRIP_METADATA: 'false',
+      });
+      try {
+        await writeOutput('https://docs.google.com/spreadsheets/d/fixture', eval_, null);
+        const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
+        const keys = [...vars, '[echo] [prompt stripped] (3)', '[echo] [prompt stripped] (4)'];
+        expect(Object.keys(rows[0])).toEqual(keys);
+        rows.forEach((row, testIdx) => {
+          expect(Object.keys(row)).toEqual(keys);
+          vars.forEach((name, index) => expect(row[name]).toBe(`variable-${testIdx}-${index}`));
+          expect(row[keys[3]]).toContain(`output-${testIdx}-0`);
+          expect(row[keys[4]]).toContain(`output-${testIdx}-1`);
+        });
+        expect(eval_.oldResults).toEqual(before);
+      } finally {
+        restore();
+      }
+    });
   });
 
   it('writes output to Google Sheets', async () => {

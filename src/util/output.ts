@@ -795,13 +795,25 @@ export async function writeOutput(
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
     const table = sanitizeTableForArtifact(await evalRecord.getTable());
     invariant(table, 'Table is required');
+    const usedColumnNames = new Set(table.head.vars);
+    const resultColumnNames = table.head.prompts.map((prompt, index) => {
+      const label = `[${prompt.provider}] ${prompt.label}`;
+      let key = label;
+      let suffix = index + 1;
+      while (usedColumnNames.has(key)) {
+        key = `${label} (${suffix})`;
+        suffix++;
+      }
+      usedColumnNames.add(key);
+      return key;
+    });
     const rows = table.body.map((row) => {
       const csvRow: CsvRow = {};
       table.head.vars.forEach((varName, index) => {
         csvRow[varName] = row.vars[index];
       });
-      table.head.prompts.forEach((prompt, index) => {
-        csvRow[`[${prompt.provider}] ${prompt.label}`] = outputToSimpleString(row.outputs[index]);
+      resultColumnNames.forEach((name, index) => {
+        csvRow[name] = outputToSimpleString(row.outputs[index]);
       });
       return csvRow;
     });
