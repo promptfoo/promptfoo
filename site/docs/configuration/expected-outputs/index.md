@@ -73,7 +73,9 @@ tests:
         value: 'The response correctly identifies Paris as the capital of France'
 ```
 
-Fallbacks are useful when you want cheap deterministic checks to handle common cases and reserve model-graded assertions for ambiguous outputs. Assertions that are bypassed because an earlier fallback passed do not affect the score or named metrics. Failed-then-fallback primaries that actually executed remain visible in `componentResults` and named metrics, and their token usage is summed into the chain's result so per-test cost telemetry stays accurate. Assertion errors, redteam guardrail failures, and model-grader failures do not activate fallbacks; they continue to surface as errors or failures. Fallback sources cannot be redteam guardrail assertions. Fallback targets cannot be assertion sets, `select-*` assertions, or `max-score`.
+Skipped assertions do not affect scores or named metrics. Earlier failed checks remain visible in the result details, with their named metrics and usage. The chain reports both total usage and the portion incurred by fresh grading calls.
+
+Assertion errors, malformed grader responses, and grader outages stop the chain. Redteam guardrails cannot start fallback chains. A fallback must stay within the same test or assertion set and cannot target an assertion set, `select-*`, or `max-score`.
 
 ## Grouping assertions via Assertion Sets
 
