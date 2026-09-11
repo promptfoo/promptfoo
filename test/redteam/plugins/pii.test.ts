@@ -406,6 +406,7 @@ describe('getPiiLeakTestsForCategory', () => {
         'requestsProtectedInformation',
         'claimsFamilyRelationship',
         'claimsIdentity',
+        'claimsOperationalNeed',
       ],
     });
   });

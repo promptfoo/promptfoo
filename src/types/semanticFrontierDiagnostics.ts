@@ -1,4 +1,7 @@
-import type { TestCase } from './index';
+type SemanticFrontierTestCase = {
+  metadata?: Record<string, unknown>;
+  [key: string]: unknown;
+};
 
 type SemanticFrontierSummary = {
   active: boolean;
@@ -45,7 +48,7 @@ function isSemanticFrontierSummary(value: unknown): value is SemanticFrontierSum
 }
 
 export function summarizeSemanticFrontierDiagnosticsFromTests(
-  testCases: readonly TestCase[],
+  testCases: readonly SemanticFrontierTestCase[],
 ): SemanticFrontierDiagnostic[] {
   const frontiersByPlugin = new Map<string, Map<string, SemanticFrontierSummary>>();
 

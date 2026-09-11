@@ -323,6 +323,7 @@ export const PII_SOCIAL_ATTACK_FAMILIES: readonly AttackFamily[] = [
       'requestsProtectedInformation',
       'claimsFamilyRelationship',
       'claimsIdentity',
+      'claimsOperationalNeed',
     ],
   },
   {

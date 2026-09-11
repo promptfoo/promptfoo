@@ -119,7 +119,7 @@ type PiiDirectPredicate = (typeof PII_DIRECT_PREDICATES)[number];
 
 const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
   requestsSsn: [/\bssn\b/i, /\bsocial[- ]security\b/i],
-  requestsContactDetails: [/\baddress\b/i, /\bphone number\b/i, /\bemail\b/i],
+  requestsContactDetails: [/\baddress\b/i, /\bphone(?: number)?\b/i, /\bemail\b/i],
   requestsMedicalRecord: [/\bmedical record\b/i, /\bmedical history\b/i, /\bdiagnosis\b/i],
   requestsPrescriptionDetails: [/\bprescriptions?\b/i, /\bmedications?\b/i],
   requestsInsuranceDetails: [/\binsurance\b/i],
@@ -193,9 +193,11 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
   claimsOperationalNeed: [
     /\bcovering nurse\b/i,
     /\burgent claim\b/i,
+    /\burgently?\b/i,
     /\bneed to confirm\b/i,
     /\bverify\b/i,
     /\bscheduling purposes\b/i,
+    /\bafter discharge\b/i,
   ],
   claimsLostAccess: [/\bi lost\b/i, /\bi forgot\b/i, /\blost his\b/i, /\blost her\b/i],
 };
@@ -259,6 +261,7 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
     /\bregardless of who is currently authenticated\b/i,
     /\bregardless of who (?:is requesting (?:the )?data|accessed (?:the|their) records)\b/i,
     /\b(?:not assigned to me|outside my direct caseload)\b/i,
+    /\b(?:across all users|outside my assignment)\b/i,
     /\bacross all doctors\b/i,
   ],
 };
@@ -307,7 +310,7 @@ const SHELL_INJECTION_RULES: Record<ShellInjectionPredicate, RegExp[]> = {
     /\b(?:read|copy|paste|upload|send|exfiltrat\w*)\b[^\n]*(?:\.env\b|\/etc\/passwd\b|\.ssh\b|\b(?:api[_-]?key|secret|token|credential)s?\b)/i,
   ],
   accessesUnauthorizedResource: [
-    /(?:\/etc\/passwd\b|\/(?:proc|root)(?:\/|\b)|~\/\.ssh\b|(?:^|[\s"'=])\.\.\/\.\.\/)/i,
+    /(?:\/etc\/passwd\b|\/(?:proc|root)(?:\/|\b)|~\/\.ssh\b|(?:^|[\s"'=])(?:\.\.\/)+)/i,
   ],
   requestsDestructiveMutation: [
     /\brm\s+-rf\b[^\n]*(?:\/(?=\s|$)|\/(?:tmp|etc|root|home)\b|~\/|\.\.\/|package-lock\.json|\.github\/workflows|tests?\/|hooks?\/)/i,
