@@ -15,7 +15,9 @@ import { EXAMPLE_ALIASES, EXAMPLE_REPLACEMENTS, REMOVED_EXAMPLES } from './examp
 import type { Command } from 'commander';
 
 const GITHUB_API_BASE = 'https://api.github.com';
+const GITHUB_EXAMPLES_PATH = '/repos/promptfoo/promptfoo/contents/examples/';
 const DEFAULT_EXAMPLE_REFS = [VERSION, 'main'];
+
 const EXAMPLE_CONFIG_FILENAMES = new Set([
   'promptfooconfig.yaml',
   'promptfooconfig.yml',
@@ -34,6 +36,27 @@ interface GitHubContentItem {
   name: string;
   type: 'file' | 'dir' | string;
   download_url: string | null;
+}
+
+function getExampleDirectoryUrl(dirPath: string, ref: string): URL {
+  return new URL(`${GITHUB_API_BASE}${GITHUB_EXAMPLES_PATH}${dirPath}?ref=${ref}`);
+}
+
+function getUnsupportedExampleReason(exampleName: string): string | undefined {
+  // Match the effective request path, including URL dot segments and backslashes.
+  let { pathname } = getExampleDirectoryUrl(exampleName, VERSION);
+  try {
+    pathname = decodeURIComponent(pathname);
+  } catch {
+    // Preserve the original request behavior for malformed percent escapes.
+  }
+  const root = pathname.startsWith(GITHUB_EXAMPLES_PATH)
+    ? pathname.slice(GITHUB_EXAMPLES_PATH.length).split('/')[0]
+    : undefined;
+  if (root === 'github-models' || root === 'provider-github-models') {
+    return 'GitHub Models has been retired, so this example is no longer supported.';
+  }
+  return undefined;
 }
 
 function getGitHubHeaders() {
@@ -73,7 +96,7 @@ function extractRunnableExamples(tree: GitHubTreeItem[]): string[] {
     }
 
     const exampleDir = path.posix.dirname(item.path).replace(/^examples\//, '');
-    if (exampleDir && exampleDir !== '.') {
+    if (exampleDir && exampleDir !== '.' && !getUnsupportedExampleReason(exampleDir)) {
       examples.add(exampleDir);
     }
   }
@@ -110,7 +133,7 @@ async function fetchExampleDirectoryContents(
   const failedRefs: string[] = [];
 
   for (const ref of refs) {
-    const url = `${GITHUB_API_BASE}/repos/promptfoo/promptfoo/contents/examples/${dirPath}?ref=${ref}`;
+    const url = getExampleDirectoryUrl(dirPath, ref).toString();
     const response = await fetchWithProxy(url, {
       headers: getGitHubHeaders(),
     });
@@ -139,6 +162,10 @@ export async function downloadDirectory(
   targetDir: string,
   refs: string[] = DEFAULT_EXAMPLE_REFS,
 ): Promise<void> {
+  const unsupportedReason = getUnsupportedExampleReason(dirPath);
+  if (unsupportedReason) {
+    throw new Error(`Example '${dirPath}' is unavailable. ${unsupportedReason}`);
+  }
   const contents = await fetchExampleDirectoryContents(dirPath, refs);
 
   for (const item of contents) {
@@ -260,19 +287,9 @@ async function logExampleInstructions(
 
   if (exampleName.includes('redteam') || !isRunnableFromRoot || hasCustomRunner) {
     if (readmeExists) {
-      logger.info(
-        dedent`
-
-        View the README file at ${chalk.bold(readmePath)} to get started!
-        `,
-      );
+      logger.info(`View the README file at ${chalk.bold(readmePath)} to get started!`);
     } else {
-      logger.info(
-        dedent`
-
-        View the example at ${chalk.bold(docsUrl)} to get started!
-        `,
-      );
+      logger.info(`View the example at ${chalk.bold(docsUrl)} to get started!`);
     }
     return;
   }
@@ -280,18 +297,18 @@ async function logExampleInstructions(
   const runCommand = promptfooCommand('eval');
   if (readmeExists) {
     logger.info(
-      dedent`
+      dedent(`
 
       View the README at ${chalk.bold(readmePath)} or run:
 
       \`${chalk.bold(`${cdCommand} && ${runCommand}`)}\`
 
       to get started!
-      `,
+      `),
     );
   } else {
     logger.info(
-      dedent`
+      dedent(`
 
       Run:
 
@@ -299,7 +316,7 @@ async function logExampleInstructions(
 
       to get started.
       Example docs: ${chalk.bold(docsUrl)}
-      `,
+      `),
     );
   }
 }
@@ -347,6 +364,10 @@ export async function handleExampleDownload(
       attemptDownload = false;
     } catch (error) {
       logger.error(`Failed to download example: ${error instanceof Error ? error.message : error}`);
+      if (getUnsupportedExampleReason(exampleName)) {
+        process.exitCode = 1;
+        return exampleName;
+      }
       attemptDownload = await confirm({
         message: 'Would you like to try downloading a different example?',
         default: true,
