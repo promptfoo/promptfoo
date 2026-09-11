@@ -59,7 +59,7 @@ template:
 
 The strategy prepares one template per distinct template configuration in an invocation and reuses it across its tests. A new generation run can produce a different template. For reproducible comparisons, save the generated clean PDF and use it with `source: file` in subsequent runs.
 
-When `template` is omitted, the strategy generates a clean document using the input description. Single-input targets can use `pdf` with `redteam.injectVar`; they receive a generated business-report template.
+When `template` is omitted, the strategy generates a clean document using the input description. Single-input targets can use `pdf` with `redteam.injectVar`; they receive a generated business-report template. If set, `config.input` must match that inject variable.
 
 ### Strategy options
 
@@ -101,8 +101,8 @@ The strategy preserves the plugin's assertions and attack goal. Redteam graders 
 
 - Standalone, single-turn generation only. Configure `pdf` directly under `redteam.strategies`; it can run alongside other strategies, but cannot be a step inside `layer`. Multi-turn runtime PDF transforms are rejected.
 - Templates must be unencrypted PDFs with extractable text. Image-only source templates are not supported; generate image-only output with `mode: scanned`.
-- Extracted template text and newly rendered text are each limited to 50,000 characters. Oversized text is rejected before it is retained for grading.
-- Input and output files are limited to 5 MiB and 10 pages, including appended notes. Page dimensions must be between 1 and 20 inches.
+- Extracted template text and newly rendered text are each limited to 50,000 characters. Template inspection runs in a separate process with a 15-second deadline and a bounded JavaScript heap.
+- Files are limited to 5 MiB. Templates can have at most 9 pages, leaving room for review notes within the 10-page output limit. Page dimensions must be between 1 and 20 inches.
 - New text uses Helvetica's Latin character set. Unsupported characters cause an error instead of disappearing. Existing template fonts remain intact in text mode.
 - Rendering and template-generation errors stop the transformation. There is no text-disguised-as-PDF fallback. Editing signed documents invalidates their signatures; forms, annotations, embedded files, and active PDF content are outside this strategy's coverage.
 
