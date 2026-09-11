@@ -157,10 +157,6 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
 
 export const MCP_PLUGINS = ['mcp', 'pii', 'bfla', 'bola', 'sql-injection', 'rbac'] as const;
 
-// Plugins that require HuggingFace API keys for their datasets
-export const HUGGINGFACE_GATED_PLUGINS = ['beavertails', 'unsafebench', 'aegis'] as const;
-export type HuggingFaceGatedPlugin = (typeof HUGGINGFACE_GATED_PLUGINS)[number];
-
 export const COLLECTIONS = [
   'default',
   'foundation',
@@ -317,13 +313,6 @@ export const TEEN_SAFETY_PLUGINS = [
 
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
-export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
-export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
-export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
-export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
-export type TelecomPlugin = (typeof TELECOM_PLUGINS)[number];
-export type RealEstatePlugin = (typeof REALESTATE_PLUGINS)[number];
-export type TeenSafetyPlugin = (typeof TEEN_SAFETY_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -432,14 +421,12 @@ export const DATASET_EXEMPT_PLUGINS = [
 
 // Plugins excluded from multi-input mode (in addition to dataset plugins)
 export const MULTI_INPUT_EXCLUDED_PLUGINS = ['cca', 'cross-session-leak'] as const;
-export type MultiInputExcludedPlugin = (typeof MULTI_INPUT_EXCLUDED_PLUGINS)[number];
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
   ...AGENTIC_EXEMPT_PLUGINS,
   ...DATASET_EXEMPT_PLUGINS,
 ] as const;
-export type StrategyExemptPlugin = (typeof STRATEGY_EXEMPT_PLUGINS)[number];
 
 export type Plugin =
   | AdditionalPlugin

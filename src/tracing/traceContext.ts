@@ -576,13 +576,7 @@ async function fetchFromLocalStore(
 
       const traceSpans = createTraceSpans(
         redactAttributes?.length
-          ? spans.map((span) => ({
-              ...span,
-              attributes: sanitizeTraceAttributes(span.attributes, {
-                redactAttributes,
-                sanitizeSensitiveAttributes: spanOptions.sanitizeAttributes,
-              }),
-            }))
+          ? spans.map((span) => redactExternalSpan(span, redactAttributes))
           : spans,
       );
       const insights = deriveInsights(traceSpans);

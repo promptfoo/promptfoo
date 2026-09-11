@@ -389,7 +389,7 @@ export class OTLPReceiver {
           current.sensitive ||
           Boolean(current.key && this.shouldRedactAttribute(current.key, redactAttributePatterns));
         if (typeof current.value === 'string') {
-          if (sensitive) {
+          if (sensitive && current.value.length > 0) {
             redactedSourceValues.add(current.value);
           }
           continue;
@@ -431,7 +431,7 @@ export class OTLPReceiver {
         return value;
       }
       let scrubbed: string = value;
-      for (const secret of redactedSourceValues) {
+      for (const secret of [...redactedSourceValues].sort((a, b) => b.length - a.length)) {
         scrubbed = scrubbed.split(secret).join('[REDACTED]');
       }
       return scrubbed as T;

@@ -34,6 +34,8 @@ export function isRelevantSpan(span: SpanRelevanceInput): boolean {
       normalizedAttribute.startsWith('llm.') ||
       normalizedAttribute.startsWith('guardrail.') ||
       normalizedAttribute.startsWith('guardrails.') ||
+      normalizedAttribute.startsWith('promptfoo.agentic.') ||
+      normalizedAttribute.startsWith('promptfoo.agent_sdk.') ||
       normalizedAttribute === 'ai.model.id'
     );
   });

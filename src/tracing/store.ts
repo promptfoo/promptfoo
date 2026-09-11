@@ -59,24 +59,42 @@ function sanitizeEvents(
     if (!shouldSanitizeAttributes || !event.attributes) {
       return { ...event, attributes };
     }
-    const secrets: string[] = [];
-    const pending: Array<[unknown, unknown]> = [[event.attributes, attributes]];
-    while (pending.length) {
-      const [raw, safe] = pending.pop()!;
-      if (safe === '<redacted>' && raw != null) {
-        secrets.push(String(raw));
-      } else if (raw && safe && typeof raw === 'object' && typeof safe === 'object') {
-        for (const [key, value] of Object.entries(raw)) {
-          pending.push([value, (safe as Record<string, unknown>)[key]]);
-        }
-      }
-    }
+    const secrets = getRedactedValues(event.attributes, attributes);
     return {
       ...event,
-      name: secrets.reduce((name, secret) => name.split(secret).join('<redacted>'), event.name),
+      name: scrubEcho(event.name, secrets),
       attributes,
     };
   });
+}
+
+function getRedactedValues(raw: unknown, safe: unknown): string[] {
+  const secrets: string[] = [];
+  const pending: Array<[unknown, unknown]> = [[raw, safe]];
+  while (pending.length) {
+    const [value, sanitized] = pending.pop()!;
+    if (sanitized === '<redacted>') {
+      if (value && typeof value === 'object') {
+        pending.push(
+          ...Object.values(value).map((item) => [item, sanitized] as [unknown, unknown]),
+        );
+      } else if (value != null && String(value).length > 0) {
+        secrets.push(String(value));
+      }
+    } else if (value && sanitized && typeof value === 'object' && typeof sanitized === 'object') {
+      for (const [key, item] of Object.entries(value)) {
+        pending.push([item, (sanitized as Record<string, unknown>)[key]]);
+      }
+    }
+  }
+  return secrets.sort((left, right) => right.length - left.length);
+}
+
+function scrubEcho<T extends string | undefined>(value: T, secrets: string[]): T {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  return secrets.reduce((text, secret) => text.split(secret).join('<redacted>'), value) as T;
 }
 
 function serializeSpan(
@@ -84,21 +102,31 @@ function serializeSpan(
   shouldSanitizeAttributes = true,
 ): SpanData {
   const rawAttributes = span.attributes ?? undefined;
+  const attributes = rawAttributes
+    ? shouldSanitizeAttributes
+      ? sanitizeTraceAttributes(rawAttributes)
+      : rawAttributes
+    : undefined;
+  const events = sanitizeEvents(span.events, shouldSanitizeAttributes);
+  const secrets = shouldSanitizeAttributes
+    ? [
+        ...getRedactedValues(rawAttributes, attributes),
+        ...(span.events ?? []).flatMap((event, index) =>
+          getRedactedValues(event.attributes, events?.[index]?.attributes),
+        ),
+      ]
+    : [];
 
   return {
     spanId: span.spanId,
     parentSpanId: span.parentSpanId ?? undefined,
-    name: span.name,
+    name: scrubEcho(span.name, secrets),
     startTime: span.startTime,
     endTime: span.endTime ?? undefined,
-    attributes: rawAttributes
-      ? shouldSanitizeAttributes
-        ? sanitizeTraceAttributes(rawAttributes)
-        : rawAttributes
-      : undefined,
-    ...(span.events ? { events: sanitizeEvents(span.events, shouldSanitizeAttributes) } : {}),
+    attributes,
+    ...(events ? { events } : {}),
     statusCode: span.statusCode ?? undefined,
-    statusMessage: span.statusMessage ?? undefined,
+    statusMessage: scrubEcho(span.statusMessage ?? undefined, secrets),
   };
 }
 

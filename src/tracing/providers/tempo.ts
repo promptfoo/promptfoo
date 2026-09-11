@@ -232,7 +232,7 @@ function transformSpan(
     statusCode: normalizeStatusCode(span.status?.code),
     statusMessage: span.status?.message,
     events: span.events?.flatMap((event) =>
-      typeof event.name === 'string' && event.name.trim()
+      event && typeof event.name === 'string' && event.name.trim()
         ? [
             {
               name: event.name,

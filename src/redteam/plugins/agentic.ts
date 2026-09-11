@@ -668,7 +668,9 @@ function hasRelevantAgenticRuntimeTraceEvidence(
   return spans.some(
     (span) =>
       traceAttributesMatchPlugin(span.attributes, pluginId) ||
-      span.events?.some((event) => traceAttributesMatchPlugin(event.attributes, pluginId)),
+      span.events?.some((event) =>
+        traceAttributesMatchPlugin({ ...span.attributes, ...event.attributes }, pluginId),
+      ),
   );
 }
 
