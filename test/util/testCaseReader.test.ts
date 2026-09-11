@@ -1244,6 +1244,18 @@ describe('readTests', () => {
     expect(test.options?.provider).toBe(`file://${providerPath}`);
   });
 
+  it.each(['C:\\configs\\tests.yaml', 'file://C:\\configs\\tests.yaml'])(
+    'reads structured YAML tests from a Windows path (%s)',
+    async (file) => {
+      vi.mocked(globSync).mockReturnValue(['C:\\configs\\tests.yaml']);
+      vi.mocked(fs.readFileSync).mockReturnValue('- vars:\n    source: windows\n');
+
+      const tests = await readTests([file]);
+
+      expect(tests).toEqual([{ vars: { source: 'windows' } }]);
+    },
+  );
+
   it('readTests with multiple __expected in CSV', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       'var1,var2,__expected1,__expected2,__expected3\nvalue1,value2,value1,value1.2,value1.3\nvalue3,value4,fn:value5,fn:value5.2,fn:value5.3',

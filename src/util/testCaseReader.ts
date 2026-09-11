@@ -449,7 +449,7 @@ function resolveGradingProviderPaths(
     if (!provider.startsWith('file://')) {
       return provider;
     }
-    const rendered = renderEnvOnlyInObject(provider, env, true);
+    const rendered = renderEnvOnlyInObject(provider, env);
     return rendered.includes('{{')
       ? rendered
       : 'file://' + path.resolve(basePath, rendered.slice('file://'.length));
@@ -703,9 +703,10 @@ export async function readTests(
     for (const globOrTest of tests) {
       if (typeof globOrTest === 'string') {
         // Extract path without function name (Windows-aware)
-        const lastColonIndex = globOrTest.lastIndexOf(':');
+        const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
+        const lastColonIndex = pathWithoutScheme.lastIndexOf(':');
         const pathWithoutFunction: string =
-          lastColonIndex > 1 ? globOrTest.slice(0, lastColonIndex) : globOrTest;
+          lastColonIndex > 1 ? pathWithoutScheme.slice(0, lastColonIndex) : pathWithoutScheme;
         // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
         const pathWithoutSheet = globOrTest.split('#')[0];
         // For Python, JS, xlsx/xls files, or files with potential function names, use readStandaloneTestsFile
@@ -714,7 +715,7 @@ export async function readTests(
           pathWithoutFunction.endsWith('.py') ||
           pathWithoutSheet.endsWith('.xlsx') ||
           pathWithoutSheet.endsWith('.xls') ||
-          globOrTest.replace(/^file:\/\//, '').includes(':')
+          lastColonIndex > 1
         ) {
           ret.push(...(await loadStandalone(globOrTest)));
         } else {
