@@ -180,22 +180,23 @@ function getSubclassCapabilityOverride(
     const capabilities = ownDeclaration.get?.call(provider) ?? ownDeclaration.value;
     if (
       capabilities !== undefined &&
-      !Object.hasOwn(capabilities ?? [], inheritedProviderCapabilities)
+      !Object.prototype.hasOwnProperty.call(capabilities ?? [], inheritedProviderCapabilities)
     ) {
       return Array.isArray(capabilities) && capabilities.includes(capability);
     }
   }
   let prototype = Object.getPrototypeOf(provider);
-  let overridden = Object.hasOwn(provider, capability);
+  let overridden = Object.prototype.hasOwnProperty.call(provider, capability);
   while (prototype && prototype !== Object.prototype) {
     const hasDeclaration =
-      prototype.constructor && Object.hasOwn(prototype.constructor, 'declaredProviderCapabilities');
+      prototype.constructor &&
+      Object.prototype.hasOwnProperty.call(prototype.constructor, 'declaredProviderCapabilities');
     // A declaring class owns its stubs; subclasses may override even a map-backed wrapper.
     const parentCapabilities = (
       Object.getPrototypeOf(prototype)?.constructor as { declaredProviderCapabilities?: unknown }
     )?.declaredProviderCapabilities;
     if (
-      Object.hasOwn(prototype, capability) &&
+      Object.prototype.hasOwnProperty.call(prototype, capability) &&
       (!hasDeclaration || parentCapabilities !== undefined)
     ) {
       overridden = true;
@@ -212,7 +213,7 @@ function getSubclassCapabilityOverride(
       return (
         (overridden &&
           Array.isArray(capabilities) &&
-          Object.hasOwn(capabilities, inheritedProviderCapabilities)) ||
+          Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities)) ||
         undefined
       );
     }
@@ -257,7 +258,7 @@ export function hasProviderCapability<K extends ProviderCapability>(
     Symbol.for('promptfoo.capabilityDelegate')
   ];
   return (
-    Object.hasOwn(capabilities, inheritedProviderCapabilities) &&
+    Object.prototype.hasOwnProperty.call(capabilities, inheritedProviderCapabilities) &&
     delegate !== provider &&
     hasProviderCapability(delegate, capability)
   );
