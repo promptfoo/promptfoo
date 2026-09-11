@@ -1113,6 +1113,7 @@ describe('OTLPTracingExporter', () => {
             secrets,
             tokens,
             cookie: { session: cookie },
+            cookies: [{ name: 'sid', value: secondaryCookie }],
           }),
         },
         traceMetadata: {
@@ -1187,6 +1188,7 @@ describe('OTLPTracingExporter', () => {
         secrets: '<redacted>',
         tokens: '<redacted>',
         cookie: '<redacted>',
+        cookies: '<redacted>',
       });
       expect(attributes['trace.metadata.customerApiKey']).toBe('<redacted>');
       expect(attributes['trace.metadata.clientCredentials']).toBe('<redacted>');
@@ -1292,6 +1294,10 @@ describe('OTLPTracingExporter', () => {
               folded_yaml: "'password': >- # credential\n  secret text",
               ordinary_yaml: 'description: |\n  public description',
               request: '{"offset":-0,"exponent":-0e0,"password":"opaque"}',
+              google: 'error ' + 'AIza' + 'a'.repeat(35),
+              multipart: 'Content-Disposition: form-data; name="password"\r\n\r\nopaque-multipart',
+              envelope:
+                'request failed: {"protected":"e30","ciphertext":"opaque-cipher","tag":"opaque-tag"}',
             },
           },
           traceMetadata: {
@@ -1327,6 +1333,9 @@ describe('OTLPTracingExporter', () => {
       });
       expect(JSON.stringify(payload)).not.toContain(jwt);
       expect(JSON.stringify(payload)).not.toContain('opaque-custom');
+      expect(JSON.stringify(payload)).not.toContain('AIza' + 'a'.repeat(35));
+      expect(JSON.stringify(payload)).not.toContain('opaque-multipart');
+      expect(JSON.stringify(payload)).not.toContain('opaque-cipher');
     },
   );
 
@@ -1351,6 +1360,8 @@ describe('OTLPTracingExporter', () => {
               truncated: String.raw`Request: password="opaque\"suffix`,
               auth_type: 'Bearer',
               auth_method: 'client_secret_post',
+              auth_status: 'authenticated',
+              auth_enabled: true,
               token_endpoint_auth_methods_supported: ['client_secret_post'],
               num_tokens: 12,
               tokens_used: 3,
@@ -1378,6 +1389,8 @@ describe('OTLPTracingExporter', () => {
         truncated: 'Request: password="<redacted>"',
         auth_type: 'Bearer',
         auth_method: 'client_secret_post',
+        auth_status: 'authenticated',
+        auth_enabled: true,
         token_endpoint_auth_methods_supported: {
           arrayValue: { values: [{ stringValue: 'client_secret_post' }] },
         },
@@ -1408,6 +1421,7 @@ describe('OTLPTracingExporter', () => {
               chunks: ['x'.repeat(65_537)],
               aggregate: Array.from({ length: 65 }, () => 'x'.repeat(1024)),
               script: 'document.cookie = serializePreferences(settings); return response;',
+              bytes: { nested: Buffer.from('opaque-bytes') },
             },
           },
           traceMetadata: { 'promptfoo.otlp_format': format },
@@ -1438,6 +1452,7 @@ describe('OTLPTracingExporter', () => {
       expect.soft(attributes.chunks === '<redacted>').toBe(true);
       expect.soft(attributes.aggregate === '<redacted>').toBe(true);
       expect.soft(attributes.script).toBe('document.cookie = <redacted>; return response;');
+      expect.soft(attributes.bytes).toBe('{"nested":"<redacted>"}');
       expect(getAttributes(spans[1])).toMatchObject({
         'evaluation.id': 'eval-trusted',
         'test.case.id': 'case-trusted',

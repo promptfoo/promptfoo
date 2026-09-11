@@ -622,6 +622,23 @@ function sanitizeCredentialText(value: string): string {
     return '<redacted>';
   }
 
+  if (
+    /content-disposition:[^\r\n]*\bname=["']?[A-Za-z_][A-Za-z\d_.-]*["']?/i.test(value) &&
+    [...value.matchAll(/\bname=["']?([A-Za-z_][A-Za-z\d_.-]*)["']?/gi)].some(([, key]) =>
+      isCredentialAttributeKey(key),
+    )
+  ) {
+    return '<redacted>';
+  }
+
+  if (
+    !value.trim().startsWith('{') &&
+    /"ciphertext"\s*:\s*"[^"]+"/.test(value) &&
+    /"tag"\s*:\s*"[^"]+"/.test(value)
+  ) {
+    return '<redacted>';
+  }
+
   for (const [, key] of value.matchAll(/<(?:[\w.-]+:)?([A-Za-z_][A-Za-z\d_.-]*)\b[^>]*>/gi)) {
     if (isCredentialAttributeKey(key)) {
       return '<redacted>';
@@ -685,6 +702,7 @@ function sanitizeCredentialText(value: string): string {
 
   // Preserve escapes before the generic masker can shorten quoted credentials.
   return redactQuotedCredentials(sanitizeBody(redactQuotedCredentials(value)))
+    .replace(/\bAIza[a-zA-Z0-9_-]{35}\b/g, '<redacted>')
     .replace(
       /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*)?/g,
       (token, header: string) => {
@@ -717,7 +735,7 @@ function sanitizeCredentialText(value: string): string {
         isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
     )
     .replace(
-      /(^|[?&#;:\s])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
+      /(^|[?&#;:\s.])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
       (match, prefix: string, key: string, separator: string, quote: string) => {
         let decodedKey = key;
         try {
@@ -809,6 +827,7 @@ function isCredentialAttributeKey(key: string): boolean {
       [
         'authorization',
         'cookie',
+        'cookies',
         'password',
         'passwords',
         'passwd',
@@ -831,7 +850,7 @@ function isCredentialAttributeKey(key: string): boolean {
     ) {
       if (
         part === 'auth' &&
-        ['type', 'method', 'methods', 'supported'].includes(parts[index + 1])
+        ['type', 'method', 'methods', 'supported', 'status', 'enabled'].includes(parts[index + 1])
       ) {
         return false;
       }
@@ -866,8 +885,12 @@ function sanitizeAttributeByKey(key: string, value: unknown): unknown {
   if (isCredentialAttributeKey(key)) {
     return '<redacted>';
   }
-  // Objects are sanitized after JSON serialization, preserving their toJSON behavior.
-  if (Array.isArray(value)) {
+  if (ArrayBuffer.isView(value)) {
+    return '<redacted>';
+  }
+  // Walk plain objects before JSON serialization so nested native byte views cannot
+  // turn into ordinary { type, data } records. Preserve intentional toJSON objects.
+  if (Array.isArray(value) || (isRecord(value) && typeof value.toJSON !== 'function')) {
     return sanitizeStructuredAttribute(value);
   }
   return value;
