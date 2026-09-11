@@ -74,6 +74,35 @@ describe('Live input', () => {
     expect(decodeWav(convertPcm16ToWav(audio)).audio).toEqual(audio);
   });
 
+  it.each([
+    { seconds: 300, metadataBytes: 0 },
+    { seconds: 299, metadataBytes: 64_000 },
+  ])(
+    'limits WAV samples independently of $metadataBytes metadata bytes',
+    ({ seconds, metadataBytes }) => {
+      const pcm = Buffer.alloc(format.rate * 2 * seconds, 1);
+      const metadata = Buffer.alloc(8 + metadataBytes);
+      metadata.write('JUNK');
+      metadata.writeUInt32LE(metadataBytes, 4);
+      const wav = Buffer.concat([convertPcm16ToWav(pcm), metadata]);
+      wav.writeUInt32LE(wav.length - 8, 4);
+
+      expect(decodeWav(wav).audio.equals(pcm)).toBe(true);
+    },
+  );
+
+  it('rejects cumulative WAV samples before concatenating an over-budget part', () => {
+    const parts = [Buffer.alloc(format.rate * 2 * 300), Buffer.alloc(2)].map((pcm) => ({
+      type: 'input_audio',
+      input_audio: { data: convertPcm16ToWav(pcm).toString('base64'), format: 'wav' },
+    }));
+    const prompt = JSON.stringify([{ role: 'user', content: parts }]);
+    const concat = vi.spyOn(Buffer, 'concat');
+
+    expect(() => prepareLiveInput(prompt, format)).toThrow('must not exceed five minutes');
+    expect(concat).toHaveBeenCalledTimes(1);
+  });
+
   it.each([0, 2])('rejects excessive WAV chunks with %i data bytes', (size) => {
     const chunk = Buffer.alloc(8 + size);
     chunk.write('data', 0);
@@ -188,13 +217,5 @@ describe('Live input', () => {
       'GPT-Live input audio must not exceed five minutes.',
     );
     expect(concat).not.toHaveBeenCalled();
-  });
-
-  it('counts decoded WAV audio instead of container bytes toward the duration limit', () => {
-    const pcm = Buffer.alloc(9_599_968);
-    const wav = convertPcm16ToWav(pcm);
-    expect(prepareLiveInput(audioPrompt(wav.toString('base64')), format).audio).toHaveLength(
-      pcm.length,
-    );
   });
 });

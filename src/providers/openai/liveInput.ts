@@ -45,7 +45,7 @@ function isMonoPcm16(bytes: Buffer, start: number, size: number, rate: number): 
   );
 }
 
-function decodeWav(bytes: Buffer, format: LiveAudioFormat): Buffer {
+function decodeWav(bytes: Buffer, format: LiveAudioFormat, maxAudioBytes: number): Buffer {
   if (
     format.type !== 'audio/pcm' ||
     bytes.toString('ascii', 0, 4) !== 'RIFF' ||
@@ -55,6 +55,7 @@ function decodeWav(bytes: Buffer, format: LiveAudioFormat): Buffer {
   }
   let validFormat = false;
   const chunks: Buffer[] = [];
+  let audioBytes = 0;
   let chunkCount = 0;
   for (let offset = 12; offset + 8 <= bytes.length; ) {
     if (++chunkCount > MAX_WAV_CHUNKS) {
@@ -75,11 +76,15 @@ function decodeWav(bytes: Buffer, format: LiveAudioFormat): Buffer {
     if (kind === 'fmt ') {
       validFormat = isMonoPcm16(bytes, start, size, format.rate);
     } else if (kind === 'data' && size > 0) {
+      audioBytes += size;
+      if (audioBytes > maxAudioBytes) {
+        throw new Error(AUDIO_DURATION_ERROR);
+      }
       chunks.push(bytes.subarray(start, start + size));
     }
     offset = start + size + (size % 2);
   }
-  const pcm = Buffer.concat(chunks);
+  const pcm = Buffer.concat(chunks, audioBytes);
   if (!validFormat || !pcm.length) {
     throw new Error(
       'GPT-Live WAV input must be nonempty mono PCM16 at the configured sample rate. Resample the file before evaluating.',
@@ -91,16 +96,25 @@ function decodeWav(bytes: Buffer, format: LiveAudioFormat): Buffer {
   return pcm;
 }
 
-function decodeAudio(data: unknown, encoding: unknown, format: LiveAudioFormat): Buffer {
+function decodeAudio(
+  data: unknown,
+  encoding: unknown,
+  format: LiveAudioFormat,
+  maxAudioBytes: number,
+): Buffer {
   if (typeof data !== 'string' || !data || data.length > 20 * 1024 * 1024) {
     throw new Error('GPT-Live audio must contain nonempty base64 data.');
+  }
+  // WAV containers include metadata; bound their PCM chunks separately before concatenation.
+  if (encoding !== 'wav' && Buffer.byteLength(data, 'base64') > maxAudioBytes) {
+    throw new Error(AUDIO_DURATION_ERROR);
   }
   const bytes = Buffer.from(data, 'base64');
   if (bytes.toString('base64') !== data) {
     throw new Error('GPT-Live audio must contain valid base64 data.');
   }
   if (encoding === 'wav') {
-    return decodeWav(bytes, format);
+    return decodeWav(bytes, format, maxAudioBytes);
   }
   const expected =
     format.type === 'audio/pcm'
@@ -154,21 +168,13 @@ function prepareContent(
         'GPT-Live audio is supported only in the final user message. Supply prior conversation as text.',
       );
     }
-    const { data } = part.input_audio;
-    // Bound the total with base64's decoded size before decoding, so many small parts can't
-    // allocate past the capture limit.
-    if (
-      typeof data === 'string' &&
-      part.input_audio.format !== 'wav' &&
-      audioBytes + Buffer.byteLength(data, 'base64') > maxAudioBytes
-    ) {
-      throw new Error(AUDIO_DURATION_ERROR);
-    }
-    const bytes = decodeAudio(data, part.input_audio.format, format);
+    const bytes = decodeAudio(
+      part.input_audio.data,
+      part.input_audio.format,
+      format,
+      maxAudioBytes - audioBytes,
+    );
     audioBytes += bytes.length;
-    if (audioBytes > maxAudioBytes) {
-      throw new Error(AUDIO_DURATION_ERROR);
-    }
     audio.push(bytes);
   }
   if (!text.length && !audioBytes) {

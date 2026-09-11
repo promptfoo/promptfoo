@@ -1480,6 +1480,39 @@ describe('OpenAiLiveProvider', () => {
     await result;
   });
 
+  it.each([
+    { source: 'provider', pricing: { cost: 0.02 }, expected: 0.3 },
+    { source: 'prompt', pricing: { inputCost: 0.01, outputCost: 0.03 }, expected: 0.25 },
+  ])(
+    'honors $source token prices for delegated Responses',
+    async ({ source, pricing, expected }) => {
+      const result = provider({
+        delegation: { type: 'responses', responses: { model: 'gpt-4.1-mini' } },
+        ...(source === 'provider' ? pricing : { inputCost: 1, outputCost: 1 }),
+      }).callApi('Hi', source === 'prompt' ? promptContext(pricing) : undefined);
+      const socket = await connect();
+      start(socket);
+      backend(socket, { type: 'response.created', response: { id: 'priced-response' } });
+      backend(socket, {
+        type: 'response.completed',
+        response: {
+          id: 'priced-response',
+          model: 'gpt-4.1-mini',
+          output: [],
+          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+        },
+      });
+      text(socket);
+      await vi.advanceTimersByTimeAsync(100);
+      closed(socket, 60);
+      const response = await result;
+
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.backendCost).toBeCloseTo(expected);
+      expect(response.cost).toBeCloseTo(expected + 0.05);
+    },
+  );
+
   it('handles nested function calls even when the terminal response output is empty', async () => {
     const handler = vi.fn().mockResolvedValue('result');
     const result = provider({
