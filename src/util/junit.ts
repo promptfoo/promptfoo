@@ -36,6 +36,8 @@ type JunitSuite = {
   displayName: string;
   errors: number;
   failures: number;
+  promptIdx: number;
+  providerName: string;
   skipped: number;
   testcases: { testIdx: number; testcase: Record<string, unknown> }[];
   tests: number;
@@ -81,7 +83,7 @@ function getSuiteKey(result: JunitProjectedResult): string {
   // Distinguish providers that share an id but differ by label (and vice versa)
   // so multi-target redteam runs do not collapse into a single suite.
   const providerKey = `${result.provider.id ?? ''}${SUITE_PROVIDER_SEPARATOR}${result.provider.label ?? ''}`;
-  const promptKey = result.promptId || `prompt-index:${result.promptIdx}`;
+  const promptKey = `prompt-index:${result.promptIdx}`;
   return `${providerKey}${SUITE_KEY_SEPARATOR}${promptKey}`;
 }
 
@@ -199,31 +201,18 @@ async function* iterateJunitProjectedResults(
 
 async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
   const suites = new Map<string, JunitSuite>();
-  // Assign each unique provider+prompt combination a stable 1-based ordinal so
-  // the suite display name (and every contained testcase classname) match
-  // regardless of which result happened to insert the suite first.
-  const promptOrdinalsByProvider = new Map<string, Map<string, number>>();
 
   for await (const result of iterateJunitProjectedResults(evalRecord)) {
     const key = getSuiteKey(result);
     let suite = suites.get(key);
     if (!suite) {
       const providerName = getProviderName(result);
-      const promptKey = result.promptId || `prompt-index:${result.promptIdx}`;
-      let promptOrdinals = promptOrdinalsByProvider.get(providerName);
-      if (!promptOrdinals) {
-        promptOrdinals = new Map();
-        promptOrdinalsByProvider.set(providerName, promptOrdinals);
-      }
-      let ordinal = promptOrdinals.get(promptKey);
-      if (ordinal === undefined) {
-        ordinal = promptOrdinals.size + 1;
-        promptOrdinals.set(promptKey, ordinal);
-      }
       suite = {
-        displayName: `[${providerName}] prompt ${ordinal}`,
+        displayName: '',
         errors: 0,
         failures: 0,
+        promptIdx: result.promptIdx,
+        providerName,
         skipped: 0,
         testcases: [],
         tests: 0,
@@ -233,7 +222,7 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
     }
 
     suite.testcases.push({
-      testcase: buildJunitTestCase(result, suite.displayName),
+      testcase: buildJunitTestCase(result),
       testIdx: result.testIdx,
     });
     suite.tests += 1;
@@ -247,12 +236,21 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
     }
   }
 
-  return [...suites.values()];
+  // Results may arrive in completion or database order, so assign display names only
+  // after restoring the canonical result-column order.
+  const promptOrdinalsByProvider = new Map<string, number>();
+  return [...suites.values()]
+    .sort((a, b) => a.promptIdx - b.promptIdx)
+    .map((suite) => {
+      const ordinal = (promptOrdinalsByProvider.get(suite.providerName) ?? 0) + 1;
+      promptOrdinalsByProvider.set(suite.providerName, ordinal);
+      suite.displayName = `[${suite.providerName}] prompt ${ordinal}`;
+      return suite;
+    });
 }
 
-function buildJunitTestCase(result: JunitProjectedResult, classname: string) {
+function buildJunitTestCase(result: JunitProjectedResult) {
   const testcase: Record<string, unknown> = {
-    '@_classname': classname,
     '@_name': getTestCaseName(result),
     '@_time': formatDurationSeconds(result.latencyMs),
   };
@@ -313,7 +311,7 @@ export async function createJunitXml(evalRecord: Eval): Promise<string> {
         ...(timestamp ? { '@_timestamp': timestamp } : {}),
         testcase: suite.testcases
           .sort((a, b) => a.testIdx - b.testIdx)
-          .map(({ testcase }) => testcase),
+          .map(({ testcase }) => ({ '@_classname': suite.displayName, ...testcase })),
       })),
     },
   });
