@@ -4,6 +4,8 @@ import path from 'path';
 import { createClient } from '@libsql/client/node';
 import { Command } from 'commander';
 import { sql } from 'drizzle-orm';
+import express from 'express';
+import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getBlobByHash,
@@ -22,6 +24,7 @@ import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
+import { blobsRouter } from '../../src/server/routes/blobs';
 import { TraceStore } from '../../src/tracing/store';
 import { ResultFailureReason } from '../../src/types/index';
 import { sha256 } from '../../src/util/createHash';
@@ -475,6 +478,83 @@ describe('importCommand', () => {
         expect(fs.readFileSync(blobPath)).toEqual(data);
         expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
         await expect(getShareAuthorizedBlob(hash, sampleData.evalId)).resolves.toBeNull();
+      } finally {
+        resetBlobStorageProvider();
+        restoreEnv();
+        removeTempDir(blobDir);
+      }
+    });
+
+    it.each([
+      ['text/html', '<!doctype html><title>retained fixture</title>'],
+      [
+        'image/svg+xml',
+        '<svg xmlns="http://www.w3.org/2000/svg"><title>retained fixture</title></svg>',
+      ],
+    ])('serves imported retained %s bytes as a download', async (mimeType, contents) => {
+      const blobDir = createTempDir('promptfoo-import-retained-mime-');
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_INLINE_MEDIA: 'false' });
+      setBlobStorageProvider(new FilesystemBlobStorageProvider({ basePath: blobDir }));
+      const app = express().use('/api/blobs', blobsRouter);
+
+      try {
+        const data = Buffer.from(contents);
+        const hash = sha256(data);
+        const uri = `promptfoo://blob/${hash}`;
+        const db = await getDb();
+        const failure = await storeBlob(data, mimeType, {
+          evalId: 'missing-orphan-mime-eval',
+        }).catch((error: Error) => error);
+        expect(failure).toBeInstanceOf(Error);
+        expect(String((failure as Error).cause)).toMatch(/FOREIGN KEY constraint failed/);
+        const blobPath = path.join(blobDir, hash.slice(0, 2), hash.slice(2, 4), hash);
+        const metadata = fs.readFileSync(`${blobPath}.meta.json`, 'utf8');
+        expect(JSON.parse(metadata).mimeType).toBe(mimeType);
+        expect(await db.all(sql`SELECT hash FROM blob_assets WHERE hash = ${hash}`)).toEqual([]);
+        expect((await request(app).get(`/api/blobs/${hash}`)).status).toBe(404);
+
+        const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+        const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+        expect(sampleData.results.version).toBe(3);
+        sampleData.results.results = [sampleData.results.results[0]];
+        sampleData.results.results[0].response = { output: uri };
+        sampleData.blobAssets = [
+          { hash, mimeType, sizeBytes: data.length, data: data.toString('base64') },
+        ];
+        const filePath = path.join(blobDir, 'retained-mime.json');
+        fs.writeFileSync(filePath, JSON.stringify(sampleData));
+        importCommand(program);
+        await program.parseAsync(['node', 'test', 'import', filePath]);
+
+        expect(process.exitCode).toBeUndefined();
+        expect(logger.error).not.toHaveBeenCalled();
+        expect(await db.all(sql`SELECT mime_type FROM blob_assets WHERE hash = ${hash}`)).toEqual([
+          { mime_type: mimeType },
+        ]);
+        expect(
+          await db.all(
+            sql`SELECT eval_id, location FROM blob_references WHERE blob_hash = ${hash}`,
+          ),
+        ).toEqual([{ eval_id: sampleData.evalId, location: 'import' }]);
+        const response = await request(app)
+          .get(`/api/blobs/${hash}`)
+          .buffer(true)
+          .parse((res, callback) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk: Buffer) => chunks.push(chunk));
+            res.on('end', () => callback(null, Buffer.concat(chunks)));
+          });
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual(data);
+        expect(response.headers['content-type']).toBe(mimeType);
+        expect(response.headers['content-disposition']).toBe('attachment');
+        expect(response.headers['x-content-type-options']).toBe('nosniff');
+        expect(fs.readFileSync(blobPath)).toEqual(data);
+        expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
+        await expect(getShareAuthorizedBlob(hash, 'unrelated-eval')).resolves.toBeNull();
+        await db.run(sql`DELETE FROM blob_references WHERE blob_hash = ${hash}`);
+        expect((await request(app).get(`/api/blobs/${hash}`)).status).toBe(403);
+        expect(fs.readFileSync(blobPath)).toEqual(data);
       } finally {
         resetBlobStorageProvider();
         restoreEnv();

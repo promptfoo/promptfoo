@@ -6,7 +6,11 @@ import { createApp } from '../../../src/server/server';
 
 // Mock dependencies
 vi.mock('../../../src/blobs/extractor');
-vi.mock('../../../src/blobs');
+vi.mock('../../../src/blobs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/blobs')>()),
+  getBlobByHash: vi.fn(),
+  getBlobUrl: vi.fn(),
+}));
 vi.mock('../../../src/database');
 
 // Import after mocking
@@ -153,6 +157,7 @@ describe('Blobs Routes', () => {
       expect(response.header.location).toBe(presignedUrl);
       expect(mockedGetBlobUrl).toHaveBeenCalledWith(validHash);
       expect(mockedGetBlobByHash).not.toHaveBeenCalled();
+      expect(response.header['content-disposition']).toBeUndefined();
     });
 
     it('should serve blob data directly when no presigned URL', async () => {
@@ -219,6 +224,71 @@ describe('Blobs Routes', () => {
           response.header['transfer-encoding'] === 'chunked',
       ).toBe(true);
     });
+
+    it.each([
+      'image/avif',
+      'image/gif',
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'video/mp4',
+      'video/ogg',
+      'video/webm',
+      'audio/wav',
+      'audio/x-custom',
+      'IMAGE/PNG',
+    ])('keeps passive %s blobs inline', async (mimeType) => {
+      setupDbWithAssetAndReference({
+        hash: validHash,
+        mimeType,
+        sizeBytes: 16,
+        provider: 'custom',
+      });
+      mockedGetBlobUrl.mockResolvedValue(null);
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse(mimeType, 16));
+
+      const response = await api.get(`/api/blobs/${validHash}`);
+
+      expect(response.status).toBe(200);
+      expect(response.header['content-type']).toBe(mimeType);
+      expect(response.header['content-disposition']).toBeUndefined();
+      expect(response.header['x-content-type-options']).toBe('nosniff');
+    });
+
+    it.each([
+      'text/html',
+      'image/svg+xml',
+      'application/xhtml+xml',
+      'application/xml',
+      'application/pdf',
+      'text/plain',
+      'application/json',
+      'application/octet-stream',
+      'application/x-custom',
+    ])(
+      'serves non-passive %s metadata as a download without changing its type',
+      async (mimeType) => {
+        // Custom/provider metadata remains authoritative over a different asset MIME.
+        setupDbWithAssetAndReference({
+          hash: validHash,
+          mimeType: 'image/png',
+          sizeBytes: 16,
+          provider: 'custom',
+        });
+        mockedGetBlobUrl.mockResolvedValue(null);
+        mockedGetBlobByHash.mockResolvedValue({
+          ...createBlobResponse(mimeType, 16),
+          data: Buffer.from('{"fixture":true}'),
+        });
+
+        const response = await api.get(`/api/blobs/${validHash}`);
+
+        expect(response.status).toBe(200);
+        expect(response.header['content-type']).toBe(mimeType);
+        expect(response.header['content-disposition']).toBe('attachment');
+        expect(response.header['x-content-type-options']).toBe('nosniff');
+      },
+    );
 
     it('should return 404 when getBlobByHash throws error', async () => {
       setupDbWithAssetAndReference(

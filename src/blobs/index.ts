@@ -16,6 +16,26 @@ export {
   type StoredBlob,
 } from './types';
 
+// MIME types retained by portable imports and allowed for inline blob responses.
+const SAFE_INLINE_BLOB_MIME_TYPES = new Set([
+  'image/avif',
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'video/mp4',
+  'video/ogg',
+  'video/webm',
+]);
+const SAFE_INLINE_AUDIO_MIME_TYPE_REGEX = /^audio\/[a-z0-9_+-]+$/i;
+
+export function isSafeInlineBlobMimeType(mimeType: string): boolean {
+  return (
+    SAFE_INLINE_BLOB_MIME_TYPES.has(mimeType.toLowerCase()) ||
+    SAFE_INLINE_AUDIO_MIME_TYPE_REGEX.test(mimeType)
+  );
+}
+
 let defaultProvider: BlobStorageProvider | null = null;
 
 function createDefaultProvider(): BlobStorageProvider {

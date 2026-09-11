@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, like, sql } from 'drizzle-orm';
 import express from 'express';
-import { getBlobByHash, getBlobUrl } from '../../blobs';
+import { getBlobByHash, getBlobUrl, isSafeInlineBlobMimeType } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
 import { getDb } from '../../database';
 import {
@@ -493,6 +493,12 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     logger.warn('[BlobRoute] Invalid MIME type, using fallback', { mimeType, hash });
     res.setHeader('Content-Type', 'application/octet-stream');
   }
+  // Deduplicated bytes can retain MIME metadata from before a failed import/store.
+  // Keep opaque storage metadata intact, but never render active content inline here.
+  if (!isSafeInlineBlobMimeType(mimeType)) {
+    res.setHeader('Content-Disposition', 'attachment');
+  }
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Length', (blob.metadata.sizeBytes ?? asset.sizeBytes).toString());
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   res.setHeader('Accept-Ranges', 'none');
