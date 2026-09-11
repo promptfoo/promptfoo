@@ -1230,6 +1230,17 @@ describe('readTests', () => {
     );
   });
 
+  it('renders absolute env-backed nested provider files before resolving paths', async () => {
+    const test = await readTest(
+      { options: { provider: 'file://{{ env.TEST_PROVIDER }}' } },
+      '/suite/tests',
+      false,
+      { TEST_PROVIDER: '/tmp/grader.js' },
+    );
+
+    expect(test.options?.provider).toBe('file:///tmp/grader.js');
+  });
+
   it('readTests with multiple __expected in CSV', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       'var1,var2,__expected1,__expected2,__expected3\nvalue1,value2,value1,value1.2,value1.3\nvalue3,value4,fn:value5,fn:value5.2,fn:value5.3',

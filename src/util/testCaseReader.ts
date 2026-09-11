@@ -21,6 +21,7 @@ import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { renderEnvOnlyInObject } from './render';
 import { parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
 
@@ -449,7 +450,10 @@ export async function readTest(
 
   const resolveNestedProviderPath = (provider: unknown): unknown => {
     if (typeof provider === 'string' && provider.startsWith('file://')) {
-      return `file://${path.resolve(effectiveBasePath, provider.slice('file://'.length))}`;
+      const rendered = renderEnvOnlyInObject(provider, env, true);
+      return rendered.includes('{{')
+        ? rendered
+        : `file://${path.resolve(effectiveBasePath, rendered.slice('file://'.length))}`;
     }
     if (
       provider &&
@@ -458,9 +462,12 @@ export async function readTest(
       typeof provider.id === 'string' &&
       provider.id.startsWith('file://')
     ) {
+      const id = renderEnvOnlyInObject(provider.id, env, true);
       return {
         ...provider,
-        id: `file://${path.resolve(effectiveBasePath, provider.id.slice('file://'.length))}`,
+        id: id.includes('{{')
+          ? id
+          : `file://${path.resolve(effectiveBasePath, id.slice('file://'.length))}`,
       };
     }
     return provider;

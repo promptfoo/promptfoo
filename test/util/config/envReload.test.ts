@@ -236,6 +236,20 @@ describe('suite environment loading', () => {
     expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
   });
 
+  it('refreshes cached engine template flags per suite', async () => {
+    const engine = getNunjucksEngine();
+    expect(
+      cliState.withEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' }, () =>
+        engine.renderString('{{ env.OPENAI_API_KEY }}', {}),
+      ),
+    ).toBe('{{ env.OPENAI_API_KEY }}');
+    expect(
+      cliState.withEnv({ PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'true' }, () =>
+        engine.renderString('{{ env.OPENAI_API_KEY }}', {}),
+      ),
+    ).toBe('');
+  });
+
   it.each(['single', 'multiple'])(
     'retains scoped credentials through the %s loader',
     async (loader) => {
