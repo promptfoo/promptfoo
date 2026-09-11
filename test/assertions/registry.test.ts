@@ -385,6 +385,13 @@ describe('assertion registry injection', () => {
     const result = await runAssertion({
       assertion: { type: 'equals', value: 'ignored' },
       providerResponse: { output: 'actual output' },
+      traceId: 'trace-1',
+      traceData: {
+        traceId: 'trace-1',
+        evaluationId: 'eval-1',
+        testCaseId: 'case-1',
+        spans: [],
+      },
       registry,
       test: {} as AtomicTestCase,
     });
@@ -399,6 +406,9 @@ describe('assertion registry injection', () => {
         baseType: 'equals',
         output: 'actual output',
         outputString: 'actual output',
+        assertionValueContext: expect.objectContaining({
+          trace: expect.objectContaining({ traceId: 'trace-1' }),
+        }),
       }),
     );
   });
