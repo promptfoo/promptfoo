@@ -16,6 +16,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { TRACE_REDACTION_ASSERTIONS } from '../../constants/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -387,6 +388,8 @@ export class HydraProvider implements ApiProvider {
       assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     }
 
+    const redactTrace = TRACE_REDACTION_ASSERTIONS.has(assertToUse?.type ?? '');
+
     // Track the previous turn's trace summary for attack generation
     let previousTraceSummary: string | undefined;
 
@@ -425,7 +428,7 @@ export class HydraProvider implements ApiProvider {
         excludeTargetOutputFromAgenticAttackGeneration:
           this.excludeTargetOutputFromAgenticAttackGeneration,
         // Include trace summary from previous turn if tracing is enabled for attack generation
-        ...(tracingOptions.includeInAttack && previousTraceSummary
+        ...(!redactTrace && tracingOptions.includeInAttack && previousTraceSummary
           ? { traceSummary: previousTraceSummary }
           : {}),
       };
@@ -964,8 +967,8 @@ export class HydraProvider implements ApiProvider {
           : undefined,
         // Note: outputImage would come from provider if model responds with image
         graderPassed: graderResult?.pass,
-        trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
-        traceSummary: computedTraceSummary,
+        trace: !redactTrace && traceContext ? formatTraceForMetadata(traceContext) : undefined,
+        traceSummary: redactTrace ? undefined : computedTraceSummary,
         // Include input vars for multi-input mode (extracted from current prompt)
         inputVars: currentRenderInputVars,
       });
@@ -977,7 +980,7 @@ export class HydraProvider implements ApiProvider {
           turn,
           message: nextMessage,
           response: targetResponse.output,
-          traceSummary: computedTraceSummary,
+          traceSummary: redactTrace ? undefined : computedTraceSummary,
         });
         stopReason = 'Grader failed';
 
@@ -1065,7 +1068,7 @@ export class HydraProvider implements ApiProvider {
         redteamHistory,
         sessionIds,
         traceSnapshots:
-          traceSnapshots.length > 0
+          !redactTrace && traceSnapshots.length > 0
             ? traceSnapshots.map((t) => formatTraceForMetadata(t))
             : undefined,
         ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),

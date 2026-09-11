@@ -1,11 +1,13 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getCodingAgentEvidence } from '../../../src/redteam/plugins/codingAgent/evidence';
 import {
   CodingAgentGrader,
+  enrichCodingAgentGradingContext,
   findDeterministicLeak,
 } from '../../../src/redteam/plugins/codingAgent/graders';
 import { verifyCodingAgentResult } from '../../../src/redteam/plugins/codingAgent/verifiers';
@@ -88,6 +90,165 @@ describe('coding-agent evidence regressions', () => {
       expect(result?.metadata).toMatchObject({ missingKinds: ['prompt', 'config'] });
     },
   );
+
+  it('accepts plural top-level replay artifact paths', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-agent-replay-'));
+    directories.push(directory);
+    const manifest = path.join(directory, 'manifest.json');
+    fs.writeFileSync(path.join(directory, 'prompt.md'), 'Task');
+    fs.writeFileSync(manifest, JSON.stringify({ promptPaths: ['prompt.md'] }));
+    expect(
+      verifyCodingAgentResult('coding-agent:replay-bundle-completeness', 'Done', testCase, {
+        replayManifestPath: manifest,
+        requiredReplayKinds: ['prompt'],
+      }),
+    ).toBeUndefined();
+  });
+
+  it.each(['pending', '', 123, null])('rejects malformed replay digest %j', (digest) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-agent-replay-'));
+    directories.push(directory);
+    const manifest = path.join(directory, 'manifest.json');
+    fs.writeFileSync(path.join(directory, 'prompt.md'), 'Task');
+    fs.writeFileSync(
+      manifest,
+      JSON.stringify({ artifacts: [{ kind: 'prompt', path: 'prompt.md', sha256: digest }] }),
+    );
+    const result = verifyCodingAgentResult(
+      'coding-agent:replay-bundle-completeness',
+      'Done',
+      testCase,
+      { replayManifestPath: manifest, requiredReplayKinds: ['prompt'] },
+    );
+    expect(result?.metadata?.artifactProblems).toEqual([
+      expect.objectContaining({ problem: 'hash-mismatch' }),
+    ]);
+  });
+
+  it('reads a replay artifact once across repeated canonical paths', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-agent-replay-'));
+    directories.push(directory);
+    const manifest = path.join(directory, 'manifest.json');
+    const artifact = path.join(directory, 'prompt.md');
+    fs.writeFileSync(artifact, 'Task');
+    fs.writeFileSync(
+      manifest,
+      JSON.stringify({
+        artifacts: Array.from({ length: 999 }, (_, index) => ({
+          kind: 'prompt',
+          path: index % 2 ? './prompt.md' : 'prompt.md',
+          sha256: createHash('sha256').update('Task').digest('hex'),
+        })),
+      }),
+    );
+    const reads = vi.spyOn(fs, 'readFileSync');
+    try {
+      expect(
+        verifyCodingAgentResult('coding-agent:replay-bundle-completeness', 'Done', testCase, {
+          replayManifestPath: manifest,
+          requiredReplayKinds: ['prompt'],
+        }),
+      ).toBeUndefined();
+      expect(reads.mock.calls.filter(([file]) => file === fs.realpathSync(artifact))).toHaveLength(
+        1,
+      );
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
+  it('rejects an oversized replay inventory before reading artifacts', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-agent-replay-'));
+    directories.push(directory);
+    const manifest = path.join(directory, 'manifest.json');
+    const artifact = path.join(directory, 'prompt.md');
+    fs.writeFileSync(artifact, 'Task');
+    fs.writeFileSync(
+      manifest,
+      JSON.stringify({
+        artifacts: Array.from({ length: 1000 }, () => ({
+          kind: 'prompt',
+          path: 'prompt.md',
+          sha256: createHash('sha256').update('Task').digest('hex'),
+        })),
+      }),
+    );
+    const reads = vi.spyOn(fs, 'readFileSync');
+    try {
+      const result = verifyCodingAgentResult(
+        'coding-agent:replay-bundle-completeness',
+        'Done',
+        testCase,
+        { replayManifestPath: manifest, requiredReplayKinds: ['prompt'] },
+      );
+      expect(result?.metadata?.missingKinds).toContain('artifact-inventory-limit');
+      expect(reads.mock.calls.filter(([file]) => file === fs.realpathSync(artifact))).toHaveLength(
+        0,
+      );
+    } finally {
+      reads.mockRestore();
+    }
+  });
+
+  it('stops replay hashing at a cumulative byte limit', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-agent-replay-'));
+    directories.push(directory);
+    const manifest = path.join(directory, 'manifest.json');
+    const content = Buffer.alloc(1024 * 1024, 'a');
+    const artifacts = Array.from({ length: 17 }, (_, index) => ({
+      kind: 'prompt',
+      path: `prompt-${index}.md`,
+      sha256: createHash('sha256').update(content).digest('hex'),
+    }));
+    for (const artifact of artifacts) {
+      fs.writeFileSync(path.join(directory, artifact.path), content);
+    }
+    fs.writeFileSync(manifest, JSON.stringify({ artifacts }));
+    const result = verifyCodingAgentResult(
+      'coding-agent:replay-bundle-completeness',
+      'Done',
+      testCase,
+      { replayManifestPath: manifest, requiredReplayKinds: ['prompt'] },
+    );
+    expect(result?.metadata?.artifactProblems).toContainEqual(
+      expect.objectContaining({ problem: 'verification-limit' }),
+    );
+  });
+
+  it.each(['approved', 'approved_for_session', 'denied'])(
+    'retains the approval decision %s in summaries',
+    (decision) => {
+      const result = enrichCodingAgentGradingContext({
+        providerResponse: {
+          raw: {
+            serverRequests: [
+              {
+                method: 'item/commandExecution/requestApproval',
+                response: { decision },
+                params: { command: 'echo PRIVATE_ARGUMENT' },
+              },
+            ],
+          },
+        },
+      });
+      expect(result?.traceSummary).toContain(`decision=${decision}`);
+      expect(result?.traceSummary).not.toContain('PRIVATE_ARGUMENT');
+      expect(getCodingAgentEvidence(result).hasActionEvidence).toBe(true);
+    },
+  );
+
+  it.each([
+    { type: 'web_search_call', action: { type: 'search', query: 'private query' } },
+    { type: 'code_interpreter_call', code: 'print(1)' },
+    { type: 'mcp_call', name: 'read_file' },
+    { type: 'web_search', query: 'private query' },
+  ])('accepts provider-native action evidence: $type', (item) => {
+    const context = { providerResponse: { raw: { output: [item] } } };
+    expect(getCodingAgentEvidence(context).hasActionEvidence).toBe(true);
+    const summary = enrichCodingAgentGradingContext(context)?.traceSummary;
+    expect(summary).toContain(item.type);
+    expect(summary).not.toContain('private query');
+  });
 
   it.each(['decline', 'cancel', 'denied', 'abort'])(
     'reads Codex approval decision %s',

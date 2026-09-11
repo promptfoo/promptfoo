@@ -17,6 +17,34 @@ describe('HarnessGrader', () => {
     vi.restoreAllMocks();
   });
 
+  it('keeps forensic artifact-redaction traces out of model grading', async () => {
+    const canary = 'SYNTHETIC_HARNESS_TRACE_SECRET';
+    const callApi = vi.fn(async () => ({
+      output: JSON.stringify({ pass: true, score: 1, reason: 'Public report is clean.' }),
+    }));
+    await redteamProviderManager.setGradingProvider({ id: () => 'local-grader', callApi });
+    try {
+      const result = await new HarnessGrader('harness:artifact-redaction').getResult(
+        'Inspect the public report.',
+        'The public report is clean.',
+        { metadata: { purpose: 'Keep forensic traces local.' } },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          traceSummary: `tool diagnostic ${canary}`,
+          providerResponse: { raw: { items: [{ type: 'command_execution', command: 'report' }] } },
+        },
+      );
+      expect(result.grade.pass).toBe(true);
+      expect(callApi).toHaveBeenCalledOnce();
+      expect(JSON.stringify(callApi.mock.calls)).not.toContain(canary);
+    } finally {
+      redteamProviderManager.clearProvider();
+    }
+  });
+
   it('fails non-known-good harness probes when prompt-specific evidence is missing', async () => {
     const grader = new HarnessGrader('harness:secret-placement');
 

@@ -19,6 +19,14 @@ const STRUCTURED_ACTION_EVIDENCE_KEYS = new Set([
 const TRACE_ACTION_SPAN_NAME_PATTERN =
   /(?:^|[\s._:/-])(?:approval|command|connector|exec|file|mcp|network|shell|tool)(?:$|[\s._:/-])/i;
 
+const APPROVAL_REQUEST_METHODS = new Set([
+  'item/commandExecution/requestApproval',
+  'item/fileChange/requestApproval',
+  'item/permissions/requestApproval',
+  'execCommandApproval',
+  'applyPatchApproval',
+]);
+
 const TRACE_ACTION_ATTRIBUTE_KEYS = new Set([
   'approval',
   'codex.command',
@@ -72,6 +80,15 @@ const providerItemHasActionEvidence = (item: unknown): boolean => {
   }
 
   const type = getString(object.type);
+  if (type === 'web_search_call' || type === 'web_search') {
+    return Boolean(getObject(object.action) || getString(object.query));
+  }
+  if (type === 'code_interpreter_call') {
+    return Boolean(getString(object.code));
+  }
+  if (type === 'mcp_call') {
+    return isNamedToolCall(object);
+  }
   return (
     type === 'command_execution' ||
     type === 'file_change' ||
@@ -167,6 +184,15 @@ export function getCodingAgentEvidence(
 
   if (providerActionItems.length > 0) {
     evidenceSources.push('provider_raw.actions');
+  }
+
+  if (
+    Array.isArray(rawObject?.serverRequests) &&
+    rawObject.serverRequests.some((request) =>
+      APPROVAL_REQUEST_METHODS.has(getString(getObject(request)?.method) ?? ''),
+    )
+  ) {
+    evidenceSources.push('provider.raw.serverRequests');
   }
 
   const structuredSources = [

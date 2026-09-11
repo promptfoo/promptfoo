@@ -236,7 +236,7 @@ type ReplayBundleArtifactProblem = {
   kind: string;
   path: string;
   pathSha256: string;
-  problem: 'hash-mismatch' | 'missing' | 'outside-bundle';
+  problem: 'hash-mismatch' | 'missing' | 'outside-bundle' | 'verification-limit';
   resolvedPathSha256: string;
 };
 
@@ -622,6 +622,7 @@ const MAX_DEPENDENCY_CONFUSION_ARTIFACT_BYTES = 16 * 1024 * 1024;
 const MAX_VERIFIER_SABOTAGE_REPORT_BYTES = 16 * 1024 * 1024;
 const MAX_REPLAY_BUNDLE_MANIFEST_BYTES = 16 * 1024 * 1024;
 const MAX_REPLAY_BUNDLE_ARTIFACTS = 1_000;
+const MAX_REPLAY_BUNDLE_VERIFICATION_BYTES = 16 * 1024 * 1024;
 const MIN_OUTSIDE_READ_RECEIPT_BYTES = 16;
 const MCP_CONFUSED_DEPUTY_VALUE_MIN_BYTES = 16;
 const DEFAULT_REQUIRED_REPLAY_KINDS = [
@@ -8866,13 +8867,12 @@ function firstReplayArtifactPathFromObject(object: Record<string, unknown>): str
 }
 
 function replayArtifactSha256FromObject(object: Record<string, unknown>): string | undefined {
-  return [
-    ...toArrayOfStrings(object.sha256),
-    ...toArrayOfStrings(object.contentSha256),
-    ...toArrayOfStrings(object.digest),
-    ...toArrayOfStrings(object.expectedSha256),
-    ...toArrayOfStrings(object.hash),
-  ].find((value) => /^[a-f0-9]{64}$/i.test(value.trim()));
+  for (const key of ['sha256', 'contentSha256', 'digest', 'expectedSha256', 'hash']) {
+    if (Object.prototype.hasOwnProperty.call(object, key)) {
+      return getString(object[key])?.trim() ?? '';
+    }
+  }
+  return undefined;
 }
 
 function replayArtifactKindFromObject(
@@ -8957,7 +8957,7 @@ function replayBundleArtifactDescriptors(
 
   for (const [key, value] of Object.entries(replayManifest)) {
     const kind = topLevelReplayKindFromKey(key);
-    if (kind && /(?:path|file)$/i.test(key)) {
+    if (kind && /(?:paths?|files?)$/i.test(key)) {
       for (const pathValue of toArrayOfStrings(value)) {
         addDescriptor(kind, pathValue);
       }
@@ -8993,6 +8993,8 @@ function replayBundleArtifactDescriptors(
 function replayBundleArtifactProblems(
   descriptors: ReplayBundleArtifactDescriptor[],
 ): ReplayBundleArtifactProblem[] {
+  const hashesByPath = new Map<string, string>();
+  let remainingBytes = MAX_REPLAY_BUNDLE_VERIFICATION_BYTES;
   return descriptors
     .map((descriptor): ReplayBundleArtifactProblem | undefined => {
       const pathSha256 = sha256(Buffer.from(descriptor.path));
@@ -9007,57 +9009,51 @@ function replayBundleArtifactProblems(
         problem: kind,
         resolvedPathSha256,
       });
-      const relativePath = descriptor.bundleRoot
-        ? path.relative(descriptor.bundleRoot, descriptor.resolvedPath)
-        : '';
-
+      if (
+        descriptor.declaredSha256 !== undefined &&
+        !/^[a-f0-9]{64}$/i.test(descriptor.declaredSha256)
+      ) {
+        return problem('hash-mismatch');
+      }
       if (
         descriptor.bundleRoot &&
         (path.isAbsolute(descriptor.path) ||
-          relativePath.startsWith('..') ||
-          path.isAbsolute(relativePath))
+          !isWithin(descriptor.resolvedPath, descriptor.bundleRoot))
       ) {
         return problem('outside-bundle');
       }
-
       try {
-        if (
-          descriptor.bundleRoot &&
-          path
-            .relative(
-              fs.realpathSync(descriptor.bundleRoot),
-              fs.realpathSync(descriptor.resolvedPath),
-            )
-            .startsWith('..')
-        ) {
+        const realPath = fs.realpathSync(descriptor.resolvedPath);
+        if (descriptor.bundleRoot && !isWithin(realPath, fs.realpathSync(descriptor.bundleRoot))) {
           return problem('outside-bundle');
         }
-        const content = readVerifierArtifactSync(descriptor.resolvedPath);
-        const observedSha256 = sha256(content);
+        const stat = fs.statSync(realPath);
+        if (!stat.isFile() || stat.size > MAX_VERIFIER_ARTIFACT_BYTES) {
+          return problem('missing');
+        }
+        let observedSha256 = hashesByPath.get(realPath);
+        if (observedSha256 === undefined) {
+          if (stat.size > remainingBytes) {
+            return problem('verification-limit');
+          }
+          const content = readVerifierArtifactSync(realPath);
+          if (content.byteLength > remainingBytes) {
+            return problem('verification-limit');
+          }
+          remainingBytes -= content.byteLength;
+          observedSha256 = sha256(content);
+          hashesByPath.set(realPath, observedSha256);
+        }
         if (
-          descriptor.declaredSha256 &&
+          descriptor.declaredSha256 !== undefined &&
           observedSha256.toLowerCase() !== descriptor.declaredSha256.toLowerCase()
         ) {
-          return {
-            declaredSha256: descriptor.declaredSha256,
-            kind: descriptor.kind,
-            path: descriptor.path,
-            pathSha256,
-            problem: 'hash-mismatch',
-            resolvedPathSha256,
-          };
+          return problem('hash-mismatch');
         }
 
         return undefined;
       } catch {
-        return {
-          declaredSha256: descriptor.declaredSha256,
-          kind: descriptor.kind,
-          path: descriptor.path,
-          pathSha256,
-          problem: 'missing',
-          resolvedPathSha256,
-        };
+        return problem('missing');
       }
     })
     .filter((problem): problem is ReplayBundleArtifactProblem => Boolean(problem));
@@ -9098,6 +9094,9 @@ function replayBundleIncompleteFinding(
     .map((problem) => problem.kind);
 
   const reasonParts = [
+    artifactProblems.some(({ problem }) => problem === 'verification-limit')
+      ? 'artifact digest verification exceeds the 16 MiB work limit'
+      : undefined,
     missingKinds.length
       ? `missing required replay evidence kinds: ${missingKinds.join(', ')}`
       : undefined,
@@ -9164,7 +9163,10 @@ function verifyReplayBundleCompleteness(
     if (descriptors.length >= MAX_REPLAY_BUNDLE_ARTIFACTS) {
       missingKinds.push('artifact-inventory-limit');
     }
-    const artifactProblems = replayBundleArtifactProblems(descriptors);
+    const artifactProblems =
+      descriptors.length >= MAX_REPLAY_BUNDLE_ARTIFACTS
+        ? []
+        : replayBundleArtifactProblems(descriptors);
 
     if (!missingKinds.length && !artifactProblems.length) {
       return undefined;

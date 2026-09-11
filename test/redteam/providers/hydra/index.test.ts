@@ -37,7 +37,9 @@ const mockResolveTracingOptions = vi.hoisted(() =>
 );
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockFormatTraceSummary = vi.hoisted(() => vi.fn(() => 'Trace summary'));
-const mockFormatTraceForMetadata = vi.hoisted(() => vi.fn(() => ({ traceId: 'test-trace-id' })));
+const mockFormatTraceForMetadata = vi.hoisted(() =>
+  vi.fn((): Record<string, unknown> => ({ traceId: 'test-trace-id' })),
+);
 const mockExtractTraceIdFromTraceparent = vi.hoisted(() => vi.fn(() => 'test-trace-id'));
 
 // Hoisted mock for applyRuntimeTransforms
@@ -2700,6 +2702,55 @@ describe('HydraProvider', () => {
       // No trace snapshots should be present
       expect(result.metadata?.traceSnapshots).toBeUndefined();
     });
+
+    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+      'keeps forensic traces out of returned %s histories',
+      async (pluginId) => {
+        const canary = 'SYNTHETIC_HYDRA_FORENSIC_SECRET';
+        mockResolveTracingOptions.mockReturnValue({
+          enabled: true,
+          includeInAttack: true,
+          includeInGrading: true,
+          includeInternalSpans: false,
+          maxSpans: 50,
+          maxDepth: 5,
+          maxRetries: 3,
+          retryDelayMs: 500,
+          sanitizeAttributes: true,
+        });
+        mockFetchTraceContext.mockResolvedValue({
+          traceId: 'trace',
+          spans: [{ spanId: 'span', name: canary }],
+          insights: [canary],
+          fetchedAt: 0,
+        });
+        mockFormatTraceSummary.mockReturnValue(canary);
+        mockFormatTraceForMetadata.mockReturnValue({ name: canary });
+        mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+        mockTargetProvider.callApi.mockResolvedValue({ output: 'Public report' });
+        mockGrader.getResult
+          .mockResolvedValueOnce({ grade: { pass: true, score: 1, reason: 'Continue' } })
+          .mockResolvedValue({ grade: { pass: false, score: 0, reason: 'Unsafe report' } });
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: {
+            assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+            metadata: { goal: 'test goal', pluginId },
+          },
+          traceparent: '00-trace123-span456-01',
+        } as CallApiContextParams);
+        expect(result.metadata?.redteamHistory).toHaveLength(2);
+        expect(result.metadata?.successfulAttacks).toHaveLength(1);
+        expect(JSON.stringify(result.metadata)).not.toContain(canary);
+        expect(
+          mockAgentProvider.callApi.mock.calls.some(([request]) => JSON.parse(request).turn === 2),
+        ).toBe(true);
+        expect(JSON.stringify(mockAgentProvider.callApi.mock.calls)).not.toContain(canary);
+      },
+    );
 
     it('should include trace data in redteamHistory entries when tracing is enabled', async () => {
       // Enable tracing

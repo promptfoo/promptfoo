@@ -8,6 +8,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { TRACE_REDACTION_ASSERTIONS } from '../constants/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { redteamProviderManager } from '../providers/shared';
 import {
@@ -460,6 +461,15 @@ export abstract class RedteamGraderBase {
     suggestions?: ResultSuggestion[];
   }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+    if (gradingContext && TRACE_REDACTION_ASSERTIONS.has(this.id)) {
+      const {
+        traceData: _data,
+        traceContext: _context,
+        traceSummary: _summary,
+        ...publicContext
+      } = gradingContext;
+      gradingContext = publicContext;
+    }
     const {
       providerResponse: gradingProviderResponse,
       imageOutputs,
