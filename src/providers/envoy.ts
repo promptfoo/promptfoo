@@ -30,8 +30,8 @@ export function createEnvoyProvider(
   providerPath: string,
   options: ProviderCreatorOptions = {},
 ): ApiProvider {
-  const { providerOptions, parsedPath } = resolveProviderCreatorInput(providerPath, options);
-  const splits = parsedPath.segments;
+  const providerOptions = resolveProviderCreatorInput(options);
+  const splits = providerPath.split(':');
   const modelName = splits.slice(1).join(':');
 
   if (!modelName) {

@@ -1,5 +1,3 @@
-import { parseProviderPath } from '../creator';
-
 import type { ApiProvider } from '../../types/providers';
 import type { ProviderCreatorOptions } from '../creator';
 import type { ProviderFactory } from '../registryTypes';
@@ -19,8 +17,7 @@ const creators: readonly (readonly [string, () => Promise<Creator>])[] = [
 export const compatibleProviderFactories: ProviderFactory[] = creators.map(([prefix, load]) => ({
   test: (path) => path.startsWith(`${prefix}:`),
   create: async (path, providerOptions) => {
-    const parsedPath = parseProviderPath(path);
     const create = await load();
-    return create(path, { providerOptions, parsedPath });
+    return create(path, { providerOptions });
   },
 }));

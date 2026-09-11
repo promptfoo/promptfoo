@@ -60,7 +60,7 @@ export async function executeCallback({
       const load: CallbackLoad = { previous: loads.get(name) };
       loads.set(name, load);
       let callback = cache[name];
-      if (!callback || references.get(name) !== reference) {
+      if (!callback || !references.has(name) || references.get(name) !== reference) {
         let resolved = false;
         try {
           if (typeof reference === 'function') {
@@ -93,7 +93,7 @@ export async function executeCallback({
               if (previous) {
                 loads.set(name, previous);
                 if (previous.callback) {
-                  cache[name] = previous.callback;
+                  storeCallback(cache, name, previous.callback);
                   references.set(name, previous.reference);
                   previous.previous = undefined;
                 }
@@ -104,7 +104,7 @@ export async function executeCallback({
           }
         }
         if (loads.get(name) === load) {
-          cache[name] = callback;
+          storeCallback(cache, name, callback);
           references.set(name, reference);
         }
       }
@@ -127,4 +127,13 @@ export async function executeCallback({
     signal?.throwIfAborted();
     return { ...identity, isError: true, error };
   }
+}
+
+function storeCallback(cache: Record<string, Function>, name: string, callback: Function): void {
+  Object.defineProperty(cache, name, {
+    value: callback,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
 }

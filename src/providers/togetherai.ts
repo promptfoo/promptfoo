@@ -2,38 +2,10 @@ import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { splitLocalOptions } from './openai/localOptions';
 
 import type { ApiProvider } from '../types/index';
 import type { ProviderCreatorOptions } from './creator';
-import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
-
-// These are consumed by promptfoo or its transport, not TogetherAI's model endpoint.
-// Requiring every shared option here keeps future connection settings out of passthrough.
-const localOptions = {
-  apiKey: true,
-  apiKeyEnvar: true,
-  apiKeyRequired: true,
-  apiHost: true,
-  apiBaseUrl: true,
-  organization: true,
-  headers: true,
-  maxRetries: true,
-  cost: true,
-  inputCost: true,
-  outputCost: true,
-  audioCost: true,
-  audioInputCost: true,
-  audioOutputCost: true,
-  passthrough: true,
-  mcp: true,
-  functionToolCallbacks: true,
-  showThinking: true,
-  omitDefaults: true,
-  basePath: true,
-  linkedTargetId: true,
-} satisfies Record<keyof OpenAiSharedOptions, boolean> &
-  Partial<Record<keyof OpenAiCompletionOptions | 'basePath' | 'linkedTargetId', boolean>>;
-const localOptionNames = new Set(Object.keys(localOptions));
 
 /**
  * Creates a TogetherAI provider using OpenAI-compatible endpoints
@@ -45,13 +17,11 @@ export function createTogetherAiProvider(
   providerPath: string,
   options: ProviderCreatorOptions = {},
 ): ApiProvider {
-  const { providerOptions, parsedPath } = resolveProviderCreatorInput(providerPath, options);
-  const splits = parsedPath.segments;
+  const providerOptions = resolveProviderCreatorInput(options);
+  const splits = providerPath.split(':');
 
   const config = providerOptions.config || {};
-  const modelParameters = Object.fromEntries(
-    Object.entries(config).filter(([key]) => !localOptionNames.has(key)),
-  );
+  const { modelParameters } = splitLocalOptions(config);
   const togetherAiConfig = {
     ...providerOptions,
     config: {

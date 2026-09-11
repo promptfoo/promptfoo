@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { parseProviderPath, resolveProviderCreatorInput } from '../../src/providers/creator';
+import { resolveProviderCreatorInput } from '../../src/providers/creator';
 import { loadApiProvider } from '../../src/providers/index';
 import { createNscaleProvider } from '../../src/providers/nscale';
 import { getProviderFactories, providerMap } from '../../src/providers/registry';
@@ -10,42 +10,31 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('passes canonical options and parsed path through without reinterpreting model config', () => {
+it('passes canonical options through without reinterpreting model config', () => {
   const providerOptions = {
     id: 'custom',
     config: { config: { modelOption: true } },
     env: { OPENAI_API_KEY: 'scoped' },
   };
-  const parsedPath = parseProviderPath('togetherai:chat:org:model:tag');
-  const input = resolveProviderCreatorInput(parsedPath.value, {
+  const input = resolveProviderCreatorInput({
     providerOptions,
-    parsedPath,
     config: { id: 'legacy' },
     env: { OPENAI_API_KEY: 'outer' },
   });
-  expect(input.providerOptions).toBe(providerOptions);
-  expect(input.parsedPath).toBe(parsedPath);
-  expect(input.parsedPath.segments).toEqual(['togetherai', 'chat', 'org', 'model', 'tag']);
+  expect(input).toBe(providerOptions);
 });
 
 it('adapts the legacy nested shape with scoped environment precedence', () => {
   expect(
-    resolveProviderCreatorInput('litellm:model', {
+    resolveProviderCreatorInput({
       config: { id: 'nested', config: { temperature: 0 }, env: { OPENAI_API_KEY: 'scoped' } },
       env: { OPENAI_API_KEY: 'suite', LITELLM_API_KEY: 'suite-proxy' },
-    }).providerOptions,
+    }),
   ).toEqual({
     id: 'nested',
     config: { temperature: 0 },
     env: { OPENAI_API_KEY: 'scoped', LITELLM_API_KEY: 'suite-proxy' },
   });
-});
-
-it('reparses an unrelated pre-parsed identifier', () => {
-  const result = resolveProviderCreatorInput('envoy:new:model', {
-    parsedPath: parseProviderPath('envoy:old'),
-  });
-  expect(result.parsedPath.segments).toEqual(['envoy', 'new', 'model']);
 });
 
 const cases = [

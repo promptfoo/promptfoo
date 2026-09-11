@@ -24,7 +24,9 @@ import {
   calculateGoogleCost,
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
+  collectThoughtSignatures,
   createAuthCacheDiscriminator,
+  getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
   mergeGoogleCompletionOptions,
   normalizeGeminiAudio,
@@ -293,7 +295,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       );
     }
 
-    const { body, config } = await prepareGeminiRequest(
+    const { body, config, toolsDisabled } = await prepareGeminiRequest(
       this.modelName,
       this.config,
       prompt,
@@ -306,11 +308,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
 
     let data;
     let cached = false;
+    let responseHeaders: unknown;
     try {
       const endpoint = this.getApiEndpoint('generateContent');
       const headers = await this.getAuthHeaders();
       const authDiscriminator = createAuthCacheDiscriminator(headers);
-      ({ data, cached } = (await fetchWithCache(
+      const response = await fetchWithCache(
         endpoint,
         {
           method: 'POST',
@@ -322,10 +325,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         getRequestTimeoutMs(),
         'json',
         shouldBustProviderCache(context),
-      )) as {
-        data: GeminiResponseData;
-        cached: boolean;
-      });
+      );
+      data = response.data as GeminiResponseData;
+      cached = response.cached;
+      responseHeaders = response.headers;
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -362,6 +365,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       }
 
       const grounding = collectGroundingMetadata(dataWithResponse);
+      const thoughtSignatures = collectThoughtSignatures(dataWithResponse);
+      const actualServiceTier = getGoogleResponseServiceTier(
+        responseHeaders,
+        lastData.usageMetadata,
+      );
 
       const tokenUsage = getGeminiTokenUsage(lastData.usageMetadata, cached, 'ai-studio');
 
@@ -378,21 +386,42 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         completionForCost,
         false,
         lastData.usageMetadata,
+        actualServiceTier,
       );
       const audio = normalizeGeminiAudio(output);
 
-      return withResponseCacheMetadata(
+      const response = withResponseCacheMetadata(
         {
           output,
           ...(audio && { audio }),
           tokenUsage,
           cost,
           raw: data,
+          cached,
           ...(guardrails && { guardrails }),
-          metadata: { ...grounding },
+          metadata: {
+            ...grounding,
+            ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
+            ...(actualServiceTier && { serviceTier: actualServiceTier }),
+          },
         },
         cached,
       );
+      try {
+        response.output = await this.executeFunctionToolCallbacks(
+          output,
+          config,
+          toolsDisabled,
+          options?.abortSignal,
+        );
+      } catch (error) {
+        return {
+          ...response,
+          ...(options?.abortSignal?.aborted ? {} : { output: undefined }),
+          error: String(error),
+        };
+      }
+      return response;
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
@@ -526,7 +555,7 @@ export class AIStudioEmbeddingProvider
   }
 }
 
-const DEFAULT_AI_STUDIO_MODEL = 'gemini-2.5-pro';
+const DEFAULT_AI_STUDIO_MODEL = 'gemini-3.8-flash';
 
 export function getGoogleAiStudioProviders(env?: EnvOverrides) {
   const gradingProvider = new AIStudioChatProvider(DEFAULT_AI_STUDIO_MODEL, { env });

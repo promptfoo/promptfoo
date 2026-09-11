@@ -1674,9 +1674,13 @@ describe('AnthropicMessagesProvider', () => {
         completion: 9,
         total: 26,
       });
-      expect(mcpMocks.callTool).toHaveBeenCalledWith('search_companies', {
-        query: 'clean energy',
-      });
+      expect(mcpMocks.callTool).toHaveBeenCalledWith(
+        'search_companies',
+        {
+          query: 'clean energy',
+        },
+        undefined,
+      );
       expect(createSpy).toHaveBeenCalledTimes(2);
 
       const secondRequest = createSpy.mock.calls[1][0] as Anthropic.Messages.MessageCreateParams;
@@ -1705,29 +1709,96 @@ describe('AnthropicMessagesProvider', () => {
       ]);
     });
 
-    it('does not start an MCP continuation after its tool call is cancelled', async () => {
-      const controller = new AbortController();
-      provider = createProvider('claude-sonnet-4-6', {
-        config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
-      });
-      mcpMocks.callTool.mockImplementationOnce(async () => {
-        controller.abort(new Error('cancelled MCP tool'));
-        throw controller.signal.reason;
-      });
-      const createSpy = vi
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValueOnce({
+    it.each([1, 2])(
+      'retains usage when MCP cancellation follows %s model responses',
+      async (rounds) => {
+        const controller = new AbortController();
+        provider = createProvider('claude-sonnet-4-6', {
+          config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
+        });
+        for (let i = 1; i < rounds; i++) {
+          mcpMocks.callTool.mockResolvedValueOnce({
+            content: [{ type: 'text', text: 'continue' }],
+          });
+        }
+        mcpMocks.callTool.mockImplementationOnce(async () => {
+          controller.abort(new Error('cancelled MCP tool'));
+          throw controller.signal.reason;
+        });
+        const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
           content: [{ type: 'tool_use', id: 'toolu_cancel', name: 'search_companies', input: {} }],
           stop_reason: 'tool_use',
           usage: { input_tokens: 1, output_tokens: 1, server_tool_use: null },
-        } as Anthropic.Messages.Message)
-        .mockRejectedValueOnce(new Error('unexpected MCP continuation'));
+        } as Anthropic.Messages.Message);
 
-      const result = await provider.callApi('Find companies', undefined, {
+        const result = await provider.callApi('Find companies', undefined, {
+          abortSignal: controller.signal,
+        });
+        expect(result.error).toContain('cancelled MCP tool');
+        expect(createSpy).toHaveBeenCalledTimes(rounds);
+        expect(result.tokenUsage).toMatchObject({
+          prompt: rounds,
+          completion: rounds,
+          total: rounds * 2,
+        });
+        expect(result.cost).toBeCloseTo(rounds * 0.000018, 10);
+      },
+    );
+
+    it('records completed parallel MCP tools when another tool is cancelled', async () => {
+      const controller = new AbortController();
+      let started!: () => void;
+      const pendingTool = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      provider = createProvider('claude-sonnet-4-6', {
+        config: { mcp: { enabled: true, server: { command: 'npm', args: ['start'] } } },
+      });
+      mcpMocks.callTool.mockResolvedValueOnce({ content: 'completed tool output' });
+      mcpMocks.callTool.mockImplementationOnce(() => {
+        started();
+        return new Promise((_resolve, reject) => {
+          controller.signal.addEventListener('abort', () => reject(controller.signal.reason), {
+            once: true,
+          });
+        });
+      });
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        content: [
+          {
+            type: 'tool_use',
+            id: 'toolu_done',
+            name: 'search_companies',
+            input: { query: 'done' },
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu_wait',
+            name: 'search_companies',
+            input: { query: 'wait' },
+          },
+        ],
+        stop_reason: 'tool_use',
+        usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+      } as Anthropic.Messages.Message);
+      const pending = provider.callApi('Find companies', undefined, {
         abortSignal: controller.signal,
       });
-      expect(result.error).toContain('cancelled MCP tool');
-      expect(createSpy).toHaveBeenCalledTimes(1);
+      await pendingTool;
+      controller.abort(new Error('cancelled parallel tool'));
+      const result = await pending;
+      expect(result.error).toContain('cancelled parallel tool');
+      expect(result.tokenUsage?.total).toBe(11);
+      expect(result.metadata?.toolCalls).toEqual([
+        {
+          id: 'toolu_done',
+          name: 'search_companies',
+          input: { query: 'done' },
+          output: 'completed tool output',
+          is_error: false,
+        },
+      ]);
+      expect(createSpy).toHaveBeenCalledOnce();
     });
 
     it('sums thinking tokens across MCP continuation rounds', async () => {

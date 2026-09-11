@@ -528,10 +528,6 @@ export interface NovaReelVideoOptions extends BedrockOptions {
   downloadFromS3?: boolean; // Default: true - download and store to blob storage
 }
 
-/**
- * Nova Reel async invoke response
- */
-
 // =============================================================================
 // Luma Ray 2 Video Generation Types
 // =============================================================================
@@ -2718,9 +2714,17 @@ export function getHandlerForModel(
     );
   }
   if (modelName.includes('openai.')) {
-    // Suggest the bare frontier id: AWS does not offer region/geo/global inference profiles for
-    // the gpt-5.x frontier models, so a prefixed id like `us.openai.gpt-5.5` is not valid.
+    // GPT-5.6 Runtime profiles support Converse, but not InvokeModel. Older frontier
+    // models retain their established Mantle Responses guidance.
     const bareFrontierId = modelName.replace(/^[a-z]+\.(?=openai\.)/, '');
+    if (/^[a-z]+\.openai\.gpt-5\.6-(?:sol|terra|luna)$/.test(modelName)) {
+      throw new Error(
+        `OpenAI model "${modelName}" is not served by Bedrock's InvokeModel API. ` +
+          `For a supported Runtime inference profile, use "bedrock:converse:${modelName}" ` +
+          `with AWS credentials, ` +
+          `or "bedrock:${bareFrontierId}" with AWS_BEARER_TOKEN_BEDROCK for Mantle Responses.`,
+      );
+    }
     throw new Error(
       `OpenAI model "${modelName}" is not served by Bedrock's InvokeModel API. Frontier ` +
         `models (gpt-5.x) use the OpenAI-compatible Responses API — use ` +
@@ -2734,8 +2738,9 @@ export function getHandlerForModel(
     // direct or prefixed ids that bypass the factory's supported bare-id route.
     throw new Error(
       `xAI model "${modelName}" is not served by Bedrock's InvokeModel API under that id. ` +
-        `Grok 4.6 is invocable through an inference profile — use "bedrock:us.xai.grok-4.6" or ` +
-        `"bedrock:global.xai.grok-4.6" with ordinary AWS credentials. Other Grok models run on ` +
+        `Grok 4.6 supports Runtime Converse through an inference profile — use ` +
+        `"bedrock:converse:us.xai.grok-4.6" or "bedrock:converse:global.xai.grok-4.6" ` +
+        `with ordinary AWS credentials. Other Grok models run on ` +
         `the OpenAI-compatible Responses API (mantle endpoint) — use the bare id such as ` +
         `"bedrock:xai.grok-4.3" and set AWS_BEARER_TOKEN_BEDROCK. See ` +
         `https://www.promptfoo.dev/docs/providers/aws-bedrock/#xai-grok-models`,

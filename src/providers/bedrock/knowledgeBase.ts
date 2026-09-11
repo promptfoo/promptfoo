@@ -193,10 +193,11 @@ export class AwsBedrockKnowledgeBaseProvider
       }
     }
 
+    const generationConfiguration = this.buildGenerationConfiguration(modelArn);
     const knowledgeBaseConfiguration: any = {
       knowledgeBaseId: this.kbConfig.knowledgeBaseId,
       modelArn,
-      generationConfiguration: this.buildGenerationConfiguration(modelArn),
+      ...(generationConfiguration && { generationConfiguration }),
     };
 
     // Only add retrieval configuration when numberOfResults is explicitly configured
