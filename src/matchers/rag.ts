@@ -193,6 +193,9 @@ export async function matchesContextRecall(
     const lowerLine = line.toLowerCase();
     return lowerLine.includes(attributedTokenLower) || lowerLine.includes(notAttributedTokenLower);
   });
+  if (sentences.length === 0) {
+    return graderFail('Context recall grader produced no attribution verdicts', resp.tokenUsage);
+  }
 
   const sentenceAttributions: { sentence: string; attributed: boolean }[] = [];
   let numerator = 0;
@@ -215,7 +218,7 @@ export async function matchesContextRecall(
     });
   }
 
-  const score = sentences.length > 0 ? numerator / sentences.length : 0;
+  const score = numerator / sentences.length;
   const pass = score >= threshold - Number.EPSILON;
 
   const metadata = {

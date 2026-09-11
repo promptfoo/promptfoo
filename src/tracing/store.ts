@@ -297,9 +297,9 @@ export class TraceStore {
 
   async getTrace(
     traceId: string,
-    options: TraceAttributeSanitizationOptions = {},
+    options: TraceAttributeSanitizationOptions & { includeInternalSpans?: boolean } = {},
   ): Promise<TraceData | null> {
-    const { sanitizeAttributes: shouldSanitize = true } = options;
+    const { sanitizeAttributes: shouldSanitize = true, includeInternalSpans = true } = options;
 
     try {
       logger.debug(`[TraceStore] Fetching trace ${traceId}`);
@@ -318,8 +318,13 @@ export class TraceStore {
 
       const trace = traces[0];
       logger.debug(`[TraceStore] Found trace ${traceId}, fetching spans`);
-      const spans = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+      let spans = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
       logger.debug(`[TraceStore] Found ${spans.length} spans for trace ${traceId}`);
+      if (!includeInternalSpans) {
+        const spansById = new Map(spans.map((span) => [span.spanId, span]));
+        const ownershipCache = new Map<string, boolean>();
+        spans = spans.filter((span) => !isGraderOwnedSpan(span, spansById, ownershipCache));
+      }
 
       return {
         traceId: trace.traceId,

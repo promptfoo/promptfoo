@@ -51,7 +51,12 @@ import { transform } from '../util/transform';
 import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
-import { AssertionsResult, DEFAULT_TOKENS_USED } from './assertionsResult';
+import {
+  AssertionsResult,
+  accumulateNormalizedAssertionTokenUsage,
+  DEFAULT_TOKENS_USED,
+  normalizeAssertionTokenUsage,
+} from './assertionsResult';
 import { handleBleuScore } from './bleu';
 import { handleClassifier } from './classifier';
 import {
@@ -215,7 +220,10 @@ async function loadTraceData(traceId: string): Promise<TraceData | null> {
   let latestTrace: TraceData | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    latestTrace = await traceStore.getTrace(traceId, { sanitizeAttributes: false });
+    latestTrace = await traceStore.getTrace(traceId, {
+      sanitizeAttributes: false,
+      includeInternalSpans: false,
+    });
 
     const spanCount = latestTrace?.spans?.length ?? 0;
     if (spanCount > 0) {
@@ -625,7 +633,12 @@ async function runAssertionInternal({
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
   // Generate traceparent for grader calls to link them to the main trace
-  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
+  const activeTraceparent = getProviderCallTracingContext()?.getActiveTraceparent();
+  const graderTraceparent = traceId
+    ? activeTraceparent?.split('-')[1] === traceId
+      ? activeTraceparent
+      : generateTraceparent(traceId, generateSpanId())
+    : undefined;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
@@ -731,7 +744,6 @@ function categorizeAssertions(
 } {
   const independent: number[] = [];
   const primaryInChains: number[] = [];
-  const fallbackTargets = new Set<number>();
 
   let i = 0;
   while (i < assertions.length) {
@@ -745,7 +757,6 @@ function categorizeAssertions(
         chainIndex < assertions.length &&
         assertions[chainIndex].assertResult === assertResult
       ) {
-        fallbackTargets.add(chainIndex);
         if (!hasFallback(assertions[chainIndex].assertion)) {
           break;
         }
@@ -753,8 +764,6 @@ function categorizeAssertions(
       }
 
       i = chainIndex + 1;
-    } else if (fallbackTargets.has(i)) {
-      i++;
     } else {
       independent.push(i);
       i++;
@@ -762,19 +771,6 @@ function categorizeAssertions(
   }
 
   return { independent, primaryInChains };
-}
-
-function sumTokensInto(target: GradingResult, source: GradingResult['tokensUsed']): void {
-  if (!source) {
-    return;
-  }
-  const tokens = target.tokensUsed ?? { ...DEFAULT_TOKENS_USED };
-  tokens.total = (tokens.total ?? 0) + (source.total ?? 0);
-  tokens.prompt = (tokens.prompt ?? 0) + (source.prompt ?? 0);
-  tokens.completion = (tokens.completion ?? 0) + (source.completion ?? 0);
-  tokens.cached = (tokens.cached ?? 0) + (source.cached ?? 0);
-  tokens.numRequests = (tokens.numRequests ?? 0) + (source.numRequests ?? 0);
-  target.tokensUsed = tokens;
 }
 
 /** Execute reached chain links in order; only the terminal link contributes to scoring. */
@@ -830,10 +826,22 @@ async function executeFallbackChain(
       isAssertionExecutionFailure(result) ||
       isRedteamGuardrailFailure(result)
     ) {
-      for (const earlier of intermediateResults) {
-        sumTokensInto(result, earlier.result.tokensUsed);
-      }
       if (intermediateResults.length > 0) {
+        const links = [...intermediateResults.map((earlier) => earlier.result), result];
+        const tokensUsed = { ...DEFAULT_TOKENS_USED };
+        for (const link of links) {
+          const usage = normalizeAssertionTokenUsage(link);
+          if (usage) {
+            accumulateNormalizedAssertionTokenUsage(tokensUsed, usage);
+          }
+        }
+        result.tokensUsed = tokensUsed;
+        if (links.some((link) => link.metadata?.cachedResponse === true)) {
+          result.metadata = {
+            ...result.metadata,
+            cachedResponse: links.every((link) => link.metadata?.cachedResponse === true),
+          };
+        }
         result.componentResults = [
           ...intermediateResults.map(({ result: intermediate }) => intermediate),
           ...(result.componentResults ?? []),

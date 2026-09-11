@@ -48,7 +48,7 @@ function mergeMetadata(
   };
 }
 
-function normalizeAssertionTokenUsage(result: GradingResult) {
+export function normalizeAssertionTokenUsage(result: GradingResult) {
   const tokensUsed = result.tokensUsed;
   if (!tokensUsed) {
     return undefined;
@@ -76,7 +76,7 @@ function normalizeAssertionTokenUsage(result: GradingResult) {
   };
 }
 
-function accumulateNormalizedAssertionTokenUsage(
+export function accumulateNormalizedAssertionTokenUsage(
   target: NonNullable<GradingResult['tokensUsed']>,
   update: NonNullable<GradingResult['tokensUsed']>,
 ): void {
@@ -283,23 +283,7 @@ export class AssertionsResult {
       this.failedContentSafetyChecks = true;
     }
 
-    if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] || 0) + result.score * weight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] || 0) + weight;
-    }
-
-    if (result.namedScores) {
-      Object.entries(result.namedScores).forEach(([metricName, score]) => {
-        if (metricName !== metric) {
-          const incomingWeight = result.namedScoreWeights?.[metricName] ?? 1;
-          const weightedIncomingWeight = incomingWeight * weight;
-          this.namedScores[metricName] =
-            (this.namedScores[metricName] || 0) + score * weightedIncomingWeight;
-          this.namedScoreWeights[metricName] =
-            (this.namedScoreWeights[metricName] || 0) + weightedIncomingWeight;
-        }
-      });
-    }
+    this.addNamedScores({ result, metric, weight });
 
     const tokensUsed = normalizeAssertionTokenUsage(result);
     if (tokensUsed) {

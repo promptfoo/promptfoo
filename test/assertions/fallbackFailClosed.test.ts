@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertions } from '../../src/assertions';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
+import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 
 import type { ApiProvider, Assertion, AtomicTestCase, ProviderResponse } from '../../src/types';
 
@@ -35,6 +36,115 @@ const createTestCase = (
   assert: assertions,
   vars: {},
   ...(options ? { options } : {}),
+});
+
+describe('Fallback grading contracts', () => {
+  it('stops after a context-recall response without attribution verdicts', async () => {
+    const grader: ApiProvider = {
+      id: () => 'malformed-recall',
+      callApi: vi.fn().mockResolvedValue({ output: 'Unable to classify this answer.' }),
+    };
+    const result = await runAssertions({
+      prompt: 'Paris is the capital of France.',
+      test: createTestCase(
+        [
+          { type: 'context-recall', value: 'Paris', threshold: 0.5, fallback: 'next' },
+          { type: 'contains', value: 'test' },
+        ],
+        { provider: grader },
+      ),
+      providerResponse: mockProviderResponse,
+    });
+    expect(result.pass).toBe(false);
+    expect(result.componentResults).toHaveLength(1);
+    expect(result.componentResults?.[0].metadata?.graderError).toBe(true);
+  });
+
+  it.each([false, true])(
+    'preserves detailed fallback usage with a cached primary: %s',
+    async (primaryCached) => {
+      const primaryUsage = {
+        total: 10,
+        prompt: 6,
+        completion: 4,
+        numRequests: 1,
+        completionDetails: { reasoning: 2, cacheReadInputTokens: 3 },
+      };
+      const terminalUsage = {
+        total: 20,
+        prompt: 15,
+        completion: 5,
+        numRequests: 1,
+        completionDetails: { reasoning: 3 },
+      };
+      const grader: ApiProvider = {
+        id: () => 'usage-grader',
+        callApi: vi
+          .fn()
+          .mockResolvedValueOnce({
+            output: '{"pass":false,"score":0}',
+            tokenUsage: primaryUsage,
+            cached: primaryCached,
+          })
+          .mockResolvedValueOnce({
+            output: '{"pass":true,"score":1}',
+            tokenUsage: terminalUsage,
+            cached: !primaryCached,
+          }),
+      };
+      const result = await runAssertions({
+        test: createTestCase(
+          [
+            { type: 'llm-rubric', value: 'first criterion', fallback: 'next' },
+            { type: 'llm-rubric', value: 'second criterion' },
+          ],
+          { provider: grader },
+        ),
+        providerResponse: mockProviderResponse,
+      });
+      expect(result.pass).toBe(true);
+      expect(result.tokensUsed).toMatchObject({
+        total: 30,
+        prompt: 21,
+        completion: 9,
+        numRequests: 2,
+        cached: primaryCached ? 10 : 20,
+        completionDetails: { reasoning: 5, cacheReadInputTokens: 3 },
+        incurredTokenUsage: primaryCached ? terminalUsage : primaryUsage,
+      });
+      expect(result.componentResults?.[0].metadata?.cachedResponse).toBe(false);
+      expect(primaryUsage.completionDetails).toEqual({ reasoning: 2, cacheReadInputTokens: 3 });
+      expect(terminalUsage.completionDetails).toEqual({ reasoning: 3 });
+    },
+  );
+
+  it('preserves the active grader span when calling a fallback grader', async () => {
+    const traceId = '11111111111111111111111111111111';
+    const traceparent = `00-${traceId}-2222222222222222-01`;
+    const callApi = vi.fn().mockResolvedValue({ output: '{"pass":true,"score":1}' });
+    const grader: ApiProvider = { id: () => 'traced-grader', callApi };
+    await withProviderCallTracingContext(
+      {
+        getActiveTraceparent: () => traceparent,
+        withGraderSpan: async (_options, invoke) => invoke(),
+        withProviderSpan: async ({ callContext }, invoke) => invoke(callContext),
+      },
+      () =>
+        runAssertions({
+          traceId,
+          provider: grader,
+          test: createTestCase(
+            [
+              { type: 'contains', value: 'missing', fallback: 'next' },
+              { type: 'llm-rubric', value: 'criterion' },
+            ],
+            { provider: grader },
+          ),
+          providerResponse: mockProviderResponse,
+        }),
+    );
+    expect(callApi.mock.calls[0][1].traceparent).toBe(traceparent);
+  });
 });
 
 afterEach(() => {
@@ -108,59 +218,58 @@ describe('Fallback chains fail closed on grader outages (P1)', () => {
     },
   ];
 
-  it.each(graderCases)('does not let a passing fallback mask a $name grader outage', async ({
-    primary,
-    options,
-    vars,
-  }) => {
-    const assertions: Assertion[] = [
-      primary,
-      // A `contains` that WOULD pass on the output. It must not run / must not
-      // mask the grader outage.
-      { type: 'contains', value: 'test' },
-    ];
-
-    const result = await runAssertions({
-      prompt: 'some prompt',
-      test: { ...createTestCase(assertions, options), ...(vars && { vars }) },
-      providerResponse: mockProviderResponse,
-    });
-
-    // Fail closed: the grader outage terminates the chain.
-    expect(result.pass).toBe(false);
-
-    const graderComponent = result.componentResults?.find(
-      (component) => component.metadata?.graderError === true,
-    );
-    expect(graderComponent).toBeDefined();
-    expect(graderComponent?.pass).toBe(false);
-
-    // The passing `contains` fallback never contributed a passing result.
-    const passingContains = result.componentResults?.some(
-      (component) => component.assertion?.type === 'contains' && component.pass,
-    );
-    expect(passingContains).toBe(false);
-  });
-
-  it.each([
-    'factuality',
-    'model-graded-closedqa',
-  ] as const)('does not mask a malformed %s grader response', async (type) => {
-    vi.mocked(DefaultGradingProvider.callApi).mockResolvedValueOnce({
-      output: 'no structured verdict',
-    });
-    const result = await runAssertions({
-      prompt: 'some prompt',
-      test: createTestCase([
-        { type, value: 'criterion', fallback: 'next' },
+  it.each(graderCases)(
+    'does not let a passing fallback mask a $name grader outage',
+    async ({ primary, options, vars }) => {
+      const assertions: Assertion[] = [
+        primary,
+        // A `contains` that WOULD pass on the output. It must not run / must not
+        // mask the grader outage.
         { type: 'contains', value: 'test' },
-      ]),
-      providerResponse: mockProviderResponse,
-    });
-    expect(result.pass).toBe(false);
-    expect(result.componentResults?.[0].metadata?.graderError).toBe(true);
-    expect(result.componentResults).toHaveLength(1);
-  });
+      ];
+
+      const result = await runAssertions({
+        prompt: 'some prompt',
+        test: { ...createTestCase(assertions, options), ...(vars && { vars }) },
+        providerResponse: mockProviderResponse,
+      });
+
+      // Fail closed: the grader outage terminates the chain.
+      expect(result.pass).toBe(false);
+
+      const graderComponent = result.componentResults?.find(
+        (component) => component.metadata?.graderError === true,
+      );
+      expect(graderComponent).toBeDefined();
+      expect(graderComponent?.pass).toBe(false);
+
+      // The passing `contains` fallback never contributed a passing result.
+      const passingContains = result.componentResults?.some(
+        (component) => component.assertion?.type === 'contains' && component.pass,
+      );
+      expect(passingContains).toBe(false);
+    },
+  );
+
+  it.each(['factuality', 'model-graded-closedqa'] as const)(
+    'does not mask a malformed %s grader response',
+    async (type) => {
+      vi.mocked(DefaultGradingProvider.callApi).mockResolvedValueOnce({
+        output: 'no structured verdict',
+      });
+      const result = await runAssertions({
+        prompt: 'some prompt',
+        test: createTestCase([
+          { type, value: 'criterion', fallback: 'next' },
+          { type: 'contains', value: 'test' },
+        ]),
+        providerResponse: mockProviderResponse,
+      });
+      expect(result.pass).toBe(false);
+      expect(result.componentResults?.[0].metadata?.graderError).toBe(true);
+      expect(result.componentResults).toHaveLength(1);
+    },
+  );
 
   it('keeps context-faithfulness errors from its second grader call terminal', async () => {
     vi.mocked(DefaultGradingProvider.callApi)
@@ -307,5 +416,9 @@ describe('Trace data is loaded only for reached assertions', () => {
     expect(result.pass).toBe(true);
     // Both reached assertions share a single memoized trace load.
     expect(getTraceMock).toHaveBeenCalledTimes(1);
+    expect(getTraceMock).toHaveBeenCalledWith('trace-1', {
+      sanitizeAttributes: false,
+      includeInternalSpans: false,
+    });
   });
 });

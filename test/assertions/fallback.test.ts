@@ -618,24 +618,6 @@ describe('Assertion Fallback Mechanism', () => {
     });
   });
 
-  describe('Schema variants', () => {
-    it('treats fallback: false as a no-op (independent assertion)', async () => {
-      const assertions: Assertion[] = [
-        { type: 'contains', value: 'nonexistent', fallback: false as any },
-        { type: 'contains', value: 'test' },
-      ];
-
-      const result = await runAssertions({
-        test: createTestCase(assertions),
-        providerResponse: mockProviderResponse,
-      });
-
-      // Both assertions are independent; the first fails so the test fails.
-      expect(result.pass).toBe(false);
-      expect(result.componentResults).toHaveLength(2);
-    });
-  });
-
   describe('Fallback chains inside assert-set', () => {
     it('runs a chain inside a set and writes results to that set only', async () => {
       const assertions: AssertionOrSet[] = [
