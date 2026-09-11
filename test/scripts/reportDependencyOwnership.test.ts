@@ -892,6 +892,38 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it('records nested optional defaults and Closure-style JSDoc import types', () => {
+    write(
+      'src/index.js',
+      "/** @param [items=[]] {import('schema').Node} */\n/** @type {?import('shared').Thing} */\nexport function use(items) { return items; }",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'schema' }),
+    ]);
+    expect(
+      reportDependencyOwnership(root, config).declarations.find(
+        (entry) => entry.dependency === 'shared',
+      )?.references,
+    ).toEqual([expect.objectContaining({ kind: 'type' })]);
+  });
+
+  it('recognizes static computed resolve calls but ignores shadowed require', () => {
+    write(
+      'src/index.js',
+      "function require(name) { return name; }\nrequire('local-only');\nimport.meta['resolve']('resolved');",
+    );
+    write('src/resolve.js', "require['resolve']('resolved-require');");
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'resolved' }),
+      expect.objectContaining({ dependency: 'resolved-require' }),
+    ]);
+  });
+
+  it('ignores require calls shadowed by a function parameter', () => {
+    write('src/index.js', "export function load(require) { return require('local-only'); }");
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
+  });
+
   it.each(['', " Description: import('example')", "\n * Example: import('example')"])(
     'records a brace-less JSDoc type without its description: %s',
     (description) => {

@@ -78,6 +78,69 @@ const ignored = [
   '**/__mocks__/**',
 ];
 
+function consumeJSDocName(body: string, start: number): number {
+  if (body[start] !== '[') {
+    return body.slice(start).match(/^[\w.$]+[ \t]+(?=\{)/)?.[0].length ?? 0;
+  }
+  let depth = 0;
+  for (let index = start; index < body.length; index++) {
+    if (body[index] === '[') {
+      depth++;
+    }
+    if (body[index] === ']' && --depth === 0) {
+      const suffix = body.slice(index + 1).match(/^[ \t]+(?=\{)/);
+      return suffix ? index + 1 - start + suffix[0].length : 0;
+    }
+    if (body[index] === '\n' || body[index] === '\r') {
+      return 0;
+    }
+  }
+  return 0;
+}
+
+function getRequireShadowRanges(
+  program: ReturnType<typeof parseSync>['program'],
+): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  if (
+    program.body.some(
+      (node) =>
+        (node.type === 'FunctionDeclaration' && node.id?.name === 'require') ||
+        (node.type === 'VariableDeclaration' &&
+          node.declarations.some(
+            (declaration) =>
+              declaration.id.type === 'Identifier' && declaration.id.name === 'require',
+          )),
+    )
+  ) {
+    ranges.push([0, Number.POSITIVE_INFINITY]);
+  }
+  new Visitor({
+    FunctionDeclaration(node) {
+      if (
+        node.body &&
+        node.params.some((param) => param.type === 'Identifier' && param.name === 'require')
+      ) {
+        ranges.push([node.body.start, node.body.end]);
+      }
+    },
+    FunctionExpression(node) {
+      if (
+        node.body &&
+        node.params.some((param) => param.type === 'Identifier' && param.name === 'require')
+      ) {
+        ranges.push([node.body.start, node.body.end]);
+      }
+    },
+    ArrowFunctionExpression(node) {
+      if (node.params.some((param) => param.type === 'Identifier' && param.name === 'require')) {
+        ranges.push([node.body.start, node.body.end]);
+      }
+    },
+  }).visit(program);
+  return ranges;
+}
+
 function readPackage(repoRoot: string, manifest: string): PackageJson {
   return JSON.parse(fs.readFileSync(path.join(repoRoot, manifest), 'utf8')) as PackageJson;
 }
@@ -508,8 +571,7 @@ export function reportDependencyOwnership(
       )) {
         let start = tag.index + tag[0].length;
         if (['param', 'arg', 'argument', 'property', 'prop'].includes(tag[1])) {
-          const name = body.slice(start).match(/^(?:\[[^\]\r\n]*\]|[\w.$]+)[ \t]+(?=\{)/);
-          start += name?.[0].length ?? 0;
+          start += consumeJSDocName(body, start);
         }
         if (body[start] === '{') {
           start++;
@@ -535,6 +597,12 @@ export function reportDependencyOwnership(
               );
             },
           }).visit({ ...type.program, body: [declaration] });
+        } else {
+          // JSDoc accepts Closure forms that are not TypeScript syntax. Their import()
+          // specifiers are still literal, so retain them when Oxc rejects the wrapper.
+          for (const match of source.matchAll(/import\(\s*(['"])([^'"]+)\1\s*\)/g)) {
+            add({ start: comment.start + 2 + start + (match.index ?? 0) }, match[2], 'type');
+          }
         }
       }
     }
@@ -545,6 +613,9 @@ export function reportDependencyOwnership(
           node.type === 'TSImportEqualsDeclaration' &&
           node.moduleReference.type === 'TSExternalModuleReference',
       );
+    const requireShadowRanges = getRequireShadowRanges(result.program);
+    const isRequireShadowed = (offset: number) =>
+      requireShadowRanges.some(([start, end]) => offset >= start && offset <= end);
     new Visitor({
       ImportDeclaration(node) {
         add(
@@ -600,14 +671,23 @@ export function reportDependencyOwnership(
         if (!node.arguments[0]) {
           return;
         }
-        if (node.callee.type === 'Identifier' && node.callee.name === 'require') {
+        if (
+          !isRequireShadowed(node.start) &&
+          node.callee.type === 'Identifier' &&
+          node.callee.name === 'require'
+        ) {
           load(node, node.arguments[0], 'value');
         } else if (
           node.callee.type === 'MemberExpression' &&
-          !node.callee.computed &&
-          node.callee.property.type === 'Identifier' &&
-          node.callee.property.name === 'resolve' &&
-          ((node.callee.object.type === 'Identifier' && node.callee.object.name === 'require') ||
+          ((node.callee.computed &&
+            node.callee.property.type === 'Literal' &&
+            node.callee.property.value === 'resolve') ||
+            (!node.callee.computed &&
+              node.callee.property.type === 'Identifier' &&
+              node.callee.property.name === 'resolve')) &&
+          ((!isRequireShadowed(node.start) &&
+            node.callee.object.type === 'Identifier' &&
+            node.callee.object.name === 'require') ||
             (node.callee.object.type === 'MetaProperty' &&
               node.callee.object.meta.name === 'import'))
         ) {
