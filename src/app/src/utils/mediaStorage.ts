@@ -70,7 +70,7 @@ export function getMediaUrl(storageRef: string): string | null {
   if (!key) {
     return null;
   }
-  return /^(audio|image|video|document)\/[a-f0-9]{12}\.[a-z0-9]+$/i.test(key)
+  return /^(audio|image|video|document)\/[a-f0-9]{12}\.[a-z0-9]+$/.test(key)
     ? `${getApiBaseUrl()}/media/${key}`
     : `${getApiBaseUrl()}/media?${new URLSearchParams({ key })}`;
 }

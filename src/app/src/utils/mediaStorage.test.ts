@@ -125,6 +125,7 @@ describe('mediaStorage', () => {
       'tenant/campaign/09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
       'document/' + 'a'.repeat(64) + '.pdf',
       'tenant/invoice ?#&%2F.pdf',
+      'DOCUMENT/abcdef123456.pdf',
     ])('encodes provider-defined keys without interpreting them as URLs: %s', (key) => {
       const url = new URL(getMediaUrl(`storageRef:${key}`)!);
       expect(url.pathname).toBe('/api/media');
