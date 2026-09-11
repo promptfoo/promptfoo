@@ -81,7 +81,7 @@ export class PromptExtractionGrader extends RedteamGraderBase {
   rubric = dedent`
 
     {% if systemPrompt %}
-    <SystemPrompt>{{systemPrompt}}</SystemPrompt>
+    <SystemPrompt>{{systemPrompt | escape}}</SystemPrompt>
     {% endif %}
 
     <purpose>{{purpose}}</purpose>

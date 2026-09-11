@@ -2473,7 +2473,7 @@ describe('RedteamGraderBase', () => {
         });
         const githubToken = `ghp_${'a'.repeat(36)}`;
         const slackToken = `xoxb-1234567890-1234567890-${'a'.repeat(24)}`;
-        const command = `API_KEY="fixture-env-key" AWS_SECRET_ACCESS_KEY=fixture-aws-key curl --user alice:fixture-user-secret --proxy-user bob:fixture-proxy-secret http://169.254.169.254/latest/meta-data/ -H 'Authorization: Bearer fixture-header-token' -H 'Authorization: ApiKey fixture-api-key' -H 'Cookie: sessionid=fixture-session; foo=fixture-cookie' -H Cookie:fixture-unquoted; rm -rf /workspace --data '${githubToken}' --data '${slackToken}'; curl https://user:fixture-password@example.com/path?token=fixture-query-token`;
+        const command = `API_KEY="fixture-env-key" AWS_SECRET_ACCESS_KEY=fixture-aws-key aws configure set aws_secret_access_key fixture-positional-key; curl --client-secret fixture-client-secret --user alice:fixture-user-secret --proxy-user bob:fixture-proxy-secret http://169.254.169.254/latest/meta-data/ -H 'Authorization: Bearer fixture-header-token' -H 'Authorization: ApiKey fixture-api-key' -H 'X-Api-Key: fixture-x-api-key' -H 'Cookie: sessionid=fixture-session; foo=fixture-cookie' -H Cookie:fixture-unquoted; rm -rf /workspace --data '${githubToken}' --data '${slackToken}'; curl https://user:fixture-password@example.com/path?token=fixture-query-token; -----BEGIN OPENSSH PRIVATE KEY----- fixture-private-key -----END OPENSSH PRIVATE KEY-----`;
         await new HarmfulGrader().getResult(
           'test prompt',
           "I can't do that.",
@@ -2484,7 +2484,12 @@ describe('RedteamGraderBase', () => {
           false,
           {
             traceSummary: jsonSummary
-              ? JSON.stringify({ apiKey: 'fixture-json-key', steps: [{ name: command }] })
+              ? JSON.stringify({
+                  apiKey: 'fixture-json-key',
+                  GITHUB_TOKEN: 'fixture-json-env',
+                  headers: [{ name: 'Authorization', value: 'fixture-json-header' }],
+                  steps: [{ name: command }],
+                })
               : `Executed ${command}`,
             traceData: {
               traceId: 'trace',
@@ -2499,6 +2504,8 @@ describe('RedteamGraderBase', () => {
                     'tool.name': 'exec_command',
                     'tool.arguments': JSON.stringify({ command }),
                   },
+                  statusCode: 2,
+                  statusMessage: 'blocked',
                 },
               ],
             },
@@ -2516,12 +2523,19 @@ describe('RedteamGraderBase', () => {
         expect(rubric).not.toContain('fixture-query-token');
         expect(rubric).not.toContain('fixture-header-token');
         expect(rubric).not.toContain('fixture-api-key');
+        expect(rubric).not.toContain('fixture-x-api-key');
+        expect(rubric).not.toContain('fixture-positional-key');
+        expect(rubric).not.toContain('fixture-client-secret');
+        expect(rubric).not.toContain('fixture-private-key');
+        expect(rubric).not.toContain('fixture-json-env');
+        expect(rubric).not.toContain('fixture-json-header');
         expect(rubric).not.toContain('fixture-session');
         expect(rubric).not.toContain('fixture-cookie');
         expect(rubric).not.toContain('fixture-unquoted');
         expect(rubric).toContain('rm -rf /workspace');
         expect(rubric).not.toContain(githubToken);
         expect(rubric).not.toContain(slackToken);
+        expect(rubric).toContain('&quot;code&quot;:2');
       },
     );
 

@@ -389,21 +389,67 @@ export abstract class RedteamPluginBase {
 function redactTraceEvidence(text: string): string {
   if (/^\s*[\[{]/.test(text)) {
     try {
-      return JSON.stringify(JSON.parse(text), (key, value) =>
-        isSecretField(key)
-          ? '[REDACTED]'
-          : typeof value === 'string'
-            ? redactTraceEvidence(value)
-            : value,
-      );
+      const redactJson = (value: unknown, key = ''): unknown => {
+        if (isSecretField(key) || isSecretEnvVarName(key)) {
+          return '[REDACTED]';
+        }
+        if (Array.isArray(value)) {
+          return value.map((entry) => redactJson(entry));
+        }
+        if (value && typeof value === 'object') {
+          const record = value as Record<string, unknown>;
+          const headerName = typeof record.name === 'string' ? record.name : undefined;
+          return Object.fromEntries(
+            Object.entries(record).map(([entryKey, entryValue]) => [
+              entryKey,
+              entryKey === 'value' &&
+              headerName &&
+              (isSecretField(headerName) || isSecretEnvVarName(headerName))
+                ? '[REDACTED]'
+                : redactJson(entryValue, entryKey),
+            ]),
+          );
+        }
+        return typeof value === 'string' ? redactTraceEvidence(value) : value;
+      };
+      return JSON.stringify(redactJson(JSON.parse(text)));
     } catch {
       // Trace summaries may be prose rather than serialized trajectory steps.
     }
   }
   return text
+    .replace(
+      /-----BEGIN [^-\r\n]*PRIVATE KEY-----[\s\S]*?-----END [^-\r\n]*PRIVATE KEY-----/gi,
+      '[REDACTED]',
+    )
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/@\s"'`\\]+)@/gi, '$1[REDACTED]@')
     .replace(/\bhttps?:\/\/[^\s"'`\\]+/gi, (url) => sanitizeUrl(url))
-    .replace(/(['"])((?:authorization|(?:set-)?cookie)\s*:\s*)[^'"]*\1/gi, '$1$2[REDACTED]$1')
+    .replace(/(['"])([\w-]+)(\s*:\s*)[^'"]*\1/gi, (match, quote, key, separator) =>
+      isSecretField(key) || /^(?:authorization|(?:set-)?cookie)$/i.test(key)
+        ? quote + key + separator + '[REDACTED]' + quote
+        : match,
+    )
+    .replace(
+      /\b([\w-]+)(\s*:\s*)[^"'\\;]*?(?=;\s+[A-Za-z][\w-]*\s+-|\s+-[A-Za-z]|$)/gi,
+      (match, key, separator) =>
+        isSecretField(key) || /^(?:authorization|(?:set-)?cookie)$/i.test(key)
+          ? key + separator + '[REDACTED]'
+          : match,
+    )
+    .replace(
+      /(^|\s)((?:--?[\w-]+|-u)\s+)(?:"[^"]*"|'[^']*'|[^\s"'\\;]+)/gi,
+      (match, prefix, option) =>
+        option.trim() === '-u' || isSecretField(option.trim().replace(/^--?/, ''))
+          ? prefix + option + '[REDACTED]'
+          : match,
+    )
+    .replace(
+      /\b(aws\s+configure\s+set\s+)([\w-]+)(\s+)(?:"[^"]*"|'[^']*'|[^\s"'\\;]+)/gi,
+      (match, prefix, key, separator) =>
+        isSecretField(key) || isSecretEnvVarName(key)
+          ? prefix + key + separator + '[REDACTED]'
+          : match,
+    )
     .replace(
       /\b((?:set-)?cookie\s*:\s*)[^"'`\\]*?(?=;\s+[A-Za-z][\w-]*\s+-|\s+-[A-Za-z]|$)/gi,
       '$1[REDACTED]',
@@ -455,7 +501,8 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
   const spans = gradingContext?.traceData?.spans?.length
     ? gradingContext.traceData.spans
     : (gradingContext?.traceContext?.spans ?? []);
-  const actions = spans.flatMap(({ name, attributes = {} }) => {
+  const actions = spans.flatMap((span) => {
+    const { name, attributes = {} } = span;
     let args = TOOL_ARGUMENT_ATTRIBUTE_KEYS.map((key) => attributes[key]).find(
       (value) => value !== undefined,
     );
@@ -485,6 +532,8 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
       path: filePath,
       command,
       args,
+      status:
+        'status' in span ? span.status : { code: span.statusCode, message: span.statusMessage },
     });
     // Form-data sanitization can consume an entire shell command after an env assignment.
     // Keep command strings for the credential-aware trace redactor below.

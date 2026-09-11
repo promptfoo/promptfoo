@@ -102,6 +102,15 @@ export function resolveTracingOptions({
   test?: AtomicTestCase;
   config?: Record<string, unknown>;
 }): RedteamTracingOptions {
+  const strategyAlias: Record<string, string> = {
+    iterative: 'jailbreak',
+    'iterative:meta': 'jailbreak:meta',
+    'iterative-meta': 'jailbreak:meta',
+    'jailbreak:meta': 'iterative-meta',
+  };
+  const strategyIds = [strategyId, strategyAlias[strategyId]].filter((id): id is string =>
+    Boolean(id),
+  );
   // Read redteam-specific tracing config
   const redteamConfig = cliState.config?.redteam as Record<string, unknown> | undefined;
   const globalConfig = (redteamConfig?.tracing as RawTracingConfig | undefined) ?? undefined;
@@ -111,18 +120,12 @@ export function resolveTracingOptions({
   )?.tracing as RawTracingConfig | undefined;
   const providerStrategyConfig = (config?.tracing as RawTracingConfig | undefined) ?? undefined;
 
-  const globalStrategyOverride =
-    strategyId && globalConfig?.strategies ? globalConfig.strategies[strategyId] : undefined;
-  const testStrategyOverride =
-    strategyId && testConfig?.strategies ? testConfig.strategies[strategyId] : undefined;
-  const metadataStrategyOverride =
-    strategyId && metadataStrategyConfig?.strategies
-      ? metadataStrategyConfig.strategies[strategyId]
-      : undefined;
-  const providerStrategyOverride =
-    strategyId && providerStrategyConfig?.strategies
-      ? providerStrategyConfig.strategies[strategyId]
-      : undefined;
+  const findOverride = (tracing?: RawTracingConfig) =>
+    strategyIds.map((id) => tracing?.strategies?.[id]).find(Boolean);
+  const globalStrategyOverride = findOverride(globalConfig);
+  const testStrategyOverride = findOverride(testConfig);
+  const metadataStrategyOverride = findOverride(metadataStrategyConfig);
+  const providerStrategyOverride = findOverride(providerStrategyConfig);
 
   const merged = mergeTracingConfig(
     globalConfig,

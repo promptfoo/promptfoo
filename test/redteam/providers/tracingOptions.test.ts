@@ -70,4 +70,16 @@ describe('resolveTracingOptions', () => {
     expect(first.provider).toEqual(firstTracingConfig.provider);
     expect(second.provider).toEqual(secondTracingConfig.provider);
   });
+
+  it.each([
+    ['iterative', 'jailbreak'],
+    ['iterative-meta', 'jailbreak:meta'],
+  ])('honors public %s overrides for %s providers', (strategyId, configuredId) => {
+    cliState.config = {
+      redteam: {
+        tracing: { enabled: true, strategies: { [configuredId]: { includeInGrading: false } } },
+      },
+    } as UnifiedConfig;
+    expect(resolveTracingOptions({ strategyId }).includeInGrading).toBe(false);
+  });
 });
