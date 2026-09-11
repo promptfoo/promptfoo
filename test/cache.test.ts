@@ -405,7 +405,7 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).not.toHaveBeenCalled();
     });
 
-    it('aborts while waiting for a cache write', async () => {
+    it('returns a completed response when a cache write is aborted', async () => {
       const controller = new AbortController();
       const cache = getCache();
       let finishWrite!: () => void;
@@ -416,9 +416,8 @@ describe('fetchWithCache', () => {
       mockFetchWithRetries.mockResolvedValueOnce(mockFetchWithRetriesResponse(true, response));
       const request = fetchWithCache(url, { signal: controller.signal }, 1000);
       await vi.waitFor(() => expect(set).toHaveBeenCalledOnce());
-      const rejected = expect(request).rejects.toMatchObject({ name: 'AbortError' });
       controller.abort();
-      await rejected;
+      await expect(request).resolves.toMatchObject({ data: response });
       finishWrite();
     });
 
