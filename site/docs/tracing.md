@@ -365,9 +365,9 @@ Patterns are matched against each attribute key **at every nesting level individ
 nested key like `authorization` inside a `headers` object is matched by the pattern
 `authorization`, but a full dotted path such as `request.headers.authorization` will **not**
 match the nested leaf key — use the key's own name.
-Redaction covers span **attributes** (recursively, including nested objects and arrays),
-and a span `name` or `statusMessage` **only when it exactly echoes the value of a redacted
-attribute**. A secret that appears solely in a span name, status/error message, or log
+Redaction covers span and event **attributes**, including nested objects and arrays.
+Matching values echoed in span or event names and status messages are scrubbed too,
+including numeric values. A secret that appears solely in a span name, status/error message, or log
 body — without also being a redacted attribute value — is not detected. Redaction also does
 **not** scan arbitrary free text or trace `metadata` (such as test `vars`), so avoid placing
 secrets in test variables when traces are retained.
@@ -491,7 +491,7 @@ Use environment variables for tokens, passwords, and authentication headers. Pro
 
 Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. The URL cannot contain credentials, query parameters, or fragments because Promptfoo appends its trace lookup path to that address. Put credentials under `auth` and tenant settings in `headers` instead.
 
-Tempo span events are retained alongside span attributes. A malformed event is
+Tempo span events are retained alongside span attributes. Spans containing named tool or guardrail events are included in red team trace context. A malformed event is
 skipped without discarding its parent span or valid sibling events.
 
 Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in span names or error messages. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
