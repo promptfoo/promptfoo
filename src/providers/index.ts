@@ -50,11 +50,9 @@ function createProviderFromFunction(
 ): ApiProvider {
   const apiProvider: ApiProvider = {
     id: () => provider.label ?? id,
-    callApi: env
-      ? function (this: ApiProvider, ...args) {
-          return cliState.withEnv(env, () => provider.apply(this, args));
-        }
-      : provider,
+    callApi(...args) {
+      return cliState.withEnv(env, () => provider.apply(this, args));
+    },
   };
   // Only forward defined metadata so we don't overwrite downstream defaults
   // (e.g. a `config ?? {}` merge) with an explicit `undefined` key.

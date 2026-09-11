@@ -14,6 +14,7 @@ import {
   showRedteamProviderLabelMissingWarning as commandShowRedteamProviderLabelMissingWarning,
   evalCommand,
 } from '../../src/commands/eval';
+import { getEnvBool, getEnvString } from '../../src/envars';
 import { evaluate, PromptSuggestionsRejectedError } from '../../src/evaluator';
 import {
   checkEmailStatusAndMaybeExit,
@@ -326,6 +327,99 @@ describe('evalCommand', () => {
       expect.any(Eval),
       null,
     );
+  });
+
+  it('keeps each run scoped through grader loading and output serialization', async () => {
+    const previousConfig = cliState.config;
+    const previousBasePath = cliState.basePath;
+    let release!: () => void;
+    const bothEvaluating = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started = 0;
+    const outputs: Record<string, unknown> = {};
+    vi.mocked(resolveConfigs).mockImplementation(async (_options, config) => {
+      cliState.config = config;
+      cliState.basePath = '/stale';
+      return {
+        config,
+        testSuite: {
+          env: config.env,
+          prompts: [{ raw: 'private prompt', label: 'test' }],
+          providers: [{ id: () => 'echo', callApi: async () => ({ output: 'Hello' }) }],
+        },
+        basePath: path.resolve(config.description!),
+      };
+    });
+    vi.mocked(loadApiProvider).mockImplementation(async (_provider, context) => {
+      const key = getEnvString('OPENAI_API_KEY');
+      expect(context).toEqual({
+        basePath: path.resolve(key!),
+        env: expect.objectContaining({ OPENAI_API_KEY: key }),
+      });
+      return { id: () => 'grader', callApi: async () => ({ output: 'pass' }) };
+    });
+    vi.mocked(evaluate).mockImplementation(async (suite, evalRecord) => {
+      evalRecord.prompts.push(...suite.prompts.map((prompt) => ({ ...prompt, provider: 'echo' })));
+      if (++started === 2) {
+        release();
+      }
+      await bothEvaluating;
+      return evalRecord as Eval;
+    });
+    vi.mocked(writeMultipleOutputs).mockImplementation(async (_paths, record) => {
+      const summary = await record.toEvaluateSummary();
+      outputs[record.config.description!] = {
+        prompts: 'prompts' in summary ? summary.prompts.map((prompt) => prompt.raw) : [],
+        stripResponse: getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT'),
+        stripVars: getEnvBool('PROMPTFOO_STRIP_TEST_VARS'),
+        stripMetadata: getEnvBool('PROMPTFOO_STRIP_METADATA'),
+      };
+    });
+    try {
+      await Promise.all(
+        ['private', 'public'].map((name) =>
+          doEval(
+            { table: false, write: false, share: false, grader: 'file://grader.js' },
+            {
+              description: name,
+              outputPath: `${name}.json`,
+              env: {
+                OPENAI_API_KEY: name,
+                PROMPTFOO_STRIP_PROMPT_TEXT: String(name === 'private'),
+                PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(name === 'private'),
+                PROMPTFOO_STRIP_TEST_VARS: String(name === 'private'),
+                PROMPTFOO_STRIP_METADATA: String(name === 'private'),
+              },
+            },
+            undefined,
+            {},
+          ),
+        ),
+      );
+      expect(outputs).toEqual({
+        private: {
+          prompts: ['[prompt stripped]'],
+          stripResponse: true,
+          stripVars: true,
+          stripMetadata: true,
+        },
+        public: {
+          prompts: ['private prompt'],
+          stripResponse: false,
+          stripVars: false,
+          stripMetadata: false,
+        },
+      });
+    } finally {
+      release();
+      vi.mocked(resolveConfigs).mockReset();
+      vi.mocked(loadApiProvider).mockReset();
+      vi.mocked(evaluate).mockReset();
+      vi.mocked(writeMultipleOutputs).mockReset();
+      cliState.config = previousConfig;
+      cliState.basePath = previousBasePath;
+    }
   });
 
   it('should merge runtime tags over config tags', async () => {

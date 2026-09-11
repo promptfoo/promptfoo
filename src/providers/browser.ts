@@ -17,6 +17,8 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
+const nunjucks = getNunjucksEngine();
+
 // Constants for connection configuration
 const DEFAULT_DEBUGGING_PORT = 9222;
 const DEFAULT_FETCH_TIMEOUT_MS = 5000;
@@ -554,7 +556,6 @@ export class BrowserProvider implements ApiProvider {
   }
 
   private renderArgs(args: Record<string, any>, vars: Record<string, any>): Record<string, any> {
-    const nunjucks = getNunjucksEngine();
     const renderedArgs: Record<string, any> = {};
     for (const [key, value] of Object.entries(args)) {
       if (typeof value === 'string') {

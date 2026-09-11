@@ -2143,7 +2143,8 @@ describe('resolveProvider', () => {
     expect(result).toBeDefined();
     expect(typeof result.id).toBe('function');
     expect(result.id()).toBe('My Custom Provider');
-    expect(result.callApi).toBe(mockFunctionProvider);
+    await expect(result.callApi('Hello')).resolves.toEqual({ output: 'Response for: Hello' });
+    expect(mockFunctionProvider).toHaveBeenCalledWith('Hello');
     expect(result.transform).toBe(mockFunctionProvider.transform);
     expect(result.delay).toBe(250);
   });
@@ -2160,7 +2161,8 @@ describe('resolveProvider', () => {
     expect(result).toBeDefined();
     expect(typeof result.id).toBe('function');
     expect(result.id()).toBe('custom-function');
-    expect(result.callApi).toBe(mockFunctionProvider);
+    await expect(result.callApi('Hello')).resolves.toEqual({ output: 'Response for: Hello' });
+    expect(mockFunctionProvider).toHaveBeenCalledWith('Hello');
   });
 
   it('should handle empty providerMap gracefully', async () => {

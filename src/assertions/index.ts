@@ -318,6 +318,8 @@ const ASSERTION_HANDLERS: Record<
   'word-count': handleWordCount,
 };
 
+const nunjucks = getNunjucksEngine();
+
 /**
  * Renders a metric name template with test variables.
  * @param metric - The metric name, possibly containing Nunjucks template syntax
@@ -332,7 +334,7 @@ export function renderMetricName(
     return metric;
   }
   try {
-    const rendered = getNunjucksEngine().renderString(metric, vars);
+    const rendered = nunjucks.renderString(metric, vars);
     if (rendered === '' && metric !== '') {
       logger.debug(`Metric template "${metric}" rendered to empty string`);
     }
@@ -543,7 +545,7 @@ async function runAssertionInternal({
       valueFromScript = await Promise.resolve(requiredModule(output, context));
     } else {
       // It's a normal string value
-      renderedValue = getNunjucksEngine().renderString(renderedValue, resolvedVars);
+      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     // Process each element in the array
@@ -552,7 +554,7 @@ async function runAssertionInternal({
         if (v.startsWith('file://')) {
           return processFileReference(v);
         }
-        return getNunjucksEngine().renderString(v, resolvedVars);
+        return nunjucks.renderString(v, resolvedVars);
       }
       return v;
     });

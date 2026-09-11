@@ -232,16 +232,41 @@ describe('suite environment loading', () => {
   );
 
   it('uses the scoped environment for regular and file-path templates', async () => {
+    const cachedEngine = getNunjucksEngine();
     const result = await cliState.withEnv({ OPENAI_API_KEY: 'scoped-key' }, async () => {
       await Promise.resolve();
       return [
         getEnvString('OPENAI_API_KEY'),
-        getNunjucksEngine().renderString('{{ env.OPENAI_API_KEY }}', {}),
+        cachedEngine.renderString('{{ env.OPENAI_API_KEY }}', {}),
         getNunjucksEngineForFilePath().renderString('{{ env.OPENAI_API_KEY }}', {}),
       ];
     });
     expect(result).toEqual(['scoped-key', 'scoped-key', 'scoped-key']);
     expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
+  });
+
+  it('refreshes cached engine template flags per suite', async () => {
+    const engine = getNunjucksEngine();
+    expect(
+      cliState.withEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' }, () =>
+        engine.renderString('{{ env.OPENAI_API_KEY }}', {}),
+      ),
+    ).toBe('{{ env.OPENAI_API_KEY }}');
+    expect(
+      cliState.withEnv({ PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'true' }, () =>
+        engine.renderString('{{ env.OPENAI_API_KEY }}', {}),
+      ),
+    ).toBe('');
+    const rendered = await cliState.withEnv(
+      { PROMPTFOO_DISABLE_TEMPLATING: 'true' },
+      () =>
+        new Promise<string>((resolve, reject) => {
+          engine.renderString('{{ env.OPENAI_API_KEY }}', {}, (error, output) =>
+            error ? reject(error) : resolve(output!),
+          );
+        }),
+    );
+    expect(rendered).toBe('{{ env.OPENAI_API_KEY }}');
   });
 
   it.each(['single', 'multiple'])(
@@ -356,6 +381,36 @@ describe('suite environment loading', () => {
     expect(results).toEqual(['first-key', 'second-key']);
   });
 
+  it('isolates cached engines during overlapping async renders', async () => {
+    const engine = getNunjucksEngine();
+    engine.addFilter(
+      'defer',
+      (value, callback) => {
+        void Promise.resolve().then(() => callback(null, value));
+      },
+      true,
+    );
+    const results = await Promise.all(
+      ['first', 'second'].map((name) =>
+        cliState.withEnv(
+          {
+            OPENAI_API_KEY: `${name}-key`,
+            PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: String(name === 'second'),
+          },
+          () =>
+            new Promise<string>((resolve, reject) => {
+              engine.renderString(
+                '{{ "" | defer }}{{ env.OPENAI_API_KEY }}:{{ env.OPENAI_API_BASE_URL | default("hidden") }}',
+                {},
+                (error, output) => (error ? reject(error) : resolve(output ?? '')),
+              );
+            }),
+        ),
+      ),
+    );
+    expect(results).toEqual(['first-key:https://process.example/v1', 'second-key:hidden']);
+  });
+
   it.each(['single', 'array'])(
     'retains scoped environment for a %s function provider',
     async (form) => {
@@ -378,7 +433,27 @@ describe('suite environment loading', () => {
       { description: 'Row #1', vars: 'missing-vars.yaml', provider: 'file://missing-provider.js' },
     ]);
     expect(readAzureBlobText).toHaveBeenCalledTimes(1);
+    const result = await evaluate(
+      { prompts: ['Hello'], providers: ['echo'], tests: testSuite.tests },
+      { cache: false },
+    );
+    const rows = await result.getResults();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ success: true, response: { output: 'Hello' } });
+    expect(readAzureBlobText).toHaveBeenCalledTimes(1);
   });
+
+  it.each([undefined, {}])(
+    'retains an explicit empty function-provider environment (%j)',
+    async (env) => {
+      const [provider] = await loadApiProviders(
+        async () => ({ output: getEnvString('OPENAI_API_KEY') }),
+        { env },
+      );
+      expect((await provider.callApi('Hello')).output).toBe('process-key');
+      expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
+    },
+  );
 
   it('resolves nested default-test files from a later config directory', async () => {
     const first = writeConfig('first', {});
@@ -434,6 +509,24 @@ describe('suite environment loading', () => {
     expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['first', 'second']);
   });
 
+  it('loads nested default test files relative to their own directory', async () => {
+    const firstConfigPath = writeConfig('first-default', {});
+    const configPath = writeConfig('nested-default', {
+      defaultTest: 'file://defaults/test.yaml',
+      tests: [{ vars: { input: 'hello' } }],
+    });
+    const defaultsDir = path.join(path.dirname(configPath), 'defaults');
+    fs.mkdirSync(defaultsDir);
+    fs.writeFileSync(path.join(defaultsDir, 'test.yaml'), 'vars: vars.yaml\n');
+    fs.writeFileSync(path.join(defaultsDir, 'vars.yaml'), 'source: nested\n');
+
+    const { testSuite } = await resolveConfigs({ config: [firstConfigPath, configPath] }, {});
+
+    expect(
+      typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest.vars : undefined,
+    ).toEqual({ source: 'nested' });
+  });
+
   it('keeps labeled prompt files from different config directories distinct', async () => {
     const paths = ['first', 'second'].map((name) => {
       const configPath = writeConfig(name, {
@@ -451,6 +544,25 @@ describe('suite environment loading', () => {
       ]),
     );
     expect(testSuite.prompts).toHaveLength(3);
+  });
+
+  it('loads scenario tests relative to each config directory', async () => {
+    const paths = ['first', 'second'].map((name) => {
+      const configPath = writeConfig(name, {});
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      config.scenarios = [{ config: [{}], tests: ['cases.yaml'] }];
+      fs.writeFileSync(configPath, JSON.stringify(config));
+      fs.writeFileSync(
+        path.join(path.dirname(configPath), 'cases.yaml'),
+        `- vars:\n    source: ${name}\n`,
+      );
+      return configPath;
+    });
+    const { testSuite } = await resolveConfigs({ config: paths }, {});
+    expect(testSuite.scenarios?.map((scenario) => scenario.tests?.[0].vars?.source)).toEqual([
+      'first',
+      'second',
+    ]);
   });
 
   it.each(['string', 'object'] as const)(
