@@ -131,7 +131,34 @@ describe('matchesClassification', () => {
       pass: false,
       reason: 'No classification scores returned',
       score: 0,
+      metadata: { graderError: true },
+      tokensUsed: {
+        cached: 0,
+        completion: 0,
+        completionDetails: {
+          acceptedPrediction: 0,
+          reasoning: 0,
+          rejectedPrediction: 0,
+        },
+        numRequests: 0,
+        prompt: 0,
+        total: 0,
+      },
     });
+  });
+
+  it('tags a transport error as a grader failure, never invertible into a pass', async () => {
+    const grading: GradingConfig = {
+      provider: Object.assign(createMockProvider({ id: 'broken-classification-provider' }), {
+        callClassificationApi: vi.fn().mockResolvedValue({ error: 'Simulated timeout' }),
+      }),
+    };
+
+    const result = await matchesClassification('harmful', 'Sample output', 0.5, grading);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('Simulated timeout');
+    expect(result.metadata?.graderError).toBe(true);
   });
 
   it('should use the overridden classification grading config', async () => {

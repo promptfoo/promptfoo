@@ -98,6 +98,9 @@ export async function matchesSearchRubric(
       reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
       tokensUsed: resp.tokenUsage,
       assertion,
+      // A provider that errored gave no verdict to invert on; tag it so
+      // not-search-rubric never flips a transport failure into a pass.
+      metadata: { graderError: true },
     };
   }
 

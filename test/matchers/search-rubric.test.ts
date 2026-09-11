@@ -171,6 +171,7 @@ describe('matchesSearchRubric', () => {
         pass: false,
         score: 0,
         reason: 'Search rubric evaluation failed: search unavailable',
+        metadata: { graderError: true },
       }),
     );
   });
