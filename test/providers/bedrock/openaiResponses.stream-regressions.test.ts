@@ -339,6 +339,40 @@ describe('Responses stream regressions', () => {
   });
 
   it.each([
+    { code: 'server_error' },
+    { code: 'rate_limit_exceeded' },
+    { code: 'invalid_request_error' },
+    { code: 'content_filter_error' },
+    { type: 'server_error' },
+    { code: 'upstream_unavailable', type: 'api_error' },
+  ])('preserves coded operational errors mentioning a safety block: %j', async (metadata) => {
+    const error = {
+      ...metadata,
+      message: 'Request blocked because the safety service is unavailable',
+    };
+    const parsed = await readResponsesStream(
+      createSseResponse([
+        {
+          type: 'response.output_text.delta',
+          output_index: 0,
+          content_index: 0,
+          delta: 'Unfinished draft',
+        },
+        { type: 'response.failed', response: { status: 'failed', error, output: [] } },
+      ]),
+      'test',
+      { debug: vi.fn() },
+    );
+    const processed = await createProcessor().processResponseOutput(parsed, {}, false);
+
+    expect(parsed.error).toEqual(error);
+    expect(processed.error).toContain(error.message);
+    expect(processed.isRefusal).not.toBe(true);
+    expect(JSON.stringify(parsed.output)).not.toContain('refusal');
+    expect(JSON.stringify(parsed.output)).not.toContain('Unfinished draft');
+  });
+
+  it.each([
     {
       name: 'content-filter-service error',
       error: { code: 'content_filter_error', message: 'The contents are not filtered' },
@@ -6268,6 +6302,63 @@ describe('Responses stream regressions', () => {
       expect(JSON.stringify(processed.raw)).not.toContain('SECRET');
       expect(JSON.stringify(processed.metadata)).not.toContain('SECRET');
     });
+
+    it.each([
+      { eventIds: true, messageIds: true, count: 1 },
+      { eventIds: false, messageIds: true, count: 1 },
+      { eventIds: false, messageIds: false, count: 1 },
+      { eventIds: true, messageIds: true, count: 2 },
+      { eventIds: false, messageIds: true, count: 2 },
+      { eventIds: false, messageIds: false, count: 2 },
+    ])(
+      'realigns finalized text at EOF after dropping an invalid call ($eventIds/$messageIds/$count)',
+      async ({ eventIds, messageIds, count }) => {
+        const processCalls = vi.fn();
+        const events: unknown[] = [
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: { type: 'function_call', name: 'lookup', arguments: '{}' },
+          },
+        ];
+        for (let index = 1; index <= count; index++) {
+          events.push(
+            {
+              type: 'response.output_text.done',
+              output_index: index,
+              content_index: 0,
+              ...(eventIds ? { item_id: `message_${index}` } : {}),
+              text: `Final answer ${index}`,
+            },
+            {
+              type: 'response.output_item.done',
+              output_index: index,
+              item: {
+                type: 'message',
+                role: 'assistant',
+                ...(messageIds ? { id: `message_${index}` } : {}),
+                content: [{ type: 'output_text', text: 'Stale draft', annotations: [] }],
+              },
+            },
+          );
+        }
+        const parsed = await readResponsesStream(createSseResponse(events), 'test', {
+          debug: vi.fn(),
+        });
+        const processed = await createProcessor(processCalls).processResponseOutput(
+          parsed,
+          {},
+          false,
+        );
+
+        expect(parsed.output).toHaveLength(count);
+        expect(processed.output).toBe(
+          Array.from({ length: count }, (_, index) => `Final answer ${index + 1}`).join('\n'),
+        );
+        expect(JSON.stringify(parsed)).not.toContain('Stale draft');
+        expect(processCalls).not.toHaveBeenCalled();
+      },
+    );
 
     it('keeps finalized message text and citations aligned after an unfinalized tool is removed', async () => {
       const annotation = {

@@ -375,17 +375,12 @@ function hasTerminalSafetyDecision(response: any): boolean {
     return true;
   }
   if (
-    errorCodes.some(
-      (errorCode) =>
-        errorCode !== 'content_filter_error' &&
-        typeof errorCode === 'string' &&
-        safetyReason.test(errorCode),
-    )
+    errorCodes.some((errorCode) => typeof errorCode === 'string' && safetyReason.test(errorCode))
   ) {
     return true;
   }
   if (
-    !errorCodes.includes('content_filter_error') &&
+    !errorCodes.some((code) => typeof code === 'string' && code.length > 0) &&
     typeof response?.error?.message === 'string' &&
     /\b(?:blocked|refused|rejected|filtered|disallowed)\b/i.test(response.error.message) &&
     /(?:content[_ -]?(?:filter|policy)|safety|guardrail)/i.test(response.error.message)
@@ -2043,6 +2038,39 @@ export async function readResponsesStream(
     throw new Error(`${providerName} streaming response included malformed SSE payload`);
   }
 
+  // Tool filters preserve message order while removing output slots.
+  const originalMessageIndices = outputWithCompletedAnnotations.flatMap((item, index) =>
+    item?.type === 'message' ? [index] : [],
+  );
+  const filteredMessageIndices = finalizedStreamOutput.flatMap((item, index) =>
+    item?.type === 'message' ? [index] : [],
+  );
+  const filteredMessageIndexByOriginalIndex = new Map(
+    originalMessageIndices.map((index, position) => [index, filteredMessageIndices[position]]),
+  );
+  const remainingUnindexedOutputText = unassignedUnindexedOutputText + pendingUnindexedOutputText;
+  const alignedOutputTextByContent = new Map<string, string>();
+  const alignedFinalizedOutputTextKeys = new Set<string>();
+  for (const [key, text] of outputTextByContent) {
+    const itemId = outputTextItemIds.get(key);
+    const contentIndex = key.slice(key.indexOf(':') + 1);
+    const outputIndex = Number(key.slice(0, key.indexOf(':')));
+    if (itemId && hasFinalizedMessageIdentityConflict(itemId, outputIndex)) {
+      continue;
+    }
+    const terminalIndex = itemId
+      ? finalizedStreamOutput.findIndex((item: any) => item?.id === itemId)
+      : (filteredMessageIndexByOriginalIndex.get(outputIndex) ?? -1);
+    if (itemId && terminalIndex < 0 && typeof finalizedStreamOutput[outputIndex]?.id === 'string') {
+      continue;
+    }
+    const alignedKey = terminalIndex >= 0 ? `${terminalIndex}:${contentIndex}` : key;
+    alignedOutputTextByContent.set(alignedKey, text);
+    if (finalizedOutputTextKeys.has(key)) {
+      alignedFinalizedOutputTextKeys.add(alignedKey);
+    }
+  }
+
   if (latestResponse && (hasStreamedOutputText || finalizedNonMessageItems.size > 0)) {
     if (
       unassignedUnindexedOutputText &&
@@ -2064,42 +2092,6 @@ export async function readResponsesStream(
       });
     }
 
-    // Tool filters preserve message order while removing output slots.
-    const originalMessageIndices = outputWithCompletedAnnotations.flatMap((item, index) =>
-      item?.type === 'message' ? [index] : [],
-    );
-    const filteredMessageIndices = finalizedStreamOutput.flatMap((item, index) =>
-      item?.type === 'message' ? [index] : [],
-    );
-    const filteredMessageIndexByOriginalIndex = new Map(
-      originalMessageIndices.map((index, position) => [index, filteredMessageIndices[position]]),
-    );
-    const remainingUnindexedOutputText = unassignedUnindexedOutputText + pendingUnindexedOutputText;
-    const alignedOutputTextByContent = new Map<string, string>();
-    const alignedFinalizedOutputTextKeys = new Set<string>();
-    for (const [key, text] of outputTextByContent) {
-      const itemId = outputTextItemIds.get(key);
-      const contentIndex = key.slice(key.indexOf(':') + 1);
-      const outputIndex = Number(key.slice(0, key.indexOf(':')));
-      if (itemId && hasFinalizedMessageIdentityConflict(itemId, outputIndex)) {
-        continue;
-      }
-      const terminalIndex = itemId
-        ? finalizedStreamOutput.findIndex((item: any) => item?.id === itemId)
-        : (filteredMessageIndexByOriginalIndex.get(outputIndex) ?? -1);
-      if (
-        itemId &&
-        terminalIndex < 0 &&
-        typeof finalizedStreamOutput[outputIndex]?.id === 'string'
-      ) {
-        continue;
-      }
-      const alignedKey = terminalIndex >= 0 ? `${terminalIndex}:${contentIndex}` : key;
-      alignedOutputTextByContent.set(alignedKey, text);
-      if (finalizedOutputTextKeys.has(key)) {
-        alignedFinalizedOutputTextKeys.add(alignedKey);
-      }
-    }
     const recoverableOutputTextByContent = isFailedOrCancelledResponse
       ? new Map(
           Array.from(alignedOutputTextByContent).filter(([key]) =>
@@ -2168,7 +2160,13 @@ export async function readResponsesStream(
         ),
     );
 
-  if (latestResponse && !isCompletedResponse && outputText && !hasOutputText) {
+  if (
+    latestResponse &&
+    !isCompletedResponse &&
+    !isFailedOrCancelledResponse &&
+    outputText &&
+    !hasOutputText
+  ) {
     return boundedResponse({
       ...latestResponse,
       output: [
@@ -2194,23 +2192,15 @@ export async function readResponsesStream(
   }
 
   if (hasStreamedOutputText) {
-    const remainingUnindexedOutputText = unassignedUnindexedOutputText + pendingUnindexedOutputText;
-    const recoverableOutputTextByContent = new Map(
-      Array.from(outputTextByContent).filter(([key]) => {
-        const itemId = outputTextItemIds.get(key);
-        const outputIndex = Number(key.slice(0, key.indexOf(':')));
-        return !itemId || !hasFinalizedMessageIdentityConflict(itemId, outputIndex);
-      }),
-    );
     const recoveredOutput = recoverIncompleteOutput(
       finalizedStreamOutput,
-      recoverableOutputTextByContent,
+      alignedOutputTextByContent,
       [
         ...completedUnindexedOutputTexts,
         ...(remainingUnindexedOutputText ? [remainingUnindexedOutputText] : []),
       ],
       true,
-      finalizedOutputTextKeys,
+      alignedFinalizedOutputTextKeys,
     );
     const output = (recoveredOutput ?? finalizedStreamOutput).filter((item) => item !== undefined);
     for (const text of invalidlyIndexedOutputTextByContent.values()) {
