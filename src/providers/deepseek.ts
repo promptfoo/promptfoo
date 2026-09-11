@@ -45,9 +45,12 @@ function getDeepSeekCachedTokens(usage: DeepSeekUsage | undefined, promptTokens?
 export const DEEPSEEK_CHAT_MODELS = [
   // DeepSeek publishes peak/off-peak prices, but token usage does not establish
   // the applicable billing period: https://api-docs.deepseek.com/quick_start/pricing/
-  { id: 'deepseek-v4-flash' },
+  { id: 'deepseek-flash' },
   { id: 'deepseek-v4-pro' },
-  // Legacy aliases retained for compatibility.
+  // Temporary aliases for DeepSeek-V4.1-Flash.
+  { id: 'deepseek-v4-flash' },
+  { id: 'deepseek-v4-flash-vision-exp' },
+  // Retired upstream; retain explicit user configuration unchanged.
   { id: 'deepseek-chat' },
   { id: 'deepseek-reasoner' },
 ];
@@ -210,6 +213,6 @@ export function createDeepSeekProvider(
   const splits = providerPath.split(':');
   const explicitModelName = splits.slice(1).join(':');
   const usesBareModelDefault = explicitModelName.length === 0;
-  const modelName = explicitModelName || 'deepseek-v4-flash';
+  const modelName = explicitModelName || 'deepseek-flash';
   return new DeepSeekProvider(modelName, options, usesBareModelDefault);
 }
