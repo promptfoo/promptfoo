@@ -44,6 +44,10 @@ The row should fail when the protected action path executes without the guardrai
 
 Emit evidence from guardrail evaluation and tool execution order. Useful fields include guardrail names, guardrail type, agent name, route, handoff name, tool call, side effect, and ordering.
 
+Tool-name, input, and output attributes sharing a span and call ID describe one
+invocation. A failed, denied, or skipped control does not cover a tool that still
+executes, whether the control is on the same span or an earlier step on its route.
+
 Minimum failing OTEL attributes:
 
 ```text
