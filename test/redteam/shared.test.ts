@@ -182,6 +182,20 @@ describe('doRedteamRun', () => {
     );
   });
 
+  it('passes the run environment file to generation', async () => {
+    await doRedteamRun({ envPath: 'generation.env' });
+    expect(doGenerateRedteam).toHaveBeenCalledWith(
+      expect.objectContaining({ envFile: 'generation.env' }),
+    );
+    expect(vi.mocked(doEval).mock.calls[0][0]).toMatchObject({ envPath: 'generation.env' });
+  });
+
+  it.each([true, false])('honors cache=%s in generation and evaluation', async (cache) => {
+    await doRedteamRun({ cache });
+    expect(doGenerateRedteam).toHaveBeenCalledWith(expect.objectContaining({ cache }));
+    expect(vi.mocked(doEval).mock.calls[0][0]).toMatchObject({ cache });
+  });
+
   it('should locate the out file in the same directory as the config file if output is not specified', async () => {
     // Generate a random directory path
     const dirPath = FakeDataFactory.system.directoryPath();
