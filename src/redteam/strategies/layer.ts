@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { AGENTIC_STRATEGIES_SET } from '../constants/strategies';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { getAttackProviderFullId, isAttackProvider } from '../shared/attackProviders';
 import { withPersistableGenerationProvider } from './types';
@@ -62,7 +63,8 @@ export async function addLayerTestCases(
   const stepIds = steps.map((step) => (typeof step === 'string' ? step : step.id));
   if (
     stepIds.includes('pdf') &&
-    (stepIds.indexOf('pdf') !== steps.length - 1 || stepIds.some(isAttackProvider))
+    (stepIds.indexOf('pdf') !== steps.length - 1 ||
+      stepIds.some((id) => isAttackProvider(id) || AGENTIC_STRATEGIES_SET.has(id)))
   ) {
     throw new Error(
       'PDF must be the final strategy in a single-turn layer; multi-turn PDF transforms are not supported',

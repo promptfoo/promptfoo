@@ -8,6 +8,8 @@ describe('addLayerTestCases', () => {
   it.each([
     ['pdf', 'base64'],
     ['jailbreak:hydra', 'pdf'],
+    ['mischievous-user', 'pdf'],
+    ['indirect-web-pwn', 'pdf'],
     ['pdf', 'pdf'],
   ])('rejects unsupported PDF composition: %j', async (...steps) => {
     await expect(addLayerTestCases([], 'prompt', { steps }, [], vi.fn())).rejects.toThrow(

@@ -31,7 +31,6 @@ import {
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
-import { isAttackProvider } from '@promptfoo/redteam/shared/attackProviders';
 import { AlertTriangle, ArrowDown, ArrowUp, Info, Trash2, X } from 'lucide-react';
 import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 import type { StrategyConfig } from '@promptfoo/redteam/types';
@@ -142,7 +141,7 @@ export default function StrategyConfigDialog({
     );
 
     return LAYER_TRANSFORMABLE_STRATEGIES.filter((strategy) => {
-      if (strategy === 'pdf' && steps.some((step) => isAttackProvider(getStepId(step)))) {
+      if (strategy === 'pdf' && hasAgenticStrategy) {
         return false;
       }
       // Cannot add duplicates
@@ -329,24 +328,14 @@ export default function StrategyConfigDialog({
         const isValidStrategy = (availableStrategies as string[]).includes(trimmedValue);
 
         if (isValidStrategy) {
-          // If strategy requires config, get its config from allStrategies
-          if (STRATEGIES_REQUIRING_CONFIG.includes(trimmedValue)) {
-            const strategyConfig = allStrategies.find((s) => {
-              const id = typeof s === 'string' ? s : s.id;
-              return id === trimmedValue;
-            });
-
-            if (strategyConfig && typeof strategyConfig === 'object' && strategyConfig.config) {
-              // Add step with its config
-              setSteps((prev) => [...prev, { id: trimmedValue, config: strategyConfig.config }]);
-            } else {
-              // Shouldn't reach here due to filtering, but add as string fallback
-              setSteps((prev) => [...prev, trimmedValue]);
-            }
-          } else {
-            // Regular strategy without config requirements
-            setSteps((prev) => [...prev, trimmedValue]);
-          }
+          const strategyConfig = allStrategies.find(
+            (s) => (typeof s === 'string' ? s : s.id) === trimmedValue,
+          );
+          const step =
+            typeof strategyConfig === 'object' && strategyConfig.config
+              ? { id: trimmedValue, config: strategyConfig.config }
+              : trimmedValue;
+          setSteps((prev) => [...prev, step]);
           setNewStep('');
         }
       }

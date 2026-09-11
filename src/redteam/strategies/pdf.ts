@@ -3,8 +3,8 @@ import path from 'node:path';
 
 import { z } from 'zod';
 import cliState from '../../cliState';
-import { normalizeInputDefinition, PdfTemplateSchema } from '../../contracts/shared';
 import { storeMedia } from '../../storage';
+import { normalizeInputDefinition, PdfTemplateSchema } from '../../types/shared';
 import { extractFirstJsonObject } from '../../util/json';
 import { createPdf, inspectPdf, MAX_PDF_BYTES, scanPdf } from '../pdf';
 import { getStrategyGenerationProvider } from './types';

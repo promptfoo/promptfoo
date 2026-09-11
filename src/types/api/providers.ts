@@ -1,7 +1,6 @@
 import { z } from 'zod';
-import { PdfTemplateSchema } from '../../contracts/shared';
 import { ProviderOptionsSchema } from '../../validators/providers';
-import { BaseTokenUsageSchema } from '../shared';
+import { BaseTokenUsageSchema, PdfTemplateSchema } from '../shared';
 import { ErrorResponseSchema, JsonObjectSchema } from './common';
 
 // Refined ProviderOptionsSchema that requires id as a non-empty string at runtime.

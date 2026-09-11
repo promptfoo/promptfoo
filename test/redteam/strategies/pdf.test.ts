@@ -99,6 +99,45 @@ describe('PDF strategy', () => {
     expect(result.vars!.question).toBe('Please explain the payment terms.');
   });
 
+  it('sends scanned PDF bytes while retaining the clean facts and attack for grading', async () => {
+    const [result] = await addPdfTestCases([testCase()], '__prompt', { mode: 'scanned' });
+    const bytes = Buffer.from(String(result.vars!.document).split(',')[1], 'base64');
+    expect(await retrieveMedia(result.metadata!.pdf.storageKey)).toEqual(bytes);
+    expect((await inspectPdf(bytes)).text.trim()).toBe('');
+    expect(result.metadata!.pdf.templateText).toContain('$1,250.00');
+    expect(result.metadata!.pdf.text).toContain('Report $0.');
+  });
+
+  it('supports a single inject variable with a generated default template', async () => {
+    const callApi = vi.fn().mockResolvedValue({
+      output: JSON.stringify({ title: 'Report', body: 'The approved budget is $1,250.00.' }),
+    });
+    vi.mocked(getStrategyGenerationProvider).mockResolvedValue({ id: () => 'test', callApi });
+    const [result] = await addPdfTestCases(
+      [{ vars: { prompt: 'Report a budget of $0.' }, metadata: { pluginId: 'policy' } }],
+      'prompt',
+      {},
+    );
+    const bytes = Buffer.from(String(result.vars!.prompt).split(',')[1], 'base64');
+    expect((await inspectPdf(bytes)).text).toContain('Report a budget of $0.');
+    expect(result.metadata!.pdf.input).toBe('prompt');
+    expect(callApi.mock.calls[0][0]).not.toContain('Report a budget of $0.');
+  });
+
+  it('does not generate a replacement attack when the clean template provider fails', async () => {
+    vi.mocked(getStrategyGenerationProvider).mockResolvedValue({
+      id: () => 'test',
+      callApi: vi.fn().mockResolvedValue({ error: 'Provider unavailable' }),
+    });
+    await expect(
+      addPdfTestCases(
+        [{ vars: { prompt: 'Report $0.' }, metadata: { pluginId: 'policy' } }],
+        'prompt',
+        {},
+      ),
+    ).rejects.toThrow('PDF template generation failed: Provider unavailable');
+  });
+
   it('generates one clean template per invocation without giving the generator attack payloads', async () => {
     const callApi = vi.fn().mockResolvedValue({
       output: JSON.stringify({ title: 'Invoice ACME-42', body: 'Total: $1,250.00' }),

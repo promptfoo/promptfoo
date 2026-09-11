@@ -39,6 +39,47 @@ describe('StrategyConfigDialog', () => {
     expect(mockOnSave).toHaveBeenCalledWith('pdf', { input: 'document', mode: 'scanned' });
   });
 
+  it.each([
+    ['base64', true],
+    ['jailbreak:hydra', false],
+    ['mischievous-user', false],
+  ])('offers PDF after %s only when the layer stays single-turn', async (step, available) => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StrategyConfigDialog
+        open
+        strategy="layer"
+        config={{ steps: [step] }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        allStrategies={[{ id: 'pdf', config: { input: 'document' } }]}
+      />,
+    );
+    await user.click(screen.getByRole('combobox'));
+    expect(screen.queryByRole('option', { name: 'pdf', exact: true }) !== null).toBe(available);
+  });
+
+  it('preserves the PDF input and scanned mode when adding it to a layer', async () => {
+    const user = userEvent.setup();
+    const pdf = { id: 'pdf', config: { input: 'document', mode: 'scanned' } };
+    renderWithProviders(
+      <StrategyConfigDialog
+        open
+        strategy="layer"
+        config={{ steps: ['rot13'] }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        allStrategies={[pdf]}
+      />,
+    );
+    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('option', { name: 'pdf', exact: true }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['rot13', pdf] });
+  });
+
   it('should correctly filter layerPlugins when using the stable empty array for selectedPlugins', async () => {
     const user = userEvent.setup();
     renderWithProviders(

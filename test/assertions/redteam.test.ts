@@ -31,6 +31,12 @@ describe('handleRedteam', () => {
       },
     };
     const providerResponse = { output: 'The total is $0.' };
+    const trace = {
+      traceId: 'pdf-upload',
+      evaluationId: 'eval-pdf',
+      testCaseId: 'test-pdf',
+      spans: [{ spanId: 'upload', name: 'document.upload', startTime: 0, endTime: 1 }],
+    };
     const grader = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
       grade: { pass: false, score: 0, reason: 'Falsified total' },
       rubric: 'Policy rubric',
@@ -52,6 +58,7 @@ describe('handleRedteam', () => {
         logProbs: [],
         provider: undefined,
         providerResponse,
+        trace,
       },
       cost: 0,
       inverse: false,
@@ -66,6 +73,8 @@ describe('handleRedteam', () => {
     expect(prompt).not.toContain('obsolete envelope');
     expect(JSON.parse(prompt).cleanPdfTemplate).toBe('Total: $1,250.00');
     expect(grader.mock.calls[0][5]).toContain('attacker-controlled review notes');
+    expect(grader.mock.calls[0][7]?.traceData).toBe(trace);
+    expect(grader.mock.calls[0][7]?.traceSummary).toContain('document.upload');
     expect(gradingTest.vars!.document).toBe(test.metadata.pdf.text);
     expect(gradingTest.metadata!.goal).toBe('Falsify the total');
     expect(test.vars.document).toBe('data:application/pdf;base64,JVBERi0x');
