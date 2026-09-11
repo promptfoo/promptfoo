@@ -126,7 +126,7 @@ describe('ProviderPluginRegistry', () => {
     }
   });
 
-  it('enrolls cleanup-capable external providers in host shutdown', async () => {
+  it('leaves cleanup-capable external providers with their owning caller', async () => {
     const cleanup = vi.fn();
     const dispose = registerProviderPlugin(
       createManifest(
@@ -146,9 +146,15 @@ describe('ProviderPluginRegistry', () => {
     );
 
     try {
-      await loadApiProvider('cleanup:model');
+      const first = await loadApiProvider('cleanup:model');
+      const second = await loadApiProvider('cleanup:model');
       await providerRegistry.shutdownAll();
+      expect(cleanup).not.toHaveBeenCalled();
+      await first.cleanup?.();
       expect(cleanup).toHaveBeenCalledOnce();
+      await expect(second.callApi('still running')).resolves.toEqual({ output: 'ok' });
+      await second.cleanup?.();
+      expect(cleanup).toHaveBeenCalledTimes(2);
     } finally {
       dispose();
     }

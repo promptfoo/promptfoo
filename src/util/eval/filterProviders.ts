@@ -1,7 +1,42 @@
 import { normalizeProviderRef } from '../../util/providerRef';
 
-import type { ApiProvider, TestSuiteConfig } from '../../types/index';
+import type { ApiProvider, CommandLineOptions, TestSuiteConfig } from '../../types/index';
 import type { ProviderOptions, ProviderOptionsMap } from '../../types/providers';
+
+/**
+ * Converts an untrusted persisted provider filter into the CLI option shape used by config
+ * resolution. Older evaluations legitimately omit this value, so undefined/null mean "no
+ * filter". Anything else that is not a non-empty string can only come from tampered or
+ * corrupted persisted data (the writer never produces it); fail closed rather than silently
+ * running the eval unfiltered.
+ */
+export function getPersistedProviderFilterOptions(
+  providerFilter: unknown,
+): Partial<Pick<CommandLineOptions, 'filterProviders'>> {
+  if (providerFilter === undefined || providerFilter === null) {
+    return {};
+  }
+  if (typeof providerFilter === 'string' && providerFilter.length > 0) {
+    return { filterProviders: providerFilter };
+  }
+  throw new Error(
+    `Stored provider filter is invalid (expected a non-empty string, got ${JSON.stringify(providerFilter)}). Refusing to run without the original provider selection.`,
+  );
+}
+
+/**
+ * Returns the reason a provider filter cannot be compiled as a regular expression, or
+ * undefined when it is valid. Lets replay paths attribute regex failures to the stored
+ * filter without blaming it for unrelated config resolution errors.
+ */
+export function getProviderFilterRegexError(filter: string): string | undefined {
+  try {
+    new RegExp(filter);
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
 
 /**
  * Extracts the id and label from a raw provider config without instantiating it.

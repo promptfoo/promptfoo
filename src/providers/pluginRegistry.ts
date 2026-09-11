@@ -47,16 +47,15 @@ class ProviderPluginLoadErrorImpl extends Error {
   readonly code: string = 'PROMPTFOO_PROVIDER_PLUGIN_LOAD_ERROR';
   readonly pluginName: string;
   readonly providerPath: string;
+  readonly cause: unknown;
 
   constructor(pluginName: string, providerPath: string, cause: unknown) {
     const message = cause instanceof Error ? cause.message : String(cause);
-    super(`Failed to load provider family for '${providerPath}': ${message}`);
+    super(`Failed to load provider plugin '${pluginName}' for '${providerPath}': ${message}`);
     this.name = 'ProviderPluginLoadError';
     this.pluginName = pluginName;
     this.providerPath = providerPath;
-    if (cause instanceof Error) {
-      (this as Error & { cause?: unknown }).cause = cause;
-    }
+    this.cause = cause;
   }
 }
 
@@ -69,9 +68,6 @@ class MissingProviderPackageErrorImpl extends ProviderPluginLoadErrorImpl {
     this.name = 'MissingProviderPackageError';
     this.message = `Provider plugin '${pluginName}' for '${providerPath}' requires package '${packageName}'. Install it with: npm install ${packageName}`;
     this.packageName = packageName;
-    if (cause instanceof Error) {
-      (this as Error & { cause?: unknown }).cause = cause;
-    }
   }
 }
 

@@ -129,6 +129,29 @@ describe('MemoryPoisoningProvider', () => {
     expect(mockTargetProvider.callApi).toHaveBeenCalledWith('follow up text', context, undefined);
   });
 
+  it('should include target context in scenario generation requests', async () => {
+    provider = new MemoryPoisoningProvider({ config: { targetId: 'cloud-target-123' } });
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ memory: 'memory text', followUp: 'follow up text' }), {
+        status: 200,
+      }),
+    );
+    const context: CallApiContextParams = {
+      prompt: { raw: 'test', display: 'test', label: 'test' },
+      vars: {},
+      originalProvider: mockTargetProvider,
+      test: { metadata: { purpose: 'test purpose' } },
+    };
+
+    await provider.callApi('test prompt', context);
+
+    const request = mockFetch.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      targetId: 'cloud-target-123',
+      task: 'agentic:memory-poisoning-scenario',
+    });
+  });
+
   it('should accumulate token usage from all target provider calls', async () => {
     const scenario = {
       memory: 'memory text',
@@ -172,6 +195,31 @@ describe('MemoryPoisoningProvider', () => {
     expect(result.tokenUsage?.prompt).toBe(45); // 10+20+15
     expect(result.tokenUsage?.completion).toBe(23); // 5+10+8
     expect(result.tokenUsage?.total).toBe(68); // 15+30+23
+  });
+
+  it('records scenario generation as attacker usage without adding a target probe', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          memory: 'memory text',
+          followUp: 'follow up text',
+          tokenUsage: { prompt: 17, completion: 6, total: 23 },
+        }),
+    } as Response);
+    mockTargetProvider.callApi.mockResolvedValue({ output: 'target response' });
+
+    const result = await provider.callApi('attack', {
+      prompt: { raw: 'test', display: 'test', label: 'test' },
+      vars: {},
+      originalProvider: mockTargetProvider,
+      test: { metadata: { purpose: 'test purpose' } },
+    });
+
+    expect(result.tokenUsage).toMatchObject({
+      numRequests: 3,
+      attacker: { prompt: 17, completion: 6, total: 23, numRequests: 1 },
+    });
   });
 
   it('should handle errors during execution', async () => {

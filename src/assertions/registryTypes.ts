@@ -5,8 +5,8 @@ export interface AssertionPrefixHandler<TParams, TResult> {
   handler: AssertionHandler<TParams, TResult>;
 }
 
-export interface AssertionCapabilityPack<TParams, TResult> {
+export interface AssertionCapabilityPack<TParams, TResult, TType extends string = string> {
   name: string;
-  handlers?: Readonly<Record<string, AssertionHandler<TParams, TResult>>>;
+  handlers?: Readonly<Record<TType, AssertionHandler<TParams, TResult>>>;
   prefixes?: readonly AssertionPrefixHandler<TParams, TResult>[];
 }

@@ -18,6 +18,7 @@ import { handleStartsWith } from '../startsWith';
 import { handleToolCallF1 } from '../toolCallF1';
 import { handleWordCount } from '../wordCount';
 
+import type { PureAssertionBaseType } from '../pureTypes';
 import type { AssertionCapabilityPack } from '../registryTypes';
 
 export const pureAssertionPack = {
@@ -44,5 +45,6 @@ export const pureAssertionPack = {
   },
 } satisfies AssertionCapabilityPack<
   Parameters<typeof handleContains>[0],
-  Awaited<ReturnType<typeof handleContains>>
+  Awaited<ReturnType<typeof handleContains>>,
+  PureAssertionBaseType
 >;

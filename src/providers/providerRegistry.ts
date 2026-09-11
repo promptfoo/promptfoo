@@ -1,71 +1,31 @@
 import logger from '../logger';
 
 /**
- * Lifecycle method for providers and other resources that need cleanup.
+ * Interface for providers that need cleanup on process exit.
  */
-export type ProviderLifecycleMethod = () => void | Promise<void>;
-
-/**
- * Lifecycle contract for registered providers and resources.
- *
- * When both methods are present, `shutdown()` takes precedence.
- */
-export type ProviderLifecycle =
-  | {
-      shutdown: ProviderLifecycleMethod;
-      cleanup?: ProviderLifecycleMethod;
-    }
-  | {
-      shutdown?: never;
-      cleanup: ProviderLifecycleMethod;
-    };
-
-export interface ProviderRegistryOptions {
-  registerProcessHandlers?: boolean;
+interface CleanupProvider {
+  shutdown(): Promise<void>;
 }
 
 /**
- * Registry of providers and resources that need cleanup.
+ * Global registry of Python providers for cleanup on process exit.
+ * Ensures no zombie Python processes are left running.
  */
-export class ProviderRegistry {
-  private providers: Set<ProviderLifecycle> = new Set();
+class ProviderRegistry {
+  private providers: Set<CleanupProvider> = new Set();
   private shutdownRegistered: boolean = false;
-  private shutdownPromise?: Promise<void>;
-  private inCleanupCallback = false;
-  private readonly shouldRegisterProcessHandlers: boolean;
 
-  constructor({ registerProcessHandlers = true }: ProviderRegistryOptions = {}) {
-    this.shouldRegisterProcessHandlers = registerProcessHandlers;
-  }
-
-  register(provider: ProviderLifecycle): () => void {
+  register(provider: CleanupProvider): void {
     this.providers.add(provider);
 
-    if (this.shouldRegisterProcessHandlers && !this.shutdownRegistered) {
+    if (!this.shutdownRegistered) {
       this.registerShutdownHandlers();
       this.shutdownRegistered = true;
     }
-
-    return () => {
-      this.unregister(provider);
-    };
   }
 
-  unregister(provider: ProviderLifecycle): void {
+  unregister(provider: CleanupProvider): void {
     this.providers.delete(provider);
-  }
-
-  private async cleanupResource(provider: ProviderLifecycle): Promise<void> {
-    try {
-      const cleanup = provider.shutdown ?? provider.cleanup;
-      this.inCleanupCallback = true;
-      const result = cleanup.call(provider);
-      this.inCleanupCallback = false;
-      await result;
-    } catch (error) {
-      this.inCleanupCallback = false;
-      logger.warn(`Error cleaning up registered resource: ${error}`);
-    }
   }
 
   private registerShutdownHandlers(): void {
@@ -73,66 +33,40 @@ export class ProviderRegistry {
 
     const shutdown = async (signal: string) => {
       if (shuttingDown) {
-        return;
+        return; // Prevent duplicate shutdown
       }
       shuttingDown = true;
 
-      logger.debug(
-        `Received ${signal}, cleaning up ${this.providers.size} registered resources...`,
+      logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
+
+      await Promise.all(
+        Array.from(this.providers).map((p) =>
+          p.shutdown().catch((err) => {
+            logger.error(`Error shutting down provider: ${err}`);
+          }),
+        ),
       );
 
-      await this.shutdownAll();
-
-      logger.debug('Registered resource cleanup complete');
+      logger.debug('Python provider shutdown complete');
     };
 
     process.once('SIGINT', () => void shutdown('SIGINT'));
     process.once('SIGTERM', () => void shutdown('SIGTERM'));
-    // `beforeExit` allows asynchronous cleanup; the `exit` event does not.
+    // Use beforeExit for async cleanup (exit event cannot await)
     process.once('beforeExit', () => void shutdown('beforeExit'));
   }
 
-  shutdownAll(): Promise<void> {
-    if (this.inCleanupCallback) {
-      const providers = Array.from(this.providers);
-      for (const provider of providers) {
-        this.providers.delete(provider);
+  async shutdownAll(): Promise<void> {
+    const results = await Promise.allSettled(Array.from(this.providers).map((p) => p.shutdown()));
+
+    // Log any failures but don't throw - cleanup should be defensive
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        logger.warn(`Error shutting down provider: ${result.reason}`);
       }
-      return Promise.all(providers.map((provider) => this.cleanupResource(provider))).then(
-        () => undefined,
-      );
     }
 
-    if (this.shutdownPromise !== undefined && this.providers.size === 0) {
-      return this.shutdownPromise;
-    }
-
-    const providers = Array.from(this.providers);
-    for (const provider of providers) {
-      this.providers.delete(provider);
-    }
-
-    const previousShutdown = this.shutdownPromise;
-    const cleanupBatch = async () => {
-      await Promise.all(providers.map((provider) => this.cleanupResource(provider)));
-    };
-    let resolveBatch: (() => void) | undefined;
-    let rejectBatch: ((error: unknown) => void) | undefined;
-    const shutdownBatch = new Promise<void>((resolve, reject) => {
-      resolveBatch = resolve;
-      rejectBatch = reject;
-    });
-    const trackedShutdown = shutdownBatch.finally(() => {
-      if (this.shutdownPromise === trackedShutdown) {
-        this.shutdownPromise = undefined;
-      }
-    });
-    this.shutdownPromise = trackedShutdown;
-
-    const runBatch =
-      previousShutdown === undefined ? cleanupBatch() : previousShutdown.then(cleanupBatch);
-    void runBatch.then(resolveBatch, rejectBatch);
-    return trackedShutdown;
+    this.providers.clear();
   }
 }
 
