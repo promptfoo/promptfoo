@@ -916,8 +916,9 @@ names in your traces. An explicit filter can also include an operation that Prom
 otherwise leave out.
 
 SQL injection grading also honors `includeInGrading`. Its trace summary includes tool names,
-status, query text, and explicit authorization and row-count outcomes when available. It omits
-bound parameter values and returned rows. Query text honors `tracing.otlp.http.redactAttributes`;
+status codes, query text, and explicit authorization and row-count outcomes when available. It omits
+free-form status messages, bound parameter values, and returned rows. Explicit `sql` tool arguments
+and `read_query` calls count as database evidence; ordinary search queries do not. Query text honors `tracing.otlp.http.redactAttributes`;
 for example, a `query` pattern removes query text from the grading summary.
 
 ### Strategy-Specific Configuration
