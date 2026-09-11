@@ -2,6 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { fetchWithCache } from '../../../src/cache';
 import { VERSION } from '../../../src/constants';
 import { DEFAULT_PURPOSE, extractSystemPurpose } from '../../../src/redteam/extraction/purpose';
+import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { getRemoteGenerationUrl } from '../../../src/redteam/remoteGeneration';
 import {
   createMockProvider,
@@ -98,6 +99,26 @@ describe('System Purpose Extractor', () => {
     expect(result).toBe('');
     expect(provider.callApi).not.toHaveBeenCalled();
     mockProcessEnv({ OPENAI_API_KEY: originalOpenaiKey });
+  });
+
+  it('attributes remote purpose extraction to the tracked generation provider', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: undefined });
+    mockProcessEnv({ PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: 'false' });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        task: 'purpose',
+        result: 'Tracked remote purpose',
+        tokenUsage: { total: 11, prompt: 7, completion: 4 },
+      },
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    });
+    const usage = {};
+
+    await extractSystemPurpose(trackGenerationTokenUsage(provider, usage), ['prompt']);
+
+    expect(usage).toMatchObject({ total: 11, prompt: 7, completion: 4, numRequests: 1 });
   });
 
   it('should use local extraction when remote generation is disabled', async () => {
