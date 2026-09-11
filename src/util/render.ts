@@ -125,7 +125,10 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): 
     )?.[1];
     if (nativePath) {
       let value: unknown = vars;
-      for (const key of nativePath.replace(/\[['"]([^'"]+)['"]\]/g, '.$1').split('.')) {
+      const keys = [...nativePath.matchAll(/(?:^|\.)([A-Za-z_$][\w$]*)|\[['"]([^'"]+)['"]\]/g)].map(
+        (match) => match[1] ?? match[2],
+      );
+      for (const key of keys) {
         if (
           !value ||
           typeof value !== 'object' ||

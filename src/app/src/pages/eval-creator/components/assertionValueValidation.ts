@@ -178,10 +178,14 @@ export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:tool-sequence',
   'trajectory:tool-set',
   'trajectory:step-count',
+  'trajectory:goal-success',
+  'trajectory:tool-used',
   'not-trajectory:tool-args-match',
   'not-trajectory:tool-sequence',
   'not-trajectory:tool-set',
   'not-trajectory:step-count',
+  'not-trajectory:goal-success',
+  'not-trajectory:tool-used',
 ]);
 
 const OPTIONAL_SQL_CONFIGURATION_TYPES = new Set<AssertionType>([
