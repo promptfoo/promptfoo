@@ -26,3 +26,4 @@ tests:
       - type: icontains
         value: 'San Francisco'
       - type: answer-relevance
+        threshold: 0.7
