@@ -1,6 +1,6 @@
 import { getAgenticAttackProfile } from '../agenticProfile';
 
-import type { TestCase } from '../../types/index';
+import type { ProviderOptions, TestCase } from '../../types/index';
 import type { Inputs } from '../../types/shared';
 
 interface AdaptiveMultiTurnStrategyDefinition {
@@ -63,45 +63,34 @@ export function addHydra(
   injectVar: string,
   config: Record<string, any>,
 ): TestCase[] {
-  const providerName = 'promptfoo:redteam:hydra';
-  const metricSuffix = 'Hydra';
-  const strategyId = 'jailbreak:hydra';
-  const scanId = crypto.randomUUID(); // Generate once for all tests in this scan
+  const { redteamProvider: _redteamProvider, ...providerConfig } = config;
+  const transformed = createAdaptiveMultiTurnStrategy({
+    providerName: 'promptfoo:redteam:hydra',
+    metricSuffix: 'Hydra',
+    strategyId: 'jailbreak:hydra',
+  })(testCases, injectVar, providerConfig);
 
-  return testCases.map((testCase) => {
-    const { redteamProvider: _redteamProvider, ...providerConfig } = config;
-    const originalText = String(testCase.vars![injectVar]);
-    // Get inputs from plugin config if available
-    const pluginConfig = testCase.metadata?.pluginConfig as Record<string, unknown> | undefined;
-    const inputs = pluginConfig?.inputs as Inputs | undefined;
+  return transformed.map((testCase) => {
     const agenticAttackProfile = getAgenticAttackProfile(testCase.metadata);
-    const hydraHints = agenticAttackProfile?.strategyHints?.hydra;
-    const sendCurrentTurnOnly = config.sendCurrentTurnOnly ?? hydraHints?.sendCurrentTurnOnly;
+    if (!agenticAttackProfile) {
+      return testCase;
+    }
+    const provider = testCase.provider as ProviderOptions;
+    const sendCurrentTurnOnly =
+      config.sendCurrentTurnOnly ?? agenticAttackProfile.strategyHints?.hydra?.sendCurrentTurnOnly;
 
     return {
       ...testCase,
       provider: {
-        id: providerName,
+        ...provider,
         config: {
-          injectVar,
-          scanId,
-          ...providerConfig,
-          // Pass inputs from plugin config to Hydra provider
-          ...(inputs && { inputs }),
+          ...provider.config,
           ...(sendCurrentTurnOnly === undefined ? {} : { sendCurrentTurnOnly }),
         },
       },
-      assert: testCase.assert?.map((assertion) => ({
-        ...assertion,
-        metric: assertion.metric ? `${assertion.metric}/${metricSuffix}` : assertion.metric,
-      })),
       metadata: {
         ...testCase.metadata,
-        ...(agenticAttackProfile && !testCase.metadata?.agenticAttackProfile
-          ? { agenticAttackProfile }
-          : {}),
-        strategyId,
-        originalText,
+        ...(testCase.metadata?.agenticAttackProfile ? {} : { agenticAttackProfile }),
       },
     };
   });

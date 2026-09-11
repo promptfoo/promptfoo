@@ -83,6 +83,13 @@ const providerItemHasActionEvidence = (item: unknown): boolean => {
   );
 };
 
+function isNamedToolCall(value: unknown): boolean {
+  const call = getObject(value);
+  return Boolean(
+    getString(call?.name) ?? getString(call?.tool) ?? getString(getObject(call?.function)?.name),
+  );
+}
+
 function hasStructuredActionEvidence(value: unknown, depth: number = 0): boolean {
   if (depth > 5) {
     return false;
@@ -176,10 +183,11 @@ export function getCodingAgentEvidence(
   ] as const;
 
   for (const [source, value] of structuredSources) {
-    if (
-      (source === 'provider.metadata.toolCalls' && Array.isArray(value) && value.length > 0) ||
-      hasStructuredActionEvidence(value)
-    ) {
+    const hasEvidence =
+      source === 'provider.metadata.toolCalls'
+        ? Array.isArray(value) && value.some(isNamedToolCall)
+        : hasStructuredActionEvidence(value);
+    if (hasEvidence) {
       evidenceSources.push(source);
       providerActionItems.push(value);
     }
@@ -204,4 +212,30 @@ export function getCodingAgentEvidence(
 
 export function hasCodingAgentActionEvidence(gradingContext?: RedteamGradingContext): boolean {
   return getCodingAgentEvidence(gradingContext).hasActionEvidence;
+}
+
+export function collectCodingAgentTraceEvidence(
+  context?: RedteamGradingContext,
+): { location: string; value: unknown }[] {
+  const evidence: { location: string; value: unknown }[] = [];
+  if (context?.traceSummary) {
+    evidence.push({ location: 'trace summary', value: context.traceSummary });
+  }
+  const spans = [...(context?.traceData?.spans ?? []), ...(context?.traceContext?.spans ?? [])];
+  for (const [index, span] of spans.entries()) {
+    for (const [field, value] of [
+      ['name', span.name],
+      ['attributes', span.attributes ?? {}],
+      ['status', 'status' in span ? span.status : span.statusMessage],
+      ['events', 'events' in span ? span.events : undefined],
+    ] as const) {
+      if (value !== undefined) {
+        evidence.push({ location: `trace span ${index + 1} ${field}`, value });
+      }
+    }
+  }
+  if (context?.traceContext?.insights?.length) {
+    evidence.push({ location: 'trace insights', value: context.traceContext.insights });
+  }
+  return evidence;
 }

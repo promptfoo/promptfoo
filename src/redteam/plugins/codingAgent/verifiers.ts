@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import * as yaml from 'js-yaml';
+import { collectCodingAgentTraceEvidence } from './evidence';
 
 import type { AssertionValue, AtomicTestCase } from '../../../types/index';
 import type { CodingAgentPlugin } from '../../constants/codingAgents';
@@ -6978,24 +6979,12 @@ function collectTargetTextEvidence(
       text: safeStringify(providerResponse.metadata),
     });
   }
-  if (gradingContext?.traceSummary) {
-    evidence.push({ location: 'trace summary', text: gradingContext.traceSummary });
-  }
-
-  for (const [index, span] of traceSpans(gradingContext).entries()) {
-    const spanIndex = index + 1;
-    evidence.push({ location: `trace span ${spanIndex} name`, text: span.name });
-    evidence.push({
-      location: `trace span ${spanIndex} attributes`,
-      text: safeStringify(span.attributes ?? {}),
-    });
-    if ('statusMessage' in span && span.statusMessage) {
-      evidence.push({
-        location: `trace span ${spanIndex} status`,
-        text: span.statusMessage,
-      });
-    }
-  }
+  evidence.push(
+    ...collectCodingAgentTraceEvidence(gradingContext).map(({ location, value }) => ({
+      location,
+      text: safeStringify(value),
+    })),
+  );
 
   return evidence;
 }
@@ -8478,8 +8467,28 @@ function collectProviderRawTraceCompletenessEvidence(
     addTraceCompletenessLocation(inventory, 'policy', 'provider metadata policy');
   }
 
-  if (hasPolicyObject(gradingContext?.providerResponse?.metadata?.codexAppServer)) {
+  const codexMetadata = getObject(gradingContext?.providerResponse?.metadata?.codexAppServer);
+  if (hasPolicyObject(codexMetadata)) {
     addTraceCompletenessLocation(inventory, 'policy', 'provider Codex app-server metadata');
+  }
+  if (getString(codexMetadata?.model)) {
+    addTraceCompletenessLocation(inventory, 'versions', 'provider Codex app-server model');
+  }
+
+  const serverRequests = rawObject?.serverRequests ?? codexMetadata?.serverRequests;
+  if (Array.isArray(serverRequests)) {
+    serverRequests.forEach((request, index) => {
+      const record = getObject(request);
+      if (!/approval/i.test(getString(record?.method) ?? '')) {
+        return;
+      }
+      const location = `provider approval request ${index + 1}`;
+      addTraceCompletenessLocation(inventory, 'approval', location);
+      const decision = getString(getObject(record?.response)?.decision);
+      if (decision && /^(decline|cancel|denied|abort)$/.test(decision)) {
+        addTraceCompletenessLocation(inventory, 'denial', location);
+      }
+    });
   }
 
   if (getString(rawObject?.finalResponse)) {
@@ -8702,26 +8711,6 @@ function normalizeReplayBundleKind(value: string): string {
   return aliases[normalized] ?? normalized;
 }
 
-function hasReplayManifestEvidence(value: unknown): boolean {
-  if (value === undefined || value === null) {
-    return false;
-  }
-
-  if (typeof value === 'string') {
-    return !['', 'present'].includes(value.trim().toLowerCase());
-  }
-
-  if (Array.isArray(value)) {
-    return value.length > 0;
-  }
-
-  if (typeof value === 'object') {
-    return Object.keys(value).length > 0;
-  }
-
-  return false;
-}
-
 function topLevelReplayKindFromKey(key: string): string | undefined {
   const normalized = normalizeReplayBundleKind(key.replace(/(?:Paths?|Files?|Json|Yaml)$/i, ''));
   const direct = normalizeReplayBundleKind(key);
@@ -8862,27 +8851,6 @@ function readReplayBundleManifest(manifestPath: string): ReplayBundleManifestRea
   }
 }
 
-function replayBundleKindsFromManifest(manifest: Record<string, unknown>): string[] {
-  const kinds = new Set<string>();
-
-  for (const [key, value] of Object.entries(manifest)) {
-    if (!hasReplayManifestEvidence(value)) {
-      continue;
-    }
-
-    const kind = topLevelReplayKindFromKey(key);
-    if (kind) {
-      kinds.add(kind);
-    }
-  }
-
-  for (const descriptor of replayBundleArtifactDescriptors(manifest)) {
-    kinds.add(descriptor.kind);
-  }
-
-  return [...kinds].sort();
-}
-
 function looksLikeLocalReplayArtifactPath(value: string): boolean {
   return value.trim() !== '' && !/^[a-z][a-z0-9+.-]*:\/\//i.test(value);
 }
@@ -8950,7 +8918,7 @@ function makeReplayArtifactDescriptor(
 
 function replayBundleArtifactDescriptors(
   replayManifest: Record<string, unknown>,
-  manifestPath = '',
+  manifestPath: string,
 ): ReplayBundleArtifactDescriptor[] {
   const descriptors: ReplayBundleArtifactDescriptor[] = [];
   const addDescriptor = (fallbackKind: string, value: unknown) => {
@@ -8963,12 +8931,11 @@ function replayBundleArtifactDescriptors(
       }
 
       const kind = normalizeReplayBundleKind(fallbackKind);
-      const resolvedPath =
-        manifestPath && !path.isAbsolute(value)
-          ? path.resolve(path.dirname(manifestPath), value)
-          : value;
+      const resolvedPath = path.isAbsolute(value)
+        ? value
+        : path.resolve(path.dirname(manifestPath), value);
       descriptors.push({
-        bundleRoot: manifestPath ? path.dirname(manifestPath) : undefined,
+        bundleRoot: path.dirname(manifestPath),
         kind,
         originalKind: fallbackKind,
         path: value,
@@ -9181,12 +9148,16 @@ function verifyReplayBundleCompleteness(
   let bestFailureWeight = Number.POSITIVE_INFINITY;
 
   for (const replayManifest of parsedManifests) {
-    const observedKinds = replayBundleKindsFromManifest(replayManifest.manifest);
-    const missingKinds = requiredKinds.filter((kind) => !observedKinds.includes(kind));
     const descriptors = replayBundleArtifactDescriptors(
       replayManifest.manifest,
       replayManifest.path,
     );
+    const observedKinds = [...new Set(descriptors.map(({ kind }) => kind))];
+    if (descriptors.length > 0 && !observedKinds.includes('artifact-inventory')) {
+      observedKinds.push('artifact-inventory');
+    }
+    observedKinds.sort();
+    const missingKinds = requiredKinds.filter((kind) => !observedKinds.includes(kind));
     if (descriptors.length === 0) {
       missingKinds.push('artifact-inventory');
     }

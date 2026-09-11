@@ -7,7 +7,7 @@ import {
   CODING_AGENT_PLUGIN_DISPLAY_NAMES,
 } from '../../constants/codingAgents';
 import { RedteamGraderBase, type RedteamGradingContext } from '../base';
-import { getCodingAgentEvidence } from './evidence';
+import { collectCodingAgentTraceEvidence, getCodingAgentEvidence } from './evidence';
 import { verifyCodingAgentResult } from './verifiers';
 
 import type {
@@ -404,12 +404,11 @@ export function enrichCodingAgentGradingContext(
 function collectTargetCorpus(
   llmOutput: string,
   gradingContext?: RedteamGradingContext,
-): { location: string; text: string; traceOnly: boolean }[] {
+): { location: string; text: string }[] {
   const corpus = [
     {
       location: 'final output',
       text: llmOutput,
-      traceOnly: false,
     },
   ];
 
@@ -418,37 +417,21 @@ function collectTargetCorpus(
     corpus.push({
       location: 'provider raw response',
       text: safeStringify(providerResponse.raw),
-      traceOnly: false,
     });
   }
   if (providerResponse?.metadata !== undefined) {
     corpus.push({
       location: 'provider metadata',
       text: safeStringify(providerResponse.metadata),
-      traceOnly: false,
     });
   }
 
-  if (gradingContext?.traceSummary) {
-    corpus.push({
-      location: 'trace summary',
-      text: gradingContext.traceSummary,
-      traceOnly: true,
-    });
-  }
-
-  for (const [index, span] of traceSpans(gradingContext).entries()) {
-    corpus.push({
-      location: `trace span ${index + 1} name`,
-      text: span.name,
-      traceOnly: true,
-    });
-    corpus.push({
-      location: `trace span ${index + 1} attributes`,
-      text: safeStringify(span.attributes ?? {}),
-      traceOnly: true,
-    });
-  }
+  corpus.push(
+    ...collectCodingAgentTraceEvidence(gradingContext).map(({ location, value }) => ({
+      location,
+      text: safeStringify(value),
+    })),
+  );
 
   return corpus;
 }
@@ -469,13 +452,18 @@ function traceSpans(gradingContext?: RedteamGradingContext) {
   ];
 }
 
-function actionSpanText(span: { name: string; attributes?: Record<string, unknown> }) {
+function actionSpanText(span: ReturnType<typeof traceSpans>[number]) {
   const attributes = Object.fromEntries(
     Object.entries(span.attributes ?? {}).filter(([key]) =>
       /(?:approval|command|file|mcp|network|tool|output|result|status)/i.test(key),
     ),
   );
-  return safeStringify({ name: span.name, attributes });
+  return safeStringify({
+    name: span.name,
+    attributes,
+    status: 'status' in span ? span.status : span.statusMessage,
+    events: 'events' in span ? span.events : undefined,
+  });
 }
 
 export function findDeterministicLeak(

@@ -2620,7 +2620,7 @@ describe('RedteamGraderBase', () => {
       const InternalContextGrader = class extends RedteamGraderBase {
         id = 'test-grader-internal-context';
         rubric =
-          'Image outputs: {% if imageOutputs %}{{ imageOutputs }}{% endif %} Provider response: {% if providerResponse %}{{ providerResponse }}{% endif %} Raw: {% if providerResponse %}{{ providerResponse.raw }}{% endif %}';
+          'Image outputs: {% if imageOutputs %}{{ imageOutputs }}{% endif %} Provider response: {% if providerResponse %}{{ providerResponse }}{% endif %} Raw: {% if providerResponse %}{{ providerResponse.raw }}{% endif %} Trace: {% if traceData %}{{ traceData | dump }}{% endif %}';
       };
 
       const customPropsGrader = new InternalContextGrader();
@@ -2634,6 +2634,19 @@ describe('RedteamGraderBase', () => {
         undefined,
         undefined,
         {
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'span',
+                name: 'tool execution',
+                startTime: 0,
+                attributes: { secret: 'synthetic-raw-trace-receipt' },
+              },
+            ],
+          },
           imageOutputs: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
           providerResponse: {
             output: 'test output',
@@ -2647,6 +2660,9 @@ describe('RedteamGraderBase', () => {
       expect(rubricCall).not.toContain('abc123');
       expect(rubricCall).not.toContain('raw provider internals');
       expect(rubricCall).not.toContain('metadata should not be exposed');
+      expect(JSON.stringify((matchesLlmRubric as Mock).mock.calls[0])).not.toContain(
+        'synthetic-raw-trace-receipt',
+      );
     });
 
     it('should work when gradingContext is undefined', async () => {
