@@ -4,6 +4,11 @@ import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureEmbeddingProvider } from '../../src/providers/azure/embedding';
 import { CohereEmbeddingProvider } from '../../src/providers/cohere';
 import {
+  DMRChatCompletionProvider,
+  DMRCompletionProvider,
+  DMREmbeddingProvider,
+} from '../../src/providers/docker';
+import {
   AIStudioChatProvider,
   AIStudioEmbeddingProvider,
 } from '../../src/providers/google/ai.studio';
@@ -25,6 +30,7 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
+import { TrueFoundryEmbeddingProvider } from '../../src/providers/truefoundry';
 import { VoyageEmbeddingProvider } from '../../src/providers/voyage';
 import { createDeferred } from '../util/utils';
 
@@ -41,6 +47,8 @@ beforeEach(() => {
 
 const config = { config: { apiKey: 'fixture-key' } };
 const textProviders = [
+  ['Docker chat', () => new DMRChatCompletionProvider('fixture', config)],
+  ['Docker completion', () => new DMRCompletionProvider('fixture', config)],
   [
     'Azure chat',
     () =>
@@ -67,6 +75,8 @@ const textProviders = [
   ],
 ] as const;
 const embeddingProviders = [
+  ['Docker embeddings', () => new DMREmbeddingProvider('fixture', config)],
+  ['TrueFoundry embeddings', () => new TrueFoundryEmbeddingProvider('fixture', config)],
   [
     'Azure embeddings',
     () =>
@@ -138,8 +148,8 @@ describe.each(operations)('$name cancellation', ({ call }) => {
     const controller = new AbortController();
     const started = createDeferred<void>();
     vi.mocked(fetchWithCache).mockImplementation(async (_url, request) => {
-      expect(request?.signal).toBe(controller.signal);
       started.resolve();
+      expect(request?.signal).toBe(controller.signal);
       return new Promise((_resolve, reject) => {
         controller.signal.addEventListener('abort', () => reject(controller.signal.reason), {
           once: true,
@@ -155,6 +165,35 @@ describe.each(operations)('$name cancellation', ({ call }) => {
     expect(fetchWithCache).toHaveBeenCalledOnce();
   });
 });
+
+it.each(operations.filter(({ name }) => name.startsWith('Docker')))(
+  'cancels $name after the model probe completes',
+  async ({ call }) => {
+    const controller = new AbortController();
+    const started = createDeferred<void>();
+    vi.mocked(fetchWithCache)
+      .mockResolvedValueOnce({
+        data: { data: [{ id: 'fixture' }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      })
+      .mockImplementationOnce(async (_url, request) => {
+        started.resolve();
+        expect(request?.signal).toBe(controller.signal);
+        return new Promise((_resolve, reject) => {
+          controller.signal.addEventListener('abort', () => reject(controller.signal.reason), {
+            once: true,
+          });
+        });
+      });
+    const pending = call(controller.signal).catch((error) => ({ error: String(error) }));
+    await started.promise;
+    controller.abort(new Error('fixture cancellation'));
+    expect((await pending).error).toContain('fixture cancellation');
+    expect(fetchWithCache).toHaveBeenCalledTimes(2);
+  },
+);
 
 it('keeps concurrent moderation calls in separate cancellation scopes', async () => {
   const first = new AbortController();
