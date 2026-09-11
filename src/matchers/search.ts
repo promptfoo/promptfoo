@@ -6,7 +6,7 @@ import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webS
 import { extractFirstJsonObject } from '../util/json';
 import { callProviderWithContext, getGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { tryParse } from './shared';
+import { graderFail, tryParse } from './shared';
 
 import type {
   ApiProvider,
@@ -92,10 +92,14 @@ export async function matchesSearchRubric(
   );
 
   if (resp.error || !resp.output) {
+    // Tag transport/API errors with graderError so inverse-aware callers
+    // (not-search-rubric) propagate the failure verbatim instead of flipping
+    // it into a spurious pass. Mirrors the pattern in classification.ts / llmGrading.ts.
     return {
-      pass: false,
-      score: 0,
-      reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
+      ...graderFail(
+        `Search rubric evaluation failed: ${resp.error || 'No output'}`,
+        resp.tokenUsage,
+      ),
       tokensUsed: resp.tokenUsage,
       assertion,
     };
