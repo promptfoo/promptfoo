@@ -9,7 +9,7 @@ import {
 import { AssertionRegistry } from '../../src/assertions/registry';
 import { BaseAssertionTypesSchema } from '../../src/types/index';
 
-import type { PureAssertionType } from '../../src/assertions/pureRegistry';
+import type { PureAssertionType } from '../../src/assertions/pureTypes';
 import type { AssertionCapabilityPack, AssertionHandler } from '../../src/assertions/registryTypes';
 import type {
   Assertion,
@@ -289,6 +289,50 @@ describe('pure assertion registry', () => {
 });
 
 describe('assertion registry injection', () => {
+  it('keeps the built-in runner result contract', async () => {
+    const result = await runAssertion({
+      assertion: { type: 'contains', value: 'expected' },
+      providerResponse: { output: 'expected' },
+      test: {},
+    });
+    expectTypeOf(result).toEqualTypeOf<GradingResult>();
+    expect(result.pass).toBe(true);
+  });
+
+  it.each(['custom-check', 'not-custom-check'] as const)(
+    'runs a typed %s with rendered values and an injected registry',
+    async (type) => {
+      type CustomType = 'custom-check' | 'not-custom-check';
+      const registry = new AssertionRegistry<
+        AssertionParams<CustomType>,
+        GradingResult<CustomType>
+      >([
+        {
+          name: 'custom',
+          handlers: {
+            'custom-check': ({ assertion, renderedValue, outputString, inverse, baseType }) => {
+              expect(baseType).toBe('custom-check');
+              const pass = (outputString === renderedValue) !== inverse;
+              return { pass, score: pass ? 1 : 0, reason: 'custom comparison', assertion };
+            },
+          },
+        },
+      ]);
+      const result = await runAssertion({
+        assertion: { type, value: '{{ expected }}' },
+        providerResponse: { output: 'expected' },
+        registry,
+        test: { vars: { expected: 'expected' } },
+      });
+      expectTypeOf(result).toEqualTypeOf<GradingResult<CustomType>>();
+      expect(result).toMatchObject({
+        pass: type === 'custom-check',
+        assertion: { type },
+        metadata: { renderedAssertionValue: 'expected' },
+      });
+    },
+  );
+
   it('uses an injected registry in runAssertion', async () => {
     const fakeHandler = vi.fn((params: AssertionParams): GradingResult => {
       return {

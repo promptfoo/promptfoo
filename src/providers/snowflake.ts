@@ -20,24 +20,21 @@ import type {
  *
  * Documentation: https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-rest-api
  *
- * The Snowflake Cortex REST API provides OpenAI-compatible endpoints but with
- * a different URL structure:
+ * Uses the existing REST COMPLETE endpoint, which is distinct from Snowflake's
+ * newer OpenAI-compatible /api/v2/cortex/v1/chat/completions endpoint:
  * - Endpoint: https://<account_identifier>.snowflakecomputing.com/api/v2/cortex/inference:complete
  * - Authentication: Bearer token (JWT, OAuth, or programmatic access token)
- * - Supports similar parameters to OpenAI (temperature, max_tokens, etc.)
- * - Supports tool calling, structured output, and streaming
+ * - Supports text generation parameters such as temperature and max_tokens
+ * - Model availability and capabilities depend on the account, region, and endpoint
  *
- * Available models include:
- * - Claude models (claude-3-5-sonnet, claude-4-sonnet)
- * - OpenAI GPT models
- * - Mistral models
- * - Llama models
- * - Custom fine-tuned models
+ * Use exact Snowflake model IDs. The example below uses a model documented on
+ * this REST endpoint; it does not imply all OpenAI request formats are supported.
+ * https://docs.snowflake.com/en/user-guide/snowflake-cortex/complete-structured-outputs#rest-api-example
  *
  * Example configuration:
  * ```yaml
  * providers:
- *   - id: snowflake:mistral-large2
+ *   - id: snowflake:claude-sonnet-4-6
  *     config:
  *       accountIdentifier: "myorg-myaccount"  # or set SNOWFLAKE_ACCOUNT_IDENTIFIER
  *       apiKey: "your-bearer-token"           # or set SNOWFLAKE_API_KEY
@@ -160,6 +157,17 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     if (data.error) {
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
+      };
+    }
+
+    // Guard against a 200 response with an empty or missing `choices` array
+    // (soft moderation block, upstream hiccup, or n>1 edge cases). Without this,
+    // `data.choices[0]` is undefined and `.message` throws an opaque TypeError.
+    // Mirrors the sibling OpenAI-compatible providers (mistral.ts, ai21.ts).
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
+        cached,
       };
     }
 

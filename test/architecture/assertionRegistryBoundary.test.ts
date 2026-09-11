@@ -3,7 +3,7 @@ import { builtinModules } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import ts from 'typescript';
+import { type Node, parseSync, Visitor } from 'oxc-parser';
 import { describe, expect, it } from 'vitest';
 import { normalizePath, resolveInternalModule } from '../../scripts/architectureUtils';
 
@@ -23,99 +23,70 @@ interface RuntimeImportViolation {
   resolvedImport?: string;
 }
 
-function importDeclarationRunsAtRuntime(node: ts.ImportDeclaration): boolean {
-  const importClause = node.importClause;
-  if (!importClause) {
-    return true;
-  }
-  if (importClause.isTypeOnly) {
-    return false;
-  }
-  if (importClause.name) {
-    return true;
-  }
-  const namedBindings = importClause.namedBindings;
-  if (!namedBindings) {
-    return false;
-  }
-  if (ts.isNamespaceImport(namedBindings)) {
-    return true;
-  }
-  const elements = namedBindings.elements;
-  return elements.length === 0 || elements.some((element) => !element.isTypeOnly);
-}
-
-function exportDeclarationRunsAtRuntime(node: ts.ExportDeclaration): boolean {
-  if (node.isTypeOnly) {
-    return false;
-  }
-  if (!node.exportClause || ts.isNamespaceExport(node.exportClause)) {
-    return true;
-  }
-  return (
-    node.exportClause.elements.length === 0 ||
-    node.exportClause.elements.some((element) => !element.isTypeOnly)
-  );
-}
-
 function getRuntimeModuleSpecifiers(sourceText: string, filePath: string): string[] {
-  const sourceFile = ts.createSourceFile(
-    filePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
+  const { program, errors } = parseSync(filePath, sourceText);
+  if (errors.length > 0) {
+    throw new Error(`Cannot parse ${filePath}: ${errors[0].message}`);
+  }
   const specifiers: string[] = [];
-
-  function addCallSpecifier(node: ts.CallExpression): void {
-    const expression = node.expression;
-    const isRuntimeLoad =
-      expression.kind === ts.SyntaxKind.ImportKeyword ||
-      (ts.isIdentifier(expression) && expression.text === 'require') ||
-      (ts.isPropertyAccessExpression(expression) &&
-        ts.isIdentifier(expression.expression) &&
-        ((expression.expression.text === 'require' && expression.name.text === 'resolve') ||
-          (expression.expression.text === 'module' && expression.name.text === 'require')));
-    if (!isRuntimeLoad) {
-      return;
-    }
-    if (node.arguments.length !== 1 || !ts.isStringLiteralLike(node.arguments[0])) {
+  function addStaticLoad(source: Node | undefined, hasExtraArguments = false): void {
+    if (hasExtraArguments || source?.type !== 'Literal' || typeof source.value !== 'string') {
       throw new Error('Pure boundary runtime loads must use one static string specifier');
     }
-    specifiers.push(node.arguments[0].text);
+    specifiers.push(source.value);
   }
-
-  function visit(node: ts.Node): void {
-    if (
-      ts.isImportDeclaration(node) &&
-      importDeclarationRunsAtRuntime(node) &&
-      ts.isStringLiteralLike(node.moduleSpecifier)
-    ) {
-      specifiers.push(node.moduleSpecifier.text);
-    } else if (
-      ts.isExportDeclaration(node) &&
-      exportDeclarationRunsAtRuntime(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteralLike(node.moduleSpecifier)
-    ) {
-      specifiers.push(node.moduleSpecifier.text);
-    } else if (
-      ts.isImportEqualsDeclaration(node) &&
-      !node.isTypeOnly &&
-      ts.isExternalModuleReference(node.moduleReference) &&
-      node.moduleReference.expression &&
-      ts.isStringLiteralLike(node.moduleReference.expression)
-    ) {
-      specifiers.push(node.moduleReference.expression.text);
-    } else if (ts.isCallExpression(node)) {
-      addCallSpecifier(node);
-    }
-
-    ts.forEachChild(node, visit);
-  }
-
-  visit(sourceFile);
+  new Visitor({
+    ImportDeclaration(node) {
+      if (node.importKind === 'type') {
+        return;
+      }
+      if (
+        node.specifiers.length === 0 ||
+        node.specifiers.some(
+          (specifier) => specifier.type !== 'ImportSpecifier' || specifier.importKind !== 'type',
+        )
+      ) {
+        specifiers.push(node.source.value);
+      }
+    },
+    ExportNamedDeclaration(node) {
+      if (
+        node.exportKind !== 'type' &&
+        node.source &&
+        (node.specifiers.length === 0 ||
+          node.specifiers.some((specifier) => specifier.exportKind !== 'type'))
+      ) {
+        specifiers.push(node.source.value);
+      }
+    },
+    ExportAllDeclaration(node) {
+      if (node.exportKind !== 'type') {
+        specifiers.push(node.source.value);
+      }
+    },
+    ImportExpression(node) {
+      addStaticLoad(node.source, node.options != null);
+    },
+    TSImportEqualsDeclaration(node) {
+      if (node.importKind !== 'type' && node.moduleReference.type === 'TSExternalModuleReference') {
+        specifiers.push(node.moduleReference.expression.value);
+      }
+    },
+    CallExpression(node) {
+      const callee = node.callee;
+      if (
+        (callee.type === 'Identifier' && callee.name === 'require') ||
+        (callee.type === 'MemberExpression' &&
+          !callee.computed &&
+          callee.object.type === 'Identifier' &&
+          callee.property.type === 'Identifier' &&
+          ((callee.object.name === 'require' && callee.property.name === 'resolve') ||
+            (callee.object.name === 'module' && callee.property.name === 'require')))
+      ) {
+        addStaticLoad(node.arguments[0], node.arguments.length !== 1);
+      }
+    },
+  }).visit(program);
   return [...new Set(specifiers)];
 }
 
@@ -192,6 +163,33 @@ function scanRuntimeImportGraph(): {
 }
 
 describe('pure assertion registry runtime boundary', () => {
+  it('ignores type-only imports while following runtime imports and re-exports', () => {
+    expect(
+      getRuntimeModuleSpecifiers(
+        `
+      import type { Host } from './host-types';
+      import { type OtherHost } from './other-host-types';
+      export type { TypeOnly } from './exported-types';
+      export { type AnotherType } from './another-type';
+      import { type Config, run } from './mixed';
+      import './side-effect';
+      export * from './re-export';
+      export { runAgain } from './named-export';
+      const dynamic = import('./dynamic');
+      const commonjs = require('./commonjs');
+    `,
+        'fixture.ts',
+      ),
+    ).toEqual([
+      './mixed',
+      './side-effect',
+      './re-export',
+      './named-export',
+      './dynamic',
+      './commonjs',
+    ]);
+  });
+
   it('recursively stays independent from host-only runtime dependencies', () => {
     const { files, violations } = scanRuntimeImportGraph();
 
