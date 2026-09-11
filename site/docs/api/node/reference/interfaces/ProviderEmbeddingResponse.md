@@ -1,7 +1,7 @@
 ---
 title: 'Interface: ProviderEmbeddingResponse'
 description: 'Response returned by embedding-capable providers. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 36
+sidebar_position: 34
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 36
 import type { ProviderEmbeddingResponse } from 'promptfoo';
 ```
 
-Defined in: [contracts/providers.ts:291](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L291)
+Defined in: contracts/providers.ts:294
 
 Response returned by embedding-capable providers.
 
@@ -29,7 +29,7 @@ const response: ProviderEmbeddingResponse = {
 
 > `optional` **cached?**: `boolean`
 
-Defined in: [contracts/providers.ts:293](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L293)
+Defined in: contracts/providers.ts:296
 
 Whether the embedding response came from cache.
 
@@ -39,7 +39,7 @@ Whether the embedding response came from cache.
 
 > `optional` **cost?**: `number`
 
-Defined in: [contracts/providers.ts:295](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L295)
+Defined in: contracts/providers.ts:298
 
 Estimated request cost when the provider can report it.
 
@@ -49,7 +49,7 @@ Estimated request cost when the provider can report it.
 
 > `optional` **embedding?**: `number`[]
 
-Defined in: [contracts/providers.ts:299](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L299)
+Defined in: contracts/providers.ts:302
 
 Embedding vector returned by the provider.
 
@@ -59,7 +59,7 @@ Embedding vector returned by the provider.
 
 > `optional` **error?**: `string`
 
-Defined in: [contracts/providers.ts:297](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L297)
+Defined in: contracts/providers.ts:300
 
 Error message when the embedding call failed without throwing.
 
@@ -69,7 +69,7 @@ Error message when the embedding call failed without throwing.
 
 > `optional` **latencyMs?**: `number`
 
-Defined in: [contracts/providers.ts:301](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L301)
+Defined in: contracts/providers.ts:304
 
 End-to-end provider latency in milliseconds.
 
@@ -79,7 +79,7 @@ End-to-end provider latency in milliseconds.
 
 > `optional` **metadata?**: `object`
 
-Defined in: [contracts/providers.ts:305](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L305)
+Defined in: contracts/providers.ts:308
 
 Additional embedding-specific metadata preserved for callers.
 
@@ -103,8 +103,8 @@ Whether a provider-level transform changed the original input text.
 
 ### tokenUsage?
 
-> `optional` **tokenUsage?**: `Partial`\<[`TokenUsage`](TokenUsage.md)\>
+> `optional` **tokenUsage?**: `Partial`\<\{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `attacker?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `generation?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `incurredTokenUsage?`: \{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `attacker?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `generation?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}\>
 
-Defined in: [contracts/providers.ts:303](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L303)
+Defined in: contracts/providers.ts:306
 
 Token usage attributed to the embedding request.

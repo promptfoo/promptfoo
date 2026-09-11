@@ -31,6 +31,7 @@ export interface ProviderModerationResponse {
   cached?: boolean;
   error?: string;
   flags?: ModerationFlag[];
+  tokenUsage?: TokenUsage;
 }
 
 /**
@@ -176,6 +177,8 @@ export interface ProviderResponse {
   cached?: boolean;
   /** Estimated request cost when the provider can report it. */
   cost?: number;
+  /** Actual target-provider cost incurred during this run, excluding response-cache replays. */
+  incurredCost?: number;
   /** Error message when the provider call failed without throwing. */
   error?: string;
   /**

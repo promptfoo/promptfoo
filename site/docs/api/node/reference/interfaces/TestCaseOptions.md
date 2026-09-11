@@ -1,7 +1,7 @@
 ---
 title: 'Interface: TestCaseOptions'
 description: 'Additional per-test options merged with prompt, output, and grading behavior. See supported imports, signatures, fields, and examples for this symbol.'
-sidebar_position: 45
+sidebar_position: 43
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 45
 import type { TestCaseOptions } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:1348](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1348)
+Defined in: types/index.ts:1371
 
 Additional per-test options merged with prompt, output, and grading behavior.
 
@@ -21,14 +21,10 @@ Unknown keys are preserved so provider-specific config can travel with a test.
 ```ts
 const options: TestCaseOptions = {
   prefix: 'System: ',
-  transform: (output) => output.trim(),
+  transform: (output) => String(output).trim(),
   disableVarExpansion: true,
 };
 ```
-
-## Extends
-
-- [`PromptConfig`](PromptConfig.md).`OutputConfig`.`GradingConfig`
 
 ## Indexable
 
@@ -40,7 +36,7 @@ const options: TestCaseOptions = {
 
 > `optional` **disableConversationVar?**: `boolean`
 
-Defined in: [types/index.ts:1352](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1352)
+Defined in: types/index.ts:1321
 
 Do not include the implicit `_conversation` variable.
 
@@ -50,7 +46,7 @@ Do not include the implicit `_conversation` variable.
 
 > `optional` **disableDefaultAsserts?**: `boolean`
 
-Defined in: [types/index.ts:1354](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1354)
+Defined in: types/index.ts:1323
 
 Skip `defaultTest` assertions while still inheriting other defaults.
 
@@ -60,7 +56,7 @@ Skip `defaultTest` assertions while still inheriting other defaults.
 
 > `optional` **disableVarExpansion?**: `boolean`
 
-Defined in: [types/index.ts:1350](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1350)
+Defined in: types/index.ts:1319
 
 Do not expand array-valued vars into multiple eval cases.
 
@@ -70,7 +66,7 @@ Do not expand array-valued vars into multiple eval cases.
 
 > `optional` **factuality?**: `object`
 
-Defined in: [types/index.ts:179](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L179)
+Defined in: types/index.ts:185
 
 Score mapping used by factuality-oriented graders.
 
@@ -104,25 +100,17 @@ Score awarded when the answer is a factual subset of the expected answer.
 
 Score awarded when the answer is a factual superset of the expected answer.
 
-#### Inherited from
-
-`GradingConfig.factuality`
-
 ---
 
 ### ~~postprocess?~~
 
 > `optional` **postprocess?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/index.ts:201](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L201)
+Defined in: types/index.ts:207
 
 #### Deprecated
 
 in > 0.38.0. Use `transform` instead.
-
-#### Inherited from
-
-`OutputConfig.postprocess`
 
 ---
 
@@ -130,13 +118,7 @@ in > 0.38.0. Use `transform` instead.
 
 > `optional` **prefix?**: `string`
 
-Defined in: [contracts/prompts.ts:45](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L45)
-
-Text prepended to the rendered prompt before it is sent to the provider.
-
-#### Inherited from
-
-[`PromptConfig`](PromptConfig.md).[`prefix`](PromptConfig.md#prefix)
+Defined in: contracts/validators/prompts.ts:7
 
 ---
 
@@ -144,13 +126,17 @@ Text prepended to the rendered prompt before it is sent to the provider.
 
 > `optional` **provider?**: `any`
 
-Defined in: [types/index.ts:175](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L175)
+Defined in: types/index.ts:181
 
 Provider override used by model-graded assertions.
 
-#### Inherited from
+---
 
-`GradingConfig.provider`
+### repeat?
+
+> `optional` **repeat?**: `number`
+
+Defined in: types/index.ts:1328
 
 ---
 
@@ -158,13 +144,9 @@ Provider override used by model-graded assertions.
 
 > `optional` **rubricPrompt?**: `string` \| `string`[] \| `object`[]
 
-Defined in: [types/index.ts:162](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L162)
+Defined in: types/index.ts:168
 
 Rubric prompt override used by model-graded assertions.
-
-#### Inherited from
-
-`GradingConfig.rubricPrompt`
 
 ---
 
@@ -172,7 +154,7 @@ Rubric prompt override used by model-graded assertions.
 
 > `optional` **runSerially?**: `boolean`
 
-Defined in: [types/index.ts:1356](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1356)
+Defined in: types/index.ts:1325
 
 Run this test serially even when the eval otherwise uses concurrency.
 
@@ -182,13 +164,9 @@ Run this test serially even when the eval otherwise uses concurrency.
 
 > `optional` **storeOutputAs?**: `string`
 
-Defined in: [types/index.ts:208](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L208)
+Defined in: types/index.ts:214
 
 Name of the variable that should receive this test case's output.
-
-#### Inherited from
-
-`OutputConfig.storeOutputAs`
 
 ---
 
@@ -196,13 +174,7 @@ Name of the variable that should receive this test case's output.
 
 > `optional` **suffix?**: `string`
 
-Defined in: [contracts/prompts.ts:47](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L47)
-
-Text appended to the rendered prompt before it is sent to the provider.
-
-#### Inherited from
-
-[`PromptConfig`](PromptConfig.md).[`suffix`](PromptConfig.md#suffix)
+Defined in: contracts/validators/prompts.ts:8
 
 ---
 
@@ -210,13 +182,9 @@ Text appended to the rendered prompt before it is sent to the provider.
 
 > `optional` **transform?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/index.ts:203](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L203)
+Defined in: types/index.ts:209
 
 Transform provider output before assertions run.
-
-#### Inherited from
-
-`OutputConfig.transform`
 
 ---
 
@@ -224,10 +192,6 @@ Transform provider output before assertions run.
 
 > `optional` **transformVars?**: `string` \| [`TransformFunction`](../type-aliases/TransformFunction.md)
 
-Defined in: [types/index.ts:205](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L205)
+Defined in: types/index.ts:211
 
 Transform vars before prompt rendering.
-
-#### Inherited from
-
-`OutputConfig.transformVars`

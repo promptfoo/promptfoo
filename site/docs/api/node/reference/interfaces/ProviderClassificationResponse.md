@@ -1,7 +1,7 @@
 ---
 title: 'Interface: ProviderClassificationResponse'
 description: 'Response returned by classification-capable providers. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 35
+sidebar_position: 33
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 35
 import type { ProviderClassificationResponse } from 'promptfoo';
 ```
 
-Defined in: [contracts/providers.ts:325](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L325)
+Defined in: contracts/providers.ts:328
 
 Response returned by classification-capable providers.
 
@@ -18,9 +18,9 @@ Response returned by classification-capable providers.
 
 ### classification?
 
-> `optional` **classification?**: `Record`\<`string`, `number`\>
+> `optional` **classification?**: `Record`\<`string`, `number`>>\>
 
-Defined in: [contracts/providers.ts:329](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L329)
+Defined in: contracts/providers.ts:332
 
 Class labels mapped to provider-reported scores.
 
@@ -30,6 +30,6 @@ Class labels mapped to provider-reported scores.
 
 > `optional` **error?**: `string`
 
-Defined in: [contracts/providers.ts:327](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L327)
+Defined in: contracts/providers.ts:330
 
 Error message when the classification call failed without throwing.

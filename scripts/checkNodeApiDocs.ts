@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import yaml from 'js-yaml';
+import { load } from 'js-yaml';
 
 const REFERENCE_DIR = path.join('site', 'docs', 'api', 'node', 'reference');
 const LEGACY_ANCHOR_MANIFEST = path.join('site', 'src', 'data', 'nodeApiLegacyAnchors.json');
@@ -55,7 +55,7 @@ function parseFrontmatter(markdown: string, filePath: string): Record<string, un
     throw new Error(`${filePath} is missing YAML frontmatter`);
   }
 
-  const parsed = yaml.load(match[1]);
+  const parsed = load(match[1]);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error(`${filePath} has invalid YAML frontmatter`);
   }

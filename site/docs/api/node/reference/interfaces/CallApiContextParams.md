@@ -1,7 +1,7 @@
 ---
 title: 'Interface: CallApiContextParams'
 description: 'Runtime context passed to custom provider functions. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 11
+sidebar_position: 9
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 11
 import type { CallApiContextParams } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:180](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L180)
+Defined in: types/providers.ts:187
 
 Runtime context passed to custom provider functions.
 
@@ -29,7 +29,7 @@ const provider: ProviderFunction = async (prompt, context) => ({
 
 > `optional` **bustCache?**: `boolean`
 
-Defined in: [types/providers.ts:203](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L203)
+Defined in: types/providers.ts:210
 
 Whether this call should bypass reusable response cache entries.
 
@@ -39,7 +39,7 @@ Whether this call should bypass reusable response cache entries.
 
 > `optional` **debug?**: `boolean`
 
-Defined in: [types/providers.ts:199](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L199)
+Defined in: types/providers.ts:206
 
 Whether the caller requested debug behavior.
 
@@ -49,7 +49,7 @@ Whether the caller requested debug behavior.
 
 > `optional` **evaluationId?**: `string`
 
-Defined in: [types/providers.ts:211](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L211)
+Defined in: types/providers.ts:218
 
 Eval identifier for manual correlation across provider calls.
 
@@ -59,7 +59,7 @@ Eval identifier for manual correlation across provider calls.
 
 > `optional` **filters?**: `NunjucksFilterMap`
 
-Defined in: [types/providers.ts:182](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L182)
+Defined in: types/providers.ts:189
 
 Nunjucks filters available while rendering related prompt content.
 
@@ -69,7 +69,7 @@ Nunjucks filters available while rendering related prompt content.
 
 > `optional` **getCache?**: () => `any`
 
-Defined in: [types/providers.ts:189](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L189)
+Defined in: types/providers.ts:196
 
 Accessor for the active cache instance. Treat the return value as opaque
 and prefer the documented `cache.*` helpers from the package over calling
@@ -85,7 +85,7 @@ it directly.
 
 > `optional` **logger?**: `Logger`
 
-Defined in: [types/providers.ts:191](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L191)
+Defined in: types/providers.ts:198
 
 Logger configured for the current eval.
 
@@ -95,7 +95,7 @@ Logger configured for the current eval.
 
 > `optional` **originalProvider?**: [`ApiProvider`](ApiProvider.md)
 
-Defined in: [types/providers.ts:193](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L193)
+Defined in: types/providers.ts:200
 
 Original provider when this call is being graded or wrapped.
 
@@ -105,7 +105,7 @@ Original provider when this call is being graded or wrapped.
 
 > **prompt**: [`Prompt`](Prompt.md)
 
-Defined in: [types/providers.ts:195](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L195)
+Defined in: types/providers.ts:202
 
 Prompt object for the current provider call.
 
@@ -115,7 +115,7 @@ Prompt object for the current provider call.
 
 > `optional` **promptIdx?**: `number`
 
-Defined in: [types/providers.ts:223](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L223)
+Defined in: types/providers.ts:230
 
 Index of the prompt within the current evaluation (column in results table).
 Used for correlating blob references and other per-result metadata.
@@ -126,7 +126,7 @@ Used for correlating blob references and other per-result metadata.
 
 > `optional` **repeatIndex?**: `number`
 
-Defined in: [types/providers.ts:225](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L225)
+Defined in: types/providers.ts:232
 
 Zero-based repeat index when the same test case is executed repeatedly.
 
@@ -136,7 +136,7 @@ Zero-based repeat index when the same test case is executed repeatedly.
 
 > `optional` **test?**: `AtomicTestCase`
 
-Defined in: [types/providers.ts:201](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L201)
+Defined in: types/providers.ts:208
 
 Test case currently being executed, when available to the caller.
 
@@ -146,7 +146,7 @@ Test case currently being executed, when available to the caller.
 
 > `optional` **testCaseId?**: `string`
 
-Defined in: [types/providers.ts:213](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L213)
+Defined in: types/providers.ts:220
 
 Stable id for the current test case when one has been assigned.
 
@@ -156,7 +156,7 @@ Stable id for the current test case when one has been assigned.
 
 > `optional` **testIdx?**: `number`
 
-Defined in: [types/providers.ts:218](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L218)
+Defined in: types/providers.ts:225
 
 Index of the test case within the current evaluation (row in results table).
 Used for correlating blob references and other per-result metadata.
@@ -167,7 +167,7 @@ Used for correlating blob references and other per-result metadata.
 
 > `optional` **traceparent?**: `string`
 
-Defined in: [types/providers.ts:206](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L206)
+Defined in: types/providers.ts:213
 
 W3C Trace Context `traceparent` header for downstream propagation.
 
@@ -177,7 +177,7 @@ W3C Trace Context `traceparent` header for downstream propagation.
 
 > `optional` **tracestate?**: `string`
 
-Defined in: [types/providers.ts:208](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L208)
+Defined in: types/providers.ts:215
 
 W3C Trace Context `tracestate` header for downstream propagation.
 
@@ -185,8 +185,8 @@ W3C Trace Context `tracestate` header for downstream propagation.
 
 ### vars
 
-> **vars**: `Record`\<`string`, `VarValue`\>
+> **vars**: `Record`\<`string`, `VarValue`>>\>
 
-Defined in: [types/providers.ts:197](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L197)
+Defined in: types/providers.ts:204
 
 Rendered variables for the current test case.

@@ -9,13 +9,17 @@ import {
   TRAJECTORY_GOAL_SUCCESS_PROMPT,
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
-import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
 import { extractFirstJsonObject } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { callProviderWithContext, getAndCheckProvider } from './providers';
+import {
+  callProviderWithContext,
+  getAndCheckProvider,
+  getRemoteGradingContext,
+  shouldUseRemoteGrading,
+} from './providers';
 import {
   LlmRubricProviderError,
   loadRubricPrompt,
@@ -161,6 +165,19 @@ function getGradingOutputForImages(llmOutput: string, imageOutputs: ProviderResp
   return llmOutput;
 }
 
+function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['audio']) {
+  if (!audio?.data) {
+    return llmOutput;
+  }
+  const outputData = llmOutput
+    .trim()
+    .replace(/^data:audio\/[^;,]+;base64,/i, '')
+    .replace(/\s/g, '');
+  return outputData === audio.data.replace(/\s/g, '')
+    ? audio.transcript || '[Audio output]'
+    : llmOutput;
+}
+
 /**
  * Grade an output against a free-form LLM rubric.
  *
@@ -201,13 +218,17 @@ export async function matchesLlmRubric(
     (grading as LlmRubricGradingConfig).__promptfooPreferRemote ||
     !grading.provider;
   const { imageOutputs } = materializeImageOutputsForGrading(options?.providerResponse?.images);
-  const gradingOutput = getGradingOutputForImages(llmOutput, imageOutputs);
+  const audio = options?.providerResponse?.audio;
+  const gradingOutput = getGradingOutputForImages(
+    getGradingOutputForAudio(llmOutput, audio),
+    imageOutputs,
+  );
   if (
     !grading.rubricPrompt &&
     shouldPreferRemote &&
     !cliState.config?.redteam?.provider &&
     cliState.config?.redteam &&
-    shouldGenerateRemote({ canUseCodexDefaultProvider: true })
+    shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
     try {
       return {
@@ -217,6 +238,7 @@ export async function matchesLlmRubric(
           output: gradingOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
+          ...getRemoteGradingContext(),
         })),
         assertion,
       };
@@ -238,10 +260,11 @@ export async function matchesLlmRubric(
       providerCallContext,
       throwOnError: options?.throwOnError,
       images: imageOutputs,
+      audio,
       vars: {
+        ...(vars || {}),
         output: tryParse(gradingOutput),
         rubric,
-        ...(vars || {}),
       },
     });
   } catch (error) {
@@ -337,7 +360,7 @@ export async function matchesFactuality(
   }
 
   const parsedOutput = tryParse(output);
-  const templateVars = { input, ideal: expected, completion: parsedOutput, ...(vars || {}) };
+  const templateVars = { ...(vars || {}), input, ideal: expected, completion: parsedOutput };
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, PROMPTFOO_FACTUALITY_PROMPT);
   const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
@@ -407,7 +430,7 @@ export async function matchesClosedQa(
   }
 
   const parsedOutput = tryParse(output);
-  const templateVars = { input, criteria: expected, completion: parsedOutput, ...(vars || {}) };
+  const templateVars = { ...(vars || {}), input, criteria: expected, completion: parsedOutput };
 
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, OPENAI_CLOSED_QA_PROMPT);
   const prompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);

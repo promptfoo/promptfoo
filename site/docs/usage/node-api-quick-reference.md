@@ -2,7 +2,7 @@
 sidebar_label: Node API Quick Reference
 sidebar_position: 23
 title: Node API quick reference
-description: Quick lookup for promptfoo's supported Node.js API surface, including evals, providers, assertions, and caching.
+description: "Look up promptfoo's Node.js APIs, common TypeScript types, runtime options, and snippets for providers, assertions, caches, guardrails, and red team evals."
 ---
 
 import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';
@@ -19,9 +19,11 @@ import {
   cache,
   evaluate,
   generateTable,
+  guardrails,
   isTransformFunction,
   loadApiProvider,
   loadApiProviders,
+  redteam,
 } from 'promptfoo';
 ```
 
@@ -52,6 +54,11 @@ import type {
 | Isolate cached work         | [`cache.withCacheNamespace()`](/docs/api/node/reference/promptfoo/namespaces/cache/functions/withCacheNamespace) |
 | Render a table              | [`generateTable()`](/docs/api/node/reference/functions/generateTable)                                            |
 | Narrow a transform value    | [`isTransformFunction()`](/docs/api/node/reference/functions/isTransformFunction)                                |
+
+For the beta APIs, see [guardrails](/docs/usage/node-api-reference#guardrails)
+(`guard`, `pii`, `harm`, `adaptive`) and
+[red team orchestration](/docs/usage/node-api-reference#red-team-orchestration)
+(`redteam.generate`, `redteam.run`).
 
 ## Core types
 

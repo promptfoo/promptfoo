@@ -1,7 +1,7 @@
 ---
 title: 'Interface: EvaluateTableHead'
 description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
-sidebar_position: 20
+sidebar_position: 18
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 20
 import type { EvaluateTableHead } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:644](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L644)
+Defined in: types/index.ts:658
 
 Header metadata for an eval table.
 
@@ -38,7 +38,7 @@ const head: EvaluateTableHead = {
 
 > **prompts**: `object`[]
 
-Defined in: [types/index.ts:646](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L646)
+Defined in: types/index.ts:660
 
 Completed prompts rendered as provider columns.
 
@@ -88,21 +88,25 @@ Number of individual assertions that passed.
 
 Estimated cost accumulated across provider calls for this prompt.
 
+##### metrics.incurredCost?
+
+> `optional` **incurredCost?**: `number`
+
 ##### metrics.namedScores
 
-> **namedScores**: `Record`\<`string`, `number`\>
+> **namedScores**: `Record`\<`string`, `number`>>\>
 
 Aggregate values for named assertion metrics.
 
 ##### metrics.namedScoresCount
 
-> **namedScoresCount**: `Record`\<`string`, `number`\>
+> **namedScoresCount**: `Record`\<`string`, `number`>>\>
 
 Number of contributions included in each named score.
 
 ##### metrics.namedScoreWeights?
 
-> `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
+> `optional` **namedScoreWeights?**: `Record`\<`string`, `number`>>\>
 
 Sum of assertion weights contributing to each named score.
 
@@ -114,25 +118,25 @@ Red-team pass/fail counts grouped by plugin and strategy.
 
 ##### metrics.redteam.pluginFailCount
 
-> **pluginFailCount**: `Record`\<`string`, `number`\>
+> **pluginFailCount**: `Record`\<`string`, `number`>>\>
 
 Failing result counts by red-team plugin id.
 
 ##### metrics.redteam.pluginPassCount
 
-> **pluginPassCount**: `Record`\<`string`, `number`\>
+> **pluginPassCount**: `Record`\<`string`, `number`>>\>
 
 Passing result counts by red-team plugin id.
 
 ##### metrics.redteam.strategyFailCount
 
-> **strategyFailCount**: `Record`\<`string`, `number`\>
+> **strategyFailCount**: `Record`\<`string`, `number`>>\>
 
 Failing result counts by red-team strategy id.
 
 ##### metrics.redteam.strategyPassCount
 
-> **strategyPassCount**: `Record`\<`string`, `number`\>
+> **strategyPassCount**: `Record`\<`string`, `number`>>\>
 
 Passing result counts by red-team strategy id.
 
@@ -224,6 +228,64 @@ Prediction tokens rejected by speculative decoding, when reported.
 
 > `optional` **total?**: `number`
 
+##### metrics.tokenUsage.attacker?
+
+> `optional` **attacker?**: `object`
+
+##### metrics.tokenUsage.attacker.cached?
+
+> `optional` **cached?**: `number`
+
+##### metrics.tokenUsage.attacker.completion?
+
+> `optional` **completion?**: `number`
+
+##### metrics.tokenUsage.attacker.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### metrics.tokenUsage.attacker.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### metrics.tokenUsage.attacker.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### metrics.tokenUsage.attacker.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### metrics.tokenUsage.attacker.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### metrics.tokenUsage.attacker.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### metrics.tokenUsage.attacker.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### metrics.tokenUsage.attacker.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### metrics.tokenUsage.attacker.total?
+
+> `optional` **total?**: `number`
+
 ##### metrics.tokenUsage.cached?
 
 > `optional` **cached?**: `number`
@@ -266,6 +328,296 @@ Tokens spent on hidden model reasoning when the provider reports them.
 
 Prediction tokens rejected by speculative decoding, when reported.
 
+##### metrics.tokenUsage.generation?
+
+> `optional` **generation?**: `object`
+
+##### metrics.tokenUsage.generation.cached?
+
+> `optional` **cached?**: `number`
+
+##### metrics.tokenUsage.generation.completion?
+
+> `optional` **completion?**: `number`
+
+##### metrics.tokenUsage.generation.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### metrics.tokenUsage.generation.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### metrics.tokenUsage.generation.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### metrics.tokenUsage.generation.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### metrics.tokenUsage.generation.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### metrics.tokenUsage.generation.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### metrics.tokenUsage.generation.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### metrics.tokenUsage.generation.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### metrics.tokenUsage.generation.total?
+
+> `optional` **total?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage?
+
+> `optional` **incurredTokenUsage?**: `object`
+
+##### metrics.tokenUsage.incurredTokenUsage.assertions?
+
+> `optional` **assertions?**: `object`
+
+##### metrics.tokenUsage.incurredTokenUsage.assertions.cached?
+
+> `optional` **cached?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.assertions.completion?
+
+> `optional` **completion?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.assertions.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### metrics.tokenUsage.incurredTokenUsage.assertions.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: ...
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### metrics.tokenUsage.incurredTokenUsage.assertions.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: ...
+
+Input tokens written into a provider cache.
+
+##### metrics.tokenUsage.incurredTokenUsage.assertions.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: ...
+
+Input tokens read from a provider cache.
+
+##### metrics.tokenUsage.incurredTokenUsage.assertions.completionDetails.reasoning?
+
+> `optional` **reasoning?**: ...
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### metrics.tokenUsage.incurredTokenUsage.assertions.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: ...
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### metrics.tokenUsage.incurredTokenUsage.assertions.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.assertions.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.assertions.total?
+
+> `optional` **total?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.attacker?
+
+> `optional` **attacker?**: `object`
+
+##### metrics.tokenUsage.incurredTokenUsage.attacker.cached?
+
+> `optional` **cached?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.attacker.completion?
+
+> `optional` **completion?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.attacker.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### metrics.tokenUsage.incurredTokenUsage.attacker.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: ...
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### metrics.tokenUsage.incurredTokenUsage.attacker.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: ...
+
+Input tokens written into a provider cache.
+
+##### metrics.tokenUsage.incurredTokenUsage.attacker.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: ...
+
+Input tokens read from a provider cache.
+
+##### metrics.tokenUsage.incurredTokenUsage.attacker.completionDetails.reasoning?
+
+> `optional` **reasoning?**: ...
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### metrics.tokenUsage.incurredTokenUsage.attacker.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: ...
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### metrics.tokenUsage.incurredTokenUsage.attacker.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.attacker.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.attacker.total?
+
+> `optional` **total?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.cached?
+
+> `optional` **cached?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.completion?
+
+> `optional` **completion?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### metrics.tokenUsage.incurredTokenUsage.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### metrics.tokenUsage.incurredTokenUsage.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### metrics.tokenUsage.incurredTokenUsage.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### metrics.tokenUsage.incurredTokenUsage.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### metrics.tokenUsage.incurredTokenUsage.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### metrics.tokenUsage.incurredTokenUsage.generation?
+
+> `optional` **generation?**: `object`
+
+##### metrics.tokenUsage.incurredTokenUsage.generation.cached?
+
+> `optional` **cached?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.generation.completion?
+
+> `optional` **completion?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.generation.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### metrics.tokenUsage.incurredTokenUsage.generation.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: ...
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### metrics.tokenUsage.incurredTokenUsage.generation.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: ...
+
+Input tokens written into a provider cache.
+
+##### metrics.tokenUsage.incurredTokenUsage.generation.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: ...
+
+Input tokens read from a provider cache.
+
+##### metrics.tokenUsage.incurredTokenUsage.generation.completionDetails.reasoning?
+
+> `optional` **reasoning?**: ...
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### metrics.tokenUsage.incurredTokenUsage.generation.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: ...
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### metrics.tokenUsage.incurredTokenUsage.generation.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.generation.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.generation.total?
+
+> `optional` **total?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### metrics.tokenUsage.incurredTokenUsage.total?
+
+> `optional` **total?**: `number`
+
 ##### metrics.tokenUsage.numRequests?
 
 > `optional` **numRequests?**: `number`
@@ -302,6 +654,6 @@ Sum of provider latency for this prompt in milliseconds.
 
 > **vars**: `string`[]
 
-Defined in: [types/index.ts:648](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L648)
+Defined in: types/index.ts:662
 
 Variable names rendered before provider columns.

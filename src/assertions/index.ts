@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import async from 'async';
-import yaml from 'js-yaml';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
 import { handleConversationRelevance } from '../external/assertions/deepeval';
@@ -21,7 +20,10 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import { getProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
+import {
+  getProviderCallExecutionContext,
+  getProviderCallTracingContext,
+} from '../scheduler/providerCallExecutionContext';
 import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
 import { getTraceStore } from '../tracing/store';
 import {
@@ -40,6 +42,7 @@ import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
+import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
@@ -366,44 +369,6 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
 }
 
 /**
- * Assertion input accepted by `runAssertion()`.
- *
- * This wrapper keeps the low-level assertion API docs readable while preserving
- * the full assertion shape used by eval configuration.
- *
- * @example
- * ```ts
- * const assertion: AssertionInput = {
- *   type: 'contains',
- *   value: 'Ada',
- * };
- * ```
- *
- * @public
- */
-export interface AssertionInput extends Assertion {}
-
-/**
- * Test-case context accepted by low-level assertion APIs.
- *
- * For the common `runAssertion()` case, `{ vars: {} }` is enough. Use the same
- * broader shape as an evaluated test case when custom assertions or assertion
- * handlers need additional context. `runAssertions()` also reads `assert` and
- * `threshold` from this object.
- *
- * @example
- * ```ts
- * const test: AssertionTestContext = {
- *   vars: { name: 'Ada' },
- *   assert: [{ type: 'contains', value: 'Ada' }],
- * };
- * ```
- *
- * @public
- */
-export interface AssertionTestContext extends AtomicTestCase {}
-
-/**
  * Options for `runAssertion()`.
  *
  * @example
@@ -423,9 +388,9 @@ export interface RunAssertionOptions {
   /** Provider that produced the response, when model-graded assertions need it. */
   provider?: ApiProvider;
   /** Assertion to run against the response. */
-  assertion: AssertionInput;
+  assertion: Assertion;
   /** Test case context associated with the response. */
-  test: AssertionTestContext;
+  test: AtomicTestCase;
   /** Rendered variables to use instead of `test.vars`, when already resolved. */
   vars?: Record<string, VarValue>;
   /** Response to grade. */
@@ -440,30 +405,7 @@ export interface RunAssertionOptions {
   traceData?: TraceData | null;
 }
 
-/**
- * Run one assertion against a provider response.
- *
- * This is the supported low-level hook for advanced callers that want to reuse
- * promptfoo assertion logic outside a full eval run.
- *
- * @example
- * ```ts
- * import { assertions } from 'promptfoo';
- *
- * const result = await assertions.runAssertion({
- *   assertion: { type: 'contains', value: 'Ada' },
- *   test: { vars: {} },
- *   providerResponse: { output: 'Hello Ada' },
- * });
- *
- * console.log(result.pass);
- * ```
- *
- * @param options - Assertion, provider response, and supporting runtime context.
- * @returns The grading result for this single assertion.
- * @public
- */
-export async function runAssertion(options: RunAssertionOptions): Promise<GradingResult> {
+async function runAssertionInternal(options: RunAssertionOptions): Promise<GradingResult> {
   const {
     prompt,
     provider,
@@ -654,7 +596,12 @@ export async function runAssertion(options: RunAssertionOptions): Promise<Gradin
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
   // Generate traceparent for grader calls to link them to the main trace
-  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
+  const activeTraceparent = getProviderCallTracingContext()?.getActiveTraceparent();
+  const graderTraceparent = traceId
+    ? activeTraceparent?.split('-')[1] === traceId
+      ? activeTraceparent
+      : generateTraceparent(traceId, generateSpanId())
+    : undefined;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
@@ -723,6 +670,49 @@ export async function runAssertion(options: RunAssertionOptions): Promise<Gradin
 }
 
 /**
+ * Run one assertion against a provider response.
+ *
+ * This is the supported low-level hook for advanced callers that want to reuse
+ * promptfoo assertion logic outside a full eval run.
+ *
+ * @example
+ * ```ts
+ * import { assertions } from 'promptfoo';
+ *
+ * const result = await assertions.runAssertion({
+ *   assertion: { type: 'contains', value: 'Ada' },
+ *   test: { vars: {} },
+ *   providerResponse: { output: 'Hello Ada' },
+ * });
+ *
+ * console.log(result.pass);
+ * ```
+ *
+ * @param options - Assertion, provider response, and supporting runtime context.
+ * @returns The grading result for this single assertion.
+ * @public
+ */
+export async function runAssertion(options: RunAssertionOptions): Promise<GradingResult> {
+  if (!options.traceId) {
+    return runAssertionInternal(options);
+  }
+
+  const tracingContext = getProviderCallTracingContext();
+  if (!tracingContext) {
+    return runAssertionInternal(options);
+  }
+
+  return tracingContext.withGraderSpan(
+    {
+      graderId: options.assertion.type,
+      evalId: options.test.metadata?.evaluationId as string | undefined,
+      testIndex: tracingContext.testIndex,
+    },
+    () => runAssertionInternal(options),
+  );
+}
+
+/**
  * Options for `runAssertions()`.
  *
  * @example
@@ -750,7 +740,7 @@ export interface RunAssertionsOptions {
   /** Response to grade. */
   providerResponse: ProviderResponse;
   /** Test case containing the assertions to run. */
-  test: AssertionTestContext;
+  test: AtomicTestCase;
   /** Rendered variables to use instead of `test.vars`, when already resolved. */
   vars?: Record<string, VarValue>;
   /** Trace identifier for trace-aware assertions, when tracing is enabled. */
@@ -920,7 +910,7 @@ export async function runCompareAssertion(
 
 export async function readAssertions(filePath: string): Promise<Assertion[]> {
   try {
-    const assertions = yaml.load(await fs.readFile(filePath, 'utf-8')) as Assertion[];
+    const assertions = loadYaml(await fs.readFile(filePath, 'utf-8')) as Assertion[];
     if (!Array.isArray(assertions) || assertions[0]?.type === undefined) {
       throw new Error('Assertions file must be an array of assertion objects');
     }

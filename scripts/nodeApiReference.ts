@@ -22,10 +22,8 @@ export {
 export type {
   ApiProvider,
   Assertion,
-  AssertionInput,
   AssertionOrSet,
   AssertionSet,
-  AssertionTestContext,
   AssertionTokenUsage,
   AssertionValueFunction,
   AssertionValueFunctionContext,

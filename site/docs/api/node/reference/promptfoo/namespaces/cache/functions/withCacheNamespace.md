@@ -10,9 +10,9 @@ sidebar_position: 7
 import { cache } from 'promptfoo';
 ```
 
-> **withCacheNamespace**\<`T`\>(`namespace`, `fn`): `Promise`\<`T`\>
+> **withCacheNamespace**\<`T`>>\>(`namespace`, `fn`): `Promise`\<`T`>>\>
 
-Defined in: [cache.ts:271](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L271)
+Defined in: cache.ts:291
 
 Run an async operation inside an isolated cache namespace.
 

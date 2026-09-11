@@ -1,7 +1,7 @@
 ---
 title: 'Interface: PromptFunctionResult'
 description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
-sidebar_position: 33
+sidebar_position: 31
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 33
 import type { PromptFunctionResult } from 'promptfoo';
 ```
 
-Defined in: [contracts/prompts.ts:98](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L98)
+Defined in: contracts/prompts.ts:98
 
 Result type for prompt functions.
 
@@ -37,9 +37,9 @@ const result: PromptFunctionResult = {
 
 ### config?
 
-> `optional` **config?**: `Record`\<`string`, `any`\>
+> `optional` **config?**: `Record`\<`string`, `any`>>\>
 
-Defined in: [contracts/prompts.ts:102](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L102)
+Defined in: contracts/prompts.ts:102
 
 Provider config overrides to merge for this rendered prompt.
 
@@ -49,6 +49,6 @@ Provider config overrides to merge for this rendered prompt.
 
 > **prompt**: `any`
 
-Defined in: [contracts/prompts.ts:100](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L100)
+Defined in: contracts/prompts.ts:100
 
 Prompt content to send to the provider.

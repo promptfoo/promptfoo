@@ -1,13 +1,18 @@
 import React from 'react';
 
+import useBrokenLinks from '@docusaurus/useBrokenLinks';
 import legacyNodeApiAnchors from '@site/src/data/nodeApiLegacyAnchors.json';
 
 type LegacyNodeApiPage = keyof typeof legacyNodeApiAnchors;
 
 export default function LegacyHeadingAnchors({ page }: { page: LegacyNodeApiPage }) {
+  const anchors = legacyNodeApiAnchors[page];
+  const { collectAnchor } = useBrokenLinks();
+  anchors.forEach(collectAnchor);
+
   return (
     <span aria-hidden="true">
-      {legacyNodeApiAnchors[page].map((id) => (
+      {anchors.map((id) => (
         <span id={id} key={id} />
       ))}
     </span>

@@ -1,7 +1,7 @@
 ---
 title: 'Interface: ProviderSimilarityResponse'
 description: 'Response returned by similarity-capable providers. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 39
+sidebar_position: 37
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 39
 import type { ProviderSimilarityResponse } from 'promptfoo';
 ```
 
-Defined in: [contracts/providers.ts:315](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L315)
+Defined in: contracts/providers.ts:318
 
 Response returned by similarity-capable providers.
 
@@ -20,7 +20,7 @@ Response returned by similarity-capable providers.
 
 > `optional` **error?**: `string`
 
-Defined in: [contracts/providers.ts:317](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L317)
+Defined in: contracts/providers.ts:320
 
 Error message when the similarity call failed without throwing.
 
@@ -30,7 +30,7 @@ Error message when the similarity call failed without throwing.
 
 > `optional` **similarity?**: `number`
 
-Defined in: [contracts/providers.ts:319](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L319)
+Defined in: contracts/providers.ts:322
 
 Similarity score reported by the provider.
 
@@ -38,8 +38,8 @@ Similarity score reported by the provider.
 
 ### tokenUsage?
 
-> `optional` **tokenUsage?**: `Partial`\<[`TokenUsage`](TokenUsage.md)\>
+> `optional` **tokenUsage?**: `Partial`\<\{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `attacker?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `generation?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `incurredTokenUsage?`: \{ `assertions?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `attacker?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `generation?`: \{ `cached?`: `number`; `completion?`: `number`; `completionDetails?`: \{ `acceptedPrediction?`: `number`; `cacheCreationInputTokens?`: `number`; `cacheReadInputTokens?`: `number`; `reasoning?`: `number`; `rejectedPrediction?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}; `numRequests?`: `number`; `prompt?`: `number`; `total?`: `number`; \}\>
 
-Defined in: [contracts/providers.ts:321](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L321)
+Defined in: contracts/providers.ts:324
 
 Token usage attributed to the similarity request.

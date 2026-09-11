@@ -37,20 +37,10 @@ export const CompletionTokenDetailsSchema = z.object({
  * };
  * ```
  *
+ * @interface
  * @public
  */
-export interface CompletionTokenDetails {
-  /** Tokens spent on hidden model reasoning when the provider reports them. */
-  reasoning?: number;
-  /** Prediction tokens accepted by speculative decoding, when reported. */
-  acceptedPrediction?: number;
-  /** Prediction tokens rejected by speculative decoding, when reported. */
-  rejectedPrediction?: number;
-  /** Input tokens read from a provider cache. */
-  cacheReadInputTokens?: number;
-  /** Input tokens written into a provider cache. */
-  cacheCreationInputTokens?: number;
-}
+export type CompletionTokenDetails = z.infer<typeof CompletionTokenDetailsSchema>;
 
 const TokenUsageCoreSchema = z.object({
   prompt: z.number().optional(),
@@ -61,95 +51,38 @@ const TokenUsageCoreSchema = z.object({
   completionDetails: CompletionTokenDetailsSchema.optional(),
 });
 
-/**
- * Token accounting reported by providers and graders.
- *
- * @example
- * ```ts
- * const usage: TokenUsage = {
- *   prompt: 12,
- *   completion: 8,
- *   total: 20,
- * };
- * ```
- *
- * @public
- */
-export const BaseTokenUsageSchema = TokenUsageCoreSchema.extend({
+/** Target usage with independent generation, attacker, and assertion breakdowns. */
+const TokenUsageBreakdownSchema = TokenUsageCoreSchema.extend({
+  attacker: TokenUsageCoreSchema.optional(),
   assertions: TokenUsageCoreSchema.optional(),
+  generation: TokenUsageCoreSchema.optional(),
+});
+
+/**
+ * The root describes the full evaluation footprint, including replayed responses.
+ * The optional incurred view contains only requests executed during this run.
+ */
+export const BaseTokenUsageSchema = TokenUsageBreakdownSchema.extend({
+  incurredTokenUsage: TokenUsageBreakdownSchema.optional(),
 });
 
 /**
  * Token accounting attributed to model-graded assertions.
- *
- * @example
- * ```ts
- * const usage: AssertionTokenUsage = {
- *   prompt: 14,
- *   completion: 6,
- *   total: 20,
- * };
- * ```
- *
+ * @interface
  * @public
  */
-export interface AssertionTokenUsage {
-  /** Total assertion tokens. */
-  total?: number;
-  /** Assertion prompt/input tokens. */
-  prompt?: number;
-  /** Assertion completion/output tokens. */
-  completion?: number;
-  /** Assertion tokens served from cache. */
-  cached?: number;
-  /** Number of assertion model requests represented here. */
-  numRequests?: number;
-  /** Detailed completion-token breakdown for assertion grading. */
-  completionDetails?: CompletionTokenDetails;
-}
+export type AssertionTokenUsage = NonNullable<TokenUsage['assertions']>;
 
 /**
- * Token accounting reported by providers and graders.
- *
- * @example
- * ```ts
- * const usage: TokenUsage = {
- *   prompt: 12,
- *   completion: 8,
- *   total: 20,
- * };
- * ```
- *
+ * Provider usage with independent generation, attacker, grading, and incurred breakdowns.
+ * @interface
  * @public
  */
-export interface TokenUsage {
-  /** Prompt/input tokens consumed by the provider call. */
-  prompt?: number;
-  /** Completion/output tokens produced by the provider call. */
-  completion?: number;
-  /** Tokens served from a provider cache, when reported. */
-  cached?: number;
-  /** Total tokens reported for the provider call. */
-  total?: number;
-  /** Number of underlying requests represented by this usage object. */
-  numRequests?: number;
-  /** Provider-specific completion-token breakdown. */
-  completionDetails?: CompletionTokenDetails;
-  /** Token usage accumulated by model-graded assertions. */
-  assertions?: AssertionTokenUsage;
-}
-
-export type BaseTokenUsage = TokenUsage;
-
-type AssertEqual<T, U> = T extends U ? (U extends T ? true : false) : false;
-type Assert<_T extends true> = true;
-
-type _AssertCompletionTokenDetailsSchema = Assert<
-  AssertEqual<CompletionTokenDetails, z.infer<typeof CompletionTokenDetailsSchema>>
->;
-type _AssertTokenUsageSchema = Assert<
-  AssertEqual<TokenUsage, z.infer<typeof BaseTokenUsageSchema>>
->;
+export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
+export type NormalizedTokenUsage = Required<
+  Omit<TokenUsage, 'attacker' | 'generation' | 'incurredTokenUsage'>
+> &
+  Pick<TokenUsage, 'attacker' | 'generation' | 'incurredTokenUsage'>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
 

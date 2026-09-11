@@ -1,7 +1,7 @@
 ---
 title: 'Interface: AudioOutput'
 description: 'Audio attachment returned by providers that produce or transform sound. See supported imports, signatures, fields, examples, and usage details for this symbol.'
-sidebar_position: 9
+sidebar_position: 7
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 9
 import type { AudioOutput } from 'promptfoo';
 ```
 
-Defined in: [contracts/providers.ts:93](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L93)
+Defined in: contracts/providers.ts:94
 
 Audio attachment returned by providers that produce or transform sound.
 
@@ -31,7 +31,7 @@ const audio: AudioOutput = {
 
 > `optional` **blobRef?**: [`BlobRef`](BlobRef.md)
 
-Defined in: [contracts/providers.ts:101](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L101)
+Defined in: contracts/providers.ts:102
 
 External blob reference when audio is stored outside the result row.
 
@@ -41,7 +41,7 @@ External blob reference when audio is stored outside the result row.
 
 > `optional` **channels?**: `number`
 
-Defined in: [contracts/providers.ts:109](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L109)
+Defined in: contracts/providers.ts:110
 
 Number of audio channels.
 
@@ -51,7 +51,7 @@ Number of audio channels.
 
 > `optional` **data?**: `string`
 
-Defined in: [contracts/providers.ts:99](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L99)
+Defined in: contracts/providers.ts:100
 
 Base64-encoded audio payload when data is embedded inline.
 
@@ -61,7 +61,7 @@ Base64-encoded audio payload when data is embedded inline.
 
 > `optional` **duration?**: `number`
 
-Defined in: [contracts/providers.ts:111](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L111)
+Defined in: contracts/providers.ts:112
 
 Audio duration in seconds.
 
@@ -71,7 +71,7 @@ Audio duration in seconds.
 
 > `optional` **expiresAt?**: `number`
 
-Defined in: [contracts/providers.ts:97](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L97)
+Defined in: contracts/providers.ts:98
 
 Expiration time for provider-hosted audio, as a Unix timestamp.
 
@@ -81,7 +81,7 @@ Expiration time for provider-hosted audio, as a Unix timestamp.
 
 > `optional` **format?**: `string`
 
-Defined in: [contracts/providers.ts:105](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L105)
+Defined in: contracts/providers.ts:106
 
 Container or codec name such as `wav` or `mp3`.
 
@@ -91,7 +91,7 @@ Container or codec name such as `wav` or `mp3`.
 
 > `optional` **id?**: `string`
 
-Defined in: [contracts/providers.ts:95](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L95)
+Defined in: contracts/providers.ts:96
 
 Provider-defined audio identifier.
 
@@ -101,7 +101,7 @@ Provider-defined audio identifier.
 
 > `optional` **sampleRate?**: `number`
 
-Defined in: [contracts/providers.ts:107](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L107)
+Defined in: contracts/providers.ts:108
 
 Audio sample rate in hertz.
 
@@ -111,6 +111,6 @@ Audio sample rate in hertz.
 
 > `optional` **transcript?**: `string`
 
-Defined in: [contracts/providers.ts:103](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L103)
+Defined in: contracts/providers.ts:104
 
 Transcript associated with the audio payload, when available.

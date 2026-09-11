@@ -1,7 +1,7 @@
 ---
 title: 'Interface: ModerationMatchOptions'
 description: 'Input passed to assertions.matchesModeration(). See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 28
+sidebar_position: 26
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 28
 import type { ModerationMatchOptions } from 'promptfoo';
 ```
 
-Defined in: [matchers/moderation.ts:28](https://github.com/promptfoo/promptfoo/blob/main/src/matchers/moderation.ts#L28)
+Defined in: matchers/moderation.ts:33
 
 Input passed to `assertions.matchesModeration()`.
 
@@ -34,7 +34,7 @@ const options: ModerationMatchOptions = {
 
 > **assistantResponse**: `string`
 
-Defined in: [matchers/moderation.ts:32](https://github.com/promptfoo/promptfoo/blob/main/src/matchers/moderation.ts#L32)
+Defined in: matchers/moderation.ts:37
 
 Assistant response to moderate.
 
@@ -44,7 +44,7 @@ Assistant response to moderate.
 
 > `optional` **categories?**: `string`[]
 
-Defined in: [matchers/moderation.ts:34](https://github.com/promptfoo/promptfoo/blob/main/src/matchers/moderation.ts#L34)
+Defined in: matchers/moderation.ts:39
 
 Optional subset of moderation categories that should count as failures.
 
@@ -54,6 +54,6 @@ Optional subset of moderation categories that should count as failures.
 
 > **userPrompt**: `string`
 
-Defined in: [matchers/moderation.ts:30](https://github.com/promptfoo/promptfoo/blob/main/src/matchers/moderation.ts#L30)
+Defined in: matchers/moderation.ts:35
 
 User prompt that led to the assistant response.

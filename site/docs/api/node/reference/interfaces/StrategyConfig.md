@@ -1,7 +1,7 @@
 ---
 title: 'Interface: StrategyConfig'
 description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
-sidebar_position: 42
+sidebar_position: 40
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 42
 import type { StrategyConfig } from 'promptfoo';
 ```
 
-Defined in: [redteam/types.ts:482](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L482)
+Defined in: redteam/types.ts:482
 
 Advanced strategy configuration carried on generated red-team test cases.
 
@@ -34,7 +34,7 @@ const strategyConfig: StrategyConfig = {
 
 > `optional` **enabled?**: `boolean`
 
-Defined in: [redteam/types.ts:484](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L484)
+Defined in: redteam/types.ts:484
 
 Whether the strategy should be enabled.
 
@@ -44,7 +44,7 @@ Whether the strategy should be enabled.
 
 > `optional` **numTests?**: `number`
 
-Defined in: [redteam/types.ts:488](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L488)
+Defined in: redteam/types.ts:488
 
 Number of tests to generate for the strategy.
 
@@ -54,6 +54,6 @@ Number of tests to generate for the strategy.
 
 > `optional` **plugins?**: `string`[]
 
-Defined in: [redteam/types.ts:486](https://github.com/promptfoo/promptfoo/blob/main/src/redteam/types.ts#L486)
+Defined in: redteam/types.ts:486
 
 Plugin ids that this strategy should target.

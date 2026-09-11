@@ -12,12 +12,13 @@ import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import {
   calculateCost,
+  clampCachedTokens,
   type ProviderConfig,
   parseChatPrompt,
   transformToolChoice,
 } from '../shared';
 import { loadCredentials } from './auth';
-import { GOOGLE_MODELS } from './shared';
+import { GEMINI_FLASH_MODELS, GOOGLE_MODELS } from './shared';
 import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 
@@ -42,6 +43,54 @@ export function normalizeSafetySettings(
 
 type GoogleToolConfig = NonNullable<CompletionOptions['toolConfig']>;
 
+type GoogleServiceTier = 'standard' | 'priority' | 'flex';
+
+/** Normalize the SDK-style tier name or Vertex's protobuf enum for the target API. */
+export function normalizeGoogleServiceTier(
+  serviceTier: unknown,
+  vertexai = false,
+): string | undefined {
+  if (typeof serviceTier !== 'string') {
+    return undefined;
+  }
+
+  const normalized = serviceTier.toLowerCase().replace(/^service_tier_/, '');
+  if (normalized !== 'standard' && normalized !== 'priority' && normalized !== 'flex') {
+    return serviceTier;
+  }
+
+  return vertexai ? `SERVICE_TIER_${normalized.toUpperCase()}` : normalized;
+}
+
+/** Read the actual processing tier before estimating costs for a downgraded request. */
+export function getGoogleResponseServiceTier(
+  headers: unknown,
+  usageMetadata?: unknown,
+): GoogleServiceTier | undefined {
+  let headerValue: unknown;
+  if (headers && typeof headers === 'object') {
+    const headerCollection = headers as {
+      get?: (name: string) => string | null;
+      [key: string]: unknown;
+    };
+    headerValue =
+      typeof headerCollection.get === 'function'
+        ? headerCollection.get('x-gemini-service-tier')
+        : Object.entries(headerCollection).find(
+            ([name]) => name.toLowerCase() === 'x-gemini-service-tier',
+          )?.[1];
+  }
+
+  const metadata = usageMetadata as { serviceTier?: unknown; service_tier?: unknown } | undefined;
+  const normalized = normalizeGoogleServiceTier(
+    headerValue ?? metadata?.serviceTier ?? metadata?.service_tier,
+  );
+
+  return normalized === 'standard' || normalized === 'priority' || normalized === 'flex'
+    ? normalized
+    : undefined;
+}
+
 function normalizeGoogleToolMode(
   mode: unknown,
 ): NonNullable<NonNullable<GoogleToolConfig['functionCallingConfig']>['mode']> | undefined {
@@ -63,50 +112,115 @@ function normalizeGoogleToolMode(
   }
 }
 
-function normalizeExplicitGoogleToolConfig(
-  config: CompletionOptions,
+function normalizeCamelCaseGoogleToolConfig(
+  config: GoogleToolConfig,
 ): GoogleToolConfig | undefined {
-  if (config.toolConfig?.functionCallingConfig) {
+  const { functionCallingConfig: rawFunctionCallingConfig, ...restToolConfig } = config;
+  const normalizedToolConfig: GoogleToolConfig = { ...restToolConfig };
+
+  if (rawFunctionCallingConfig) {
     const {
       mode: rawMode,
       allowedFunctionNames,
       ...restFunctionCallingConfig
-    } = config.toolConfig.functionCallingConfig;
+    } = rawFunctionCallingConfig;
     const mode = normalizeGoogleToolMode(rawMode);
     const functionCallingConfig = {
       ...restFunctionCallingConfig,
       ...(mode ? { mode } : {}),
       ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
     };
-    if (Object.keys(functionCallingConfig).length === 0) {
-      return undefined;
+    if (Object.keys(functionCallingConfig).length > 0) {
+      normalizedToolConfig.functionCallingConfig = functionCallingConfig;
     }
-    return {
-      functionCallingConfig,
-    };
   }
 
-  if (config.tool_config?.function_calling_config) {
+  return Object.keys(normalizedToolConfig).length > 0 ? normalizedToolConfig : undefined;
+}
+
+function normalizeSnakeCaseGoogleToolConfig(
+  config: NonNullable<CompletionOptions['tool_config']>,
+): GoogleToolConfig | undefined {
+  const {
+    function_calling_config: rawFunctionCallingConfig,
+    retrieval_config: retrievalConfig,
+    include_server_side_tool_invocations: includeServerSideToolInvocations,
+  } = config;
+  const normalizedToolConfig: GoogleToolConfig = {
+    ...(retrievalConfig
+      ? {
+          retrievalConfig: {
+            ...(retrievalConfig.lat_lng ? { latLng: retrievalConfig.lat_lng } : {}),
+            ...(retrievalConfig.language_code
+              ? { languageCode: retrievalConfig.language_code }
+              : {}),
+          },
+        }
+      : {}),
+    ...(includeServerSideToolInvocations === undefined ? {} : { includeServerSideToolInvocations }),
+  };
+
+  if (rawFunctionCallingConfig) {
     const {
       mode: rawMode,
       allowed_function_names: allowedFunctionNames,
       stream_function_call_arguments: streamFunctionCallArguments,
-    } = config.tool_config.function_calling_config;
+    } = rawFunctionCallingConfig;
     const mode = normalizeGoogleToolMode(rawMode);
     const functionCallingConfig = {
       ...(mode ? { mode } : {}),
       ...(allowedFunctionNames?.length ? { allowedFunctionNames } : {}),
       ...(streamFunctionCallArguments === undefined ? {} : { streamFunctionCallArguments }),
     };
-    if (Object.keys(functionCallingConfig).length === 0) {
-      return undefined;
+    if (Object.keys(functionCallingConfig).length > 0) {
+      normalizedToolConfig.functionCallingConfig = functionCallingConfig;
     }
-    return {
-      functionCallingConfig,
-    };
   }
 
-  return undefined;
+  return Object.keys(normalizedToolConfig).length > 0 ? normalizedToolConfig : undefined;
+}
+
+function normalizeExplicitGoogleToolConfig(
+  config: CompletionOptions,
+): GoogleToolConfig | undefined {
+  if (config.toolConfig) {
+    return normalizeCamelCaseGoogleToolConfig(config.toolConfig);
+  }
+
+  return config.tool_config ? normalizeSnakeCaseGoogleToolConfig(config.tool_config) : undefined;
+}
+
+function normalizePassthroughGoogleToolConfig(
+  config: CompletionOptions,
+): GoogleToolConfig | undefined {
+  const passthrough = config.passthrough as
+    | {
+        toolConfig?: GoogleToolConfig;
+        tool_config?: NonNullable<CompletionOptions['tool_config']>;
+      }
+    | undefined;
+
+  if (passthrough?.toolConfig) {
+    return normalizeCamelCaseGoogleToolConfig(passthrough.toolConfig);
+  }
+
+  return passthrough?.tool_config
+    ? normalizeSnakeCaseGoogleToolConfig(passthrough.tool_config)
+    : undefined;
+}
+
+function mergeGoogleToolConfigs(
+  ...configs: Array<GoogleToolConfig | undefined>
+): GoogleToolConfig | undefined {
+  const merged = Object.assign({}, ...configs.filter(Boolean));
+  const functionCallingConfig = Object.assign(
+    {},
+    ...configs.map((config) => config?.functionCallingConfig).filter(Boolean),
+  );
+  if (Object.keys(functionCallingConfig).length > 0) {
+    merged.functionCallingConfig = functionCallingConfig;
+  }
+  return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
 export function resolveGoogleToolConfig(config: CompletionOptions): {
@@ -114,36 +228,33 @@ export function resolveGoogleToolConfig(config: CompletionOptions): {
   toolsDisabled: boolean;
 } {
   const explicitConfig = normalizeExplicitGoogleToolConfig(config);
+  const passthroughConfig = normalizePassthroughGoogleToolConfig(config);
   const transformedToolChoice = transformToolChoice(config.tool_choice, 'google');
   const toolChoiceConfig =
     transformedToolChoice && typeof transformedToolChoice === 'object'
       ? (transformedToolChoice as GoogleToolConfig)
       : undefined;
-  const explicitMode = normalizeGoogleToolMode(explicitConfig?.functionCallingConfig?.mode);
-  const camelCaseMode = normalizeGoogleToolMode(config.toolConfig?.functionCallingConfig?.mode);
-  const snakeCaseMode = normalizeGoogleToolMode(config.tool_config?.function_calling_config?.mode);
-  const toolChoiceMode = normalizeGoogleToolMode(toolChoiceConfig?.functionCallingConfig?.mode);
-
-  if (
-    explicitMode === 'NONE' ||
-    camelCaseMode === 'NONE' ||
-    snakeCaseMode === 'NONE' ||
-    toolChoiceMode === 'NONE'
-  ) {
-    return {
-      toolConfig: { functionCallingConfig: { mode: 'NONE' } },
-      toolsDisabled: true,
-    };
-  }
+  const toolConfig = mergeGoogleToolConfigs(toolChoiceConfig, explicitConfig, passthroughConfig);
 
   return {
-    ...(explicitConfig
-      ? { toolConfig: explicitConfig }
-      : toolChoiceConfig
-        ? { toolConfig: toolChoiceConfig }
-        : {}),
-    toolsDisabled: false,
+    ...(toolConfig ? { toolConfig } : {}),
+    toolsDisabled: toolConfig?.functionCallingConfig?.mode === 'NONE',
   };
+}
+
+/** Merge configured tools with single-object or array passthrough tools. */
+export function mergeGoogleRequestTools(
+  configuredTools: Tool[],
+  passthroughTools: unknown,
+): unknown[] | undefined {
+  if (passthroughTools === undefined) {
+    return configuredTools.length > 0 ? configuredTools : undefined;
+  }
+
+  return [
+    ...configuredTools,
+    ...(Array.isArray(passthroughTools) ? passthroughTools : [passthroughTools]),
+  ];
 }
 
 export function mergeGoogleCompletionOptions(
@@ -177,15 +288,127 @@ export function mergeGoogleCompletionOptions(
     if (promptHasSnakeToolConfig) {
       mergedConfig.tool_config = promptConfig!.tool_config;
     }
+
+    if (promptHasToolChoice && !promptHasToolConfig && !promptHasSnakeToolConfig) {
+      const baseToolConfig = normalizeExplicitGoogleToolConfig(baseConfig);
+      if (baseToolConfig) {
+        const { functionCallingConfig: _functionCallingConfig, ...nonFunctionToolConfig } =
+          baseToolConfig;
+        if (Object.keys(nonFunctionToolConfig).length > 0) {
+          mergedConfig.toolConfig = nonFunctionToolConfig;
+        }
+      }
+    }
+
+    // A provider-level passthrough policy must not override a prompt's tool choice.
+    // Preserve unrelated passthrough fields and non-function tool settings.
+    if (promptConfig?.passthrough === undefined && baseConfig.passthrough) {
+      const passthrough = { ...baseConfig.passthrough };
+      const inheritedToolConfig = normalizePassthroughGoogleToolConfig(baseConfig);
+      delete passthrough.toolConfig;
+      delete passthrough.tool_config;
+      if (inheritedToolConfig) {
+        const { functionCallingConfig: _functionCallingConfig, ...nonFunctionToolConfig } =
+          inheritedToolConfig;
+        if (Object.keys(nonFunctionToolConfig).length > 0) {
+          passthrough.toolConfig = nonFunctionToolConfig;
+        }
+      }
+      mergedConfig.passthrough = passthrough;
+    }
   }
 
   return mergedConfig;
 }
 
-export function removeGoogleFunctionDeclarations(tools: Tool[]): Tool[] {
-  return tools.flatMap(({ functionDeclarations, ...tool }) =>
-    functionDeclarations && Object.keys(tool).length === 0 ? [] : [tool as Tool],
-  );
+export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
+  const toolList = Array.isArray(tools) ? tools : [tools];
+  return toolList.flatMap((rawTool) => {
+    if (!rawTool || typeof rawTool !== 'object' || Array.isArray(rawTool)) {
+      return [];
+    }
+    const { functionDeclarations, function_declarations, ...tool } = rawTool as Tool & {
+      function_declarations?: unknown;
+    };
+    return (functionDeclarations || function_declarations) && Object.keys(tool).length === 0
+      ? []
+      : [tool as Tool];
+  });
+}
+
+/**
+ * Current Gemini Flash models ignore sampling parameters and reject penalties
+ * and candidate counts. Remove typed and passthrough spellings.
+ */
+export function removeDeprecatedGeminiGenerationParams<T>(
+  modelName: string,
+  generationConfig: T,
+): T {
+  if (
+    !GEMINI_FLASH_MODELS.some(({ id }) => modelName.startsWith(id)) &&
+    modelName !== 'gemini-flash-latest' &&
+    modelName !== 'gemini-flash-lite-latest'
+  ) {
+    return generationConfig;
+  }
+
+  if (
+    !generationConfig ||
+    typeof generationConfig !== 'object' ||
+    Array.isArray(generationConfig)
+  ) {
+    return generationConfig;
+  }
+
+  const sanitized = { ...generationConfig } as Record<string, unknown>;
+  for (const field of [
+    'temperature',
+    'topP',
+    'top_p',
+    'topK',
+    'top_k',
+    'candidateCount',
+    'candidate_count',
+    'presencePenalty',
+    'presence_penalty',
+    'frequencyPenalty',
+    'frequency_penalty',
+  ]) {
+    delete sanitized[field];
+  }
+
+  if (
+    modelName.startsWith('gemini-3.8-flash') ||
+    modelName.startsWith('gemini-3.7-flash') ||
+    modelName === 'gemini-flash-latest'
+  ) {
+    for (const config of [sanitized.thinkingConfig, sanitized.thinking_config]) {
+      const thinkingConfig = config as
+        | {
+            thinkingBudget?: unknown;
+            thinking_budget?: unknown;
+            thinkingLevel?: unknown;
+            thinking_level?: unknown;
+          }
+        | undefined;
+      if (
+        thinkingConfig?.thinkingBudget !== undefined ||
+        thinkingConfig?.thinking_budget !== undefined
+      ) {
+        throw new Error(
+          `${modelName} does not support thinkingBudget. Use thinkingLevel (LOW, MEDIUM, or HIGH).`,
+        );
+      }
+      const thinkingLevel = thinkingConfig?.thinkingLevel ?? thinkingConfig?.thinking_level;
+      if (typeof thinkingLevel === 'string' && thinkingLevel.toUpperCase() === 'MINIMAL') {
+        throw new Error(
+          `${modelName} does not support MINIMAL thinking. Use LOW, MEDIUM, or HIGH.`,
+        );
+      }
+    }
+  }
+
+  return sanitized as T;
 }
 
 function stripExecutableToolFileReferencesFromValue(tools: unknown): unknown {
@@ -223,35 +446,254 @@ export function stripExecutableToolFileReferences(
  * @param promptTokens - Number of tokens in the prompt
  * @param completionTokens - Number of tokens in the completion
  * @param isVertexMode - Whether the call was made via Vertex AI (uses Vertex pricing when available)
+ * @param audioPromptTokens - Number of audio tokens included in the prompt token count
+ * @param audioCompletionTokens - Number of audio tokens included in the completion token count
+ * @param videoCompletionTokens - Number of video tokens included in the completion token count
+ * @param imagePromptTokens - Number of image tokens included in the prompt token count
+ * @param cachedPromptTokens - Number of cached tokens included in the prompt token count
+ * @param cachedAudioPromptTokens - Number of cached audio tokens included in the prompt token count
+ * @param cachedImagePromptTokens - Number of cached image tokens included in the prompt token count
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
 export function calculateGoogleCost(
   modelName: string,
-  config: ProviderConfig,
+  config: ProviderConfig & { region?: string },
   promptTokens?: number,
   completionTokens?: number,
   isVertexMode?: boolean,
+  audioPromptTokens?: number,
+  audioCompletionTokens?: number,
+  videoCompletionTokens?: number,
+  imagePromptTokens?: number,
+  cachedPromptTokens?: number,
+  cachedAudioPromptTokens?: number,
+  cachedImagePromptTokens?: number,
+  actualServiceTier?: GoogleServiceTier,
 ): number | undefined {
   const model = GOOGLE_MODELS.find((m) => m.id === modelName);
 
-  // Check for tiered pricing (higher rates above token threshold)
-  if (promptTokens != null && completionTokens != null) {
-    if (model?.tieredCost && promptTokens > model.tieredCost.threshold) {
-      const inputCost = config.inputCost ?? config.cost ?? model.tieredCost.above.input;
-      const outputCost = config.outputCost ?? config.cost ?? model.tieredCost.above.output;
-      return inputCost * promptTokens + outputCost * completionTokens;
-    }
+  if (
+    typeof promptTokens !== 'number' ||
+    typeof completionTokens !== 'number' ||
+    !Number.isFinite(promptTokens) ||
+    !Number.isFinite(completionTokens)
+  ) {
+    return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
+  }
 
-    // Use Vertex-specific pricing when available
-    if (isVertexMode && model?.vertexCost) {
-      const inputCost = config.inputCost ?? config.cost ?? model.vertexCost.input;
-      const outputCost = config.outputCost ?? config.cost ?? model.vertexCost.output;
-      return inputCost * promptTokens + outputCost * completionTokens;
+  const modelCost =
+    model?.tieredCost && promptTokens > model.tieredCost.threshold
+      ? model.tieredCost.above
+      : isVertexMode && model?.vertexCost
+        ? model.vertexCost
+        : model?.cost;
+  if (!modelCost) {
+    return undefined;
+  }
+
+  const passthrough = config.passthrough as
+    | { service_tier?: unknown; serviceTier?: unknown }
+    | undefined;
+  const serviceTier = normalizeGoogleServiceTier(
+    actualServiceTier ??
+      passthrough?.service_tier ??
+      passthrough?.serviceTier ??
+      config.service_tier,
+  );
+  let serviceTierMultiplier = 1;
+  if (serviceTier === 'priority') {
+    serviceTierMultiplier = modelCost.priorityMultiplier ?? 1;
+  } else if (serviceTier === 'flex') {
+    serviceTierMultiplier = modelCost.flexMultiplier ?? 1;
+  }
+
+  const region = config.region;
+  const vertexRegionalMultiplier =
+    isVertexMode && (region === 'us' || region === 'eu')
+      ? (model?.vertexRegionalMultiplier ?? 1)
+      : 1;
+  const introductoryMultiplier =
+    model?.introductoryPricing && Date.now() < model.introductoryPricing.expiresAt
+      ? model.introductoryPricing.multiplier
+      : 1;
+  const catalogMultiplier = vertexRegionalMultiplier * introductoryMultiplier;
+  const applyCatalogMultiplier = (rate?: number) =>
+    rate === undefined ? undefined : rate * catalogMultiplier;
+  const inputCost = config.inputCost ?? config.cost ?? modelCost.input * catalogMultiplier;
+  const outputCost = config.outputCost ?? config.cost ?? modelCost.output * catalogMultiplier;
+  const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
+  const imageInputTokens = clampCachedTokens(
+    imagePromptTokens,
+    Math.max(promptTokens - audioInputTokens, 0),
+  );
+  const textInputTokens = Math.max(promptTokens - audioInputTokens - imageInputTokens, 0);
+  const cachedTokens = clampCachedTokens(cachedPromptTokens, promptTokens);
+  let cachedAudioTokens = clampCachedTokens(
+    cachedAudioPromptTokens,
+    Math.min(cachedTokens, audioInputTokens),
+  );
+  let cachedImageTokens = clampCachedTokens(
+    cachedImagePromptTokens,
+    Math.min(Math.max(cachedTokens - cachedAudioTokens, 0), imageInputTokens),
+  );
+  if (cachedAudioTokens === 0 && cachedImageTokens === 0) {
+    const cachedNonTextTokens = Math.max(cachedTokens - textInputTokens, 0);
+    if (imageInputTokens === 0) {
+      cachedAudioTokens = Math.min(cachedNonTextTokens, audioInputTokens);
+    } else if (audioInputTokens === 0) {
+      cachedImageTokens = Math.min(cachedNonTextTokens, imageInputTokens);
+    }
+  }
+  const cachedTextTokens = Math.min(
+    Math.max(cachedTokens - cachedAudioTokens - cachedImageTokens, 0),
+    textInputTokens,
+  );
+  const audioOutputTokens = clampCachedTokens(audioCompletionTokens, completionTokens);
+  const videoOutputTokens = clampCachedTokens(
+    videoCompletionTokens,
+    Math.max(completionTokens - audioOutputTokens, 0),
+  );
+  const audioInputCost =
+    config.audioInputCost ??
+    config.audioCost ??
+    config.inputCost ??
+    config.cost ??
+    applyCatalogMultiplier(modelCost.audioInput) ??
+    inputCost;
+  const audioOutputCost =
+    config.audioOutputCost ??
+    config.audioCost ??
+    config.outputCost ??
+    config.cost ??
+    applyCatalogMultiplier(modelCost.audioOutput) ??
+    outputCost;
+  const videoOutputCost =
+    config.videoOutputCost ??
+    config.outputCost ??
+    config.cost ??
+    applyCatalogMultiplier(modelCost.videoOutput) ??
+    outputCost;
+  const imageInputCost =
+    config.imageInputCost ??
+    config.inputCost ??
+    config.cost ??
+    applyCatalogMultiplier(modelCost.imageInput) ??
+    inputCost;
+  const serviceTierCacheRead =
+    serviceTier === 'priority' && modelCost.priorityCacheRead !== undefined
+      ? modelCost.priorityCacheRead / serviceTierMultiplier
+      : serviceTier === 'flex' && modelCost.flexCacheRead !== undefined
+        ? modelCost.flexCacheRead / serviceTierMultiplier
+        : modelCost.cacheRead;
+  const catalogCacheRead = applyCatalogMultiplier(serviceTierCacheRead);
+  const cachedInputCost = config.inputCost ?? config.cost ?? catalogCacheRead ?? inputCost;
+  const cachedAudioInputCost =
+    config.audioInputCost ??
+    config.audioCost ??
+    config.inputCost ??
+    config.cost ??
+    applyCatalogMultiplier(modelCost.cacheReadAudio) ??
+    catalogCacheRead ??
+    audioInputCost;
+  const cachedImageInputCost =
+    config.imageInputCost ?? config.inputCost ?? config.cost ?? catalogCacheRead ?? imageInputCost;
+  // A modality/base cost override on the request takes precedence over the
+  // catalog's tier-specific audio rate.
+  const hasAudioInputOverride =
+    config.audioInputCost !== undefined ||
+    config.audioCost !== undefined ||
+    config.inputCost !== undefined ||
+    config.cost !== undefined;
+  let serviceTierAudioInputCost = audioInputCost;
+  if (!hasAudioInputOverride) {
+    if (serviceTier === 'priority' && modelCost.priorityAudioInput !== undefined) {
+      serviceTierAudioInputCost =
+        (modelCost.priorityAudioInput * catalogMultiplier) / serviceTierMultiplier;
+    } else if (serviceTier === 'flex' && modelCost.flexAudioInput !== undefined) {
+      serviceTierAudioInputCost =
+        (modelCost.flexAudioInput * catalogMultiplier) / serviceTierMultiplier;
     }
   }
 
-  // Use standard calculation for non-tiered pricing
-  return calculateCost(modelName, config, promptTokens, completionTokens, GOOGLE_MODELS);
+  return (
+    ((textInputTokens - cachedTextTokens) * inputCost +
+      cachedTextTokens * cachedInputCost +
+      (audioInputTokens - cachedAudioTokens) * serviceTierAudioInputCost +
+      cachedAudioTokens * cachedAudioInputCost +
+      (imageInputTokens - cachedImageTokens) * imageInputCost +
+      cachedImageTokens * cachedImageInputCost +
+      (completionTokens - audioOutputTokens - videoOutputTokens) * outputCost +
+      audioOutputTokens * audioOutputCost +
+      videoOutputTokens * videoOutputCost) *
+    serviceTierMultiplier
+  );
+}
+
+const getGoogleModalityTokenCount = (details: unknown, modalities: string[]): number => {
+  if (!Array.isArray(details)) {
+    return 0;
+  }
+  return details.reduce((total, detail) => {
+    const tokenCount = detail?.tokenCount ?? detail?.token_count;
+    return modalities.includes(detail?.modality) &&
+      typeof tokenCount === 'number' &&
+      Number.isFinite(tokenCount)
+      ? total + Math.max(tokenCount, 0)
+      : total;
+  }, 0);
+};
+
+export function calculateGoogleCostFromUsage(
+  modelName: string,
+  config: ProviderConfig & { region?: string },
+  promptTokens: number | undefined,
+  completionTokens: number | undefined,
+  isVertexMode: boolean,
+  usageMetadata: any,
+  responseServiceTier?: unknown,
+): number | undefined {
+  const promptDetails = usageMetadata?.promptTokensDetails ?? usageMetadata?.prompt_tokens_details;
+  const toolPromptDetails =
+    usageMetadata?.toolUsePromptTokensDetails ?? usageMetadata?.tool_use_prompt_tokens_details;
+  const responseDetails =
+    usageMetadata?.candidatesTokensDetails ??
+    usageMetadata?.responseTokensDetails ??
+    usageMetadata?.candidates_tokens_details ??
+    usageMetadata?.response_tokens_details;
+  const cacheDetails = usageMetadata?.cacheTokensDetails ?? usageMetadata?.cache_tokens_details;
+  const toolPromptTokens =
+    usageMetadata?.toolUsePromptTokenCount ?? usageMetadata?.tool_use_prompt_token_count ?? 0;
+  const promptTokensForCost =
+    typeof promptTokens === 'number' &&
+    typeof toolPromptTokens === 'number' &&
+    Number.isFinite(toolPromptTokens)
+      ? promptTokens + Math.max(toolPromptTokens, 0)
+      : promptTokens;
+  const audioPromptTokens =
+    getGoogleModalityTokenCount(promptDetails, ['AUDIO']) +
+    getGoogleModalityTokenCount(toolPromptDetails, ['AUDIO']);
+  const imagePromptTokens =
+    getGoogleModalityTokenCount(promptDetails, ['IMAGE', 'VIDEO', 'DOCUMENT']) +
+    getGoogleModalityTokenCount(toolPromptDetails, ['IMAGE', 'VIDEO', 'DOCUMENT']);
+
+  return calculateGoogleCost(
+    modelName,
+    config,
+    promptTokensForCost,
+    completionTokens,
+    isVertexMode,
+    audioPromptTokens,
+    getGoogleModalityTokenCount(responseDetails, ['AUDIO']),
+    getGoogleModalityTokenCount(responseDetails, ['VIDEO']),
+    imagePromptTokens,
+    usageMetadata?.cachedContentTokenCount ?? usageMetadata?.cached_content_token_count,
+    getGoogleModalityTokenCount(cacheDetails, ['AUDIO']),
+    getGoogleModalityTokenCount(cacheDetails, ['IMAGE', 'VIDEO', 'DOCUMENT']),
+    getGoogleResponseServiceTier(
+      responseServiceTier ? { 'x-gemini-service-tier': responseServiceTier } : undefined,
+      usageMetadata,
+    ),
+  );
 }
 
 const ajv = getAjv();
@@ -297,6 +739,15 @@ interface GeminiUsageMetadata {
   candidatesTokenCount?: number;
   totalTokenCount: number;
   thoughtsTokenCount?: number;
+  cachedContentTokenCount?: number;
+  toolUsePromptTokenCount?: number;
+  promptTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  toolUsePromptTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  candidatesTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  responseTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  cacheTokensDetails?: Array<{ modality: string; tokenCount: number }>;
+  serviceTier?: string;
+  service_tier?: string;
 }
 
 export interface GeminiErrorResponse {
@@ -355,15 +806,17 @@ export interface Palm2ApiResponse {
   ];
 }
 
-const PartSchema = z.object({
-  text: z.string().optional(),
-  inline_data: z
-    .object({
-      mime_type: z.string(),
-      data: z.string(),
-    })
-    .optional(),
-});
+const PartSchema = z
+  .object({
+    text: z.string().optional(),
+    inline_data: z
+      .object({
+        mime_type: z.string(),
+        data: z.string(),
+      })
+      .optional(),
+  })
+  .passthrough();
 
 const ContentSchema = z.object({
   role: z.enum(['user', 'model']).optional(),
@@ -372,7 +825,7 @@ const ContentSchema = z.object({
 
 const GeminiFormatSchema = z.array(ContentSchema);
 
-export type GeminiFormat = z.infer<typeof GeminiFormatSchema>;
+export type GeminiFormat = { role?: 'user' | 'model'; parts: Part[] }[];
 
 export function maybeCoerceToGeminiFormat(
   contents: any,
@@ -659,6 +1112,16 @@ export function getLastPromptSafetyRatings(
   return safetyRatings;
 }
 
+export function collectThoughtSignatures(data: GeminiResponseData[]): string[] {
+  return data.flatMap((datum) =>
+    (datum.candidates ?? []).flatMap((candidate) =>
+      (candidate.content?.parts ?? []).flatMap((part) =>
+        typeof part.thoughtSignature === 'string' ? [part.thoughtSignature] : [],
+      ),
+    ),
+  );
+}
+
 export interface CollectedGroundingMetadata {
   groundingMetadata?: Record<string, any>;
   groundingChunks?: Record<string, any>[];
@@ -805,6 +1268,51 @@ export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] |
   return array1;
 }
 
+export function normalizeGeminiAudio(output: Part[] | string | undefined) {
+  if (!Array.isArray(output)) {
+    return undefined;
+  }
+
+  const audioParts = output.filter((part) => part.inlineData?.mimeType?.startsWith('audio/'));
+  if (audioParts.length === 0) {
+    return undefined;
+  }
+
+  const mimeType = audioParts[0].inlineData!.mimeType;
+  const audioData = Buffer.concat(
+    audioParts.map((part) => Buffer.from(part.inlineData!.data, 'base64')),
+  );
+  if (!/^audio\/(?:L16|pcm)(?:;|$)/i.test(mimeType)) {
+    return {
+      data: audioData.toString('base64'),
+      format: mimeType.split(/[;/]/)[1],
+    };
+  }
+
+  const sampleRate = Number(mimeType.match(/(?:^|;)\s*rate=(\d+)/i)?.[1] ?? 24_000);
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + audioData.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(audioData.length, 40);
+
+  return {
+    data: Buffer.concat([header, audioData]).toString('base64'),
+    format: 'wav',
+    sampleRate,
+    channels: 1,
+  };
+}
+
 /**
  * Normalizes and sanitizes tools configuration for Gemini API compatibility.
  * - Handles snake_case to camelCase conversion for backwards compatibility
@@ -873,64 +1381,164 @@ export function loadFile(
   return fileContents;
 }
 
-function isValidBase64Image(data: string): boolean {
-  // Handle both data URLs and raw base64
-  const base64Data = isDataUrl(data) ? extractBase64FromDataUrl(data) : data;
-
-  // Minimum length check: smallest valid GIF is ~35 chars
-  // Set threshold to 20 to allow small images (1x1 pixels, icons, test fixtures)
-  if (!base64Data || base64Data.length < 20) {
-    return false;
+function getMimeTypeFromFtypBrand(brand: string): string {
+  if (['M4A ', 'M4B ', 'M4P ', 'F4A ', 'F4B '].includes(brand)) {
+    return 'audio/mp4';
+  } else if (['heic', 'heix', 'hevc', 'hevx'].includes(brand)) {
+    return 'image/heic';
+  } else if (['mif1', 'msf1'].includes(brand)) {
+    return 'image/heif';
+  } else if (brand === 'qt  ') {
+    return 'video/quicktime';
+  } else if (brand.startsWith('3g')) {
+    return 'video/3gpp';
   }
 
-  try {
-    // Verify it's valid base64
-    Buffer.from(base64Data, 'base64');
-
-    // Check for known image format headers (magic numbers)
-    return (
-      base64Data.startsWith('/9j/') || // JPEG
-      base64Data.startsWith('iVBORw0KGgo') || // PNG
-      base64Data.startsWith('R0lGODlh') || // GIF89a
-      base64Data.startsWith('R0lGODdh') || // GIF87a
-      base64Data.startsWith('UklGR') || // WebP (RIFF)
-      base64Data.startsWith('Qk0') || // BMP
-      base64Data.startsWith('Qk1') || // BMP (alternate)
-      base64Data.startsWith('SUkq') || // TIFF (little-endian)
-      base64Data.startsWith('TU0A') || // TIFF (big-endian)
-      base64Data.startsWith('AAABAA') // ICO
-    );
-  } catch {
-    return false;
-  }
+  return 'video/mp4';
 }
 
-function getMimeTypeFromBase64(base64DataOrUrl: string): string {
-  // Try to extract MIME type from data URL first
-  const parsed = parseDataUrl(base64DataOrUrl);
-  if (parsed) {
-    return parsed.mimeType;
+const ASF_HEADER_GUID = Buffer.from('3026b2758e66cf11a6d900aa0062ce6c', 'hex');
+const ASF_STREAM_PROPERTIES_GUID = Buffer.from('9107dcb7b7a9cf118ee600c00c205365', 'hex');
+const ASF_AUDIO_STREAM_GUID = Buffer.from('409e69f84d5bcf11a8fd00805f5c442b', 'hex');
+const ASF_VIDEO_STREAM_GUID = Buffer.from('c0ef19bc4d5bcf11a8fd00805f5c442b', 'hex');
+const EBML_DOCTYPE_ID = Buffer.from([0x42, 0x82]);
+const MAX_MEDIA_SNIFF_BYTES = 65_536;
+const SUPPORTED_INLINE_MEDIA_MIME_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'audio/wav',
+  'audio/mpeg',
+  'audio/aiff',
+  'audio/aac',
+  'audio/ogg',
+  'audio/flac',
+  'audio/mp4',
+  'video/mp4',
+  'video/mpeg',
+  'video/quicktime',
+  'video/avi',
+  'video/x-flv',
+  'video/webm',
+  'video/wmv',
+  'video/3gpp',
+]);
+
+function getAsfMimeType(bytes: Buffer): string | undefined {
+  let streamOffset = bytes.indexOf(ASF_STREAM_PROPERTIES_GUID, ASF_HEADER_GUID.length);
+  let hasAudio = false;
+
+  while (streamOffset !== -1) {
+    const streamTypeOffset = streamOffset + ASF_STREAM_PROPERTIES_GUID.length + 8;
+    const streamType = bytes.subarray(streamTypeOffset, streamTypeOffset + 16);
+    if (streamType.equals(ASF_VIDEO_STREAM_GUID)) {
+      return 'video/wmv';
+    }
+    if (streamType.equals(ASF_AUDIO_STREAM_GUID)) {
+      hasAudio = true;
+    }
+    streamOffset = bytes.indexOf(ASF_STREAM_PROPERTIES_GUID, streamTypeOffset);
   }
 
-  // Fallback to magic number detection for raw base64
-  const base64Data = extractBase64FromDataUrl(base64DataOrUrl);
+  return hasAudio ? 'audio/x-ms-wma' : undefined;
+}
+
+function getEbmlMimeType(bytes: Buffer): string | undefined {
+  const doctypeOffset = bytes.indexOf(EBML_DOCTYPE_ID, 4);
+  if (doctypeOffset < 0) {
+    return undefined;
+  }
+
+  const encodedLength = bytes[doctypeOffset + EBML_DOCTYPE_ID.length];
+  if (encodedLength === undefined || (encodedLength & 0x80) === 0) {
+    return undefined;
+  }
+
+  const doctypeLength = encodedLength & 0x7f;
+  const doctypeOffsetStart = doctypeOffset + EBML_DOCTYPE_ID.length + 1;
+  const doctype = bytes
+    .subarray(doctypeOffsetStart, doctypeOffsetStart + doctypeLength)
+    .toString('ascii');
+
+  return doctype === 'webm' ? 'video/webm' : undefined;
+}
+
+function getMimeTypeFromMediaBytes(bytes: Buffer): string | undefined {
+  const riffType = bytes.subarray(8, 12).toString('ascii');
+  if (bytes.subarray(0, 4).toString('ascii') === 'RIFF') {
+    if (riffType === 'WEBP') {
+      return 'image/webp';
+    } else if (riffType === 'WAVE') {
+      return 'audio/wav';
+    } else if (riffType === 'AVI ') {
+      return 'video/avi';
+    }
+  } else if (
+    bytes.subarray(0, 4).toString('ascii') === 'FORM' &&
+    ['AIFF', 'AIFC'].includes(riffType)
+  ) {
+    return 'audio/aiff';
+  } else if (bytes.subarray(4, 8).toString('ascii') === 'ftyp') {
+    return getMimeTypeFromFtypBrand(bytes.subarray(8, 12).toString('ascii'));
+  } else if (['moov', 'mdat', 'wide'].includes(bytes.subarray(4, 8).toString('ascii'))) {
+    return 'video/quicktime';
+  } else if (bytes.subarray(0, 4).toString('hex') === '1a45dfa3') {
+    return getEbmlMimeType(bytes);
+  } else if (['000001ba', '000001b3'].includes(bytes.subarray(0, 4).toString('hex'))) {
+    return 'video/mpeg';
+  } else if (bytes.subarray(0, 3).toString('ascii') === 'FLV') {
+    return 'video/x-flv';
+  } else if (bytes.subarray(0, ASF_HEADER_GUID.length).equals(ASF_HEADER_GUID)) {
+    return getAsfMimeType(bytes);
+  } else if (bytes[0] === 0xff && (bytes[1] & 0xf6) === 0xf0) {
+    return 'audio/aac';
+  } else if (
+    bytes.subarray(0, 3).toString('ascii') === 'ID3' ||
+    (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
+  ) {
+    return 'audio/mpeg';
+  } else if (bytes.subarray(0, 4).toString('ascii') === 'fLaC') {
+    return 'audio/flac';
+  } else if (bytes.subarray(0, 4).toString('ascii') === 'OggS') {
+    return bytes.subarray(0, 65_536).includes(Buffer.from('theora', 'ascii'))
+      ? 'video/ogg'
+      : 'audio/ogg';
+  }
+
+  return undefined;
+}
+
+function getMimeTypeFromBase64(data: string): string | undefined {
+  const parsed = parseDataUrl(data);
+  const base64Data = parsed ? parsed.base64Data : data;
+
+  if (!base64Data || base64Data.length < 20 || !/^[A-Za-z0-9+/]+={0,2}$/.test(base64Data)) {
+    return undefined;
+  }
+
+  if (parsed) {
+    const mimeType = parsed.mimeType.toLowerCase();
+    return SUPPORTED_INLINE_MEDIA_MIME_TYPES.has(mimeType) ? mimeType : undefined;
+  }
+
   if (base64Data.startsWith('/9j/')) {
     return 'image/jpeg';
   } else if (base64Data.startsWith('iVBORw0KGgo')) {
     return 'image/png';
-  } else if (base64Data.startsWith('R0lGODlh') || base64Data.startsWith('R0lGODdh')) {
-    return 'image/gif';
-  } else if (base64Data.startsWith('UklGR')) {
-    return 'image/webp';
-  } else if (base64Data.startsWith('Qk0') || base64Data.startsWith('Qk1')) {
-    return 'image/bmp';
-  } else if (base64Data.startsWith('SUkq') || base64Data.startsWith('TU0A')) {
-    return 'image/tiff';
-  } else if (base64Data.startsWith('AAABAA')) {
-    return 'image/x-icon';
+  } else if (base64Data.startsWith('JVBER')) {
+    return 'application/pdf';
   }
-  // Default to jpeg for unknown formats
-  return 'image/jpeg';
+
+  const sniffBase64Length = Math.ceil(MAX_MEDIA_SNIFF_BYTES / 3) * 4;
+  const inferredMimeType = getMimeTypeFromMediaBytes(
+    Buffer.from(base64Data.slice(0, sniffBase64Length), 'base64'),
+  );
+  return inferredMimeType && SUPPORTED_INLINE_MEDIA_MIME_TYPES.has(inferredMimeType)
+    ? inferredMimeType
+    : undefined;
 }
 
 function processImagesInContents(
@@ -951,11 +1559,14 @@ function processImagesInContents(
     return [];
   }
 
-  const base64ToVarName = new Map<string, string>();
+  const base64ToMimeType = new Map<string, string>();
 
-  for (const [varName, value] of Object.entries(contextVars)) {
-    if (typeof value === 'string' && isValidBase64Image(value)) {
-      base64ToVarName.set(value, varName);
+  for (const value of Object.values(contextVars)) {
+    if (typeof value === 'string') {
+      const mimeType = getMimeTypeFromBase64(value);
+      if (mimeType) {
+        base64ToMimeType.set(value, mimeType);
+      }
     }
   }
 
@@ -966,17 +1577,17 @@ function processImagesInContents(
       for (const part of content.parts) {
         if (part.text) {
           const lines = part.text.split('\n');
-          let foundValidImage = false;
+          let foundValidMedia = false;
           let currentTextBlock = '';
           const processedParts: Part[] = [];
 
-          // First pass: check if any line is a valid base64 image from context variables
+          // First pass: check if any line is valid base64 media from context variables
           for (const line of lines) {
             const trimmedLine = line.trim();
 
-            // Check if this line is a base64 image that was loaded from a variable
-            if (base64ToVarName.has(trimmedLine) && isValidBase64Image(trimmedLine)) {
-              foundValidImage = true;
+            const mimeType = base64ToMimeType.get(trimmedLine);
+            if (mimeType) {
+              foundValidMedia = true;
 
               // Add any accumulated text as a text part
               if (currentTextBlock.length > 0) {
@@ -986,8 +1597,6 @@ function processImagesInContents(
                 currentTextBlock = '';
               }
 
-              // Add the image part
-              const mimeType = getMimeTypeFromBase64(trimmedLine);
               // Extract raw base64 data (Google expects raw base64, not data URLs)
               const base64Data = isDataUrl(trimmedLine)
                 ? extractBase64FromDataUrl(trimmedLine)
@@ -1014,8 +1623,8 @@ function processImagesInContents(
             });
           }
 
-          // If we found valid images, use the processed parts; otherwise, keep the original part
-          if (foundValidImage) {
+          // If we found valid media, use the processed parts; otherwise, keep the original part
+          if (foundValidMedia) {
             newParts.push(...processedParts);
           } else {
             newParts.push(part);

@@ -3,7 +3,12 @@ import { getDefaultProviders } from '../providers/defaults';
 import { loadApiProvider } from '../providers/index';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from '../redteam/constants';
 import invariant from '../util/invariant';
-import { getAndCheckProvider } from './providers';
+import {
+  callGradingProvider,
+  getAndCheckProvider,
+  getGradingProviderCallOptions,
+} from './providers';
+import { normalizeMatcherTokenUsage } from './shared';
 
 import type { ApiModerationProvider, GradingConfig, GradingResult } from '../types/index';
 
@@ -73,12 +78,25 @@ export async function matchesModeration(
 
   invariant(moderationProvider, 'Moderation provider must be defined');
 
-  const resp = await moderationProvider.callModerationApi(userPrompt, assistantResponse);
+  const callApiOptions = getGradingProviderCallOptions();
+  const resp = await callGradingProvider(moderationProvider, 'moderation', (context) =>
+    callApiOptions
+      ? moderationProvider.callModerationApi(userPrompt, assistantResponse, context, callApiOptions)
+      : moderationProvider.callModerationApi(userPrompt, assistantResponse),
+  );
+  const tokenUsageResult = resp.tokenUsage
+    ? { tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage) }
+    : {};
   if (resp.error) {
+    // A provider/transport error is not evidence about the content. Tag it as a
+    // grader failure so inverse-aware callers (`not-moderation`) propagate it
+    // verbatim instead of flipping it into a spurious pass.
     return {
       pass: false,
       score: 0,
       reason: `Moderation API error: ${resp.error}`,
+      ...tokenUsageResult,
+      metadata: { graderError: true },
     };
   }
 
@@ -88,6 +106,7 @@ export async function matchesModeration(
       pass: true,
       score: 1,
       reason: 'No moderation flags detected',
+      ...tokenUsageResult,
     };
   }
   const filteredFlags =
@@ -99,6 +118,7 @@ export async function matchesModeration(
       reason: `Moderation flags detected: ${filteredFlags
         .map((flag) => flag.description)
         .join(', ')}`,
+      ...tokenUsageResult,
     };
   }
 
@@ -106,5 +126,6 @@ export async function matchesModeration(
     pass: true,
     score: 1,
     reason: 'No relevant moderation flags detected',
+    ...tokenUsageResult,
   };
 }

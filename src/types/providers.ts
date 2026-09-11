@@ -88,6 +88,13 @@ export type ProviderConfig =
  */
 export type ProvidersConfig = ProviderId | ProviderFunction | ApiProvider | ProviderConfig[];
 
+export interface RemoteGenerationContext {
+  /** Provider IDs used for filtering, retry, and target identity. */
+  providerTargetIds: string[];
+  /** Cloud target database ID sent to Promptfoo Cloud task handlers. */
+  cloudTargetId?: string;
+}
+
 export type ProviderType = 'embedding' | 'classification' | 'text' | 'moderation';
 
 export interface SkillCallEntry {
@@ -299,6 +306,8 @@ export interface ApiProvider extends MinimalApiProvider {
   delay?: number;
   /** Optional stable session id for conversational providers. */
   getSessionId?: () => string;
+  /** Native audio input content format accepted by this provider and its configured model. */
+  getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   /**
    * Named provider inputs used by multi-input targets.
    *
@@ -339,7 +348,12 @@ export interface ApiClassificationProvider extends ApiProvider {
 }
 
 export interface ApiModerationProvider extends ApiProvider {
-  callModerationApi: (prompt: string, response: string) => Promise<ProviderModerationResponse>;
+  callModerationApi: (
+    prompt: string,
+    response: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderModerationResponse>;
 }
 
 export type FilePath = string;

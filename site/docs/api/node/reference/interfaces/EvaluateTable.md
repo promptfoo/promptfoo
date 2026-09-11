@@ -1,7 +1,7 @@
 ---
 title: 'Interface: EvaluateTable'
 description: 'Table-shaped eval output used by generateTable() and the web UI. See the supported promptfoo Node.js API imports, signatures, fields, and application examples.'
-sidebar_position: 19
+sidebar_position: 17
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 19
 import type { EvaluateTable } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:693](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L693)
+Defined in: types/index.ts:707
 
 Table-shaped eval output used by `generateTable()` and the web UI.
 
@@ -58,7 +58,7 @@ const table: EvaluateTable = {
 
 > **body**: [`EvaluateTableRow`](EvaluateTableRow.md)[]
 
-Defined in: [types/index.ts:697](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L697)
+Defined in: types/index.ts:711
 
 Ordered table rows, one per evaluated test case.
 
@@ -68,6 +68,6 @@ Ordered table rows, one per evaluated test case.
 
 > **head**: [`EvaluateTableHead`](EvaluateTableHead.md)
 
-Defined in: [types/index.ts:695](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L695)
+Defined in: types/index.ts:709
 
 Prompt and variable headers rendered above the table body.

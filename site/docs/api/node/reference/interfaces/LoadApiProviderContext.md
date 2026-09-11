@@ -1,7 +1,7 @@
 ---
 title: 'Interface: LoadApiProviderContext'
 description: 'Optional context accepted by loadApiProvider(). See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 26
+sidebar_position: 24
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 26
 import type { LoadApiProviderContext } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:2002](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2002)
+Defined in: types/index.ts:2079
 
 Optional context accepted by `loadApiProvider()`.
 
@@ -32,7 +32,7 @@ const context: LoadApiProviderContext = {
 
 > `optional` **basePath?**: `string`
 
-Defined in: [types/index.ts:2010](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2010)
+Defined in: types/index.ts:2087
 
 Base path used to resolve relative config-file references.
 
@@ -42,7 +42,7 @@ Base path used to resolve relative config-file references.
 
 > `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
-Defined in: [types/index.ts:2014](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2014)
+Defined in: types/index.ts:2091
 
 Environment overrides available while loading the provider.
 
@@ -52,6 +52,6 @@ Environment overrides available while loading the provider.
 
 > `optional` **options?**: [`ProviderOptions`](ProviderOptions.md)
 
-Defined in: [types/index.ts:2006](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L2006)
+Defined in: types/index.ts:2083
 
 Provider-specific options to merge into the resolved provider.

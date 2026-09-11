@@ -1,7 +1,7 @@
 ---
 title: 'Interface: CallApiOptionsParams'
 description: 'Per-request options passed to custom providers. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 13
+sidebar_position: 11
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 13
 import type { CallApiOptionsParams } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:249](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L249)
+Defined in: types/providers.ts:256
 
 Per-request options passed to custom providers.
 
@@ -37,7 +37,7 @@ const provider: ProviderFunction = async (prompt, _context, options) => {
 
 > `optional` **abortSignal?**: `AbortSignal`
 
-Defined in: [types/providers.ts:253](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L253)
+Defined in: types/providers.ts:260
 
 Signal that can be used to abort the request.
 
@@ -47,6 +47,6 @@ Signal that can be used to abort the request.
 
 > `optional` **includeLogProbs?**: `boolean`
 
-Defined in: [types/providers.ts:251](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L251)
+Defined in: types/providers.ts:258
 
 Whether the caller requested token log probabilities when supported.

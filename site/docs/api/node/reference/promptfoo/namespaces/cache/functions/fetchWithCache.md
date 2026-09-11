@@ -10,9 +10,9 @@ sidebar_position: 4
 import { cache } from 'promptfoo';
 ```
 
-> **fetchWithCache**\<`T`\>(`url`, `options?`, `timeout?`, `format?`, `bustOrOptions?`, `maxRetries?`): `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`\>\>
+> **fetchWithCache**\<`T`>>\>(`url`, `options?`, `timeout?`, `format?`, `bustOrOptions?`, `maxRetries?`): `Promise`\<[`FetchWithCacheResult`](../type-aliases/FetchWithCacheResult.md)\<`T`>>>>\>\>
 
-Defined in: [cache.ts:776](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L776)
+Defined in: cache.ts:897
 
 Fetch a URL through promptfoo's retrying cache wrapper.
 

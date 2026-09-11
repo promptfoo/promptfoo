@@ -1,7 +1,7 @@
 ---
 title: 'Interface: PromptConfig'
 description: 'Prompt-local text decoration applied before provider execution. See the supported promptfoo Node.js API imports, signatures, fields, and application examples.'
-sidebar_position: 32
+sidebar_position: 30
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 32
 import type { PromptConfig } from 'promptfoo';
 ```
 
-Defined in: [contracts/prompts.ts:43](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L43)
+Defined in: contracts/prompts.ts:43
 
 Prompt-local text decoration applied before provider execution.
 
@@ -26,17 +26,13 @@ const config: PromptConfig = {
 };
 ```
 
-## Extended by
-
-- [`TestCaseOptions`](TestCaseOptions.md)
-
 ## Properties
 
 ### prefix?
 
 > `optional` **prefix?**: `string`
 
-Defined in: [contracts/prompts.ts:45](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L45)
+Defined in: contracts/prompts.ts:45
 
 Text prepended to the rendered prompt before it is sent to the provider.
 
@@ -46,6 +42,6 @@ Text prepended to the rendered prompt before it is sent to the provider.
 
 > `optional` **suffix?**: `string`
 
-Defined in: [contracts/prompts.ts:47](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L47)
+Defined in: contracts/prompts.ts:47
 
 Text appended to the rendered prompt before it is sent to the provider.

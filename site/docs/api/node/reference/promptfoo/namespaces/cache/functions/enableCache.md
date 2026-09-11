@@ -12,7 +12,7 @@ import { cache } from 'promptfoo';
 
 > **enableCache**(): `void`
 
-Defined in: [cache.ts:876](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L876)
+Defined in: cache.ts:1006
 
 Enable the shared promptfoo cache.
 

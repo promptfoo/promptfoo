@@ -1,7 +1,7 @@
 ---
 title: 'Interface: BlobRef'
 description: 'External blob reference used by media-capable provider responses. See the supported promptfoo Node.js API imports, signatures, fields, and application examples.'
-sidebar_position: 10
+sidebar_position: 8
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 10
 import type { BlobRef } from 'promptfoo';
 ```
 
-Defined in: [contracts/blobs.ts:17](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/blobs.ts#L17)
+Defined in: contracts/blobs.ts:17
 
 External blob reference used by media-capable provider responses.
 
@@ -32,7 +32,7 @@ const blob: BlobRef = {
 
 > **hash**: `string`
 
-Defined in: [contracts/blobs.ts:21](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/blobs.ts#L21)
+Defined in: contracts/blobs.ts:21
 
 Content hash used to deduplicate and retrieve the blob.
 
@@ -42,7 +42,7 @@ Content hash used to deduplicate and retrieve the blob.
 
 > **mimeType**: `string`
 
-Defined in: [contracts/blobs.ts:23](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/blobs.ts#L23)
+Defined in: contracts/blobs.ts:23
 
 MIME type of the stored blob.
 
@@ -52,7 +52,7 @@ MIME type of the stored blob.
 
 > **provider**: `string`
 
-Defined in: [contracts/blobs.ts:27](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/blobs.ts#L27)
+Defined in: contracts/blobs.ts:27
 
 Storage backend that owns the blob.
 
@@ -62,7 +62,7 @@ Storage backend that owns the blob.
 
 > **sizeBytes**: `number`
 
-Defined in: [contracts/blobs.ts:25](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/blobs.ts#L25)
+Defined in: contracts/blobs.ts:25
 
 Blob size in bytes.
 
@@ -72,6 +72,6 @@ Blob size in bytes.
 
 > **uri**: `string`
 
-Defined in: [contracts/blobs.ts:19](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/blobs.ts#L19)
+Defined in: contracts/blobs.ts:19
 
 Canonical URI, for example `promptfoo://blob/<hash>`.

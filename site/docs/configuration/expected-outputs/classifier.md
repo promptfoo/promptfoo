@@ -6,7 +6,7 @@ description: Apply HuggingFace classifiers for comprehensive output analysis inc
 
 # Classifier grading
 
-Use the `classifier` assert type to run the LLM output through any [HuggingFace text classifier](https://huggingface.co/docs/transformers/tasks/sequence_classification).
+Use the `classifier` assert type to run the LLM output through a compatible [HuggingFace text classifier](https://huggingface.co/docs/transformers/tasks/sequence_classification), or a token classifier for entity-level checks such as PII detection.
 
 The assertion looks like this:
 
@@ -20,16 +20,16 @@ assert:
 
 ## Setup
 
-HuggingFace allows unauthenticated usage, but you may have to set the `HF_API_TOKEN` environment variable to avoid rate limits on larger evals. For more detail, see [HuggingFace provider docs](/docs/providers/huggingface).
+For hosted Inference Providers, set `HF_TOKEN` (or `HF_API_TOKEN`) to a token with [Inference Providers permissions](https://huggingface.co/docs/inference-providers/tasks/text-classification). For a dedicated endpoint, use a token authorized to access that deployment and set `config.apiEndpoint` to its URL. See the [HuggingFace provider docs](/docs/providers/huggingface/#inference-endpoints).
 
 ## Use cases
 
-For a full list of supported models, see [HuggingFace text classification models](https://huggingface.co/models?pipeline_tag=text-classification).
+Browse [HuggingFace text classification model artifacts](https://huggingface.co/models?pipeline_tag=text-classification). A Hub repository does not guarantee hosted inference: check that [HF Inference](https://huggingface.co/docs/inference-providers/providers/hf-inference) serves the model for the required task, or deploy a compatible endpoint and configure `apiEndpoint`. The links below describe model artifacts, including models that require your own deployment.
 
 Examples of use cases supported by the HuggingFace ecosystem include:
 
-- **Sentiment** classifiers like [DistilBERT-base-uncased](https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english), [roberta-base-go_emotions](https://huggingface.co/SamLowe/roberta-base-go_emotions), etc.
-- **Tone and emotion** via [finbert-tone](https://huggingface.co/yiyanghkust/finbert-tone), [emotion_text_classification](https://huggingface.co/michellejieli/emotion_text_classifier), etc.
+- **Sentiment** classifiers like [DistilBERT-base-uncased](https://huggingface.co/distilbert/distilbert-base-uncased-finetuned-sst-2-english), [roberta-base-go_emotions](https://huggingface.co/SamLowe/roberta-base-go_emotions), etc.
+- **Tone and emotion** via [finbert-tone](https://huggingface.co/yiyanghkust/finbert-tone), [emotion_text_classification](https://huggingface.co/michelleli99/emotion_text_classifier), etc.
 - **Toxicity** via [DistilBERT-toxic-comment-model](https://huggingface.co/martin-ha/toxic-comment-model), [twitter-roberta-base-offensive](https://huggingface.co/cardiffnlp/twitter-roberta-base-offensive), [bertweet-large-sexism-detector](https://huggingface.co/NLP-LTU/bertweet-large-sexism-detector), etc.
 - **Bias** and fairness via [d4data/bias-detection-model](https://huggingface.co/d4data/bias-detection-model).
 - **Grounding, factuality, and evidence-type** classification via [MiniLM-evidence-types](https://huggingface.co/marieke93/MiniLM-evidence-types) and similar
@@ -81,12 +81,15 @@ tests:
 
 ## PII detection example
 
-This assertion uses [starpii](https://huggingface.co/bigcode/starpii) to determine whether an LLM output potentially contains PII:
+This assertion uses [starpii](https://huggingface.co/bigcode/starpii), a token classifier trained to detect PII in source code, to check an LLM output. Validate its suitability for your output domain. Its model card currently lists no Inference Provider deployment. Obtain access to the gated model, deploy a compatible token-classification endpoint, and set `HF_STARPII_ENDPOINT` to its URL:
 
 ```yaml
 assert:
   - type: not-classifier
-    provider: huggingface:token-classification:bigcode/starpii
+    provider:
+      id: huggingface:token-classification:bigcode/starpii
+      config:
+        apiEndpoint: '{{env.HF_STARPII_ENDPOINT}}'
     # Ensure that outputs are not PII, with a score > 0.75
     threshold: 0.75
 ```
@@ -96,6 +99,8 @@ The `not-classifier` type inverts the result of the classifier. In this case, th
 ## Prompt injection example
 
 This assertion uses a [fine-tuned deberta-v3-base model](https://huggingface.co/protectai/deberta-v3-base-prompt-injection) to detect prompt injections.
+
+Both this model and its [v2 successor](https://huggingface.co/protectai/deberta-v3-base-prompt-injection-v2) are marked archived and no longer maintained. The example retains the original model, `SAFE` label, and threshold; switching to v2 or another detector requires validating its labels and recalibrating scores for your data.
 
 ```yaml
 assert:
@@ -107,12 +112,15 @@ assert:
 
 ## Bias detection example
 
-This assertion uses a [fine-tuned distilbert model](https://huggingface.co/d4data/bias-detection-model) classify biased text.
+This assertion uses a [fine-tuned distilbert model](https://huggingface.co/d4data/bias-detection-model) to classify biased text. Its model card currently lists no Inference Provider deployment. Deploy a compatible text-classification endpoint for this model and set `HF_BIAS_ENDPOINT` to its URL; keep the `Biased` label and calibrate the threshold for your use case.
 
 ```yaml
 assert:
   - type: classifier
-    provider: huggingface:text-classification:d4data/bias-detection-model
+    provider:
+      id: huggingface:text-classification:d4data/bias-detection-model
+      config:
+        apiEndpoint: '{{env.HF_BIAS_ENDPOINT}}'
     value: 'Biased'
     threshold: 0.5 # score for "Biased" must be greater than or equal to this value
 ```

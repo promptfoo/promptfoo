@@ -2,7 +2,7 @@
 sidebar_label: Node API Guide
 sidebar_position: 21
 title: Node API guide
-description: Guide to promptfoo's supported Node.js API surface, with links to generated reference pages for evals, providers, assertions, and caching.
+description: "Guide to promptfoo's Node.js APIs for running evals, loading providers, reusing assertions, managing caches, checking guardrails, and generating red team tests."
 ---
 
 import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';
@@ -31,15 +31,17 @@ import deep files from `dist/` or `src/`.
 
 ## API map
 
-| API                                                                               | Stability | Use it for                                          |
-| --------------------------------------------------------------------------------- | --------- | --------------------------------------------------- |
-| [`evaluate()`](/docs/api/node/reference/functions/evaluate)                       | Stable    | Running an eval programmatically                    |
-| [`loadApiProvider()`](/docs/api/node/reference/functions/loadApiProvider)         | Stable    | Building one provider instance from code            |
-| [`loadApiProviders()`](/docs/api/node/reference/functions/loadApiProviders)       | Stable    | Building one or many provider instances from config |
-| [`assertions`](/docs/api/node/reference/variables/assertions)                     | Stable    | Reusing assertion logic or test-framework matchers  |
-| [`cache`](/docs/api/node/reference/promptfoo/namespaces/cache/)                   | Stable    | Shared caching, cache isolation, and cached fetches |
-| [`generateTable()`](/docs/api/node/reference/functions/generateTable)             | Stable    | Rendering eval tables in terminal-friendly text     |
-| [`isTransformFunction()`](/docs/api/node/reference/functions/isTransformFunction) | Stable    | Narrowing inline transform values at runtime        |
+| API                                                                               | Stability | Use it for                                              |
+| --------------------------------------------------------------------------------- | --------- | ------------------------------------------------------- |
+| [`evaluate()`](/docs/api/node/reference/functions/evaluate)                       | Stable    | Running an eval programmatically                        |
+| [`loadApiProvider()`](/docs/api/node/reference/functions/loadApiProvider)         | Stable    | Building one provider instance from code                |
+| [`loadApiProviders()`](/docs/api/node/reference/functions/loadApiProviders)       | Stable    | Building one or many provider instances from config     |
+| [`assertions`](/docs/api/node/reference/variables/assertions)                     | Stable    | Reusing assertion logic or test-framework matchers      |
+| [`cache`](/docs/api/node/reference/promptfoo/namespaces/cache/)                   | Stable    | Shared caching, cache isolation, and cached fetches     |
+| [`generateTable()`](/docs/api/node/reference/functions/generateTable)             | Stable    | Rendering eval tables in terminal-friendly text         |
+| [`isTransformFunction()`](/docs/api/node/reference/functions/isTransformFunction) | Stable    | Narrowing inline transform values at runtime            |
+| [`guardrails`](#guardrails)                                                       | Beta      | Checking or adapting text through the guardrail service |
+| [`redteam`](#red-team-orchestration)                                              | Beta      | Generating and running red team evals                   |
 
 The package still exports additional compatibility helpers and schema types, but
 the generated reference intentionally focuses on the Node APIs we recommend
@@ -96,6 +98,72 @@ For assertions, start with the task-oriented
 or [`assertions.runAssertions()`](/docs/api/node/reference/variables/assertions#runassertions)
 when you already have a provider response and want to reuse promptfoo grading
 outside a full eval run.
+
+## Guardrails
+
+The beta `guardrails` helpers call the configured promptfoo guardrail service.
+They use your cloud host when logged in, or `PROMPTFOO_REMOTE_API_BASE_URL` when
+set. These are remote checks, so the input is sent to that service.
+
+```ts
+import { guardrails } from 'promptfoo';
+
+const result = await guardrails.guard('Text to check');
+console.log(result.results.some((entry) => entry.flagged));
+
+const pii = await guardrails.pii('Contact me at ada@example.com');
+const harm = await guardrails.harm('Text to check for harmful content');
+const adapted = await guardrails.adaptive({ prompt: 'Prompt to adapt' });
+console.log(adapted.adaptedPrompt);
+```
+
+`guard()`, `pii()`, and `harm()` accept a string and return `Promise<GuardResult>`.
+Each result contains the service's `model` and a `results` array with `flagged`,
+`categories`, and `category_scores`. PII findings, when returned, are available
+under `results[i].payload.pii`.
+
+`adaptive()` accepts an `AdaptiveRequest` with `prompt` and optional `policies`
+(string identifiers). It returns `Promise<AdaptiveResult>` with `model`,
+`adaptedPrompt`, and `modifications`. Import these types from `promptfoo` when
+annotating application code. Service or network failures reject the promise.
+
+## Red team orchestration
+
+The beta `redteam` API lets Node.js applications generate tests and run red team
+evals. Use the same [red team configuration](/docs/red-team/configuration/) as
+the CLI:
+
+```ts
+import { redteam } from 'promptfoo';
+
+const generated = await redteam.generate({
+  config: 'promptfooconfig.yaml',
+  output: 'redteam.yaml',
+  cache: false,
+});
+
+if (generated) {
+  const evalRecord = await redteam.run({
+    config: 'redteam.yaml',
+    cache: false,
+  });
+  if (evalRecord) {
+    console.log(await evalRecord.toEvaluateSummary());
+  }
+}
+```
+
+`generate(options)` accepts `RedteamGenerateOptions` and returns
+`Promise<Partial<UnifiedConfig> | null>`. Options include `config`, `output`,
+`numTests`, `plugins`, `strategies`, and `envFile`.
+
+`run(options?)` returns `Promise<Eval | undefined>`. Options include `config`,
+`target`, `output`, `maxConcurrency`, and `envPath`. Generation uses `envFile`
+for an environment file; running uses `envPath`.
+
+The `redteam` namespace also exposes `Plugins`, `Strategies`, `Graders`,
+`Extractors`, and `Base.Plugin` / `Base.Grader` for advanced integrations. These
+extension points are beta and may change between releases.
 
 ## Related docs
 

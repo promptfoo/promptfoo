@@ -12,7 +12,7 @@ import type { PromptContent } from 'promptfoo';
 
 > **PromptContent** = `string` \| `any`
 
-Defined in: [contracts/prompts.ts:25](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L25)
+Defined in: contracts/prompts.ts:25
 
 Prompt payload accepted from function-valued prompts.
 

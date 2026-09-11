@@ -31,9 +31,7 @@ not every internal compatibility type that exists in the runtime build.
 
 - [ApiProvider](interfaces/ApiProvider.md)
 - [Assertion](interfaces/Assertion.md)
-- [AssertionInput](interfaces/AssertionInput.md)
 - [AssertionSet](interfaces/AssertionSet.md)
-- [AssertionTestContext](interfaces/AssertionTestContext.md)
 - [AssertionTokenUsage](interfaces/AssertionTokenUsage.md)
 - [AssertionValueFunctionContext](interfaces/AssertionValueFunctionContext.md)
 - [AtomicTestCase](interfaces/AtomicTestCase.md)

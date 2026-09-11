@@ -40,8 +40,6 @@ export { isTransformFunction } from './types/transform';
 export { ConfigResolutionError } from './util/config/load';
 
 export type {
-  AssertionInput,
-  AssertionTestContext,
   RunAssertionOptions,
   RunAssertionsOptions,
 } from './assertions/index';

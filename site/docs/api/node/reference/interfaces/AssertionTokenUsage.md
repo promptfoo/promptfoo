@@ -1,7 +1,7 @@
 ---
 title: 'Interface: AssertionTokenUsage'
 description: 'Token accounting attributed to model-graded assertions. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 6
+sidebar_position: 4
 ---
 
 ## Import
@@ -10,19 +10,9 @@ sidebar_position: 6
 import type { AssertionTokenUsage } from 'promptfoo';
 ```
 
-Defined in: [contracts/shared.ts:96](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L96)
+Defined in: contracts/shared.ts:74
 
 Token accounting attributed to model-graded assertions.
-
-## Example
-
-```ts
-const usage: AssertionTokenUsage = {
-  prompt: 14,
-  completion: 6,
-  total: 20,
-};
-```
 
 ## Properties
 
@@ -30,9 +20,7 @@ const usage: AssertionTokenUsage = {
 
 > `optional` **cached?**: `number`
 
-Defined in: [contracts/shared.ts:104](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L104)
-
-Assertion tokens served from cache.
+Defined in: contracts/shared.ts:48
 
 ---
 
@@ -40,19 +28,45 @@ Assertion tokens served from cache.
 
 > `optional` **completion?**: `number`
 
-Defined in: [contracts/shared.ts:102](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L102)
-
-Assertion completion/output tokens.
+Defined in: contracts/shared.ts:47
 
 ---
 
 ### completionDetails?
 
-> `optional` **completionDetails?**: [`CompletionTokenDetails`](CompletionTokenDetails.md)
+> `optional` **completionDetails?**: `object`
 
-Defined in: [contracts/shared.ts:108](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L108)
+Defined in: contracts/shared.ts:51
 
-Detailed completion-token breakdown for assertion grading.
+#### acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+#### cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+#### cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+#### reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+#### rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
 
 ---
 
@@ -60,9 +74,7 @@ Detailed completion-token breakdown for assertion grading.
 
 > `optional` **numRequests?**: `number`
 
-Defined in: [contracts/shared.ts:106](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L106)
-
-Number of assertion model requests represented here.
+Defined in: contracts/shared.ts:50
 
 ---
 
@@ -70,9 +82,7 @@ Number of assertion model requests represented here.
 
 > `optional` **prompt?**: `number`
 
-Defined in: [contracts/shared.ts:100](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L100)
-
-Assertion prompt/input tokens.
+Defined in: contracts/shared.ts:46
 
 ---
 
@@ -80,6 +90,4 @@ Assertion prompt/input tokens.
 
 > `optional` **total?**: `number`
 
-Defined in: [contracts/shared.ts:98](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L98)
-
-Total assertion tokens.
+Defined in: contracts/shared.ts:49

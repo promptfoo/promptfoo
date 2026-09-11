@@ -10,9 +10,9 @@ sidebar_position: 11
 import type { ScoringFunction } from 'promptfoo';
 ```
 
-> **ScoringFunction** = (`namedScores`, `context?`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)\> \| [`GradingResult`](../interfaces/GradingResult.md)
+> **ScoringFunction** = (`namedScores`, `context?`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)> > \> \| [`GradingResult`](../interfaces/GradingResult.md)
 
-Defined in: [types/index.ts:1201](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1201)
+Defined in: types/index.ts:1217
 
 Custom scorer used to aggregate named assertion scores for one test case.
 
@@ -64,15 +64,27 @@ Threshold applied by the surrounding assertion set, when configured.
 
 #### tokensUsed?
 
-\{ `completion`: `number`; `prompt`: `number`; `total`: `number`; \}
+\{ `cached?`: `number`; `completion`: `number`; `completionDetails?`: [`TokenUsage`](../interfaces/TokenUsage.md)\[`"completionDetails"`\]; `numRequests?`: `number`; `prompt`: `number`; `total`: `number`; \}
 
 Token totals accumulated across component results.
+
+#### tokensUsed.cached?
+
+`number`
 
 #### tokensUsed.completion
 
 `number`
 
 Completion tokens used by all component results.
+
+#### tokensUsed.completionDetails?
+
+[`TokenUsage`](../interfaces/TokenUsage.md)\[`"completionDetails"`\]
+
+#### tokensUsed.numRequests?
+
+`number`
 
 #### tokensUsed.prompt
 

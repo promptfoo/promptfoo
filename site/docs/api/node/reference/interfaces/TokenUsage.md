@@ -1,7 +1,7 @@
 ---
 title: 'Interface: TokenUsage'
-description: 'Token accounting reported by providers and graders. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 46
+description: 'Provider usage with independent generation, attacker, grading, and incurred breakdowns. See supported imports, signatures, fields, and examples for this symbol.'
+sidebar_position: 44
 ---
 
 ## Import
@@ -10,29 +10,133 @@ sidebar_position: 46
 import type { TokenUsage } from 'promptfoo';
 ```
 
-Defined in: [contracts/shared.ts:125](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L125)
+Defined in: contracts/shared.ts:81
 
-Token accounting reported by providers and graders.
-
-## Example
-
-```ts
-const usage: TokenUsage = {
-  prompt: 12,
-  completion: 8,
-  total: 20,
-};
-```
+Provider usage with independent generation, attacker, grading, and incurred breakdowns.
 
 ## Properties
 
 ### assertions?
 
-> `optional` **assertions?**: [`AssertionTokenUsage`](AssertionTokenUsage.md)
+> `optional` **assertions?**: `object`
 
-Defined in: [contracts/shared.ts:139](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L139)
+Defined in: contracts/shared.ts:57
 
-Token usage accumulated by model-graded assertions.
+#### cached?
+
+> `optional` **cached?**: `number`
+
+#### completion?
+
+> `optional` **completion?**: `number`
+
+#### completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+#### numRequests?
+
+> `optional` **numRequests?**: `number`
+
+#### prompt?
+
+> `optional` **prompt?**: `number`
+
+#### total?
+
+> `optional` **total?**: `number`
+
+---
+
+### attacker?
+
+> `optional` **attacker?**: `object`
+
+Defined in: contracts/shared.ts:56
+
+#### cached?
+
+> `optional` **cached?**: `number`
+
+#### completion?
+
+> `optional` **completion?**: `number`
+
+#### completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+#### numRequests?
+
+> `optional` **numRequests?**: `number`
+
+#### prompt?
+
+> `optional` **prompt?**: `number`
+
+#### total?
+
+> `optional` **total?**: `number`
 
 ---
 
@@ -40,9 +144,7 @@ Token usage accumulated by model-graded assertions.
 
 > `optional` **cached?**: `number`
 
-Defined in: [contracts/shared.ts:131](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L131)
-
-Tokens served from a provider cache, when reported.
+Defined in: contracts/shared.ts:48
 
 ---
 
@@ -50,19 +152,343 @@ Tokens served from a provider cache, when reported.
 
 > `optional` **completion?**: `number`
 
-Defined in: [contracts/shared.ts:129](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L129)
-
-Completion/output tokens produced by the provider call.
+Defined in: contracts/shared.ts:47
 
 ---
 
 ### completionDetails?
 
-> `optional` **completionDetails?**: [`CompletionTokenDetails`](CompletionTokenDetails.md)
+> `optional` **completionDetails?**: `object`
 
-Defined in: [contracts/shared.ts:137](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L137)
+Defined in: contracts/shared.ts:51
 
-Provider-specific completion-token breakdown.
+#### acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+#### cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+#### cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+#### reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+#### rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+---
+
+### generation?
+
+> `optional` **generation?**: `object`
+
+Defined in: contracts/shared.ts:58
+
+#### cached?
+
+> `optional` **cached?**: `number`
+
+#### completion?
+
+> `optional` **completion?**: `number`
+
+#### completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+#### numRequests?
+
+> `optional` **numRequests?**: `number`
+
+#### prompt?
+
+> `optional` **prompt?**: `number`
+
+#### total?
+
+> `optional` **total?**: `number`
+
+---
+
+### incurredTokenUsage?
+
+> `optional` **incurredTokenUsage?**: `object`
+
+Defined in: contracts/shared.ts:66
+
+#### assertions?
+
+> `optional` **assertions?**: `object`
+
+##### assertions.cached?
+
+> `optional` **cached?**: `number`
+
+##### assertions.completion?
+
+> `optional` **completion?**: `number`
+
+##### assertions.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### assertions.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### assertions.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### assertions.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### assertions.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### assertions.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### assertions.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### assertions.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### assertions.total?
+
+> `optional` **total?**: `number`
+
+#### attacker?
+
+> `optional` **attacker?**: `object`
+
+##### attacker.cached?
+
+> `optional` **cached?**: `number`
+
+##### attacker.completion?
+
+> `optional` **completion?**: `number`
+
+##### attacker.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### attacker.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### attacker.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### attacker.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### attacker.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### attacker.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### attacker.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### attacker.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### attacker.total?
+
+> `optional` **total?**: `number`
+
+#### cached?
+
+> `optional` **cached?**: `number`
+
+#### completion?
+
+> `optional` **completion?**: `number`
+
+#### completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+#### generation?
+
+> `optional` **generation?**: `object`
+
+##### generation.cached?
+
+> `optional` **cached?**: `number`
+
+##### generation.completion?
+
+> `optional` **completion?**: `number`
+
+##### generation.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### generation.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### generation.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### generation.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### generation.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### generation.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### generation.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### generation.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### generation.total?
+
+> `optional` **total?**: `number`
+
+#### numRequests?
+
+> `optional` **numRequests?**: `number`
+
+#### prompt?
+
+> `optional` **prompt?**: `number`
+
+#### total?
+
+> `optional` **total?**: `number`
 
 ---
 
@@ -70,9 +496,7 @@ Provider-specific completion-token breakdown.
 
 > `optional` **numRequests?**: `number`
 
-Defined in: [contracts/shared.ts:135](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L135)
-
-Number of underlying requests represented by this usage object.
+Defined in: contracts/shared.ts:50
 
 ---
 
@@ -80,9 +504,7 @@ Number of underlying requests represented by this usage object.
 
 > `optional` **prompt?**: `number`
 
-Defined in: [contracts/shared.ts:127](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L127)
-
-Prompt/input tokens consumed by the provider call.
+Defined in: contracts/shared.ts:46
 
 ---
 
@@ -90,6 +512,4 @@ Prompt/input tokens consumed by the provider call.
 
 > `optional` **total?**: `number`
 
-Defined in: [contracts/shared.ts:133](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L133)
-
-Total tokens reported for the provider call.
+Defined in: contracts/shared.ts:49

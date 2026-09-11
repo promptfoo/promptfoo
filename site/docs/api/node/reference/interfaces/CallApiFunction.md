@@ -1,7 +1,7 @@
 ---
 title: 'Interface: CallApiFunction()'
 description: 'Function signature used by custom providers. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 12
+sidebar_position: 10
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 12
 import type { CallApiFunction } from 'promptfoo';
 ```
 
-Defined in: [types/providers.ts:369](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L369)
+Defined in: types/providers.ts:383
 
 Function signature used by custom providers.
 
@@ -28,9 +28,9 @@ const echoProvider: CallApiFunction = async (prompt, context) => ({
 });
 ```
 
-> **CallApiFunction**(`prompt`, `context?`, `options?`): `Promise`\<[`ProviderResponse`](ProviderResponse.md)\>
+> **CallApiFunction**(`prompt`, `context?`, `options?`): `Promise`\<[`ProviderResponse`](ProviderResponse.md)>>\>
 
-Defined in: [types/providers.ts:370](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L370)
+Defined in: types/providers.ts:384
 
 Function signature used by custom providers.
 
@@ -78,6 +78,6 @@ const echoProvider: CallApiFunction = async (prompt, context) => ({
 
 > `optional` **label?**: `string`
 
-Defined in: [types/providers.ts:376](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L376)
+Defined in: types/providers.ts:390
 
 Human-readable label used when the provider function is shown in reports.

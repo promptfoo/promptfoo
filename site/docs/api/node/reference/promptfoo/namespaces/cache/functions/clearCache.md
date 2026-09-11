@@ -10,9 +10,9 @@ sidebar_position: 1
 import { cache } from 'promptfoo';
 ```
 
-> **clearCache**(): `Promise`\<`boolean`\>
+> **clearCache**(): `Promise`\<`boolean`>>\>
 
-Defined in: [cache.ts:916](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L916)
+Defined in: cache.ts:1046
 
 Clear the shared promptfoo cache.
 

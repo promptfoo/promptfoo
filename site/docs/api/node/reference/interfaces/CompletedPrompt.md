@@ -1,7 +1,7 @@
 ---
 title: 'Interface: CompletedPrompt'
 description: 'Prompt metadata attached to completed eval results. See supported promptfoo Node.js imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 15
+sidebar_position: 13
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 15
 import type { CompletedPrompt } from 'promptfoo';
 ```
 
-Defined in: [types/index.ts:447](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L447)
+Defined in: types/index.ts:460
 
 Prompt metadata attached to completed eval results.
 
@@ -30,7 +30,7 @@ const prompt: CompletedPrompt = {
 
 > `optional` **config?**: `any`
 
-Defined in: [contracts/validators/prompts.ts:25](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L25)
+Defined in: contracts/validators/prompts.ts:25
 
 ---
 
@@ -38,7 +38,7 @@ Defined in: [contracts/validators/prompts.ts:25](https://github.com/promptfoo/pr
 
 > `optional` **display?**: `string`
 
-Defined in: [contracts/validators/prompts.ts:20](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L20)
+Defined in: contracts/validators/prompts.ts:20
 
 #### Deprecated
 
@@ -50,7 +50,7 @@ in > 0.59.0. Use `label` instead.
 
 > `optional` **function?**: [`PromptFunction`](../type-aliases/PromptFunction.md)
 
-Defined in: [contracts/validators/prompts.ts:22](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L22)
+Defined in: contracts/validators/prompts.ts:22
 
 ---
 
@@ -58,7 +58,7 @@ Defined in: [contracts/validators/prompts.ts:22](https://github.com/promptfoo/pr
 
 > `optional` **id?**: `string`
 
-Defined in: [contracts/validators/prompts.ts:14](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L14)
+Defined in: contracts/validators/prompts.ts:14
 
 ---
 
@@ -66,7 +66,7 @@ Defined in: [contracts/validators/prompts.ts:14](https://github.com/promptfoo/pr
 
 > **label**: `string`
 
-Defined in: [contracts/validators/prompts.ts:21](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L21)
+Defined in: contracts/validators/prompts.ts:21
 
 ---
 
@@ -74,7 +74,7 @@ Defined in: [contracts/validators/prompts.ts:21](https://github.com/promptfoo/pr
 
 > `optional` **metrics?**: `object`
 
-Defined in: [types/index.ts:429](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L429)
+Defined in: types/index.ts:442
 
 #### assertFailCount
 
@@ -94,21 +94,25 @@ Number of individual assertions that passed.
 
 Estimated cost accumulated across provider calls for this prompt.
 
+#### incurredCost?
+
+> `optional` **incurredCost?**: `number`
+
 #### namedScores
 
-> **namedScores**: `Record`\<`string`, `number`\>
+> **namedScores**: `Record`\<`string`, `number`>>\>
 
 Aggregate values for named assertion metrics.
 
 #### namedScoresCount
 
-> **namedScoresCount**: `Record`\<`string`, `number`\>
+> **namedScoresCount**: `Record`\<`string`, `number`>>\>
 
 Number of contributions included in each named score.
 
 #### namedScoreWeights?
 
-> `optional` **namedScoreWeights?**: `Record`\<`string`, `number`\>
+> `optional` **namedScoreWeights?**: `Record`\<`string`, `number`>>\>
 
 Sum of assertion weights contributing to each named score.
 
@@ -120,25 +124,25 @@ Red-team pass/fail counts grouped by plugin and strategy.
 
 ##### redteam.pluginFailCount
 
-> **pluginFailCount**: `Record`\<`string`, `number`\>
+> **pluginFailCount**: `Record`\<`string`, `number`>>\>
 
 Failing result counts by red-team plugin id.
 
 ##### redteam.pluginPassCount
 
-> **pluginPassCount**: `Record`\<`string`, `number`\>
+> **pluginPassCount**: `Record`\<`string`, `number`>>\>
 
 Passing result counts by red-team plugin id.
 
 ##### redteam.strategyFailCount
 
-> **strategyFailCount**: `Record`\<`string`, `number`\>
+> **strategyFailCount**: `Record`\<`string`, `number`>>\>
 
 Failing result counts by red-team strategy id.
 
 ##### redteam.strategyPassCount
 
-> **strategyPassCount**: `Record`\<`string`, `number`\>
+> **strategyPassCount**: `Record`\<`string`, `number`>>\>
 
 Passing result counts by red-team strategy id.
 
@@ -230,6 +234,64 @@ Prediction tokens rejected by speculative decoding, when reported.
 
 > `optional` **total?**: `number`
 
+##### tokenUsage.attacker?
+
+> `optional` **attacker?**: `object`
+
+##### tokenUsage.attacker.cached?
+
+> `optional` **cached?**: `number`
+
+##### tokenUsage.attacker.completion?
+
+> `optional` **completion?**: `number`
+
+##### tokenUsage.attacker.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### tokenUsage.attacker.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### tokenUsage.attacker.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### tokenUsage.attacker.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### tokenUsage.attacker.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### tokenUsage.attacker.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### tokenUsage.attacker.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### tokenUsage.attacker.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### tokenUsage.attacker.total?
+
+> `optional` **total?**: `number`
+
 ##### tokenUsage.cached?
 
 > `optional` **cached?**: `number`
@@ -272,6 +334,296 @@ Tokens spent on hidden model reasoning when the provider reports them.
 
 Prediction tokens rejected by speculative decoding, when reported.
 
+##### tokenUsage.generation?
+
+> `optional` **generation?**: `object`
+
+##### tokenUsage.generation.cached?
+
+> `optional` **cached?**: `number`
+
+##### tokenUsage.generation.completion?
+
+> `optional` **completion?**: `number`
+
+##### tokenUsage.generation.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### tokenUsage.generation.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### tokenUsage.generation.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### tokenUsage.generation.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### tokenUsage.generation.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### tokenUsage.generation.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### tokenUsage.generation.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### tokenUsage.generation.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### tokenUsage.generation.total?
+
+> `optional` **total?**: `number`
+
+##### tokenUsage.incurredTokenUsage?
+
+> `optional` **incurredTokenUsage?**: `object`
+
+##### tokenUsage.incurredTokenUsage.assertions?
+
+> `optional` **assertions?**: `object`
+
+##### tokenUsage.incurredTokenUsage.assertions.cached?
+
+> `optional` **cached?**: `number`
+
+##### tokenUsage.incurredTokenUsage.assertions.completion?
+
+> `optional` **completion?**: `number`
+
+##### tokenUsage.incurredTokenUsage.assertions.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### tokenUsage.incurredTokenUsage.assertions.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### tokenUsage.incurredTokenUsage.assertions.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### tokenUsage.incurredTokenUsage.assertions.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### tokenUsage.incurredTokenUsage.assertions.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### tokenUsage.incurredTokenUsage.assertions.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### tokenUsage.incurredTokenUsage.assertions.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### tokenUsage.incurredTokenUsage.assertions.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### tokenUsage.incurredTokenUsage.assertions.total?
+
+> `optional` **total?**: `number`
+
+##### tokenUsage.incurredTokenUsage.attacker?
+
+> `optional` **attacker?**: `object`
+
+##### tokenUsage.incurredTokenUsage.attacker.cached?
+
+> `optional` **cached?**: `number`
+
+##### tokenUsage.incurredTokenUsage.attacker.completion?
+
+> `optional` **completion?**: `number`
+
+##### tokenUsage.incurredTokenUsage.attacker.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### tokenUsage.incurredTokenUsage.attacker.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### tokenUsage.incurredTokenUsage.attacker.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### tokenUsage.incurredTokenUsage.attacker.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### tokenUsage.incurredTokenUsage.attacker.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### tokenUsage.incurredTokenUsage.attacker.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### tokenUsage.incurredTokenUsage.attacker.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### tokenUsage.incurredTokenUsage.attacker.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### tokenUsage.incurredTokenUsage.attacker.total?
+
+> `optional` **total?**: `number`
+
+##### tokenUsage.incurredTokenUsage.cached?
+
+> `optional` **cached?**: `number`
+
+##### tokenUsage.incurredTokenUsage.completion?
+
+> `optional` **completion?**: `number`
+
+##### tokenUsage.incurredTokenUsage.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### tokenUsage.incurredTokenUsage.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### tokenUsage.incurredTokenUsage.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### tokenUsage.incurredTokenUsage.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### tokenUsage.incurredTokenUsage.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### tokenUsage.incurredTokenUsage.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### tokenUsage.incurredTokenUsage.generation?
+
+> `optional` **generation?**: `object`
+
+##### tokenUsage.incurredTokenUsage.generation.cached?
+
+> `optional` **cached?**: `number`
+
+##### tokenUsage.incurredTokenUsage.generation.completion?
+
+> `optional` **completion?**: `number`
+
+##### tokenUsage.incurredTokenUsage.generation.completionDetails?
+
+> `optional` **completionDetails?**: `object`
+
+##### tokenUsage.incurredTokenUsage.generation.completionDetails.acceptedPrediction?
+
+> `optional` **acceptedPrediction?**: `number`
+
+Prediction tokens accepted by speculative decoding, when reported.
+
+##### tokenUsage.incurredTokenUsage.generation.completionDetails.cacheCreationInputTokens?
+
+> `optional` **cacheCreationInputTokens?**: `number`
+
+Input tokens written into a provider cache.
+
+##### tokenUsage.incurredTokenUsage.generation.completionDetails.cacheReadInputTokens?
+
+> `optional` **cacheReadInputTokens?**: `number`
+
+Input tokens read from a provider cache.
+
+##### tokenUsage.incurredTokenUsage.generation.completionDetails.reasoning?
+
+> `optional` **reasoning?**: `number`
+
+Tokens spent on hidden model reasoning when the provider reports them.
+
+##### tokenUsage.incurredTokenUsage.generation.completionDetails.rejectedPrediction?
+
+> `optional` **rejectedPrediction?**: `number`
+
+Prediction tokens rejected by speculative decoding, when reported.
+
+##### tokenUsage.incurredTokenUsage.generation.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### tokenUsage.incurredTokenUsage.generation.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### tokenUsage.incurredTokenUsage.generation.total?
+
+> `optional` **total?**: `number`
+
+##### tokenUsage.incurredTokenUsage.numRequests?
+
+> `optional` **numRequests?**: `number`
+
+##### tokenUsage.incurredTokenUsage.prompt?
+
+> `optional` **prompt?**: `number`
+
+##### tokenUsage.incurredTokenUsage.total?
+
+> `optional` **total?**: `number`
+
 ##### tokenUsage.numRequests?
 
 > `optional` **numRequests?**: `number`
@@ -296,7 +648,7 @@ Sum of provider latency for this prompt in milliseconds.
 
 > **provider**: `string`
 
-Defined in: [types/index.ts:428](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L428)
+Defined in: types/index.ts:441
 
 ---
 
@@ -304,7 +656,7 @@ Defined in: [types/index.ts:428](https://github.com/promptfoo/promptfoo/blob/mai
 
 > **raw**: `string`
 
-Defined in: [contracts/validators/prompts.ts:15](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L15)
+Defined in: contracts/validators/prompts.ts:15
 
 ---
 
@@ -312,4 +664,4 @@ Defined in: [contracts/validators/prompts.ts:15](https://github.com/promptfoo/pr
 
 > `optional` **template?**: `string`
 
-Defined in: [contracts/validators/prompts.ts:16](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/validators/prompts.ts#L16)
+Defined in: contracts/validators/prompts.ts:16

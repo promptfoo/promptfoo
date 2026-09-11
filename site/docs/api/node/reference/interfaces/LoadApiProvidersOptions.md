@@ -1,7 +1,7 @@
 ---
 title: 'Interface: LoadApiProvidersOptions'
 description: 'Shared options for loading one or more providers. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 27
+sidebar_position: 25
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 27
 import type { LoadApiProvidersOptions } from 'promptfoo';
 ```
 
-Defined in: [providers/index.ts:383](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L383)
+Defined in: providers/index.ts:383
 
 Shared options for loading one or more providers.
 
@@ -32,7 +32,7 @@ const options: LoadApiProvidersOptions = {
 
 > `optional` **basePath?**: `string`
 
-Defined in: [providers/index.ts:385](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L385)
+Defined in: providers/index.ts:385
 
 Base path used to resolve relative `file://` provider config references.
 
@@ -42,6 +42,6 @@ Base path used to resolve relative `file://` provider config references.
 
 > `optional` **env?**: [`EnvOverrides`](../type-aliases/EnvOverrides.md)
 
-Defined in: [providers/index.ts:387](https://github.com/promptfoo/promptfoo/blob/main/src/providers/index.ts#L387)
+Defined in: providers/index.ts:387
 
 Environment overrides available while providers are loaded.

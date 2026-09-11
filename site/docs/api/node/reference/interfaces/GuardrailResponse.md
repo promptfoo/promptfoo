@@ -1,7 +1,7 @@
 ---
 title: 'Interface: GuardrailResponse'
 description: 'Guardrail outcome metadata returned by moderation-aware providers. See supported imports, signatures, fields, examples, and usage details for this symbol.'
-sidebar_position: 24
+sidebar_position: 22
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 24
 import type { GuardrailResponse } from 'promptfoo';
 ```
 
-Defined in: [contracts/providers.ts:50](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L50)
+Defined in: contracts/providers.ts:51
 
 Guardrail outcome metadata returned by moderation-aware providers.
 
@@ -30,7 +30,7 @@ const guardrails: GuardrailResponse = {
 
 > `optional` **flagged?**: `boolean`
 
-Defined in: [contracts/providers.ts:56](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L56)
+Defined in: contracts/providers.ts:57
 
 Aggregate flag when the provider does not distinguish input from output.
 
@@ -40,7 +40,7 @@ Aggregate flag when the provider does not distinguish input from output.
 
 > `optional` **flaggedInput?**: `boolean`
 
-Defined in: [contracts/providers.ts:52](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L52)
+Defined in: contracts/providers.ts:53
 
 Whether the input prompt tripped a guardrail.
 
@@ -50,7 +50,7 @@ Whether the input prompt tripped a guardrail.
 
 > `optional` **flaggedOutput?**: `boolean`
 
-Defined in: [contracts/providers.ts:54](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L54)
+Defined in: contracts/providers.ts:55
 
 Whether the provider output tripped a guardrail.
 
@@ -60,6 +60,6 @@ Whether the provider output tripped a guardrail.
 
 > `optional` **reason?**: `string`
 
-Defined in: [contracts/providers.ts:58](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L58)
+Defined in: contracts/providers.ts:59
 
 Provider-supplied reason for the guardrail outcome.

@@ -18,7 +18,7 @@ focuses on APIs that are useful to call directly from application code.
 npm install promptfoo
 ```
 
-Promptfoo requires Node.js `^20.20.0 || >=22.22.0`. The Node.js API ships with
+Promptfoo requires Node.js `>=22.22.0`. The Node.js API ships with
 the same version of the `promptfoo` package used by the CLI.
 
 ```ts
@@ -30,6 +30,7 @@ import { evaluate } from 'promptfoo';
 | Stability | Meaning                                                                       |
 | --------- | ----------------------------------------------------------------------------- |
 | Stable    | Supported for production use and documented as part of the public Node.js API |
+| Beta      | Available for advanced integrations; signatures may change between releases   |
 | Internal  | Implementation detail; not part of the supported public API                   |
 
 The most commonly used public surfaces are:

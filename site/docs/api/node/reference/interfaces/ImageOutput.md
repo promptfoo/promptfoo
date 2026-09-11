@@ -1,7 +1,7 @@
 ---
 title: 'Interface: ImageOutput'
 description: 'Image attachment returned by providers that produce images. See supported Node.js imports, exact signatures, fields, and application examples for this symbol.'
-sidebar_position: 25
+sidebar_position: 23
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 25
 import type { ImageOutput } from 'promptfoo';
 ```
 
-Defined in: [contracts/providers.ts:69](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L69)
+Defined in: contracts/providers.ts:70
 
 Image attachment returned by providers that produce images.
 
@@ -23,7 +23,7 @@ already been externalized out of the result row.
 
 > `optional` **blobRef?**: [`BlobRef`](BlobRef.md)
 
-Defined in: [contracts/providers.ts:73](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L73)
+Defined in: contracts/providers.ts:74
 
 External blob reference when image data is stored outside the result row.
 
@@ -33,7 +33,7 @@ External blob reference when image data is stored outside the result row.
 
 > `optional` **data?**: `string`
 
-Defined in: [contracts/providers.ts:71](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L71)
+Defined in: contracts/providers.ts:72
 
 Inline data URI or base64 payload.
 
@@ -43,6 +43,6 @@ Inline data URI or base64 payload.
 
 > `optional` **mimeType?**: `string`
 
-Defined in: [contracts/providers.ts:75](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L75)
+Defined in: contracts/providers.ts:76
 
 MIME type such as `image/png`.

@@ -2,7 +2,7 @@
 sidebar_position: 20
 sidebar_label: Node.js API
 title: Node.js API
-description: Use promptfoo programmatically from Node.js with supported APIs for evals, providers, assertions, caching, and advanced TypeScript workflows.
+description: 'Use promptfoo from Node.js to run evals, implement providers and assertions, transform outputs, manage caches, and generate red team tests with typed APIs.'
 ---
 
 import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';
@@ -36,6 +36,13 @@ the supported public boundary; do not import deep files from `dist/` or `src/`.
 ```sh
 npm install promptfoo
 ```
+
+:::note
+
+promptfoo requires Node.js `22.22.0` or newer. Node.js 24 LTS is recommended. See the
+[runtime support guide](/docs/installation#nodejs-runtime-support).
+
+:::
 
 ## Quickstart
 
@@ -102,6 +109,9 @@ for the full config schema. The main Node-facing surfaces are:
 | `cache.*`                                                  | Stable    | Shared caching, cache isolation, and cached fetches   |
 | `generateTable()`                                          | Stable    | Rendering eval tables in terminal-friendly text       |
 | `isTransformFunction()`                                    | Stable    | Narrowing inline transform values at runtime          |
+
+For the beta APIs, see [guardrails](/docs/usage/node-api-reference#guardrails) and
+[red team orchestration](/docs/usage/node-api-reference#red-team-orchestration).
 
 Functions that are not exported from the root `promptfoo` package are not part of
 the supported Node.js API, even if they exist in the repository source.
@@ -201,15 +211,21 @@ await evaluate({
     {
       vars: { question: 'What is 2 + 2?' },
       options: {
-        transform: (output) => output.toUpperCase(),
+        transform: (output) => String(output).toUpperCase(),
       },
       assert: [
         {
           type: 'contains',
           value: 'calculator',
           transform: (output, context) => {
-            const tools = context.metadata?.toolCalls ?? [];
-            return tools.map((tool) => tool.name).join(', ');
+            const tools = context.metadata?.toolCalls;
+            if (!Array.isArray(tools)) {
+              return '';
+            }
+            return tools
+              .filter((tool) => tool && typeof tool.name === 'string')
+              .map((tool) => tool.name)
+              .join(', ');
           },
         },
       ],

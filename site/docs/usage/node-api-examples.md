@@ -2,7 +2,7 @@
 sidebar_label: Node API Examples
 sidebar_position: 22
 title: Node API examples
-description: Practical examples for using promptfoo programmatically from Node.js, including evals, providers, assertions, progress callbacks, and cache isolation.
+description: 'Practical Node.js examples for promptfoo: run evals, build custom providers and assertions, generate prompts, track progress, and isolate cached responses.'
 ---
 
 import LegacyHeadingAnchors from '@site/src/components/LegacyHeadingAnchors';

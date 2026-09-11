@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../contracts/env';
-import { BaseTokenUsageSchema } from '../contracts/shared';
+import {
+  BaseTokenUsageSchema,
+  type NormalizedTokenUsage,
+  type NunjucksFilterMap,
+  type TokenUsage,
+  type VarValue,
+} from '../contracts/shared';
+import { TRACE_CREDENTIAL_PATH_SEGMENT } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
@@ -19,8 +26,7 @@ export {
 } from './eventSource';
 
 import type { EnvOverrides } from '../contracts/env';
-import type { Prompt, PromptConfig, PromptFunction } from '../contracts/prompts';
-import type { NunjucksFilterMap, TokenUsage, VarValue } from '../contracts/shared';
+import type { Prompt, PromptFunction } from '../contracts/prompts';
 import type {
   PluginConfig,
   RedteamAssertionTypes,
@@ -359,6 +365,12 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
   abortSignal?: AbortSignal;
 };
 
+/** Runtime options stored with an evaluation for reproducible resume and retry behavior. */
+export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
+  /** @internal Normalized value of --filter-providers or --filter-targets. */
+  providerFilter?: string;
+};
+
 const PromptMetricsSchema = z.object({
   /** Aggregate normalized score across outputs for this prompt. */
   score: z.number(),
@@ -397,6 +409,7 @@ const PromptMetricsSchema = z.object({
     .optional(),
   /** Estimated cost accumulated across provider calls for this prompt. */
   cost: z.number(),
+  incurredCost: z.number().optional(),
 });
 /**
  * Aggregate metrics tracked for one completed prompt.
@@ -500,8 +513,9 @@ export interface EvaluateResult {
   gradingResult?: GradingResult | null;
   namedScores: Record<string, number>;
   cost?: number;
+  incurredCost?: number;
   metadata?: Record<string, any>;
-  tokenUsage?: Required<TokenUsage>;
+  tokenUsage?: NormalizedTokenUsage;
   /**
    * Eval ID this result belongs to, surfaced when tracing is enabled so consumers
    * can pass it to `/api/traces/evaluation/:evaluationId` without re-deriving it.
@@ -701,7 +715,7 @@ export interface EvaluateStats {
   successes: number;
   failures: number;
   errors: number;
-  tokenUsage: Required<TokenUsage>;
+  tokenUsage: NormalizedTokenUsage;
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
@@ -802,6 +816,8 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     /** Full prompt sent to the grading LLM, retained for debugging. */
     renderedGradingPrompt?: string;
+    /** Whether the complete grading response was reused. */
+    cachedResponse?: boolean;
     /**
      * Set when a grader transport or parse failure prevented a real eval.
      * Inverse assertions must not flip this into a pass; the field is only
@@ -1221,6 +1237,9 @@ export type ScoringFunction = (
       prompt: number;
       /** Completion tokens used by all component results. */
       completion: number;
+      cached?: number;
+      numRequests?: number;
+      completionDetails?: TokenUsage['completionDetails'];
     };
   },
 ) => Promise<GradingResult> | GradingResult;
@@ -1304,6 +1323,9 @@ export const TestCaseSchema = z.object({
       disableDefaultAsserts: z.boolean().optional(),
       /** Run this test serially even when the eval otherwise uses concurrency. */
       runSerially: z.boolean().optional(),
+
+      // Number of times to repeat this specific test case.
+      repeat: z.number().int().positive().safe().optional(),
     })
     .catchall(z.any())
     .optional(),
@@ -1338,24 +1360,15 @@ export const TestCaseSchema = z.object({
  * ```ts
  * const options: TestCaseOptions = {
  *   prefix: 'System: ',
- *   transform: (output) => output.trim(),
+ *   transform: (output) => String(output).trim(),
  *   disableVarExpansion: true,
  * };
  * ```
  *
+ * @interface
  * @public
  */
-export interface TestCaseOptions extends PromptConfig, OutputConfig, GradingConfig {
-  /** Do not expand array-valued vars into multiple eval cases. */
-  disableVarExpansion?: boolean;
-  /** Do not include the implicit `_conversation` variable. */
-  disableConversationVar?: boolean;
-  /** Skip `defaultTest` assertions while still inheriting other defaults. */
-  disableDefaultAsserts?: boolean;
-  /** Run this test serially even when the eval otherwise uses concurrency. */
-  runSerially?: boolean;
-  [key: string]: any;
-}
+export type TestCaseOptions = NonNullable<TestCase['options']>;
 
 /**
  * Arbitrary metadata attached to a test case.
@@ -1371,15 +1384,10 @@ export interface TestCaseOptions extends PromptConfig, OutputConfig, GradingConf
  * };
  * ```
  *
+ * @interface
  * @public
  */
-export interface TestCaseMetadata {
-  /** Advanced red-team plugin config carried on generated test cases. */
-  pluginConfig?: PluginConfig;
-  /** Advanced red-team strategy config carried on generated test cases. */
-  strategyConfig?: StrategyConfig;
-  [key: string]: any;
-}
+export type TestCaseMetadata = NonNullable<TestCase['metadata']>;
 
 /**
  * Author-facing test case configuration accepted by eval suites.
@@ -1516,6 +1524,70 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
+const TraceProviderEndpointSchema = z.url().refine((endpoint) => {
+  const url = new URL(endpoint);
+  const hasCredentialPath = url.pathname.split('/').some((segment) => {
+    try {
+      return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
+    } catch {
+      return true;
+    }
+  });
+  return (
+    (url.protocol === 'http:' || url.protocol === 'https:') &&
+    !url.username &&
+    !url.password &&
+    !url.search &&
+    !url.hash &&
+    !hasCredentialPath
+  );
+}, 'Trace provider endpoint must use HTTP or HTTPS without credentials, query parameters, or fragments');
+
+const TraceProviderAuthSchema = z
+  .object({
+    token: z.string().min(1).optional(),
+    username: z.string().min(1).optional(),
+    password: z.string().min(1).optional(),
+  })
+  .refine(
+    ({ token, username, password }) =>
+      !(token && (username || password)) && Boolean(username) === Boolean(password),
+    'Configure either a bearer token or both basic-auth credentials',
+  );
+
+const TraceProviderConfigSchema = z.discriminatedUnion('id', [
+  z.object({
+    id: z.literal('tempo'),
+    endpoint: TraceProviderEndpointSchema,
+    auth: TraceProviderAuthSchema.optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+  z.object({
+    id: z.literal('braintrust'),
+    endpoint: TraceProviderEndpointSchema,
+    projectId: z.uuid(),
+    auth: z.object({ token: z.string().min(1) }),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+  z.object({
+    id: z.literal('langfuse'),
+    endpoint: TraceProviderEndpointSchema,
+    auth: z
+      .object({
+        username: z.string().min(1),
+        password: z.string().min(1),
+        token: z.never().optional(),
+      })
+      .strict(),
+    headers: z.record(z.string(), z.string()).optional(),
+    timeout: z.number().int().positive().max(300_000).optional(),
+  }),
+]);
+
+const TraceQueryDelaySchema = z.number().int().nonnegative().max(300_000);
+
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({
   // Optional tags to describe the test suite
@@ -1637,6 +1709,8 @@ export const TestSuiteSchema = z.object({
           headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
+      provider: TraceProviderConfigSchema.optional(),
+      queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
 });
@@ -1794,6 +1868,9 @@ export const TestSuiteConfigSchema = z.object({
           headers: z.record(z.string(), z.string()).optional(),
         })
         .optional(),
+
+      provider: TraceProviderConfigSchema.optional(),
+      queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
 });
@@ -1955,7 +2032,7 @@ export interface OutputFile {
   shareableUrl: string | null;
   metadata?: OutputMetadata;
   vars?: string[];
-  runtimeOptions?: Partial<EvaluateOptions>;
+  runtimeOptions?: EvalRuntimeOptions;
   traces?: TraceData[];
   blobAssets?: ExportedBlobAsset[];
 }

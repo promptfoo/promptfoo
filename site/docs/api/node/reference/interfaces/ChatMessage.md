@@ -1,7 +1,7 @@
 ---
 title: 'Interface: ChatMessage'
 description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
-sidebar_position: 14
+sidebar_position: 12
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 14
 import type { ChatMessage } from 'promptfoo';
 ```
 
-Defined in: [contracts/providers.ts:17](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L17)
+Defined in: contracts/providers.ts:17
 
 Chat message reported by providers for multi-turn prompts and transcripts.
 
@@ -29,7 +29,7 @@ const message: ChatMessage = {
 
 > **content**: `string`
 
-Defined in: [contracts/providers.ts:21](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L21)
+Defined in: contracts/providers.ts:21
 
 Text content sent or received for the turn.
 
@@ -39,6 +39,6 @@ Text content sent or received for the turn.
 
 > **role**: `"function"` \| `"system"` \| `"user"` \| `"assistant"` \| `"tool"`
 
-Defined in: [contracts/providers.ts:19](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/providers.ts#L19)
+Defined in: contracts/providers.ts:19
 
 Speaker role for the message.

@@ -10,9 +10,9 @@ sidebar_position: 7
 import type { PromptFunction } from 'promptfoo';
 ```
 
-> **PromptFunction** = (`context`) => `Promise`\<[`PromptContent`](PromptContent.md) \| [`PromptFunctionResult`](../interfaces/PromptFunctionResult.md)\>
+> **PromptFunction** = (`context`) => `Promise`\<[`PromptContent`](PromptContent.md) \| [`PromptFunctionResult`](../interfaces/PromptFunctionResult.md)>>\>
 
-Defined in: [contracts/prompts.ts:122](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L122)
+Defined in: contracts/prompts.ts:122
 
 Function form accepted anywhere the Node.js API accepts a prompt.
 

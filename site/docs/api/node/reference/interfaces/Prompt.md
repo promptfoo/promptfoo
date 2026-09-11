@@ -1,7 +1,7 @@
 ---
 title: 'Interface: Prompt'
 description: 'Normalized prompt record stored on eval results and passed to providers. See supported imports, signatures, fields, examples, and usage details for this symbol.'
-sidebar_position: 31
+sidebar_position: 29
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 31
 import type { Prompt } from 'promptfoo';
 ```
 
-Defined in: [contracts/prompts.ts:143](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L143)
+Defined in: contracts/prompts.ts:143
 
 Normalized prompt record stored on eval results and passed to providers.
 
@@ -30,7 +30,7 @@ const prompt: Prompt = {
 
 > `optional` **config?**: `any`
 
-Defined in: [contracts/prompts.ts:159](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L159)
+Defined in: contracts/prompts.ts:159
 
 Prompt-local provider config overrides merged into the selected provider config.
 
@@ -40,7 +40,7 @@ Prompt-local provider config overrides merged into the selected provider config.
 
 > `optional` **display?**: `string`
 
-Defined in: [contracts/prompts.ts:153](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L153)
+Defined in: contracts/prompts.ts:153
 
 #### Deprecated
 
@@ -52,7 +52,7 @@ in > 0.59.0. Use `label` instead.
 
 > `optional` **function?**: [`PromptFunction`](../type-aliases/PromptFunction.md)
 
-Defined in: [contracts/prompts.ts:157](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L157)
+Defined in: contracts/prompts.ts:157
 
 Function-valued prompt renderer when the prompt is assembled at runtime.
 
@@ -62,7 +62,7 @@ Function-valued prompt renderer when the prompt is assembled at runtime.
 
 > `optional` **id?**: `string`
 
-Defined in: [contracts/prompts.ts:145](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L145)
+Defined in: contracts/prompts.ts:145
 
 Stable prompt identifier used in results and prompt selection.
 
@@ -72,7 +72,7 @@ Stable prompt identifier used in results and prompt selection.
 
 > **label**: `string`
 
-Defined in: [contracts/prompts.ts:155](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L155)
+Defined in: contracts/prompts.ts:155
 
 Human-readable label shown in reports and prompt selectors.
 
@@ -82,7 +82,7 @@ Human-readable label shown in reports and prompt selectors.
 
 > **raw**: `string`
 
-Defined in: [contracts/prompts.ts:147](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L147)
+Defined in: contracts/prompts.ts:147
 
 Raw prompt template before display-only decoration.
 
@@ -92,6 +92,6 @@ Raw prompt template before display-only decoration.
 
 > `optional` **template?**: `string`
 
-Defined in: [contracts/prompts.ts:151](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/prompts.ts#L151)
+Defined in: contracts/prompts.ts:151
 
 Internal undecorated prompt copy used when prefix or suffix wrapping is applied.

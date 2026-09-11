@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { getEnvBool } from '../envars';
 import { isGradingResult } from '../types/index';
 
@@ -12,6 +14,9 @@ export const DEFAULT_TOKENS_USED = {
   cached: 0,
   numRequests: 0,
 };
+
+type AssertionTokenUsage = typeof DEFAULT_TOKENS_USED &
+  Pick<NonNullable<GradingResult['tokensUsed']>, 'completionDetails' | 'incurredTokenUsage'>;
 
 interface ParentAssertionSet {
   index: number;
@@ -43,6 +48,169 @@ function mergeMetadata(
   };
 }
 
+function normalizeAssertionTokenUsage(result: GradingResult) {
+  const tokensUsed = result.tokensUsed;
+  if (!tokensUsed) {
+    return undefined;
+  }
+
+  if (result.metadata?.cachedResponse === true) {
+    const reportedTotal =
+      tokensUsed.total ?? (tokensUsed.prompt ?? 0) + (tokensUsed.completion ?? 0);
+    const logicalTotal = reportedTotal || (tokensUsed.cached ?? 0);
+    return {
+      ...tokensUsed,
+      total: logicalTotal,
+      prompt: tokensUsed.prompt ?? 0,
+      completion: tokensUsed.completion ?? 0,
+      cached: Math.max(tokensUsed.cached ?? 0, logicalTotal),
+      numRequests: Math.max(tokensUsed.numRequests ?? 0, 1),
+      incurredTokenUsage: { ...DEFAULT_TOKENS_USED },
+    };
+  }
+
+  return {
+    ...tokensUsed,
+    ...(result.metadata?.renderedGradingPrompt !== undefined &&
+      tokensUsed.numRequests === 0 && { numRequests: 1 }),
+  };
+}
+
+function accumulateNormalizedAssertionTokenUsage(
+  target: NonNullable<GradingResult['tokensUsed']>,
+  update: NonNullable<GradingResult['tokensUsed']>,
+): void {
+  const trackIncurredUsage = Boolean(target.incurredTokenUsage || update.incurredTokenUsage);
+  if (trackIncurredUsage && !target.incurredTokenUsage) {
+    target.incurredTokenUsage = cloneAssertionTokenUsage(target);
+  }
+
+  for (const field of ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const) {
+    target[field] = (target[field] ?? 0) + (update[field] ?? 0);
+  }
+
+  if (update.completionDetails) {
+    const currentDetails = target.completionDetails;
+    const incomingDetails = update.completionDetails;
+    target.completionDetails = {
+      reasoning: (currentDetails?.reasoning ?? 0) + (incomingDetails.reasoning ?? 0),
+      acceptedPrediction:
+        (currentDetails?.acceptedPrediction ?? 0) + (incomingDetails.acceptedPrediction ?? 0),
+      rejectedPrediction:
+        (currentDetails?.rejectedPrediction ?? 0) + (incomingDetails.rejectedPrediction ?? 0),
+      cacheReadInputTokens:
+        (currentDetails?.cacheReadInputTokens ?? 0) + (incomingDetails.cacheReadInputTokens ?? 0),
+      cacheCreationInputTokens:
+        (currentDetails?.cacheCreationInputTokens ?? 0) +
+        (incomingDetails.cacheCreationInputTokens ?? 0),
+    };
+  }
+
+  if (trackIncurredUsage && target.incurredTokenUsage) {
+    accumulateNormalizedAssertionTokenUsage(
+      target.incurredTokenUsage,
+      update.incurredTokenUsage ?? cloneAssertionTokenUsage(update),
+    );
+  }
+}
+
+function cloneAssertionTokenUsage(
+  tokenUsage: NonNullable<GradingResult['tokensUsed']>,
+): NonNullable<NonNullable<GradingResult['tokensUsed']>['incurredTokenUsage']> {
+  const { incurredTokenUsage: _incurredTokenUsage, ...assertionUsage } = tokenUsage;
+  return {
+    ...assertionUsage,
+    ...(assertionUsage.completionDetails && {
+      completionDetails: { ...assertionUsage.completionDetails },
+    }),
+  };
+}
+
+function mergeScoringMetadata(
+  baseMetadata: GradingResult['metadata'],
+  scoringResult: GradingResult,
+  baseTokensUsed: GradingResult['tokensUsed'],
+): GradingResult['metadata'] | undefined {
+  const metadata = mergeMetadata(baseMetadata, scoringResult.metadata);
+  const tokensUsed = scoringResult.tokensUsed;
+  const scoringPerformedFreshWork =
+    scoringResult.metadata?.cachedResponse !== true &&
+    tokensUsed !== undefined &&
+    ((tokensUsed.numRequests ?? 0) > 0 ||
+      (tokensUsed.total ?? 0) > 0 ||
+      (tokensUsed.prompt ?? 0) > 0 ||
+      (tokensUsed.completion ?? 0) > 0);
+
+  const componentsPerformedFreshWork =
+    baseMetadata?.cachedResponse !== true &&
+    ((baseTokensUsed?.numRequests ?? 0) > 0 ||
+      (baseTokensUsed?.total ?? 0) > 0 ||
+      (baseTokensUsed?.prompt ?? 0) > 0 ||
+      (baseTokensUsed?.completion ?? 0) > 0);
+
+  if (
+    (!scoringPerformedFreshWork && !componentsPerformedFreshWork) ||
+    metadata?.cachedResponse !== true
+  ) {
+    return metadata;
+  }
+
+  const { cachedResponse: _cachedResponse, ...remainingMetadata } = metadata;
+  return Object.keys(remainingMetadata).length > 0 ? remainingMetadata : undefined;
+}
+
+function mergeScoringTokenUsage(
+  baseTokensUsed: GradingResult['tokensUsed'],
+  scoringResult: GradingResult,
+): GradingResult['tokensUsed'] {
+  if (!scoringResult.tokensUsed || scoringResult.tokensUsed === baseTokensUsed) {
+    return baseTokensUsed;
+  }
+
+  const scoringHasIndependentProvenance =
+    scoringResult.metadata?.cachedResponse === true ||
+    scoringResult.metadata?.renderedGradingPrompt !== undefined;
+  if (
+    baseTokensUsed &&
+    !scoringHasIndependentProvenance &&
+    isDeepStrictEqual(scoringResult.tokensUsed, baseTokensUsed)
+  ) {
+    return baseTokensUsed;
+  }
+
+  const scoringTokensUsed = normalizeAssertionTokenUsage(scoringResult);
+  if (!scoringTokensUsed) {
+    return baseTokensUsed;
+  }
+
+  const mergedTokensUsed = {
+    total: baseTokensUsed?.total ?? 0,
+    prompt: baseTokensUsed?.prompt ?? 0,
+    completion: baseTokensUsed?.completion ?? 0,
+    cached: baseTokensUsed?.cached ?? 0,
+    numRequests: baseTokensUsed?.numRequests ?? 0,
+    ...(baseTokensUsed?.completionDetails && {
+      completionDetails: { ...baseTokensUsed.completionDetails },
+    }),
+    ...(baseTokensUsed?.incurredTokenUsage && {
+      incurredTokenUsage: cloneAssertionTokenUsage(baseTokensUsed.incurredTokenUsage),
+    }),
+  };
+  const scorerUsedTokens =
+    (scoringTokensUsed.total ?? 0) > 0 ||
+    (scoringTokensUsed.prompt ?? 0) > 0 ||
+    (scoringTokensUsed.completion ?? 0) > 0;
+
+  accumulateNormalizedAssertionTokenUsage(mergedTokensUsed, {
+    ...scoringTokensUsed,
+    ...(scoringResult.metadata?.cachedResponse !== true &&
+      scorerUsedTokens &&
+      !scoringTokensUsed.numRequests && { numRequests: 1 }),
+  });
+
+  return mergedTokensUsed;
+}
+
 export class AssertionsResult {
   static noAssertsResult(): GradingResult {
     return {
@@ -53,7 +221,7 @@ export class AssertionsResult {
     };
   }
 
-  private tokensUsed = {
+  private tokensUsed: AssertionTokenUsage = {
     ...DEFAULT_TOKENS_USED,
   };
   private threshold: number | undefined;
@@ -122,12 +290,9 @@ export class AssertionsResult {
       });
     }
 
-    if (result.tokensUsed) {
-      this.tokensUsed.total += result.tokensUsed.total || 0;
-      this.tokensUsed.prompt += result.tokensUsed.prompt || 0;
-      this.tokensUsed.completion += result.tokensUsed.completion || 0;
-      this.tokensUsed.cached += result.tokensUsed.cached || 0;
-      this.tokensUsed.numRequests += result.tokensUsed.numRequests || 0;
+    const tokensUsed = normalizeAssertionTokenUsage(result);
+    if (tokensUsed) {
+      accumulateNormalizedAssertionTokenUsage(this.tokensUsed, tokensUsed);
     }
 
     if (result.pass) {
@@ -149,17 +314,18 @@ export class AssertionsResult {
     const score = this.totalWeight > 0 ? this.totalScore / this.totalWeight : 0;
 
     let pass = !this.failedReason;
-    let reason = this.failedReason ? this.failedReason : 'All assertions passed';
+    let reason = this.failedReason || 'All assertions passed';
 
-    if (this.threshold) {
-      // Existence of a test threshold overrides the pass/fail status of individual assertions
+    if (typeof this.threshold === 'number' && !Number.isNaN(this.threshold)) {
+      // A numeric test threshold overrides the pass/fail status of individual assertions.
+      // Gate on `typeof === 'number'` (not a truthy check) so a threshold of 0 is honored —
+      // `score >= 0` is always true, i.e. "collect assertion scores but never fail on an
+      // individual failure". Guarding on the type (rather than `!== undefined`) keeps a
+      // `null`/`NaN` threshold — e.g. an empty `threshold:` in YAML — from silently
+      // force-passing every assertion via `score >= null`.
       pass = score >= this.threshold;
-
-      if (pass) {
-        reason = `Aggregate score ${score.toFixed(2)} ≥ ${this.threshold} threshold`;
-      } else {
-        reason = `Aggregate score ${score.toFixed(2)} < ${this.threshold} threshold`;
-      }
+      const comparator = pass ? '≥' : '<';
+      reason = `Aggregate score ${score.toFixed(2)} ${comparator} ${this.threshold} threshold`;
     }
 
     if (this.failedContentSafetyChecks) {
@@ -189,18 +355,24 @@ export class AssertionsResult {
     }
 
     const hasNamedScoreWeights = Object.keys(this.namedScoreWeights).length > 0;
+    const cachedResponse =
+      this.componentResults.length > 0 &&
+      this.componentResults.every((result) => result.metadata?.cachedResponse === true);
 
     this.result = {
       pass,
       score,
       reason,
       namedScores: normalizedNamedScores,
-      ...(hasNamedScoreWeights ? { namedScoreWeights: this.namedScoreWeights } : {}),
+      ...(hasNamedScoreWeights && { namedScoreWeights: this.namedScoreWeights }),
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
-      ...(this._parentAssertionSet && {
+      ...((this._parentAssertionSet || cachedResponse) && {
         metadata: {
-          assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
+          ...(this._parentAssertionSet && {
+            assertionSet: buildAssertionSetMetadata(this._parentAssertionSet.assertionSet),
+          }),
+          ...(cachedResponse && { cachedResponse: true }),
         },
       }),
     };
@@ -219,8 +391,13 @@ export class AssertionsResult {
         this.result = {
           ...this.result,
           ...scoringResult,
+          tokensUsed: mergeScoringTokenUsage(this.result.tokensUsed, scoringResult),
           ...((this.result.metadata || scoringResult.metadata) && {
-            metadata: mergeMetadata(this.result.metadata, scoringResult.metadata),
+            metadata: mergeScoringMetadata(
+              this.result.metadata,
+              scoringResult,
+              this.result.tokensUsed,
+            ),
           }),
         };
       } catch (err) {

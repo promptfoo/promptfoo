@@ -1,7 +1,7 @@
 ---
 title: 'Interface: TransformPrompt'
 description: 'Conventional shape for TransformContext.prompt. See the supported promptfoo Node.js API imports, signatures, fields, and application examples for this symbol.'
-sidebar_position: 48
+sidebar_position: 46
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 48
 import type { TransformPrompt } from 'promptfoo';
 ```
 
-Defined in: [contracts/transform.ts:46](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/transform.ts#L46)
+Defined in: contracts/transform.ts:46
 
 Conventional shape for `TransformContext.prompt`.
 
@@ -33,7 +33,7 @@ const prompt: TransformPrompt = {
 
 > `optional` **display?**: `string`
 
-Defined in: [contracts/transform.ts:54](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/transform.ts#L54)
+Defined in: contracts/transform.ts:54
 
 Display-friendly prompt text when it differs from `raw`.
 
@@ -43,7 +43,7 @@ Display-friendly prompt text when it differs from `raw`.
 
 > `optional` **id?**: `string`
 
-Defined in: [contracts/transform.ts:50](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/transform.ts#L50)
+Defined in: contracts/transform.ts:50
 
 Stable prompt identifier.
 
@@ -53,7 +53,7 @@ Stable prompt identifier.
 
 > `optional` **label?**: `string`
 
-Defined in: [contracts/transform.ts:48](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/transform.ts#L48)
+Defined in: contracts/transform.ts:48
 
 Human-readable prompt label.
 
@@ -63,6 +63,6 @@ Human-readable prompt label.
 
 > `optional` **raw?**: `string`
 
-Defined in: [contracts/transform.ts:52](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/transform.ts#L52)
+Defined in: contracts/transform.ts:52
 
 Raw prompt text before display transforms.

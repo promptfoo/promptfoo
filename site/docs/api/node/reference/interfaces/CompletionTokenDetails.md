@@ -1,7 +1,7 @@
 ---
 title: 'Interface: CompletionTokenDetails'
 description: 'This generated reference page documents the supported promptfoo Node.js API contract, including stable imports, signatures, fields, and application examples.'
-sidebar_position: 16
+sidebar_position: 14
 ---
 
 ## Import
@@ -10,7 +10,7 @@ sidebar_position: 16
 import type { CompletionTokenDetails } from 'promptfoo';
 ```
 
-Defined in: [contracts/shared.ts:42](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L42)
+Defined in: contracts/shared.ts:43
 
 Detailed completion-token breakdown reported by reasoning-capable models.
 
@@ -29,7 +29,7 @@ const details: CompletionTokenDetails = {
 
 > `optional` **acceptedPrediction?**: `number`
 
-Defined in: [contracts/shared.ts:46](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L46)
+Defined in: contracts/shared.ts:20
 
 Prediction tokens accepted by speculative decoding, when reported.
 
@@ -39,7 +39,7 @@ Prediction tokens accepted by speculative decoding, when reported.
 
 > `optional` **cacheCreationInputTokens?**: `number`
 
-Defined in: [contracts/shared.ts:52](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L52)
+Defined in: contracts/shared.ts:26
 
 Input tokens written into a provider cache.
 
@@ -49,7 +49,7 @@ Input tokens written into a provider cache.
 
 > `optional` **cacheReadInputTokens?**: `number`
 
-Defined in: [contracts/shared.ts:50](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L50)
+Defined in: contracts/shared.ts:24
 
 Input tokens read from a provider cache.
 
@@ -59,7 +59,7 @@ Input tokens read from a provider cache.
 
 > `optional` **reasoning?**: `number`
 
-Defined in: [contracts/shared.ts:44](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L44)
+Defined in: contracts/shared.ts:18
 
 Tokens spent on hidden model reasoning when the provider reports them.
 
@@ -69,6 +69,6 @@ Tokens spent on hidden model reasoning when the provider reports them.
 
 > `optional` **rejectedPrediction?**: `number`
 
-Defined in: [contracts/shared.ts:48](https://github.com/promptfoo/promptfoo/blob/main/src/contracts/shared.ts#L48)
+Defined in: contracts/shared.ts:22
 
 Prediction tokens rejected by speculative decoding, when reported.
