@@ -1822,4 +1822,28 @@ describe('not-javascript: GradingResult reason preservation on inversion', () =>
     expect(result.pass).toBe(true);
     expect(result.reason).toBe('My custom reason');
   });
+
+  it('preserves empty-string reason verbatim and does not replace it with a fallback', async () => {
+    // Returning reason: '' is a valid GradingResult. The || fallback used to
+    // replace it with 'Assertion passed'; ?? preserves it.
+    const assertion: Assertion = {
+      type: 'not-javascript',
+      value: async (output: string) => ({
+        pass: output.includes('foo'),
+        score: 0,
+        reason: '',
+      }),
+    };
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'hello world' }, // does not include 'foo' → function pass:false → not-javascript pass:true
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.reason).toBe(''); // empty string must be preserved verbatim
+  });
 });
