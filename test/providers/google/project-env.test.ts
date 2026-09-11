@@ -36,6 +36,9 @@ beforeEach(() => {
     GOOGLE_PROJECT_ID: undefined,
     GOOGLE_CLOUD_PROJECT: undefined,
     GOOGLE_GENAI_USE_VERTEXAI: undefined,
+    GOOGLE_API_KEY: undefined,
+    GOOGLE_GENERATIVE_AI_API_KEY: undefined,
+    GEMINI_API_KEY: undefined,
   });
   auth.getClient.mockResolvedValue({ request: auth.request });
   auth.getProjectId.mockResolvedValue('adc-project');
@@ -83,7 +86,8 @@ describe('scoped Google cloud project resolution', () => {
         env: { GOOGLE_CLOUD_PROJECT: 'scoped-project' },
       });
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', options);
-      expect(provider.requiresApiKey()).toBe(vertexai === false);
+      // Veo resolves prompt-level authentication and ADC after preflight.
+      expect(provider.requiresApiKey()).toBe(false);
 
       const result = await provider.callApi('A quiet garden');
 
@@ -124,6 +128,29 @@ describe('scoped Google cloud project resolution', () => {
     },
   );
 
+  it.each([
+    [{ VERTEX_PROJECT_ID: 'vertex', GOOGLE_CLOUD_PROJECT: 'cloud' }, {}, 'vertex'],
+    [{ GOOGLE_CLOUD_PROJECT: 'cloud' }, { VERTEX_PROJECT_ID: 'vertex' }, 'vertex'],
+    [{ GOOGLE_PROJECT_ID: 'google', GOOGLE_CLOUD_PROJECT: 'cloud' }, {}, 'google'],
+    [{ GOOGLE_CLOUD_PROJECT: 'cloud' }, { GOOGLE_PROJECT_ID: 'google' }, 'google'],
+  ])(
+    'uses the shared project precedence for video requests (%j, %j)',
+    async (env, processEnv, expected) => {
+      mockProcessEnv(processEnv);
+      auth.request.mockRejectedValue(new Error('Fixture route stop'));
+      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
+        config: { vertexai: true },
+        env,
+      });
+
+      await provider.callApi('A quiet garden');
+
+      expect(auth.request).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ url: expect.stringContaining(`/projects/${expected}/`) }),
+      );
+    },
+  );
+
   describe.each([
     {
       name: 'Imagen',
@@ -144,6 +171,40 @@ describe('scoped Google cloud project resolution', () => {
       },
     },
   ])('$name request', ({ Provider, model, url, response }) => {
+    describe.each(['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'])(
+      'provider-scoped %s',
+      (key) => {
+        it.each([undefined, 'explicit-key'])(
+          'selects the request key with config.apiKey=%j',
+          async (apiKey) => {
+            mockProcessEnv({ GOOGLE_API_KEY: 'process-key' });
+            vi.mocked(fetchWithCache).mockResolvedValue({
+              data: response,
+              status: 200,
+              statusText: 'OK',
+              cached: false,
+            });
+            const provider = new Provider(
+              model,
+              ProviderOptionsSchema.parse({
+                config: { vertexai: false, apiKey },
+                env: { GOOGLE_CLOUD_PROJECT: 'scoped-project', [key]: 'scoped-key' },
+              }),
+            );
+
+            const result = await provider.callApi('Draw a circle');
+
+            expect(result.error).toBeUndefined();
+            expect(auth.request).not.toHaveBeenCalled();
+            expect(fetchWithCache).toHaveBeenCalledTimes(1);
+            const [endpoint, init] = vi.mocked(fetchWithCache).mock.calls[0];
+            expect(String(endpoint)).toContain('generativelanguage.googleapis.com');
+            expect(new Headers(init?.headers).get('x-goog-api-key')).toBe(apiKey ?? 'scoped-key');
+          },
+        );
+      },
+    );
+
     it('honors explicit AI Studio mode despite a scoped project', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         data: response,

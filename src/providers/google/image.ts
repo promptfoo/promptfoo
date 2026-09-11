@@ -345,12 +345,12 @@ export class GoogleImageProvider implements ApiProvider {
   private getApiKey(): string | undefined {
     return (
       this.config.apiKey ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
-      getEnvString('GEMINI_API_KEY') ||
       this.env?.GOOGLE_API_KEY ||
       this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      this.env?.GEMINI_API_KEY
+      this.env?.GEMINI_API_KEY ||
+      getEnvString('GOOGLE_API_KEY') ||
+      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
+      getEnvString('GEMINI_API_KEY')
     );
   }
 

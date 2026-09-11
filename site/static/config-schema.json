@@ -1283,7 +1283,17 @@
               {
                 "type": "array",
                 "items": {
-                  "type": ["string", "number", "boolean"]
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
                 }
               },
               {
@@ -1508,7 +1518,17 @@
             "type": "string"
           },
           "additionalProperties": {
-            "type": ["string", "number", "boolean"]
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
           }
         }
       ]

@@ -41,6 +41,7 @@ const DEFAULT_LOCATION = 'us-central1';
  */
 const VEO_3_DURATIONS: GoogleVideoDuration[] = [4, 6, 8];
 const VEO_2_DURATIONS: GoogleVideoDuration[] = [5, 6, 8];
+const VEO_EXTENSION_DURATION: GoogleVideoDuration = 8;
 
 /**
  * Default configuration values
@@ -110,6 +111,22 @@ export function validateDuration(
   return { valid: true };
 }
 
+/**
+ * Vertex's extend-a-video request body documents only `storageUri` and `sampleCount`, and fixes
+ * the added length at 7 seconds -- `durationSeconds` is not an extension parameter. Existing
+ * configs nonetheless carry 4 or 6 (this repo's own example shipped 6), so warn and fall back to
+ * the extension default rather than failing a request the API would have accepted.
+ */
+function resolveExtensionDuration(duration: number): GoogleVideoDuration {
+  if (duration !== VEO_EXTENSION_DURATION) {
+    logger.warn(
+      `[Google Video] durationSeconds is not used when extending a video (Veo adds a fixed 7s). ` +
+        `Ignoring the configured ${duration}s.`,
+    );
+  }
+  return VEO_EXTENSION_DURATION;
+}
+
 export function validateResolution(
   model: string,
   aspectRatio: string,
@@ -167,21 +184,13 @@ export class GoogleVideoProvider implements ApiProvider {
     return `[Google Video Provider ${this.modelName}]`;
   }
 
-  requiresApiKey(): boolean {
-    return this.config.apiKeyRequired !== false && !this.isVertexMode();
-  }
-
-  private getLocation(): string {
+  private getLocation(config: GoogleVideoOptions): string {
     return (
-      this.config.region ||
+      config.region ||
       getEnvString('GOOGLE_LOCATION') ||
       this.env?.GOOGLE_LOCATION ||
       DEFAULT_LOCATION
     );
-  }
-
-  private async getProjectId(): Promise<string> {
-    return await resolveProjectId(this.config, this.env);
   }
 
   private isVertexMode(config: GoogleVideoOptions = this.config): boolean {
@@ -189,6 +198,11 @@ export class GoogleVideoProvider implements ApiProvider {
       config as CompletionOptions & { vertexai?: boolean },
       this.env,
     );
+  }
+
+  requiresApiKey(): boolean {
+    // ADC project discovery and prompt-level overrides are resolved inside callApi.
+    return false;
   }
 
   private getApiKey(config: GoogleVideoOptions = this.config): string | undefined {
@@ -200,15 +214,15 @@ export class GoogleVideoProvider implements ApiProvider {
     return apiKey;
   }
 
-  private async getClientWithCredentials() {
-    const credentials = loadCredentials(this.config.credentials);
+  private async getClientWithCredentials(config: GoogleVideoOptions) {
+    const credentials = loadCredentials(config.credentials);
     const { client } = await getGoogleClient({ credentials });
     return client;
   }
 
-  private async getVertexEndpoint(action: string = 'predictLongRunning'): Promise<string> {
-    const location = this.getLocation();
-    const projectId = await this.getProjectId();
+  private async getVertexEndpoint(config: GoogleVideoOptions, action: string): Promise<string> {
+    const location = this.getLocation(config);
+    const projectId = config.projectId || (await resolveProjectId(config, this.env));
     return `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:${action}`;
   }
 
@@ -272,29 +286,66 @@ export class GoogleVideoProvider implements ApiProvider {
     return this.createAiStudioVideoJob(prompt, config);
   }
 
+  private addVertexVideoInput(
+    instance: Record<string, unknown>,
+    config: GoogleVideoOptions,
+  ): string | undefined {
+    if (
+      (!config.sourceVideo && config.extendVideoId) ||
+      /^projects\/[^/]+\/locations\/[^/]+\/(?:publishers\/[^/]+\/models\/[^/]+\/)?operations\/[^/]+$/.test(
+        config.sourceVideo ?? '',
+      )
+    ) {
+      return 'Vertex AI Veo does not accept operation IDs for video extension. Set `sourceVideo` to a gs:// URI, base64 video data, or a file:// path.';
+    }
+
+    if (!config.sourceVideo) {
+      return undefined;
+    }
+
+    if (config.sourceVideo.startsWith('gs://')) {
+      instance.video = {
+        gcsUri: config.sourceVideo,
+        mimeType: 'video/mp4',
+      };
+      return undefined;
+    }
+
+    const { data: videoData, error } = this.loadVideoData(config.sourceVideo);
+    if (error) {
+      return error;
+    }
+    instance.video = {
+      bytesBase64Encoded: videoData,
+      mimeType: 'video/mp4',
+    };
+    return undefined;
+  }
+
   private buildVertexRequestBody(
     prompt: string,
     config: GoogleVideoOptions,
   ): { body?: Record<string, unknown>; error?: string } {
     const instance: Record<string, unknown> = { prompt };
+    const parameters: Record<string, unknown> = {};
 
     if (config.aspectRatio) {
-      instance.aspectRatio = config.aspectRatio;
+      parameters.aspectRatio = config.aspectRatio;
     }
     if (config.resolution) {
-      instance.resolution = config.resolution;
+      parameters.resolution = config.resolution;
     }
     if (config.durationSeconds) {
-      instance.durationSeconds = String(config.durationSeconds);
+      parameters.durationSeconds = config.durationSeconds;
     }
     if (config.negativePrompt) {
-      instance.negativePrompt = config.negativePrompt;
+      parameters.negativePrompt = config.negativePrompt;
     }
     if (config.personGeneration) {
-      instance.personGeneration = config.personGeneration;
+      parameters.personGeneration = config.personGeneration;
     }
     if (config.seed !== undefined) {
-      instance.seed = config.seed;
+      parameters.seed = config.seed;
     }
 
     if (config.image) {
@@ -303,7 +354,7 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error };
       }
       instance.image = {
-        imageBytes: imageData,
+        bytesBase64Encoded: imageData,
         mimeType: 'image/png',
       };
     }
@@ -315,7 +366,7 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error };
       }
       instance.lastFrame = {
-        imageBytes: lastFrameData,
+        bytesBase64Encoded: lastFrameData,
         mimeType: 'image/png',
       };
     }
@@ -331,21 +382,22 @@ export class GoogleVideoProvider implements ApiProvider {
           return { error };
         }
         refs.push({
-          image: { imageBytes: imageData, mimeType: 'image/png' },
+          image: { bytesBase64Encoded: imageData, mimeType: 'image/png' },
           referenceType,
         });
       }
       instance.referenceImages = refs;
     }
 
-    const extendVideoId = config.extendVideoId || config.sourceVideo;
-    if (extendVideoId) {
-      instance.video = { operationName: extendVideoId };
+    const videoError = this.addVertexVideoInput(instance, config);
+    if (videoError) {
+      return { error: videoError };
     }
 
     return {
       body: {
         instances: [instance],
+        parameters,
       },
     };
   }
@@ -382,10 +434,8 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error };
       }
       instance.image = {
-        inlineData: {
-          mimeType: 'image/png',
-          data: imageData,
-        },
+        mimeType: 'image/png',
+        bytesBase64Encoded: imageData,
       };
     }
 
@@ -396,10 +446,8 @@ export class GoogleVideoProvider implements ApiProvider {
         return { error };
       }
       instance.lastFrame = {
-        inlineData: {
-          mimeType: 'image/png',
-          data: lastFrameData,
-        },
+        mimeType: 'image/png',
+        bytesBase64Encoded: lastFrameData,
       };
     }
 
@@ -414,10 +462,8 @@ export class GoogleVideoProvider implements ApiProvider {
         }
         refs.push({
           image: {
-            inlineData: {
-              mimeType: 'image/png',
-              data: imageData,
-            },
+            mimeType: 'image/png',
+            bytesBase64Encoded: imageData,
           },
           referenceType,
         });
@@ -427,21 +473,14 @@ export class GoogleVideoProvider implements ApiProvider {
 
     const sourceVideo = config.extendVideoId || config.sourceVideo;
     if (sourceVideo) {
-      if (sourceVideo.includes('/operations/')) {
+      if (!sourceVideo.startsWith('https://') || sourceVideo.includes('/operations/')) {
         return {
           error:
-            'Google AI Studio Veo does not accept operation IDs for video extension. Use `vertex:video:*` with `extendVideoId`, or provide base64/file:// video data via `sourceVideo`.',
+            'Google AI Studio Veo extension requires the original generated video URI from metadata.videoUri as `sourceVideo`. Local files, base64 data, and operation IDs are not supported. For Vertex AI, use a gs:// URI, base64 data, or a file:// path.',
         };
       }
-      const { data: videoData, error } = this.loadVideoData(sourceVideo);
-      if (error) {
-        return { error };
-      }
       instance.video = {
-        inlineData: {
-          mimeType: 'video/mp4',
-          data: videoData,
-        },
+        uri: sourceVideo,
       };
     }
 
@@ -459,14 +498,14 @@ export class GoogleVideoProvider implements ApiProvider {
     prompt: string,
     config: GoogleVideoOptions,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
-    const url = await this.getVertexEndpoint('predictLongRunning');
     const { body, error: bodyError } = this.buildVertexRequestBody(prompt, config);
     if (bodyError || !body) {
       return { error: bodyError || 'Failed to build Vertex Veo request' };
     }
 
     try {
-      const client = await this.getClientWithCredentials();
+      const url = await this.getVertexEndpoint(config, 'predictLongRunning');
+      const client = await this.getClientWithCredentials(config);
       logger.debug('[Google Video] Creating video job', { url, model: this.modelName });
 
       const response = await client.request({
@@ -549,7 +588,7 @@ export class GoogleVideoProvider implements ApiProvider {
     config: GoogleVideoOptions,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
     if (this.isVertexMode(config)) {
-      return this.pollVertexOperationStatus(operationName, pollIntervalMs, maxPollTimeMs);
+      return this.pollVertexOperationStatus(operationName, pollIntervalMs, maxPollTimeMs, config);
     }
 
     return this.pollAiStudioOperationStatus(operationName, pollIntervalMs, maxPollTimeMs, config);
@@ -559,18 +598,17 @@ export class GoogleVideoProvider implements ApiProvider {
     operationName: string,
     pollIntervalMs: number,
     maxPollTimeMs: number,
+    config: GoogleVideoOptions,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
     const startTime = Date.now();
-    const location = this.getLocation();
-    const projectId = await this.getProjectId();
 
     // Veo uses fetchPredictOperation endpoint for polling (POST request)
     // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation
-    const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:fetchPredictOperation`;
+    const url = await this.getVertexEndpoint(config, 'fetchPredictOperation');
 
     logger.debug(`[Google Video] Polling operation via fetchPredictOperation: ${url}`);
 
-    const client = await this.getClientWithCredentials();
+    const client = await this.getClientWithCredentials(config);
 
     while (Date.now() - startTime < maxPollTimeMs) {
       try {
@@ -687,7 +725,7 @@ export class GoogleVideoProvider implements ApiProvider {
     context?: CallApiContextParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     if (this.isVertexMode(config)) {
-      return this.downloadVertexVideoToBlob(videoUri, context);
+      return this.downloadVertexVideoToBlob(videoUri, config, context);
     }
 
     return this.downloadAiStudioVideoToBlob(videoUri, config, context);
@@ -695,10 +733,11 @@ export class GoogleVideoProvider implements ApiProvider {
 
   private async downloadVertexVideoToBlob(
     videoUri: string,
+    config: GoogleVideoOptions,
     context?: CallApiContextParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
-      const client = await this.getClientWithCredentials();
+      const client = await this.getClientWithCredentials(config);
 
       // Use authenticated request to download video
       const response = await client.request({
@@ -818,10 +857,12 @@ export class GoogleVideoProvider implements ApiProvider {
     if (isVertexMode) {
       let projectId =
         effectiveConfig.projectId ||
-        this.env?.GOOGLE_CLOUD_PROJECT ||
-        getEnvString('GOOGLE_CLOUD_PROJECT') ||
+        this.env?.VERTEX_PROJECT_ID ||
+        getEnvString('VERTEX_PROJECT_ID') ||
         this.env?.GOOGLE_PROJECT_ID ||
-        getEnvString('GOOGLE_PROJECT_ID');
+        getEnvString('GOOGLE_PROJECT_ID') ||
+        this.env?.GOOGLE_CLOUD_PROJECT ||
+        getEnvString('GOOGLE_CLOUD_PROJECT');
 
       if (!projectId) {
         try {
@@ -868,9 +909,13 @@ export class GoogleVideoProvider implements ApiProvider {
     const model = effectiveConfig.model || this.modelName;
     const aspectRatio = effectiveConfig.aspectRatio || DEFAULT_ASPECT_RATIO;
     const resolution = effectiveConfig.resolution || DEFAULT_RESOLUTION;
+    const isVideoExtension = Boolean(effectiveConfig.sourceVideo || effectiveConfig.extendVideoId);
+    const isVertexExtension = isVideoExtension && this.isVertexMode(effectiveConfig);
     // Support both 'durationSeconds' and 'duration' (alias)
-    const durationSeconds =
-      effectiveConfig.durationSeconds || effectiveConfig.duration || DEFAULT_DURATION;
+    let durationSeconds =
+      effectiveConfig.durationSeconds ??
+      effectiveConfig.duration ??
+      (isVideoExtension ? VEO_EXTENSION_DURATION : DEFAULT_DURATION);
 
     // Validate aspect ratio
     const ratioValidation = validateAspectRatio(aspectRatio);
@@ -879,9 +924,15 @@ export class GoogleVideoProvider implements ApiProvider {
     }
 
     // Validate duration
-    const durationValidation = validateDuration(model, durationSeconds);
-    if (!durationValidation.valid) {
-      return { error: durationValidation.message };
+    if (isVertexExtension) {
+      durationSeconds = resolveExtensionDuration(durationSeconds);
+    } else if (isVideoExtension && durationSeconds !== VEO_EXTENSION_DURATION) {
+      return { error: 'Google AI Studio video extension requires durationSeconds: 8.' };
+    } else {
+      const durationValidation = validateDuration(model, durationSeconds);
+      if (!durationValidation.valid) {
+        return { error: durationValidation.message };
+      }
     }
 
     // Validate resolution
@@ -894,11 +945,16 @@ export class GoogleVideoProvider implements ApiProvider {
 
     // Step 1: Create video job
     logger.info(`[Google Video] Creating video job for model ${model}...`);
+    const {
+      duration: _duration,
+      durationSeconds: _durationSeconds,
+      ...requestConfig
+    } = effectiveConfig;
     const { operation: createdOp, error: createError } = await this.createVideoJob(prompt, {
-      ...effectiveConfig,
+      ...requestConfig,
       aspectRatio,
       resolution,
-      durationSeconds,
+      ...(isVertexExtension ? {} : { durationSeconds }),
     });
 
     if (createError || !createdOp) {
@@ -925,6 +981,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     // Step 3: Store video to blob storage
     let blobRef: BlobRef | undefined;
+    const videoUri = completedOp.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
 
     // Check for base64 encoded video (new format)
     const base64Video = completedOp.response?.videos?.[0]?.bytesBase64Encoded;
@@ -937,8 +994,6 @@ export class GoogleVideoProvider implements ApiProvider {
       blobRef = ref;
     } else {
       // Fallback to URI format (legacy)
-      const videoUri =
-        completedOp.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
       if (!videoUri) {
         logger.debug(`[Google Video] Response: ${JSON.stringify(completedOp.response)}`);
         return { error: 'No video data in response' };
@@ -979,17 +1034,18 @@ export class GoogleVideoProvider implements ApiProvider {
         url: blobRef.uri, // Expose URI directly for consistent API surface with Sora
         format: 'mp4',
         size: resolution,
-        duration: durationSeconds,
+        ...(isVideoExtension ? {} : { duration: durationSeconds }),
         model,
         aspectRatio,
         resolution,
       },
       metadata: {
         operationName,
+        ...(videoUri ? { videoUri } : {}),
         model,
         aspectRatio,
         resolution,
-        durationSeconds,
+        ...(isVideoExtension ? { extensionSeconds: 7 } : { durationSeconds }),
         blobHash: blobRef.hash,
       },
     };
