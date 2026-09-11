@@ -45,6 +45,9 @@ function defaultResponse(pathname: string, method?: string) {
   if (method === 'DELETE') {
     return json({ deleted: true });
   }
+  if (pathname.endsWith('/turns/turn_test')) {
+    return json(turn);
+  }
   if (pathname.endsWith('/turns')) {
     return json(page([turn]));
   }
@@ -73,6 +76,9 @@ const calls = () =>
 const withoutUsage = (pathname: string, method: string) => {
   if (method === 'DELETE') {
     return undefined;
+  }
+  if (pathname.endsWith('/turns/turn_test')) {
+    return json({ ...turn, usage: null });
   }
   if (pathname.endsWith('/turns')) {
     return json(page([{ ...turn, usage: null }]));
@@ -722,6 +728,7 @@ describe('OpenAiAgentsApiProvider', () => {
 
   it('waits for final session usage before deleting the session', async () => {
     vi.useFakeTimers();
+    const sessionUsage = { ...usage, input_tokens: 110, total_tokens: 130 };
     let sessionReads = 0;
     mockApi((pathname, method) => {
       if (pathname.endsWith('/turns')) {
@@ -729,14 +736,15 @@ describe('OpenAiAgentsApiProvider', () => {
       }
       if (pathname.endsWith('/sess_test') && method === 'GET') {
         sessionReads++;
-        return json({ ...session, usage: sessionReads >= 3 ? usage : null });
+        return json({ ...session, usage: sessionReads >= 3 ? sessionUsage : null });
       }
       return method === 'POST' ? json({ ...session, usage: null }) : undefined;
     });
     const pending = provider().callApi('hi');
     await vi.advanceTimersByTimeAsync(2_000);
     const result = await pending;
-    expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+    // Session totals take precedence over root-turn usage once both are available.
+    expect(result.tokenUsage).toMatchObject({ prompt: 110, completion: 20, total: 130 });
     expect(result.cost).toBeGreaterThan(0);
     expect(result.metadata).not.toHaveProperty('usageUnavailable');
     expect(sessionReads).toBe(3);
@@ -762,6 +770,19 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(result.error).toBeUndefined();
     expect(result.tokenUsage).toBeUndefined();
     expect(result.cost).toBeUndefined();
+  });
+
+  it('falls back to root-turn usage when session totals lag', async () => {
+    vi.useFakeTimers();
+    mockApi((pathname, method) =>
+      pathname.endsWith('/turns/turn_test') ? json(turn) : withoutUsage(pathname, method),
+    );
+    const pending = provider().callApi('hi');
+    await vi.advanceTimersByTimeAsync(7_000);
+    const result = await pending;
+    expect(result.tokenUsage).toMatchObject({ prompt: 100, completion: 20, total: 120 });
+    expect(result.metadata).not.toHaveProperty('usageUnavailable');
+    expect(result.metadata).toMatchObject({ sessionDeleted: true });
   });
 
   it('skips the usage wait when usageTimeoutMs is 0', async () => {

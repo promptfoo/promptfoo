@@ -85,6 +85,8 @@ const TRANSIENT_STATUS_CODES = new Set([500, 502, 503, 504]);
 const RETRY_BASE_DELAY_MS = 1_000;
 const RETRY_MAX_DELAY_MS = 8_000;
 const CLEANUP_RETRY_MAX_DELAY_MS = 5_000;
+// Session usage normally follows root-turn usage within seconds.
+const TURN_USAGE_GRACE_MS = 5_000;
 // Redacting short values such as `x-api-key: 1` would corrupt unrelated error text.
 const MIN_CREDENTIAL_LENGTH = 8;
 const CREDENTIAL_NAME =
@@ -473,16 +475,17 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         (item) => item.turn_id === turn.id,
       );
       const output = this.getFinalAnswer(items);
-      const finished = await this.waitForFinalUsage(
+      const { session: finished, turn: finishedTurn } = await this.waitForFinalUsage(
         completedSession,
+        turn,
         endpoint,
         headers,
         signal,
         deadline,
         options?.abortSignal,
       );
-      // Session usage includes subagent work; root-turn usage can undercount it.
-      const usage = finished.usage ?? turn.usage;
+      // Session usage includes subagent work, so prefer it over the root turn's usage.
+      const usage = finished.usage ?? finishedTurn.usage;
       const model = finished.agent.model;
       result.output = output;
       result.tokenUsage = usage
@@ -570,22 +573,44 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     }
   }
 
-  /** Session usage is attached shortly after the root turn completes; deleting sooner loses it. */
+  /** Usage is attached shortly after the root turn completes; deleting the session sooner loses it. */
   private async waitForFinalUsage(
     session: Session,
+    turn: Turn,
     endpoint: string,
     headers: Headers,
     signal: AbortSignal,
     deadline: number,
     evalSignal?: AbortSignal,
-  ): Promise<Session> {
+  ): Promise<{ session: Session; turn: Turn }> {
     const waitUntil = Math.min(Date.now() + (this.config.usageTimeoutMs ?? 15_000), deadline);
     const pollIntervalMs = Math.min(this.config.pollIntervalMs ?? 1_000, 1_000);
-    let latest = session;
+    const turnEndpoint = `${endpoint}/turns/${encodeURIComponent(turn.id)}`;
+    const latest = { session, turn };
+    let turnUsageSeenAt: number | undefined;
     try {
-      while (!latest.usage && Date.now() < waitUntil) {
+      while (!latest.session.usage && Date.now() < waitUntil) {
+        if (latest.turn.usage) {
+          turnUsageSeenAt ??= Date.now();
+          if (Date.now() - turnUsageSeenAt >= TURN_USAGE_GRACE_MS) {
+            break;
+          }
+        }
         await sleepWithAbort(Math.min(pollIntervalMs, waitUntil - Date.now()), signal);
-        latest = await this.request<Session>(endpoint, 'GET', headers, signal);
+        const [nextSession, nextTurn] = await Promise.all([
+          this.request<Session>(endpoint, 'GET', headers, signal),
+          // Root-turn usage is only a fallback; a failed turn read must not stop session polling.
+          this.request<Turn>(turnEndpoint, 'GET', headers, signal).catch((error: unknown) => {
+            signal.throwIfAborted();
+            logger.debug('[OpenAI Agents API] Root turn usage read failed', {
+              sessionId: session.id,
+              error: this.redact(error instanceof Error ? error.message : String(error)),
+            });
+            return undefined;
+          }),
+        ]);
+        latest.session = nextSession;
+        latest.turn = nextTurn ?? latest.turn;
       }
     } catch (error) {
       evalSignal?.throwIfAborted();
