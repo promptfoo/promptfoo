@@ -122,6 +122,11 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
         `[LocalStorage] Invalid media key: path traversal attempt detected ("${key}")`,
       );
     }
+    // Only keys emitted by store() identify media. The index and metadata sidecars
+    // share this directory but must never be readable through the media API.
+    if (!/^(audio|image|video|document|media)\/[a-f0-9]{12}\.[a-z0-9]+$/i.test(key)) {
+      throw new Error('[LocalStorage] Invalid local media key');
+    }
     return targetPath;
   }
 

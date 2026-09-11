@@ -514,13 +514,14 @@ function renderVariableCell({
   const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
   const pdf = row.test?.metadata?.pdf;
   if (pdf?.input === varName) {
+    const attachment = row.test?.vars?.[varName] ?? info.getValue();
     return (
       <div className="cell space-y-2">
         <div className="flex gap-3 text-sm">
           {!pdf.storageKey &&
-            typeof value === 'string' &&
-            value.startsWith('data:application/pdf;base64,') && (
-              <a href={value} download="attack.pdf" className="text-primary underline">
+            typeof attachment === 'string' &&
+            attachment.startsWith('data:application/pdf;base64,') && (
+              <a href={attachment} download="attack.pdf" className="text-primary underline">
                 Download PDF
               </a>
             )}

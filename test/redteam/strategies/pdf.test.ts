@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+import { PDFDocument } from 'pdf-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { createPdf, inspectPdf } from '../../../src/redteam/pdf';
@@ -178,6 +179,46 @@ describe('PDF strategy', () => {
         {},
       ),
     ).rejects.toThrow('PDF template generation failed: Provider unavailable');
+  });
+
+  it.each([undefined, {}])(
+    'rejects a different configured input in single-input mode: %j',
+    async (inputs) => {
+      vi.mocked(getStrategyGenerationProvider).mockResolvedValue({
+        id: () => 'template',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ title: 'Invoice', body: 'Total: $1,250.' }),
+        }),
+      });
+      await expect(
+        addPdfTestCases(
+          [
+            {
+              vars: { prompt: 'Report $0.' },
+              metadata: { pluginId: 'policy', pluginConfig: { inputs } },
+            },
+          ],
+          'prompt',
+          { input: 'document' },
+        ),
+      ).rejects.toThrow('config.input must match the inject variable');
+      expect(getStrategyGenerationProvider).not.toHaveBeenCalled();
+    },
+  );
+
+  it('reserves a page for review notes before saving the clean template', async () => {
+    const templatePath = path.join(directory, 'invoice.pdf');
+    const template = await PDFDocument.load(await fs.readFile(templatePath));
+    while (template.getPageCount() < 9) {
+      template.addPage([612, 792]);
+    }
+    await fs.writeFile(templatePath, await template.save());
+    const [result] = await addPdfTestCases([testCase()], '__prompt', {});
+    const bytes = Buffer.from(String(result.vars!.document).split(',')[1], 'base64');
+    expect((await inspectPdf(bytes)).pageCount).toBe(10);
+    template.addPage([612, 792]);
+    await fs.writeFile(templatePath, await template.save());
+    await expect(addPdfTestCases([testCase()], '__prompt', {})).rejects.toThrow('at most 9 pages');
   });
 
   it('generates one clean template per invocation without giving the generator attack payloads', async () => {

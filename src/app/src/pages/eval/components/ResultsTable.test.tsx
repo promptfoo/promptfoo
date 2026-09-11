@@ -622,55 +622,71 @@ describe('ResultsTable Metrics Display', () => {
         expectedUrl: '/api/media?key=09d620f6-9b31-4cea-936d-4bdc38ea7bc1',
       },
       { storageKey: undefined, expectedUrl: 'data:application/pdf;base64,do-not-display' },
-    ])('shows PDF artifacts with storage key $storageKey', ({ storageKey, expectedUrl }) => {
-      vi.mocked(useTableStore).mockImplementation(() => ({
-        config: {},
-        evalId: '123',
-        setTable: vi.fn(),
-        version: 4,
-        fetchEvalData: vi.fn(),
-        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
-        table: {
-          head: { prompts: [{}], vars: ['document'] },
-          body: [
-            {
-              outputs: [{ pass: true, score: 1, text: 'The invoice total is $1,250.' }],
-              vars: ['data:application/pdf;base64,do-not-display'],
-              test: {
-                metadata: {
-                  strategyId: 'pdf',
-                  originalText: 'Change the payment terms.',
-                  pdf: {
-                    input: 'document',
-                    mode: 'scanned',
-                    storageKey,
-                    templateStorageKey: storageKey ? 'document/123456abcdef.pdf' : undefined,
+      {
+        storageKey: undefined,
+        expectedUrl: 'data:application/pdf;base64,do-not-display',
+        actualPrompt: 'Provider rewritten prompt',
+      },
+    ])(
+      'shows PDF artifacts with storage key $storageKey',
+      ({ storageKey, expectedUrl, actualPrompt }) => {
+        vi.mocked(useTableStore).mockImplementation(() => ({
+          config: { redteam: { injectVar: 'document' } },
+          evalId: '123',
+          setTable: vi.fn(),
+          version: 4,
+          fetchEvalData: vi.fn(),
+          filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+          table: {
+            head: { prompts: [{}], vars: ['document'] },
+            body: [
+              {
+                outputs: [
+                  {
+                    pass: true,
+                    score: 1,
+                    text: 'The invoice total is $1,250.',
+                    response: { prompt: actualPrompt },
+                  },
+                ],
+                vars: ['data:application/pdf;base64,do-not-display'],
+                test: {
+                  vars: { document: 'data:application/pdf;base64,do-not-display' },
+                  metadata: {
+                    strategyId: 'pdf',
+                    originalText: 'Change the payment terms.',
+                    pdf: {
+                      input: 'document',
+                      mode: 'scanned',
+                      storageKey,
+                      templateStorageKey: storageKey ? 'document/123456abcdef.pdf' : undefined,
+                    },
                   },
                 },
               },
-            },
-          ],
-        },
-      }));
-      renderWithProviders(<ResultsTable {...defaultProps} />);
-      expect(
-        screen.getByRole('link', { name: storageKey ? 'Open PDF' : 'Download PDF' }),
-      ).toHaveAttribute('href', expect.stringContaining(expectedUrl));
-      if (storageKey) {
-        expect(screen.getByRole('link', { name: 'Clean template' })).toHaveAttribute(
-          'href',
-          expect.stringContaining('/api/media/document/123456abcdef.pdf'),
-        );
-      } else {
-        expect(screen.queryByRole('link', { name: 'Clean template' })).not.toBeInTheDocument();
-        expect(screen.getByRole('link', { name: 'Download PDF' })).toHaveAttribute(
-          'download',
-          'attack.pdf',
-        );
-      }
-      expect(screen.getByText('Change the payment terms.')).toBeInTheDocument();
-      expect(screen.queryByText(/do-not-display/)).not.toBeInTheDocument();
-    });
+            ],
+          },
+        }));
+        renderWithProviders(<ResultsTable {...defaultProps} />);
+        expect(
+          screen.getByRole('link', { name: storageKey ? 'Open PDF' : 'Download PDF' }),
+        ).toHaveAttribute('href', expect.stringContaining(expectedUrl));
+        if (storageKey) {
+          expect(screen.getByRole('link', { name: 'Clean template' })).toHaveAttribute(
+            'href',
+            expect.stringContaining('/api/media/document/123456abcdef.pdf'),
+          );
+        } else {
+          expect(screen.queryByRole('link', { name: 'Clean template' })).not.toBeInTheDocument();
+          expect(screen.getByRole('link', { name: 'Download PDF' })).toHaveAttribute(
+            'download',
+            'attack.pdf',
+          );
+        }
+        expect(screen.getByText('Change the payment terms.')).toBeInTheDocument();
+        expect(screen.queryByText(/do-not-display/)).not.toBeInTheDocument();
+      },
+    );
 
     const mockTableWithMedia = {
       body: [

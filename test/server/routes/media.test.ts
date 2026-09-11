@@ -3,6 +3,8 @@ import type { Server } from 'node:http';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { LocalFileSystemProvider } from '../../../src/storage/localFileSystemProvider';
+import { createTempDir, removeTempDir } from '../../util/utils';
 
 import type { MediaStorageProvider } from '../../../src/storage/types';
 
@@ -43,6 +45,32 @@ describe('Media Routes', () => {
   });
 
   describe('GET /api/media?key=...', () => {
+    it('serves local PDF bytes while keeping the index and sidecars private', async () => {
+      const directory = createTempDir('promptfoo-media-api-');
+      try {
+        const provider = new LocalFileSystemProvider({ basePath: directory });
+        const data = Buffer.from('%PDF-1.7');
+        const { ref } = await provider.store(data, {
+          mediaType: 'document',
+          contentType: 'application/pdf',
+          originalText: 'Private review notes',
+        });
+        mockedMediaExists.mockImplementation((key) => provider.exists(key));
+        mockedRetrieveMedia.mockImplementation((key) => provider.retrieve(key));
+        for (const key of ['hash-index.json', `${ref.key}.meta.json`]) {
+          const response = await api.get('/api/media').query({ key });
+          expect(response.status).toBe(404);
+          expect(response.text).not.toContain('Private review notes');
+        }
+        expect(mockedRetrieveMedia).not.toHaveBeenCalled();
+        const response = await api.get('/api/media').query({ key: ref.key });
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual(data);
+      } finally {
+        removeTempDir(directory);
+      }
+    });
+
     it.each([
       'tenant/campaign/09d620f6-9b31-4cea-936d-4bdc38ea7bc1.pdf',
       'document/' + 'a'.repeat(64) + '.pdf',

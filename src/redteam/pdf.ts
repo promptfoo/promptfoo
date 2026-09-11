@@ -1,4 +1,9 @@
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+
 import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { getDirectory } from '../esm';
 
 export const MAX_PDF_BYTES = 5 * 1024 * 1024;
 const MAX_PDF_TEXT_CHARS = 50_000;
@@ -8,10 +13,14 @@ const MARGIN = 48;
 const FONT_SIZE = 11;
 const LINE_HEIGHT = 16;
 
-async function loadPdf(bytes: Uint8Array): Promise<PDFDocument> {
+function validatePdfBytes(bytes: Uint8Array): void {
   if (bytes.length > MAX_PDF_BYTES || Buffer.from(bytes.subarray(0, 5)).toString() !== '%PDF-') {
     throw new Error('PDF must be a valid PDF file no larger than 5 MiB');
   }
+}
+
+async function loadPdf(bytes: Uint8Array): Promise<PDFDocument> {
+  validatePdfBytes(bytes);
   const document = await PDFDocument.load(bytes, { updateMetadata: false });
   if (document.getPageCount() === 0 || document.getPageCount() > MAX_PAGES) {
     throw new Error('PDF must contain between 1 and 10 pages');
@@ -94,21 +103,95 @@ export async function createPdf(text: string, template?: Uint8Array): Promise<Bu
 }
 
 export async function inspectPdf(bytes: Uint8Array): Promise<{ text: string; pageCount: number }> {
-  const document = await loadPdf(bytes);
-  const { PDFParse } = await import('pdf-parse');
-  const parser = new PDFParse({ data: new Uint8Array(bytes), isEvalSupported: false });
-  try {
-    const result = await parser.getText();
-    const text = result.pages.map((page) => page.text).join('\n\n');
-    if (text.length > MAX_PDF_TEXT_CHARS) {
-      throw new Error('PDF extracted text exceeds the 50,000-character limit');
+  validatePdfBytes(bytes);
+  const require = createRequire(path.join(getDirectory(), 'package.json'));
+  // Isolate compressed PDF parsing from the CLI's heap and event loop. A process
+  // also lets us override inherited Node memory flags, unlike worker resourceLimits.
+  // Fixed source and dependency paths avoid a separate asset in bundled builds.
+  const child = spawn(
+    process.execPath,
+    [
+      '--max-old-space-size=256',
+      '--max-semi-space-size=16',
+      '--input-type=commonjs',
+      '--eval',
+      `async function inspect() {
+      const chunks = [];
+      for await (const chunk of process.stdin) chunks.push(chunk);
+      const bytes = Buffer.concat(chunks);
+      const { PDFDocument } = require(process.argv[1]);
+      const document = await PDFDocument.load(bytes, { updateMetadata: false });
+      const pages = document.getPages();
+      if (pages.length < 1 || pages.length > 10) {
+        throw new Error('PDF must contain between 1 and 10 pages');
+      }
+      for (const page of pages) {
+        for (const { width, height } of [page.getSize(), page.getCropBox()]) {
+          if (!Number.isFinite(width) || !Number.isFinite(height) ||
+              width < 72 || height < 72 || width > 1440 || height > 1440) {
+            throw new Error('PDF pages must be between 1 and 20 inches in each dimension');
+          }
+        }
+      }
+      const { PDFParse } = require(process.argv[2]);
+      const parser = new PDFParse({ data: new Uint8Array(bytes), isEvalSupported: false });
+      try {
+        const result = await parser.getText();
+        const text = result.pages.map((page) => page.text).join('\\n\\n');
+        if (text.length > 50000) {
+          throw new Error('PDF extracted text exceeds the 50,000-character limit');
+        }
+        return { text, pageCount: pages.length };
+      } finally {
+        await parser.destroy();
+      }
     }
-    return {
-      text,
-      pageCount: document.getPageCount(),
-    };
+    inspect().then(
+      (result) => process.send({ result }),
+      (error) => process.send({ error: error.message }),
+    );`,
+      require.resolve('pdf-lib'),
+      require.resolve('pdf-parse'),
+    ],
+    {
+      env: { ...process.env, NODE_OPTIONS: '' },
+      stdio: ['pipe', 'ignore', 'ignore', 'ipc'],
+      windowsHide: true,
+    },
+  );
+  const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await new Promise<{ text: string; pageCount: number }>((resolve, reject) => {
+      timer = setTimeout(
+        () => reject(new Error('PDF inspection exceeded the 15-second limit')),
+        15_000,
+      );
+      child.once(
+        'message',
+        (message: { error?: string; result: { text: string; pageCount: number } }) => {
+          if (message.error) {
+            reject(new Error(message.error));
+          } else {
+            resolve(message.result);
+          }
+        },
+      );
+      child.once('error', reject);
+      child.once('exit', (code, signal) =>
+        reject(
+          new Error(
+            `PDF inspection process exited (${signal ?? code}); document may exceed parser memory limits`,
+          ),
+        ),
+      );
+      child.stdin!.on('error', reject);
+      child.stdin!.end(bytes);
+    });
   } finally {
-    await parser.destroy();
+    clearTimeout(timer);
+    child.kill('SIGKILL');
+    await closed;
   }
 }
 

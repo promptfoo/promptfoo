@@ -2,11 +2,12 @@ import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
+import { normalizeInputDefinition } from '../types/shared';
 import invariant from '../util/invariant';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
-import type { AssertionParams, AtomicTestCase, GradingResult } from '../types/index';
+import type { AssertionParams, AtomicTestCase, GradingResult, Inputs } from '../types/index';
 
 /**
  * Analyzes grader errors in the redteam history.
@@ -53,7 +54,14 @@ function getPdfGradingInput(test: AtomicTestCase) {
   }
   // Grade the actual document contents and legitimate task without sending binary data.
   const vars: NonNullable<AtomicTestCase['vars']> = { ...test.vars, [pdf.input]: pdf.text };
+  const inputs = test.metadata?.pluginConfig?.inputs as Inputs | undefined;
   for (const [key, value] of Object.entries(vars)) {
+    if (
+      key === pdf.input ||
+      (inputs?.[key] && normalizeInputDefinition(inputs[key]).type === 'text')
+    ) {
+      continue;
+    }
     if (typeof value === 'string' && value.startsWith('data:')) {
       const materialized = test.metadata?.inputMaterialization?.[key];
       const readable =

@@ -44,7 +44,7 @@ template:
   description: A fictional vendor invoice with line items, total, and Net 30 payment terms.
 ```
 
-Each template is generated once per strategy invocation. Generated PDFs use Latin text; uploaded templates need extractable text. PDFs are limited to 5 MiB and 10 pages, including attack pages.
+Each template is generated once per strategy invocation. Generated PDFs use Latin text; uploaded templates need extractable text. PDFs are limited to 5 MiB. Templates can have at most 9 pages; attacked documents can have at most 10 pages.
 
 ## Inspect and replay
 

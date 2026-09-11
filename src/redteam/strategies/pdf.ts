@@ -71,7 +71,10 @@ async function prepareTemplate(
       .parse(extractFirstJsonObject(response.output));
     bytes = await createPdf(`${document.title}\n\n${document.body}`);
   }
-  const { text } = await inspectPdf(bytes);
+  const { text, pageCount } = await inspectPdf(bytes);
+  if (pageCount >= 10) {
+    throw new Error('PDF templates must have at most 9 pages to leave room for review notes');
+  }
   if (!text.trim()) {
     throw new Error(
       'PDF templates must contain extractable text. Use mode: scanned to test rasterized copies',
@@ -85,6 +88,9 @@ function resolveInput(testCase: TestCaseWithPlugin, injectVar: string, configure
   const configuredInputs = testCase.metadata.pluginConfig?.inputs as Inputs | undefined;
   const inputs =
     configuredInputs && Object.keys(configuredInputs).length ? configuredInputs : undefined;
+  if (!inputs && configuredInput && configuredInput !== injectVar) {
+    throw new Error('PDF config.input must match the inject variable for single-input targets');
+  }
   const pdfInputs = Object.entries(inputs ?? {}).filter(
     ([, definition]) => normalizeInputDefinition(definition).type === 'pdf',
   );
