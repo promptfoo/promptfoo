@@ -16,7 +16,7 @@ import { readAzureBlobText } from '../../../src/util/azureBlob';
 import { combineConfigs, resolveConfigs } from '../../../src/util/config/load';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import { getNunjucksEngine } from '../../../src/util/templates';
-import { readTest } from '../../../src/util/testCaseReader';
+import { loadTestsFromGlob, readTest, readTests } from '../../../src/util/testCaseReader';
 import { mockProcessEnv } from '../utils';
 
 import type { UnifiedConfig } from '../../../src/types/index';
@@ -197,6 +197,54 @@ describe('suite environment loading', () => {
     });
     await expect(resolveConfigs({ config: [configPath] }, {})).rejects.toThrow();
     expect(cliState.config).toBe(previous);
+  });
+
+  it.each(['tests', 'vars'] as const)(
+    'does not load config test sources replaced by --%s',
+    async (option) => {
+      const configPath = writeConfig('overridden', { tests: ['file://ignored.cjs'] });
+      fs.writeFileSync(
+        path.join(path.dirname(configPath), 'ignored.cjs'),
+        "throw new Error('Ignored test source was executed');",
+      );
+      const selected = path.join(tempDir, 'selected.yaml');
+      fs.writeFileSync(selected, '- vars: { source: selected }\n');
+      const { testSuite } = await resolveConfigs({ config: [configPath], [option]: selected }, {});
+      expect(testSuite.tests?.[0].vars).toEqual({ source: 'selected' });
+    },
+  );
+
+  describe.each([
+    ['readTests', readTests],
+    ['loadTestsFromGlob', loadTestsFromGlob],
+  ] as const)('%s standalone environment', (_name, loadTests) => {
+    it('uses the supplied environment while parsing CSV', async () => {
+      cliState.config = { env: { PROMPTFOO_CSV_DELIMITER: '|' } };
+      fs.writeFileSync(path.join(tempDir, 'cases.csv'), 'first;second\none;two\n');
+      const [test] = await loadTests('cases.csv', tempDir, { PROMPTFOO_CSV_DELIMITER: ';' });
+      expect(test.vars).toEqual({ first: 'one', second: 'two' });
+      expect(getEnvString('PROMPTFOO_CSV_DELIMITER')).toBe('|');
+    });
+
+    it('lets an empty environment mask the previous suite during CSV parsing', async () => {
+      const restore = mockProcessEnv({ PROMPTFOO_CSV_DELIMITER: ',' });
+      try {
+        cliState.config = { env: { PROMPTFOO_CSV_DELIMITER: ';' } };
+        fs.writeFileSync(path.join(tempDir, 'cases.csv'), 'first,second\none,two\n');
+        const [test] = await loadTests('cases.csv', tempDir, {});
+        expect(test.vars).toEqual({ first: 'one', second: 'two' });
+      } finally {
+        restore();
+      }
+    });
+
+    it('inherits the active environment when none is supplied', async () => {
+      fs.writeFileSync(path.join(tempDir, 'cases.csv'), 'first;second\none;two\n');
+      const [test] = await cliState.withEnv({ PROMPTFOO_CSV_DELIMITER: ';' }, () =>
+        loadTests('cases.csv', tempDir),
+      );
+      expect(test.vars).toEqual({ first: 'one', second: 'two' });
+    });
   });
 
   it('resolves prompts and external tests relative to every expanded config path', async () => {

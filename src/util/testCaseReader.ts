@@ -570,7 +570,15 @@ export async function readTest(
 export async function loadTestsFromGlob(
   loadTestsGlob: string,
   basePath: string = '',
-  env?: EnvOverrides,
+  env: EnvOverrides | undefined = cliState.env,
+): Promise<TestCase[]> {
+  return cliState.withEnv(env, () => loadTestsFromGlobWithEnv(loadTestsGlob, basePath, env));
+}
+
+async function loadTestsFromGlobWithEnv(
+  loadTestsGlob: string,
+  basePath: string,
+  env: EnvOverrides | undefined,
 ): Promise<TestCase[]> {
   if (loadTestsGlob.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -669,6 +677,14 @@ export async function readTests(
   tests: TestSuiteConfig['tests'],
   basePath: string = '',
   env: EnvOverrides | undefined = cliState.env,
+): Promise<TestCase[]> {
+  return cliState.withEnv(env, () => readTestsWithEnv(tests, basePath, env));
+}
+
+async function readTestsWithEnv(
+  tests: TestSuiteConfig['tests'],
+  basePath: string,
+  env: EnvOverrides | undefined,
 ): Promise<TestCase[]> {
   const loadStandalone = async (source: string, config?: Record<string, any>) => {
     const tests = await readStandaloneTestsFile(source, basePath, config);
@@ -913,8 +929,7 @@ function collectConfigFileReferences(
  * loader agree on which files feed an evaluation, rather than duplicating the rules.
  *
  * Must be called with the raw `tests` value from the config file. `combineConfigs`
- * expands scalar and generator references into concrete test cases, after which the
- * original reference is no longer available.
+ * expands references into concrete test cases and discards the original reference.
  */
 export function resolveTestsWatchPaths(
   tests: TestSuiteConfig['tests'],

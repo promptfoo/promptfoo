@@ -526,6 +526,10 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
 
 /** Reads config files and resolves their tests using the combined environment. */
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+  return (await prepareCombinedConfig(configPaths)).config;
+}
+
+async function prepareCombinedConfig(configPaths: string[], skipTests = false) {
   const configs: UnifiedConfig[] = [];
   const resolvedConfigPaths: string[] = [];
   for (const configPath of configPaths) {
@@ -794,20 +798,30 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
-  combinedConfig.tests = await cliState.withEnv(combinedConfig.env, async () => {
-    const tests: TestCase[] = [];
-    for (const [index, config] of configs.entries()) {
-      tests.push(
-        ...(await readTests(
-          config.tests,
-          path.dirname(resolvedConfigPaths[index]),
-          combinedConfig.env,
-        )),
-      );
-    }
-    return tests;
-  });
-  return combinedConfig;
+  if (!skipTests) {
+    combinedConfig.tests = await cliState.withEnv(combinedConfig.env, async () => {
+      const tests: TestCase[] = [];
+      for (const [index, config] of configs.entries()) {
+        tests.push(
+          ...(await readTests(
+            config.tests,
+            path.dirname(resolvedConfigPaths[index]),
+            combinedConfig.env,
+          )),
+        );
+      }
+      return tests;
+    });
+  }
+  return {
+    config: combinedConfig,
+    testSources: skipTests
+      ? []
+      : configs.map((config, index) => ({
+          tests: config.tests,
+          basePath: path.dirname(resolvedConfigPaths[index]),
+        })),
+  };
 }
 
 /**
@@ -824,20 +838,28 @@ export async function resolveConfigs(
   basePath: string;
   commandLineOptions?: Partial<CommandLineOptions>;
   selectedProviderConfigs?: TestSuiteConfig['providers'];
+  testSources?: { tests: TestSuiteConfig['tests']; basePath: string }[];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
+  let testSources: { tests: TestSuiteConfig['tests']; basePath: string }[] | undefined;
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
-    fileConfig = await combineConfigs(configPaths);
+    const prepared = await prepareCombinedConfig(
+      configPaths,
+      Boolean(cmdObj.tests || cmdObj.vars || cmdObj.assertions),
+    );
+    fileConfig = prepared.config;
+    testSources = prepared.testSources;
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
   }
-  return cliState.withEnv(fileConfig.env || defaultConfig.env, () =>
+  const resolved = await cliState.withEnv(fileConfig.env || defaultConfig.env, () =>
     resolveLoadedConfig(cmdObj, fileConfig, defaultConfig, promptReferenceSources, type),
   );
+  return { ...resolved, testSources };
 }
 
 async function resolveLoadedConfig(

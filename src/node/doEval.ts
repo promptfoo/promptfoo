@@ -4,7 +4,6 @@ import * as path from 'path';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import dedent from 'dedent';
-import { globSync } from 'glob';
 import ora from 'ora';
 import { z } from 'zod';
 import { disableCache } from '../cache';
@@ -37,7 +36,6 @@ import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
 import {
   ConfigResolutionError,
   logConfigResolutionError,
-  maybeReadConfig,
   renderConfigEnvTemplates,
   resolveConfigs,
 } from '../util/config/load';
@@ -276,18 +274,6 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
   }
 }
 
-/**
- * Whether a config file can be read without executing it.
- *
- * readConfig() only routes through importModule() for JavaScript and TypeScript. Its
- * YAML and JSON branch reads the file, dereferences `$ref`, and renders environment
- * templates, none of which execute user code. Restricting the re-read to those formats
- * therefore keeps the normalisation while guaranteeing a config is never run twice.
- */
-function isDeclarativeConfig(configPath: string): boolean {
-  return ['.yaml', '.yml', '.json'].includes(path.extname(configPath).toLowerCase());
-}
-
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
@@ -343,6 +329,7 @@ export async function doEval(
 
   const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
     const startTime = Date.now();
+    let testSources: Awaited<ReturnType<typeof resolveConfigs>>['testSources'];
     telemetry.record('command_used', {
       name: 'eval - started',
       watch: Boolean(cmdObj.watch),
@@ -529,6 +516,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
+        testSources,
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
@@ -1234,29 +1222,9 @@ export async function doEval(
             ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath),
           );
         } else {
-          // The array form survives combineConfigs() untouched, so inline test cases and
-          // their `vars` file references are still readable from the resolved config.
           varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
-          // A scalar reference (`tests: file://cases.yaml`) and a generator object are
-          // expanded into concrete test cases by combineConfigs(), so by this point the
-          // reference they came from is gone. Recover it by reading the config again.
-          for (const configPathPattern of configPaths) {
-            // --config accepts globs, which combineConfigs() expands, so expand here too
-            // rather than handing a literal wildcard to the reader.
-            const resolvedConfigPaths = globSync(path.resolve(process.cwd(), configPathPattern), {
-              windowsPathsNoEscape: true,
-            });
-            for (const resolvedConfigPath of resolvedConfigPaths) {
-              if (!isDeclarativeConfig(resolvedConfigPath)) {
-                continue;
-              }
-              const rawConfig = await maybeReadConfig(resolvedConfigPath);
-              if (rawConfig?.tests != null && !Array.isArray(rawConfig.tests)) {
-                varPaths.push(
-                  ...resolveTestsWatchPaths(rawConfig.tests, path.dirname(resolvedConfigPath)),
-                );
-              }
-            }
+          for (const source of testSources ?? []) {
+            varPaths.push(...resolveTestsWatchPaths(source.tests, source.basePath));
           }
         }
         const watchPaths = Array.from(
