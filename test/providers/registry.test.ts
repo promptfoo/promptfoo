@@ -301,6 +301,42 @@ describe('Provider Registry', () => {
     });
 
     describe('OpenAI endpoint defaults', () => {
+      it.each(['gpt-daybreak-blue-latest', 'gpt-daybreak-red-latest'])(
+        'selects Responses only for native Daybreak shorthand %s',
+        async (model) => {
+          const native = await registry.create(`openai:${model}`, {
+            options: { config: { apiBaseUrl: 'https://api.openai.com/v1' } },
+          });
+          expect(native).toBeInstanceOf(OpenAiResponsesProvider);
+          expect(native).toHaveProperty('modelName', model);
+
+          const gateway = await registry.create(`openai:${model}`, {
+            options: { config: { apiBaseUrl: 'https://gateway.example/v1' } },
+          });
+          expect(gateway).toBeInstanceOf(OpenAiChatCompletionProvider);
+          expect(gateway).toHaveProperty('modelName', model);
+
+          for (const [endpoint, Provider] of [
+            ['chat', OpenAiChatCompletionProvider],
+            ['responses', OpenAiResponsesProvider],
+          ] as const) {
+            const explicit = await registry.create(`openai:${endpoint}:${model}`);
+            expect(explicit).toBeInstanceOf(Provider);
+            expect(explicit).toHaveProperty('modelName', model);
+          }
+        },
+      );
+
+      it.each([
+        'gpt-daybreak-blue-latest-custom',
+        'custom-gpt-daybreak-red-latest',
+        'openai/gpt-daybreak-blue-latest',
+      ])('preserves custom Daybreak-like shorthand %s', async (model) => {
+        const provider = await registry.create(`openai:${model}`);
+        expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
+        expect(provider).toHaveProperty('modelName', model);
+      });
+
       it.each([
         ['chat', OpenAiChatCompletionProvider],
         ['responses', OpenAiResponsesProvider],

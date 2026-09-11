@@ -2163,6 +2163,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const usageSources: {
             inputTokens?: number;
             outputTokens?: number;
+            thinkingTokens?: number;
             cacheReadInputTokens?: number;
             cacheCreationInputTokens?: number;
           }[] = Object.values(finalMsg.modelUsage ?? {});
@@ -2170,6 +2171,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             usageSources.push({
               inputTokens: finalMsg.usage.input_tokens,
               outputTokens: finalMsg.usage.output_tokens,
+              thinkingTokens: finalMsg.usage.output_tokens_details?.thinking_tokens,
               cacheReadInputTokens: finalMsg.usage.cache_read_input_tokens,
               cacheCreationInputTokens: finalMsg.usage.cache_creation_input_tokens,
             });
@@ -2177,12 +2179,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const usage = usageSources.reduce<{
             inputTokens: number;
             outputTokens: number;
+            thinkingTokens?: number;
             cacheReadInputTokens: number;
             cacheCreationInputTokens: number;
           }>(
             (total, source) => ({
               inputTokens: total.inputTokens + (source.inputTokens ?? 0),
               outputTokens: total.outputTokens + (source.outputTokens ?? 0),
+              thinkingTokens:
+                source.thinkingTokens == null
+                  ? total.thinkingTokens
+                  : (total.thinkingTokens ?? 0) + source.thinkingTokens,
               cacheReadInputTokens: total.cacheReadInputTokens + (source.cacheReadInputTokens ?? 0),
               cacheCreationInputTokens:
                 total.cacheCreationInputTokens + (source.cacheCreationInputTokens ?? 0),
@@ -2194,6 +2201,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               cacheCreationInputTokens: 0,
             },
           );
+          // Thinking tokens are already included in outputTokens.
           const promptTokens =
             usage.inputTokens + usage.cacheReadInputTokens + usage.cacheCreationInputTokens;
           const tokenUsage: ProviderResponse['tokenUsage'] = usageSources.length
@@ -2201,9 +2209,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 prompt: promptTokens,
                 completion: usage.outputTokens,
                 total: promptTokens + usage.outputTokens,
-                ...(usage.cacheReadInputTokens > 0 || usage.cacheCreationInputTokens > 0
+                ...(usage.thinkingTokens != null ||
+                usage.cacheReadInputTokens > 0 ||
+                usage.cacheCreationInputTokens > 0
                   ? {
                       completionDetails: {
+                        ...(usage.thinkingTokens != null && { reasoning: usage.thinkingTokens }),
                         cacheReadInputTokens: usage.cacheReadInputTokens,
                         cacheCreationInputTokens: usage.cacheCreationInputTokens,
                       },

@@ -87,6 +87,7 @@ import {
   assertOpenAiModelEndpointCompatibility,
   getRetiredOpenAiModelRoute,
   isOpenAiFirstPartyApiUrl,
+  OPENAI_DAYBREAK_ALIASES,
 } from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
@@ -1157,7 +1158,13 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
-      if (shouldDefaultToOpenAiResponses(modelType)) {
+      if (
+        shouldDefaultToOpenAiResponses(modelType) ||
+        (OPENAI_DAYBREAK_ALIASES.has(modelType) &&
+          isOpenAiFirstPartyApiUrl(
+            resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env),
+          ))
+      ) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {

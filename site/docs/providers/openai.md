@@ -74,6 +74,8 @@ Use an explicit endpoint in each provider ID. This makes the request format pred
 
 For file transcription, see [audio transcription](#audio-transcription). For Agents SDK, ChatKit, and Codex workflows, see [agent providers](#agentic-providers).
 
+Daybreak models require separate approval and use Responses, not Chat Completions. Use `openai:responses:gpt-daybreak-blue-latest` or `openai:responses:gpt-daybreak-red-latest`. Their shorthand IDs also select Responses on native OpenAI endpoints, preserving the alias in the request. See the [Blue](https://developers.openai.com/api/docs/models/gpt-daybreak-blue-latest) and [Red](https://developers.openai.com/api/docs/models/gpt-daybreak-red-latest) model cards.
+
 <Link id="gpt-51" />
 <Link id="available-models" />
 <Link id="key-features" />
@@ -282,6 +284,8 @@ Above 272,000 input tokens, input, cached-input, and cache-write rates double; o
 For Chat Completions and Responses, set `inputCost` and `outputCost` to override rates in **dollars per token**, not per million tokens. For audio, use `audioInputCost` and `audioOutputCost`. The older `cost` and `audioCost` options are shared input/output fallbacks. These settings affect Promptfoo's estimates, not API billing.
 
 Cost estimates follow the published rates for the selected model, service tier, and region. GPT-5.6 costs remain unset when cache-write usage is missing. GPT-5.5 Pro Batch and Flex costs above 272,000 input tokens also remain unset because OpenAI has not published those rates. Fine-tuned models use their published fine-tuned inference rates; Promptfoo does not infer Flex or Fast discounts for them.
+
+For Daybreak on `api.openai.com`, standard estimates follow the [current alias pricing](https://developers.openai.com/api/docs/pricing): Blue uses Sol's rates above; Red uses $12.50 input, $1.25 cached input, $15.625 cache writes, and $75 output per million tokens. Red's model card limits input to 272,000 tokens; its pricing table has no long-context rates. Estimates require cache-write usage and remain unset for other tiers, regional endpoints, gateways, or unsupported usage unless complete explicit rates apply. These alias relationships were verified September 11, 2026 and may change as the aliases move.
 
 ### Generating multiple responses
 
