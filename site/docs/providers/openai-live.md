@@ -37,6 +37,8 @@ tests:
 
 Run `npx promptfoo@latest eval --no-cache -o results.json`. Assertions evaluate the assistant's transcript. The result also includes playable audio and timestamped user and assistant transcript fragments. Fragments keep their original spacing, so a transcript can begin with a space; prefer `contains` or `icontains` to `equals`.
 
+For native audio grading with `llm-rubric`, use an audio-capable Chat grader such as `openai:chat:gpt-audio-1.5`. GPT-Live used as a grader receives the transcript; it does not accept the MP3 and arbitrary WAV files supported by Chat audio grading.
+
 Each test creates a new session. Text prompts seed a user message in startup history, then request a spoken answer while streaming silence. This is useful for checking answer content; use recorded audio to evaluate speech recognition, pauses, or interruptions.
 
 ## Audio input
