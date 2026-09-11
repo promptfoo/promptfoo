@@ -6,7 +6,70 @@ import { describe, expect, it, vi } from 'vitest';
 import * as cache from '../../../../src/cache';
 import { OpenAiResponsesProvider } from '../../../../src/providers/openai/responses';
 
+import type { OpenAiWebSearchTool } from '../../../../src/providers/openai/types';
+
 describe('OpenAiResponsesProvider tool handling', () => {
+  it.each([
+    {
+      type: 'web_search',
+      search_context_size: 'low',
+      filters: { allowed_domains: ['developers.openai.com'] },
+      user_location: {
+        type: 'approximate',
+        country: 'US',
+        city: 'San Francisco',
+        region: 'California',
+        timezone: 'America/Los_Angeles',
+      },
+      external_web_access: false,
+      return_token_budget: 'unlimited',
+    },
+    {
+      type: 'web_search_preview',
+      search_context_size: 'high',
+      user_location: { type: 'approximate', country: 'US' },
+    },
+    {
+      type: 'web_search',
+      search_context_size: 'medium',
+      filters: null,
+      user_location: null,
+      external_web_access: true,
+      return_token_budget: 'default',
+    },
+  ] satisfies OpenAiWebSearchTool[])(
+    'forwards $type options with $search_context_size context',
+    async (tool) => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          id: 'resp_search',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Found documentation.' }],
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiResponsesProvider('gpt-5.6-sol', {
+        config: { apiKey: 'test-key', tools: [tool] },
+      });
+
+      const result = await provider.callApi('Find the Responses API documentation.');
+
+      const [url, options] = vi.mocked(cache.fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://api.openai.com/v1/responses');
+      expect(JSON.parse(options?.body as string).tools).toEqual([tool]);
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe('Found documentation.');
+    },
+  );
+
   it('should handle tool calling correctly', async () => {
     const mockApiResponse = {
       id: 'resp_abc123',

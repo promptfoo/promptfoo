@@ -65,14 +65,19 @@ describe('scanner config policy boundary', () => {
       createAgentClient: vi.fn().mockResolvedValue({
         sessionId: 'test-session-id',
         disconnect,
-        socket: { io: { off: vi.fn() } },
+        socket: { emit: vi.fn(), io: { off: vi.fn() } },
       }),
     }));
-    vi.doMock('../../../src/codeScan/mcp/index', () => ({
-      setupMcpBridge: vi.fn().mockResolvedValue({ mcpBridge: null, mcpProcess: null }),
-    }));
     vi.doMock('../../../src/codeScan/mcp/filesystem', () => ({
-      stopFilesystemMcpServer: vi.fn(),
+      startFilesystemMcpServer: vi.fn().mockReturnValue({ pid: 1234 }),
+      waitForFilesystemMcpServerReady: vi.fn().mockResolvedValue(undefined),
+      stopFilesystemMcpServer: vi.fn().mockResolvedValue(undefined),
+    }));
+    vi.doMock('../../../src/codeScan/mcp/transport', () => ({
+      SocketIoMcpBridge: class {
+        connect = vi.fn().mockResolvedValue(undefined);
+        disconnect = vi.fn().mockResolvedValue(undefined);
+      },
     }));
     vi.doMock('../../../src/codeScan/util/auth', () => ({
       resolveAuthCredentials: vi.fn().mockReturnValue({ apiKey: 'test-key' }),
@@ -138,7 +143,7 @@ describe('scanner config policy boundary', () => {
     const { disconnect } = mockScannerBoundaries();
 
     const { executeScan } = await import('../../../src/codeScan/scanner/index');
-    const { setupMcpBridge } = await import('../../../src/codeScan/mcp/index');
+    const { startFilesystemMcpServer } = await import('../../../src/codeScan/mcp/filesystem');
     const { createAgentClient } = await import('../../../src/util/agent/agentClient');
     const { buildScanRequest } = await import('../../../src/codeScan/scanner/request');
 
@@ -152,11 +157,7 @@ describe('scanner config policy boundary', () => {
     expect(createAgentClient).toHaveBeenCalledWith(
       expect.objectContaining({ host: 'https://api.promptfoo.app' }),
     );
-    expect(setupMcpBridge).toHaveBeenCalledWith(
-      expect.anything(),
-      path.resolve(repoPath),
-      'test-session-id',
-    );
+    expect(startFilesystemMcpServer).toHaveBeenCalledWith(path.resolve(repoPath));
     expect(buildScanRequest).toHaveBeenCalledWith(
       expect.any(Array),
       expect.any(Object),
@@ -173,7 +174,7 @@ describe('scanner config policy boundary', () => {
     mockScannerBoundaries();
 
     const { executeScan } = await import('../../../src/codeScan/scanner/index');
-    const { setupMcpBridge } = await import('../../../src/codeScan/mcp/index');
+    const { startFilesystemMcpServer } = await import('../../../src/codeScan/mcp/filesystem');
     const { createAgentClient } = await import('../../../src/util/agent/agentClient');
     const { buildScanRequest } = await import('../../../src/codeScan/scanner/request');
 
@@ -187,7 +188,7 @@ describe('scanner config policy boundary', () => {
     expect(createAgentClient).toHaveBeenCalledWith(
       expect.objectContaining({ host: 'https://scanner.example' }),
     );
-    expect(setupMcpBridge).not.toHaveBeenCalled();
+    expect(startFilesystemMcpServer).not.toHaveBeenCalled();
     expect(buildScanRequest).toHaveBeenCalledWith(
       expect.any(Array),
       expect.any(Object),
@@ -203,7 +204,7 @@ describe('scanner config policy boundary', () => {
     mockScannerBoundaries();
 
     const { executeScan } = await import('../../../src/codeScan/scanner/index');
-    const { setupMcpBridge } = await import('../../../src/codeScan/mcp/index');
+    const { startFilesystemMcpServer } = await import('../../../src/codeScan/mcp/filesystem');
     const { createAgentClient } = await import('../../../src/util/agent/agentClient');
     const { buildScanRequest } = await import('../../../src/codeScan/scanner/request');
 
@@ -218,7 +219,7 @@ describe('scanner config policy boundary', () => {
     expect(createAgentClient).toHaveBeenCalledWith(
       expect.objectContaining({ host: 'https://api.promptfoo.app' }),
     );
-    expect(setupMcpBridge).not.toHaveBeenCalled();
+    expect(startFilesystemMcpServer).not.toHaveBeenCalled();
     expect(buildScanRequest).toHaveBeenCalledWith(
       expect.any(Array),
       expect.any(Object),
