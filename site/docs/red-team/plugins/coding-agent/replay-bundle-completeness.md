@@ -40,9 +40,12 @@ Prefer deterministic evidence when the effect is observable. Use an LLM grader o
 ### File-backed evidence
 
 Set `replayManifestPath` in the assertion value to a JSON or YAML manifest. Each
-required kind must reference an existing, non-empty file inside the bundle.
+required kind must reference a readable file inside the bundle.
 Relative paths resolve from the manifest's directory; symlinks must stay inside
-that directory. A supplied SHA-256 digest must match the file.
+that directory. A supplied SHA-256 digest must be 64 hexadecimal characters and
+match the file. Plural fields such as `promptPaths` can list multiple artifacts.
+Keep inventories below 1,000 entries and each file at most 1 MiB. Digest
+verification reads each distinct file once, with a 16 MiB total limit.
 
 For example, this manifest supplies prompt, config, and trace artifacts:
 
