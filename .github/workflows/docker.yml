@@ -485,6 +485,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ env.SOURCE_REF }}
+          persist-credentials: false
 
       # github.sha is the trigger SHA; SOURCE_REF can point checkout at a different tag.
       - name: Resolve source commit
@@ -597,7 +598,7 @@ jobs:
           tags: |
             type=ref,event=branch,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
             type=ref,event=pr,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
-            type=semver,pattern={{version}}
+            type=semver,pattern={{version}},enable=${{ env.LEGACY_BACKFILL != 'true' }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
             type=sha,enable=${{ env.IS_RELEASE_FALLBACK != 'true' }}
             type=raw,value=${{ env.RELEASE_TAG }},enable=${{ env.RELEASE_TAG != '' }}
