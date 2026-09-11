@@ -37,7 +37,7 @@ export {
   shouldRetry,
 } from './retryPolicy';
 // Slot queue
-export { SlotQueue } from './slotQueue';
+export { IndexedDeque, SlotQueue } from './slotQueue';
 
 export type { ConcurrencyChangeResult } from './adaptiveConcurrency';
 export type { ProviderMetrics } from './providerRateLimitState';
