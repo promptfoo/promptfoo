@@ -1611,6 +1611,67 @@ describe('OpenAiLiveProvider', () => {
     expect(socket.sent.some((event) => event.content === 'sensitive late result')).toBe(false);
   });
 
+  const clientDelegation = (socket: Socket, id: string) =>
+    emit(socket, {
+      type: 'session.delegation.created',
+      offset_ms: 0,
+      delegation: { id, target: 'client' },
+    });
+  const delegationResults = (socket: Socket) =>
+    socket.sent.filter(
+      (event) => event.type === 'session.commentary.append' && event.delegation_id !== null,
+    );
+  const clientCapError =
+    'GPT-Live client delegations exceeded maxToolIterations=2. Increase maxToolIterations if the eval needs more delegations.';
+
+  it('stops a client delegation loop at maxToolIterations without counting repeated IDs', async () => {
+    const handler = vi.fn().mockResolvedValue('The order shipped.');
+    const result = provider({ delegationHandler: handler, maxToolIterations: 2 }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket);
+    for (const id of ['d1', 'd1', 'd2']) {
+      clientDelegation(socket, id);
+      await vi.advanceTimersByTimeAsync(0);
+    }
+    // The repeated ID runs once and doesn't count toward the cap.
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(delegationResults(socket).map((event) => event.delegation_id)).toEqual(['d1', 'd2']);
+    expect(sentTypes(socket)).not.toContain('session.close');
+    clientDelegation(socket, 'd3');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+    closed(socket);
+    expect((await result).error).toBe(clientCapError);
+  });
+
+  it('caps a burst of client delegations before any handler finishes', async () => {
+    const resolvers: ((value: string) => void)[] = [];
+    const handler = vi.fn(
+      () =>
+        new Promise<string>((done) => {
+          resolvers.push(done);
+        }),
+    );
+    const result = provider({ delegationHandler: handler, maxToolIterations: 2 }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    text(socket);
+    for (const id of ['d1', 'd2', 'd3', 'd4']) {
+      clientDelegation(socket, id);
+    }
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(socket.sent.at(-1)).toEqual({ type: 'session.close' });
+    for (const done of resolvers) {
+      done('late result');
+    }
+    await vi.advanceTimersByTimeAsync(0);
+    expect(delegationResults(socket)).toHaveLength(0);
+    closed(socket);
+    expect((await result).error).toBe(clientCapError);
+  });
+
   it('uses HTTPS_PROXY for the upgrade and destroys the agent after connection errors', async () => {
     mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example:8080' });
     const result = provider().callApi('Hi');

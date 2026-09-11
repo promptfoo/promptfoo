@@ -154,7 +154,7 @@ export class LiveSession {
   private backendCost: number | undefined = 0;
   private backendResponses: { id: string; model: string; usage: unknown }[] = [];
   private delegations: LiveDelegation[] = [];
-  private clientDelegationOccurred = false;
+  private clientDelegations = 0;
   private pendingHandlers = 0;
   private backendTurns = new Map<string, BackendTurn>();
   private finishedResponses = new Set<string>();
@@ -588,12 +588,21 @@ export class LiveSession {
       });
       return;
     }
-    this.clientDelegationOccurred = true;
+    // Count each distinct client delegation before its handler runs, separately from function calls.
+    this.clientDelegations++;
     this.backendCost = undefined;
     const handler = this.options.delegationHandler;
     if (!handler) {
       this.setError(
         'GPT-Live requested client delegation, but no delegationHandler is configured. Configure a handler or Responses delegation.',
+      );
+      this.closeSession();
+      return;
+    }
+    const maxToolIterations = resolveMaxToolIterations(this.options.config.maxToolIterations);
+    if (this.clientDelegations > maxToolIterations) {
+      this.setError(
+        `GPT-Live client delegations exceeded maxToolIterations=${maxToolIterations}. Increase maxToolIterations if the eval needs more delegations.`,
       );
       this.closeSession();
       return;
@@ -851,7 +860,7 @@ export class LiveSession {
       this.finalized &&
       voiceCost !== undefined &&
       this.backendCost !== undefined &&
-      !this.clientDelegationOccurred &&
+      !this.clientDelegations &&
       !this.backendTurns.size &&
       !this.pendingHandlers
         ? voiceCost + this.backendCost

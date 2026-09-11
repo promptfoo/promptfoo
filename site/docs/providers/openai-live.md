@@ -84,7 +84,7 @@ For managed Responses delegation, set `delegation.type: responses` and `delegati
 
 For custom functions, set `functionCallHandler: file://tools.js`. Export an async function `(name, args, signal) => string`, where `args` is the JSON argument string. Promptfoo checks the function name against configured tools, collects completed calls, returns every result, and then continues the backend response. Handlers must enforce permissions for actions they execute.
 
-`maxToolIterations` limits the function calls a session hands to the handler, counted across batches and follow-up responses (default: 8, allowed range 1 to 64). At the limit, Promptfoo does not call the handler, sends no further results, ends the capture, and reports an error.
+`maxToolIterations` limits each session's function calls to `functionCallHandler`, counted across batches and follow-up responses, and separately limits its client delegations to `delegationHandler` (default: 8 each, allowed range 1 to 64). At either limit, Promptfoo does not call the handler, sends no further results, ends the capture, and reports an error.
 
 For your own model or agent harness, use `delegation.type: client` and `delegationHandler: file://backend.js`:
 
