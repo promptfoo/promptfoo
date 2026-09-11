@@ -73,6 +73,7 @@ function hasPromptBoundaryMarker(line: string): boolean {
 
 function cleanPrompt(prompt: string): string {
   let cleaned = prompt;
+  cleaned = cleaned.replace(/^\*+\s*/, '');
   // Handle numbered lists with various formats
   cleaned = cleaned.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
   // Handle quotes
