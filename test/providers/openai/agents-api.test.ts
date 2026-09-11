@@ -3,6 +3,7 @@ import logger from '../../../src/logger';
 import { OpenAiAgentsApiProvider } from '../../../src/providers/openai/agents-api';
 import { withGenAISpan } from '../../../src/providers/tracing';
 import { fetchWithRetries } from '../../../src/util/fetch/index';
+import { checkProviderApiKeys } from '../../../src/util/provider';
 import { mockProcessEnv } from '../../util/utils';
 
 vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
@@ -314,6 +315,27 @@ describe('OpenAiAgentsApiProvider', () => {
       expect(result.error).toContain('OPENAI_API_KEY');
       expect(fetchWithRetries).not.toHaveBeenCalled();
     });
+  });
+
+  it('defers CLI credential preflight to the call-level gateway check', async () => {
+    const gateway = new OpenAiAgentsApiProvider('', {
+      config: { apiBaseUrl: 'https://gateway-token-value:@gateway.example/v1' },
+    });
+    expect(checkProviderApiKeys([gateway])).toEqual(new Map());
+    expect((await gateway.callApi('hi')).output).toBe('42');
+  });
+
+  it('redacts an echoed MCP path credential', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(
+      apiError(401, 'Rejected auth-supersecretvalue123'),
+    );
+    const result = await provider({
+      agent: {
+        tools: [{ type: 'mcp', server_url: 'https://mcp.example/auth-supersecretvalue123' }],
+      },
+    }).callApi('hi');
+    expect(result.error).toContain('HTTP 401');
+    expect(result.error).not.toContain('auth-supersecretvalue123');
   });
 
   describe('URL-authenticated gateways', () => {

@@ -345,15 +345,13 @@ function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
 
 async function createOutputSummary(evalRecord: Eval): Promise<OutputFile['results']> {
   const summary = await evalRecord.toEvaluateSummary();
-  if (!('prompts' in summary)) {
-    return summary;
-  }
-  return {
-    ...summary,
-    prompts: summary.prompts.map((prompt) =>
+  const prompts = ('prompts' in summary ? summary.prompts : summary.table.head.prompts).map(
+    (prompt) =>
       prompt.config ? { ...prompt, config: sanitizeConfigForOutput(prompt.config) } : prompt,
-    ),
-  };
+  );
+  return 'prompts' in summary
+    ? { ...summary, prompts }
+    : { ...summary, table: { ...summary.table, head: { ...summary.table.head, prompts } } };
 }
 
 function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {

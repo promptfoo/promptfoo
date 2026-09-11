@@ -1,7 +1,12 @@
 import logger from '../../logger';
 import { fetchWithRetries, readBoundedText } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/render';
-import { isNonCredentialHeader, isSecretField, REDACTED } from '../../util/sanitizer';
+import {
+  isNonCredentialHeader,
+  isSecretField,
+  REDACTED,
+  sanitizeUrlForLogging,
+} from '../../util/sanitizer';
 import { analyzeTemplateReference } from '../../util/templates';
 import { sleepWithAbort } from '../../util/time';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
@@ -190,6 +195,11 @@ function getUrlCredentials(value: string): string[] {
   const userinfo = decodeUserinfo(url);
   if (userinfo) {
     found.push(userinfo, basicCredential(userinfo));
+  }
+  for (const segment of url.pathname.split('/')) {
+    if (sanitizeUrlForLogging(`/${segment}`) === '/%5BREDACTED%5D') {
+      found.push(segment, decodeUrlComponent(segment));
+    }
   }
   for (const segment of url.search.slice(1).split(/[&;]/)) {
     const separator = segment.indexOf('=');
@@ -406,6 +416,11 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
 
   id(): string {
     return this.modelName ? `openai:agents-api:${this.modelName}` : 'openai:agents-api';
+  }
+
+  /** Validate credentials per call, after merging prompt settings and gateway authentication. */
+  requiresApiKey(): boolean {
+    return false;
   }
 
   private redact(text: string): string {
@@ -752,7 +767,12 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const { hasHeaderCredential, hasCustomHeader } = scanRequestHeaders(headers, credentials);
     this.credentials = sortCredentials(credentials);
     // Only a credential-named header or URL credential replaces the API key requirement.
-    if (!apiKey && !hasHeaderCredential && !hasUrlCredential && this.requiresApiKey()) {
+    if (
+      !apiKey &&
+      !hasHeaderCredential &&
+      !hasUrlCredential &&
+      (this.config.apiKeyRequired ?? true)
+    ) {
       return { error: this.getMissingApiKeyErrorMessage() };
     }
     const authorization = this.getAuthorization(apiKey, hasUrlCredential || hasCustomHeader);

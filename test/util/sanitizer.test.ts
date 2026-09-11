@@ -1336,6 +1336,22 @@ describe('sanitizeObject', () => {
   });
 
   describe('real-world scenarios', () => {
+    it.each([
+      'gateway.example',
+      'gateway.example:8443',
+      'gateway.example/path',
+      'gateway.example/path/',
+    ])('preserves apiHost formatting for %s', (apiHost) => {
+      expect(sanitizeObject({ apiHost })).toEqual({ apiHost });
+    });
+
+    it.each(['apiBaseUrl', 'server_url', 'apiHost'])('redacts a credential path in %s', (key) => {
+      const endpoint = `${key === 'apiHost' ? '' : 'https://'}gateway.example/auth-supersecretvalue123`;
+      expect(JSON.stringify(sanitizeObject({ [key]: endpoint }))).not.toContain(
+        'auth-supersecretvalue123',
+      );
+    });
+
     it('should sanitize HTTP request config', () => {
       const requestConfig = {
         method: 'POST',

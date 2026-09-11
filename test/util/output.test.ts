@@ -193,6 +193,35 @@ describe('writeOutput', () => {
     expect(outputJson).not.toContain('fixture-api-key');
   });
 
+  it.each(['json', 'yaml', 'html', 'xml'])(
+    'redacts legacy prompt config in %s exports',
+    async (extension) => {
+      const prompt = {
+        raw: 'Summarize',
+        label: 'gateway',
+        provider: 'openai:agents-api',
+        config: { apiHost: 'gateway.example', headers: { 'X-Gateway-Auth': 'legacy-header-7294' } },
+      };
+      const eval_ = new Eval({}, { prompts: [prompt] });
+      const summary = await eval_.toEvaluateSummary();
+      eval_.oldResults = {
+        version: 2,
+        timestamp: summary.timestamp,
+        stats: summary.stats,
+        results: [],
+        table: { head: { vars: [], prompts: [prompt] }, body: [] },
+      };
+      if (extension === 'html') {
+        vi.mocked(fsPromises.readFile).mockResolvedValue('{{ results | dump }}');
+      }
+      await writeOutput(`output.${extension}`, eval_, null);
+      const output = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      expect(output).not.toContain('legacy-header-7294');
+      expect(output).toContain('[REDACTED]');
+      expect(prompt.config.headers['X-Gateway-Auth']).toBe('legacy-header-7294');
+    },
+  );
+
   it('redacts env and secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
     const eval_ = new Eval({
