@@ -1021,10 +1021,20 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
   const sanitized: any = {};
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
-    if (key === 'url' && typeof value === 'string') {
-      sanitized[key] = sanitizeUrl(value);
-    } else if (isSecretKey(key)) {
+    if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
+    } else if (key === 'headers' && obj.type === 'mcp' && value && typeof value === 'object') {
+      sanitized[key] = Object.fromEntries(Object.keys(value).map((name) => [name, REDACTED]));
+    } else if (key === 'apiHost' && typeof value === 'string') {
+      sanitized[key] = sanitizeUrl(`https://${value}`).replace(/^https:\/\//, '');
+    } else if (
+      typeof value === 'string' &&
+      (key === 'url' ||
+        key === 'apiBaseUrl' ||
+        key === 'server_url' ||
+        (isEnvMap && key.toUpperCase().endsWith('_URL')))
+    ) {
+      sanitized[key] = sanitizeUrl(value);
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact values that look like secrets (API keys, tokens, etc.)
       sanitized[key] = REDACTED;

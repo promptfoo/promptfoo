@@ -114,11 +114,6 @@ const NON_CREDENTIAL_HEADERS = new Set([
   'user-agent',
   'x-openai-originator',
 ]);
-// Prompt settings replace provider settings as groups, so a provider value cannot shadow them.
-const PROMPT_OVERRIDE_GROUPS: readonly (readonly string[])[] = [
-  ['apiHost', 'apiBaseUrl'],
-  ['apiKey', 'apiKeyEnvar'],
-];
 
 class AgentsApiHttpError extends Error {
   constructor(
@@ -274,25 +269,6 @@ function scanRequestHeaders(
     hasCustomHeader ||= present && name !== 'authorization' && !isNonCredentialHeader(name);
   });
   return { hasHeaderCredential, hasCustomHeader };
-}
-
-/** Prompt config overrides provider config, replacing endpoint and credential settings as groups. */
-function mergePromptConfig(
-  providerConfig: AgentsApiOptions,
-  promptConfig: Record<string, unknown> | undefined,
-): AgentsApiOptions {
-  const merged: Record<string, unknown> = { ...providerConfig };
-  for (const group of PROMPT_OVERRIDE_GROUPS) {
-    if (group.some((field) => promptConfig?.[field] !== undefined)) {
-      for (const field of group) {
-        delete merged[field];
-      }
-    }
-  }
-  Object.assign(merged, promptConfig);
-  // Promptfoo can attach a live provider here; do not render its methods or state.
-  delete merged.provider;
-  return merged as AgentsApiOptions;
 }
 
 /** Credentials a call can send or echo: its resolved key, effective base URL, and config values. */
@@ -688,7 +664,17 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
-    const mergedConfig = mergePromptConfig(this.config, context?.prompt?.config);
+    const promptConfig = context?.prompt?.config;
+    const mergedConfig = {
+      ...this.config,
+      ...(promptConfig?.apiBaseUrl !== undefined && { apiHost: undefined }),
+      ...(promptConfig?.apiHost !== undefined && { apiBaseUrl: undefined }),
+      ...(promptConfig?.apiKeyEnvar !== undefined && { apiKey: undefined }),
+      ...(promptConfig?.apiKey !== undefined && { apiKeyEnvar: undefined }),
+      ...promptConfig,
+    };
+    // Promptfoo can attach a live provider here; do not render its methods or state.
+    delete mergedConfig.provider;
     let config = mergedConfig;
     try {
       const vars = context?.vars;

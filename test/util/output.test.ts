@@ -211,6 +211,22 @@ describe('writeOutput', () => {
             max_turns: 2,
           },
         },
+        {
+          id: 'openai:agents-api',
+          config: {
+            apiHost: 'host-credential:@gateway.example',
+            apiBaseUrl: 'https://url-credential:@gateway.example/v1',
+            agent: {
+              tools: [
+                {
+                  type: 'mcp',
+                  server_url: 'https://mcp.example?api_key=query-credential',
+                  headers: { 'X-MCP-Custom': 'opaque-value-7294' },
+                },
+              ],
+            },
+          },
+        },
       ],
       tracing: {
         enabled: true,
@@ -238,6 +254,17 @@ describe('writeOutput', () => {
     expect(parsed.config.env.REGION).toBe('us-east-1');
     expect(parsed.config.providers[0].config.apiKey).toBe('[REDACTED]');
     expect(parsed.config.providers[0].config.max_turns).toBe(2);
+    expect(parsed.config.providers[1].config.agent.tools[0].headers).toEqual({
+      'X-MCP-Custom': '[REDACTED]',
+    });
+    for (const credential of [
+      'host-credential',
+      'url-credential',
+      'query-credential',
+      'opaque-value-7294',
+    ]) {
+      expect(outputJson).not.toContain(credential);
+    }
     expect(parsed.config.description).toBe('Test config');
     expect(parsed.config.tests).toBe('az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D');
     expect(outputJson).not.toContain('output-tempo-secret');
