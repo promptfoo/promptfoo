@@ -844,7 +844,7 @@ The `redteam.provider` configuration controls both attack generation and grading
 
 You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
 
-For supported local generators, default batches use family-balanced generation to retain distinct attacks instead of near-duplicates. When semantic frontier planning is active, the generation report includes a `Semantic Frontier Diagnostics` table, and generated YAML stores the same summary in `metadata.semanticFrontierDiagnostics`.
+For supported local generators, default batches use family-balanced generation to retain distinct attacks instead of near-duplicates. These checks measure patterns in the generated prompts, not whether the target is secure. When semantic frontier planning is active, the generation report includes a `Semantic Frontier Diagnostics` table, and generated YAML stores the same summary in `metadata.semanticFrontierDiagnostics`.
 
 Generated YAML also stores `metadata.generationTokenUsage` when the local generation provider reports usage. These totals are the observed attack-generation spend available to Promptfoo; remote generation services may not expose their underlying token usage.
 

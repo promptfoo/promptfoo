@@ -226,6 +226,8 @@ After running an evaluation, view traces in the web UI:
 
 ### 4. Assert on Traced Workflows
 
+The SQL injection grader also uses captured trace summaries. A refusal alone does not pass when a trace is available; the grader checks the recorded actions alongside the response.
+
 Once traces are flowing into Promptfoo, you can evaluate what the agent actually did, not just the final answer:
 
 ```yaml
