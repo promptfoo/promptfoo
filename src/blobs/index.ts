@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { and, eq, isNotNull, or } from 'drizzle-orm';
 import { getDb } from '../database';
-import { blobAssetsTable, blobReferencesTable } from '../database/tables';
+import { blobAssetsTable, blobReferencesTable, evalsTable } from '../database/tables';
 import logger from '../logger';
 import { FilesystemBlobStorageProvider } from './filesystemProvider';
 
@@ -69,7 +69,7 @@ export async function storeBlob(
         .onConflictDoNothing()
         .run();
 
-      if (refContext?.evalId) {
+      if (refContext?.evalId && (await isPersistedEval(tx, refContext.evalId))) {
         await tx
           .insert(blobReferencesTable)
           .values({
@@ -148,6 +148,26 @@ export async function getBlobUrl(hash: string, expiresInSeconds?: number): Promi
   return provider.getUrl(hash, expiresInSeconds);
 }
 
+type BlobReferenceDb = Pick<Awaited<ReturnType<typeof getDb>>, 'select'>;
+
+/**
+ * Evals run with `--no-write` never get an `evals` row, so a reference to them would violate
+ * the foreign key and discard the stored media. Keep the blob without an eval association.
+ */
+async function isPersistedEval(db: BlobReferenceDb, evalId: string): Promise<boolean> {
+  const row = await db
+    .select({ id: evalsTable.id })
+    .from(evalsTable)
+    .where(eq(evalsTable.id, evalId))
+    .get();
+  if (!row) {
+    logger.debug('[BlobStorage] Skipping blob reference for an eval without a database row', {
+      evalId,
+    });
+  }
+  return Boolean(row);
+}
+
 export async function recordBlobReference(
   hash: string,
   refContext: {
@@ -162,6 +182,11 @@ export async function recordBlobReference(
     return;
   }
 
+  const db = await getDb();
+  if (!(await isPersistedEval(db, refContext.evalId))) {
+    return;
+  }
+
   const provider = getBlobStorageProvider();
   const exists = await provider.exists(hash).catch(() => false);
   if (!exists) {
@@ -173,7 +198,6 @@ export async function recordBlobReference(
     return;
   }
 
-  const db = await getDb();
   const existing = await db
     .select({
       id: blobReferencesTable.id,
