@@ -8,6 +8,7 @@ import {
   getTargetResponse,
   redteamProviderManager,
 } from '../../src/redteam/providers/shared';
+import * as remoteGeneration from '../../src/redteam/remoteGeneration';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import { getRateLimitKey } from '../../src/scheduler/rateLimitKey';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
@@ -283,4 +284,154 @@ describe('selected caller observer error through real iterative evaluation', () 
     }
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it.each([true, false])(
+    'authoritative markup retains the actual selected Chat observer error: throws=%s',
+    async (throws) => {
+      vi.spyOn(remoteGeneration, 'neverGenerateRemote').mockReturnValue(false);
+      vi.spyOn(remoteGeneration, 'getRemoteGenerationUrl').mockReturnValue(
+        'https://markup-observer.fixture.test/generate',
+      );
+      const target = await loadApiProvider('openai:chat:gpt-4o-mini', {
+        options: {
+          config: {
+            apiBaseUrl: 'https://markup-observer.fixture.test/v1',
+            apiKey: 'fixture-key',
+            maxRetries: 0,
+          },
+        },
+      });
+      providers.push(target);
+      const failure = Object.freeze(new Error('metrics rate limit exceeded'));
+      const descriptors = Object.getOwnPropertyDescriptors(failure);
+      const observer = vi.fn(() => {
+        if (throws) {
+          throw failure;
+        }
+      });
+      const rawResponses: ProviderResponse[] = [];
+      const delegator: ApiProvider = {
+        id: target.id.bind(target),
+        config: target.config,
+        callApi: vi.fn(async (prompt, context, options) => {
+          const response = await callTargetProvider(target, prompt, context, {
+            ...options,
+            onResponseHeaders: options?.onResponseHeaders
+              ? composeResponseHeadersObservers(options.onResponseHeaders, observer)
+              : observer,
+          });
+          rawResponses.push(response);
+          return response;
+        }),
+      };
+      const strategy = await loadApiProvider('promptfoo:redteam:authoritative-markup-injection', {
+        options: { config: { injectVar: 'input' } },
+      });
+      const strategyResponses: ProviderResponse[] = [];
+      const callStrategy = strategy.callApi;
+      vi.spyOn(strategy, 'callApi').mockImplementation(function (this: ApiProvider, ...args) {
+        const result = callStrategy.apply(this, args);
+        void result.then(
+          (response) => {
+            strategyResponses.push(response);
+          },
+          () => {},
+        );
+        return result;
+      });
+      expect(getRateLimitKey(delegator)).toBe(getRateLimitKey(target));
+      expect(getRateLimitKey(strategy)).not.toBe(getRateLimitKey(target));
+      let generationRequests = 0;
+      let targetRequests = 0;
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
+        if (String(url) === 'https://markup-observer.fixture.test/generate') {
+          generationRequests++;
+          expect(JSON.parse(String(options?.body)).task).toBe('authoritative-markup-injection');
+          return new Response(
+            JSON.stringify({
+              message: { role: 'user', content: 'Hello' },
+              tokenUsage: { prompt: 2, completion: 1, total: 3, numRequests: 1 },
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          );
+        }
+        expect(String(url)).toBe('https://markup-observer.fixture.test/v1/chat/completions');
+        targetRequests++;
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'Hello.' }, finish_reason: 'stop' }],
+            usage: { prompt_tokens: 2, completion_tokens: 3, total_tokens: 5 },
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        );
+      });
+      const controller = new AbortController();
+      controllers.push(controller);
+      let rows: Awaited<ReturnType<typeof runEval>> | undefined;
+      const done = withCacheEnabled(false, () =>
+        runEval({
+          delay: 0,
+          testIdx: 0,
+          promptIdx: 0,
+          repeatIndex: 0,
+          isRedteam: false,
+          provider: delegator,
+          prompt: { raw: '{{input}}', label: 'harmless markup greeting' },
+          test: { provider: strategy, vars: { input: 'Hello' } },
+          conversations: {},
+          registers: {},
+          abortSignal: controller.signal,
+          rateLimitRegistry: registry,
+        }),
+      ).then((value) => {
+        rows = value;
+      });
+      pending.push(done);
+      // Finish the existing default positive retry policy in RED as well as GREEN.
+      await vi.advanceTimersByTimeAsync(300000);
+      await done;
+      expect(rawResponses.length).toBeGreaterThan(0);
+      expect(
+        rawResponses.every(
+          (response) => isResponseHeadersObserverErrorResponse(response) === throws,
+        ),
+      ).toBe(true);
+      expect(generationRequests).toBe(1);
+      expect(targetRequests).toBe(1);
+      expect(delegator.callApi).toHaveBeenCalledOnce();
+      expect(observer).toHaveBeenCalledOnce();
+      expect(rows).toHaveLength(1);
+      expect(rows?.[0].response?.error).toBe(
+        throws ? `API call error: ${String(failure)}` : undefined,
+      );
+      // The marker is private scheduler provenance, not part of normalized persisted rows.
+      expect(strategyResponses).toHaveLength(1);
+      expect(isResponseHeadersObserverErrorResponse(strategyResponses[0])).toBe(throws);
+      expect(rows?.[0].response?.tokenUsage?.attacker).toMatchObject({ total: 3, numRequests: 1 });
+      if (!throws) {
+        expect(rows?.[0].response?.tokenUsage).toMatchObject({ total: 5, numRequests: 1 });
+        expect(rows?.[0].response?.output).toBe('Hello.');
+      }
+      expect(Object.getOwnPropertyDescriptors(failure)).toEqual(descriptors);
+      const metrics = Object.values(registry.getMetrics());
+      expect(metrics).toHaveLength(2);
+      expect(metrics).toMatchObject([
+        {
+          totalRequests: 1,
+          rateLimitHits: 0,
+          retriedRequests: 0,
+          activeRequests: 0,
+          queueDepth: 0,
+        },
+        {
+          totalRequests: 1,
+          rateLimitHits: 0,
+          retriedRequests: 0,
+          activeRequests: 0,
+          queueDepth: 0,
+        },
+      ]);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
 });
