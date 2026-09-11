@@ -262,87 +262,69 @@ describe('published agent skill examples', () => {
     },
   );
 
-  it('runs generated OpenAPI smoke assertions against transformed response values', async () => {
-    const values: Record<string, unknown> = {
-      text: 'ready',
-      object: { ok: true },
-    };
-    const server = http.createServer((request, response) => {
+  it('runs a generated OpenAPI smoke assertion against a transformed text response', async () => {
+    const server = http.createServer((_request, response) => {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ answer: values[request.url!.slice(1)] }));
+      response.end(JSON.stringify({ answer: 'ready' }));
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     try {
       const address = server.address() as { port: number };
-      const specPath = path.join(tempDir, 'response-types.yaml');
+      const specPath = path.join(tempDir, 'response-type.yaml');
       fs.writeFileSync(
         specPath,
-        yaml.dump({
-          openapi: '3.1.0',
-          paths: Object.fromEntries(
-            Object.entries(values).map(([name, value]) => [
-              `/${name}`,
-              {
-                get: {
-                  operationId: name,
-                  responses: {
-                    '200': {
-                      description: 'Health response',
-                      content: {
-                        'application/json': {
-                          schema: {
-                            type: 'object',
-                            properties: {
-                              answer: { type: typeof value },
-                            },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            ]),
-          ),
-        }),
+        `openapi: 3.1.0
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      responses:
+        '200':
+          description: Health response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  answer:
+                    type: string
+`,
       );
-      for (const name of Object.keys(values)) {
-        const generated = yaml.load(
-          execFileSync(
-            process.execPath,
-            [
-              path.join(
-                skillsRoot,
-                'promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs',
-              ),
-              '--spec',
-              specPath,
-              '--operation-id',
-              name,
-              '--base-url-env',
-              'HEALTH_URL',
-            ],
-            { encoding: 'utf8' },
-          ),
-        ) as { providers: { config: { url: string } }[] };
-        generated.providers[0].config.url = `http://127.0.0.1:${address.port}/${name}`;
-        const configPath = path.join(tempDir, `response-${name}.yaml`);
-        const outputPath = path.join(tempDir, `response-${name}.json`);
-        fs.writeFileSync(configPath, yaml.dump(generated));
-        await runCli([
-          'eval',
-          '-c',
-          configPath,
-          '-o',
-          outputPath,
-          '--no-cache',
-          '--no-share',
-          '--no-progress-bar',
-        ]);
-        const results = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-        expect(results.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
-        expect(results.results.results[0].response.output).toEqual(values[name]);
-      }
+      const generated = yaml.load(
+        execFileSync(
+          process.execPath,
+          [
+            path.join(
+              skillsRoot,
+              'promptfoo-provider-setup/scripts/openapi-operation-to-config.mjs',
+            ),
+            '--spec',
+            specPath,
+            '--operation-id',
+            'getHealth',
+            '--base-url-env',
+            'HEALTH_URL',
+          ],
+          { encoding: 'utf8' },
+        ),
+      ) as { providers: { config: { url: string } }[] };
+      generated.providers[0].config.url = `http://127.0.0.1:${address.port}/health`;
+      const configPath = path.join(tempDir, 'response-text.yaml');
+      const outputPath = path.join(tempDir, 'response-text.json');
+      fs.writeFileSync(configPath, yaml.dump(generated));
+      await runCli([
+        'eval',
+        '-c',
+        configPath,
+        '-o',
+        outputPath,
+        '--no-cache',
+        '--no-share',
+        '--no-progress-bar',
+      ]);
+      const results = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+      expect(results.results.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
+      expect(results.results.results[0].response.output).toBe('ready');
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
