@@ -17,7 +17,7 @@ type Value =
       elements?: ArrayElement[];
     }
   | { kind: 'function'; node: FunctionNode; scope: Scope; moduleVariable: boolean }
-  | { kind: 'api'; name: string }
+  | { kind: 'api'; name: string; rows?: Value[] }
   | { kind: 'union'; values: Value[] };
 type ValueSlot =
   | Value
@@ -915,7 +915,13 @@ export function findHoistedPersistentMockWithoutReset(
     return mock;
   }
 
-  function callApi(api: string, args: Value[], context: Context, node: Node): Value {
+  function callApi(
+    apiValue: Extract<Value, { kind: 'api' }>,
+    args: Value[],
+    context: Context,
+    node: Node,
+  ): Value {
+    const { name: api } = apiValue;
     switch (api) {
       case 'vi.fn':
         // mockReset restores a vi.fn(callback)'s original implementation. Its
@@ -923,6 +929,8 @@ export function findHoistedPersistentMockWithoutReset(
         for (const key of callbackReferences(args[0] ?? UNKNOWN, context, node)) {
           exposedMocks.add(key);
         }
+        return makeMock(node, context);
+      case 'vi.spyOn':
         return makeMock(node, context);
       case 'vi.mocked':
         return args[0] ?? UNKNOWN;
@@ -951,10 +959,16 @@ export function findHoistedPersistentMockWithoutReset(
         }
         break;
     }
-    return callTestApi(api, args, context, node);
+    return callTestApi(apiValue, args, context, node);
   }
 
-  function callTestApi(api: string, args: Value[], context: Context, node: Node): Value {
+  function callTestApi(
+    apiValue: Extract<Value, { kind: 'api' }>,
+    args: Value[],
+    context: Context,
+    node: Node,
+  ): Value {
+    const { name: api } = apiValue;
     const base = api.split('.')[0];
     const curried = api.endsWith('.each') || api.endsWith('.for');
     if (context.phase !== 'collection') {
@@ -964,15 +978,18 @@ export function findHoistedPersistentMockWithoutReset(
       const callback = args.at(-1);
       if (callback?.kind === 'function') {
         const empty = isEmptySuite(callback.node.body);
-        invoke(
-          callback,
-          [{ kind: 'api', name: 'test' }],
-          { ...context, suite: suite(context.suite, empty, context.guards) },
-          node,
-          {
-            root: true,
-          },
-        );
+        const rows = apiValue.rows ?? [{ kind: 'api', name: 'test' }];
+        for (const row of rows) {
+          invoke(
+            callback,
+            [row],
+            { ...context, suite: suite(context.suite, empty, context.guards) },
+            node,
+            {
+              root: true,
+            },
+          );
+        }
       }
     } else if (HOOK_PHASES.has(base)) {
       const callback = args[0];
@@ -988,7 +1005,15 @@ export function findHoistedPersistentMockWithoutReset(
         testCallbacks.push({ callback, context, node });
       }
     }
-    return { kind: 'api', name: curried ? base : api };
+    const table = args[0];
+    return {
+      kind: 'api',
+      name: curried ? base : api,
+      rows:
+        curried && table?.kind === 'object' && table.array && table.elements
+          ? table.elements.map((element) => element.value)
+          : undefined,
+    };
   }
 
   function isEmptySuite(node: Node | null | undefined): boolean {
@@ -1242,7 +1267,7 @@ export function findHoistedPersistentMockWithoutReset(
     method?: string,
   ): Value {
     if (callable.kind === 'api') {
-      return callApi(callable.name, args, context, node);
+      return callApi(callable, args, context, node);
     }
     if (context.phase === 'collection' && args.some((argument) => argument.kind === 'function')) {
       // Opaque collection helpers can register tests, including callbacks

@@ -2159,6 +2159,21 @@ describe('hoisted mock provenance', () => {
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
   });
 
+  it('tracks a hoisted spy through its reset', () => {
+    const source = `const spy = vi.hoisted(() =>
+      vi.spyOn(target, 'method').mockReturnValue('x'));
+      beforeEach(() => spy.mockReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('keeps parameterized suite row mock identities', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      describe.each([{ mock }])('case', ({ mock }) => {
+        beforeEach(() => mock.mockReset()); it('works', () => mock());
+      });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
   it('drops a setup setter canceled later in the same hook', () => {
     const source = `const mock = vi.hoisted(() => vi.fn());
       beforeEach(() => { mock.mockReturnValue('x'); mock.mockReset(); });
