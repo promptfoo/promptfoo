@@ -178,10 +178,14 @@ export const STRUCTURED_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'trajectory:tool-sequence',
   'trajectory:tool-set',
   'trajectory:step-count',
+  'trajectory:goal-success',
+  'trajectory:tool-used',
   'not-trajectory:tool-args-match',
   'not-trajectory:tool-sequence',
   'not-trajectory:tool-set',
   'not-trajectory:step-count',
+  'not-trajectory:goal-success',
+  'not-trajectory:tool-used',
 ]);
 
 const OPTIONAL_SQL_CONFIGURATION_TYPES = new Set<AssertionType>([
@@ -514,7 +518,14 @@ function getTrajectoryStepCountValueError(value: unknown): string | undefined {
   if (matcherError) {
     return matcherError;
   }
-  return trajectoryCountBoundsError(value, 'trajectory:step-count');
+  return trajectoryCountBoundsError(
+    {
+      ...value,
+      min: isNunjucksOutputExpression(value.min) ? 0 : value.min,
+      max: isNunjucksOutputExpression(value.max) ? Number.MAX_VALUE : value.max,
+    },
+    'trajectory:step-count',
+  );
 }
 
 function getTraceErrorSpansValueError(value: unknown): string | undefined {
@@ -527,7 +538,9 @@ function getTrajectoryToolSequenceValueError(value: unknown): string | undefined
   // The object form carries an optional mode; mirror the runtime "in_order"/"exact" check
   // (validated before steps, as the runtime resolves mode before the empty-steps guard).
   if (isRecord(value)) {
-    const modeError = trajectoryToolSequenceModeError(value);
+    const modeError = trajectoryToolSequenceModeError(
+      isNunjucksOutputExpression(value.mode) ? { ...value, mode: 'in_order' } : value,
+    );
     if (modeError) {
       return modeError;
     }
@@ -734,7 +747,11 @@ function getTrajectoryGoalValueError(assertion: Assertion): string | undefined {
   }
   // Goal is present; mirror the runtime check that an optional timeoutMs is a positive number.
   if (isRecord(assertion.value)) {
-    return trajectoryGoalSuccessTimeoutError(assertion.value);
+    return trajectoryGoalSuccessTimeoutError(
+      isNunjucksOutputExpression(assertion.value.timeoutMs)
+        ? { ...assertion.value, timeoutMs: 1 }
+        : assertion.value,
+    );
   }
 
   return undefined;

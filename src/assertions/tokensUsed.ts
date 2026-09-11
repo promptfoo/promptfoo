@@ -130,7 +130,7 @@ function tokensFromProviderResponse(params: AssertionParams): number | undefined
     return undefined;
   }
   if (
-    usage.numRequests === 0 &&
+    usage.numRequests !== undefined &&
     usage.prompt === 0 &&
     usage.completion === 0 &&
     usage.total === 0
@@ -173,6 +173,7 @@ function resolveTokenUsage(
   params: AssertionParams,
   source: NonNullable<TokensUsedValue['source']>,
   pattern: string,
+  patternSupplied = false,
 ): { total: number; usedSource: 'trace' | 'response' } {
   const trace = params.assertionValueContext.trace;
 
@@ -196,7 +197,7 @@ function resolveTokenUsage(
     };
   }
 
-  if (pattern !== '*') {
+  if (pattern !== '*' || patternSupplied) {
     if (!trace?.spans || trace.spans.length === 0) {
       throw new Error(
         `No trace token usage available for tokens-used assertion matching pattern "${pattern}"`,
@@ -270,7 +271,12 @@ export const handleTokensUsed = (params: AssertionParams): GradingResult => {
   const { min, max } = value;
   const pattern = value.pattern ?? '*';
   const source = value.source ?? 'auto';
-  const { total, usedSource } = resolveTokenUsage(params, source, pattern);
+  const { total, usedSource } = resolveTokenUsage(
+    params,
+    source,
+    pattern,
+    Object.prototype.hasOwnProperty.call(renderedValue, 'pattern'),
+  );
 
   const basePass = (min === undefined || total >= min) && (max === undefined || total <= max);
   const pass = params.inverse ? !basePass : basePass;

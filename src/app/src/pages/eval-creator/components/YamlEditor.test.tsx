@@ -134,10 +134,7 @@ describe('YamlEditor', () => {
     await user.paste('description: Saved with shortcut');
     await user.keyboard('{Control>}s{/Control}');
 
-    expect(mockSetConfig).toHaveBeenCalledWith(
-      { description: 'Saved with shortcut' },
-      'source-eval',
-    );
+    expect(mockSetConfig).toHaveBeenCalledWith({ description: 'Saved with shortcut' });
     expect(mockShowToast).toHaveBeenCalledWith('Configuration saved successfully', 'success');
     expect(screen.getByRole('button', { name: /Save/ })).toBeDisabled();
   });

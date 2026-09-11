@@ -723,6 +723,7 @@ function collectStoredAzureBlobSasTokens(
     const redacted = redactAzureBlobSasToken(value);
     if (redacted !== value) {
       const key = JSON.stringify([path, redacted]);
+      const globalKey = JSON.stringify([null, redacted]);
       const storedValue = tokensByRedactedUri.get(key);
       if (storedValue === undefined) {
         tokensByRedactedUri.set(key, value);
@@ -730,6 +731,12 @@ function collectStoredAzureBlobSasTokens(
         // Two stored secrets collapse to the same redacted URI. Leave future
         // submissions redacted rather than guessing which credential to reuse.
         tokensByRedactedUri.set(key, null);
+      }
+      const globalValue = tokensByRedactedUri.get(globalKey);
+      if (globalValue === undefined) {
+        tokensByRedactedUri.set(globalKey, value);
+      } else if (globalValue !== value) {
+        tokensByRedactedUri.set(globalKey, null);
       }
     }
     return tokensByRedactedUri;
@@ -758,6 +765,9 @@ function restoreAzureBlobSasTokensFromMap<T>(
   path: Array<string | number> = [],
 ): RestoreResult<T> {
   if (typeof value === 'string') {
+    if (tokensByRedactedUri.get(JSON.stringify([null, value])) === null) {
+      return { value, restored: false };
+    }
     const storedValue = tokensByRedactedUri.get(JSON.stringify([path, value]));
     return storedValue == null
       ? { value, restored: false }

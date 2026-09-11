@@ -348,6 +348,45 @@ describe('callGradingProvider', () => {
     expect(provider.callApi).not.toHaveBeenCalled();
   });
 
+  it('keeps an aborted in-flight call in its rate-limit slot until it settles', async () => {
+    let releaseFirst!: () => void;
+    const firstCall = new Promise<ProviderResponse>((resolve) => {
+      releaseFirst = () => resolve({ output: 'first' });
+    });
+    const provider = createProvider();
+    vi.mocked(provider.callApi).mockImplementation((prompt) =>
+      prompt === 'first' ? firstCall : Promise.resolve({ output: prompt }),
+    );
+    const registry = createRateLimitRegistry({ maxConcurrency: 1, minConcurrency: 1 });
+    const abortController = new AbortController();
+
+    try {
+      const first = withProviderCallExecutionContext(
+        {
+          rateLimitRegistry: registry,
+          queuedCallAbortSignal: abortController.signal,
+        },
+        () => callProviderWithContext(provider, 'first', 'rubric', vars),
+      );
+      await vi.waitFor(() => expect(provider.callApi).toHaveBeenCalledTimes(1));
+      abortController.abort();
+      const rejection = expect(first).rejects.toMatchObject({ name: 'AbortError' });
+
+      const second = withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+        callProviderWithContext(provider, 'second', 'rubric', vars),
+      );
+      await Promise.resolve();
+      expect(provider.callApi).toHaveBeenCalledTimes(1);
+
+      releaseFirst();
+      await rejection;
+      await expect(second).resolves.toEqual({ output: 'second' });
+      expect(provider.callApi).toHaveBeenCalledTimes(2);
+    } finally {
+      registry.dispose();
+    }
+  });
+
   it('settles an aborted queued call waiting in a wrapped provider rate limiter', async () => {
     let releaseHold!: () => void;
     const holdGate = new Promise<void>((resolve) => {

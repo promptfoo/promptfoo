@@ -1,20 +1,6 @@
 /**
- * Shared config validation for trace and trajectory assertions.
- *
- * Each validator encodes the hardening rules (numeric bounds, ranges, percentile/method
- * enums, and boolean toggles) for an assertion's `value`, returning a human-readable error
- * message or `undefined` when the config is valid. Both the runtime assertion handlers
- * (which throw on the returned message) and the Eval Creator UI validators (which surface
- * it inline at save time) call these, so save-time and run-time validation cannot drift.
- *
- * This module lives in the dependency-free `contracts` leaf (not `src/assertions`, which
- * is `core`) so both the browser bundle (via
- * `@promptfoo/contracts/validators/traceAssertionConfig`) and the runtime can import it
- * without adding reverse-layer dependencies.
- *
- * Validators only enforce the hardening rules; structural/presence requirements that
- * differ between the two surfaces (e.g. the UI requiring a span pattern, or the runtime
- * requiring a `goal`) stay with each caller.
+ * Value validation shared by trace assertion handlers and the Eval Creator.
+ * Returns an error message or undefined. Callers validate their own structural requirements.
  */
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

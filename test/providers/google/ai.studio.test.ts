@@ -2334,6 +2334,36 @@ describe('AIStudioChatProvider', () => {
       expect(body.tools).toBeUndefined();
     });
 
+    it('disables inherited passthrough function declarations for a prompt-level tool choice', async () => {
+      vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
+        return { renderString: vi.fn((str) => str) } as any;
+      });
+      provider = new AIStudioChatProvider('gemini-pro', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ functionDeclarations: [{ name: 'lookup' }] }],
+          passthrough: {
+            toolConfig: { functionCallingConfig: { mode: 'ANY' } },
+            tools: [{ functionDeclarations: [{ name: 'other' }] }, { googleSearch: {} }],
+          },
+        } as any,
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        data: { candidates: [{ content: { parts: [{ text: 'ok' }] } }] },
+        cached: false,
+      } as any);
+
+      await provider.callGemini('hi', {
+        prompt: { raw: 'hi', label: 'hi', config: { tool_choice: 'none' } },
+      } as any);
+
+      const body = JSON.parse(
+        vi.mocked(cache.fetchWithCache).mock.calls.at(-1)![1]!.body as string,
+      );
+      expect(body.toolConfig).toEqual({ functionCallingConfig: { mode: 'NONE' } });
+      expect(body.tools).toEqual([{ googleSearch: {} }]);
+    });
+
     it('should handle Google Search as a tool', async () => {
       // Reset the Nunjucks mock to return the non-rendered value for these tests
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {

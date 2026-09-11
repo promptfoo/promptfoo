@@ -48,7 +48,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   const editorContainerRef = React.useRef<HTMLDivElement>(null);
   const { showToast } = useToast();
 
-  const { config, getTestSuite, setConfig, sourceEvalId } = useStore();
+  const { config, getTestSuite, setConfig } = useStore();
 
   const parseAndUpdateStore = (yamlContent: string) => {
     try {
@@ -59,7 +59,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
       if (parsedConfig && typeof parsedConfig === 'object') {
         // Simply update the config with the parsed YAML
         // The store will handle the mapping
-        setConfig({ ...config, ...(parsedConfig as Partial<UnifiedConfig>) }, sourceEvalId);
+        setConfig({ ...config, ...(parsedConfig as Partial<UnifiedConfig>) });
 
         setParseError(null);
         showToast('Configuration saved successfully', 'success');

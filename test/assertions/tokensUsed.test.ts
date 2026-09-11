@@ -379,6 +379,10 @@ describe('handleTokensUsed', () => {
     expect(() => handleTokensUsed(params)).toThrow(
       /No token usage data available for tokens-used assertion from provider response/,
     );
+    params.providerResponse!.tokenUsage!.numRequests = 1;
+    expect(() => handleTokensUsed(params)).toThrow(
+      /No token usage data available for tokens-used assertion from provider response/,
+    );
   });
 
   it('falls back to provider token components when response total is zero', () => {

@@ -133,13 +133,14 @@ export const handleTraceErrorSpans = ({
   assertion,
   assertionValueContext,
   inverse,
+  renderedValue,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-error-spans assertion');
   }
 
   const { maxCount, maxPercentage, pattern, requirePresence } = resolveTraceErrorSpansValue(
-    assertion.value,
+    renderedValue ?? assertion.value,
   );
 
   const spans = assertionValueContext.trace.spans as TraceSpan[];

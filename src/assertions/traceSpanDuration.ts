@@ -76,12 +76,13 @@ export const handleTraceSpanDuration = ({
   assertion,
   assertionValueContext,
   inverse,
+  renderedValue,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-span-duration assertion');
   }
 
-  const value = assertion.value as TraceSpanDurationValue;
+  const value = (renderedValue ?? assertion.value) as TraceSpanDurationValue;
   if (!value || typeof value !== 'object' || typeof value.max !== 'number') {
     throw new Error('trace-span-duration assertion must have a value object with max property');
   }

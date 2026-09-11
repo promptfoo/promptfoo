@@ -1557,7 +1557,7 @@ describe('trajectory assertions', () => {
         ...defaultParams,
         assertionValueContext: {
           ...defaultParams.assertionValueContext,
-          vars: { order_id: '123' },
+          vars: { order_id: '123', history: [false] },
         },
         baseType: 'trajectory:tool-args-match',
         assertion: {
@@ -1566,6 +1566,7 @@ describe('trajectory assertions', () => {
             name: 'search_orders',
             args: {
               order_id: '{{ order_id }}',
+              include_history: '{{ history[0] }}',
             },
           },
         },
@@ -1573,6 +1574,7 @@ describe('trajectory assertions', () => {
           name: 'search_orders',
           args: {
             order_id: '{{ order_id }}',
+            include_history: '{{ history[0] }}',
           },
         },
       };

@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import {
+  isNunjucksOutputExpression,
   notTrajectoryToolUsedBoundsError,
   trajectoryCountBoundsError,
   trajectoryGoalSuccessTimeoutError,
@@ -93,9 +94,29 @@ function getRenderedTrajectoryValue(params: AssertionParams): unknown {
         : item,
     );
   }
-  return value && typeof value === 'object'
-    ? renderVarsInObject(value, params.assertionValueContext.vars)
-    : value;
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const rendered = renderVarsInObject(value, params.assertionValueContext.vars);
+  if (!rendered || typeof rendered !== 'object' || Array.isArray(rendered)) {
+    return rendered;
+  }
+  const coerceBound = (key: 'min' | 'max' | 'timeoutMs') => {
+    const raw = (value as Record<string, unknown>)[key];
+    const result = (rendered as Record<string, unknown>)[key];
+    if (!isNunjucksOutputExpression(raw) || typeof result !== 'string' || !result.trim()) {
+      return result;
+    }
+    const numeric = Number(result);
+    return Number.isFinite(numeric) ? numeric : result;
+  };
+  const result = { ...rendered } as Record<string, unknown>;
+  for (const key of ['min', 'max', 'timeoutMs'] as const) {
+    if (Object.prototype.hasOwnProperty.call(rendered, key)) {
+      result[key] = coerceBound(key);
+    }
+  }
+  return result;
 }
 
 function requireNamedTrajectoryMatcher(
