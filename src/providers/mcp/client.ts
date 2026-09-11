@@ -165,17 +165,31 @@ export class MCPClient {
 
     // Initialize servers
     const servers = this.config.servers || (this.config.server ? [this.config.server] : []);
+    const usedKeys = new Set(this.clients.keys());
     for (const server of servers) {
-      logger.info(`connecting to server ${server.name || server.url || server.path || 'default'}`);
+      const baseKey = server.name || server.url || server.path || server.command || 'default';
+      let serverKey = baseKey;
+      for (let suffix = 1; usedKeys.has(serverKey); suffix++) {
+        serverKey = `${baseKey}:${suffix}`;
+      }
+      usedKeys.add(serverKey);
+      logger.info(`connecting to server ${serverKey}`);
       startupSignal.throwIfAborted();
-      await awaitProviderOperation(this.connectToServer(server, startupSignal), startupSignal);
+      await awaitProviderOperation(
+        this.connectToServer(server, serverKey, startupSignal),
+        startupSignal,
+      );
     }
   }
 
-  private async connectToServer(server: MCPServerConfig, signal?: AbortSignal): Promise<void> {
+  private async connectToServer(
+    server: MCPServerConfig,
+    serverKey = server.name || server.url || server.path || 'default',
+    signal?: AbortSignal,
+  ): Promise<void> {
     const operationSignal = signal ?? this.lifecycleController.signal;
     operationSignal.throwIfAborted();
-    const serverKey = server.name || server.url || server.path || 'default';
+    this.assertActive();
     const { Client } = await loadMcpClientSdk();
     operationSignal.throwIfAborted();
     this.assertActive();
@@ -213,14 +227,14 @@ export class MCPClient {
         signal: operationSignal,
       };
 
-      if (server.command && server.args) {
+      if (server.command) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         this.assertActive();
         // NPM package or other command execution
         signal?.throwIfAborted();
         transport = new StdioClientTransport({
           command: server.command,
-          args: server.args,
+          args: server.args ?? [],
           env: getStdioEnv(server),
         });
         await client.connect(transport, requestOptions);
@@ -333,10 +347,10 @@ export class MCPClient {
             throw error;
           }
           client = new Client(clientInfo);
-          closePromise = undefined;
           transport = undefined;
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
-          signal?.throwIfAborted();
+          operationSignal.throwIfAborted();
+          this.assertActive();
           transport = new SSEClientTransport(
             new URL(serverUrl),
             hasOptions ? transportOptions : undefined,
@@ -345,7 +359,7 @@ export class MCPClient {
           logger.debug('Connected using SSE transport');
         }
       } else {
-        throw new Error('Either command+args or path or url must be specified for MCP server');
+        throw new Error('Either command or path or url must be specified for MCP server');
       }
 
       signal?.throwIfAborted();
@@ -444,7 +458,9 @@ export class MCPClient {
     oauthConfig: OAuthServerConfig,
     forceRefresh: boolean,
   ): Promise<void> {
-    // If a refresh is already in progress, wait for it instead of starting a new one.
+    // Wait for each active refresh lock. Its owner clears it in finally; once no lock
+    // remains, this caller either uses the refreshed token or starts its own refresh.
+    // Another caller may install a new lock while we wait, so check again each time.
     while (true) {
       if (this.shuttingDown) {
         return;
@@ -461,10 +477,10 @@ export class MCPClient {
         if (this.hasValidToken(serverKey)) {
           return;
         }
-        // Token still needs refresh after waiting, so fall through and try again.
+        // The token is still stale; check for a replacement lock before refreshing.
         logger.debug(`[MCP] Token still needs refresh for ${serverKey}, refreshing again...`);
       } catch {
-        // If the in-progress refresh failed, we'll try again below
+        // The lock owner cleans up even on failure; check for a replacement lock.
         logger.debug(`[MCP] Previous token refresh failed for ${serverKey}, retrying...`);
       }
     }
@@ -511,7 +527,10 @@ export class MCPClient {
     if (this.shuttingDown) {
       return;
     }
-    await awaitProviderOperation(this.connectToServer(oauthConfig.serverConfig, signal), signal);
+    await awaitProviderOperation(
+      this.connectToServer(oauthConfig.serverConfig, serverKey, signal),
+      signal,
+    );
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
 
@@ -561,6 +580,8 @@ export class MCPClient {
         let currentClient = client;
         let retried = false;
 
+        // A successful call returns. Authentication failure allows one refresh and
+        // one retry; all other failures return an error after the catch block.
         while (true) {
           try {
             signal?.throwIfAborted();

@@ -26,7 +26,7 @@ import {
 import { cloudConfig } from '../src/globalConfig/cloud';
 import logger from '../src/logger';
 import { fetchWithRetries } from '../src/util/fetch/index';
-import { mockProcessEnv } from './util/utils';
+import { createDeferred, mockProcessEnv } from './util/utils';
 
 vi.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: vi.fn().mockReturnValue('/mock/config/path'),
@@ -360,6 +360,20 @@ describe('fetchWithCache', () => {
   });
 
   describe('with cache enabled', () => {
+    it('rejects a settled cache hit when cancellation precedes its continuation', async () => {
+      const controller = new AbortController();
+      const reason = new Error('cancelled after cache settled');
+      const read = createDeferred<string>();
+      vi.mocked(getCache().get).mockReturnValueOnce(read.promise);
+
+      const request = fetchWithCache(url, { signal: controller.signal }, 1000);
+      read.resolve(JSON.stringify(response));
+      queueMicrotask(() => controller.abort(reason));
+
+      await expect(request).rejects.toBe(reason);
+      expect(mockFetchWithRetries).not.toHaveBeenCalled();
+    });
+
     it('does not register an abort listener if the cache read already cancelled', async () => {
       const controller = new AbortController();
       const listener = vi.spyOn(controller.signal, 'addEventListener');
@@ -901,7 +915,7 @@ describe('fetchWithCache', () => {
       if (signaledResult.status === 'rejected') {
         expect(signaledResult.reason.name).toBe('AbortError');
       }
-      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledOnce();
     });
 
     it('should handle request options in cache key', async () => {

@@ -273,6 +273,8 @@ export interface ApiProvider<TConfig = any> extends MinimalApiProvider, Provider
   callModerationApi?: ProviderOperations['callModerationApi'];
   delay?: number;
   getSessionId?: () => string;
+  /** Native audio input content format accepted by this provider and its configured model. */
+  getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
   transform?: string | TransformFunction;

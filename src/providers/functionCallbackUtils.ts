@@ -376,11 +376,7 @@ export class FunctionCallbackHandler {
       const parsedArgs =
         args == null || args === '' ? {} : typeof args === 'string' ? JSON.parse(args) : args;
       signal?.throwIfAborted();
-      const result = await this.mcpClient.callTool(
-        toolName,
-        parsedArgs,
-        ...(signal ? ([signal] as const) : ([] as const)),
-      );
+      const result = await this.mcpClient.callTool(toolName, parsedArgs, signal);
 
       if (isMcpErrorResult(result)) {
         return {

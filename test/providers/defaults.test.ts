@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
+import { AzureEmbeddingProvider } from '../../src/providers/azure/embedding';
 import { AzureModerationProvider } from '../../src/providers/azure/moderation';
 import {
   getDefaultProviders,
   setDefaultCompletionProviders,
   setDefaultEmbeddingProviders,
 } from '../../src/providers/defaults';
-import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
+import {
+  AIStudioChatProvider,
+  AIStudioEmbeddingProvider,
+} from '../../src/providers/google/ai.studio';
 import { hasGoogleDefaultCredentials } from '../../src/providers/google/util';
 import { VertexEmbeddingProvider } from '../../src/providers/google/vertex';
 import {
@@ -83,6 +88,8 @@ describe('Provider override tests', () => {
     mockProcessEnv({ AZURE_API_KEY: undefined });
     mockProcessEnv({ AZURE_DEPLOYMENT_NAME: undefined });
     mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: undefined });
+    mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: undefined });
+    mockProcessEnv({ VOYAGE_API_KEY: undefined });
   });
 
   afterEach(async () => {
@@ -289,14 +296,122 @@ describe('Provider override tests', () => {
     expect(hasGoogleDefaultCredentials).toHaveBeenCalledTimes(1);
   });
 
-  it('should not probe Google default credentials when Azure is preferred', async () => {
+  it('should not probe Google default credentials when Azure has an embedding deployment', async () => {
     mockProcessEnv({ AZURE_OPENAI_API_KEY: 'azure-key' });
     mockProcessEnv({ AZURE_DEPLOYMENT_NAME: 'azure-chat' });
     mockProcessEnv({ AZURE_OPENAI_DEPLOYMENT_NAME: 'azure-chat' });
+    mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'azure-vectors' });
 
     await getDefaultProviders();
 
     expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+  });
+
+  describe('embeddings with Azure chat defaults', () => {
+    const azureEnv: EnvOverrides = {
+      AZURE_OPENAI_API_KEY: 'fixture-azure-key',
+      AZURE_DEPLOYMENT_NAME: 'tenant-chat',
+      AZURE_OPENAI_DEPLOYMENT_NAME: 'tenant-chat',
+    };
+
+    it.each(['process', 'scoped'])(
+      'uses an explicit Azure embedding deployment from %s unchanged',
+      async (source) => {
+        const env = { ...azureEnv, AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'tenant-vectors-v1' };
+        if (source === 'process') {
+          mockProcessEnv(env);
+        }
+        const providers = await getDefaultProviders(source === 'scoped' ? env : undefined);
+        expect(providers.embeddingProvider).toBeInstanceOf(AzureEmbeddingProvider);
+        expect(providers.embeddingProvider).toHaveProperty('deploymentName', 'tenant-vectors-v1');
+        expect(providers.gradingProvider).toBeInstanceOf(AzureChatCompletionProvider);
+        expect(providers.gradingProvider).toHaveProperty('deploymentName', 'tenant-chat');
+        expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+      },
+    );
+
+    it('preserves process precedence for the Azure embedding deployment', async () => {
+      mockProcessEnv({ AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'process-vectors' });
+      const providers = await getDefaultProviders({
+        ...azureEnv,
+        AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'scoped-vectors',
+      });
+      expect(providers.embeddingProvider).toHaveProperty('deploymentName', 'process-vectors');
+    });
+
+    it.each([
+      ['GEMINI_API_KEY', 'google:embedding:gemini-embedding-001'],
+      ['GOOGLE_API_KEY', 'google:embedding:gemini-embedding-001'],
+      ['PALM_API_KEY', 'google:embedding:gemini-embedding-001'],
+      ['MISTRAL_API_KEY', 'mistral:embedding:mistral-embed'],
+      ['VOYAGE_API_KEY', 'voyage:voyage-3.5'],
+    ])('uses scoped %s for embeddings while keeping Azure chat', async (key, id) => {
+      const env = {
+        ...azureEnv,
+        GOOGLE_GENAI_USE_VERTEXAI: 'true',
+        [key]: 'fixture-embedding-key',
+      };
+      const providers = await getDefaultProviders(env);
+      expect(providers.embeddingProvider.id()).toBe(id);
+      expect(providers.embeddingProvider).not.toBeInstanceOf(AzureEmbeddingProvider);
+      expect(providers.embeddingProvider).toHaveProperty('env', env);
+      expect(providers.gradingProvider).toBeInstanceOf(AzureChatCompletionProvider);
+      expect(providers.gradingProvider).toHaveProperty('deploymentName', 'tenant-chat');
+      expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+      if (key !== 'MISTRAL_API_KEY' && key !== 'VOYAGE_API_KEY') {
+        expect(providers.embeddingProvider).toBeInstanceOf(AIStudioEmbeddingProvider);
+        expect(providers.embeddingProvider).toHaveProperty('config.vertexai', false);
+        expect((providers.embeddingProvider as AIStudioEmbeddingProvider).getApiKey()).toBe(
+          'fixture-embedding-key',
+        );
+      }
+    });
+
+    it('uses process embedding credentials without reusing the chat deployment', async () => {
+      mockProcessEnv({ ...azureEnv, MISTRAL_API_KEY: 'fixture-mistral-key' });
+      const providers = await getDefaultProviders();
+      expect(providers.embeddingProvider.id()).toBe('mistral:embedding:mistral-embed');
+      expect(providers.gradingProvider).toHaveProperty('deploymentName', 'tenant-chat');
+      expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+    });
+
+    it('uses Vertex embeddings when only ADC is available beside Azure chat', async () => {
+      vi.mocked(hasGoogleDefaultCredentials).mockResolvedValue(true);
+      const providers = await getDefaultProviders(azureEnv);
+      expect(providers.embeddingProvider).toBeInstanceOf(VertexEmbeddingProvider);
+      expect(providers.embeddingProvider.id()).toBe('vertex:gemini-embedding-001');
+      expect(providers.gradingProvider).toBeInstanceOf(AzureChatCompletionProvider);
+      expect(hasGoogleDefaultCredentials).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the existing OpenAI fallback when no embedding credentials are available', async () => {
+      const providers = await getDefaultProviders(azureEnv);
+      expect(providers.embeddingProvider).toBe(OpenAiEmbeddingProvider);
+      expect(providers.embeddingProvider).not.toBeInstanceOf(AzureEmbeddingProvider);
+      expect(hasGoogleDefaultCredentials).toHaveBeenCalledTimes(1);
+      const response = await OpenAiEmbeddingProvider.callEmbeddingApi('hello');
+      expect(response.error).toMatch(/API key/i);
+      expect(response.embedding).toBeUndefined();
+    });
+
+    it('preserves explicit embedding overrides without probing ADC', async () => {
+      const override = new MockProvider('custom:existing-vector-space');
+      await setDefaultEmbeddingProviders(override);
+      const providers = await getDefaultProviders(azureEnv);
+      expect(providers.embeddingProvider).toBe(override);
+      expect(providers.gradingProvider).toBeInstanceOf(AzureChatCompletionProvider);
+      expect(hasGoogleDefaultCredentials).not.toHaveBeenCalled();
+    });
+
+    it('preserves an explicit embedding override over an Azure embedding deployment', async () => {
+      const override = new MockProvider('custom:existing-vector-space');
+      await setDefaultEmbeddingProviders(override);
+      const providers = await getDefaultProviders({
+        ...azureEnv,
+        AZURE_OPENAI_EMBEDDING_DEPLOYMENT_NAME: 'tenant-vectors',
+      });
+      expect(providers.embeddingProvider).toBe(override);
+    });
   });
 
   it('should use Mistral providers when provided via env overrides', async () => {

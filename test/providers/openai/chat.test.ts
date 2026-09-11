@@ -1097,9 +1097,13 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         const result = await provider.callApi('Read the file');
 
-        expect(mcpClient.callTool).toHaveBeenCalledWith('read_file', {
-          path: '../../../etc/passwd',
-        });
+        expect(mcpClient.callTool).toHaveBeenCalledWith(
+          'read_file',
+          {
+            path: '../../../etc/passwd',
+          },
+          undefined,
+        );
         expect(result.output).toBe(expectedOutput);
       },
     );
@@ -2799,6 +2803,37 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       });
       expect(result.tokenUsage).toEqual({ total: 18, prompt: 12, completion: 6, numRequests: 1 });
     });
+
+    it.each([false, true])(
+      'preserves the effective requested audio format (cached=%s)',
+      async (cached) => {
+        mockFetchWithCache.mockResolvedValue({
+          data: {
+            choices: [
+              { message: { audio: { id: 'audio-mp3', data: 'SUQz', transcript: 'Hello.' } } },
+            ],
+          },
+          cached,
+          status: 200,
+          statusText: 'OK',
+        });
+        const provider = new OpenAiChatCompletionProvider('gpt-audio-1.5', {
+          config: { audio: { voice: 'alloy', format: 'wav' } },
+        });
+        const result = await provider.callApi('Say hello', {
+          prompt: {
+            raw: 'Say hello',
+            label: 'audio',
+            config: { audio: { voice: 'alloy', format: 'mp3' } },
+          },
+          vars: {},
+        });
+        const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]!.body as string);
+        expect(body.audio.format).toBe('mp3');
+        expect(result.audio).toMatchObject({ data: 'SUQz', format: 'mp3' });
+        expect(result.cached).toBe(cached);
+      },
+    );
 
     it('should handle cached audio responses correctly', async () => {
       const mockAudioResponse = {

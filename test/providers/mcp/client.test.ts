@@ -216,6 +216,64 @@ describe('MCPClient', () => {
       expect(mcpClient.hasInitialized).toBe(false);
     });
 
+    it('should initialize a zero-argument command server with its configured env', async () => {
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'mcp-server', env: { MCP_MODE: 'test' } },
+      });
+
+      await mcpClient.initialize();
+
+      expect(StdioClientTransport).toHaveBeenCalledWith({
+        command: 'mcp-server',
+        args: [],
+        env: { ...process.env, MCP_MODE: 'test' },
+      });
+      expect(mcpClient.hasInitialized).toBe(true);
+      await mcpClient.cleanup();
+    });
+
+    it('keeps unnamed zero-argument command servers distinct', async () => {
+      mockClient.listTools
+        .mockResolvedValueOnce({
+          tools: [{ name: 'first_tool', description: '', inputSchema: {} }],
+        })
+        .mockResolvedValueOnce({
+          tools: [{ name: 'second_tool', description: '', inputSchema: {} }],
+        });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        servers: [
+          { command: 'mcp-server', env: { MCP_MODE: 'first' } },
+          { command: 'mcp-server', env: { MCP_MODE: 'second' } },
+        ],
+      });
+
+      await mcpClient.initialize();
+
+      expect(mcpClient.connectedServers).toHaveLength(2);
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual([
+        'first_tool',
+        'second_tool',
+      ]);
+      await mcpClient.cleanup();
+      expect(mockClient.close).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not overwrite an explicitly named server with a generated command key', async () => {
+      mcpClient = new MCPClient({
+        enabled: true,
+        servers: [{ name: 'mcp-server:1', command: 'mcp-server' }, { command: 'mcp-server' }],
+      });
+
+      await mcpClient.initialize();
+
+      expect(mcpClient.connectedServers).toHaveLength(2);
+      await mcpClient.cleanup();
+      expect(mockClient.close).toHaveBeenCalledTimes(2);
+    });
+
     it('should initialize with per-server env merged into process.env', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
       mockClient.listTools.mockResolvedValueOnce({
@@ -488,6 +546,27 @@ describe('MCPClient', () => {
       expect(fallback.listTools).toHaveBeenCalledOnce();
       await mcpClient.cleanup();
       expect(fallback.close).toHaveBeenCalledOnce();
+    });
+
+    it('does not reconnect when cleanup starts while loading the SSE transport', async () => {
+      const first = createMockClient();
+      first.connect.mockRejectedValueOnce(new Error('Streamable HTTP failed'));
+      const fallback = createMockClient();
+      const cleaned = createDeferred<void>();
+      mcpMocks.MockClient.mockImplementationOnce(function FirstClient() {
+        return first;
+      }).mockImplementationOnce(function FallbackClient() {
+        queueMicrotask(() => void mcpClient.cleanup().then(cleaned.resolve, cleaned.reject));
+        return fallback;
+      });
+
+      mcpClient = new MCPClient({ enabled: true, server: { url: 'http://localhost:3000' } });
+      await expect(mcpClient.initialize()).rejects.toMatchObject({ name: 'AbortError' });
+      await cleaned.promise;
+
+      expect(fallback.connect).not.toHaveBeenCalled();
+      expect(SSEClientTransport).not.toHaveBeenCalled();
+      expect(mcpClient.connectedServers).toEqual([]);
     });
 
     it('should fall back to SSEClientTransport with headers if StreamableHTTPClientTransport fails', async () => {
