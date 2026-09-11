@@ -272,6 +272,7 @@ describeEvaluator('evaluator options and hooks', () => {
     const evaluation = new Eval({});
     const pendingEvaluation = evaluate(testSuite, evaluation, { timeoutMs: 100 });
     await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersToNextTimerAsync();
     await pendingEvaluation;
 
     const expectedResult = expect.objectContaining({

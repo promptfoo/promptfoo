@@ -1779,7 +1779,6 @@ async function runEvalInternal({
               ? (gradingAbortSignal ?? evaluateOptions.abortSignal)
               : abortSignal;
           try {
-            await applyProviderDelayIfNeeded(provider, response, abortSignal);
             await applyRunEvalResponseOutcome({
               abortSignal: outcomeSignal,
               deferGrading,
@@ -1807,6 +1806,15 @@ async function runEvalInternal({
             ret.error = err instanceof Error ? err.message : String(err);
             ret.failureReason = ResultFailureReason.ERROR;
             return [ret];
+          }
+
+          try {
+            await applyProviderDelayIfNeeded(provider, response, abortSignal);
+          } catch (error) {
+            if (!abortSignal?.aborted) {
+              throw error;
+            }
+            // The row is already graded; pausing an inter-test delay does not invalidate it.
           }
 
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
@@ -3833,9 +3841,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     };
 
     let timeoutId: NodeJS.Timeout | undefined;
+    let timeoutFallback: NodeJS.Immediate | undefined;
     let didTimeout = false;
     let completedTarget: EvaluateResult | undefined;
     const clearEvalStepTimeout = () => {
+      if (timeoutFallback) {
+        clearImmediate(timeoutFallback);
+        timeoutFallback = undefined;
+      }
       if (timeoutId) {
         clearTimeout(timeoutId);
         timeoutId = undefined;
@@ -3843,7 +3856,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     };
 
     try {
-      return await Promise.race([
+      const rows = await Promise.race([
         this.processEvalStep(
           evalStepWithSignal,
           index,
@@ -3856,18 +3869,29 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
               }
             },
             providerCallQueue,
-            shouldSkipStaleRows: () => didTimeout,
+            shouldSkipStaleRows: () =>
+              didTimeout || (abortController.signal.aborted && !completedTarget),
           },
           context,
         ),
         new Promise<void>((_, reject) => {
           timeoutId = setTimeout(() => {
-            didTimeout = true;
-            abortController.abort();
-            reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
+            const error = new Error(`Evaluation timed out after ${timeoutMs}ms`);
+            abortController.abort(error);
+            // Allow cancellation-aware providers to return completed billing before the
+            // fallback for legacy providers that never settle after abort.
+            timeoutFallback = setImmediate(() => {
+              didTimeout = true;
+              reject(error);
+            });
           }, timeoutMs);
         }),
       ]);
+      if (abortController.signal.aborted && !completedTarget) {
+        didTimeout = true;
+        throw abortController.signal.reason;
+      }
+      return rows;
     } catch (error) {
       if (!didTimeout) {
         throw error;

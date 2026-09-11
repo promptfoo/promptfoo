@@ -85,6 +85,10 @@ function spawnCli(
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
+  const exit = new Promise<{ stdout: string; stderr: string; exitCode: number }>((resolve) => {
+    child.once('close', (code) => resolve({ stdout, stderr, exitCode: code ?? 1 }));
+  });
+
   const outputWaiters: Array<{
     pattern: string | RegExp;
     resolve: (output: string) => void;
@@ -168,12 +172,9 @@ function spawnCli(
         );
       }, timeoutMs);
 
-      child.on('exit', (code) => {
+      void exit.then((result) => {
         clearTimeout(timer);
-        // Small delay to collect remaining output
-        setTimeout(() => {
-          resolve({ stdout, stderr, exitCode: code ?? 1 });
-        }, 100);
+        resolve(result);
       });
     });
   };
@@ -355,8 +356,7 @@ describe('Resume E2E Tests', () => {
         cli.sendSignal('SIGINT');
         await cli.waitForOutput('Pausing evaluation', 10000);
 
-        // Small delay then second SIGINT: force exit
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        // The pause message confirms the first signal was handled.
         cli.sendSignal('SIGINT');
 
         // Process should exit
