@@ -409,6 +409,14 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     }
   }
 
+  private sendsToOpenAiApi(): boolean {
+    try {
+      return new URL(this.getApiUrl()).hostname.toLowerCase() === 'api.openai.com';
+    } catch {
+      return false;
+    }
+  }
+
   private async runSession(
     prompt: string,
     options?: CallApiOptionsParams,
@@ -419,9 +427,12 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const credentials = new Set<string>();
     addCredential(credentials, apiKey);
     let hasHeaderCredential = false;
+    let hasGatewayCredential = false;
     headers.forEach((value, name) => {
       if (isCredentialName(name)) {
-        hasHeaderCredential ||= value.trim().length > 0;
+        const present = value.trim().length > 0;
+        hasHeaderCredential ||= present;
+        hasGatewayCredential ||= present && name !== 'authorization';
         addCredential(credentials, value);
       }
     });
@@ -430,7 +441,13 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     if (!apiKey && !hasHeaderCredential && this.requiresApiKey()) {
       return { error: this.getMissingApiKeyErrorMessage() };
     }
-    if (apiKey && !headers.has('Authorization')) {
+    // Don't forward an ambient OPENAI_API_KEY to a gateway that authenticates with its own
+    // credential header; an explicit apiKey or apiKeyEnvar still sends it.
+    const sendApiKey =
+      Boolean(this.config.apiKey || this.config.apiKeyEnvar) ||
+      !hasGatewayCredential ||
+      this.sendsToOpenAiApi();
+    if (apiKey && sendApiKey && !headers.has('Authorization')) {
       headers.set('Authorization', `Bearer ${apiKey}`);
     }
     headers.set('Content-Type', 'application/json');
@@ -530,6 +547,8 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
         await this.cleanupSession(endpoint, headers, !completed, metadata);
       }
     }
+    // Cleanup ignores eval cancellation so the session is released; honor it before returning.
+    options?.abortSignal?.throwIfAborted();
     if (Object.keys(metadata).length) {
       result.metadata = metadata;
     }

@@ -207,6 +207,31 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(headers.has('Authorization')).toBe(false);
   });
 
+  it('does not forward an ambient OpenAI key to a gateway with its own credential header', async () => {
+    mockProcessEnv({ OPENAI_API_KEY: 'ambient-openai-key' });
+    const authorizationHeaders = async (config: { apiBaseUrl?: string; apiKeyEnvar?: string }) => {
+      vi.mocked(fetchWithRetries).mockClear();
+      await new OpenAiAgentsApiProvider('', {
+        config: { headers: { 'api-key': 'gateway-credential' }, ...config },
+      }).callApi('hi');
+      return vi
+        .mocked(fetchWithRetries)
+        .mock.calls.map(([, request]) => new Headers(request!.headers).get('Authorization'));
+    };
+
+    const gateway = await authorizationHeaders({ apiBaseUrl: 'https://gateway.example/v1' });
+    expect(gateway.length).toBeGreaterThan(0);
+    expect(gateway.every((value) => value === null)).toBe(true);
+    // An explicit key source or the official API still receives the OpenAI key.
+    expect(
+      await authorizationHeaders({
+        apiBaseUrl: 'https://gateway.example/v1',
+        apiKeyEnvar: 'OPENAI_API_KEY',
+      }),
+    ).toContain('Bearer ambient-openai-key');
+    expect(await authorizationHeaders({})).toContain('Bearer ambient-openai-key');
+  });
+
   it('renders nested config once and preserves variable values as literal data', async () => {
     const agentProvider = provider({
       agent: { instructions: 'Follow {{role}}', tools: [{ server_label: '{{tool}}' }] },
@@ -717,6 +742,27 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(deletion.method).toBe('DELETE');
     expect(cancel.options?.signal?.aborted).toBe(false);
     expect(deletion.options?.signal?.aborted).toBe(false);
+  });
+
+  it('honors eval cancellation that arrives while cleanup retries deletion', async () => {
+    vi.useFakeTimers();
+    let deletions = 0;
+    mockApi((_pathname, method) => {
+      if (method !== 'DELETE') {
+        return undefined;
+      }
+      deletions++;
+      return deletions < 3 ? apiError(409, 'session must be durably idle') : undefined;
+    });
+    const controller = new AbortController();
+    const pending = provider().callApi('hi', undefined, { abortSignal: controller.signal });
+    const rejected = expect(pending).rejects.toThrow('cancel eval');
+    await vi.waitFor(() => expect(deletions).toBeGreaterThan(0));
+    controller.abort(new Error('cancel eval'));
+    await vi.advanceTimersByTimeAsync(5_000);
+    await rejected;
+    // The session is still released even though the caller cancelled mid-cleanup.
+    expect(deletions).toBe(3);
   });
 
   it('does not create a session after cancellation', async () => {
