@@ -177,6 +177,8 @@ describe('OTLPTracingExporter', () => {
         {
           sequence: 'tokens: [opaque-token-one, opaque-token-two]',
           mapping: 'password: {primary: opaque-secret}',
+          nested: 'config: {password: {primary: opaque-nested}}',
+          flowSequence: '[{password: {primary: opaque-sequence}}]',
           multiline: 'config:\n  credentials: [\n    opaque-first,\n    opaque-second\n  ]',
           ordinary: 'names: [first, second]',
         },
@@ -184,6 +186,8 @@ describe('OTLPTracingExporter', () => {
       );
       expect(attributes.sequence).toBe('<redacted>');
       expect(attributes.mapping).toBe('<redacted>');
+      expect(attributes.nested).toBe('<redacted>');
+      expect(attributes.flowSequence).toBe('<redacted>');
       expect(attributes.multiline).toBe('<redacted>');
       expect(attributes.ordinary).toBe('names: [first, second]');
       expect(JSON.stringify(payload)).not.toContain('opaque-');
@@ -196,6 +200,8 @@ describe('OTLPTracingExporter', () => {
       const { attributes, payload } = await exportCustomData(
         {
           single: 'machine api.example login buildbot password opaque/value',
+          commented:
+            'machine api.example\n# deployment account\nlogin buildbot\npassword opaque/commented',
           quoted: 'machine api.example\nlogin buildbot\npassword "opaque quoted phrase"',
           fallback: 'default login buildbot account opaque-account',
           ordinary: 'machine learning uses account metadata',
@@ -203,10 +209,58 @@ describe('OTLPTracingExporter', () => {
         format,
       );
       expect(attributes.single).toBe('<redacted>');
+      expect(attributes.commented).toBe('<redacted>');
       expect(attributes.quoted).toBe('<redacted>');
       expect(attributes.fallback).toBe('<redacted>');
       expect(attributes.ordinary).toBe('machine learning uses account metadata');
       expect(JSON.stringify(payload)).not.toContain('opaque');
+    },
+  );
+
+  it.each(['json', 'protobuf'] as const)('redacts plural key collections in %s', async (format) => {
+    const input = {
+      api_keys: ['opaque/one', 'opaque/two'],
+      apiKeys: { primary: 'opaque/three' },
+      apikeys: ['opaque/four'],
+      accessKeys: ['opaque/five'],
+      private_keys: ['opaque/six'],
+      cache_keys: ['public identifier'],
+    };
+    const { attributes, payload } = await exportCustomData(
+      { native: input, serialized: JSON.stringify(input) },
+      format,
+    );
+    for (const name of ['native', 'serialized']) {
+      expect(JSON.parse(attributes[name] as string)).toEqual({
+        api_keys: '<redacted>',
+        apiKeys: '<redacted>',
+        apikeys: '<redacted>',
+        accessKeys: '<redacted>',
+        private_keys: '<redacted>',
+        cache_keys: ['public identifier'],
+      });
+    }
+    expect(JSON.stringify(payload)).not.toContain('opaque/');
+  });
+
+  it.each(['json', 'protobuf'] as const)(
+    'bounds recipient inspection across repeated native envelopes in %s',
+    async (format) => {
+      let reads = 0;
+      const recipient = {
+        get header() {
+          reads++;
+          return {};
+        },
+      };
+      const envelope = {
+        ciphertext: 'ordinary',
+        tag: 'ordinary',
+        recipients: Array(200).fill(recipient),
+      };
+      const { attributes } = await exportCustomData({ native: Array(200).fill(envelope) }, format);
+      expect(attributes.native).toBe('<redacted>');
+      expect(reads).toBeLessThanOrEqual(10_000);
     },
   );
 

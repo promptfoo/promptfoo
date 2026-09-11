@@ -631,9 +631,18 @@ function sanitizeCredentialText(value: string): string {
     }
   }
 
+  for (const [, , key, first] of value.matchAll(
+    /[,{\[]\s*(["']?)([A-Za-z_][A-Za-z\d_.-]*)\1\s*:\s*(?=(\S|$))/g,
+  )) {
+    if (isCredentialAttributeKey(key) && first !== '"' && first !== "'") {
+      return '<redacted>';
+    }
+  }
+
+  const netrc = value.replace(/^[ \t]*#[^\r\n]*/gm, '');
   if (
-    /(?:^|[\r\n])\s*(?:machine\s+\S+\s+|default\s+)(?:login|password|account)\b/i.test(value) &&
-    /(?:^|\s)(?:password|account)\s+\S/i.test(value)
+    /(?:^|[\r\n])\s*(?:machine\s+\S+\s+|default\s+)(?:login|password|account)\b/i.test(netrc) &&
+    /(?:^|\s)(?:password|account)\s+\S/i.test(netrc)
   ) {
     return '<redacted>';
   }
@@ -789,6 +798,7 @@ function isCredentialAttributeKey(key: string): boolean {
         'credential',
         'credentials',
         'apikey',
+        'apikeys',
         'auth',
         'jwt',
         'sig',
@@ -815,7 +825,9 @@ function isCredentialAttributeKey(key: string): boolean {
       }
       return true;
     }
-    return part === 'key' && ['api', 'access', 'private'].includes(parts[index - 1]);
+    return (
+      (part === 'key' || part === 'keys') && ['api', 'access', 'private'].includes(parts[index - 1])
+    );
   });
 }
 
@@ -861,7 +873,7 @@ function isPrivateJwkParameter(source: Record<string, unknown> | unknown[], key:
     : source.kty === 'oct' && key === 'k';
 }
 
-function isJwe(value: unknown): boolean {
+function isJwe(value: unknown, budget: { remaining: number }): boolean {
   if (!isRecord(value) || typeof value.ciphertext !== 'string' || typeof value.tag !== 'string') {
     return false;
   }
@@ -882,13 +894,16 @@ function isJwe(value: unknown): boolean {
         (header) => isRecord(header) && typeof header[key] === 'string',
       ),
     );
+  if (hasAlgorithms(value.header)) {
+    return true;
+  }
+  if (!Array.isArray(value.recipients)) {
+    return false;
+  }
+  budget.remaining -= value.recipients.length;
   return (
-    hasAlgorithms(value.header) ||
-    (Array.isArray(value.recipients) &&
-      (value.recipients.length > MAX_STRUCTURED_ATTRIBUTE_NODES ||
-        value.recipients.some(
-          (recipient) => isRecord(recipient) && hasAlgorithms(recipient.header),
-        )))
+    budget.remaining < 0 ||
+    value.recipients.some((recipient) => isRecord(recipient) && hasAlgorithms(recipient.header))
   );
 }
 
@@ -897,7 +912,8 @@ function sanitizeStructuredAttribute(
   state: { changed: boolean } = { changed: false },
   normalizeScalars = false,
 ): Record<string, unknown> | unknown[] | string {
-  if (isJwe(value)) {
+  const budget = { remaining: MAX_STRUCTURED_ATTRIBUTE_NODES };
+  if (isJwe(value, budget)) {
     state.changed = true;
     return '<redacted>';
   }
@@ -906,12 +922,11 @@ function sanitizeStructuredAttribute(
   const stack: Array<{ source: StructuredValue; target: StructuredValue; depth: number }> = [
     { source: value, target: root, depth: 0 },
   ];
-  let visitedNodes = 0;
 
   while (stack.length > 0) {
     const { source, target, depth } = stack.pop()!;
     for (const [key, entry] of structuredAttributeEntries(source)) {
-      if (++visitedNodes > MAX_STRUCTURED_ATTRIBUTE_NODES) {
+      if (--budget.remaining < 0) {
         state.changed = true;
         return '<redacted>';
       }
@@ -921,7 +936,7 @@ function sanitizeStructuredAttribute(
         isCredentialPairValue(source, key) ||
         isCredentialAttributeKey(key) ||
         isPrivateJwkParameter(source, key) ||
-        isJwe(entry)
+        isJwe(entry, budget)
       ) {
         sanitized = '<redacted>';
         state.changed = true;
