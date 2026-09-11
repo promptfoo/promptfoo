@@ -159,6 +159,7 @@ function prepareContent(
     // allocate past the capture limit.
     if (
       typeof data === 'string' &&
+      part.input_audio.format !== 'wav' &&
       audioBytes + Buffer.byteLength(data, 'base64') > maxAudioBytes
     ) {
       throw new Error(AUDIO_DURATION_ERROR);

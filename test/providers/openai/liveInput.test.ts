@@ -189,4 +189,12 @@ describe('Live input', () => {
     );
     expect(concat).not.toHaveBeenCalled();
   });
+
+  it('counts decoded WAV audio instead of container bytes toward the duration limit', () => {
+    const pcm = Buffer.alloc(9_599_968);
+    const wav = convertPcm16ToWav(pcm);
+    expect(prepareLiveInput(audioPrompt(wav.toString('base64')), format).audio).toHaveLength(
+      pcm.length,
+    );
+  });
 });

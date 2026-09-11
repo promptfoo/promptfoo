@@ -115,8 +115,7 @@ export class OpenAiLiveProvider extends OpenAiGenericProvider {
     // credential header or URL userinfo; an explicit apiKey or apiKeyEnvar still sends it.
     const sendApiKey =
       Boolean(config.apiKey || config.apiKeyEnvar) ||
-      url.hostname.toLowerCase() === 'api.openai.com' ||
-      (!userinfo && !credentialHeaders.some(([name]) => name.toLowerCase() !== 'authorization'));
+      url.hostname.toLowerCase() === 'api.openai.com';
     const authorization =
       apiKey && sendApiKey
         ? `Bearer ${apiKey}`

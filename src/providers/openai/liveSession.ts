@@ -817,7 +817,7 @@ export class LiveSession {
         cached: usage.input_tokens_details?.cached_tokens,
         completionDetails: getOpenAICompletionTokenDetails(usage),
       });
-      const cost = calculateOpenAIUsageCost(model, {}, usage, {
+      const cost = calculateOpenAIUsageCost(model, this.options.config, usage, {
         serviceTier:
           response.service_tier ??
           (config?.type === 'responses' ? config.responses.service_tier : undefined),

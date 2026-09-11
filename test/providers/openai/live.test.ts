@@ -1257,7 +1257,7 @@ describe('OpenAiLiveProvider', () => {
     });
     expect(await connectWith(gateway)).toEqual({
       url: 'ws://provider-gateway.example/v1/live/sessions',
-      headers: { Authorization: 'Bearer ambient-openai-key' },
+      headers: {},
     });
     // Prompt-level endpoints get that prompt's key and organization, without OpenAI's originator.
     expect(
@@ -1490,6 +1490,8 @@ describe('OpenAiLiveProvider', () => {
           tools: [{ type: 'function', name: 'lookup', parameters: {}, strict: false }],
         },
       },
+      inputCost: 0.01,
+      outputCost: 0.02,
       functionCallHandler: handler,
     }).callApi('Check my order');
     const socket = await connect();
@@ -1552,7 +1554,7 @@ describe('OpenAiLiveProvider', () => {
       total: 30,
       numRequests: 3,
     });
-    expect(output.cost).toBeCloseTo(0.050024);
+    expect(output.cost).toBeCloseTo(0.45);
     expect(output.metadata?.backendResponses).toHaveLength(2);
     expect(output.metadata?.backendResponses[0].usage).toEqual({
       input_tokens: 10,
