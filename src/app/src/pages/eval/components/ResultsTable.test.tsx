@@ -194,7 +194,21 @@ describe('ResultsTable Metrics Display', () => {
       evalId: '123',
       inComparisonMode: false,
       setTable: vi.fn(),
-      table: mockTable,
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              metrics: {
+                ...mockTable.head.prompts[0].metrics,
+                tokenUsage: { completion: 500, total: 1000, generation: { total: 6 } },
+              },
+            },
+          ],
+        },
+      },
       version: 4,
       renderMarkdown: true,
       fetchEvalData: vi.fn(),
@@ -213,6 +227,12 @@ describe('ResultsTable Metrics Display', () => {
       'Target Tokens: 1,000',
     );
     expect(screen.queryByText('Provider Tokens:')).not.toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent(
+      'Total Tokens: 1,006',
+    );
+    expect(screen.getByText('Generation Tokens:').parentElement).toHaveTextContent(
+      'Generation Tokens: 6',
+    );
   });
 
   it('displays average tokens with correct calculation', () => {
