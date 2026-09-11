@@ -216,7 +216,7 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
   // Preserve newline indexes for empty-marker fallback.
   const promptLines = lines.flatMap((line, lineIndex) =>
     line
-      .split(/;(?=\s*(?:\d+[.)-]?\s*)?\**Prompt\s*:)/i)
+      .split(/;(?=\s*\**(?:\d+[.)-]?\s*\**)?Prompt\s*:)/i)
       .map((segment) => ({ line: segment, lineIndex })),
   );
 
