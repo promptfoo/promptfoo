@@ -1,4 +1,5 @@
 import cliState from '../../cliState';
+import { getAttackProviderFullId } from '../shared/attackProviders';
 
 import type { AtomicTestCase, UnifiedConfig } from '../../types/index';
 
@@ -144,4 +145,14 @@ export function resolveTracingOptions({
     | undefined;
 
   return normalizeTracingOptions(merged, rootTracingConfig);
+}
+
+export function resolveTestTracingOptions(test: AtomicTestCase): RedteamTracingOptions {
+  return resolveTracingOptions({
+    strategyId: getAttackProviderFullId(test.metadata?.strategyId ?? '').replace(
+      'promptfoo:redteam:',
+      '',
+    ),
+    test,
+  });
 }
