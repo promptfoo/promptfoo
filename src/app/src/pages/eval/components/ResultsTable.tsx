@@ -739,6 +739,9 @@ function renderTokenMetrics({
   const filteredGenerationTokens = filteredMetrics?.tokenUsage
     ? getTokenUsageTotal(filteredMetrics.tokenUsage.generation)
     : undefined;
+  const filteredGenerationRequests = filteredMetrics?.tokenUsage
+    ? (filteredMetrics.tokenUsage.generation?.numRequests ?? 0)
+    : undefined;
   const filteredTokens =
     filteredPrimaryTokens === undefined
       ? undefined
@@ -791,6 +794,9 @@ function renderTokenMetrics({
       {generationRequests > 0 ? (
         <div>
           <strong>Generation Requests:</strong> {formatMetricValue(generationRequests)}
+          {filteredGenerationRequests === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredGenerationRequests))}
         </div>
       ) : null}
       {incurredAccounting ? (

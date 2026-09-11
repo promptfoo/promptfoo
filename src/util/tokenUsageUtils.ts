@@ -44,6 +44,22 @@ export function createEmptyAssertions(): NonNullable<TokenUsage['assertions']> {
   };
 }
 
+/** Whether a token payload contains any usage worth persisting or displaying. */
+export function hasObservableTokenUsage(usage: Partial<TokenUsage> | undefined): boolean {
+  return Boolean(
+    usage &&
+      (Object.entries(usage).some(
+        ([key, value]) =>
+          key !== 'completionDetails' &&
+          key !== 'incurredTokenUsage' &&
+          typeof value === 'number' &&
+          value !== 0,
+      ) ||
+        Object.values(usage.completionDetails ?? {}).some((value) => (value ?? 0) !== 0) ||
+        hasObservableTokenUsage(usage.incurredTokenUsage)),
+  );
+}
+
 /**
  * Create an empty token usage object with all fields initialized to zero.
  */
@@ -341,14 +357,11 @@ export function accumulateGradingTokenUsage(
   const reportedTotal =
     tokensUsed?.total ?? (tokensUsed?.prompt ?? 0) + (tokensUsed?.completion ?? 0);
   const cachedTokens = tokensUsed?.cached ?? 0;
-  const hasCompletionDetails = Object.values(tokensUsed?.completionDetails ?? {}).some(
-    (value) => (value ?? 0) > 0,
-  );
   if (
     tokensUsed?.numRequests === 0 &&
     reportedTotal === 0 &&
     cachedTokens === 0 &&
-    !hasCompletionDetails
+    !hasObservableTokenUsage(tokensUsed)
   ) {
     return;
   }
@@ -541,8 +554,7 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
   } = parsed.data;
   generationUsage.total ??= (generationUsage.prompt ?? 0) + (generationUsage.completion ?? 0);
   const hasUsage =
-    Object.values(generationUsage).some((value) => typeof value === 'number' && value !== 0) ||
-    Object.values(generationUsage.completionDetails ?? {}).some((value) => value !== 0);
+    hasObservableTokenUsage(generationUsage) || hasObservableTokenUsage(incurredTokenUsage);
   if (!hasUsage) {
     return false;
   }

@@ -109,6 +109,7 @@ import {
   cloneTokenUsageBreakdown,
   createEmptyAssertions,
   createEmptyTokenUsage,
+  hasObservableTokenUsage,
 } from './util/tokenUsageUtils';
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
@@ -3371,15 +3372,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       cliState.resume &&
         store.prompts.some((prompt) => {
           const generation = prompt.metrics?.tokenUsage?.generation;
-          return (generation?.total ?? 0) > 0 || (generation?.numRequests ?? 0) > 0;
+          return hasObservableTokenUsage(generation);
         }),
     );
-    if (!this.generationUsageRecorded && store.prompts[0]?.metrics) {
-      this.generationUsageRecorded = accumulateGenerationTokenUsage(
-        store.prompts[0].metrics.tokenUsage,
-        store.config.metadata?.generationAccounting?.tokenUsage,
-      );
-    }
     this.conversations = {};
     this.registers = {};
 
@@ -4707,11 +4702,35 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         continue;
       }
       const evalStep = runEvalOptions[i];
-      const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
+      const testCase = { ...evalStep.test };
+      delete (testCase as Partial<AtomicTestCase>).provider;
+      const { metrics } = prompts[evalStep.promptIdx];
+      const ownsGenerationUsage =
+        !this.generationUsageRecorded &&
+        Boolean(
+          metrics &&
+            accumulateGenerationTokenUsage(
+              metrics.tokenUsage,
+              testCase.metadata?.providerTokenUsage,
+            ),
+        );
+      this.generationUsageRecorded ||= ownsGenerationUsage;
+      if (
+        !ownsGenerationUsage &&
+        this.generationUsageRecorded &&
+        testCase.metadata?.providerTokenUsage
+      ) {
+        testCase.metadata = { ...testCase.metadata };
+        delete testCase.metadata.providerTokenUsage;
+      }
+      const timeoutResult = createMaxDurationTimeoutResult(
+        { ...evalStep, test: testCase },
+        maxEvalTimeMs,
+        startTime,
+      );
       this.trackFinalJsonlResult(timeoutResult);
       await this.store.appendResult(timeoutResult);
       this.stats.errors++;
-      const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {
         metrics.testErrorCount += 1;
         metrics.totalLatencyMs += timeoutResult.latencyMs;
@@ -4879,6 +4898,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     const { prompts, columnsByProvider } = buildCompletedPrompts(testSuite, this.store);
+
+    if (!this.generationUsageRecorded && prompts[0]?.metrics) {
+      this.generationUsageRecorded = accumulateGenerationTokenUsage(
+        prompts[0].metrics.tokenUsage,
+        this.store.config.metadata?.generationAccounting?.tokenUsage,
+      );
+    }
 
     await this.store.appendPrompts(prompts);
 

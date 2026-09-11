@@ -47,6 +47,7 @@ import {
   accumulateGenerationTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
+  hasObservableTokenUsage,
 } from '../util/tokenUsageUtils';
 import {
   invalidateEvaluationCache,
@@ -1422,7 +1423,7 @@ export default class Eval {
     }
 
     const generation = stats.tokenUsage.generation;
-    if (!generation || ((generation.total ?? 0) === 0 && (generation.numRequests ?? 0) === 0)) {
+    if (!hasObservableTokenUsage(generation)) {
       accumulateGenerationTokenUsage(
         stats.tokenUsage,
         this.config.metadata?.generationAccounting?.tokenUsage,

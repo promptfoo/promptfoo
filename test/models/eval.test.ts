@@ -1274,6 +1274,17 @@ describe('evaluator', () => {
       });
     });
 
+    it('does not duplicate canonical generation after cached-only prompt usage', () => {
+      const eval1 = new Eval({
+        metadata: { generationAccounting: { tokenUsage: { cached: 7 } } },
+      });
+      eval1.prompts = [
+        { metrics: { tokenUsage: { generation: { cached: 7, total: 0, numRequests: 0 } } } },
+      ] as any;
+
+      expect(eval1.getStats().tokenUsage.generation).toMatchObject({ cached: 7 });
+    });
+
     it('does not attribute historical suite generation metadata without a run charge', () => {
       const eval1 = new Eval({
         metadata: {

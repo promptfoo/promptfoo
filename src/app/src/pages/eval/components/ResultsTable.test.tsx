@@ -259,13 +259,14 @@ describe('ResultsTable Metrics Display', () => {
       version: 4,
       renderMarkdown: true,
       fetchEvalData: vi.fn(),
-      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+      filters: { values: {}, appliedCount: 1, options: { metric: [] } },
+      filteredMetrics: [{ tokenUsage: { generation: { numRequests: 1 } } }],
     }));
 
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
     expect(screen.getByText('Generation Requests:').parentElement).toHaveTextContent(
-      'Generation Requests: 2',
+      'Generation Requests: 2(1 filtered)',
     );
   });
 

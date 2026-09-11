@@ -49,6 +49,24 @@ describeEvaluator('evaluator token usage', () => {
     );
   });
 
+  it('seeds canonical generation usage after prompt metrics are built', async () => {
+    const generationUsage = { total: 7, prompt: 4, completion: 3, numRequests: 1 };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{}],
+    };
+    const evalRecord = await Eval.create(
+      { metadata: { generationAccounting: { tokenUsage: generationUsage } } },
+      testSuite.prompts,
+      { id: randomUUID() },
+    );
+
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(evalRecord.prompts[0].metrics?.tokenUsage.generation).toMatchObject(generationUsage);
+  });
+
   it.each([1, 2])(
     'separates cached target footprint from fresh grading at concurrency %i',
     async (maxConcurrency) => {
