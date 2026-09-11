@@ -24,6 +24,9 @@ export function resolveProviderApiKey(
     }
   }
   for (const envar of envars) {
+    if (env?.[envar] === '') {
+      continue;
+    }
     const value = getEnvString(envar as EnvVarKey);
     if (value) {
       return value;

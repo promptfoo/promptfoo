@@ -449,7 +449,15 @@ function resolveGradingProviderPaths(
     if (!provider.startsWith('file://')) {
       return provider;
     }
-    const rendered = renderEnvOnlyInObject(provider, env);
+    const processEnvDisabled = getEnvBool(
+      'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
+      getEnvBool('PROMPTFOO_SELF_HOSTED', false),
+    );
+    const rendered = renderEnvOnlyInObject(
+      provider,
+      { ...(processEnvDisabled ? {} : process.env), ...env },
+      true,
+    );
     return rendered.includes('{{')
       ? rendered
       : 'file://' + path.resolve(basePath, rendered.slice('file://'.length));
