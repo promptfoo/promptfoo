@@ -588,8 +588,8 @@ export class OpenAICodexSecurityProvider implements ApiProvider {
         !Array.isArray(findingVariable))
         ? findingVariable
         : undefined;
-    // Finding precedence: config.finding -> context.vars.finding -> prompt.
-    // If finding_file is set, its parsed or raw contents override all of the above.
+    // Finding precedence is config.finding, then context.vars.finding, then prompt.
+    // finding_file overrides all three when it is configured.
     let finding: string | object = config.finding ?? contextualFinding ?? prompt;
     if (config.finding_file) {
       const findingContents = await fs.readFile(

@@ -42,7 +42,6 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 // Mock child components to isolate the page component
-vi.mock('@app/components/PylonChat', () => ({ default: () => <div>PylonChat</div> }));
 vi.mock('./components/Targets', () => ({ default: () => <div>Targets</div> }));
 vi.mock('./components/Targets/TargetTypeSelection', () => ({
   default: () => <div>TargetTypeSelection</div>,
@@ -444,5 +443,52 @@ redteam:
         expect(providerType).toBe('openai');
       });
     });
+
+    it.each([
+      ['vertex:gemini-3.1-pro-preview', 'global'],
+      ['vertex:gemini-2.5-pro', undefined],
+      ['vertex:gemini-3.6-flash', 'global'],
+      ['vertex:gemini-3.7-flash', 'global'],
+      ['vertex:gemini-3.8-flash', 'global'],
+    ])(
+      'should preserve legacy Vertex target ID %s when loading a YAML config',
+      async (targetId, region) => {
+        const user = userEvent.setup();
+
+        render(
+          <MemoryRouter initialEntries={['/redteam/setup']}>
+            <RedTeamSetupPage />
+          </MemoryRouter>,
+        );
+
+        const loadButton = screen.getByRole('button', { name: /Load Config/i });
+        await user.click(loadButton);
+
+        const yamlContent = `
+description: Legacy Vertex target config
+targets:
+  - ${targetId}
+prompts:
+  - "{{prompt}}"
+redteam:
+  purpose: Test purpose
+  plugins:
+    - shell-injection
+`;
+        const file = new File([yamlContent], 'config.yaml', { type: 'text/yaml' });
+
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        expect(fileInput).toBeTruthy();
+        await user.upload(fileInput, file);
+
+        await waitFor(() => {
+          const { config, providerType } = useRedTeamConfig.getState();
+          expect(config.target.id).toBe(targetId);
+          expect(config.target.label).toBe(targetId);
+          expect(config.target.config?.region).toBe(region);
+          expect(providerType).toBe('vertex');
+        });
+      },
+    );
   });
 });
