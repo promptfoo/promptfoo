@@ -40,26 +40,38 @@ Install and authenticate the [OpenAI Codex SDK provider](/docs/providers/openai-
 
 ## Per-test-case workspaces
 
-String fields inside the grading provider's `config` are rendered with the same Nunjucks templating that powers `prompts` and `assert.value`, so you can bind `working_dir` (or any other config string) to a per-test-case path:
+Top-level strings in the grading provider's `config` support Nunjucks templates, including `{{ variable }}` expressions and `{% if ... %}` blocks. Templates are rendered from each test case's final `vars` before the grader is created:
 
 ```yaml
+prompts:
+  - '{{summary}}'
+providers:
+  - echo
+
 tests:
   - vars:
       trace_id: abc123
+      summary: Updated the parser.
+  - vars:
+      trace_id: def456
+      summary: Added input validation.
 
-assert:
-  - type: agent-rubric
-    value: Check whether the change described in `summary.md` matches the diff.
-    provider:
-      id: anthropic:claude-agent-sdk
-      config:
-        working_dir: ./evidence/{{trace_id}}
-        sandbox_mode: read-only
-        approval_policy: never
-        skip_git_repo_check: true
+defaultTest:
+  assert:
+    - type: agent-rubric
+      value: Check whether the change described in `summary.md` matches the diff.
+      provider:
+        id: openai:codex-sdk
+        config:
+          working_dir: ./evidence/{{trace_id}}
+          sandbox_mode: read-only
+          approval_policy: never
+          skip_git_repo_check: true
 ```
 
-This pattern is useful for batch evaluations where each case has its own artifact (a captured trace, a rendered output, a fixture project). Non-string fields and unrelated strings are passed through unchanged.
+Prepare an evidence directory for each case before running the eval. Interpolating an undefined variable causes an error rather than silently selecting a shared parent directory; use Nunjucks's `default` filter for intentional fallbacks.
+
+Both inline provider definitions and the `provider.text` form are supported. Per-case rendering applies only to `agent-rubric` and top-level config strings. Nested objects/arrays retain their existing env-only rendering, and already-constructed provider instances are used unchanged.
 
 ## Supported agent providers
 
