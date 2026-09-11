@@ -25,6 +25,7 @@ import EvalResult from '../../src/models/evalResult';
 import { TraceStore } from '../../src/tracing/store';
 import { ResultFailureReason } from '../../src/types/index';
 import { sha256 } from '../../src/util/createHash';
+import { createOutputData } from '../../src/util/output';
 import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 vi.mock('../../src/logger', () => ({
@@ -475,6 +476,9 @@ describe('importCommand', () => {
         expect(fs.readFileSync(blobPath)).toEqual(data);
         expect(fs.readFileSync(`${blobPath}.meta.json`, 'utf8')).toBe(metadata);
         await expect(getShareAuthorizedBlob(hash, sampleData.evalId)).resolves.toBeNull();
+        const evalRecord = await Eval.findById(sampleData.evalId);
+        const exported = await createOutputData(evalRecord!, null, { includeMedia: true });
+        expect(exported.blobAssets).toBeUndefined();
       } finally {
         resetBlobStorageProvider();
         restoreEnv();
@@ -550,6 +554,13 @@ describe('importCommand', () => {
         expect((await getShareAuthorizedBlob(htmlHash, sampleData.evalId))?.metadata.mimeType).toBe(
           'application/octet-stream',
         );
+        const evalRecord = await Eval.findById(sampleData.evalId);
+        const exported = await createOutputData(evalRecord!, null, { includeMedia: true });
+        expect(exported.blobAssets).toHaveLength(2);
+        expect(exported.blobAssets?.map((asset) => asset.mimeType)).toEqual([
+          'application/octet-stream',
+          'application/octet-stream',
+        ]);
       } finally {
         resetBlobStorageProvider();
         removeTempDir(blobDir);
