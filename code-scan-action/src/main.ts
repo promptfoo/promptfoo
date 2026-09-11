@@ -29,7 +29,12 @@ import {
 } from '../../src/types/codeScan';
 import { getGitHubOIDCToken } from './auth';
 import { generateConfigFile } from './config';
-import { getGitHubContext, getPRFiles, partitionReviewCommentsByDiff } from './github';
+import {
+  assertCurrentPRHead,
+  getGitHubContext,
+  getPRFiles,
+  partitionReviewCommentsByDiff,
+} from './github';
 
 interface ActionInputs {
   apiHost: string;
@@ -690,11 +695,7 @@ function buildGeneralCommentBody(comment: Comment): string {
 }
 
 function toReviewComment(comment: Comment) {
-  // GitHub's createReview API requires start_line < line for multi-line comments and
-  // rejects the entire review (422) otherwise. Comments routed here are clamped upstream
-  // by partitionReviewCommentsByDiff, but guard explicitly so this never depends on a
-  // caller having run that clamp. The ternary also narrows startLine to `number`,
-  // dropping the null/undefined the API type rejects.
+  // GitHub rejects multi-line comments unless start_line is strictly before line.
   const startLine =
     comment.startLine && comment.line && comment.startLine < comment.line
       ? comment.startLine
@@ -759,19 +760,6 @@ async function postGeneralComments(
   core.info('✅ General comments posted successfully');
 }
 
-async function postReviewBodyAsComment(
-  octokit: ReturnType<typeof github.getOctokit>,
-  context: PullRequestContext,
-  reviewBody: string,
-): Promise<void> {
-  await octokit.rest.issues.createComment({
-    owner: context.owner,
-    repo: context.repo,
-    issue_number: context.number,
-    body: reviewBody,
-  });
-}
-
 async function postFallbackComments(
   githubToken: string,
   context: PullRequestContext,
@@ -811,11 +799,7 @@ async function postFallbackComments(
   // location is not in the reviewed diff.
   const generalCommentsToPost = [...generalComments, ...invalidLineComments];
 
-  // Post the inline review separately. createReview can reject the ENTIRE review — e.g. a
-  // 422 after the PR diff moved, or GitHub rejecting a single location — which would
-  // otherwise drop every line finding (and, in the old single-catch, skip the general
-  // comments too) while leaving the Action green. On failure, degrade the line findings to
-  // general comments at their original locations so nothing is silently lost.
+  // A rejected review must not discard the findings that can still be posted separately.
   let reviewFailed = false;
   try {
     await postReview(octokit, context, lineComments, reviewBody);
@@ -827,12 +811,26 @@ async function postFallbackComments(
     generalCommentsToPost.push(...lineComments);
   }
 
+  if (generalCommentsToPost.length > 0 || (reviewFailed && reviewBody)) {
+    // Issue comments are not commit-bound. Recheck after the review attempt before
+    // falling back, and fail if the current head cannot be verified.
+    await assertCurrentPRHead(octokit.rest, context);
+  }
+
   try {
     // Preserve the review summary too when the review write failed, so it is not lost.
     if (reviewFailed && reviewBody) {
       try {
-        await postReviewBodyAsComment(octokit, context, reviewBody);
+        await octokit.rest.issues.createComment({
+          owner: context.owner,
+          repo: context.repo,
+          issue_number: context.number,
+          body: reviewBody,
+        });
       } catch (error) {
+        if (generalCommentsToPost.length === 0) {
+          throw error;
+        }
         core.warning('Failed to post review summary as a comment: ' + formatError(error));
       }
     }

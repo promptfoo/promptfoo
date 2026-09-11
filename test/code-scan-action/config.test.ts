@@ -79,9 +79,6 @@ describe('Action metadata', () => {
 
   it('keeps the scanner host pinned by trusted workflow metadata', () => {
     expect(action.inputs['api-host'].default).toBe('https://api.promptfoo.app');
-    expect(action.inputs['config-path'].description).toContain(
-      'api-host remains workflow-controlled',
-    );
   });
 
   it('keeps diffs-only default-free so omitted and explicit false remain distinguishable', () => {

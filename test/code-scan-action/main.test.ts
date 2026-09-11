@@ -96,6 +96,7 @@ const mocks = vi.hoisted(() => {
     getGitHubContext: vi.fn(),
     getPRFiles: vi.fn(),
     partitionReviewCommentsByDiff: vi.fn(),
+    assertCurrentPRHead: vi.fn(),
   };
 
   const config = {
@@ -299,6 +300,7 @@ function setupMocks() {
     },
   });
 
+  mocks.actionGithub.assertCurrentPRHead.mockResolvedValue(undefined);
   mocks.actionGithub.getGitHubContext.mockResolvedValue({
     owner: 'test-owner',
     repo: 'test-repo',
@@ -1658,6 +1660,48 @@ describe('code-scan-action main', () => {
         }),
       );
       expect(mocks.core.setFailed).not.toHaveBeenCalled();
+    });
+
+    it.each(['head changed', 'head lookup failed'])(
+      'stops fallback comments after a rejected review when %s',
+      async (message) => {
+        const { createComment, createReview } = mockFallbackPosting();
+        createReview.mockRejectedValue(new Error('GitHub API: 422 Unprocessable Entity'));
+        mocks.actionGithub.assertCurrentPRHead.mockRejectedValue(new Error(message));
+        mockPromptfooScanResponse({
+          success: true,
+          comments: [{ file: 'src/handler.ts', line: 12, finding: 'Finding on scanned commit' }],
+          review: 'Review of scanned commit',
+          commentsPosted: false,
+        });
+
+        await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+        await vi.waitFor(() =>
+          expect(mocks.core.setFailed).toHaveBeenCalledWith(expect.stringContaining(message)),
+        );
+        expect(createReview).toHaveBeenCalledWith(expect.objectContaining({ commit_id: 'abc123' }));
+        expect(createComment).not.toHaveBeenCalled();
+      },
+    );
+
+    it('fails when a review-only response cannot be posted through either channel', async () => {
+      const { createComment, createReview } = mockFallbackPosting();
+      createReview.mockRejectedValue(new Error('review rejected'));
+      createComment.mockRejectedValue(new Error('summary rejected'));
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [],
+        review: 'Review summary',
+        commentsPosted: false,
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+      await vi.waitFor(() =>
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(
+          expect.stringContaining('summary rejected'),
+        ),
+      );
+      expect(createComment).toHaveBeenCalledTimes(1);
     });
 
     it('fails the Action when both the PR review and the general-comment fallback fail', async () => {

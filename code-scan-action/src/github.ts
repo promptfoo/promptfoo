@@ -105,7 +105,7 @@ export async function getPRFiles(
 
 /**
  * Fetch PR diff and extract valid line ranges for each file.
- * This is used to validate and clamp comment line numbers.
+ * This is used to validate exact comment locations.
  */
 async function getPRDiffRanges(
   octokit: Octokit,
@@ -129,7 +129,10 @@ async function getPRDiffRanges(
   }
 }
 
-async function assertCurrentPRHead(octokit: Octokit, context: PullRequestContext): Promise<void> {
+export async function assertCurrentPRHead(
+  octokit: Pick<Octokit, 'pulls'>,
+  context: PullRequestContext,
+): Promise<void> {
   const { data: pr } = await octokit.pulls.get({
     owner: context.owner,
     repo: context.repo,
@@ -142,17 +145,8 @@ async function assertCurrentPRHead(octokit: Octokit, context: PullRequestContext
   }
 }
 
-/**
- * Whether a comment's exact line(s) can be placed as an inline review comment.
- *
- * GitHub only accepts review comments anchored to lines that appear in the reviewed
- * diff. We intentionally do NOT clamp an out-of-diff line to the nearest visible hunk:
- * default full-repository tracing routinely reports findings on unchanged lines, and
- * clamping would silently re-point the comment at unrelated code, destroying the true
- * location. A finding is inline-eligible only when its exact `file:line` is in the diff;
- * for multi-line findings both endpoints must be in the diff. Everything else is routed
- * to a general comment that preserves the original location in text.
- */
+// Keep exact finding locations. Out-of-diff findings become general comments instead
+// of being moved onto unrelated code in a nearby hunk.
 function isInlineCommentInDiff(comment: Comment, validRanges: FileLineRanges): boolean {
   if (!comment.file || comment.line == null) {
     return false;
