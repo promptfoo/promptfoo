@@ -273,6 +273,28 @@ describe('Envoy gateway URLs', () => {
     expect(request?.headers).not.toHaveProperty('Authorization');
   });
 
+  it.each([
+    ['', null],
+    [undefined, 'Bearer suite-key'],
+  ] as const)('preserves provider credential override %j', async (key, authorization) => {
+    const provider = await loadApiProvider('envoy:route:stable', {
+      env: { OPENAI_API_KEY: 'suite-key' },
+      options: {
+        env: { OPENAI_API_KEY: key },
+        config: { apiKeyRequired: false, headers: { 'x-api-key': 'header-key' } },
+      },
+    });
+
+    const response = await cliState.withEnv({ OPENAI_API_KEY: 'ambient-key' }, () =>
+      provider.callApi('Hello'),
+    );
+    expect(response.output).toBe('Hello');
+    const request = vi.mocked(fetchWithCache).mock.calls[0][1];
+    const headers = new Headers(request?.headers);
+    expect(headers.get('x-api-key')).toBe('header-key');
+    expect(headers.get('authorization')).toBe(authorization);
+  });
+
   it('treats an empty registered URL as masking the process URL', async () => {
     cliState.config = { env: { ENVOY_API_BASE_URL: '' } };
 

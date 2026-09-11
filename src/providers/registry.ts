@@ -628,7 +628,9 @@ export const providerMap: ProviderFactory[] = [
       context: LoadApiProviderContext,
     ) => {
       const providerEnv = Object.fromEntries(
-        Object.entries(providerOptions.env ?? {}).filter(([, value]) => value),
+        Object.entries(providerOptions.env ?? {}).filter(
+          ([key, value]) => value !== undefined && (key !== 'ENVOY_API_BASE_URL' || value !== ''),
+        ),
       );
       return createEnvoyProvider(providerPath, {
         config: providerOptions,
