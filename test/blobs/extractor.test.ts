@@ -22,6 +22,7 @@ vi.mock('../../src/blobs/index', () => ({
     },
   }),
   recordBlobReference: vi.fn().mockResolvedValue(undefined),
+  isEvalPersisted: vi.fn().mockResolvedValue(true),
 }));
 
 describe('normalizeAudioMimeType', () => {
@@ -215,6 +216,7 @@ describe('Local blob extraction', () => {
         hash: 'abc123def456',
       },
     });
+    vi.mocked(blobIndexModule.isEvalPersisted).mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -233,6 +235,55 @@ describe('Local blob extraction', () => {
     // Should store locally
     expect(mockStoreBlob).toHaveBeenCalledTimes(1);
     expect(mockUploadBlobRemote).not.toHaveBeenCalled();
+  });
+
+  it('keeps media inline for an eval without a database row', async () => {
+    const blobIndexModule = await import('../../src/blobs/index');
+    vi.mocked(blobIndexModule.isEvalPersisted).mockResolvedValue(false);
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: `data:image/png;base64,${largeBase64} promptfoo://blob/${'c'.repeat(64)}`,
+      audio: { data: largeBase64, format: 'wav' },
+    };
+
+    const result = await extractAndStoreBinaryData(response, {
+      evalId: 'eval-no-write',
+      testIdx: 0,
+      promptIdx: 0,
+    });
+
+    expect(result).toBe(response);
+    expect(result?.audio?.data).toBe(largeBase64);
+    expect(blobIndexModule.isEvalPersisted).toHaveBeenCalledWith('eval-no-write');
+    expect(mockStoreBlob).not.toHaveBeenCalled();
+    expect(blobIndexModule.recordBlobReference).not.toHaveBeenCalled();
+  });
+
+  it('does not check eval persistence for a response without media', async () => {
+    const blobIndexModule = await import('../../src/blobs/index');
+    const response: ProviderResponse = { output: 'plain text answer' };
+
+    const result = await extractAndStoreBinaryData(response, { evalId: 'eval-in-memory' });
+
+    expect(result).toBe(response);
+    // In-memory evaluations may run without a migrated database.
+    expect(blobIndexModule.isEvalPersisted).not.toHaveBeenCalled();
+  });
+
+  it('keeps media inline when eval persistence cannot be checked', async () => {
+    const blobIndexModule = await import('../../src/blobs/index');
+    vi.mocked(blobIndexModule.isEvalPersisted).mockRejectedValue(new Error('no such table: evals'));
+    const largeBase64 = Buffer.alloc(2000).toString('base64');
+    const response: ProviderResponse = {
+      output: 'ok',
+      audio: { data: largeBase64, format: 'wav' },
+    };
+
+    const result = await extractAndStoreBinaryData(response, { evalId: 'eval-in-memory' });
+
+    expect(result?.audio?.data).toBe(largeBase64);
+    expect(result?.audio?.blobRef).toBeUndefined();
+    expect(mockStoreBlob).not.toHaveBeenCalled();
   });
 
   it('should externalize image data URIs to blobRefs', async () => {

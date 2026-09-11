@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
 import { eq, inArray } from 'drizzle-orm';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getShareAuthorizedBlob,
   isBlobAllowedForShare,
   recordBlobReference,
   resetBlobStorageProvider,
   setBlobStorageProvider,
+  storeBlob,
 } from '../../src/blobs';
 import { getDb } from '../../src/database';
 import { blobAssetsTable, blobReferencesTable, evalsTable } from '../../src/database/tables';
@@ -213,5 +214,115 @@ describe('recordBlobReference provenance upgrades', () => {
     const rows = await getReferenceRows();
     expect(rows).toHaveLength(1);
     expect(rows[0].location).toBe('import');
+  });
+});
+
+describe('blob references for evals without a database row', () => {
+  // `promptfoo eval --no-write` runs an eval that is never inserted into the evals table.
+  const savedEvalId = `eval-${randomUUID()}`;
+  const unsavedEvalId = `eval-${randomUUID()}`;
+  const hash = 'f'.repeat(64);
+  const deleteByHash = vi.fn(async (_hash: string) => {});
+
+  const stubProvider: BlobStorageProvider = {
+    providerId: 'test-stub',
+    store: async (data, mimeType) => ({
+      ref: {
+        uri: `promptfoo://blob/${hash}`,
+        hash,
+        mimeType,
+        sizeBytes: data.length,
+        provider: 'test-stub',
+      },
+      deduplicated: false,
+    }),
+    getByHash: async () => {
+      throw new Error('not implemented');
+    },
+    exists: async () => true,
+    deleteByHash,
+    getUrl: async () => null,
+  };
+
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(async () => {
+    setBlobStorageProvider(stubProvider);
+    deleteByHash.mockClear();
+    const db = await getDb();
+    await db.insert(evalsTable).values([{ id: savedEvalId, config: {}, results: {} }]);
+  });
+
+  afterEach(async () => {
+    resetBlobStorageProvider();
+    const db = await getDb();
+    await db.delete(blobReferencesTable).where(eq(blobReferencesTable.blobHash, hash));
+    await db.delete(blobAssetsTable).where(eq(blobAssetsTable.hash, hash));
+    await db.delete(evalsTable).where(eq(evalsTable.id, savedEvalId));
+  });
+
+  async function getRows() {
+    const db = await getDb();
+    return {
+      assets: await db.select().from(blobAssetsTable).where(eq(blobAssetsTable.hash, hash)),
+      references: await db
+        .select()
+        .from(blobReferencesTable)
+        .where(eq(blobReferencesTable.blobHash, hash)),
+    };
+  }
+
+  it('stores media for an unsaved eval without recording a reference', async () => {
+    const { ref } = await storeBlob(Buffer.from('audio-bytes'), 'audio/wav', {
+      evalId: unsavedEvalId,
+      location: 'response.audio',
+      kind: 'audio',
+    });
+
+    expect(ref.uri).toBe(`promptfoo://blob/${hash}`);
+    expect(deleteByHash).not.toHaveBeenCalled();
+    const { assets, references } = await getRows();
+    expect(assets).toHaveLength(1);
+    expect(references).toHaveLength(0);
+  });
+
+  it('still records references for saved evals', async () => {
+    await storeBlob(Buffer.from('audio-bytes'), 'audio/wav', {
+      evalId: savedEvalId,
+      location: 'response.audio',
+      kind: 'audio',
+    });
+
+    const { references } = await getRows();
+    expect(references).toHaveLength(1);
+    expect(references[0]).toMatchObject({
+      evalId: savedEvalId,
+      kind: 'audio',
+      location: 'response.audio',
+    });
+  });
+
+  it('does not record an existing blob against an unsaved eval', async () => {
+    await storeBlob(Buffer.from('audio-bytes'), 'audio/wav');
+
+    await expect(
+      recordBlobReference(hash, {
+        evalId: unsavedEvalId,
+        kind: 'audio',
+        location: 'response.audio',
+      }),
+    ).resolves.toBeUndefined();
+
+    const { references } = await getRows();
+    expect(references).toHaveLength(0);
+  });
+
+  it('reports whether an eval has a database row', async () => {
+    const { isEvalPersisted } = await import('../../src/blobs');
+
+    await expect(isEvalPersisted(savedEvalId)).resolves.toBe(true);
+    await expect(isEvalPersisted(unsavedEvalId)).resolves.toBe(false);
   });
 });
