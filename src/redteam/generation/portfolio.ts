@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import logger from '../../logger';
 import { type GeneratedPrompt, RedteamPluginBase } from '../plugins/base';
 import { getShortPluginId } from '../util';
 import {
@@ -11,7 +10,6 @@ import {
   selectSemanticWarmStartFamilies,
 } from './selection';
 
-import type { TestCase } from '../../types/index';
 import type { AttackCandidate, AttackFamily, AttackPlan, AttackSignature } from './types';
 
 export type SemanticFrontierConfig = SemanticBandSelectionConfig & {
@@ -140,18 +138,12 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     `;
   }
 
-  override async generateTests(n: number, delayMs: number = 0): Promise<TestCase[]> {
+  override async generateTests(n: number, delayMs: number = 0) {
     if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
-      logger.debug(
-        `${this.constructor.name} falling back to legacy generation because multi-input mode is enabled`,
-      );
       return super.generateTests(n, delayMs);
     }
 
     if (this.config.language || this.config.modifiers?.language) {
-      logger.debug(
-        `${this.constructor.name} falling back to legacy generation because language modifiers are not compatible with semantic predicate selection`,
-      );
       return super.generateTests(n, delayMs);
     }
 
@@ -222,12 +214,6 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
         appendValidFamilyCandidates(generatedCandidates);
       }
 
-      if (family.requiredPredicates && validFamilyCandidates.length < plannedCount) {
-        logger.warn(
-          `${this.constructor.name} found ${validFamilyCandidates.length}/${plannedCount} valid ${family.id} candidates matching predicates: ${family.requiredPredicates.join(', ')}`,
-        );
-      }
-
       candidates.push(
         ...(family.requiredPredicates && family.requiredPredicates.length > 0
           ? validFamilyCandidates
@@ -236,12 +222,6 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     }
 
     const selected = this.selectPortfolioCandidates(candidates, n);
-    if (selected.length !== n) {
-      logger.warn(
-        `${this.constructor.name} selected ${selected.length}/${n} portfolio candidates after coverage-aware selection`,
-      );
-    }
-
     const semanticFrontier = this.getSemanticFrontierConfig();
     const semanticFrontierSummary = semanticFrontier
       ? this.summarizeSemanticFrontier(selected, semanticFrontier, n)

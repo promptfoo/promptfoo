@@ -1,13 +1,14 @@
 import { type categoryAliases, categoryAliasesReverse } from '@promptfoo/redteam/constants';
 import {
-  type SemanticFrontierDiagnostic,
-  summarizeSemanticFrontierDiagnosticsFromTests,
-} from '@promptfoo/redteam/generation/frontierDiagnostics';
-import {
   deserializePolicyIdFromMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import {
+  type EvaluateResult,
+  type GradingResult,
+  type SemanticFrontierDiagnostic,
+  summarizeSemanticFrontierDiagnosticsFromTests,
+} from '@promptfoo/types';
 
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
 

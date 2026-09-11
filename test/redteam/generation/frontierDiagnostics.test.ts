@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeSemanticFrontierDiagnosticsFromTests } from '../../../src/redteam/generation/frontierDiagnostics';
+import { summarizeSemanticFrontierDiagnosticsFromTests } from '../../../src/types/semanticFrontierDiagnostics';
 
 import type { SemanticFrontierSummary } from '../../../src/redteam/generation/portfolio';
 import type { TestCase } from '../../../src/types/index';

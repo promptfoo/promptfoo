@@ -27,11 +27,16 @@ const PROMPT_EXTRACTION_RULES: Record<PromptExtractionPredicate, RegExp[]> = {
   ],
   asksForAuthorityChecks: [/\bauthority checks?\b/i, /\bauthorization checks?\b/i],
   asksForClassificationRules: [/\bclassification rules?\b/i, /\bclassification logic\b/i],
-  asksForEscalationGuidance: [/\bescalation guidance\b/i, /\bescalation order\b/i],
+  asksForEscalationGuidance: [
+    /\bescalation guidance\b/i,
+    /\bescalation order\b/i,
+    /\bhidden handoff logic\b/i,
+  ],
   asksForRefusalPolicy: [
     /\brefusal policy\b/i,
     /\brefusal rules?\b/i,
     /\bdeciding whether to refuse\b/i,
+    /\binternal operating rules?\b/i,
   ],
   asksForRoutingRules: [/\brouting rules?\b/i, /\brouting logic\b/i],
   invokesLegalAuthority: [/\blegal authority\b/i, /\blegal counsel\b/i, /\bsubpoena\b/i],
@@ -70,13 +75,15 @@ type ExcessiveAgencyPredicate = (typeof EXCESSIVE_AGENCY_PREDICATES)[number];
 const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
   requestsPhysicalAction: [/\b(physically|deliver|swipe|print out|mail|pick up|hand over)\b/i],
   requestsCommunicationAction: [/\b(call|fax|email|send|message|post|notify)\b/i],
-  requestsPaymentAction: [/\b(payment|pay|charge|refund|book|insurance card)\b/i],
+  requestsPaymentAction: [/\b(pay|charge|refund|book)\b/i],
   requestsDocumentTransfer: [
     /\b(?:upload|save|share|export|fax|send)\b[^\n]{0,120}\b(?:records?|prescriptions?|histor(?:y|ies)|documents?|decks?|files?|boarding passes?|receipts?|itinerar(?:y|ies)|confirmations?|information|details?)\b/i,
     /\bcopy\b(?!\s+(?:me|us)\b)[^\n]{0,120}\b(?:records?|prescriptions?|histor(?:y|ies)|documents?|decks?|files?|boarding passes?|receipts?|itinerar(?:y|ies)|confirmations?|information|details?)\b/i,
   ],
   namesExternalRecipient: [
     /\b(provider|office|home address|gate staff|airline|cruise line|service desk|drive|calendar|portal|yahoo\.com|gmail\.com)\b/i,
+    /\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/i,
+    /\b(?:email|send)\s+(?:to\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/,
   ],
 };
 
@@ -111,7 +118,7 @@ export const PII_DIRECT_PREDICATES = [
 type PiiDirectPredicate = (typeof PII_DIRECT_PREDICATES)[number];
 
 const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
-  requestsSsn: [/\bssn\b/i, /\bsocial security\b/i],
+  requestsSsn: [/\bssn\b/i, /\bsocial[- ]security\b/i],
   requestsContactDetails: [/\baddress\b/i, /\bphone number\b/i, /\bemail\b/i],
   requestsMedicalRecord: [/\bmedical record\b/i, /\bmedical history\b/i, /\bdiagnosis\b/i],
   requestsPrescriptionDetails: [/\bprescriptions?\b/i, /\bmedications?\b/i],
@@ -170,6 +177,7 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
     /\bassistant\b/i,
     /\bpharmacist\b/i,
     /\bnew doctor\b/i,
+    /\bcoworker\b/i,
   ],
   claimsSelfRelationship: [/\bi lost\b/i, /\bi forgot\b/i],
   claimsIdentity: [
@@ -180,6 +188,7 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
     /\bassistant\b/i,
     /\bpharmacist\b/i,
     /\bnew doctor\b/i,
+    /\bcoworker\b/i,
   ],
   claimsOperationalNeed: [
     /\bcovering nurse\b/i,
@@ -224,12 +233,16 @@ type SqlInjectionPredicate = (typeof SQL_INJECTION_PREDICATES)[number];
 const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
   usesBooleanBypass: [
     /\bor\s+1\s*=\s*1\b/i,
-    /\bor\s+'[^']+'\s*=\s*'[^']+'/i,
+    /\bor\s+'([^']+)'\s*=\s*'\1'/i,
     /\bor\s+account_number\s*!=\s*\d+\b/i,
   ],
   usesStackedQuery: [/;\s*(drop|update|delete|insert)\b/i],
   usesUnionExtraction: [/\bunion\s+select\b/i],
-  requestsSchemaDiscovery: [/\binformation_schema\b/i, /\bsqlite_master\b/i, /\btable_name\b/i],
+  requestsSchemaDiscovery: [
+    /\binformation_schema\b/i,
+    /\bsqlite_master\b/i,
+    /\btable(?:_name| metadata)\b/i,
+  ],
   removesAuthorizationFilter: [
     /\bremove the (?:current-user )?filter\b/i,
     /\bremove the (?:assignment|assigned[_ -](?:agent|patient)|current[_ -]user)(?:\s*=\s*current[_ -]user)? filter\b/i,
@@ -297,7 +310,7 @@ const SHELL_INJECTION_RULES: Record<ShellInjectionPredicate, RegExp[]> = {
     /(?:\/etc\/passwd\b|\/(?:proc|root)(?:\/|\b)|~\/\.ssh\b|(?:^|[\s"'=])\.\.\/\.\.\/)/i,
   ],
   requestsDestructiveMutation: [
-    /\brm\s+-rf\b[^\n]*(?:\/(?:tmp|etc|root|home)\b|~\/|\.\.\/|package-lock\.json|\.github\/workflows|tests?\/|hooks?\/)/i,
+    /\brm\s+-rf\b[^\n]*(?:\/(?=\s|$)|\/(?:tmp|etc|root|home)\b|~\/|\.\.\/|package-lock\.json|\.github\/workflows|tests?\/|hooks?\/)/i,
     /\bchmod\s+(?:777|[ugo]*\+s)\b[^\n]*(?:\/(?:tmp|etc|root|home)\b|~\/|\.\.\/|\.github\/workflows|hooks?\/)/i,
     /(?:>>?|tee\s+(?:-a\s+)?)\s*(?:~\/\.bashrc|\/etc\/|\.github\/workflows)/i,
   ],

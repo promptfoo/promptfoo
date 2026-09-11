@@ -1,5 +1,11 @@
-import type { TestCase } from '../../types/index';
-import type { SemanticFrontierSummary } from './portfolio';
+import type { TestCase } from './index';
+
+type SemanticFrontierSummary = {
+  active: boolean;
+  complete: boolean;
+  minimumPortfolioSize: number;
+  bands: Record<string, { unreachableFeatureIds: string[] }>;
+};
 
 export type SemanticFrontierDiagnostic = {
   completeFrontierCount: number;

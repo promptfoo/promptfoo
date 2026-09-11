@@ -23,6 +23,13 @@ import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import { EMAIL_OK_STATUS } from '../../types/email';
 import {
+  type ApiProvider,
+  summarizeSemanticFrontierDiagnosticsFromTests,
+  type TestCase,
+  type TestSuite,
+  type UnifiedConfig,
+} from '../../types/index';
+import {
   checkCloudPermissions,
   getCloudDatabaseId,
   getConfigFromCloud,
@@ -57,7 +64,6 @@ import {
 } from '../constants';
 import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
-import { summarizeSemanticFrontierDiagnosticsFromTests } from '../generation/frontierDiagnostics';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
@@ -65,7 +71,6 @@ import { getRedteamGenerationContextFromProviders } from '../remoteGenerationCon
 import { PartialGenerationError, ProbeLimitExceededError } from '../types';
 import type { Command } from 'commander';
 
-import type { ApiProvider, TestCase, TestSuite, UnifiedConfig } from '../../types/index';
 import type { TokenUsage } from '../../types/shared';
 import type {
   FailedPluginInfo,
@@ -979,6 +984,7 @@ async function doGenerateRedteamInternal(
       );
       const existingMetadata = { ...(existingConfig.metadata || {}) };
       delete existingMetadata.generationTokenUsage;
+      delete existingMetadata.generationAccounting;
       delete existingMetadata.semanticFrontierDiagnostics;
       // Add the config hash to metadata
       existingConfig.metadata = {

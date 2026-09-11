@@ -710,6 +710,7 @@ describe('doGenerateRedteam', () => {
     mockReadFileSync({
       metadata: {
         generationTokenUsage: { numRequests: 2, total: 20 },
+        generationAccounting: { tokenUsage: { total: 20 } },
         semanticFrontierDiagnostics: [{ pluginId: 'stale-plugin' }],
       },
       tests: [],
@@ -731,6 +732,7 @@ describe('doGenerateRedteam', () => {
 
     const updatedConfig = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0];
     expect(updatedConfig?.metadata).not.toHaveProperty('generationTokenUsage');
+    expect(updatedConfig?.metadata).not.toHaveProperty('generationAccounting');
     expect(updatedConfig?.metadata).not.toHaveProperty('semanticFrontierDiagnostics');
   });
 

@@ -1,7 +1,7 @@
 import { Badge } from '@app/components/ui/badge';
 import { Card, CardContent } from '@app/components/ui/card';
-import { displayNameOverrides } from '@promptfoo/redteam/constants';
-import type { SemanticFrontierDiagnostic } from '@promptfoo/redteam/generation/frontierDiagnostics';
+import { getPluginDisplayName } from './FrameworkComplianceUtils';
+import type { SemanticFrontierDiagnostic } from '@promptfoo/types';
 
 interface SemanticFrontierDiagnosticsProps {
   diagnostics: readonly SemanticFrontierDiagnostic[];
@@ -39,9 +39,7 @@ export default function SemanticFrontierDiagnostics({
         <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
           {diagnostics.map((diagnostic) => {
             const status = getStatus(diagnostic);
-            const pluginName =
-              displayNameOverrides[diagnostic.pluginId as keyof typeof displayNameOverrides] ||
-              diagnostic.pluginId;
+            const pluginName = getPluginDisplayName(diagnostic.pluginId);
             const frontierLabel = diagnostic.frontierCount === 1 ? 'frontier' : 'frontiers';
 
             return (

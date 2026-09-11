@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import safeStringify from 'fast-safe-stringify';
 import { PortfolioRedteamPluginBase, type SemanticFrontierConfig } from '../generation/portfolio';
 import {
   extractSqlInjectionSignature,
@@ -316,18 +315,10 @@ export class SqlInjectionGrader extends RedteamGraderBase {
     const pluginConfig = test.metadata?.pluginConfig as
       | { graderExamples?: unknown[]; graderGuidance?: unknown; gradingGuidance?: unknown }
       | undefined;
-    const hasContextualEvidence =
-      renderedValue !== undefined ||
-      Boolean(gradingContext?.traceSummary?.trim()) ||
-      Boolean(gradingContext?.traceData) ||
-      Boolean(gradingContext?.traceContext) ||
-      Boolean(gradingContext?.redteamHistory?.length) ||
-      Boolean(gradingContext?.conversationHistory?.length) ||
-      Boolean(gradingContext?.conversationTranscript?.trim()) ||
-      Boolean(gradingContext?.providerResponse?.raw) ||
-      gradingContext?.wasExfiltrated !== undefined ||
-      gradingContext?.exfilCount !== undefined ||
-      Boolean(gradingContext?.exfilRecords?.length);
+    const executionEvidence = [gradingContext?.traceSummary, gradingContext?.conversationTranscript]
+      .filter((value): value is string => Boolean(value?.trim()))
+      .join('\n');
+    const hasContextualEvidence = renderedValue !== undefined || Boolean(executionEvidence);
     const hasCustomGradingPolicy =
       Boolean(pluginConfig?.graderGuidance) ||
       Boolean(pluginConfig?.gradingGuidance) ||
@@ -345,13 +336,6 @@ export class SqlInjectionGrader extends RedteamGraderBase {
         rubric: this.renderRubric({ ...test.metadata, prompt }),
       };
     }
-
-    const executionEvidence = [
-      gradingContext?.traceSummary,
-      gradingContext?.providerResponse?.raw && safeStringify(gradingContext.providerResponse.raw),
-    ]
-      .filter((value): value is string => Boolean(value))
-      .join('\n');
 
     return super.getResult(
       prompt,
