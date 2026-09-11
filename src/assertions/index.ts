@@ -311,10 +311,10 @@ async function runAssertionInternal<TType extends string>({
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
   };
 
-  // Add trace data if traceId is available
-  if (traceId && assertionMayNeedTraceContext(assertion)) {
+  if (traceData !== undefined || (traceId && assertionMayNeedTraceContext(assertion))) {
     try {
-      const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
+      const resolvedTraceData =
+        traceData === undefined && traceId ? await loadTraceData(traceId) : traceData;
       if (resolvedTraceData) {
         context.trace = {
           traceId: resolvedTraceData.traceId,
