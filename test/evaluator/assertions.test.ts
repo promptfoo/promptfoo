@@ -2,10 +2,10 @@ import './setup';
 
 import { randomUUID } from 'crypto';
 
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
-import { type TestSuite } from '../../src/types/index';
+import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import {
   mockApiProvider,
   mockGradingApiProviderFails,
@@ -15,6 +15,74 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it('finishes audio grading before collecting the next serial target response', async () => {
+    const callOrder: string[] = [];
+    vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+      callOrder.push('target');
+      return {
+        output: 'Hello.',
+        audio: { data: Buffer.alloc(2048, 1).toString('base64'), format: 'wav' },
+      };
+    });
+    const grader: ApiProvider = {
+      id: () => 'audio-grader',
+      getAudioInputFormat: () => 'openai',
+      callApi: vi.fn(async () => {
+        callOrder.push('grader');
+        return { output: '{"pass":true,"score":1}' };
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Say hello')],
+      tests: Array.from({ length: 3 }, () => ({
+        assert: [{ type: 'llm-rubric', value: 'The speaker sounds calm.', provider: grader }],
+      })),
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.stats.successes).toBe(3);
+    expect(callOrder).toEqual(['target', 'grader', 'target', 'grader', 'target', 'grader']);
+    for (const row of summary.results) {
+      expect(row.response?.audio?.blobRef).toBeDefined();
+      expect(row.response?.audio?.data).toBeUndefined();
+    }
+  });
+
+  it.each([1, 2])(
+    'grades native audio after blob extraction with concurrency %s',
+    async (maxConcurrency) => {
+      const audioData = Buffer.alloc(2048, 1).toString('base64');
+      vi.mocked(mockApiProvider.callApi).mockResolvedValue({
+        output: 'Hello.',
+        audio: { data: audioData, format: 'wav', transcript: 'Hello.' },
+      });
+      const grader: ApiProvider = {
+        ...mockGradingApiProviderPasses,
+        getAudioInputFormat: () => 'openai',
+      };
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Say hello')],
+        tests: [
+          { assert: [{ type: 'llm-rubric', value: 'The speaker sounds calm.', provider: grader }] },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, { maxConcurrency });
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(summary.results[0].success).toBe(true);
+      expect(summary.results[0].response?.audio?.blobRef).toBeDefined();
+      expect(summary.results[0].response?.audio?.data).toBeUndefined();
+      const messages = JSON.parse(vi.mocked(grader.callApi).mock.calls[0][0]);
+      expect(messages.flatMap((message: { content: unknown }) => message.content)).toContainEqual({
+        type: 'input_audio',
+        input_audio: { data: audioData, format: 'wav' },
+      });
+    },
+  );
+
   it('evaluate with expected value matching output', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -148,6 +216,201 @@ describeEvaluator('evaluator assertions', () => {
     expect(summary.stats.failures).toBe(0);
     expect(summary.results[0].success).toBe(true);
     expect(summary.results[0].response?.output).toBe('Test output');
+  });
+
+  it('reuses a configured LiteLLM provider ID for both G-Eval calls', async () => {
+    const configuredLiteLLM: ApiProvider = {
+      id: vi.fn().mockReturnValue('litellm:gemini-pro'),
+      config: { apiBaseUrl: 'http://localhost:4000', temperature: 0 },
+      callApi: vi.fn().mockImplementation(async (_prompt, context) => ({
+        output:
+          context?.prompt?.label === 'g-eval-steps'
+            ? JSON.stringify({ steps: ['Check factual accuracy'] })
+            : JSON.stringify({ score: 10, reason: 'The answer is accurate' }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      })),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider, configuredLiteLLM],
+      prompts: [toPrompt('What is the capital of France?')],
+      tests: [
+        {
+          providers: ['test-provider'],
+          assert: [
+            {
+              type: 'g-eval',
+              value: 'The answer identifies the capital correctly',
+              provider: 'litellm:gemini-pro',
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(configuredLiteLLM.callApi).toHaveBeenCalledTimes(2);
+    expect(
+      vi.mocked(configuredLiteLLM.callApi).mock.calls.map(([, context]) => context?.prompt?.label),
+    ).toEqual(['g-eval-steps', 'g-eval']);
+    expect(summary.stats.successes).toBe(1);
+  });
+
+  it('reuses configured graders in typed defaults and scenario assertion sets', async () => {
+    const configuredGrader: ApiProvider = {
+      id: vi.fn().mockReturnValue('litellm:judge'),
+      label: 'Configured grader',
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'The output passes' }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider, configuredGrader],
+      prompts: [toPrompt('Test prompt')],
+      defaultTest: {
+        options: { provider: { text: 'Configured grader' } },
+      },
+      scenarios: [
+        {
+          config: [{}],
+          tests: [
+            {
+              providers: ['test-provider'],
+              assert: [
+                {
+                  type: 'assert-set',
+                  assert: [
+                    { type: 'llm-rubric', value: 'Use the default grader option' },
+                    {
+                      type: 'llm-rubric',
+                      value: 'Use the explicit configured grader ID option',
+                      provider: { text: { id: 'litellm:judge' } },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(configuredGrader.callApi).toHaveBeenCalledTimes(2);
+    expect(summary.stats.successes).toBe(1);
+  });
+
+  it('routes an assertion provider id to the id-matching provider when a sibling label collides', async () => {
+    const judgeById: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'Passes via id-matched judge.' }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+    const judgeByLabel: ApiProvider = {
+      id: vi.fn().mockReturnValue('litellm:judge'),
+      label: 'judge',
+      callApi: vi.fn().mockResolvedValue({
+        output: JSON.stringify({ pass: false, score: 0, reason: 'Should never be called.' }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider, judgeById, judgeByLabel],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          providers: ['test-provider'],
+          assert: [{ type: 'llm-rubric', value: 'Use the id-matched judge', provider: 'judge' }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(judgeById.callApi).toHaveBeenCalledTimes(1);
+    expect(judgeByLabel.callApi).not.toHaveBeenCalled();
+    expect(summary.stats.successes).toBe(1);
+  });
+
+  it('preserves suite env for typed graders inherited from defaultTest assertions', async () => {
+    const testSuite: TestSuite = {
+      env: { LITELLM_API_BASE: 'echo' },
+      providers: [mockApiProvider],
+      prompts: [toPrompt('Test prompt')],
+      tests: [{ providers: ['test-provider'] }],
+      defaultTest: {
+        assert: [
+          {
+            type: 'llm-rubric',
+            value: 'Grade the test output',
+            rubricPrompt: '{"pass":true,"score":1,"reason":"Resolved suite env"}',
+            provider: {
+              text: {
+                id: '{{ env.LITELLM_API_BASE }}',
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.results[0].success).toBe(true);
+  });
+
+  it('reuses configured text and embedding graders for answer relevance', async () => {
+    const textJudge: ApiProvider = {
+      id: vi.fn().mockReturnValue('litellm:text-judge'),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test prompt' }),
+    };
+    const embeddingJudge: ApiProvider = {
+      id: vi.fn().mockReturnValue('litellm:embedding:judge'),
+      callApi: vi.fn().mockResolvedValue({ output: '' }),
+      callEmbeddingApi: vi.fn().mockResolvedValue({ embedding: [1, 0] }),
+    };
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider, textJudge, embeddingJudge],
+      prompts: [toPrompt('Test prompt')],
+      tests: [
+        {
+          providers: ['test-provider'],
+          assert: [
+            {
+              type: 'answer-relevance',
+              threshold: 0.8,
+              provider: {
+                text: 'litellm:text-judge',
+                embedding: 'litellm:embedding:judge',
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(textJudge.callApi).toHaveBeenCalledTimes(3);
+    expect(embeddingJudge.callEmbeddingApi).toHaveBeenCalledTimes(4);
+    expect(summary.stats.successes).toBe(1);
   });
 
   it('evaluate with grading expected value does not pass', async () => {

@@ -10,11 +10,14 @@ import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   getRemoteGenerationExplicitlyDisabledError,
+  getRemoteGenerationHeaders,
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../remoteGeneration';
+import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
+import { callTargetProvider } from './shared';
 
 import type {
   ApiProvider,
@@ -30,6 +33,7 @@ interface BestOfNResponse {
 
 interface BestOfNConfig {
   injectVar: string;
+  targetId?: string;
   maxConcurrency: number;
   nSteps?: number;
   maxCandidatesPerStep?: number;
@@ -48,6 +52,7 @@ export default class BestOfNProvider implements ApiProvider {
       maxConcurrency?: number;
       nSteps?: number;
       maxCandidatesPerStep?: number;
+      targetId?: string;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -60,6 +65,7 @@ export default class BestOfNProvider implements ApiProvider {
       maxConcurrency: options.maxConcurrency || 3,
       nSteps: options.nSteps,
       maxCandidatesPerStep: options.maxCandidatesPerStep,
+      targetId: options.targetId,
     };
   }
 
@@ -74,6 +80,8 @@ export default class BestOfNProvider implements ApiProvider {
 
     const targetProvider: ApiProvider = context.originalProvider;
     const targetTokenUsage = createEmptyTokenUsage();
+    let targetCost: number | undefined;
+    let incurredTargetCost: number | undefined;
     const sessionIds: string[] = [];
     try {
       // Get candidate prompts from the server
@@ -81,11 +89,10 @@ export default class BestOfNProvider implements ApiProvider {
         getRemoteGenerationUrl(),
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: getRemoteGenerationHeaders(),
           body: JSON.stringify({
             task: 'jailbreak:best-of-n',
+            ...remoteGenerationContextPayload(this.config.targetId),
             prompt: context.vars[this.config.injectVar],
             nSteps: this.config.nSteps,
             maxCandidatesPerStep: this.config.maxCandidatesPerStep,
@@ -163,13 +170,24 @@ export default class BestOfNProvider implements ApiProvider {
             // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
             // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
             throwIfTargetPromptExceedsMaxChars(renderedPrompt);
-            const response = await targetProvider.callApi(renderedPrompt, context, options);
+            const response = await callTargetProvider(
+              targetProvider,
+              renderedPrompt,
+              context,
+              options,
+            );
             const sessionId = getSessionId(response, context);
             if (sessionId) {
               sessionIds.push(sessionId);
             }
             lastResponse = response;
             accumulateResponseTokenUsage(targetTokenUsage, response);
+            if (response.cost !== undefined) {
+              targetCost = (targetCost ?? 0) + response.cost;
+              incurredTargetCost =
+                (incurredTargetCost ?? 0) +
+                (response.incurredCost ?? (response.cached ? 0 : response.cost));
+            }
             currentStep++;
             if (!response.error) {
               successfulResponse = response;
@@ -189,25 +207,39 @@ export default class BestOfNProvider implements ApiProvider {
         },
       );
 
-      if (successfulResponse) {
-        (successfulResponse as ProviderResponse).tokenUsage = targetTokenUsage;
-        return successfulResponse;
-      }
-      if (lastResponse) {
-        (lastResponse as ProviderResponse).tokenUsage = targetTokenUsage;
-        (lastResponse as ProviderResponse).metadata = {
-          ...((lastResponse as ProviderResponse).metadata ?? {}),
-          sessionIds,
-        };
-      }
-      return (
-        lastResponse || {
-          error: 'All candidates failed',
-          metadata: {
-            sessionIds,
-          },
+      const aggregatedResponse = (successfulResponse ?? lastResponse) as ProviderResponse | null;
+      if (aggregatedResponse) {
+        aggregatedResponse.tokenUsage = targetTokenUsage;
+        if (
+          aggregatedResponse.cached &&
+          (targetTokenUsage.incurredTokenUsage?.numRequests ?? 0) > 0
+        ) {
+          aggregatedResponse.cached = false;
         }
-      );
+
+        if (targetCost !== undefined) {
+          aggregatedResponse.cost = targetCost;
+          if (incurredTargetCost !== targetCost || aggregatedResponse.incurredCost !== undefined) {
+            aggregatedResponse.incurredCost = incurredTargetCost;
+          }
+        }
+
+        if (!successfulResponse) {
+          aggregatedResponse.metadata = {
+            ...(aggregatedResponse.metadata ?? {}),
+            sessionIds,
+          };
+        }
+
+        return aggregatedResponse;
+      }
+
+      return {
+        error: 'All candidates failed',
+        metadata: {
+          sessionIds,
+        },
+      };
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation
       if (err instanceof Error && err.name === 'AbortError') {

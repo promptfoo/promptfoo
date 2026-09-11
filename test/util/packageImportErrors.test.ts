@@ -29,4 +29,51 @@ describe('isMissingPackageImportError', () => {
 
     expect(isMissingPackageImportError(error, '@googleapis/sheets')).toBe(false);
   });
+
+  it('recognizes the optional package itself from a realistic ESM message', () => {
+    const error = Object.assign(
+      new Error(
+        "Cannot find package '@googleapis/sheets' imported from /app/dist/src/googleSheets.js",
+      ),
+      { code: 'ERR_MODULE_NOT_FOUND' },
+    );
+
+    expect(isMissingPackageImportError(error, '@googleapis/sheets')).toBe(true);
+  });
+
+  it('recognizes a subpath import of the optional package', () => {
+    const error = Object.assign(
+      new Error(
+        "Cannot find package '@googleapis/sheets/build/index' imported from /app/dist/src/googleSheets.js",
+      ),
+      { code: 'ERR_MODULE_NOT_FOUND' },
+    );
+
+    expect(isMissingPackageImportError(error, '@googleapis/sheets')).toBe(true);
+  });
+
+  it('does not misreport a missing transitive dependency as the optional package (ESM)', () => {
+    // The optional package is installed, but one of ITS dependencies is not.
+    // The package name appears only in the importer path, not as the failed
+    // specifier, so it must not be reported as the package itself being absent.
+    const error = Object.assign(
+      new Error(
+        "Cannot find package 'gaxios' imported from /app/node_modules/@googleapis/sheets/build/index.js",
+      ),
+      { code: 'ERR_MODULE_NOT_FOUND' },
+    );
+
+    expect(isMissingPackageImportError(error, '@googleapis/sheets')).toBe(false);
+  });
+
+  it('does not misreport a missing transitive dependency as the optional package (CommonJS)', () => {
+    const error = Object.assign(
+      new Error(
+        "Cannot find module 'gaxios'\nRequire stack:\n- /app/node_modules/@googleapis/sheets/build/index.js",
+      ),
+      { code: 'MODULE_NOT_FOUND' },
+    );
+
+    expect(isMissingPackageImportError(error, '@googleapis/sheets')).toBe(false);
+  });
 });

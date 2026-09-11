@@ -35,6 +35,20 @@ This example shows Claude Agent SDK in its simplest form - running in a temporar
 (cd basic && promptfoo eval)
 ```
 
+#### Counting LLM turns with trace markers
+
+`./basic/promptfooconfig.tracing.yaml` enables OTEL tracing and uses
+`trace-span-count` over the `gen_ai.turn *` marker spans the provider emits (one
+per `assistant` message / LLM round) to assert how many rounds a task took. See
+[Turn marker spans](https://www.promptfoo.dev/docs/tracing/#per-llm-turn-spans)
+for the per-provider table and the subagent/cache-hit caveats.
+
+```bash
+# Use --no-cache so the turn-marker spans are re-emitted on every run; a cached
+# response would short-circuit before the tracing code and fail the turn-count assertions.
+(cd basic && promptfoo eval -c promptfooconfig.tracing.yaml --no-cache)
+```
+
 ### Working Directory
 
 This example provides Claude Agent SDK with read-only access to a sample project containing Python, TypeScript, and JavaScript files with intentional bugs for analysis. Because the `working_dir` is set, Claude Agent SDK has access to the following read-only tools:

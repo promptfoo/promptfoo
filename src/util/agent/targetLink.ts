@@ -9,7 +9,7 @@
 
 import logger from '../../logger';
 import { TargetLinkEvents } from '../../types/targetLink';
-import { fetchWithProxy } from '../fetch';
+import { fetchWithProxy } from '../fetch/index';
 
 import type { ApiProvider } from '../../types/providers';
 import type {

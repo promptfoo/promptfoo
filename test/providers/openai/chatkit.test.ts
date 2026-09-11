@@ -90,7 +90,8 @@ function getGeneratedHTML(provider: OpenAiChatKitProvider): string {
               headers: {
                 'Authorization': 'Bearer ${apiKey}',
                 'Content-Type': 'application/json',
-                'OpenAI-Beta': 'chatkit_beta=v1'
+                'OpenAI-Beta': 'chatkit_beta=v1',
+                'X-OpenAI-Originator': 'promptfoo'
               },
               body: JSON.stringify({
                 workflow: { id: '${workflowId}'${versionClause} },

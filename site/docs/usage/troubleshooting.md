@@ -139,41 +139,40 @@ prompts:
 - Building new templates designed for object navigation
 - Working with complex nested data structures
 
-## Node.js version mismatch error
+<a id="nodejs-version-mismatch-error"></a>
 
-You might encounter this error after switching Node.js versions:
+## libsql binding not found
+
+You may see this error if the libsql platform binding for your OS/architecture is
+missing or wasn't installed:
 
 ```text
-Error: The module '/path/to/node_modules/better-sqlite3/build/Release/better_sqlite3.node'
-was compiled against a different Node.js version using
-NODE_MODULE_VERSION 115. This version of Node.js requires
-NODE_MODULE_VERSION 127. Please try re-compiling or re-installing
-the module (for instance, using `npm rebuild` or `npm install`).
+Error: Cannot find module '@libsql/darwin-arm64'
+Require stack:
+- /path/to/node_modules/libsql/index.js
 ```
 
-This happens because promptfoo uses native code modules such as `better-sqlite3`,
-which must be compiled for the active Node.js version.
-
-### Solution: Remove npx cache and reinstall
+libsql ships prebuilt N-API bindings as optional peer packages
+(`@libsql/darwin-arm64`, `@libsql/linux-x64-gnu`, `@libsql/win32-x64-msvc`, etc.).
+N-API is ABI-stable across Node.js versions, so this is almost always a packaging
+issue (npm skipped optional deps, the cache is corrupt, or the platform isn't yet
+supported), not a Node.js version mismatch.
 
 Use the repair path that matches how you run promptfoo.
 
 **Project checkout**
 
-If you are running promptfoo from a local checkout, switch to the Node.js version
-you intend to use, then rebuild the native dependency:
-
 ```bash
-npm rebuild better-sqlite3
+npm install
 ```
 
-If the project includes an `.nvmrc`, run `nvm use` first so the active Node.js version
-matches the project before rebuilding.
+If `npm install` keeps skipping the binding, force optional dependencies on:
+
+```bash
+npm install --include=optional
+```
 
 **Global npm install**
-
-If you installed promptfoo globally with npm, reinstall it under the active Node.js
-version:
 
 ```bash
 npm install -g promptfoo@latest
@@ -181,8 +180,8 @@ npm install -g promptfoo@latest
 
 **npx**
 
-If the error happens with `npx promptfoo@latest`, remove the cached npx install and
-run the command again. With newer npm versions, remove only the matching cache entry:
+Remove the cached npx install, then re-run. With newer npm versions, drop only the
+matching cache entry:
 
 ```bash
 npm cache npx ls
@@ -190,18 +189,19 @@ npm cache npx rm <key>
 npx -y promptfoo@latest
 ```
 
-Use the key shown next to `promptfoo@latest` in `npm cache npx ls`. If your npm
-version does not support `npm cache npx`, remove the older npx cache directory instead:
+Use the key shown next to `promptfoo@latest` in `npm cache npx ls`.
 
-```bash
-rm -rf ~/.npm/_npx && npx -y promptfoo@latest
-```
+**Unsupported platform**
 
-This forces a fresh install for the current Node.js version.
+If your `<platform>-<arch>` is not listed in the
+[libsql release matrix](https://github.com/tursodatabase/libsql-js/releases),
+file an issue at
+[promptfoo/promptfoo](https://github.com/promptfoo/promptfoo/issues) with your
+platform and architecture in the title.
 
 ## Native build failures
 
-Some dependencies like [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) include native code that must compile locally. Ensure your machine has a C/C++ build toolchain:
+Some dependencies include native code that may need to compile locally. Ensure your machine has a C/C++ build toolchain:
 
 - **Ubuntu/Debian**: `sudo apt-get install build-essential`
 - **macOS**: `xcode-select --install`

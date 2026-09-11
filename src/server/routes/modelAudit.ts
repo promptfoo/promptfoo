@@ -6,12 +6,12 @@ import { StringDecoder } from 'string_decoder';
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { checkModelAuditInstalled } from '../../commands/modelScan';
 import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
 import { ModelAuditSchemas } from '../../types/api/modelAudit';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
+import { checkModelAuditInstalled } from '../../util/modelAuditInstall';
 import { parseCompleteModelAuditResults } from '../../util/modelAuditResults';
 import { replyValidationError, sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
@@ -23,7 +23,7 @@ export const modelAuditRouter = Router();
 const LIST_SCANNERS_ARGS = parseModelAuditArgs([], {
   listScanners: true,
   format: 'json',
-}).args;
+});
 
 function getModelAuditDelegationEnv(): NodeJS.ProcessEnv {
   return {
@@ -257,7 +257,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     // Use the centralized CLI parser to build command arguments
     const effectiveVerbose = normalizedOptions.verbose !== false;
     const effectiveTimeout = normalizedOptions.timeout || 3600;
-    const { args } = parseModelAuditArgs(resolvedPaths, {
+    const args = parseModelAuditArgs(resolvedPaths, {
       ...normalizedOptions,
       // Force JSON format for API responses (required for parsing)
       format: 'json',

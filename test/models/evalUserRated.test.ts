@@ -65,7 +65,7 @@ describe('User-Rated Filter Feature', () => {
 
   beforeEach(async () => {
     // Clear all tables before each test
-    const db = getDb();
+    const db = await getDb();
     await db.run('DELETE FROM eval_results');
     await db.run('DELETE FROM evals_to_datasets');
     await db.run('DELETE FROM evals_to_prompts');
@@ -241,7 +241,7 @@ describe('User-Rated Filter Feature', () => {
 
     it('should handle malformed grading results gracefully', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const db = getDb();
+      const db = await getDb();
 
       // Insert a result with null grading_result
       await db.run(`
@@ -286,7 +286,7 @@ describe('User-Rated Filter Feature', () => {
 
     it('should distinguish human assertions from other assertion types', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const db = getDb();
+      const db = await getDb();
 
       // Result with 'human' assertion type (should match)
       await db.run(`
@@ -491,7 +491,7 @@ describe('User-Rated Filter Feature', () => {
   describe('Edge cases and error handling', () => {
     it('should handle results with null componentResults', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const db = getDb();
+      const db = await getDb();
 
       // Insert result with grading_result but null componentResults
       await db.run(`
@@ -514,7 +514,7 @@ describe('User-Rated Filter Feature', () => {
 
     it('should handle results with multiple componentResults including human', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      const db = getDb();
+      const db = await getDb();
 
       // Result with multiple componentResults, one of which is human
       await db.run(`

@@ -8,6 +8,7 @@ import { rmSync } from 'node:fs';
 import path from 'node:path';
 
 import { afterAll, afterEach, vi } from 'vitest';
+import { closeTestDatabaseClients } from './src/database/testing';
 import { mockProcessEnv } from './test/util/utils';
 
 const TEST_CONFIG_DIR = path.join('.local', 'vitest', 'config', `worker-${process.pid}`);
@@ -48,7 +49,9 @@ afterEach(() => {
 /**
  * Cleanup after all tests in this worker complete.
  */
-afterAll(() => {
+afterAll(async () => {
+  await closeTestDatabaseClients();
+
   // Reset all modules to clear any cached state
   vi.resetModules();
 

@@ -7,25 +7,28 @@ import {
   isMultiTurnStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
   type MultiTurnStrategy,
-  REDTEAM_MODEL,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
+import {
+  getRemoteGenerationHeaders,
+  getRemoteGenerationUrl,
+  neverGenerateRemote,
+} from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
-import { TestCaseWithPlugin } from '../../types';
+import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
+import { evalJobService } from '../services/evalJobService';
 import {
   extractGeneratedPrompt,
   generateMultiTurnPrompt,
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
-import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
@@ -45,6 +48,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       plugin,
       strategy,
       config,
+      provider,
       turn,
       maxTurns,
       history,
@@ -83,11 +87,15 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     // be passed in as a configuration option.
     const injectVar = 'query';
 
-    // Get the red team provider
-    const redteamProvider = await redteamProviderManager.getProvider({ provider: REDTEAM_MODEL });
+    // Keep preview generation request-scoped. A form-selected provider wins, followed by
+    // any org/team cache, then the built-in default; previous CLI runs must not leak here.
+    const providerSelection = await redteamProviderManager.getProviderSelection({
+      provider: provider as RedteamFileConfig['provider'],
+      ignoreCliState: true,
+    });
 
     const testCases = await pluginFactory.action({
-      provider: redteamProvider,
+      provider: providerSelection.provider,
       purpose: config.applicationDefinition.purpose ?? 'general AI assistant',
       injectVar,
       n: effectiveCount, // Generate requested number of test cases
@@ -115,8 +123,14 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         const strategyTestCases = await strategyFactory.action(
           testCases as TestCaseWithPlugin[],
           injectVar,
-          strategy.config || {},
+          {
+            ...(strategy.config || {}),
+          },
           strategy.id,
+          {
+            // Provider options stay request-local because they can contain credentials.
+            generationProviderSelection: providerSelection,
+          },
         );
 
         if (strategyTestCases && strategyTestCases.length > 0) {
@@ -240,11 +254,10 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     if (currentAbortController) {
       currentAbortController.abort();
     }
-    const existingJob = evalJobs.get(currentJobId);
-    if (existingJob) {
-      existingJob.status = 'error';
-      existingJob.logs.push('Job cancelled - new job started');
-    }
+    evalJobService.fail(currentJobId, ['Job cancelled - new job started'], {
+      append: true,
+      resetResult: false,
+    });
   }
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
@@ -252,15 +265,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   currentJobId = id;
   currentAbortController = new AbortController();
 
-  // Initialize job status with empty logs array
-  evalJobs.set(id, {
-    evalId: null,
-    status: 'in-progress',
-    progress: 0,
-    total: 0,
-    result: null,
-    logs: [],
-  });
+  evalJobService.create(id);
 
   // Set web UI mode
   cliState.webUI = true;
@@ -274,21 +279,15 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     ...(maxConcurrency === undefined ? {} : { maxConcurrency }),
     logCallback: (message: string) => {
       if (currentJobId === id) {
-        const job = evalJobs.get(id);
-        if (job) {
-          job.logs.push(message);
-        }
+        evalJobService.appendLog(id, message);
       }
     },
     abortSignal: currentAbortController.signal,
   })
     .then(async (evalResult) => {
       const summary = evalResult ? await evalResult.toEvaluateSummary() : null;
-      const job = evalJobs.get(id);
-      if (job && currentJobId === id) {
-        job.status = 'complete';
-        job.result = summary;
-        job.evalId = evalResult?.id ?? null;
+      if (currentJobId === id) {
+        evalJobService.complete(id, summary, evalResult?.id ?? null);
       }
       if (currentJobId === id) {
         cliState.webUI = false;
@@ -298,13 +297,12 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     })
     .catch((error) => {
       logger.error(`Error running red team: ${error}\n${error.stack || ''}`);
-      const job = evalJobs.get(id);
-      if (job && currentJobId === id) {
-        job.status = 'error';
-        job.logs.push(`Error: ${error.message}`);
-        if (error.stack) {
-          job.logs.push(`Stack trace: ${error.stack}`);
-        }
+      if (currentJobId === id) {
+        evalJobService.fail(
+          id,
+          [`Error: ${error.message}`, ...(error.stack ? [`Stack trace: ${error.stack}`] : [])],
+          { append: true, resetResult: false },
+        );
       }
       if (currentJobId === id) {
         cliState.webUI = false;
@@ -328,11 +326,10 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
     currentAbortController.abort();
   }
 
-  const job = evalJobs.get(jobId);
-  if (job) {
-    job.status = 'error';
-    job.logs.push('Job cancelled by user');
-  }
+  evalJobService.fail(jobId, ['Job cancelled by user'], {
+    append: true,
+    resetResult: false,
+  });
 
   // Clear state
   cliState.webUI = false;
@@ -384,9 +381,7 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
     logger.debug(`Sending request to cloud function: ${cloudFunctionUrl}`);
     const response = await fetchWithProxy(cloudFunctionUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: getRemoteGenerationHeaders(),
       body: JSON.stringify({
         ...bodyResult.data,
         task: taskId,

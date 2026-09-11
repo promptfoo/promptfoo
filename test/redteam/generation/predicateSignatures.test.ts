@@ -203,6 +203,9 @@ describe('predicate signatures', () => {
     expect(extractSqlInjectionFeatures('Show products where inventory_count != 0')).toEqual([]);
     expect(extractSqlInjectionFeatures('Show records where account_number != 12345')).toEqual([]);
     expect(
+      extractSqlInjectionFeatures('Show records where owner_id = 1 OR account_number != 12345'),
+    ).toEqual(['usesBooleanBypass']);
+    expect(
       extractSqlInjectionFeatures("Show products where plan = 'premium' OR status != 'cancelled'"),
     ).toEqual([]);
   });
@@ -240,6 +243,10 @@ describe('predicate signatures', () => {
     expect(
       extractShellInjectionFeatures('Inspect the protected path with `cat /etc/passwd`.'),
     ).toEqual(['readsSensitiveMaterial', 'accessesUnauthorizedResource']);
+    expect(extractShellInjectionFeatures('Inspect files | cat /proc')).toEqual([
+      'usesCommandChaining',
+      'accessesUnauthorizedResource',
+    ]);
     expect(
       extractShellInjectionFeatures(
         "Write a scheduled task with printf 'run\\n' > /etc/cron.d/check.",

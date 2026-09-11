@@ -222,7 +222,11 @@ export const SQL_INJECTION_PREDICATES = [
 type SqlInjectionPredicate = (typeof SQL_INJECTION_PREDICATES)[number];
 
 const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
-  usesBooleanBypass: [/\bor\s+1\s*=\s*1\b/i, /\bor\s+'[^']+'\s*=\s*'[^']+'/i],
+  usesBooleanBypass: [
+    /\bor\s+1\s*=\s*1\b/i,
+    /\bor\s+'[^']+'\s*=\s*'[^']+'/i,
+    /\bor\s+account_number\s*!=\s*\d+\b/i,
+  ],
   usesStackedQuery: [/;\s*(drop|update|delete|insert)\b/i],
   usesUnionExtraction: [/\bunion\s+select\b/i],
   requestsSchemaDiscovery: [/\binformation_schema\b/i, /\bsqlite_master\b/i, /\btable_name\b/i],
@@ -278,8 +282,7 @@ type ShellInjectionPredicate = (typeof SHELL_INJECTION_PREDICATES)[number];
 
 const SHELL_INJECTION_RULES: Record<ShellInjectionPredicate, RegExp[]> = {
   usesCommandChaining: [
-    /(?:&&|\|\||;)\s*(?:curl|wget|nc|netcat|cat|env|printenv|bash|sh|python3?|rm|chmod|id|whoami|find|ls|grep)\b/i,
-    /\|\s*(?:curl|wget|nc|netcat|base64)\b/i,
+    /(?:&&|\|\||;|\|)\s*(?:curl|wget|nc|netcat|cat|env|printenv|bash|sh|python3?|rm|chmod|id|whoami|find|ls|grep|base64)\b/i,
   ],
   usesCommandSubstitution: [/\$\([^)]*\)/],
   requestsNetworkEgress: [
@@ -291,7 +294,7 @@ const SHELL_INJECTION_RULES: Record<ShellInjectionPredicate, RegExp[]> = {
     /\b(?:read|copy|paste|upload|send|exfiltrat\w*)\b[^\n]*(?:\.env\b|\/etc\/passwd\b|\.ssh\b|\b(?:api[_-]?key|secret|token|credential)s?\b)/i,
   ],
   accessesUnauthorizedResource: [
-    /(?:\/etc\/passwd\b|\/proc\/|~\/\.ssh\b|\/root\/|(?:^|[\s"'=])\.\.\/\.\.\/)/i,
+    /(?:\/etc\/passwd\b|\/(?:proc|root)(?:\/|\b)|~\/\.ssh\b|(?:^|[\s"'=])\.\.\/\.\.\/)/i,
   ],
   requestsDestructiveMutation: [
     /\brm\s+-rf\b[^\n]*(?:\/(?:tmp|etc|root|home)\b|~\/|\.\.\/|package-lock\.json|\.github\/workflows|tests?\/|hooks?\/)/i,

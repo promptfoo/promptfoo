@@ -34,7 +34,7 @@ ModelAudit uses specific exit codes for CI/CD automation:
 
 - **0**: No security issues found ✅
 - **1**: Security issues detected (warnings or critical findings) 🟡
-- **2**: Scan errors (file access, installation, timeouts) 🔴
+- **2**: Operational errors or inconclusive scans (file access, installation, timeouts, or no scanned files) 🔴
 
 In CI/CD pipelines, exit code 1 indicates findings that should be reviewed. Only exit code 2 represents actual scan failures.
 
@@ -63,7 +63,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -170,7 +170,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -183,6 +183,8 @@ jobs:
           pip install modelaudit
 
       - name: Scan models directory
+        id: scan
+        continue-on-error: true
         run: |
           promptfoo scan-model models/ \
             --no-write \
@@ -190,10 +192,15 @@ jobs:
             --output modelaudit.sarif
 
       - name: Upload SARIF to GitHub
+        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: modelaudit.sarif
           category: model-security
+
+      - name: Fail if scan found issues or errors
+        if: steps.scan.outcome == 'failure'
+        run: exit 1
 ```
 
 ### Scheduled Security Scans
@@ -218,7 +225,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -231,6 +238,7 @@ jobs:
           pip install modelaudit[all]
 
       - name: Comprehensive model scan
+        continue-on-error: true
         run: |
           promptfoo scan-model models/ \
             --format json \
@@ -317,7 +325,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -335,16 +343,9 @@ jobs:
             --strict \
             --format json \
             --output results.json
-
-      - name: Verify no issues
-        run: |
-          # In strict mode, exit code 1 means issues found
-          # This step fails if any warnings or critical issues exist
-          if [ $? -ne 0 ]; then
-            echo "❌ Security scan found issues - deployment blocked"
-            exit 1
-          fi
 ```
+
+The scan step fails if strict mode finds warnings or critical issues.
 
 ## GitLab CI
 
@@ -353,7 +354,7 @@ Example `.gitlab-ci.yml`:
 ```yaml
 model-security-scan:
   stage: test
-  image: node:20
+  image: node:24
 
   before_script:
     - apt-get update && apt-get install -y python3 python3-pip
@@ -367,20 +368,28 @@ model-security-scan:
         grep -Ei "\.(${MODEL_EXTENSIONS})$" || true)
 
       if [ -n "$CHANGED" ]; then
-        echo "$CHANGED" | while read -r file; do
+        mkdir -p scan_results
+        printf '%s\n' "$CHANGED" > changed_files.txt
+        scan_status=0
+        while IFS= read -r file; do
           if [ -f "$file" ]; then
-            promptfoo scan-model "$file" --format json >> scan_results.json
+            report_id=$(printf '%s' "$file" | sha256sum | cut -d ' ' -f1)
+            file_status=0
+            promptfoo scan-model "$file" \
+              --format json \
+              --output "scan_results/${report_id}.json" || file_status=$?
+            if [ "$file_status" -gt "$scan_status" ]; then scan_status=$file_status; fi
           fi
-        done
+        done < changed_files.txt
+        exit "$scan_status"
       else
         echo "No model files changed"
       fi
 
   artifacts:
-    reports:
-      junit: scan_results.json
     paths:
-      - scan_results.json
+      - scan_results/
+    when: always
     expire_in: 30 days
 
   only:
@@ -477,7 +486,7 @@ version: 2.1
 jobs:
   model-scan:
     docker:
-      - image: cimg/node:20.0
+      - image: cimg/node:lts
 
     steps:
       - checkout

@@ -7,7 +7,7 @@ import { createMockProvider } from '../../factories/provider';
 
 vi.mock('fs');
 vi.mock('csv-parse/sync');
-vi.mock('../../../src/util/fetch');
+vi.mock('../../../src/util/fetch/index');
 vi.mock('../../../src/logger');
 
 describe('XSTest Plugin', () => {
