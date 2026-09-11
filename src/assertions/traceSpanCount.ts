@@ -14,12 +14,13 @@ export const handleTraceSpanCount = ({
   assertion,
   assertionValueContext,
   inverse,
+  renderedValue,
 }: AssertionParams): GradingResult => {
   if (!assertionValueContext.trace || !assertionValueContext.trace.spans) {
     throw new Error('No trace data available for trace-span-count assertion');
   }
 
-  const value = assertion.value as TraceSpanCountValue;
+  const value = (renderedValue ?? assertion.value) as TraceSpanCountValue;
   if (
     !value ||
     typeof value !== 'object' ||
