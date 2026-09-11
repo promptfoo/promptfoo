@@ -1,6 +1,6 @@
 /** Measure an already-built tarball in fresh consumers, independently of the repository graph. */
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -10,16 +10,10 @@ import { parseArgs } from 'node:util';
 
 import { describeDirectDependencies, inventoryTree } from './installProfileInventory';
 import { assertIsolatedConsumerRoot } from './installProfileIsolation';
-import { npmInvocation, terminateProcessTree } from './installProfileProcess';
+import { npmInvocation, runInstallProfileCommand as run } from './installProfileProcess';
 
-type CommandResult = {
-  code: number | null;
-  signal: NodeJS.Signals | null;
-  timedOut: boolean;
-  elapsedMs: number;
-  stdout: string;
-  stderr: string;
-};
+import type { CommandResult } from './installProfileProcess';
+
 type Sample = CommandResult & { iteration: number };
 type EvalRow = {
   success?: boolean;
@@ -184,63 +178,6 @@ function environment(root: string): NodeJS.ProcessEnv {
   };
 }
 
-async function run(
-  command: string,
-  args: string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-  logPrefix: string,
-  timeoutMs = 60_000,
-): Promise<CommandResult> {
-  const stdout = `${logPrefix}.stdout.log`;
-  const stderr = `${logPrefix}.stderr.log`;
-  const out = fs.openSync(stdout, 'w');
-  const err = fs.openSync(stderr, 'w');
-  const started = performance.now();
-  let timedOut = false;
-  let terminationError: unknown;
-  try {
-    return await new Promise((resolve, reject) => {
-      const child = spawn(command, args, {
-        cwd,
-        env,
-        stdio: ['ignore', out, err],
-        detached: process.platform !== 'win32',
-      });
-      // Finish terminating lifecycle-script descendants before collecting evidence.
-      const timer = setTimeout(() => {
-        timedOut = true;
-        try {
-          assert(child.pid, 'Missing process ID for timed-out command');
-          terminateProcessTree(child.pid);
-        } catch (error) {
-          terminationError = error;
-          child.kill('SIGKILL');
-        }
-      }, timeoutMs);
-      child.once('error', (error) => {
-        clearTimeout(timer);
-        reject(error);
-      });
-      child.once('close', (code, signal) => {
-        clearTimeout(timer);
-        if (terminationError) {
-          reject(
-            new Error('Unable to terminate timed-out process tree; measurement stopped', {
-              cause: terminationError,
-            }),
-          );
-          return;
-        }
-        resolve({ code, signal, timedOut, elapsedMs: performance.now() - started, stdout, stderr });
-      });
-    });
-  } finally {
-    fs.closeSync(out);
-    fs.closeSync(err);
-  }
-}
-
 async function probeConsumer(consumer: string, logs: string, env: NodeJS.ProcessEnv, runs: number) {
   let passed = true;
   const entrypoint = path.join(consumer, 'node_modules/promptfoo/dist/src/entrypoint.js');
@@ -385,6 +322,8 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
   );
   const scripts = values['install-scripts'] && !values['no-install-scripts'];
   const npm = npmInvocation();
+  // Use a CLI flag so npm also disables implicit ancestor workspace selection.
+  npm.prefix.push('--workspaces=false');
   // Respect a configured registry (e.g. a company mirror) without copying any
   // other npm configuration or credentials into the isolated consumer.
   const registry = parseRegistryUrl(

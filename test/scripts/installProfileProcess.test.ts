@@ -1,8 +1,14 @@
 import childProcess from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { npmInvocation, terminateProcessTree } from '../../scripts/installProfileProcess';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  npmInvocation,
+  runInstallProfileCommand,
+  terminateProcessTree,
+} from '../../scripts/installProfileProcess';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -165,5 +171,85 @@ describe('npmInvocation', () => {
         'Cannot locate the npm JavaScript CLI. Install npm alongside Node.js or run this script with npm.',
       ),
     );
+  });
+});
+
+describe('install profile commands', () => {
+  let root: string;
+  let child: ReturnType<typeof childProcess.spawn>;
+
+  beforeEach(() => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'install-profile-command-'));
+    child = new childProcess.ChildProcess();
+    Object.defineProperty(child, 'pid', { value: 1234 });
+    vi.spyOn(child, 'kill').mockReturnValue(true);
+    vi.spyOn(childProcess, 'spawn').mockReturnValue(child);
+    vi.spyOn(process, 'kill').mockReturnValue(true);
+    vi.spyOn(childProcess, 'execFileSync').mockReturnValue(Buffer.alloc(0));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  const run = () => runInstallProfileCommand('fixture', [], root, {}, path.join(root, 'command'));
+
+  it.each(['SIGINT', 'SIGTERM'] as const)(
+    'terminates the active tree and waits for close on %s',
+    async (signal) => {
+      const listeners = process.listeners(signal);
+      const pending = run();
+      const settled = vi.fn();
+      void pending.then(settled, settled);
+      const handler = process.listeners(signal).find((listener) => !listeners.includes(listener));
+      expect(handler).toBeDefined();
+      handler!.call(process, signal);
+      if (process.platform === 'win32') {
+        expect(childProcess.execFileSync).toHaveBeenCalledWith(
+          'taskkill',
+          ['/PID', '1234', '/T', '/F'],
+          expect.any(Object),
+        );
+      } else {
+        expect(process.kill).toHaveBeenCalledWith(-1234, 'SIGKILL');
+      }
+      await Promise.resolve();
+      expect(settled).not.toHaveBeenCalled();
+      child.emit('close', null, 'SIGKILL');
+      await expect(pending).rejects.toThrow(`Measurement interrupted by ${signal}`);
+      expect(process.listeners(signal)).toEqual(listeners);
+    },
+  );
+
+  it.each([0, 1])('retains exit code %s and removes interruption handlers', async (code) => {
+    const listeners = (['SIGINT', 'SIGTERM'] as const).map((signal) => process.listeners(signal));
+    const pending = run();
+    child.emit('close', code, null);
+    await expect(pending).resolves.toMatchObject({ code, signal: null, timedOut: false });
+    expect(process.listeners('SIGINT')).toEqual(listeners[0]);
+    expect(process.listeners('SIGTERM')).toEqual(listeners[1]);
+    expect(process.kill).not.toHaveBeenCalled();
+  });
+
+  it('removes handlers when spawning fails', async () => {
+    const listeners = (['SIGINT', 'SIGTERM'] as const).map((signal) => process.listeners(signal));
+    const pending = run();
+    child.emit('error', new Error('spawn fixture failure'));
+    await expect(pending).rejects.toThrow('spawn fixture failure');
+    expect(process.listeners('SIGINT')).toEqual(listeners[0]);
+    expect(process.listeners('SIGTERM')).toEqual(listeners[1]);
+  });
+
+  it('waits for close after a timeout and preserves the timeout result', async () => {
+    vi.useFakeTimers();
+    const pending = run();
+    const settled = vi.fn();
+    void pending.then(settled, settled);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(settled).not.toHaveBeenCalled();
+    child.emit('close', null, 'SIGKILL');
+    await expect(pending).resolves.toMatchObject({ code: null, timedOut: true });
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
