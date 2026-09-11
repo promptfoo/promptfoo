@@ -28,6 +28,9 @@ describe('extractModuleSpecifiers', () => {
       const resolved = require.resolve('cjs-resolve');
       const resolvedWithPaths = require.resolve('cjs-resolve-with-paths', { paths: [] });
       const moduleRequired = module.require('module-require');
+      const bracketRequired = module['require']('bracket-require');
+      const load = require;
+      const aliasedResolve = load.resolve('aliased-resolve');
       require(nonLiteral);
     `;
 
@@ -40,6 +43,8 @@ describe('extractModuleSpecifiers', () => {
       'cjs-resolve',
       'cjs-resolve-with-paths',
       'module-require',
+      'bracket-require',
+      'aliased-resolve',
     ]);
   });
 
@@ -76,9 +81,22 @@ describe('extractRuntimeModuleSpecifiers', () => {
         const first = require;
         const fromCreateRequire = createRequire(import.meta.url);
         const third = fromCreateRequire;
+        import { createRequire as makeRequire } from 'node:module';
+        import * as nodeModule from 'node:module';
+        const fourth = makeRequire(import.meta.url);
+        const fifth = nodeModule.createRequire(import.meta.url);
         third('zod');
+        fourth('yaml');
+        fifth('toml');
       `;
-      expect(extract(source, 'fixture.ts')).toEqual(['yaml', 'zod']);
+      expect(extract(source, 'fixture.ts')).toEqual([
+        'yaml',
+        'node:module',
+        'node:module',
+        'zod',
+        'yaml',
+        'toml',
+      ]);
     },
   );
 
@@ -182,6 +200,17 @@ describe('computeRuntimeDependencyClosure', () => {
 
     expect(computeRuntimeDependencyClosure(repoRoot, 'src/index.ts')).toMatchObject({
       unresolvedInternalImports: ['src/index.ts: ./missing.json', 'src/index.ts: <empty>'],
+    });
+  });
+
+  it('includes existing runtime assets without parsing them as source', () => {
+    write('src/index.ts', "import './schema.json'; require('./native.node');");
+    write('src/schema.json', '{}');
+    write('src/native.node', 'binary');
+
+    expect(computeRuntimeDependencyClosure(repoRoot, 'src/index.ts')).toMatchObject({
+      files: ['src/index.ts', 'src/native.node', 'src/schema.json'],
+      unresolvedInternalImports: [],
     });
   });
 });

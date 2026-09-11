@@ -63,6 +63,7 @@ describe('package artifact readiness', () => {
     [{ maxArtifactFiles: 1 }, 'artifact budgets require artifacts'],
     [{ maxArtifactBytes: 100 }, 'artifact budgets require artifacts'],
     [{ entrypoint: null }, 'must declare a string entrypoint'],
+    [{ entrypoint: '../outside.ts' }, 'entrypoint must stay inside the repo'],
   ])('rejects malformed candidate config: %s', (override, message) => {
     write('src/index.ts', 'export {};');
     write(
@@ -204,6 +205,23 @@ describe('package artifact readiness', () => {
     );
     write('dist/chunk.js', 'export const value = true;');
 
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.js')).toMatchObject({
+      files: ['dist/chunk.js', 'dist/index.js'],
+      missingFiles: [],
+    });
+  });
+
+  it('follows CommonJS package main and strips ESM URL suffixes', () => {
+    write('dist/index.cjs', "require('./plugin');");
+    write('dist/plugin/package.json', JSON.stringify({ main: 'lib/start.js' }));
+    write('dist/plugin/lib/start.js', 'module.exports = true;');
+    write('dist/index.js', "import './chunk.js?cache=1#fragment';");
+    write('dist/chunk.js', 'export {};');
+
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.cjs')).toMatchObject({
+      files: ['dist/index.cjs', 'dist/plugin/lib/start.js'],
+      missingFiles: [],
+    });
     expect(computePackageArtifactClosure(packageRoot, 'dist/index.js')).toMatchObject({
       files: ['dist/chunk.js', 'dist/index.js'],
       missingFiles: [],

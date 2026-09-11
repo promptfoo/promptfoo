@@ -18,7 +18,6 @@ function main(): void {
   if (!destination) {
     throw new Error('--destination requires a package artifact directory.');
   }
-  assert(process.env.npm_execpath, 'Expected npm_execpath when packing the package artifact');
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as {
     name: string;
@@ -27,15 +26,8 @@ function main(): void {
   const artifactDirectory = path.resolve(ROOT, destination);
   fs.mkdirSync(artifactDirectory, { recursive: true });
   const output = execFileSync(
-    process.execPath,
-    [
-      process.env.npm_execpath,
-      'pack',
-      '--ignore-scripts',
-      '--json',
-      '--pack-destination',
-      artifactDirectory,
-    ],
+    process.platform === 'win32' ? 'npm.cmd' : 'npm',
+    ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactDirectory],
     {
       cwd: ROOT,
       encoding: 'utf8',

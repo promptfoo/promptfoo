@@ -206,7 +206,15 @@ function validatePackageCandidate(
   if (typeof candidate.entrypoint !== 'string') {
     throw new Error(`Package candidate "${candidate.name}" must declare a string entrypoint.`);
   }
-  const entrypointPath = path.join(repoRoot, candidate.entrypoint);
+  const entrypointPath = path.resolve(repoRoot, candidate.entrypoint);
+  const entrypointRelativePath = path.relative(repoRoot, entrypointPath);
+  if (
+    entrypointRelativePath.startsWith(`..${path.sep}`) ||
+    entrypointRelativePath === '..' ||
+    path.isAbsolute(entrypointRelativePath)
+  ) {
+    throw new Error(`Package candidate "${candidate.name}" entrypoint must stay inside the repo.`);
+  }
   if (!fs.existsSync(entrypointPath) || !fs.statSync(entrypointPath).isFile()) {
     throw new Error(
       `Package candidate "${candidate.name}" entrypoint "${candidate.entrypoint}" does not exist.`,
@@ -347,9 +355,10 @@ function resolveArtifactImport(
     return undefined;
   }
   const resolvedPackageRoot = path.resolve(packageRoot);
+  const cleanSpecifier = specifier.replace(/[?#].*$/, '');
   const unresolvedPath = path.resolve(
     path.dirname(path.join(resolvedPackageRoot, importer)),
-    specifier,
+    cleanSpecifier,
   );
   const unresolvedRelativePath = path.relative(resolvedPackageRoot, unresolvedPath);
   if (
@@ -360,6 +369,20 @@ function resolveArtifactImport(
     return { outsidePackage: true };
   }
 
+  const packageMainPath = path.join(unresolvedPath, 'package.json');
+  let packageMain: string | undefined;
+  if (kind === 'require' && fs.existsSync(packageMainPath)) {
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(packageMainPath, 'utf8')) as {
+        main?: unknown;
+      };
+      if (typeof packageJson.main === 'string') {
+        packageMain = path.resolve(unresolvedPath, packageJson.main);
+      }
+    } catch {
+      // Invalid package metadata is reported as a missing runtime import.
+    }
+  }
   const candidates = [
     unresolvedPath,
     ...(kind === 'require'
@@ -370,10 +393,19 @@ function resolveArtifactImport(
           path.join(unresolvedPath, indexFile),
         )
       : []),
+    ...(packageMain
+      ? [packageMain, ...['.js', '.json', '.node'].map((extension) => `${packageMain}${extension}`)]
+      : []),
   ];
   const existingPath = candidates.find(
     (candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile(),
   );
+  if (existingPath) {
+    const existingRelativePath = path.relative(resolvedPackageRoot, existingPath);
+    if (existingRelativePath.startsWith(`..${path.sep}`) || path.isAbsolute(existingRelativePath)) {
+      return { outsidePackage: true };
+    }
+  }
   return {
     outsidePackage: false,
     relativePath: normalizePath(path.relative(resolvedPackageRoot, existingPath ?? unresolvedPath)),

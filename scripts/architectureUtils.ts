@@ -278,15 +278,25 @@ function getStaticModuleSpecifier(node: Node): string | undefined {
   return undefined;
 }
 
+function getMemberName(node: Node): string | undefined {
+  if (node.type !== 'MemberExpression') {
+    return undefined;
+  }
+  if (!node.computed && node.property.type === 'Identifier') {
+    return node.property.name;
+  }
+  return node.computed ? getStaticModuleSpecifier(node.property) : undefined;
+}
+
 function isRuntimeLoader(node: Node, aliases: Set<string>): boolean {
+  const memberName = getMemberName(node);
   return (
     (node.type === 'Identifier' && (node.name === 'require' || aliases.has(node.name))) ||
     (node.type === 'MemberExpression' &&
-      !node.computed &&
       node.object.type === 'Identifier' &&
-      node.property.type === 'Identifier' &&
-      ((node.object.name === 'require' && node.property.name === 'resolve') ||
-        (node.object.name === 'module' && node.property.name === 'require')))
+      (((node.object.name === 'require' || aliases.has(node.object.name)) &&
+        memberName === 'resolve') ||
+        (node.object.name === 'module' && memberName === 'require')))
   );
 }
 
@@ -305,8 +315,26 @@ function extractModuleReferences(
     throw new Error(`Could not parse ${filePath}: ${errors[0].message}`);
   }
   const aliases = new Set<string>();
+  const createRequireFactories = new Set(['createRequire']);
+  const moduleNamespaces = new Set<string>();
   const declarations: Array<{ name: string; init: Node }> = [];
   new Visitor({
+    ImportDeclaration(node) {
+      if (getStaticModuleSpecifier(node.source) !== 'node:module') {
+        return;
+      }
+      for (const specifier of node.specifiers) {
+        if (
+          specifier.type === 'ImportSpecifier' &&
+          specifier.imported.type === 'Identifier' &&
+          specifier.imported.name === 'createRequire'
+        ) {
+          createRequireFactories.add(specifier.local.name);
+        } else if (specifier.type === 'ImportNamespaceSpecifier') {
+          moduleNamespaces.add(specifier.local.name);
+        }
+      }
+    },
     VariableDeclarator(node) {
       if (node.id.type === 'Identifier' && node.init) {
         declarations.push({ name: node.id.name, init: node.init });
@@ -320,8 +348,11 @@ function extractModuleReferences(
       if (
         isRuntimeLoader(init, aliases) ||
         (init.type === 'CallExpression' &&
-          init.callee.type === 'Identifier' &&
-          init.callee.name === 'createRequire')
+          ((init.callee.type === 'Identifier' && createRequireFactories.has(init.callee.name)) ||
+            (init.callee.type === 'MemberExpression' &&
+              init.callee.object.type === 'Identifier' &&
+              moduleNamespaces.has(init.callee.object.name) &&
+              getMemberName(init.callee) === 'createRequire')))
       ) {
         aliases.add(name);
       }
@@ -454,10 +485,7 @@ export function resolveInternalModule(
   for (const candidate of candidates) {
     if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
       const relativeCandidate = normalizePath(path.relative(repoRoot, candidate));
-      if (
-        relativeCandidate.startsWith('src/') &&
-        TYPESCRIPT_EXTENSIONS.includes(path.extname(relativeCandidate))
-      ) {
+      if (relativeCandidate.startsWith('src/')) {
         return relativeCandidate;
       }
     }
@@ -561,6 +589,10 @@ export function computeRuntimeDependencyClosure(
       continue;
     }
     files.add(importer);
+
+    if (!TYPESCRIPT_EXTENSIONS.includes(path.extname(importer))) {
+      continue;
+    }
 
     const sourceText = fs.readFileSync(path.join(repoRoot, importer), 'utf8');
     for (const specifier of extractRuntimeModuleSpecifiers(sourceText, importer)) {
