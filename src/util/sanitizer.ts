@@ -1182,6 +1182,7 @@ export function isReplaySecretField(fieldName: string): boolean {
   return (
     isSecretField(fieldName) ||
     normalized.endsWith('apikey') ||
+    normalized.endsWith('accesstoken') ||
     REPLAY_EXTRA_SECRET_FIELDS.has(normalized)
   );
 }

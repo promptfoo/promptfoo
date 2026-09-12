@@ -779,6 +779,7 @@ describe('createShareableUrl', () => {
           id: 'openai:grader',
           config: {
             headers: { 'X-Client-Token': 'abc123', 'Content-Type': 'application/json' },
+            connectors: [{ id: 'search', user_access_token: 'connector123' }],
             transform,
           },
         };
@@ -813,6 +814,7 @@ describe('createShareableUrl', () => {
 
         const body = mockFetch.mock.calls[1][1].body;
         expect(body).not.toContain('abc123');
+        expect(body).not.toContain('connector123');
         expect(JSON.stringify(mockFetch.mock.calls)).not.toContain(
           'PRIVATE_SHARED_FUNCTION_SOURCE',
         );
@@ -830,6 +832,7 @@ describe('createShareableUrl', () => {
         }
         expect(result.testCase.vars?.apiKey).toBe('abc123');
         expect(provider.config.headers['X-Client-Token']).toBe('abc123');
+        expect(provider.config.connectors[0].user_access_token).toBe('connector123');
       },
     );
 
