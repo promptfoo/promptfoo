@@ -132,6 +132,15 @@ function getRequireShadowRanges(
     BlockStatement(node) {
       lexicalScopes.push([node.start, node.end]);
     },
+    ForStatement(node) {
+      lexicalScopes.push([node.start, node.end]);
+    },
+    ForInStatement(node) {
+      lexicalScopes.push([node.start, node.end]);
+    },
+    ForOfStatement(node) {
+      lexicalScopes.push([node.start, node.end]);
+    },
     FunctionDeclaration(node) {
       addFunctionScope(node);
     },
@@ -148,14 +157,20 @@ function getRequireShadowRanges(
     scopes
       .filter(([start, end]) => offset >= start && offset <= end)
       .sort(([left], [right]) => right - left)[0];
-  const addParams = (node: {
-    body: { start: number; end: number } | null;
-    params: Array<{ type: string; name?: string }>;
-  }) => {
-    if (
-      node.body &&
-      node.params.some((param) => param.type === 'Identifier' && param.name === 'require')
-    ) {
+  const bindsRequire = (node: unknown): boolean => {
+    if (!node || typeof node !== 'object') {
+      return false;
+    }
+    const record = node as Record<string, unknown>;
+    if (record.type === 'Identifier') {
+      return record.name === 'require';
+    }
+    return Object.values(record).some((value) =>
+      Array.isArray(value) ? value.some(bindsRequire) : bindsRequire(value),
+    );
+  };
+  const addParams = (node: { body: { start: number; end: number } | null; params: unknown[] }) => {
+    if (node.body && node.params.some(bindsRequire)) {
       ranges.push([node.body.start, node.body.end]);
     }
   };
@@ -178,12 +193,7 @@ function getRequireShadowRanges(
       addParams(node);
     },
     VariableDeclaration(node) {
-      if (
-        node.declarations.some(
-          (declaration) =>
-            declaration.id.type === 'Identifier' && declaration.id.name === 'require',
-        )
-      ) {
+      if (node.declarations.some((declaration) => bindsRequire(declaration.id))) {
         ranges.push(scopeFor(node.start, node.kind === 'var' ? functionScopes : lexicalScopes));
       }
     },
@@ -278,11 +288,11 @@ function isTestFile(file: string): boolean {
 function scopeFor(file: string, manifest: string, configuredRoots: string[]): Scope {
   const relative =
     manifest === 'package.json' ? file : path.posix.relative(path.posix.dirname(manifest), file);
-  if (/\.d\.(?:ts|mts|cts)$/.test(relative)) {
-    return 'declaration';
-  }
   if (isTestFile(relative)) {
     return 'test';
+  }
+  if (/\.d\.(?:ts|mts|cts)$/.test(relative)) {
+    return 'declaration';
   }
   const workspaceRoot = manifest === 'package.json' ? '' : path.posix.dirname(manifest);
   const configuredSource = configuredRoots.some(
@@ -335,7 +345,7 @@ function discoverFiles(
     ]) {
       for (const file of globSync(pattern, {
         cwd: repoRoot,
-        dot: true,
+        dot: pattern === `${root}*.${extensions}`,
         nodir: true,
         ignore: sourceIgnores(root),
       }).map(normalizePath)) {
@@ -658,8 +668,18 @@ export function reportDependencyOwnership(
         } else {
           // JSDoc accepts Closure forms that are not TypeScript syntax. Their import()
           // specifiers are still literal, so retain them when Oxc rejects the wrapper.
-          for (const match of takeJSDocType(source).matchAll(/import\(\s*(['"])([^'"]+)\1\s*\)/g)) {
-            add({ start: comment.start + 2 + start + (match.index ?? 0) }, match[2], 'type');
+          const fallbackStart = body[start - 1] === '{' ? start - 1 : start;
+          const fallback = body.slice(fallbackStart);
+          for (const match of takeJSDocType(fallback).matchAll(
+            /import\(\s*(['"])([^'"]+)\1\s*\)/g,
+          )) {
+            add(
+              {
+                start: comment.start + 2 + fallbackStart + (match.index ?? 0),
+              },
+              match[2],
+              'type',
+            );
           }
         }
       }

@@ -54,10 +54,10 @@ const SOURCE_EXTENSIONS = [...TYPESCRIPT_EXTENSIONS, '.js', '.jsx', '.mjs', '.cj
 const DECLARATION_EXTENSIONS = ['.d.ts', '.d.mts', '.d.cts'];
 const DIRECTORY_INDEXES = SOURCE_EXTENSIONS.map((extension) => `index${extension}`);
 const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
-  '.js': ['.ts', '.tsx'],
+  '.js': ['.ts', '.tsx', '.d.ts'],
   '.jsx': ['.tsx', '.ts'],
-  '.mjs': ['.mts'],
-  '.cjs': ['.cts'],
+  '.mjs': ['.mts', '.d.mts'],
+  '.cjs': ['.cts', '.d.cts'],
 };
 
 export function normalizePath(filePath: string): string {
