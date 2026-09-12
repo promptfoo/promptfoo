@@ -37,6 +37,7 @@ import {
   getErrorResultIds,
   recalculatePromptMetrics,
 } from '../../src/node/retry';
+import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import * as defaultProvidersModule from '../../src/providers/defaults';
 import { loadApiProvider } from '../../src/providers/index';
 import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
@@ -52,6 +53,7 @@ import { ConfigResolutionError, maybeReadConfig, resolveConfigs } from '../../sr
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
+import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
@@ -1504,6 +1506,36 @@ describe('evalCommand', () => {
     }
   });
 
+  it('allows prompt-only Claude SDK credentials through CLI preflight', async () => {
+    const restoreEnv = mockProcessEnv({
+      ANTHROPIC_API_KEY: undefined,
+      CLAUDE_CODE_USE_VERTEX: undefined,
+      CLAUDE_CODE_USE_BEDROCK: undefined,
+    });
+    const actual =
+      await vi.importActual<typeof import('../../src/util/provider')>('../../src/util/provider');
+    vi.mocked(checkProviderApiKeys).mockReset().mockImplementation(actual.checkProviderApiKeys);
+    const provider = new ClaudeCodeSDKProvider();
+    const prompts = [{ raw: 'Hello', label: 'test', config: { apiKey: 'prompt-only-key' } }];
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: defaultConfig,
+      testSuite: { providers: [provider], prompts },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
+    try {
+      await doEval({ write: false }, defaultConfig, defaultConfigPath, {});
+      expect(evaluate).toHaveBeenCalledWith(
+        expect.objectContaining({ providers: [provider], prompts }),
+        expect.anything(),
+        expect.anything(),
+      );
+    } finally {
+      restoreEnv();
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+    }
+  });
+
   it('logs per-key error lines for CLI callers when API keys are missing', async () => {
     const previousExitCode = process.exitCode;
     process.exitCode = undefined;
@@ -2443,6 +2475,55 @@ describe('evalCommand', () => {
       requestA.finish();
       requestB.finish();
       await Promise.allSettled(pending);
+      loadDefaultConfigSpy.mockRestore();
+      vi.mocked(evaluate).mockReset();
+      vi.mocked(resolveConfigs).mockReset();
+    }
+  });
+
+  it('waits for an earlier shared-provider cleanup before a new run starts', async () => {
+    let finishCleanup!: () => void;
+    let cleanupStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      cleanupStarted = resolve;
+    });
+    let cleanupCalls = 0;
+    const provider = {
+      id: () => 'shared-provider',
+      callApi: vi.fn(async () => ({ output: 'ok' })),
+      cleanup: vi.fn(async () => {
+        if (cleanupCalls++ === 0) {
+          cleanupStarted();
+          await new Promise<void>((done) => {
+            finishCleanup = done;
+          });
+        }
+      }),
+    } satisfies ApiProvider;
+    const config = { prompts: [], providers: [provider], tests: [] } as UnifiedConfig;
+    const loadDefaultConfigSpy = vi
+      .spyOn(defaultConfigModule, 'loadDefaultConfig')
+      .mockResolvedValue({ defaultConfig: config, defaultConfigPath: undefined });
+    vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+    vi.mocked(resolveConfigs)
+      .mockReset()
+      .mockResolvedValue({
+        config,
+        testSuite: { prompts: [], providers: [provider] },
+        basePath: path.dirname(defaultConfigPath),
+      });
+    vi.mocked(evaluate).mockReset().mockResolvedValue(new Eval(config));
+    try {
+      const first = doEval({ write: false }, config, undefined, {});
+      await started;
+      const second = doEval({ write: false }, config, undefined, {});
+      await Promise.resolve();
+      expect(vi.mocked(evaluate)).toHaveBeenCalledOnce();
+      finishCleanup();
+      await Promise.all([first, second]);
+      expect(vi.mocked(evaluate)).toHaveBeenCalledTimes(2);
+    } finally {
+      finishCleanup?.();
       loadDefaultConfigSpy.mockRestore();
       vi.mocked(evaluate).mockReset();
       vi.mocked(resolveConfigs).mockReset();
