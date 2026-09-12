@@ -18,6 +18,7 @@ import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
 import * as fileUtil from '../src/util/file';
+import { renderGradingProviderConfig } from '../src/util/gradingProviderConfig';
 import { loadYaml } from '../src/util/yamlLoad';
 import { mockProcessEnv } from './util/utils';
 
@@ -217,6 +218,38 @@ describe('loadApiProvider', () => {
       }),
     );
   });
+
+  it.each([undefined, './local'])(
+    'transforms cloud configs once after merging all env sources (%s)',
+    async (localRoot) => {
+      vi.mocked(getProviderFromCloud).mockResolvedValue({
+        id: 'file://providers/custom_llm.py:generate',
+        env: { EVIDENCE_ROOT: './cloud' },
+        config: { custom: '{{env.CLOUD_ONLY}}' },
+      });
+      const transform = vi.fn((config, env) =>
+        renderGradingProviderConfig(config, { trace_id: 'abc' }, env),
+      );
+      await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+        env: { CLOUD_ONLY: 'suite', EVIDENCE_ROOT: './suite' },
+        options: {
+          env: localRoot ? { EVIDENCE_ROOT: localRoot } : undefined,
+          config: { working_dir: '{{env.EVIDENCE_ROOT}}/{{trace_id}}' },
+        },
+        configTransform: transform,
+      });
+      expect(transform).toHaveBeenCalledOnce();
+      expect(PythonProvider).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          config: expect.objectContaining({
+            working_dir: `${localRoot ?? './cloud'}/abc`,
+            custom: 'suite',
+          }),
+        }),
+      );
+    },
+  );
 
   it('should merge local config overrides with cloud provider config', async () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
