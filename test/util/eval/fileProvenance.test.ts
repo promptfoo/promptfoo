@@ -33,6 +33,19 @@ describe('file-backed replay provenance', () => {
     }
   });
 
+  it.each([
+    { metadata: { source: 'file://literal.txt', value: 'file://literal.txt' } },
+    { metadata: { options: { provider: 'file://literal.txt' } } },
+    { description: 'file://literal.txt' },
+  ])('keeps literal file URLs stable without reading their paths: %j', (test) => {
+    const basePath = directory();
+    const tests = [test];
+    const selection = createTestCaseSelection(tests, [0], { basePath });
+    expect(restoreTestCaseSelection(tests, selection, { basePath })).toEqual([0]);
+    fs.writeFileSync(path.join(basePath, 'literal.txt'), 'unrelated file content');
+    expect(restoreTestCaseSelection(tests, selection, { basePath })).toEqual([0]);
+  });
+
   it.each(['edit', 'add', 'remove'])(
     'tracks file globs across %s changes without rejecting unchanged selections',
     (change) => {

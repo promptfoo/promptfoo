@@ -2506,9 +2506,10 @@ function canonicalizeSelectionFingerprintValue(
   value: unknown,
   basePath: string,
   seen = new WeakSet<object>(),
-  providerReference = false,
+  referenceKind: 'test' | 'file' | 'provider' | 'literal' = 'test',
   providerFiles = new Set<string>(),
 ): unknown {
+  const providerReference = referenceKind === 'provider';
   if (typeof value === 'string') {
     if (providerReference && isProviderConfigFileReference(value)) {
       const filePath = fs.realpathSync(path.resolve(basePath, value.slice('file://'.length)));
@@ -2525,7 +2526,7 @@ function canonicalizeSelectionFingerprintValue(
             redactSecretLeaves(configs),
             basePath,
             seen,
-            true,
+            'provider',
             providerFiles,
           ),
         };
@@ -2542,11 +2543,12 @@ function canonicalizeSelectionFingerprintValue(
     const providerPath = providerReference
       ? value.match(/^(?:python|ruby|golang):(.+)$/s)?.[1]
       : undefined;
-    const file = value.startsWith('file://')
-      ? parseFileUrl(value)
-      : providerPath || (providerReference && /\.(?:[cm]?js|ts)(?::[^/\\]+)?$/.test(value))
-        ? parsePathOrGlob(basePath, providerPath ?? value)
-        : undefined;
+    const file =
+      (providerReference || referenceKind === 'file') && value.startsWith('file://')
+        ? parseFileUrl(value)
+        : providerPath || (providerReference && /\.(?:[cm]?js|ts)(?::[^/\\]+)?$/.test(value))
+          ? parsePathOrGlob(basePath, providerPath ?? value)
+          : undefined;
     if (file && hasMagic(file.filePath, { magicalBraces: true, windowsPathsNoEscape: true })) {
       const files = globSync(file.filePath, { cwd: basePath, windowsPathsNoEscape: true }).sort();
       return {
@@ -2590,13 +2592,7 @@ function canonicalizeSelectionFingerprintValue(
   try {
     if (Array.isArray(value)) {
       return value.map((item) =>
-        canonicalizeSelectionFingerprintValue(
-          item,
-          basePath,
-          seen,
-          providerReference,
-          providerFiles,
-        ),
+        canonicalizeSelectionFingerprintValue(item, basePath, seen, referenceKind, providerFiles),
       );
     }
     if (value instanceof Date) {
@@ -2607,16 +2603,34 @@ function canonicalizeSelectionFingerprintValue(
         .filter(([, item]) => item !== undefined)
         .map(([key, item]) => {
           const sourceKey = providerReference
-            ? canonicalizeSelectionFingerprintValue(key, basePath, seen, true, providerFiles)
+            ? canonicalizeSelectionFingerprintValue(key, basePath, seen, 'provider', providerFiles)
             : key;
-          const isProvider = key === 'provider' || key === 'providers';
+          const kind =
+            referenceKind === 'test'
+              ? key === 'provider' || key === 'providers'
+                ? 'provider'
+                : [
+                      'vars',
+                      'value',
+                      'assertScoringFunction',
+                      'transform',
+                      'postprocess',
+                      'transformVars',
+                      'contextTransform',
+                      'rubricPrompt',
+                    ].includes(key)
+                  ? 'file'
+                  : key === 'options' || key === 'assert'
+                    ? 'test'
+                    : 'literal'
+              : referenceKind;
           return [
             typeof sourceKey === 'string' ? sourceKey : JSON.stringify(sourceKey),
             canonicalizeSelectionFingerprintValue(
-              isProvider ? redactSecretLeaves(item) : item,
+              kind === 'provider' ? redactSecretLeaves(item) : item,
               basePath,
               seen,
-              providerReference || isProvider,
+              kind,
               providerFiles,
             ),
           ];

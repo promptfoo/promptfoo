@@ -205,7 +205,7 @@ promptfoo eval --resume <evalId>   # resumes a specific eval
 ```
 
 - On resume, promptfoo reuses the original run's effective runtime options (e.g., `--delay`, `--no-cache`, `--max-concurrency`, `--repeat`), skips completed test/prompt pairs, ignores CLI flags that change test ordering to keep indices aligned, and disables watch mode.
-- Evaluations with saved provider or test selections check selected provider entry files, assertion files, grading providers, scoring callbacks, and transforms, including files inherited from `defaultTest`. References resolve against the original configuration directory. If those files change, start a new evaluation. Resume and retry reject the changed selection before calling the target or replacing saved results.
+- Evaluations with saved provider or test selections check selected provider entry files, assertion files, grading providers, scoring callbacks, and transforms, including files inherited from `defaultTest`. References resolve against the original configuration directory. Literal file URLs in descriptions or metadata are not loaded. If source files change, start a new evaluation. Resume and retry reject the changed selection before calling the target or replacing saved results.
 
 ### Retry Errors
 
@@ -214,7 +214,7 @@ promptfoo eval --retry-errors      # retries all ERROR results from the latest e
 ```
 
 - The retry errors feature automatically finds ERROR results from the latest eval and re-runs only those test cases. This is useful when evals fail due to temporary network issues, rate limits, or API errors.
-- **Data safety**: If the retry fails, your original ERROR results are preserved. Old ERROR results are only removed after the retry succeeds. You can safely run `--retry-errors` again if it fails.
+- **Data safety**: If the retry fails, your original ERROR results are preserved. After a replacement is saved, retry removes superseded rows for that execution, including successes left by an interrupted retry. This keeps result counts and metrics from accumulating duplicates. You can safely run `--retry-errors` again if it fails.
 - Cannot be used together with `--resume` or `--no-write` flags.
 - Uses the original eval's configuration and runtime options to ensure consistency.
 

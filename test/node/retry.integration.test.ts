@@ -218,106 +218,131 @@ describe('retry command', () => {
       }
     });
 
-    it('rewrites the original JSONL output after partial cleanup with an override config', async () => {
-      const artifactId = randomUUID();
-      const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.JSONL`);
-      const jsonOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.json`);
-      const configPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.yaml`);
-      const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
-      const evalRecord = await Eval.create(
-        {
-          outputPath: [jsonlOutputPath, jsonOutputPath],
-          prompts: [prompt.raw],
-          providers: ['echo'],
-          tests: [{ vars: { name: 'World' } }],
-        },
-        [prompt],
-        { id: uniqueEvalId() },
-      );
-      const db = await getDb();
-      const staleResultId = `${evalRecord.id}-stale-error`;
-      await db.insert(evalResultsTable).values({
-        id: staleResultId,
-        evalId: evalRecord.id,
-        promptIdx: 0,
-        testIdx: 0,
-        prompt,
-        testCase: { vars: { name: 'World' } },
-        provider: { id: 'echo' },
-        response: { output: 'stale error' },
-        error: 'stale error',
-        success: false,
-        score: 0,
-        failureReason: ResultFailureReason.ERROR,
-        namedScores: {},
-      });
-      fs.writeFileSync(
-        jsonlOutputPath,
-        `${JSON.stringify({ id: staleResultId, error: 'stale error' })}\n`,
-      );
-      fs.writeFileSync(
-        configPath,
-        [
-          'providers:',
-          '  - echo',
-          'prompts:',
-          `  - "${prompt.raw}"`,
-          'tests:',
-          '  - vars:',
-          '      name: World',
-        ].join('\n'),
-      );
-      const originalAddPrompts = Eval.prototype.addPrompts;
-      let addPromptsCalls = 0;
-      vi.spyOn(Eval.prototype, 'addPrompts').mockImplementation(async function (
-        this: Eval,
-        prompts,
-      ) {
-        addPromptsCalls += 1;
-        if (addPromptsCalls === 4) {
-          throw new Error('simulated prompt metric save failure');
+    it.each([false, true])(
+      'removes interrupted retry successes (metric save fails: %s)',
+      async (metricSaveFails) => {
+        const artifactId = randomUUID();
+        const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.JSONL`);
+        const jsonOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.json`);
+        const configPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.yaml`);
+        const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
+        const evalRecord = await Eval.create(
+          {
+            outputPath: [jsonlOutputPath, jsonOutputPath],
+            prompts: [prompt.raw],
+            providers: ['echo'],
+            tests: [{ vars: { name: 'World' } }],
+          },
+          [prompt],
+          { id: uniqueEvalId() },
+        );
+        const db = await getDb();
+        const staleResultId = `${evalRecord.id}-stale-error`;
+        await db.insert(evalResultsTable).values({
+          id: staleResultId,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 0,
+          prompt,
+          testCase: { vars: { name: 'World' } },
+          provider: { id: 'echo' },
+          response: { output: 'stale error' },
+          error: 'stale error',
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          namedScores: {},
+        });
+        await db.insert(evalResultsTable).values({
+          id: `${evalRecord.id}-interrupted-success`,
+          evalId: evalRecord.id,
+          promptIdx: 0,
+          testIdx: 0,
+          prompt,
+          testCase: { vars: { name: 'World' } },
+          provider: { id: 'echo' },
+          response: { output: 'Hello World' },
+          success: true,
+          score: 1,
+          cost: 0.25,
+          failureReason: ResultFailureReason.NONE,
+          namedScores: {},
+        });
+        fs.writeFileSync(
+          jsonlOutputPath,
+          `${JSON.stringify({ id: staleResultId, error: 'stale error' })}\n`,
+        );
+        fs.writeFileSync(
+          configPath,
+          [
+            'providers:',
+            '  - echo',
+            'prompts:',
+            `  - "${prompt.raw}"`,
+            'tests:',
+            '  - vars:',
+            '      name: World',
+          ].join('\n'),
+        );
+        const originalAddPrompts = Eval.prototype.addPrompts;
+        let addPromptsCalls = 0;
+        const addPromptsSpy = vi
+          .spyOn(Eval.prototype, 'addPrompts')
+          .mockImplementation(async function (this: Eval, prompts) {
+            addPromptsCalls += 1;
+            if (metricSaveFails && addPromptsCalls === 4) {
+              throw new Error('simulated prompt metric save failure');
+            }
+            return originalAddPrompts.call(this, prompts);
+          });
+
+        try {
+          await retryCommand(evalRecord.id, { config: configPath });
+
+          const rows = fs
+            .readFileSync(jsonlOutputPath, 'utf8')
+            .split(/\r?\n/)
+            .filter(Boolean)
+            .map((line) => JSON.parse(line));
+          expect(rows).toHaveLength(1);
+          expect(rows[0]).toEqual(
+            expect.objectContaining({
+              success: true,
+              testIdx: 0,
+              vars: { name: 'World' },
+            }),
+          );
+          expect(JSON.stringify(rows)).not.toContain(staleResultId);
+          expect(JSON.stringify(rows)).not.toContain('stale error');
+          expect(fs.existsSync(jsonOutputPath)).toBe(false);
+          expect(addPromptsCalls).toBe(4);
+
+          const persistedRows = await db
+            .select()
+            .from(evalResultsTable)
+            .where(eq(evalResultsTable.evalId, evalRecord.id));
+          expect(persistedRows).toHaveLength(1);
+          expect(persistedRows[0]).toEqual(
+            expect.objectContaining({
+              success: true,
+              testIdx: 0,
+            }),
+          );
+          if (!metricSaveFails) {
+            expect((await Eval.findById(evalRecord.id))?.prompts[0].metrics).toMatchObject({
+              testPassCount: 1,
+              testErrorCount: 0,
+              cost: 0,
+            });
+          }
+        } finally {
+          addPromptsSpy.mockRestore();
+          fs.rmSync(jsonlOutputPath, { force: true });
+          fs.rmSync(jsonOutputPath, { force: true });
+          fs.rmSync(configPath, { force: true });
         }
-        return originalAddPrompts.call(this, prompts);
-      });
-
-      try {
-        await retryCommand(evalRecord.id, { config: configPath });
-
-        const rows = fs
-          .readFileSync(jsonlOutputPath, 'utf8')
-          .split(/\r?\n/)
-          .filter(Boolean)
-          .map((line) => JSON.parse(line));
-        expect(rows).toHaveLength(1);
-        expect(rows[0]).toEqual(
-          expect.objectContaining({
-            success: true,
-            testIdx: 0,
-            vars: { name: 'World' },
-          }),
-        );
-        expect(JSON.stringify(rows)).not.toContain(staleResultId);
-        expect(JSON.stringify(rows)).not.toContain('stale error');
-        expect(fs.existsSync(jsonOutputPath)).toBe(false);
-        expect(addPromptsCalls).toBe(4);
-
-        const persistedRows = await db
-          .select()
-          .from(evalResultsTable)
-          .where(eq(evalResultsTable.evalId, evalRecord.id));
-        expect(persistedRows).toHaveLength(1);
-        expect(persistedRows[0]).toEqual(
-          expect.objectContaining({
-            success: true,
-            testIdx: 0,
-          }),
-        );
-      } finally {
-        fs.rmSync(jsonlOutputPath, { force: true });
-        fs.rmSync(jsonOutputPath, { force: true });
-        fs.rmSync(configPath, { force: true });
-      }
-    });
+      },
+    );
 
     it('preserves stale ERROR rows when replacement persistence fails', async () => {
       const artifactId = randomUUID();
@@ -1810,7 +1835,7 @@ describe('retry command', () => {
 
       await expect(
         assertErrorResultsReplaced(errorResultIds, preexistingResultIds),
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual(expect.arrayContaining(preexistingResultIds));
     });
   });
 });

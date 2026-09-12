@@ -208,12 +208,7 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
   return errorResults.map((r) => r.id);
 }
 
-/**
- * Snapshot of every result ID that exists for an evaluation. Captured before a
- * retry so {@link assertErrorResultsReplaced} can distinguish rows newly persisted
- * by the retry from pre-existing rows (including older duplicate successes) that
- * share the same (evalId, testIdx, promptIdx) execution key.
- */
+/** Snapshot existing rows so retry can distinguish new replacements from stale successes. */
 export async function getAllResultIds(evalId: string): Promise<string[]> {
   const db = await getDb();
 
@@ -226,10 +221,7 @@ export async function getAllResultIds(evalId: string): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-/**
- * Deletes ERROR results after successful retry.
- * Uses batch delete for better performance.
- */
+/** Delete superseded rows in one transaction and notify affected evaluations. */
 export async function deleteErrorResults(resultIds: string[]): Promise<void> {
   if (resultIds.length === 0) {
     return;
@@ -264,15 +256,15 @@ export async function deleteErrorResults(resultIds: string[]): Promise<void> {
 }
 
 /**
- * Require a newly persisted replacement for each failed execution before deleting stale ERROR rows.
+ * Require a newly persisted replacement and return superseded rows for each failed execution.
  * The pre-retry snapshot prevents older duplicate rows from counting as replacements.
  */
 export async function assertErrorResultsReplaced(
   resultIds: string[],
   preexistingResultIds: string[] = [],
-): Promise<void> {
+): Promise<string[]> {
   if (resultIds.length === 0) {
-    return;
+    return [];
   }
 
   const db = await getDb();
@@ -302,6 +294,10 @@ export async function assertErrorResultsReplaced(
   }
 
   const preexistingIds = new Set([...resultIds, ...preexistingResultIds]);
+  const supersededIds = new Set(resultIds);
+  const failedExecutions = new Set(
+    staleRows.map((row) => `${row.evalId}:${row.testIdx}:${row.promptIdx}`),
+  );
   const replacedExecutions = new Set<string>();
   const testIndicesByEval = new Map<string, Set<number>>();
   for (const row of staleRows) {
@@ -333,6 +329,8 @@ export async function assertErrorResultsReplaced(
         const key = `${row.evalId}:${row.testIdx}:${row.promptIdx}`;
         if (!preexistingIds.has(row.id)) {
           replacedExecutions.add(key);
+        } else if (failedExecutions.has(key)) {
+          supersededIds.add(row.id);
         }
       }
     }
@@ -350,6 +348,7 @@ export async function assertErrorResultsReplaced(
       `Retry produced no persisted replacement for ${missingRows.length} ERROR result${missingRows.length === 1 ? '' : 's'}. Original ERROR rows were preserved.`,
     );
   }
+  return [...supersededIds];
 }
 
 // Batch size of 1000 balances memory usage vs. database query overhead for large evals (40K+ results)
@@ -552,13 +551,6 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     testSuite.prompts = getPromptsForReplay(originalEval.prompts, testSuite.prompts);
   }
 
-  // CRITICAL: We do NOT delete ERROR results here anymore!
-  // Previously (before this fix), deletion happened before evaluate(), which caused data loss:
-  // - If retry failed (network error, API timeout, etc.), the ERROR results were already gone
-  // - User could not re-retry because the original ERROR results were permanently deleted
-  // Now we delete AFTER successful retry, so if retry fails, ERROR results are preserved
-  // and the user can simply run the retry command again.
-
   logger.info(
     `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
   );
@@ -636,11 +628,14 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
       throw new Error('Retry results failed to persist. Existing ERROR rows were preserved.');
     }
 
-    await assertErrorResultsReplaced(errorResultIds, preexistingResultIds);
+    const supersededResultIds = await assertErrorResultsReplaced(
+      errorResultIds,
+      preexistingResultIds,
+    );
 
     let errorRowsDeleted = false;
     try {
-      await deleteErrorResults(errorResultIds);
+      await deleteErrorResults(supersededResultIds);
       errorRowsDeleted = true;
       await recalculatePromptMetrics(retriedEval);
     } catch (cleanupError) {

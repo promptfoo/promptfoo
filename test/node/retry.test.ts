@@ -1084,9 +1084,10 @@ describe('assertErrorResultsReplaced replacement accounting', () => {
       sequencedDb([[staleError], [staleError, oldDuplicateSuccess, newlyPersisted]]) as any,
     );
 
-    await expect(
-      assertErrorResultsReplaced(['err'], ['err', 'old-success']),
-    ).resolves.toBeUndefined();
+    await expect(assertErrorResultsReplaced(['err'], ['err', 'old-success'])).resolves.toEqual([
+      'err',
+      'old-success',
+    ]);
   });
 
   it('does not infer retry provenance from insertion order', async () => {

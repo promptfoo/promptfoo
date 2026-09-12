@@ -32,6 +32,18 @@ afterEach(() => {
 });
 
 describe('redactSecretLeaves', () => {
+  it.each(['session=short', [{ name: 'session', value: 'short', domain: 'example.test' }]])(
+    'redacts nested browser cookies without changing the local config',
+    (cookies) => {
+      const config = {
+        defaultTest: { options: { provider: { id: 'browser', config: { cookies } } } },
+      };
+      const result = redactSecretLeaves(config);
+      expect(JSON.stringify(result)).not.toContain('short');
+      expect(config.defaultTest.options.provider.config.cookies).toEqual(cookies);
+      expect(result.defaultTest.options.provider.id).toBe('browser');
+    },
+  );
   it('preserves ordinary HTTP service identities', () => {
     const id = 'https://api.example.test/services/public';
     expect(redactSecretLeaves({ id })).toEqual({ id });

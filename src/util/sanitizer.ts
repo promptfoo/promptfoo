@@ -1160,7 +1160,7 @@ const STRUCTURE_PRESERVING_SECRET_KEYS = new Set(['auth', 'session']);
 // Secret field names recognized by the replay/share canonicalizer beyond
 // SECRET_FIELD_NAMES, kept as a superset of the historical per-fingerprint sets so
 // switching to the shared canonicalizer never weakens redaction.
-const REPLAY_EXTRA_SECRET_FIELDS = new Set(['accesskeyid', 'secretaccesskey']);
+const REPLAY_EXTRA_SECRET_FIELDS = new Set(['accesskeyid', 'secretaccesskey', 'cookies']);
 
 function normalizeReplayFieldName(fieldName: string): string {
   // Strip separators AND dots so nested keys (`a.b.token`) normalize like the
