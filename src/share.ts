@@ -244,6 +244,7 @@ async function sendChunkOfResults(
       ...result,
       provider: redactSecretLeaves(result.provider),
       testCase: redactSecretLeaves(result.testCase),
+      ...('vars' in result ? { vars: redactSecretLeaves(result.vars) } : {}),
       ...(result.prompt?.config
         ? { prompt: { ...result.prompt, config: redactSecretLeaves(result.prompt.config) } }
         : {}),

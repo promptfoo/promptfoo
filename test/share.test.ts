@@ -771,45 +771,54 @@ describe('createShareableUrl', () => {
       expect(checkCloudPermissions).toHaveBeenCalledWith(mockEval.config);
     });
 
-    it('redacts provider credentials in result batches without changing local replay data', async () => {
-      const provider = {
-        id: 'openai:grader',
-        config: { headers: { 'X-Client-Token': 'abc123', 'Content-Type': 'application/json' } },
-      };
-      const result = new EvalResult({
-        id: 'result-with-grader',
-        evalId: mockEval.id!,
-        promptIdx: 0,
-        testIdx: 0,
-        gradingResult: null,
-        failureReason: 0,
-        provider,
-        testCase: { vars: { input: 'Hello' }, options: { provider } },
-        prompt: { raw: 'Hello', label: 'Hello', config: { provider } },
-        response: { output: 'Unchanged response' },
-        score: 1,
-        success: true,
-      });
-      mockEval.fetchResultsBatched = vi.fn(async function* () {
-        yield [result];
-      });
-      mockFetch
-        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'shared' }) })
-        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    it.each([true, false])(
+      'redacts credentials in persisted=%s result batches',
+      async (persisted) => {
+        const provider = {
+          id: 'openai:grader',
+          config: { headers: { 'X-Client-Token': 'abc123', 'Content-Type': 'application/json' } },
+        };
+        const result = new EvalResult({
+          id: 'result-with-grader',
+          evalId: mockEval.id!,
+          promptIdx: 0,
+          testIdx: 0,
+          gradingResult: null,
+          failureReason: 0,
+          provider,
+          testCase: { vars: { input: 'Hello', apiKey: 'abc123' }, options: { provider } },
+          prompt: { raw: 'Hello', label: 'Hello', config: { provider } },
+          response: { output: 'Unchanged response' },
+          score: 1,
+          success: true,
+        });
+        Object.assign(mockEval, {
+          fetchResultsBatched: vi.fn(async function* () {
+            yield [persisted ? result : result.toEvaluateResult()];
+          }),
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'shared' }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
 
-      await createShareableUrl(mockEval as Eval);
+        await createShareableUrl(mockEval as Eval);
 
-      const body = mockFetch.mock.calls[1][1].body;
-      expect(body).not.toContain('abc123');
-      expect(JSON.parse(body)[0]).toMatchObject({
-        testCase: { vars: { input: 'Hello' } },
-        response: { output: 'Unchanged response' },
-        score: 1,
-        success: true,
-      });
-      expect(body).toContain('application/json');
-      expect(provider.config.headers['X-Client-Token']).toBe('abc123');
-    });
+        const body = mockFetch.mock.calls[1][1].body;
+        expect(body).not.toContain('abc123');
+        expect(JSON.parse(body)[0]).toMatchObject({
+          testCase: { vars: { input: 'Hello' } },
+          response: { output: 'Unchanged response' },
+          score: 1,
+          success: true,
+        });
+        expect(body).toContain('application/json');
+        if (!persisted) {
+          expect(JSON.parse(body)[0].vars).toEqual({ input: 'Hello', apiKey: '[REDACTED]' });
+        }
+        expect(result.testCase.vars?.apiKey).toBe('abc123');
+        expect(provider.config.headers['X-Client-Token']).toBe('abc123');
+      },
+    );
 
     it('uploads local blob refs before manually sharing a previously unshared eval', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
