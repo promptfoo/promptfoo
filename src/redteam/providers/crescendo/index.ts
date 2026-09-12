@@ -19,6 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../../util/traceRedaction';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -60,7 +61,6 @@ import {
   isValidChatMessageArray,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
-  requiresTraceRedaction,
   runRedteamGrader,
   type TargetResponse,
   tryUnblocking,

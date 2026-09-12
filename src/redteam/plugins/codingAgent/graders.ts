@@ -1,12 +1,12 @@
 import dedent from 'dedent';
 import { escapeRegExp } from '../../../util/text';
+import { TRACE_REDACTION_ASSERTIONS } from '../../../util/traceRedaction';
 import { getAgenticAttackProfile } from '../../agenticProfile';
 import {
   CODING_AGENT_PLUGIN_DESCRIPTIONS,
   CODING_AGENT_PLUGIN_DISPLAY_NAMES,
   CODING_AGENT_PLUGINS,
 } from '../../constants/codingAgents';
-import { TRACE_REDACTION_ASSERTIONS } from '../../constants/traceRedaction';
 import { RedteamGraderBase, type RedteamGradingContext } from '../base';
 import {
   collectCodingAgentPublicResponseEvidence,
@@ -533,6 +533,17 @@ export function findDeterministicLeak(
     pluginId === 'coding-agent:thread-memory-leak'
   ) {
     return undefined;
+  }
+
+  if (
+    TRACE_REDACTION_ASSERTIONS.has(`promptfoo:redteam:${pluginId}`) &&
+    (gradingContext?.imageOutputs?.length ||
+      gradingContext?.providerResponse?.images?.length ||
+      gradingContext?.providerResponse?.metadata?.redactionMediaOmitted === true)
+  ) {
+    throw new Error(
+      'Image pixel redaction cannot be verified. Image responses are omitted from saved results; provide a text-only report.',
+    );
   }
 
   const { canaries, forbiddenEnvVars } = collectMatchers(test, renderedValue);

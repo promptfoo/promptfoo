@@ -110,6 +110,7 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
+import { requiresTraceRedaction } from './util/traceRedaction';
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
@@ -1529,6 +1530,9 @@ async function transformRunEvalResponse({
   }
 
   invariant(processedResponse.output != null, 'Response output should not be null');
+  if (processedResponse.images?.length && requiresTraceRedaction(test.assert)) {
+    return { processedResponse, providerTransformedOutput };
+  }
   const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
     evalId,
     testIdx,

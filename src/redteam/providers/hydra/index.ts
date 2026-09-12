@@ -16,6 +16,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../../util/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -50,7 +51,6 @@ import {
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
-  requiresTraceRedaction,
   runRedteamGrader,
   type TargetResponse,
   type TurnBacktrackingStopReason,

@@ -52,11 +52,44 @@ describe('sanitizeCodingAgentVerifierInputs', () => {
       nested = { nested };
     }
     expect(() =>
-      JSON.stringify(sanitizeCodingAgentVerifierInputs({ metadata: nested })),
+      JSON.stringify(
+        sanitizeCodingAgentVerifierInputs({
+          type: 'promptfoo:redteam:coding-agent:trace-redaction',
+          metadata: nested,
+        }),
+      ),
     ).not.toThrow();
-    expect(JSON.stringify(sanitizeCodingAgentVerifierInputs({ metadata: nested }))).not.toContain(
-      'PRIVATE_DEEP_METADATA',
-    );
+    expect(
+      JSON.stringify(
+        sanitizeCodingAgentVerifierInputs({
+          type: 'promptfoo:redteam:coding-agent:trace-redaction',
+          metadata: nested,
+        }),
+      ),
+    ).not.toContain('PRIVATE_DEEP_METADATA');
+  });
+
+  it('preserves ordinary deep provider schemas without recursive traversal', () => {
+    let schema: Record<string, unknown> = { type: 'string' };
+    for (let i = 0; i < 6000; i++) {
+      schema = { properties: schema };
+    }
+    const result = sanitizeCodingAgentVerifierInputs({ provider: { config: { schema } } });
+    let leaf = result.provider.config.schema;
+    for (let i = 0; i < 6000; i++) {
+      leaf = leaf.properties as Record<string, unknown>;
+    }
+    expect(leaf).toEqual({ type: 'string' });
+  });
+
+  it('keeps the redaction marker when input metadata explicitly clears it', () => {
+    expect(
+      sanitizeCodingAgentVerifierInputs({
+        type: 'promptfoo:redteam:coding-agent:trace-redaction',
+        rawReceipt: 'PRIVATE_RECEIPT',
+        privateVerifierInputsRedacted: false,
+      }),
+    ).toMatchObject({ rawReceipt: '[REDACTED]', privateVerifierInputsRedacted: true });
   });
 
   it('redacts only verifier-owned copies of shared configuration objects', () => {

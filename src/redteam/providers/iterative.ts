@@ -20,6 +20,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../util/traceRedaction';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -55,7 +56,6 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
-  requiresTraceRedaction,
   runRedteamGrader,
   type TargetResponse,
 } from './shared';

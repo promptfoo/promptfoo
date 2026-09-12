@@ -15,6 +15,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../util/traceRedaction';
 import { getAgenticAttackProfile } from '../agenticProfile';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
@@ -47,7 +48,6 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
-  requiresTraceRedaction,
   runRedteamGrader,
   type TargetResponse,
 } from './shared';

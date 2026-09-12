@@ -33,6 +33,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
+import { sanitizeRedactionResult } from '../util/traceRedaction';
 import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
@@ -556,6 +557,7 @@ function getStripFlags() {
  * on-disk copy is sanitized.
  */
 export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
+  result = sanitizeRedactionResult(result);
   const {
     shouldStripPromptText,
     shouldStripResponseOutput,
@@ -621,6 +623,7 @@ export default class EvalResult {
     result: EvaluateResult,
     opts?: { persist: boolean },
   ) {
+    result = sanitizeRedactionResult(result);
     const persist = opts?.persist == null ? true : opts.persist;
     const {
       prompt,
@@ -706,7 +709,8 @@ export default class EvalResult {
     const db = await getDb();
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
-    for (const result of results) {
+    for (const input of results) {
+      const result = sanitizeRedactionResult(input);
       const processedResponse = isBlobStorageEnabled()
         ? await extractAndStoreBinaryData(result.response, {
             evalId,
@@ -1002,7 +1006,7 @@ export default class EvalResult {
       });
     }
 
-    return {
+    return sanitizeRedactionResult({
       cost: this.cost,
       ...(this.response?.incurredCost !== undefined && {
         incurredCost: this.response.incurredCost,
@@ -1028,7 +1032,7 @@ export default class EvalResult {
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
       metadata: shouldStripMetadata ? {} : this.metadata,
       failureReason: this.failureReason,
-    };
+    });
   }
 }
 

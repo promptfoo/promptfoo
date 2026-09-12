@@ -50,6 +50,61 @@ describe('EvalResult', () => {
     },
   );
 
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'omits image-bearing %s responses and their metadata echoes from result copies',
+    async (pluginId) => {
+      const image =
+        'data:image/svg+xml;base64,' +
+        Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg"><text>PRIVATE_PIXEL_RECEIPT</text></svg>',
+        ).toString('base64');
+      const response = {
+        output: `![report](${image})`,
+        images: [{ data: image, mimeType: 'image/svg+xml' }],
+        raw: { image },
+        metadata: { screenshot: image },
+        cost: 0.01,
+      };
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        response,
+        testCase: {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  type: `promptfoo:redteam:${pluginId}` as const,
+                },
+              ],
+            },
+          ],
+        },
+        metadata: { screenshot: image, custom: 'retained' },
+      });
+      const artifact = sanitizeResultForJsonlArtifact(row);
+      expect(JSON.stringify(artifact)).not.toContain(image);
+      expect(artifact.response).toMatchObject({
+        cost: 0.01,
+        metadata: { redactionMediaOmitted: true },
+      });
+      expect(artifact.metadata?.custom).toBe('retained');
+      expect(row.response?.images?.[0].data).toBe(image);
+      const saved = await EvalResult.createFromEvaluateResult('image-redaction-copy', row, {
+        persist: false,
+      });
+      expect(JSON.stringify(saved.toEvaluateResult())).not.toContain(image);
+    },
+  );
+
+  it('preserves image responses for ordinary assertions', () => {
+    const row = {
+      response: { output: 'image', images: [{ data: 'data:image/png;base64,abc' }] },
+      testCase: { assert: [{ type: 'contains', value: 'image' }] },
+    };
+    expect(sanitizeResultForJsonlArtifact(row).response).toEqual(row.response);
+  });
+
   beforeAll(async () => {
     await runDbMigrations();
   });

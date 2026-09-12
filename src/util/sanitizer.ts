@@ -19,62 +19,85 @@ export function sanitizeCodingAgentVerifierInputs<T>(input: T): T {
   const seen = [new WeakMap<object, unknown>(), new WeakMap<object, unknown>()];
   const isCodingAgentId = (id: unknown) =>
     typeof id === 'string' && /^(?:promptfoo:redteam:)?(?:coding-agent|harness):/.test(id);
+  const stack: {
+    entries: [string, unknown][];
+    result: Record<string, unknown> | unknown[];
+    verifier: boolean;
+    depth: number;
+    index: number;
+    redacted: boolean;
+  }[] = [];
   const visit = (value: unknown, verifier = false, depth = 0): unknown => {
     if (!value || typeof value !== 'object' || (!Array.isArray(value) && isClassInstance(value))) {
       return value;
     }
-    if (depth >= 32) {
-      return { privateVerifierInputsRedacted: true };
-    }
     const object = value as Record<string, unknown>;
-    verifier ||= [
+    const owned = [
       object.id,
       object.type,
       object.pluginId,
       (object.metadata as Record<string, unknown> | undefined)?.pluginId,
     ].some(isCodingAgentId);
+    if (!verifier && owned) {
+      depth = 0;
+    }
+    verifier ||= owned;
+    if (verifier && depth >= 32) {
+      return { privateVerifierInputsRedacted: true };
+    }
     const cache = seen[Number(verifier)];
     if (cache.has(value)) {
       return cache.get(value);
     }
-    if (Array.isArray(value)) {
-      const result: unknown[] = [];
-      cache.set(value, result);
-      for (const item of value) {
-        result.push(visit(item, verifier, depth + 1));
-      }
-      return result;
-    }
-    const entries: [string, unknown][] = [];
-    const result: Record<string, unknown> = {};
+    const result = Array.isArray(value) ? [] : {};
     cache.set(value, result);
-    let redacted = object.privateVerifierInputsRedacted === true;
-    for (const [key, child] of Object.entries(object)) {
-      const normalizedKey = key.replace(/[_-]/g, '');
-      if (
-        verifier &&
-        PRIVATE_VERIFIER_FIELD.test(normalizedKey) &&
-        !/(?:paths?|hash|sha256|bytes?|length)$/i.test(normalizedKey) &&
-        child !== undefined
-      ) {
-        entries.push([key, REDACTED]);
-        redacted = true;
-      } else {
-        const sanitized = visit(child, verifier, depth + 1);
-        entries.push([key, sanitized]);
-        if (verifier && sanitized && typeof sanitized === 'object') {
-          const children = Array.isArray(sanitized) ? sanitized : [sanitized];
-          redacted ||= children.some((item) => item?.privateVerifierInputsRedacted === true);
-        }
-      }
-    }
-    Object.defineProperties(result, Object.getOwnPropertyDescriptors(Object.fromEntries(entries)));
-    if (redacted) {
-      result.privateVerifierInputsRedacted = true;
-    }
+    stack.push({
+      entries: Object.entries(value),
+      result,
+      verifier,
+      depth,
+      index: 0,
+      redacted: object.privateVerifierInputsRedacted === true,
+    });
     return result;
   };
-  return visit(input) as T;
+  const output = visit(input);
+  while (stack.length) {
+    const frame = stack[stack.length - 1];
+    if (frame.index === frame.entries.length) {
+      if (frame.verifier && !Array.isArray(frame.result)) {
+        for (const child of Object.values(frame.result)) {
+          const children = Array.isArray(child) ? child : [child];
+          if (children.some((item) => item?.privateVerifierInputsRedacted === true)) {
+            frame.redacted = true;
+          }
+        }
+      }
+      if (frame.redacted && !Array.isArray(frame.result)) {
+        frame.result.privateVerifierInputsRedacted = true;
+      }
+      stack.pop();
+      continue;
+    }
+    const [key, child] = frame.entries[frame.index++];
+    const normalizedKey = key.replace(/[_-]/g, '');
+    const privateField =
+      frame.verifier &&
+      PRIVATE_VERIFIER_FIELD.test(normalizedKey) &&
+      !/(?:paths?|hash|sha256|bytes?|length)$/i.test(normalizedKey) &&
+      child !== undefined;
+    const value = privateField ? REDACTED : visit(child, frame.verifier, frame.depth + 1);
+    Object.defineProperty(frame.result, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+    if (privateField && !Array.isArray(frame.result)) {
+      frame.redacted = true;
+    }
+  }
+  return output as T;
 }
 
 export function sanitizeConfigForPersistence(

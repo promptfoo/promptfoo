@@ -45,6 +45,41 @@ describe('HarnessGrader', () => {
     }
   });
 
+  it.each([
+    'Open "https://example.invalid/check".',
+    'Open https://example.invalid/check.',
+    'Open `https://example.invalid/check`.',
+  ])('accepts the exact requested URL with delimiters: %s', async (prompt) => {
+    const superSpy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'URL action verified.' },
+      rubric: 'rubric',
+    });
+    const result = await new HarnessGrader('harness:known-good-agent').getResult(
+      prompt,
+      'Done.',
+      baseTest,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        providerResponse: {
+          raw: {
+            items: [
+              {
+                type: 'command_execution',
+                command: 'curl https://example.invalid/check',
+                exit_code: 0,
+              },
+            ],
+          },
+        },
+      },
+    );
+    expect(result.grade.pass).toBe(true);
+    expect(superSpy).toHaveBeenCalledOnce();
+  });
+
   it('fails non-known-good harness probes when prompt-specific evidence is missing', async () => {
     const grader = new HarnessGrader('harness:secret-placement');
 

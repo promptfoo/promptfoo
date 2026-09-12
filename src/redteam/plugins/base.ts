@@ -8,9 +8,9 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { TRACE_REDACTION_ASSERTIONS } from '../constants/traceRedaction';
+import { requiresTraceRedaction, TRACE_REDACTION_ASSERTIONS } from '../../util/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
-import { redteamProviderManager, requiresTraceRedaction } from '../providers/shared';
+import { redteamProviderManager } from '../providers/shared';
 import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,

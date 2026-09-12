@@ -469,6 +469,12 @@ function getExpectedPluginTestCount(
   plugin: SynthesizeOptions['plugins'][number],
   language?: string | string[],
 ): number {
+  if (Object.prototype.hasOwnProperty.call(categories, plugin.id)) {
+    return categories[plugin.id as keyof typeof categories].reduce(
+      (sum, id) => sum + getExpectedPluginTestCount({ ...plugin, id }, language),
+      0,
+    );
+  }
   const languageCount = getPluginLanguageCount(plugin, language);
   return (getIntentTestCount(plugin) ?? plugin.numTests ?? 0) * languageCount;
 }

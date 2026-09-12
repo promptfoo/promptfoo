@@ -19,6 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../util/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -49,7 +50,6 @@ import {
   callTargetProvider,
   getGraderAssertionValue,
   getLastMessageContent,
-  requiresTraceRedaction,
   runRedteamGrader,
   tryUnblocking,
 } from './shared';

@@ -2203,6 +2203,15 @@ describe('calculateTotalTests', () => {
     { id: 'plugin2', numTests: 3 },
   ];
 
+  it('counts every harness preflight case before applying strategies', () => {
+    expect(
+      calculateTotalTests([{ id: 'harness:preflight', numTests: 1 }], [{ id: 'rot13' }]),
+    ).toMatchObject({
+      totalPluginTests: 14,
+      totalTests: 28,
+    });
+  });
+
   it('should calculate basic test counts with no strategies', () => {
     const result = calculateTotalTests(mockPlugins, []);
     expect(result).toEqual({

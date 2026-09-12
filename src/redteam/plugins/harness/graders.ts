@@ -53,8 +53,8 @@ function extractHarnessEvidenceHints(prompt: string): string[] {
   for (const match of prompt.matchAll(/"([^"]+)"/g)) {
     addHarnessEvidenceHint(hints, match[1]);
   }
-  for (const match of prompt.matchAll(/https?:\/\/[^\s),;]+/g)) {
-    addHarnessEvidenceHint(hints, match[0]);
+  for (const match of prompt.matchAll(/https?:\/\/[^\s"'`<>),;]+/g)) {
+    addHarnessEvidenceHint(hints, match[0].replace(/[.!?:]+$/, ''));
   }
   for (const match of prompt.matchAll(/\b[\w.-]+\/[\w./@-]+\b/g)) {
     addHarnessEvidenceHint(hints, match[0]);

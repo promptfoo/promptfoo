@@ -36,7 +36,6 @@ import {
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
-import { TRACE_REDACTION_ASSERTIONS } from '../constants/traceRedaction';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
@@ -1031,16 +1030,6 @@ export async function tryUnblocking({
     logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
     return { success: false };
   }
-}
-
-export function requiresTraceRedaction(assertions: AssertionOrSet[] | undefined): boolean {
-  return (
-    assertions?.some((assertion) =>
-      assertion.type === 'assert-set'
-        ? requiresTraceRedaction(assertion.assert)
-        : TRACE_REDACTION_ASSERTIONS.has(assertion.type),
-    ) ?? false
-  );
 }
 
 function isSingleAssertion(assertToUse: AssertionOrSet | undefined): assertToUse is Assertion {
