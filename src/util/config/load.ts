@@ -927,17 +927,21 @@ export async function resolveConfigs(
   }
   const resolved = await cliState.withBasePath(undefined, () =>
     cliState.withEnv(fileConfig.env || defaultConfig.env || {}, () =>
-      resolveLoadedConfig(
-        cmdObj,
-        fileConfig,
-        defaultConfig,
-        promptReferenceSources,
-        type,
-        testSources,
+      cliState.withConfig({ ...defaultConfig, ...fileConfig }, () =>
+        resolveLoadedConfig(
+          cmdObj,
+          fileConfig,
+          defaultConfig,
+          promptReferenceSources,
+          type,
+          testSources,
+        ),
       ),
     ),
   );
   cliState.basePath = resolved.basePath;
+  cliState.config = resolved.config;
+  cliState.selectedProviderConfigs = resolved.selectedProviderConfigs;
   return { ...resolved, testSources };
 }
 
@@ -1031,6 +1035,8 @@ async function resolveLoadedConfig(
     tracing: fileConfig.tracing || defaultConfig.tracing,
     evaluateOptions: fileConfig.evaluateOptions || defaultConfig.evaluateOptions,
   };
+
+  cliState.config = config;
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
   const hasProviders =
@@ -1281,7 +1287,6 @@ async function resolveLoadedConfig(
     };
   }
 
-  cliState.config = config;
   return {
     config,
     testSuite,

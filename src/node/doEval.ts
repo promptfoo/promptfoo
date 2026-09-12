@@ -1294,8 +1294,10 @@ export async function doEval(
   const runEvaluation = (initialization?: boolean) => {
     // Each watch run starts clean and retains its resolved env through output and cleanup.
     const runEnv: EnvOverrides = {};
-    return cliState.withBasePath(undefined, () =>
-      cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization)),
+    return cliState.withConfig(undefined, () =>
+      cliState.withBasePath(undefined, () =>
+        cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization)),
+      ),
     );
   };
 

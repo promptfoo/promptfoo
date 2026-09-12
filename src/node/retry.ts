@@ -355,8 +355,13 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
 
   // Load configuration - from provided config file or from original evaluation
   const resolvedConfig = await resolveRetryConfigs(originalEval, cmdObj);
-  return cliState.withEnv(resolvedConfig.testSuite.env, () =>
-    retryWithConfig(originalEval, errorResultIds, cmdObj, resolvedConfig),
+  return cliState.withConfig(
+    resolvedConfig.config,
+    () =>
+      cliState.withEnv(resolvedConfig.testSuite.env, () =>
+        retryWithConfig(originalEval, errorResultIds, cmdObj, resolvedConfig),
+      ),
+    resolvedConfig.selectedProviderConfigs,
   );
 }
 

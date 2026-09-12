@@ -324,8 +324,11 @@ export async function evaluateWithSource(
   testSuite: EvaluateTestSuite,
   options: InternalEvaluateOptions = {},
 ) {
-  return cliState.withBasePath(path.resolve(testSuite.basePath ?? ''), () =>
-    cliState.withEnv(testSuite.env ?? {}, () => evaluateWithEnv(testSuite, options)),
+  const { prompts: _prompts, providers: _providers, ...config } = testSuite;
+  return cliState.withConfig(config, () =>
+    cliState.withBasePath(path.resolve(testSuite.basePath ?? ''), () =>
+      cliState.withEnv(testSuite.env ?? {}, () => evaluateWithEnv(testSuite, options)),
+    ),
   );
 }
 

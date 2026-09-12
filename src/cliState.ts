@@ -14,6 +14,11 @@ interface CliState {
   basePath?: string;
   withBasePath<T>(basePath: string | undefined, fn: () => T): T;
   config?: Partial<UnifiedConfig>;
+  withConfig<T>(
+    config: Partial<UnifiedConfig> | undefined,
+    fn: () => T,
+    selectedProviderConfigs?: Partial<UnifiedConfig>['providers'],
+  ): T;
   selectedProviderConfigs?: Partial<UnifiedConfig>['providers'];
 
   // Forces remote inference wherever possible
@@ -72,6 +77,10 @@ interface CliState {
   setActiveOtlpReceiver(receiver?: ActiveOtlpReceiver): void;
 }
 
+type ConfigState = Pick<CliState, 'config' | 'selectedProviderConfigs'>;
+const configContext = new AsyncLocalStorage<ConfigState>();
+const globalConfigState: ConfigState = {};
+
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
 const basePathContext = new AsyncLocalStorage<{ basePath: string | undefined }>();
 let globalBasePath: string | undefined;
@@ -83,6 +92,25 @@ let globalMaxConcurrency: number | undefined;
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
 
 const state: CliState = {
+  get config() {
+    return (configContext.getStore() ?? globalConfigState).config;
+  },
+  set config(config) {
+    (configContext.getStore() ?? globalConfigState).config = config;
+  },
+  get selectedProviderConfigs() {
+    return (configContext.getStore() ?? globalConfigState).selectedProviderConfigs;
+  },
+  set selectedProviderConfigs(providers) {
+    (configContext.getStore() ?? globalConfigState).selectedProviderConfigs = providers;
+  },
+  withConfig<T>(
+    config: Partial<UnifiedConfig> | undefined,
+    fn: () => T,
+    selectedProviderConfigs = config?.providers,
+  ): T {
+    return configContext.run({ config, selectedProviderConfigs }, fn);
+  },
   get basePath() {
     const store = basePathContext.getStore();
     return store ? store.basePath : globalBasePath;

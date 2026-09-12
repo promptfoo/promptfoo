@@ -9,6 +9,7 @@ import { fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { getEnvString } from '../../../src/envars';
 import { evaluate as evaluateResolved } from '../../../src/evaluator';
+import { getGradingProvider, getRemoteGradingContext } from '../../../src/matchers/providers';
 import { renderLlmRubricPrompt } from '../../../src/matchers/rubric';
 import Eval from '../../../src/models/eval';
 import { evaluate } from '../../../src/node/evaluate';
@@ -204,6 +205,70 @@ describe('suite environment loading', () => {
     );
     expect(cliState.config?.env?.OPENAI_API_KEY).toBe('previous-key');
   });
+
+  it.each(['sdk', 'resolved'] as const)(
+    'isolates config and selected targets during overlapping %s evaluations',
+    async (mode) => {
+      let release!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let arrived = 0;
+      const previous = cliState.config;
+      cliState.selectedProviderConfigs = ['promptfoo://provider/stale'];
+      const results = await Promise.all(
+        ['first', 'second'].map(async (name) => {
+          const provider = {
+            id: () => `target-${name}`,
+            config: { linkedTargetId: `promptfoo://provider/${name}` },
+            async callApi() {
+              if (++arrived === 2) {
+                release();
+              }
+              await ready;
+              const grader = await getGradingProvider('text', undefined, null);
+              return {
+                output: JSON.stringify({
+                  grader: grader?.label,
+                  target: getRemoteGradingContext().targetId,
+                  purpose: cliState.config?.redteam?.purpose,
+                }),
+              };
+            },
+          };
+          const config = {
+            defaultTest: { options: { provider: { id: 'echo', label: name } } },
+            redteam: { purpose: name },
+            env: {},
+          };
+          const evaluation =
+            mode === 'sdk'
+              ? await evaluate(
+                  { ...config, prompts: ['hello'], providers: [provider], tests: [{ vars: {} }] },
+                  { cache: false },
+                )
+              : await evaluateResolved(
+                  {
+                    prompts: [{ raw: 'hello', label: 'hello' }],
+                    providers: [provider],
+                    tests: [{ vars: {} }],
+                    env: {},
+                  },
+                  new Eval({ ...config, providers: ['promptfoo://provider/unselected'] }),
+                  {},
+                );
+          const [row] = await evaluation.getResults();
+          expect(row.success).toBe(true);
+          return JSON.parse(String(row.response?.output));
+        }),
+      );
+      expect(results).toEqual(
+        ['first', 'second'].map((name) => ({ grader: name, target: name, purpose: name })),
+      );
+      expect(cliState.config).toBe(previous);
+      expect(cliState.selectedProviderConfigs).toEqual(['promptfoo://provider/stale']);
+    },
+  );
 
   it('isolates overlapping combined config loads', async () => {
     const configs = await Promise.all(

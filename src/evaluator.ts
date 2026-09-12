@@ -5163,16 +5163,26 @@ export function evaluate<
   runtime?: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
   return cliState.withBasePath(testSuite.basePath ?? cliState.basePath, () =>
-    cliState.withEnv(testSuite.env ?? cliState.env, () => {
-      const resolvedRuntime =
-        runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
-      const runtimeTestSuite =
-        resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
-        nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
-        testSuite;
-      const store = resolvedRuntime.createEvaluationStore(evalRecord);
-      const ev = new Evaluator(runtimeTestSuite, store, options, resolvedRuntime);
-      return ev.evaluate();
-    }),
+    cliState.withEnv(testSuite.env ?? cliState.env, () =>
+      cliState.withConfig(
+        {
+          ...evalRecord.config,
+          defaultTest: testSuite.defaultTest ?? evalRecord.config.defaultTest,
+          redteam: testSuite.redteam ?? evalRecord.config.redteam,
+        },
+        () => {
+          const resolvedRuntime =
+            runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
+          const runtimeTestSuite =
+            resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+            nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+            testSuite;
+          const store = resolvedRuntime.createEvaluationStore(evalRecord);
+          const ev = new Evaluator(runtimeTestSuite, store, options, resolvedRuntime);
+          return ev.evaluate();
+        },
+        testSuite.providers.map((provider) => ({ id: provider.id(), config: provider.config })),
+      ),
+    ),
   );
 }
