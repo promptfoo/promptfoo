@@ -92,17 +92,25 @@ const providerItemHasActionEvidence = (item: unknown): boolean => {
   if (type === 'code_interpreter_call') {
     return Boolean(getString(object.code));
   }
-  if (type === 'mcp_call') {
-    return isNamedToolCall(object);
+  if (type === 'command_execution') {
+    return Boolean(getString(object.command));
+  }
+  if (type === 'file_change') {
+    return Boolean(
+      getString(object.path) ||
+        (Array.isArray(object.changes) &&
+          object.changes.some((change) => getString(getObject(change)?.path))),
+    );
   }
   return (
-    type === 'command_execution' ||
-    type === 'file_change' ||
-    type === 'mcp_tool_call' ||
-    type === 'tool' ||
-    type === 'tool_call' ||
-    type === 'function_call' ||
-    type === 'dynamic_tool_call'
+    [
+      'mcp_call',
+      'mcp_tool_call',
+      'tool',
+      'tool_call',
+      'function_call',
+      'dynamic_tool_call',
+    ].includes(type ?? '') && isNamedToolCall(object)
   );
 };
 
@@ -141,12 +149,22 @@ function hasStructuredActionEvidence(value: unknown, depth: number = 0): boolean
         child.some((item) =>
           typeof item === 'string'
             ? Boolean(item.trim())
-            : Boolean(getObject(item) && Object.keys(item as Record<string, unknown>).length),
+            : Boolean(
+                getObject(item) &&
+                  (getString(getObject(item)?.type)
+                    ? providerItemHasActionEvidence(item)
+                    : Object.keys(item as Record<string, unknown>).length),
+              ),
         )
       ) {
         return true;
       }
-      if (getObject(child) && Object.keys(child as Record<string, unknown>).length > 0) {
+      if (
+        getObject(child) &&
+        (getString(getObject(child)?.type)
+          ? providerItemHasActionEvidence(child)
+          : Object.keys(child as Record<string, unknown>).length > 0)
+      ) {
         return true;
       }
     }

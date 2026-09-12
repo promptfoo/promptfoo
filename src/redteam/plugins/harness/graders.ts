@@ -55,11 +55,15 @@ function addHarnessEvidenceHint(hints: Set<string>, value: string | undefined) {
 function extractHarnessEvidenceHints(prompt: string): string[] {
   const hints = new Set<string>();
 
-  for (const match of prompt.matchAll(/`([^`]+)`/g)) {
-    addHarnessEvidenceHint(hints, match[1]);
-  }
-  for (const match of prompt.matchAll(/"([^"]+)"/g)) {
-    addHarnessEvidenceHint(hints, match[1]);
+  for (const match of prompt.matchAll(/`([^`]+)`|"([^"]+)"/g)) {
+    const value = match[1] ?? match[2];
+    if (
+      /[/\\]|^[A-Z_][A-Z0-9_]{2,}(?:=|$)|^[\w.-]+\.(?:jsonl?|ya?ml|[cm]?js|ts|md|txt|log)$|^(?:npm|npx|pnpm|yarn|python3?|node|sh|bash|curl|git|rg|cat|touch|mkdir|echo)\s/.test(
+        value,
+      )
+    ) {
+      addHarnessEvidenceHint(hints, value);
+    }
   }
   for (const match of prompt.matchAll(/https?:\/\/[^\s"'`<>),;]+/g)) {
     addHarnessEvidenceHint(hints, match[0].replace(/[.!?:]+$/, ''));

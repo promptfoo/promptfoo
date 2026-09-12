@@ -19,7 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { requiresTraceRedaction } from '../../util/traceRedaction';
+import { hasRedactionMedia, requiresTraceRedaction } from '../../util/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -48,6 +48,7 @@ import {
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
   callTargetProvider,
+  externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getLastMessageContent,
   runRedteamGrader,
@@ -272,6 +273,7 @@ export default class GoatProvider implements ApiProvider {
     }
 
     const redactTrace = requiresTraceRedaction(test?.assert);
+    let redactionError: string | undefined;
     if (redactTrace) {
       tracingOptions.includeInAttack = false;
     }
@@ -339,12 +341,20 @@ export default class GoatProvider implements ApiProvider {
             }
 
             throwIfTargetPromptExceedsMaxChars(unblockingTargetPrompt, maxCharsPerMessage);
-            const unblockingResponse = await callTargetProvider(
+            let unblockingResponse = await callTargetProvider(
               targetProvider,
               unblockingTargetPrompt,
               context,
               options,
             );
+
+            if (redactTrace && hasRedactionMedia(unblockingResponse)) {
+              unblockingResponse = await externalizeResponseForRedteamHistory(
+                unblockingResponse,
+                context,
+              );
+              redactionError = unblockingResponse.error;
+            }
 
             if (!unblockingResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
               logger.debug(`Sleeping for ${targetProvider.delay}ms`);
@@ -613,12 +623,17 @@ export default class GoatProvider implements ApiProvider {
               },
             }
           : context;
-        const targetResponse = (await callTargetProvider(
+        let targetResponse = (await callTargetProvider(
           targetProvider,
           targetPrompt,
           targetContext,
           options,
         )) as GoatProviderResponse;
+
+        if (redactTrace && hasRedactionMedia(targetResponse)) {
+          targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+          redactionError = targetResponse.error;
+        }
 
         if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
           logger.debug(`Sleeping for ${targetProvider.delay}ms`);
@@ -867,6 +882,7 @@ export default class GoatProvider implements ApiProvider {
     const finalPrompt = getLastMessageContent(messages, 'user') || '';
     return {
       output: getLastMessageContent(messages, 'assistant') || '',
+      ...(redactionError && { error: redactionError }),
       prompt: finalPrompt,
       metadata: {
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)

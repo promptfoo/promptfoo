@@ -26,6 +26,39 @@ import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      [false, true].map((hasResponse) => [pluginId, hasResponse] as const),
+    ),
+  )('omits private errors for %s with response=%s', async (pluginId, hasResponse) => {
+    const secret = 'PRIVATE_ERROR_RECEIPT_8964';
+    const row = createEvaluateResult({
+      ...mockEvaluateResult,
+      testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+      error: `Request failed: ${secret}`,
+      failureReason: ResultFailureReason.ERROR,
+      success: false,
+      metadata: { errorContext: { statusText: secret, responseSnippet: secret } },
+      response: hasResponse ? { error: secret, metadata: { diagnostic: secret } } : undefined,
+    });
+    if (!hasResponse) {
+      delete row.response;
+    }
+    const artifact = sanitizeResultForJsonlArtifact(row);
+    const saved = await EvalResult.createFromEvaluateResult('private-error-' + pluginId, row);
+    const [bulk] = await EvalResult.createManyFromEvaluateResult(
+      [row],
+      'private-error-bulk-' + pluginId,
+    );
+    for (const value of [artifact, saved.toEvaluateResult(), bulk.toEvaluateResult()]) {
+      expect(JSON.stringify(value)).not.toContain(secret);
+      expect(value.failureReason).toBe(ResultFailureReason.ERROR);
+      expect(value.success).toBe(false);
+      expect(value.error).toContain('Error details omitted');
+    }
+    expect(row.error).toContain(secret);
+  });
+
   it.each([
     'coding-agent:trace-redaction',
     'harness:artifact-redaction',

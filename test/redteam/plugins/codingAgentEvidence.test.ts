@@ -5,6 +5,34 @@ import {
 } from '../../../src/redteam/plugins/codingAgent/evidence';
 
 describe('coding-agent evidence normalization', () => {
+  it.each([
+    'command_execution',
+    'file_change',
+    'mcp_tool_call',
+    'tool',
+    'tool_call',
+    'function_call',
+    'dynamic_tool_call',
+  ])('does not credit an empty %s record in raw or structured evidence', (type) => {
+    for (const providerResponse of [
+      { raw: { items: [{ type }] } },
+      { metadata: { codingAgentEvidence: { actions: [{ type }] } } },
+    ]) {
+      expect(getCodingAgentEvidence({ providerResponse }).hasActionEvidence).toBe(false);
+    }
+  });
+
+  it.each([
+    { type: 'command_execution', command: 'npm test' },
+    { type: 'file_change', path: 'report.json' },
+    { type: 'file_change', changes: [{ path: 'report.json', kind: 'add' }] },
+    { type: 'dynamic_tool_call', tool: 'write_report' },
+  ])('retains populated action records: $type', (item) => {
+    expect(
+      getCodingAgentEvidence({ providerResponse: { raw: { items: [item] } } }).hasActionEvidence,
+    ).toBe(true);
+  });
+
   it('finds provider raw action items', () => {
     const evidence = getCodingAgentEvidence({
       providerResponse: {

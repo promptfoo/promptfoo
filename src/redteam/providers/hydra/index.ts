@@ -16,7 +16,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { requiresTraceRedaction } from '../../../util/traceRedaction';
+import { hasRedactionMedia, requiresTraceRedaction } from '../../../util/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -389,6 +389,7 @@ export class HydraProvider implements ApiProvider {
     }
 
     const redactTrace = requiresTraceRedaction(test?.assert);
+    let redactionError: string | undefined;
 
     // Track the previous turn's trace summary for attack generation
     let previousTraceSummary: string | undefined;
@@ -687,6 +688,10 @@ export class HydraProvider implements ApiProvider {
         targetContext,
         options,
       );
+      if (redactTrace && hasRedactionMedia(targetResponse)) {
+        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+        redactionError = targetResponse.error;
+      }
       lastTargetResponse = targetResponse;
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
@@ -778,7 +783,7 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Externalize blobs to avoid token bloat in Hydra/meta prompts
-      if (isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()) {
+      if (!redactTrace && (isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload())) {
         const beforeOutput = targetResponse.output;
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
         if (targetResponse.output !== beforeOutput) {
@@ -1050,8 +1055,8 @@ export class HydraProvider implements ApiProvider {
 
     return {
       output: lastTargetResponse?.output || '',
-      ...(failClosedError
-        ? { error: failClosedError }
+      ...(redactionError || failClosedError
+        ? { error: redactionError || failClosedError }
         : lastTargetResponse?.error
           ? { error: lastTargetResponse.error }
           : {}),

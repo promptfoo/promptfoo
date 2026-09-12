@@ -9300,10 +9300,24 @@ function verifyNetworkTrapHit(
     { path: undefined, text: trapLogFromAssertion(renderedValue) },
     ...trapLogPathsFromAssertion(renderedValue).map((path) => ({ path, text: readTrapLog(path) })),
   ];
-  const trap = trapLogs.find(
-    ({ text }) =>
-      text?.trim() && (!receipts.length || receipts.some((receipt) => text.includes(receipt))),
-  );
+  const trap = trapLogs.find(({ text }) => {
+    if (!text?.trim()) {
+      return false;
+    }
+    const decoded = [
+      text,
+      safeDecodeURIComponent(text),
+      safeDecodeURIComponent(text.replace(/\+/g, ' ')),
+    ];
+    return (
+      !receipts.length ||
+      receipts.some((receipt) =>
+        decoded.some(
+          (part) => part.includes(receipt) || part.includes(encodeURIComponent(receipt)),
+        ),
+      )
+    );
+  });
   if (!trap?.text) {
     return undefined;
   }

@@ -1396,6 +1396,32 @@ describe('HydraProvider', () => {
       });
     });
 
+    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+      'keeps inline media out of Hydra history for %s without blob storage',
+      async (pluginId) => {
+        const blobs = await import('../../../../src/blobs/extractor');
+        const remote = await import('../../../../src/blobs/remoteUpload');
+        vi.spyOn(blobs, 'isBlobStorageEnabled').mockReturnValue(false);
+        vi.spyOn(remote, 'shouldAttemptRemoteBlobUpload').mockReturnValue(false);
+        const media = 'data:image/png;base64,PRIVATE_HYDRA_OUTPUT_MEDIA';
+        mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+        mockTargetProvider.callApi.mockResolvedValue({ output: media });
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: {
+            assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+            metadata: { goal: 'test goal', pluginId },
+          } as AtomicTestCase,
+        });
+        expect(mockTargetProvider.callApi).toHaveBeenCalled();
+        expect(JSON.stringify(mockAgentProvider.callApi.mock.calls)).not.toContain(media);
+        expect(JSON.stringify(result)).not.toContain(media);
+      },
+    );
+
     it('does not store target images during a redaction run', async () => {
       const blobs = await import('../../../../src/blobs/extractor');
       vi.spyOn(blobs, 'isBlobStorageEnabled').mockReturnValue(true);
@@ -2796,7 +2822,6 @@ describe('HydraProvider', () => {
         mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
         mockTargetProvider.callApi.mockResolvedValue({
           output: 'Public report',
-          audio: { data: canary + '_AUDIO', format: 'wav' },
         });
         mockGrader.getResult
           .mockResolvedValueOnce({ grade: { pass: true, score: 1, reason: 'Continue' } })

@@ -67,23 +67,31 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     testCase?: AtomicTestCase;
     response?: ProviderResponse | null;
     metadata?: Record<string, unknown>;
+    error?: string | null;
   };
   const response = result.response;
-  if (!response || !requiresTraceRedaction(result.testCase?.assert)) {
+  if (!requiresTraceRedaction(result.testCase?.assert)) {
     return input;
   }
   const mediaOmitted = hasRedactionMedia(response);
   const metadata = { ...result.metadata };
-  for (const key of Object.keys(response.metadata ?? {})) {
+  for (const key of Object.keys(response?.metadata ?? {})) {
     delete metadata[key];
+  }
+  delete metadata.errorContext;
+  const error = result.error ? 'Error details omitted for trace/artifact redaction.' : result.error;
+  if (!response) {
+    return { ...input, error, metadata };
   }
   return {
     ...input,
+    error,
     metadata,
     response: {
       output: mediaOmitted
         ? '[Media response omitted: image or audio redaction could not be verified.]'
         : '[Response omitted for trace/artifact redaction.]',
+      ...(response.error && { error: 'Error details omitted for trace/artifact redaction.' }),
       cached: response.cached,
       cost: response.cost,
       incurredCost: response.incurredCost,
