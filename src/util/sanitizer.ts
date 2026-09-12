@@ -1195,6 +1195,12 @@ const URL_KEY_RE = /(?:url|uri|endpoint)$/i;
 
 /** Redact a primitive (non-object) leaf value based on its key and content. */
 function redactPrimitiveLeaf(value: unknown, key: string | undefined): unknown {
+  if (typeof value === 'string' && key && /^(?:id|provider(?:id|s)?)$/i.test(key)) {
+    const url = value.match(/^([a-z][\w-]*:)?(https?:\/\/.+)$/i);
+    if (url) {
+      return (url[1] ?? '') + sanitizeUrlForLogging(url[2]);
+    }
+  }
   if (typeof key === 'string') {
     if (typeof value === 'string' && URL_KEY_RE.test(key)) {
       return sanitizeUrl(value);

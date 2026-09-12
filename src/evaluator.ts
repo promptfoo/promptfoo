@@ -30,6 +30,7 @@ import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
+import { parseScriptParts } from './providers/scriptCompletion';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
@@ -83,6 +84,7 @@ import { type ApiProvider, isApiProvider } from './types/providers';
 import { checkCloudPermissions } from './util/cloud';
 import { buildProviderPermissionConfig } from './util/eval/providerSelection';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
+import { parsePathOrGlob } from './util/file';
 import { filterByRange } from './util/filterRange';
 import { warnEmptyFilterRange } from './util/filterRangeWarn';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -105,7 +107,7 @@ import {
 } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { redactSecretLeaves } from './util/sanitizer';
-import { getFileSourceHash } from './util/sourceHash';
+import { getExecutableSourceHash, getFileSourceHash } from './util/sourceHash';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -2499,8 +2501,32 @@ function stableSerializeSelection(
 
 function canonicalizeSelectionFingerprintValue(
   value: unknown,
+  basePath: string,
   seen = new WeakSet<object>(),
+  providerReference = false,
 ): unknown {
+  if (typeof value === 'string') {
+    if (providerReference && value.startsWith('exec:')) {
+      return {
+        reference: value,
+        sourceHash: getExecutableSourceHash(parseScriptParts(value.slice(5)), basePath),
+      };
+    }
+    const providerPath = providerReference
+      ? value.match(/^(?:python|ruby|golang):(.+)$/s)?.[1]
+      : undefined;
+    const file = value.startsWith('file://')
+      ? parseFileUrl(value)
+      : providerPath || (providerReference && /\.(?:[cm]?js|ts)(?::[^/\\]+)?$/.test(value))
+        ? parsePathOrGlob(basePath, providerPath ?? value)
+        : undefined;
+    return file
+      ? {
+          reference: value,
+          sourceHash: getFileSourceHash(path.resolve(basePath, file.filePath), file.functionName),
+        }
+      : value;
+  }
   if (typeof value === 'function') {
     return { __promptfooFunction: Function.prototype.toString.call(value) };
   }
@@ -2519,98 +2545,62 @@ function canonicalizeSelectionFingerprintValue(
   seen.add(value);
   try {
     if (Array.isArray(value)) {
-      return value.map((item) => canonicalizeSelectionFingerprintValue(item, seen));
+      return value.map((item) =>
+        canonicalizeSelectionFingerprintValue(item, basePath, seen, providerReference),
+      );
     }
     if (value instanceof Date) {
       return value.toISOString();
     }
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        key,
-        canonicalizeSelectionFingerprintValue(item, seen),
-      ]),
+      Object.entries(value).map(([key, item]) => {
+        const sourceKey = providerReference
+          ? canonicalizeSelectionFingerprintValue(key, basePath, seen, true)
+          : key;
+        const isProvider = key === 'provider' || key === 'providers';
+        return [
+          typeof sourceKey === 'string' ? sourceKey : JSON.stringify(sourceKey),
+          canonicalizeSelectionFingerprintValue(
+            isProvider ? redactSecretLeaves(item) : item,
+            basePath,
+            seen,
+            providerReference || isProvider,
+          ),
+        ];
+      }),
     );
   } finally {
     seen.delete(value);
   }
 }
 
-function sanitizeAssertionProviderForSelection(assertion: unknown): unknown {
-  if (!assertion || typeof assertion !== 'object' || Array.isArray(assertion)) {
-    return assertion;
-  }
-  const record = assertion as Record<string, unknown>;
-  const file =
-    typeof record.value === 'string' && record.value.startsWith('file://')
-      ? parseFileUrl(record.value)
-      : undefined;
-  return {
-    ...record,
-    ...(file
-      ? {
-          sourceHash: getFileSourceHash(
-            path.resolve(cliState.basePath || '.', file.filePath),
-            file.functionName,
-          ),
-        }
-      : {}),
-    ...('provider' in record
-      ? {
-          provider: redactSecretLeaves(record.provider),
-        }
-      : {}),
-    ...(Array.isArray(record.assert)
-      ? { assert: record.assert.map(sanitizeAssertionProviderForSelection) }
-      : {}),
-  };
+interface TestCaseSelectionContext {
+  basePath?: string;
+  defaultTest?: unknown;
 }
 
-function getTestCaseFingerprintInput(testCase: unknown): unknown {
-  const canonical = canonicalizeSelectionFingerprintValue(testCase);
-  if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) {
-    return canonical;
-  }
-  const record = canonical as Record<string, unknown>;
-  const options =
-    record.options && typeof record.options === 'object' && !Array.isArray(record.options)
-      ? (record.options as Record<string, unknown>)
+function getTestCaseFingerprint(
+  testCase: unknown,
+  { basePath = '.', defaultTest }: TestCaseSelectionContext,
+): string {
+  const test = canonicalizeSelectionFingerprintValue(testCase, basePath);
+  const defaults =
+    defaultTest && typeof defaultTest === 'object' && Object.keys(defaultTest).length > 0
+      ? canonicalizeSelectionFingerprintValue(defaultTest, basePath)
       : undefined;
-  return {
-    ...record,
-    ...('provider' in record
-      ? {
-          provider: redactSecretLeaves(record.provider),
-        }
-      : {}),
-    ...('providers' in record
-      ? {
-          providers: redactSecretLeaves(record.providers),
-        }
-      : {}),
-    ...(options && 'provider' in options
-      ? {
-          options: {
-            ...options,
-            provider: redactSecretLeaves(options.provider),
-          },
-        }
-      : {}),
-    ...(Array.isArray(record.assert)
-      ? { assert: record.assert.map(sanitizeAssertionProviderForSelection) }
-      : {}),
-  };
-}
-
-function getTestCaseFingerprint(testCase: unknown): string {
   return createHash('sha256')
-    .update(stableSerializeSelection(getTestCaseFingerprintInput(testCase)))
+    .update(stableSerializeSelection(defaults ? { test, defaults } : test))
     .digest('hex');
 }
 
-function getTestCaseProvenanceFingerprint(testCase: unknown): string {
+function getTestCaseProvenanceFingerprint(testCase: unknown, basePath: string): string {
   return createHash('sha256')
     .update(
-      stableSerializeSelection(getTestCaseFingerprintInput(testCase), new WeakSet<object>(), true),
+      stableSerializeSelection(
+        canonicalizeSelectionFingerprintValue(testCase, basePath),
+        new WeakSet<object>(),
+        true,
+      ),
     )
     .digest('hex');
 }
@@ -2619,6 +2609,7 @@ function getTestCaseProvenanceFingerprint(testCase: unknown): string {
 export function createTestCaseSelection(
   testCases: unknown[],
   indices: number[],
+  context: TestCaseSelectionContext = {},
 ): EvalTestCaseSelection {
   const invalidIndices = indices.filter(
     (index) => !Number.isSafeInteger(index) || index < 0 || index >= testCases.length,
@@ -2632,7 +2623,7 @@ export function createTestCaseSelection(
   return {
     tests: indices.map((index) => ({
       index,
-      fingerprint: getTestCaseFingerprint(testCases[index]),
+      fingerprint: getTestCaseFingerprint(testCases[index], context),
     })),
   };
 }
@@ -2641,6 +2632,7 @@ export function createTestCaseSelection(
 export function restoreTestCaseSelection(
   testCases: unknown[],
   selection: EvalTestCaseSelection,
+  context: TestCaseSelectionContext = {},
 ): number[] {
   if (!selection || !Array.isArray(selection.tests)) {
     throw new Error('Stored test case selection is invalid.');
@@ -2677,7 +2669,7 @@ export function restoreTestCaseSelection(
   const candidatesByFingerprint = new Map<string, number[]>();
   const neededFingerprints = new Set(distinctOriginalIndicesByFingerprint.keys());
   for (let index = 0; index < testCases.length && neededFingerprints.size > 0; index++) {
-    const fingerprint = getTestCaseFingerprint(testCases[index]);
+    const fingerprint = getTestCaseFingerprint(testCases[index], context);
     if (!neededFingerprints.has(fingerprint)) {
       continue;
     }
@@ -5220,7 +5212,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (options.testCaseIndices || hasTestCaseSelection) {
       const unresolvedTests = getTestCasesForSelection(testSuite);
       const selectedTestCaseIndices = hasTestCaseSelection
-        ? restoreTestCaseSelection(unresolvedTests, options.testCaseSelection!)
+        ? restoreTestCaseSelection(unresolvedTests, options.testCaseSelection!, {
+            basePath: options.configBasePath,
+            defaultTest: testSuite.defaultTest,
+          })
         : options.testCaseIndices!;
       const invalidIndices = selectedTestCaseIndices.filter(
         (index) => !Number.isSafeInteger(index) || index < 0 || index >= unresolvedTests.length,
@@ -5237,7 +5232,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       deferredScenarioIndicesByPosition = selectedTests.map((testCase) => {
         const scenarioIndex = (testCase as DeferredScenarioTest)[DEFERRED_SCENARIO_INDEX];
         if (scenarioIndex !== undefined) {
-          const fingerprint = getTestCaseProvenanceFingerprint(testCase);
+          const fingerprint = getTestCaseProvenanceFingerprint(
+            testCase,
+            options.configBasePath ?? '.',
+          );
           const scenarioIndices = deferredScenarioIndicesByFingerprint!.get(fingerprint) ?? [];
           scenarioIndices.push(scenarioIndex);
           deferredScenarioIndicesByFingerprint!.set(fingerprint, scenarioIndices);
@@ -5268,7 +5266,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           const atomicTestCase = testCase as AtomicTestCase;
           const hasDirectProvenance =
             (atomicTestCase as DeferredScenarioTest)[DEFERRED_SCENARIO_INDEX] !== undefined;
-          const fingerprint = getTestCaseProvenanceFingerprint(atomicTestCase);
+          const fingerprint = getTestCaseProvenanceFingerprint(
+            atomicTestCase,
+            options.configBasePath ?? '.',
+          );
           const fallbackScenarioIndex = hasDirectProvenance
             ? undefined
             : (fallbackIndices.get(fingerprint)?.shift() ??

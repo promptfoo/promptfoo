@@ -263,16 +263,18 @@ export function applyProviderSelection<TRuntime extends RuntimeProvider, TSource
 }
 
 function getPermissionProviders(selection: ProviderSelection): PermissionProvider[] {
-  return selection.providers.map((provider) => {
-    if (provider.cloudProviderId) {
-      return provider.cloudProviderId;
-    }
-    return {
-      id: provider.id,
-      ...(provider.label ? { label: provider.label } : {}),
-      ...(provider.linkedTargetId ? { config: { linkedTargetId: provider.linkedTargetId } } : {}),
-    };
-  });
+  return redactSecretLeaves(
+    selection.providers.map((provider) => {
+      if (provider.cloudProviderId) {
+        return provider.cloudProviderId;
+      }
+      return {
+        id: provider.id,
+        ...(provider.label ? { label: provider.label } : {}),
+        ...(provider.linkedTargetId ? { config: { linkedTargetId: provider.linkedTargetId } } : {}),
+      };
+    }),
+  );
 }
 
 function getPermissionMetadata(config: object) {
@@ -457,7 +459,7 @@ export function buildProviderPermissionConfig(
     }
   }
   return {
-    providers,
+    providers: redactSecretLeaves(providers),
     prompts: [],
     ...(metadata ? { metadata } : {}),
     ...(hasRedteam ? { redteam: {} } : {}),

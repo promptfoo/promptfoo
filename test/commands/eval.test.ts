@@ -2814,7 +2814,7 @@ describe('checkCloudPermissions', () => {
     vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord, options) => {
       receivedEvalRecord = evalRecord as Eval;
       expect(options).not.toHaveProperty('providerSelection');
-      expect(options).not.toHaveProperty('configBasePath');
+      expect(options?.configBasePath).toBe(path.resolve('/'));
       expect(options).not.toHaveProperty('promptSelection');
       expect(options).not.toHaveProperty('testCaseIndices');
       expect(options).not.toHaveProperty('testCaseSelection');

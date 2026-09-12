@@ -121,7 +121,7 @@ export type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 export type TestSuiteTransform = (
   testSuite: TestSuite,
   config: Partial<UnifiedConfig>,
-  context?: { selectedProviderConfigs?: TestSuiteConfig['providers'] },
+  context?: { selectedProviderConfigs?: TestSuiteConfig['providers']; configBasePath?: string },
 ) => void | Promise<void>;
 export type PostFilterTestSuiteTransform = (
   testSuite: TestSuite,
@@ -700,6 +700,19 @@ async function doEvalWithEnv(
       }
     }
 
+    // `resolveConfigs` leaves basePath empty for an auto-discovered default config
+    // (`promptfoo eval` without -c) even though `defaultConfigPath` names the loaded
+    // file, and for a purely in-memory default there is no file at all. Persist the
+    // directory of the auto-discovered config (or cwd for an in-memory default) so a
+    // resume/retry from another directory resolves relative provider/prompt/test/env
+    // paths against the original base instead of the new cwd.
+    const effectiveConfigBasePath =
+      _basePath && _basePath.length > 0
+        ? path.resolve(_basePath)
+        : defaultConfigPath
+          ? path.resolve(path.dirname(defaultConfigPath))
+          : path.resolve('.');
+
     const resolvedProvidersBeforeCustomization = [...testSuite.providers];
     if (resumeEval?.runtimeOptions?.providerSelection) {
       validatedProviderSelection = {
@@ -715,7 +728,10 @@ async function doEvalWithEnv(
       validatedTestCaseSelection = structuredClone(resumeEval.runtimeOptions.testCaseSelection);
     }
     if (!resumeEval && customization.beforeFilterTestSuite) {
-      await customization.beforeFilterTestSuite(testSuite, config, { selectedProviderConfigs });
+      await customization.beforeFilterTestSuite(testSuite, config, {
+        selectedProviderConfigs,
+        configBasePath: effectiveConfigBasePath,
+      });
     }
     const initialProviderSelection = customization.evaluateOptionOverrides?.providerSelection;
     if (!resumeEval && initialProviderSelection) {
@@ -930,6 +946,7 @@ async function doEvalWithEnv(
         validatedTestCaseSelection = createTestCaseSelection(
           testSuite.tests,
           testSuite.tests.map((_, index) => index),
+          { basePath: effectiveConfigBasePath, defaultTest: testSuite.defaultTest },
         );
       }
       const shouldSuppressImplicitDefaultTest =
@@ -990,10 +1007,14 @@ async function doEvalWithEnv(
     if (validatedProviderSelection && hasExplicitTestCaseIndices) {
       const tests = permissionTests;
       const indices = validatedTestCaseSelection
-        ? restoreTestCaseSelection(tests, validatedTestCaseSelection)
+        ? restoreTestCaseSelection(tests, validatedTestCaseSelection, {
+            basePath: effectiveConfigBasePath,
+            defaultTest: testSuite.defaultTest,
+          })
         : createTestCaseSelection(
             tests,
             resumeRuntimeOptions?.testCaseIndices ?? evaluateOptions.testCaseIndices ?? [],
+            { basePath: effectiveConfigBasePath, defaultTest: testSuite.defaultTest },
           ).tests.map(({ index }) => index);
       permissionTests = indices.map((index) => tests[index]);
     }
@@ -1007,7 +1028,7 @@ async function doEvalWithEnv(
               typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
             redteam: config.redteam,
           },
-          _basePath || cliState.basePath,
+          effectiveConfigBasePath,
         )
       : config;
     await checkCloudPermissions(cloudPermissionConfig as UnifiedConfig);
@@ -1028,6 +1049,7 @@ async function doEvalWithEnv(
     } = evaluateOptions as InternalEvaluateOptions & { providerFilter?: unknown };
     const options: InternalEvaluateOptions = {
       ...safeEvaluateOptions,
+      configBasePath: effectiveConfigBasePath,
       ...(resumeRuntimeOptions?.testCaseIndices === undefined
         ? {}
         : { testCaseIndices: resumeRuntimeOptions.testCaseIndices }),
@@ -1108,18 +1130,6 @@ async function doEvalWithEnv(
 
     const effectiveConfigEnvPaths =
       cliEnvPaths ?? resolveEnvPathsForPersistence(commandLineOptions?.envPath);
-    // `resolveConfigs` leaves basePath empty for an auto-discovered default config
-    // (`promptfoo eval` without -c) even though `defaultConfigPath` names the loaded
-    // file, and for a purely in-memory default there is no file at all. Persist the
-    // directory of the auto-discovered config (or cwd for an in-memory default) so a
-    // resume/retry from another directory resolves relative provider/prompt/test/env
-    // paths against the original base instead of the new cwd.
-    const effectiveConfigBasePath =
-      _basePath && _basePath.length > 0
-        ? path.resolve(_basePath)
-        : defaultConfigPath
-          ? path.resolve(path.dirname(defaultConfigPath))
-          : path.resolve('.');
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
       ...(effectiveConfigBasePath ? { configBasePath: effectiveConfigBasePath } : {}),

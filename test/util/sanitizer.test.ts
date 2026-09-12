@@ -32,6 +32,17 @@ afterEach(() => {
 });
 
 describe('redactSecretLeaves', () => {
+  it.each(['id', 'providerId', 'provider', 'providers'])(
+    'redacts credentials inside URL-bearing %s values',
+    (key) => {
+      const secret = 'sk-live-abcdefghijklmnopqrstuvwxyz1234567890';
+      const value = `webhook:https://example.test/hooks/${secret}?token=${secret}`;
+      const result = redactSecretLeaves({ [key]: key === 'providers' ? [value] : value });
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(JSON.stringify(result)).toContain('webhook:https://example.test/hooks/');
+    },
+  );
+
   it.each([
     '-----BEGIN PRIVATE KEY-----\nfixture-secret\n-----END PRIVATE KEY-----',
     ['fixture-key-one', 'fixture-key-two'],

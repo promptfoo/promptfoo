@@ -25,6 +25,19 @@ function provider(id: string, label?: string, config?: Record<string, unknown>) 
 }
 
 describe('provider selection', () => {
+  it('redacts URL credentials in permission and share identities without changing the provider', () => {
+    const secret = 'sk-live-abcdefghijklmnopqrstuvwxyz1234567890';
+    const id = `webhook:https://example.test/hooks/${secret}`;
+    const target = provider(id);
+    const selection = createProviderSelection([target], [id], [target]);
+    const permissions = buildProviderPermissionConfig({}, selection, {
+      tests: [{ options: { provider: id } }],
+    });
+    expect(JSON.stringify(permissions)).not.toContain(secret);
+    expect(JSON.stringify(buildProviderShareConfig({}, selection))).not.toContain(secret);
+    expect(target.id()).toBe(id);
+  });
+
   const cloudProviderId = 'promptfoo://provider/11111111-1111-4111-8111-111111111111';
   const linkedTargetId = 'promptfoo://provider/22222222-2222-4222-8222-222222222222';
   const temporaryDirectories: string[] = [];

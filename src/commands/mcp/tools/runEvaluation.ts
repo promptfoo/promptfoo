@@ -268,12 +268,14 @@ function setSelectedTestCaseIndices(
   evaluateOptionOverrides: Partial<InternalEvaluateOptions>,
   testSuite: TestSuite,
   selectedTestCaseIndices: number[] | undefined,
+  configBasePath?: string,
 ): void {
   if (selectedTestCaseIndices) {
     evaluateOptionOverrides.testCaseIndices = selectedTestCaseIndices;
     evaluateOptionOverrides.testCaseSelection = createTestCaseSelection(
       getTestCasesForSelection(testSuite),
       selectedTestCaseIndices,
+      { basePath: configBasePath, defaultTest: testSuite.defaultTest },
     );
   }
 }
@@ -515,7 +517,11 @@ export function registerRunEvaluationTool(server: McpServer) {
         const startTime = Date.now();
         const evalResult = await cliState.withMaxConcurrency(maxConcurrency, () =>
           doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, {
-            beforeFilterTestSuite: (testSuite, _config, { selectedProviderConfigs } = {}) => {
+            beforeFilterTestSuite: (
+              testSuite,
+              _config,
+              { selectedProviderConfigs, configBasePath } = {},
+            ) => {
               const unfilteredProviders = [...testSuite.providers];
               const filteredSuite = applyMcpEvaluationFilters(testSuite, {
                 testCaseIndices,
@@ -543,6 +549,7 @@ export function registerRunEvaluationTool(server: McpServer) {
                 evaluateOptionOverrides,
                 testSuite,
                 selectedTestCaseIndices,
+                configBasePath,
               );
               if (hasFilters) {
                 logger.debug(

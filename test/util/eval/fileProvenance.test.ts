@@ -91,11 +91,58 @@ describe('file-backed replay provenance', () => {
         { assert: [{ type, value: `file://${relative}:grade` }] },
         { assert: [{ type: 'assert-set', assert: [{ type, value: `file://${file}:grade` }] }] },
       ];
-      const selection = createTestCaseSelection(tests, [1, 0]);
-      expect(restoreTestCaseSelection(tests, selection)).toEqual([1, 0]);
+      const selection = createTestCaseSelection(tests, [1, 0], { basePath: dir });
+      expect(restoreTestCaseSelection(tests, selection, { basePath: dir })).toEqual([1, 0]);
       fs.writeFileSync(file, 'other');
-      expect(() => restoreTestCaseSelection(tests, selection)).toThrow();
+      expect(() => restoreTestCaseSelection(tests, selection, { basePath: dir })).toThrow();
       expect(JSON.stringify(selection)).not.toContain('first');
     },
   );
+  it.each([
+    ['scoring callback', { assertScoringFunction: 'file://source.js:score' }],
+    [
+      'assertion array',
+      { assert: [{ type: 'contains-any', value: ['literal', 'file://source.js'] }] },
+    ],
+    ['output transform', { options: { transform: 'file://source.js:transform' } }],
+    ['variable transform', { options: { transformVars: 'file://source.js:vars' } }],
+    [
+      'assertion transform',
+      { assert: [{ type: 'equals', value: 'ok', transform: 'file://source.js:transform' }] },
+    ],
+    [
+      'assertion grader',
+      { assert: [{ type: 'llm-rubric', value: 'ok', provider: 'file://source.js' }] },
+    ],
+    [
+      'named Python grader',
+      { assert: [{ type: 'llm-rubric', value: 'ok', provider: 'python:source.js:grade' }] },
+    ],
+    ['provider map grader', { options: { provider: { 'file://source.js': { temperature: 0 } } } }],
+  ])('rejects edited %s while another invocation changes the global base path', (_name, test) => {
+    const basePath = directory();
+    const elsewhere = directory();
+    fs.writeFileSync(path.join(basePath, 'source.js'), 'first');
+    fs.writeFileSync(path.join(elsewhere, 'source.js'), 'unchanged');
+    const tests = [test];
+    const context = { basePath };
+    cliState.basePath = elsewhere;
+    const selection = createTestCaseSelection(tests, [0], context);
+    expect(restoreTestCaseSelection(tests, selection, context)).toEqual([0]);
+    fs.writeFileSync(path.join(basePath, 'source.js'), 'other');
+    expect(() => restoreTestCaseSelection(tests, selection, context)).toThrow();
+  });
+
+  it.each([
+    { assert: [{ type: 'equals' as const, value: 'first' }] },
+    { options: { transform: 'output + "first"' } },
+    { options: { provider: 'openai:first' } },
+    { assertScoringFunction: 'first' },
+  ])('rejects changed inherited defaults: %j', (defaultTest) => {
+    const tests = [{ vars: { input: 'same' } }];
+    const selection = createTestCaseSelection(tests, [0], { defaultTest });
+    expect(restoreTestCaseSelection(tests, selection, { defaultTest })).toEqual([0]);
+    const changed = JSON.parse(JSON.stringify(defaultTest).replaceAll('first', 'other'));
+    expect(() => restoreTestCaseSelection(tests, selection, { defaultTest: changed })).toThrow();
+  });
 });
