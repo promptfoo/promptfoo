@@ -50,6 +50,8 @@ Hydra relies on Promptfoo Cloud to coordinate the attacker agent, maintain scan-
 
 ::::tip
 Hydra manages attacker-side history and backtracking. Your target provider manages target-side persistence in `stateful: true` mode. In Promptfoo Cloud, Hydra can derive the mode from the target configuration. In the open-source CLI/UI, set `stateful: true` only after you configure sessions in the provider. See [Multi-Turn Session Management](/docs/red-team/troubleshooting/multi-turn-sessions).
+
+Audio and image payloads follow the same history mode. Setting `sendCurrentTurnOnly: true` also omits previous turns from these payloads.
 ::::
 
 ## How It Works

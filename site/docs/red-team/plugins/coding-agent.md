@@ -111,6 +111,8 @@ See the [coding-agent guide](/docs/red-team/coding-agents) for a complete harnes
 Add `redteam.targetManifest` to make generated coding-agent prompts use real example files,
 commands, tools, roots, and data boundaries instead of invented repo context.
 
+Remote generation receives these manifest fields, configured fixture paths, scenario context, and generation options. Verifier-only values such as raw receipts, protected file contents, and execution ledgers stay local and are attached to the generated assertions.
+
 ```yaml
 redteam:
   targetManifest:
