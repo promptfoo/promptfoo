@@ -19,6 +19,7 @@ import {
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
+import { mergeProviderEnv } from './env';
 import { getProviderFactories } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -88,8 +89,7 @@ export async function loadApiProvider(
 
   // Merge environment overrides: context.env (test suite level) is base,
   // options.env (provider-specific) takes precedence for per-provider customization
-  const mergedEnv: EnvOverrides | undefined =
-    env || options.env ? { ...env, ...options.env } : undefined;
+  const mergedEnv: EnvOverrides | undefined = mergeProviderEnv(providerPath, env, options.env);
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
@@ -142,11 +142,7 @@ export async function loadApiProvider(
       prompts: options.prompts ?? cloudProvider.prompts,
       inputs: options.inputs ?? cloudProvider.inputs,
       // Merge all three env sources: context (base) -> cloud -> local (highest priority)
-      env: {
-        ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
-        ...cloudProvider.env, // Cloud provider env overrides context
-        ...options.env, // Local env overrides everything
-      },
+      env: mergeProviderEnv(cloudProvider.id, env, cloudProvider.env, options.env),
     };
 
     logger.debug(
@@ -185,8 +181,12 @@ export async function loadApiProvider(
 
     // Merge file's env with context.env - context.env takes precedence
     // This allows callers to override file-defined defaults
-    const mergedFileEnv: EnvOverrides | undefined =
-      fileContent.env || mergedEnv ? { ...fileContent.env, ...mergedEnv } : undefined;
+    const mergedFileEnv: EnvOverrides | undefined = mergeProviderEnv(
+      fileContent.id,
+      fileContent.env,
+      env,
+      options.env,
+    );
 
     return loadApiProvider(fileContent.id, {
       basePath,

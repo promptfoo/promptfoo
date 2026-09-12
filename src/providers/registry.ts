@@ -39,6 +39,7 @@ import {
   ElevenLabsSTTProvider,
   ElevenLabsTTSProvider,
 } from './elevenlabs';
+import { mergeProviderEnv } from './env';
 import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
@@ -988,13 +989,6 @@ export const providerMap: ProviderFactory[] = [
         const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
         const codexModel = modelName || configuredModel;
         const codexProviderId = providerOptions.id ?? providerPath;
-        const codexEnv = { ...context.env, ...providerOptions.env };
-        // loadApiProvider has already merged env; use the original provider scope
-        // to preserve precedence when the suite uses the other API-key alias.
-        const scopedEnv = context.options?.env ?? providerOptions.env;
-        if (scopedEnv?.CODEX_API_KEY && !scopedEnv.OPENAI_API_KEY) {
-          delete codexEnv.OPENAI_API_KEY;
-        }
         return new OpenAICodexSDKProvider({
           ...providerOptions,
           id: codexProviderId,
@@ -1004,7 +998,7 @@ export const providerMap: ProviderFactory[] = [
                 model: codexModel,
               }
             : providerOptions.config,
-          env: codexEnv,
+          env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
