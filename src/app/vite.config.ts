@@ -162,7 +162,7 @@ export default {
         'src/**/*.test.tsx',
         'src/**/*.spec.ts',
         'src/**/*.spec.tsx',
-        'src/**/*.browser.{ts,tsx}',
+        'src/test/browser-mode/**/*.browser.{ts,tsx}',
         'src/setupTests.ts',
         'src/**/*.stories.tsx',
       ],
