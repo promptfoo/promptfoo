@@ -466,6 +466,8 @@ Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. T
 
 Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in any span name or error message in the fetched trace. When a redacted value contains serialized JSON, those names and messages are hidden before storage. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
 
+For trace-aware assertions, external snapshots are polled until completed spans stop changing or the five-retry limit is reached. At that limit, grading uses the latest available evidence; increase `queryDelay` if your backend takes longer to ingest a trace.
+
 #### Braintrust
 
 Promptfoo can retrieve application spans from a Braintrust project's logs:
