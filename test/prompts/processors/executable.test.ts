@@ -3,7 +3,13 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { generateIdFromPrompt } from '../../../src/models/prompt';
 import { processExecutableFile } from '../../../src/prompts/processors/executable';
+import {
+  applyPromptSelection,
+  createPromptSelection,
+  getPromptsForReplay,
+} from '../../../src/util/eval/replay';
 
 import type { ApiProvider } from '../../../src/types/index';
 
@@ -31,6 +37,7 @@ describe('processExecutableFile', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs();
   });
 
   const describeUnix = process.platform === 'win32' ? describe.skip : describe;
@@ -72,6 +79,72 @@ describe('processExecutableFile', () => {
     expect(prompts).toHaveLength(1);
     expect(prompts[0].label).toBe(scriptPath);
     expect(prompts[0].raw).toBe(scriptPath);
+  });
+
+  it.each(['binary', 'large script', 'command argument'])(
+    'rejects replay after changing a %s implementation',
+    async (kind) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-prompt-provenance-'));
+      const implementation = path.join(dir, 'prompt-file');
+      const contents =
+        kind === 'binary' ? '\0original-binary' : '# original script\n' + ' '.repeat(110_000);
+      fs.writeFileSync(implementation, contents);
+      const command =
+        kind === 'command argument'
+          ? `${JSON.stringify(process.execPath)} ${JSON.stringify(implementation)}`
+          : implementation;
+      const original = await processExecutableFile(command, { label: 'Executable prompt' });
+      const selection = createPromptSelection(original);
+      const unchanged = await processExecutableFile(command, { label: 'Executable prompt' });
+      expect(applyPromptSelection(unchanged, selection)).toEqual(unchanged);
+      const persisted = JSON.parse(
+        JSON.stringify({ ...original[0], id: generateIdFromPrompt(original[0]) }),
+      );
+      expect(getPromptsForReplay([persisted], unchanged)[0].function).toBe(unchanged[0].function);
+      fs.writeFileSync(implementation, contents.replace('original', 'modified'));
+      const modified = await processExecutableFile(command, { label: 'Executable prompt' });
+      expect(modified[0].raw).toBe(original[0].raw);
+      expect(() => applyPromptSelection(modified, selection)).toThrow('no longer exists');
+      fs.rmSync(dir, { recursive: true, force: true });
+    },
+  );
+
+  it.each(['PATH', 'basePath'])(
+    'fingerprints executable files resolved through %s',
+    async (resolution) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-prompt-resolution-'));
+      const name = process.platform === 'win32' ? 'fixture-tool.exe' : 'fixture-tool';
+      const file = path.join(dir, name);
+      fs.writeFileSync(file, 'original implementation', { mode: 0o755 });
+      if (resolution === 'PATH') {
+        vi.stubEnv('PATH', dir);
+      }
+      const command = resolution === 'PATH' ? name : `./${name}`;
+      const config = { basePath: dir };
+      const original = await processExecutableFile(command, { config });
+      const selection = createPromptSelection(original);
+      expect(() => applyPromptSelection(original, selection)).not.toThrow();
+      const unchanged = await processExecutableFile(command, { config });
+      expect(() => applyPromptSelection(unchanged, selection)).not.toThrow();
+      fs.writeFileSync(file, 'modified implementation');
+      const changed = await processExecutableFile(command, { config });
+      expect(changed[0].raw).toBe(original[0].raw);
+      expect(() => applyPromptSelection(changed, selection)).toThrow('no longer exists');
+      const persisted = JSON.parse(
+        JSON.stringify({ ...original[0], id: generateIdFromPrompt(original[0]) }),
+      );
+      expect(() => getPromptsForReplay([persisted], changed)).toThrow('implementation changed');
+      fs.rmSync(dir, { recursive: true, force: true });
+    },
+  );
+
+  it('rejects replay when executable provenance cannot be read', async () => {
+    const command = '/missing/prompt-executable';
+    const original = await processExecutableFile(command, {});
+    const resolved = await processExecutableFile(command, {});
+    expect(() => applyPromptSelection(resolved, createPromptSelection(original))).toThrow(
+      'no longer exists',
+    );
   });
 
   // Unix-specific tests

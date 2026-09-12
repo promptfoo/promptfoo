@@ -7,6 +7,7 @@ import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { ConfigPermissionError, checkCloudPermissions } from '../../src/util/cloud';
+import * as providerSelection from '../../src/util/eval/providerSelection';
 import { createProviderSelection } from '../../src/util/eval/providerSelection';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -78,6 +79,26 @@ describeEvaluator('provider permissions after extension hooks', () => {
       );
     },
   );
+
+  it('builds the provider permission projection once when there are no extensions', async () => {
+    const projection = vi.spyOn(providerSelection, 'buildProviderPermissionConfig');
+    const suite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [toPrompt('first'), toPrompt('second')],
+      tests: [{ vars: { case: 'a' } }, { vars: { case: 'b' } }],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, {
+      repeat: 3,
+      providerSelection: createProviderSelection(
+        suite.providers,
+        ['test-provider'],
+        suite.providers,
+      ),
+    });
+    expect((await record.toEvaluateSummary()).stats.successes).toBe(12);
+    expect(projection).toHaveBeenCalledTimes(1);
+  });
 
   it('checks an allowed hook grader once across concurrent tests', async () => {
     const grader: ApiProvider = {

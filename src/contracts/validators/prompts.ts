@@ -20,6 +20,7 @@ export const PromptSchema = z.object({
   display: z.string().optional(),
   label: z.string(),
   function: PromptFunctionSchema.optional(),
+  sourceHash: z.string().optional(),
 
   // These config options are merged into the provider config.
   config: z.any().optional(),

@@ -3966,7 +3966,9 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       test: evalStep.test,
     });
     evalStep.test = beforeEachOut.test;
-    await this.checkProviderPermissions(testSuite, [evalStep.test]);
+    if (testSuite.extensions?.length) {
+      await this.checkProviderPermissions(testSuite, [evalStep.test]);
+    }
 
     const rows = await runEvalInternal({
       ...evalStep,

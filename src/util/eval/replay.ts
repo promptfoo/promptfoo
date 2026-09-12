@@ -7,6 +7,7 @@ interface PersistedPrompt {
   raw: string;
   label: string;
   config?: unknown;
+  sourceHash?: string;
 }
 
 interface ReplayPrompt {
@@ -14,6 +15,7 @@ interface ReplayPrompt {
   label: string;
   config?: unknown;
   function?: any;
+  sourceHash?: string;
 }
 
 interface PromptSelection {
@@ -30,6 +32,7 @@ function getPromptFingerprint(prompt: ReplayPrompt): string {
       raw: prompt.raw,
       label: prompt.label,
       config: redactSecretLeaves(prompt.config),
+      ...(prompt.sourceHash && { sourceHash: prompt.sourceHash }),
     }),
   );
 }
@@ -112,6 +115,7 @@ export function getPromptsForReplay(
       raw: prompt.raw,
       label: prompt.label,
       config: prompt.config,
+      ...(prompt.sourceHash && { sourceHash: prompt.sourceHash }),
     };
     if (prompt.id) {
       const fingerprint = getPromptFingerprint(replayPrompt);
@@ -137,6 +141,11 @@ export function getPromptsForReplay(
     const persistedPrompt =
       candidates?.find((candidate) => candidate.fingerprint === fingerprint) ?? candidates?.[0];
     if (persistedPrompt) {
+      if (persistedPrompt.prompt.sourceHash !== prompt.sourceHash) {
+        throw new Error(
+          'Executable prompt implementation changed or cannot be verified. The evaluation was not changed.',
+        );
+      }
       orderedPrompts.push({
         ...persistedPrompt.prompt,
         ...(persistedPrompt.fingerprint === fingerprint ? { config: prompt.config } : {}),

@@ -1,5 +1,8 @@
 import { execFile } from 'child_process';
-import { stat as fsStat, readFile } from 'fs/promises';
+import { createHash, randomUUID } from 'crypto';
+import { constants, createReadStream } from 'fs';
+import { access, stat as fsStat, readFile } from 'fs/promises';
+import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
@@ -13,6 +16,67 @@ const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
 function stripText(text: string) {
   return text.replace(ANSI_ESCAPE, '');
+}
+
+async function getExecutableSourceHash(parts: string[], basePath?: string): Promise<string> {
+  const cwd = path.resolve(basePath || '.');
+  const command = parts[0];
+  const searchPath = command && !/[\\/]/.test(command);
+  const suffixes =
+    process.platform === 'win32'
+      ? ['', ...(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';')]
+      : [''];
+  const candidates = searchPath
+    ? (process.env.PATH || '')
+        .split(path.delimiter)
+        .flatMap((directory) =>
+          suffixes.map((suffix) => path.resolve(cwd, directory, command + suffix)),
+        )
+    : [path.resolve(cwd, command || '')];
+  try {
+    let executable: string | undefined;
+    for (const candidate of candidates) {
+      try {
+        if ((await fsStat(candidate)).isFile()) {
+          if (searchPath) {
+            await access(candidate, constants.X_OK);
+          }
+          executable = candidate;
+          break;
+        }
+      } catch {
+        // Continue searching PATH for the executable used by execFile.
+      }
+    }
+    if (!executable) {
+      return randomUUID();
+    }
+    const files = [executable];
+    for (const argument of parts.slice(1)) {
+      const candidate = path.resolve(cwd, argument);
+      try {
+        if ((await fsStat(candidate)).isFile()) {
+          files.push(candidate);
+        }
+      } catch (error) {
+        if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code || '')) {
+          throw error;
+        }
+      }
+    }
+    const hash = createHash('sha256').update(JSON.stringify(parts));
+    for (const file of files) {
+      const fileHash = createHash('sha256');
+      for await (const chunk of createReadStream(file)) {
+        fileHash.update(chunk);
+      }
+      hash.update(JSON.stringify([file, fileHash.digest('hex')]));
+    }
+    return hash.digest('hex');
+  } catch {
+    // Unreadable implementations can run, but a fresh token prevents unverifiable replay.
+    return randomUUID();
+  }
 }
 
 /**
@@ -150,6 +214,7 @@ export async function processExecutableFile(
       function: (context) =>
         executablePromptFunction(filePath, { ...context, config: prompt.config }),
       config: prompt.config,
+      sourceHash: await getExecutableSourceHash(scriptParts, prompt.config?.basePath),
     },
   ];
 }

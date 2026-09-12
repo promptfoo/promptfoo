@@ -52,6 +52,8 @@ export interface Prompt {
   display?: string;
   label: string;
   function?: PromptFunction;
+  /** Digest of the executable files used to produce this prompt, for replay validation. */
+  sourceHash?: string;
 
   // These config options are merged into the provider config.
   config?: any;
