@@ -28,7 +28,7 @@ describe('PromptExtractionPlugin', () => {
       ),
     ).toMatchObject({
       'direct-disclosure': ['requestsSystemPrompt'],
-      'format-conversion': ['requestsOperatingInstructions'],
+      'format-conversion': ['requestsOperatingInstructions', 'requestsFormatConversion'],
       'authority-pretext': [
         'asksForAuthorityChecks',
         'invokesLegalAuthority',
@@ -137,12 +137,16 @@ describe('PromptExtractionPlugin', () => {
     expect(summarizeObservedPluginFeatureBandCoverage('prompt-extraction', prompts)).toEqual({
       'core-disclosure': {
         coverageRate: 1,
-        featureCount: 2,
-        observedFeatureCount: 2,
-        observedFeatureIds: ['requestsOperatingInstructions', 'requestsSystemPrompt'],
+        featureCount: 3,
+        observedFeatureCount: 3,
+        observedFeatureIds: [
+          'requestsFormatConversion',
+          'requestsOperatingInstructions',
+          'requestsSystemPrompt',
+        ],
         pluginId: 'prompt-extraction',
         promptCount: 6,
-        promptsWithFeaturesCount: 4,
+        promptsWithFeaturesCount: 3,
       },
       'protected-control-plane': {
         coverageRate: 1,
@@ -164,7 +168,7 @@ describe('PromptExtractionPlugin', () => {
     });
   });
 
-  it('preserves the full semantic frontier when compressing six families into five tests', async () => {
+  it('retains conversion coverage and reports the five-test coverage tradeoff', async () => {
     const provider = createMockProvider();
     vi.spyOn(provider, 'callApi')
       .mockResolvedValueOnce({
@@ -202,7 +206,7 @@ describe('PromptExtractionPlugin', () => {
       new Set([
         'authority-pretext',
         'direct-disclosure',
-        'escalation-review',
+        'format-conversion',
         'policy-audit',
         'routing-review',
       ]),
@@ -210,21 +214,24 @@ describe('PromptExtractionPlugin', () => {
     expect(summarizeObservedPluginFeatureBandCoverage('prompt-extraction', prompts)).toEqual({
       'core-disclosure': {
         coverageRate: 1,
-        featureCount: 2,
-        observedFeatureCount: 2,
-        observedFeatureIds: ['requestsOperatingInstructions', 'requestsSystemPrompt'],
+        featureCount: 3,
+        observedFeatureCount: 3,
+        observedFeatureIds: [
+          'requestsFormatConversion',
+          'requestsOperatingInstructions',
+          'requestsSystemPrompt',
+        ],
         pluginId: 'prompt-extraction',
         promptCount: 5,
         promptsWithFeaturesCount: 2,
       },
       'protected-control-plane': {
-        coverageRate: 1,
+        coverageRate: 6 / 7,
         featureCount: 7,
-        observedFeatureCount: 7,
+        observedFeatureCount: 6,
         observedFeatureIds: [
           'asksForAuthorityChecks',
           'asksForClassificationRules',
-          'asksForEscalationGuidance',
           'asksForRefusalPolicy',
           'asksForRoutingRules',
           'invokesLegalAuthority',
@@ -232,27 +239,34 @@ describe('PromptExtractionPlugin', () => {
         ],
         pluginId: 'prompt-extraction',
         promptCount: 5,
-        promptsWithFeaturesCount: 4,
+        promptsWithFeaturesCount: 3,
       },
     });
     expect(tests[0].metadata?.semanticFrontier).toEqual({
       active: true,
       bands: {
         'core-disclosure': {
-          featureCount: 2,
-          observedFeatureCount: 2,
-          observedFeatureIds: ['requestsOperatingInstructions', 'requestsSystemPrompt'],
-          reachableFeatureCount: 2,
-          reachableFeatureIds: ['requestsOperatingInstructions', 'requestsSystemPrompt'],
+          featureCount: 3,
+          observedFeatureCount: 3,
+          observedFeatureIds: [
+            'requestsOperatingInstructions',
+            'requestsSystemPrompt',
+            'requestsFormatConversion',
+          ],
+          reachableFeatureCount: 3,
+          reachableFeatureIds: [
+            'requestsOperatingInstructions',
+            'requestsSystemPrompt',
+            'requestsFormatConversion',
+          ],
           unreachableFeatureIds: [],
         },
         'protected-control-plane': {
           featureCount: 7,
-          observedFeatureCount: 7,
+          observedFeatureCount: 6,
           observedFeatureIds: [
             'asksForAuthorityChecks',
             'asksForClassificationRules',
-            'asksForEscalationGuidance',
             'asksForRefusalPolicy',
             'asksForRoutingRules',
             'invokesLegalAuthority',
@@ -271,7 +285,7 @@ describe('PromptExtractionPlugin', () => {
           unreachableFeatureIds: [],
         },
       },
-      complete: true,
+      complete: false,
       minimumPortfolioSize: 5,
     });
   });

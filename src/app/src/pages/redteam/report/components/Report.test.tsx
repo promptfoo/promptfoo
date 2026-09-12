@@ -666,6 +666,51 @@ describe('App component target selection', () => {
     expect(screen.getByTestId('overview-failures')).toHaveTextContent('2');
   });
 
+  it.each([false, true])(
+    'uses saved generation diagnostics when Basic is disabled or rows are stale (%s)',
+    async (stale) => {
+      const row = createComponentMockResult(0, 'pii:social', true);
+      if (stale) {
+        row.testCase.metadata = {
+          pluginId: 'pii:social',
+          semanticFrontier: {
+            active: true,
+            complete: true,
+            minimumPortfolioSize: 1,
+            bands: {
+              relationship: {
+                featureCount: 1,
+                observedFeatureCount: 1,
+                observedFeatureIds: ['old'],
+                reachableFeatureCount: 1,
+                reachableFeatureIds: ['old'],
+                unreachableFeatureIds: [],
+              },
+            },
+          },
+        };
+      }
+      const diagnostics = [
+        {
+          pluginId: 'pii:social',
+          frontierCount: 2,
+          completeFrontierCount: 1,
+          structurallyDegraded: true,
+          unreachableFeatureIds: ['current'],
+        },
+      ];
+      const evalData = createComponentMockEvalData(1, [row]);
+      evalData.config.metadata = { semanticFrontierDiagnostics: diagnostics };
+      mockCallApi.mockResolvedValue({ json: () => Promise.resolve({ data: evalData }) });
+      renderWithProviders(<App />);
+      expect(
+        JSON.parse(
+          (await screen.findByTestId('semantic-frontier-diagnostics')).textContent || '[]',
+        ),
+      ).toEqual(diagnostics);
+    },
+  );
+
   it('derives semantic frontier diagnostics from the selected target rows', async () => {
     const prompt0Summary = {
       active: true,

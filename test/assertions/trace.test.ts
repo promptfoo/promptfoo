@@ -158,6 +158,46 @@ describe('trace assertions', () => {
     });
   });
 
+  it('applies the SQL span filter to both raw grading context and its summary', async () => {
+    mockTraceStore.getTrace.mockResolvedValue({
+      ...mockTraceData,
+      spans: [
+        {
+          spanId: 'allowed',
+          name: 'allowed query',
+          startTime: 0,
+          attributes: { 'db.statement': 'SELECT public FROM records' },
+        },
+        {
+          spanId: 'private',
+          name: 'PRIVATE_SPAN_NAME',
+          startTime: 1,
+          attributes: { 'db.statement': 'SELECT PRIVATE_QUERY FROM records' },
+        },
+      ],
+    });
+    const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'Fixture verdict' },
+      rubric: 'Fixture rubric',
+    });
+    await runAssertion({
+      assertion: { type: 'promptfoo:redteam:sql-injection' },
+      prompt: 'Inspect records.',
+      test: {
+        metadata: {
+          purpose: 'Fixture assistant',
+          tracing: { enabled: true, spanFilter: ['allowed*'] },
+        },
+      },
+      providerResponse: mockProviderResponse,
+      traceId: 'test-trace-id',
+    });
+    const context = grade.mock.calls[0]?.[7];
+    expect(context?.traceData?.spans).toHaveLength(1);
+    expect(context?.traceSummary).toContain('SELECT public');
+    expect(JSON.stringify(context)).not.toContain('PRIVATE_');
+  });
+
   it.each([false, true])(
     'includes SQL outcomes without rows or bind values (redact query: %s)',
     async (redactQuery) => {

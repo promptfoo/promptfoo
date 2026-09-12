@@ -362,6 +362,26 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
       return [];
     }
 
+    const stored = evalData.config.metadata?.semanticFrontierDiagnostics;
+    if (
+      Array.isArray(stored) &&
+      stored.every(
+        (diagnostic) =>
+          diagnostic &&
+          typeof diagnostic.pluginId === 'string' &&
+          Number.isInteger(diagnostic.frontierCount) &&
+          diagnostic.frontierCount >= 0 &&
+          Number.isInteger(diagnostic.completeFrontierCount) &&
+          diagnostic.completeFrontierCount >= 0 &&
+          diagnostic.completeFrontierCount <= diagnostic.frontierCount &&
+          typeof diagnostic.structurallyDegraded === 'boolean' &&
+          Array.isArray(diagnostic.unreachableFeatureIds) &&
+          diagnostic.unreachableFeatureIds.every((id: unknown) => typeof id === 'string'),
+      )
+    ) {
+      return stored;
+    }
+
     const prompts =
       (evalData.version >= 4
         ? evalData.prompts
