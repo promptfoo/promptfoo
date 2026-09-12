@@ -132,6 +132,7 @@ describe('MuseCodeProvider', () => {
     await fs.rm(binDir, { recursive: true, force: true });
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     restoreEnv();
   });
 
@@ -666,7 +667,7 @@ describe('MuseCodeProvider', () => {
   it('omits raw journal data when a credential spans events', async () => {
     const apiKey = 'split-secret';
     const events = structuredClone(fixtureEvents);
-    events.at(-2)!.payload.text = 'split-';
+    events.at(-2)!.payload.text = 'ordinary output: split-';
     events.at(-1)!.payload.text = 'secret';
     onSpawn = (child) => {
       child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
@@ -1272,6 +1273,35 @@ describe('MuseCodeProvider', () => {
     };
     const response = await instance.callApi(prompt, {
       prompt: { raw: prompt, label: 'prompt', config: { apiKey: 'second-session-secret' } },
+      vars: {},
+    });
+
+    expect(response.raw).toBeUndefined();
+  });
+
+  it('retains credentials for a session ID returned by Muse', async () => {
+    const firstKey = 'first-generated-session-secret';
+    const instance = provider({
+      config: { working_dir: testDir, no_session_log: false, apiKey: firstKey },
+    });
+    onSpawn = (child) => {
+      child.stdout.write(fixture);
+      child.close();
+    };
+    await instance.callApi(prompt);
+
+    const events = structuredClone(fixtureEvents);
+    events.at(-1)!.payload.details = firstKey;
+    onSpawn = (child) => {
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+    const response = await instance.callApi(prompt, {
+      prompt: {
+        raw: prompt,
+        label: 'prompt',
+        config: { session_id: sessionId, apiKey: 'second-generated-session-secret' },
+      },
       vars: {},
     });
 

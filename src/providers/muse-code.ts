@@ -319,11 +319,11 @@ function redactCredentials(
   const containsSplitCredential = (values: string[], credential: string) =>
     values.some((_, start) => {
       let joined = '';
-      for (let end = start; end < values.length && joined.length < credential.length; end++) {
+      for (let end = start; end < values.length; end++) {
         if (values[end].includes(credential)) {
           return end > start && credential.startsWith(joined);
         }
-        joined += values[end];
+        joined = (joined + values[end]).slice(-credential.length);
         if (end > start && joined.includes(credential)) {
           return true;
         }
@@ -541,9 +541,6 @@ export class MuseCodeProvider implements ApiProvider {
       ? [...(this.sessionCredentials.get(config.session_id) ?? new Set())]
       : [];
     const credentials = [...historicalCredentials, ...currentCredentials];
-    if (config.session_id) {
-      this.sessionCredentials.set(config.session_id, new Set(credentials));
-    }
     try {
       signal.throwIfAborted();
       const basePath = config.basePath ?? cliState.basePath;
@@ -572,7 +569,11 @@ export class MuseCodeProvider implements ApiProvider {
         env,
       );
       // Redact credentials from the actual child environment before tracing or persistence.
-      return redactCredentials(parseResponse(result), credentials, historicalCredentials);
+      const response = parseResponse(result);
+      if (response.sessionId) {
+        this.sessionCredentials.set(response.sessionId, new Set(credentials));
+      }
+      return redactCredentials(response, credentials, historicalCredentials);
     } catch (error) {
       return redactCredentials(
         {
