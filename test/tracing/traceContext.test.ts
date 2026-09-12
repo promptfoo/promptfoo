@@ -44,18 +44,13 @@ describe('fetchTraceContext', () => {
       async (_traceId: string, spans: SpanData[], options?: AddSpansOptions) => {
         const combined = [...storedSpans, ...spans];
         const sanitized = options?.redactSpans ? options.redactSpans(combined) : combined;
-        const seen = new Set<string>();
-        storedSpans.splice(
-          0,
-          storedSpans.length,
-          ...sanitized.filter((span) => {
-            if (seen.has(span.spanId)) {
-              return false;
-            }
-            seen.add(span.spanId);
-            return true;
-          }),
-        );
+        const byId = new Map<string, SpanData>();
+        for (const span of sanitized) {
+          if (options?.updateExisting || !byId.has(span.spanId)) {
+            byId.set(span.spanId, span);
+          }
+        }
+        storedSpans.splice(0, storedSpans.length, ...byId.values());
         return { stored: true };
       },
     );
@@ -114,6 +109,7 @@ describe('fetchTraceContext', () => {
     expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
     expect(mocks.addSpans).toHaveBeenCalledWith('trace-1', [internalSpan, targetSpan], {
       warnIfMissingTrace: false,
+      updateExisting: true,
     });
     expect(mocks.getSpans).toHaveBeenCalledWith('trace-1', {
       includeInternalSpans: false,

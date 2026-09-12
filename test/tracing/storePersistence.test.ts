@@ -12,6 +12,7 @@ import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
 import * as traceProviders from '../../src/tracing/providers';
+import { TempoProvider } from '../../src/tracing/providers/tempo';
 import { TraceStore } from '../../src/tracing/store';
 import { fetchTraceContext } from '../../src/tracing/traceContext';
 import EvalFactory from '../factories/evalFactory';
@@ -44,6 +45,128 @@ describe('TraceStore span persistence', () => {
     });
     return traceStore;
   }
+
+  it.each(['otlp-first', 'external-first'])(
+    'shares redaction history across trace ingestors (%s)',
+    async (order) => {
+      const traceId = 'c'.repeat(32);
+      await createTrace(traceId, { otlpHttpRedactAttributes: ['authorization'] });
+      const receiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      const fetchTrace = vi.spyOn(TempoProvider.prototype, 'fetchTrace');
+      const providerConfig = { id: 'tempo' as const, endpoint: 'http://localhost:3200' };
+      const source = {
+        spanId: '2'.repeat(16),
+        name: 'source',
+        startTime: 1,
+        attributes: { authorization: 'PRIVATE_OTHER_INGESTOR' },
+      };
+      const bootstrap = { spanId: '1'.repeat(16), name: 'bootstrap', startTime: 1 };
+      const echo = {
+        spanId: '3'.repeat(16),
+        name: 'echo PRIVATE_OTHER_INGESTOR',
+        startTime: 1,
+        attributes: { 'db.statement': 'SELECT 1' },
+      };
+      const external = async (span: typeof bootstrap) => {
+        fetchTrace.mockResolvedValueOnce({ traceId, spans: [span], fetchedAt: Date.now() });
+        await fetchTraceContext(traceId, {
+          providerConfig,
+          queryDelay: 0,
+          maxRetries: 0,
+          redactAttributes: ['authorization'],
+        });
+      };
+      const otlp = async (span: typeof bootstrap & { attributes?: Record<string, string> }) => {
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId,
+                        spanId: span.spanId,
+                        name: span.name,
+                        startTimeUnixNano: '1000000000',
+                        attributes: Object.entries(span.attributes ?? {}).map(([key, value]) => ({
+                          key,
+                          value: { stringValue: value },
+                        })),
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .expect(200);
+      };
+      try {
+        const [first, second] = order === 'otlp-first' ? [otlp, external] : [external, otlp];
+        await first(bootstrap);
+        await second(source);
+        await first(echo);
+        const db = await getDb();
+        const rows = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+        expect(rows).toHaveLength(3);
+        expect(JSON.stringify(rows)).not.toContain('PRIVATE_OTHER_INGESTOR');
+      } finally {
+        await receiver.stop();
+        fetchTrace.mockRestore();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'refreshes completed external verifier evidence (redaction: %s)',
+    async (redact) => {
+      const traceId = 'external-update';
+      const store = await createTrace(traceId);
+      const initial = {
+        spanId: 'query',
+        name: 'query pending',
+        startTime: 1,
+        attributes: { 'db.statement': 'SELECT id FROM public_records' },
+      };
+      const completed = {
+        ...initial,
+        name: 'query completed',
+        events: [
+          {
+            name: 'verifier.finding',
+            timestamp: 2,
+            attributes: { findings: ['authorization-bypass'] },
+          },
+        ],
+        endTime: 2,
+        statusCode: 2,
+        attributes: {
+          'db.statement': 'SELECT id FROM private_records',
+          'tool.output': { authorized: false },
+        },
+      };
+      const fetchTrace = vi.spyOn(TempoProvider.prototype, 'fetchTrace');
+      const providerConfig = { id: 'tempo' as const, endpoint: 'http://localhost:3200' };
+      try {
+        for (const span of [initial, completed]) {
+          fetchTrace.mockResolvedValueOnce({ traceId, spans: [span], fetchedAt: Date.now() });
+          await fetchTraceContext(traceId, {
+            providerConfig,
+            queryDelay: 0,
+            maxRetries: 0,
+            redactAttributes: redact ? ['authorization'] : [],
+          });
+        }
+        const spans = await store.getSpans(traceId, { sanitizeAttributes: false });
+        expect(spans).toHaveLength(1);
+        expect(spans[0]).toMatchObject(completed);
+      } finally {
+        fetchTrace.mockRestore();
+      }
+    },
+  );
 
   it.each(['source-first', 'echo-first'])(
     'redacts persisted external trace text across %s partial snapshots',
