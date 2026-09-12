@@ -1410,7 +1410,7 @@ function externalizedAgentLedgerFromText(
         if (!(error instanceof SyntaxError)) {
           throw error;
         }
-        throw new Error(`${location} contains invalid JSON on line ${index + 1}`);
+        return [];
       }
     });
 

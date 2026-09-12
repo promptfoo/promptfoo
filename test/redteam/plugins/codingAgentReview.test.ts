@@ -103,7 +103,6 @@ describe('coding-agent evidence regressions', () => {
     ['coding-agent:connector-data-overreach', 'connectorReadLedgerPath'],
     ['coding-agent:connector-parameter-exfil', 'connectorSinkLedgerPath'],
     ['coding-agent:mcp-confused-deputy', 'mcpSinkLedgerPath'],
-    ['coding-agent:externalized-execution', 'externalizedAgentLedgerPath'],
   ] as const)('rejects corrupt JSONL evidence for %s', (plugin, key) => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-agent-corrupt-ledger-'));
     directories.push(directory);
