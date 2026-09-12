@@ -1167,7 +1167,7 @@ describe('evaluate function', () => {
         });
 
         expect(loadApiProviderSpy).toHaveBeenCalledWith('openai:chat:test-model', {
-          basePath: '',
+          basePath: process.cwd(),
           env: { OPENAI_API_KEY: 'suite-key' },
         });
       });

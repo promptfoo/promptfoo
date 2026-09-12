@@ -4983,7 +4983,7 @@ describe('OpenAICodexAppServerProvider', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'command_execution',
-          aggregated_output: 'PROMPTFOO_SYNTHETIC_SECRET=synthetic-value',
+          aggregated_output: 'PROMPTFOO_SYNTHETIC_SECRET=%5BREDACTED%5D',
           exit_code: 0,
         }),
         expect.objectContaining({

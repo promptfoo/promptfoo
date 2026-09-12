@@ -6,6 +6,7 @@ import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeBody,
+  sanitizeConfigForOutput,
   sanitizeHeaders,
   sanitizeObject,
   sanitizeQueryParams,
@@ -66,6 +67,48 @@ describe('looksLikeSecret', () => {
 
     expect(looksLikeSecret(value)).toBe(true);
     expect(looksLikeSecret(`${value}.`)).toBe(false);
+  });
+});
+
+describe('sanitizeConfigForOutput', () => {
+  it('redacts credentials in URL provider IDs and map keys without changing safe IDs', () => {
+    const url = 'https://gateway.example/v1?tenantClientSecret=short-value';
+    const safeUrl = 'HTTPS://Safe.Example/v1?oauth=true&useSession=false&sameSiteCookie=lax';
+    const config = { providers: [url, { id: url }, { [url]: {} }, { id: safeUrl }] };
+    const output = sanitizeConfigForOutput(config);
+    expect(output.providers).toEqual([
+      'https://gateway.example/v1?tenantClientSecret=%5BREDACTED%5D',
+      { id: 'https://gateway.example/v1?tenantClientSecret=%5BREDACTED%5D' },
+      { 'https://gateway.example/v1?tenantClientSecret=%5BREDACTED%5D': {} },
+      { id: safeUrl },
+    ]);
+    expect(JSON.stringify(output)).not.toContain('short-value');
+    expect(JSON.stringify(config)).toContain('short-value');
+  });
+
+  it('retains safe tracing env aliases while removing their literal source credential', () => {
+    const config = {
+      env: {
+        LANGFUSE_SECRET_KEY: '{{ env.ACTUAL_SECRET }}',
+        ACTUAL_SECRET: 'private-value',
+      },
+      tracing: {
+        enabled: true,
+        provider: {
+          id: 'langfuse' as const,
+          endpoint: 'https://cloud.langfuse.com',
+          auth: { username: 'public-key', password: '{{ env.LANGFUSE_SECRET_KEY }}' },
+        },
+      },
+    };
+    const output = sanitizeConfigForOutput(config);
+    expect(output.env).toEqual({ LANGFUSE_SECRET_KEY: '{{ env.ACTUAL_SECRET }}' });
+    expect(output.tracing?.provider?.auth).toEqual({
+      username: 'public-key',
+      password: '{{ env.LANGFUSE_SECRET_KEY }}',
+    });
+    expect(JSON.stringify(output)).not.toContain('private-value');
+    expect(config.env.ACTUAL_SECRET).toBe('private-value');
   });
 });
 
@@ -1829,6 +1872,17 @@ describe('legacy sanitizer aliases', () => {
 });
 
 describe('sanitizeUrl', () => {
+  it.each(['auth[tenantClientSecret]', 'auth%5BtenantClientSecret%5D'])(
+    'redacts bracketed parameter %s in URLs and templates',
+    (key) => {
+      for (const prefix of ['https://gateway.example/v1', '/v1', '{{ base }}/v1']) {
+        const result = sanitizeUrl(`${prefix}?${key}=short-value`);
+        expect(result).not.toContain('short-value');
+        expect(result).toContain('%5BREDACTED%5D');
+      }
+    },
+  );
+
   it.each([
     'googleApiKey',
     'customer_api_key',
@@ -1857,7 +1911,7 @@ describe('sanitizeUrl', () => {
 
   it('preserves query names that describe limits or key metadata', () => {
     const url =
-      'HTTPS://Safe.Example?tokens_available=10&monkey=yes&api_key_version=2&googleApiKeys=3&signatureVersion=2&tokenizer=bpe&secretsEnabled=true&authType=oauth';
+      'HTTPS://Safe.Example?tokens_available=10&monkey=yes&api_key_version=2&googleApiKeys=3&signatureVersion=2&tokenizer=bpe&secretsEnabled=true&authType=oauth&oauth=true&useSession=false&sameSiteCookie=lax';
     expect(sanitizeUrl(url)).toBe(url);
   });
 

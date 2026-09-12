@@ -188,8 +188,10 @@ export const SECRET_FIELD_NAMES = new Set([
   'certcontent',
 ]);
 
-// Short names such as `sig` need a complete parameter-name match.
-const SECRET_PARAMETER_SUFFIXES = [...SECRET_FIELD_NAMES].filter((name) => name.length > 3);
+// Ambiguous names need a complete segment match: oauth/useSession/sameSiteCookie are settings.
+const SECRET_PARAMETER_SUFFIXES = [...SECRET_FIELD_NAMES].filter(
+  (name) => name.length > 3 && !['auth', 'session', 'cookie', 'setcookie'].includes(name),
+);
 
 /**
  * Normalize field names for comparison (lowercase, drop hyphens, underscores,
@@ -646,6 +648,17 @@ export function sanitizeConfigForOutput(config: Partial<UnifiedConfig>): Partial
   const provider = safe.tracing?.provider;
   const sanitizedProvider = sanitized.tracing?.provider;
   if (provider && sanitizedProvider) {
+    const referencedEnv = getReferencedTracingCredentialEnvironmentVariables(
+      provider.auth,
+      provider.headers,
+      safe.env,
+      undefined,
+    );
+    for (const [name, value] of Object.entries(safe.env ?? {})) {
+      if (sanitized.env && referencedEnv.has(name) && isSafeTracingCredentialTemplate(value)) {
+        Object.assign(sanitized.env, { [name]: value });
+      }
+    }
     for (const field of ['auth', 'headers'] as const) {
       const values = provider[field];
       if (!values) {
@@ -1054,7 +1067,8 @@ export function sanitizeUrlEncodedString(value: string): string {
 function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap = false): any {
   const sanitized: any = {};
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
-  for (const [key, value] of Object.entries(obj)) {
+  for (const [rawKey, value] of Object.entries(obj)) {
+    const key = /^https?:\/\//i.test(rawKey) ? sanitizeUrl(rawKey) : rawKey;
     if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
@@ -1083,7 +1097,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
 
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
-    return sanitizeJsonString(obj, depth, maxDepth);
+    return /^https?:\/\//i.test(obj) ? sanitizeUrl(obj) : sanitizeJsonString(obj, depth, maxDepth);
   }
 
   // Handle primitives and null/undefined
@@ -1264,7 +1278,7 @@ export function sanitizeUrl(url: string): string {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
         if (
           isSecretParameterName(key) ||
-          key.split(/[._-]/).some(isSecretParameterName) ||
+          key.split(/[._\-\[\]]+/).some(isSecretParameterName) ||
           rawSecretParamKeys.has(key) ||
           looksLikeSecret(value) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential
