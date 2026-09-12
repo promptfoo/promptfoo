@@ -135,7 +135,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     // Run evaluation
     logger.info('Running scan...');
     const { defaultConfig } = await loadDefaultConfig();
-    const { description: _description, output: _output, ...evalOptions } = options;
+    const { output: _output, ...evalOptions } = options;
     const generation = redteamConfig.metadata?.generation;
     const generatedDuringRun = generation?.id === generationRunId;
     const evalResult = await doEval(

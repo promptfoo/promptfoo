@@ -184,6 +184,11 @@ describe('doRedteamRun', () => {
     expect(vi.mocked(doEval).mock.calls[0][0]).not.toHaveProperty('output');
   });
 
+  it('records the explicit scan description on the evaluation', async () => {
+    await doRedteamRun({ description: 'nightly scan' });
+    expect(vi.mocked(doEval).mock.calls[0][0]).toMatchObject({ description: 'nightly scan' });
+  });
+
   it('passes the run environment file to generation', async () => {
     await doRedteamRun({ envPath: 'generation.env' });
     expect(doGenerateRedteam).toHaveBeenCalledWith(

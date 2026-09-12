@@ -127,9 +127,14 @@ export type {
 } from './types/shared';
 export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
-type LibraryRedteamRunOptions = Omit<RedteamRunOptions, 'eventSource'>;
+type LibraryRedteamRunOptions = Omit<RedteamRunOptions, 'eventSource' | 'target'>;
 
 async function runRedteam(options: LibraryRedteamRunOptions = {}) {
+  if ('target' in options && options.target !== undefined) {
+    throw new Error(
+      'redteam.run() does not support target selection. Define providers in the configuration file.',
+    );
+  }
   return doRedteamRun({ ...options, eventSource: 'library' });
 }
 

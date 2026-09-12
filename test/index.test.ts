@@ -1239,6 +1239,17 @@ describe('redteam package wrapper', () => {
     vi.mocked(doRedteamRun).mockReset();
   });
 
+  it('rejects an unsupported cloud target selector before running a scan', async () => {
+    await expect(
+      index.redteam.run({
+        config: 'config.yaml',
+        // @ts-expect-error The Node API accepts targets through its config providers.
+        target: 'cloud-target',
+      }),
+    ).rejects.toThrow('Define providers in the configuration file');
+    expect(doRedteamRun).not.toHaveBeenCalled();
+  });
+
   it('should accept omitted options for package callers', async () => {
     await index.redteam.run();
 

@@ -66,7 +66,6 @@ import { isUuid } from '../util/uuid';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
-import type { Command } from 'commander';
 
 import type {
   CommandLineOptions,
@@ -94,7 +93,7 @@ export const EvalCommandSchema = CommandLineOptionsSchema.extend({
 export type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 
 function runtimeTagsForEval(
-  cmdObj: Partial<CommandLineOptions & Command>,
+  cmdObj: Partial<CommandLineOptions>,
   commandLineOptions: Record<string, any> | undefined,
 ): Record<string, string> | undefined {
   const tags = {
@@ -227,7 +226,7 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
 }
 
 function resolveSuggestionOptions(
-  cmdObj: Partial<CommandLineOptions & Command>,
+  cmdObj: Partial<CommandLineOptions>,
   commandLineOptions: Record<string, any> | undefined,
   evaluateOptions: InternalEvaluateOptions,
 ): Pick<InternalEvaluateOptions, 'generateSuggestions' | 'suggestionsCount'> {
@@ -288,7 +287,7 @@ function isDeclarativeConfig(configPath: string): boolean {
 }
 
 export async function doEval(
-  cmdObj: Partial<CommandLineOptions & Command>,
+  cmdObj: Partial<CommandLineOptions>,
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
