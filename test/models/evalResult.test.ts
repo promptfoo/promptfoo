@@ -26,9 +26,9 @@ import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
-  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
     'redacts verifier inputs in public %s result copies',
-    (pluginId) => {
+    async (pluginId) => {
       const secret = 'protected fixture receipt';
       const value = {
         rawReceipt: secret,
@@ -36,16 +36,40 @@ describe('EvalResult', () => {
         protectedFiles: [{ path: 'protected.txt', expectedContent: secret }],
         rawReceiptPath: 'fixtures/receipt.txt',
       };
-      const row = {
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
         testCase: {
           assert: [{ type: `promptfoo:redteam:${pluginId}`, value }],
-          metadata: { pluginId, pluginConfig: value },
+          metadata: { pluginId, pluginConfig: value } as AtomicTestCase['metadata'],
         },
         metadata: { pluginId, pluginConfig: value },
-      };
+        gradingResult: {
+          pass: true,
+          score: 1,
+          reason: 'ok',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'ok',
+              metadata: { pluginId, pluginConfig: value },
+            },
+          ],
+        },
+      });
       const artifact = sanitizeResultForJsonlArtifact(row);
       expect(JSON.stringify(artifact)).not.toContain(secret);
       expect(JSON.stringify(artifact)).toContain('fixtures/receipt.txt');
+      const saved = await EvalResult.createFromEvaluateResult('verifier-result-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'verifier-bulk-' + pluginId,
+      );
+      for (const result of [saved, bulk]) {
+        const persisted = await EvalResult.findById(result.id);
+        expect(JSON.stringify(persisted?.toEvaluateResult())).not.toContain(secret);
+        expect(JSON.stringify(persisted?.gradingResult)).toContain('fixtures/receipt.txt');
+      }
       expect(JSON.stringify(row)).toContain(secret);
     },
   );

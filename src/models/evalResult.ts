@@ -409,7 +409,7 @@ function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
 }
 
 function sanitizeGradingResultForDb<T>(gradingResult: T): T {
-  return redactHttpHeadersOnGradingResult(gradingResult);
+  return redactHttpHeadersOnGradingResult(sanitizeCodingAgentVerifierInputs(gradingResult));
 }
 
 // `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
