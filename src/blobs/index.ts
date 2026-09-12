@@ -2,10 +2,9 @@ import { randomUUID } from 'node:crypto';
 
 import { and, eq, isNotNull, or } from 'drizzle-orm';
 import { getDb } from '../database';
-import { blobAssetsTable, blobReferencesTable, evalsTable } from '../database/tables';
+import { blobAssetsTable, blobReferencesTable } from '../database/tables';
 import logger from '../logger';
 import { FilesystemBlobStorageProvider } from './filesystemProvider';
-import { sanitizeBlobMimeType } from './mimeTypes';
 
 import type { BlobStorageProvider, BlobStoreResult, StoredBlob } from './types';
 
@@ -16,6 +15,26 @@ export {
   type BlobStoreResult,
   type StoredBlob,
 } from './types';
+
+// MIME types retained by portable imports and allowed for inline blob responses.
+const SAFE_INLINE_BLOB_MIME_TYPES = new Set([
+  'image/avif',
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'video/mp4',
+  'video/ogg',
+  'video/webm',
+]);
+const SAFE_INLINE_AUDIO_MIME_TYPE_REGEX = /^audio\/[a-z0-9_+-]+$/i;
+
+export function isSafeInlineBlobMimeType(mimeType: string): boolean {
+  return (
+    SAFE_INLINE_BLOB_MIME_TYPES.has(mimeType.toLowerCase()) ||
+    SAFE_INLINE_AUDIO_MIME_TYPE_REGEX.test(mimeType)
+  );
+}
 
 let defaultProvider: BlobStorageProvider | null = null;
 
@@ -52,48 +71,33 @@ export async function storeBlob(
     kind?: string;
   },
 ): Promise<BlobStoreResult> {
-  const db = await getDb();
-  const evalExists = refContext?.evalId
-    ? await db
-        .select({ id: evalsTable.id })
-        .from(evalsTable)
-        .where(eq(evalsTable.id, refContext.evalId))
-        .get()
-    : undefined;
-
   const provider = getBlobStorageProvider();
-  // Keep provider metadata inert too. The result is sanitized again for legacy/deduplicated
-  // objects whose stored metadata predates this boundary.
-  const result = await provider.store(data, sanitizeBlobMimeType(mimeType));
-  const safeMimeType = sanitizeBlobMimeType(result.ref.mimeType);
-  const normalizedResult: BlobStoreResult = {
-    ...result,
-    ref: { ...result.ref, mimeType: safeMimeType },
-  };
+  const result = await provider.store(data, mimeType);
 
-  // Track asset and reference in DB for dedup/auth/cascade. Do not delete provider bytes if this
-  // fails: a concurrent writer may already have registered and started using identical bytes.
-  await db.transaction(async (tx) => {
+  // Track asset and reference in DB for dedup/auth/cascade
+  const db = await getDb();
+  // Keep stored bytes if persistence fails: another eval may already reference them,
+  // including bytes adopted after this store began. Unreferenced bytes are safer than data loss.
+  const registeredMimeType = await db.transaction(async (tx) => {
     await tx
       .insert(blobAssetsTable)
       .values({
-        hash: normalizedResult.ref.hash,
-        sizeBytes: normalizedResult.ref.sizeBytes,
-        mimeType: normalizedResult.ref.mimeType,
-        provider: normalizedResult.ref.provider,
+        hash: result.ref.hash,
+        sizeBytes: result.ref.sizeBytes,
+        // A deduplicated file may be an orphan from a failed transaction.
+        // Adopt it with the current caller's MIME type, which imports sanitize.
+        mimeType: result.deduplicated ? mimeType : result.ref.mimeType,
+        provider: result.ref.provider,
       })
-      .onConflictDoUpdate({
-        target: blobAssetsTable.hash,
-        set: { mimeType: normalizedResult.ref.mimeType },
-      })
+      .onConflictDoNothing()
       .run();
 
-    if (refContext?.evalId && evalExists) {
+    if (refContext?.evalId) {
       await tx
         .insert(blobReferencesTable)
         .values({
           id: randomUUID(),
-          blobHash: normalizedResult.ref.hash,
+          blobHash: result.ref.hash,
           evalId: refContext.evalId,
           testIdx: refContext.testIdx,
           promptIdx: refContext.promptIdx,
@@ -103,21 +107,33 @@ export async function storeBlob(
         .onConflictDoNothing()
         .run();
     }
+
+    const asset = await tx
+      .select({ mimeType: blobAssetsTable.mimeType })
+      .from(blobAssetsTable)
+      .where(eq(blobAssetsTable.hash, result.ref.hash))
+      .get();
+    return asset!.mimeType;
   });
 
-  return normalizedResult;
+  return { ...result, ref: { ...result.ref, mimeType: registeredMimeType } };
 }
 
 export async function getBlobByHash(hash: string): Promise<StoredBlob> {
   const provider = getBlobStorageProvider();
   const blob = await provider.getByHash(hash);
-  return {
-    ...blob,
-    metadata: {
-      ...blob.metadata,
-      mimeType: sanitizeBlobMimeType(blob.metadata.mimeType),
-    },
-  };
+  const db = await getDb();
+  const asset = await db
+    .select({ mimeType: blobAssetsTable.mimeType })
+    .from(blobAssetsTable)
+    .where(eq(blobAssetsTable.hash, hash))
+    .get();
+  // Registered metadata takes precedence over sidecars retained from failed stores.
+  return asset ? { ...blob, metadata: { ...blob.metadata, mimeType: asset.mimeType } } : blob;
+}
+
+export async function getBlobUrl(hash: string, expiresInSeconds?: number): Promise<string | null> {
+  return getBlobStorageProvider().getUrl(hash, expiresInSeconds);
 }
 
 export async function isBlobAllowedForShare(hash: string, evalId: string): Promise<boolean> {
@@ -157,11 +173,6 @@ export async function getShareAuthorizedBlob(
   return getBlobByHash(hash);
 }
 
-export async function getBlobUrl(hash: string, expiresInSeconds?: number): Promise<string | null> {
-  const provider = getBlobStorageProvider();
-  return provider.getUrl(hash, expiresInSeconds);
-}
-
 export async function recordBlobReference(
   hash: string,
   refContext: {
@@ -188,13 +199,22 @@ export async function recordBlobReference(
   }
 
   const db = await getDb();
+  // A failed store can retain bytes without committing their asset registration.
+  // Referencing those bytes must not adopt them or create an invalid foreign key.
+  const asset = await db
+    .select({ hash: blobAssetsTable.hash })
+    .from(blobAssetsTable)
+    .where(eq(blobAssetsTable.hash, hash))
+    .get();
+  if (!asset) {
+    return;
+  }
+
   const existing = await db
     .select({
       id: blobReferencesTable.id,
       kind: blobReferencesTable.kind,
       location: blobReferencesTable.location,
-      promptIdx: blobReferencesTable.promptIdx,
-      testIdx: blobReferencesTable.testIdx,
     })
     .from(blobReferencesTable)
     .where(
@@ -206,27 +226,10 @@ export async function recordBlobReference(
     .get();
 
   if (existing) {
-    const incomingCoordinates =
-      refContext.promptIdx !== undefined && refContext.testIdx !== undefined
-        ? { promptIdx: refContext.promptIdx, testIdx: refContext.testIdx }
-        : null;
-    const existingCoordinatesAreCompatible =
-      incomingCoordinates !== null &&
-      (existing.promptIdx == null || existing.promptIdx === incomingCoordinates.promptIdx) &&
-      (existing.testIdx == null || existing.testIdx === incomingCoordinates.testIdx);
-    const strongerReference: {
-      kind?: string;
-      location?: string;
-      promptIdx?: number;
-      testIdx?: number;
-    } = {
+    const strongerReference: { kind?: string; location?: string } = {
       ...(refContext.kind && !existing.kind && { kind: refContext.kind }),
       ...(refContext.location === 'import' &&
         existing.location !== 'import' && { location: 'import' }),
-      ...(existingCoordinatesAreCompatible &&
-        existing.promptIdx == null && { promptIdx: incomingCoordinates.promptIdx }),
-      ...(existingCoordinatesAreCompatible &&
-        existing.testIdx == null && { testIdx: incomingCoordinates.testIdx }),
     };
     if (Object.keys(strongerReference).length > 0) {
       await db

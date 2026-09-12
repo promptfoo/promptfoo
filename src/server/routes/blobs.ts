@@ -6,6 +6,7 @@ import {
   getBlobByHash,
   getBlobUrl,
   isBlobAllowedForShare,
+  isSafeInlineBlobMimeType,
   storeBlob,
 } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
@@ -510,12 +511,6 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     return;
   }
   const { hash } = paramsResult.data;
-  const queryResult = BlobsSchemas.Get.Query.safeParse(req.query);
-  if (!queryResult.success) {
-    replyValidationError(res, queryResult.error);
-    return;
-  }
-  const { evalId } = queryResult.data;
 
   const db = await getDb();
   const asset = await db
@@ -534,6 +529,13 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
+  const queryResult = BlobsSchemas.Get.Query.safeParse(req.query);
+  if (!queryResult.success) {
+    replyValidationError(res, queryResult.error);
+    return;
+  }
+  const { evalId } = queryResult.data;
+
   // Blob references are scoped to the evaluation being viewed. Deployments with user
   // authentication must additionally verify access to that evaluation.
   if (!(await isBlobAllowedForShare(hash, evalId))) {
@@ -543,6 +545,7 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   }
 
   const assetMimeType = sanitizeBlobMimeType(asset.mimeType);
+  let blob: Awaited<ReturnType<typeof getBlobByHash>> | undefined;
   try {
     const presigned =
       asset.provider !== 'local' &&
@@ -559,9 +562,8 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     logger.debug('[BlobRoute] Failed to create blob redirect', { error, hash });
   }
 
-  let blob: Awaited<ReturnType<typeof getBlobByHash>>;
   try {
-    blob = await getBlobByHash(hash);
+    blob ??= await getBlobByHash(hash);
   } catch (error) {
     logger.error('[BlobRoute] Failed to load blob', { error, hash });
     res.status(404).json({ error: 'Blob not found' });
@@ -575,8 +577,11 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
   }
 
   // Validate MIME type before setting header to prevent injection attacks
-  const mimeType = sanitizeBlobMimeType(blob.metadata.mimeType || asset.mimeType);
+  const mimeType = assetMimeType;
   res.setHeader('Content-Type', mimeType);
+  if (!isSafeInlineBlobMimeType(mimeType)) {
+    res.setHeader('Content-Disposition', 'attachment');
+  }
   // Defense in depth: never let the browser MIME-sniff stored bytes into active content.
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Length', (blob.metadata.sizeBytes ?? asset.sizeBytes).toString());

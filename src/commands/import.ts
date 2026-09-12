@@ -1,9 +1,8 @@
 import crypto from 'crypto';
 import fs from 'fs/promises';
 
-import { BLOB_MAX_SIZE, recordBlobReference, storeBlob } from '../blobs';
+import { BLOB_MAX_SIZE, isSafeInlineBlobMimeType, recordBlobReference, storeBlob } from '../blobs';
 import { BLOB_HASH_REGEX, collectBlobHashes } from '../blobs/blobRefs';
-import { sanitizeBlobMimeType } from '../blobs/mimeTypes';
 import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
 import { parseImportFile } from '../importers/parse';
@@ -98,6 +97,8 @@ function extractDurations(evalData: any) {
 }
 
 const MAX_EXPORTED_BLOB_BASE64_LENGTH = Math.ceil(BLOB_MAX_SIZE / 3) * 4 + 4;
+// Portable exports are untrusted input; imported blobs must not become active same-origin content.
+const IMPORTED_BLOB_MIME_TYPE_FALLBACK = 'application/octet-stream';
 
 function isImportableV3Results(results: unknown): results is EvaluateSummaryV3 {
   const candidate = results as Partial<EvaluateSummaryV3>;
@@ -136,6 +137,15 @@ function isImportableBlobAsset(asset: unknown): asset is ExportedBlobAsset {
     candidate.sizeBytes >= 0 &&
     typeof candidate.data === 'string'
   );
+}
+
+function sanitizeImportedBlobMimeType(mimeType: string): string {
+  const normalizedMimeType = mimeType.trim().toLowerCase();
+  if (isSafeInlineBlobMimeType(normalizedMimeType)) {
+    return normalizedMimeType;
+  }
+
+  return IMPORTED_BLOB_MIME_TYPE_FALLBACK;
 }
 
 function decodeBlobAsset(asset: ExportedBlobAsset): Buffer {
@@ -190,7 +200,7 @@ function prepareBlobAssets(
 
 async function importBlobAssets(blobAssets: PreparedBlobAsset[]): Promise<void> {
   for (const { asset, data } of blobAssets) {
-    const { ref } = await storeBlob(data, sanitizeBlobMimeType(asset.mimeType));
+    const { ref } = await storeBlob(data, sanitizeImportedBlobMimeType(asset.mimeType));
     if (ref.hash !== asset.hash.toLowerCase()) {
       throw new Error(`Embedded blob hash mismatch for ${asset.hash}`);
     }

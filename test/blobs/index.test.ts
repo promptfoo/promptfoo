@@ -1,9 +1,10 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 
-import { eq, inArray, sql } from 'drizzle-orm';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { eq, inArray } from 'drizzle-orm';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  getBlobByHash,
   getShareAuthorizedBlob,
   isBlobAllowedForShare,
   recordBlobReference,
@@ -11,9 +12,11 @@ import {
   setBlobStorageProvider,
   storeBlob,
 } from '../../src/blobs';
+import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 import { getDb } from '../../src/database';
 import { blobAssetsTable, blobReferencesTable, evalsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
+import { createDeferred, createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 import type { BlobStorageProvider } from '../../src/blobs';
 
@@ -216,198 +219,249 @@ describe('recordBlobReference provenance upgrades', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].location).toBe('import');
   });
-
-  it('backfills missing result coordinates without overwriting existing provenance', async () => {
-    await recordBlobReference(hash, {
-      evalId,
-      kind: 'image',
-      location: 'provider',
-    });
-    await recordBlobReference(hash, {
-      evalId,
-      location: 'response.output',
-      promptIdx: 0,
-      testIdx: 0,
-    });
-    await recordBlobReference(hash, {
-      evalId,
-      location: 'response.output',
-      promptIdx: 9,
-      testIdx: 8,
-    });
-
-    const rows = await getReferenceRows();
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      kind: 'image',
-      location: 'provider',
-      promptIdx: 0,
-      testIdx: 0,
-    });
-  });
-
-  it('does not combine partial coordinates from different result rows', async () => {
-    await recordBlobReference(hash, {
-      evalId,
-      kind: 'image',
-      promptIdx: 1,
-    });
-    await recordBlobReference(hash, {
-      evalId,
-      promptIdx: 9,
-      testIdx: 8,
-    });
-
-    const rows = await getReferenceRows();
-    expect(rows[0]).toMatchObject({ promptIdx: 1, testIdx: null });
-  });
-
-  it('completes a partial coordinate tuple only from the same result row', async () => {
-    await recordBlobReference(hash, {
-      evalId,
-      kind: 'image',
-      promptIdx: 1,
-    });
-    await recordBlobReference(hash, {
-      evalId,
-      promptIdx: 1,
-      testIdx: 8,
-    });
-
-    const rows = await getReferenceRows();
-    expect(rows[0]).toMatchObject({ promptIdx: 1, testIdx: 8 });
-  });
 });
 
-describe('storeBlob failure and MIME boundaries', () => {
-  const evalId = `eval-${randomUUID()}`;
-  const hash = '6'.repeat(64);
-  let deleteCalls: string[];
-  let storeCalls = 0;
+describe('storeBlob persistence failures with shared files', () => {
+  const data = Buffer.from('shared blob rollback fixture');
+  const mimeType = 'application/octet-stream';
+  const hash = createHash('sha256').update(data).digest('hex');
+  const firstEvalId = `eval-${randomUUID()}`;
+  const secondEvalId = `eval-${randomUUID()}`;
+  const missingEvalId = `missing-${randomUUID()}`;
+  let tempDir: string;
+  let provider: FilesystemBlobStorageProvider;
+  let restoreEnv: () => void;
+  let db: Awaited<ReturnType<typeof getDb>>;
+  let transactionError: unknown;
 
   beforeAll(async () => {
     await runDbMigrations();
   });
 
   beforeEach(async () => {
-    deleteCalls = [];
-    storeCalls = 0;
-    const db = await getDb();
-    await db.insert(evalsTable).values({ id: evalId, config: {}, results: {} });
+    tempDir = createTempDir('promptfoo-blob-rollback-');
+    restoreEnv = mockProcessEnv({ PROMPTFOO_CONFIG_DIR: tempDir });
+    provider = new FilesystemBlobStorageProvider({ basePath: path.join(tempDir, 'blobs') });
+    setBlobStorageProvider(provider);
+    db = await getDb();
+    await db.insert(evalsTable).values([
+      { id: firstEvalId, config: {}, results: {} },
+      { id: secondEvalId, config: {}, results: {} },
+    ]);
+    transactionError = undefined;
+    const transaction = db.transaction.bind(db);
+    vi.spyOn(db, 'transaction').mockImplementation((callback, config) =>
+      transaction(callback, config).catch((error: unknown) => {
+        transactionError = error;
+        throw error;
+      }),
+    );
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     resetBlobStorageProvider();
-    const db = await getDb();
-    await db.run(sql`DROP TRIGGER IF EXISTS fail_blob_reference`);
-    await db.delete(blobReferencesTable).where(eq(blobReferencesTable.evalId, evalId));
-    await db.delete(blobAssetsTable).where(eq(blobAssetsTable.hash, hash));
-    await db.delete(evalsTable).where(eq(evalsTable.id, evalId));
+    try {
+      await db.delete(blobReferencesTable).where(eq(blobReferencesTable.blobHash, hash));
+      await db.delete(blobAssetsTable).where(eq(blobAssetsTable.hash, hash));
+      await db.delete(evalsTable).where(inArray(evalsTable.id, [firstEvalId, secondEvalId]));
+    } finally {
+      restoreEnv();
+      removeTempDir(tempDir);
+    }
   });
 
-  function setStoreProvider(deduplicated: boolean, mimeType = 'image/png') {
-    setBlobStorageProvider({
-      providerId: 'test-stub',
-      store: async () => {
-        storeCalls += 1;
-        return {
-          deduplicated,
-          ref: {
-            hash,
-            mimeType,
-            provider: 'test-stub',
-            sizeBytes: 5,
-            uri: `promptfoo://blob/${hash}`,
-          },
-        };
-      },
-      getByHash: async () => ({
-        data: Buffer.from('bytes'),
-        metadata: {
-          createdAt: '2026-06-08T00:00:00.000Z',
-          key: hash,
-          mimeType,
-          provider: 'test-stub',
-          sizeBytes: 5,
-        },
-      }),
-      exists: async () => true,
-      deleteByHash: async (deletedHash) => {
-        deleteCalls.push(deletedHash);
-      },
-      getUrl: async () => null,
-    });
+  async function snapshotFiles() {
+    const filePath = path.join(tempDir, 'blobs', hash.slice(0, 2), hash.slice(2, 4), hash);
+    return {
+      bytes: await readFile(filePath),
+      metadata: await readFile(`${filePath}.meta.json`, 'utf8'),
+    };
   }
 
-  it('stores blobs for non-persisted evaluations without recording provenance', async () => {
-    setStoreProvider(true);
-
-    await expect(
-      storeBlob(Buffer.from('bytes'), 'image/png', { evalId: 'missing-eval' }),
-    ).resolves.toBeDefined();
-    expect(storeCalls).toBe(1);
-    expect(deleteCalls).toEqual([]);
-  });
-
-  it('does not disturb an existing reference when a later eval is not persisted', async () => {
-    setStoreProvider(false);
-
-    await expect(storeBlob(Buffer.from('bytes'), 'image/png', { evalId })).resolves.toBeDefined();
-    expect(storeCalls).toBe(1);
-
-    await expect(
-      storeBlob(Buffer.from('bytes'), 'image/png', { evalId: 'missing-eval' }),
-    ).resolves.toBeDefined();
-    expect(storeCalls).toBe(2);
-    expect(deleteCalls).toEqual([]);
-
-    const db = await getDb();
-    await expect(
-      db.select().from(blobReferencesTable).where(eq(blobReferencesTable.evalId, evalId)).get(),
-    ).resolves.toMatchObject({ blobHash: hash });
-  });
-
-  it.each([
-    { deduplicated: false, tracked: false, deleted: false },
-    { deduplicated: true, tracked: false, deleted: false },
-    { deduplicated: false, tracked: true, deleted: false },
-  ])(
-    'preserves bytes after a failed write because another writer may own them ($deduplicated, $tracked)',
-    async ({ deduplicated, tracked, deleted }) => {
-      setStoreProvider(deduplicated);
-      if (tracked) {
-        await storeBlob(Buffer.from('bytes'), 'image/png', { evalId });
-      }
-      const db = await getDb();
-      await db.run(sql`CREATE TRIGGER fail_blob_reference BEFORE INSERT ON blob_references
-      WHEN NEW.location = 'fail' BEGIN SELECT RAISE(ABORT, 'fixture reference failure'); END`);
-
-      await expect(
-        storeBlob(Buffer.from('bytes'), 'image/png', { evalId, location: 'fail' }),
-      ).rejects.toThrow();
-      expect(deleteCalls).toEqual(deleted ? [hash] : []);
-      expect(storeCalls).toBe(tracked ? 2 : 1);
-      const asset = await db
+  async function snapshotRows() {
+    return {
+      assets: await db.select().from(blobAssetsTable).where(eq(blobAssetsTable.hash, hash)),
+      references: await db
         .select()
-        .from(blobAssetsTable)
-        .where(eq(blobAssetsTable.hash, hash))
-        .get();
-      expect(Boolean(asset)).toBe(tracked);
-    },
-  );
+        .from(blobReferencesTable)
+        .where(eq(blobReferencesTable.blobHash, hash)),
+    };
+  }
 
-  it('downgrades unsafe provider metadata on deduplication and reads', async () => {
-    setStoreProvider(true, 'image/svg+xml');
+  async function expectOriginalPersistenceError(pending: Promise<unknown>) {
+    const error = await pending.then(
+      () => {
+        throw new Error('Expected the real blob reference transaction to reject');
+      },
+      (rejection: unknown) => rejection,
+    );
+    expect(transactionError).toBeDefined();
+    expect(error).toBe(transactionError);
+  }
 
-    const result = await storeBlob(Buffer.from('bytes'), 'application/octet-stream', { evalId });
-    expect(result.ref.mimeType).toBe('application/octet-stream');
-    await expect(getBlobByHash(hash)).resolves.toMatchObject({
-      metadata: { mimeType: 'application/octet-stream' },
+  it('preserves already shared files when a later reference transaction fails', async () => {
+    await storeBlob(data, mimeType, { evalId: firstEvalId, location: 'import' });
+    const files = await snapshotFiles();
+    const rows = await snapshotRows();
+
+    await expectOriginalPersistenceError(storeBlob(data, mimeType, { evalId: missingEvalId }));
+
+    expect(await snapshotRows()).toEqual(rows);
+    expect(await provider.exists(hash)).toBe(true);
+    expect(await snapshotFiles()).toEqual(files);
+    expect((await getShareAuthorizedBlob(hash, firstEvalId))?.data).toEqual(data);
+    await expect(isBlobAllowedForShare(hash, missingEvalId)).resolves.toBe(false);
+  });
+
+  it('preserves newly created files adopted before their first transaction fails', async () => {
+    const created = createDeferred<boolean>();
+    const release = createDeferred<void>();
+    let firstStore = true;
+    const gatedProvider: BlobStorageProvider = {
+      providerId: provider.providerId,
+      store: async (bytes, type) => {
+        const pause = firstStore;
+        firstStore = false;
+        try {
+          const result = await provider.store(bytes, type);
+          if (pause) {
+            created.resolve(result.deduplicated);
+            await release.promise;
+          }
+          return result;
+        } catch (error) {
+          if (pause) {
+            created.reject(error);
+          }
+          throw error;
+        }
+      },
+      getByHash: (key) => provider.getByHash(key),
+      exists: (key) => provider.exists(key),
+      deleteByHash: (key) => provider.deleteByHash(key),
+      getUrl: (key, expires) => provider.getUrl(key, expires),
+    };
+    setBlobStorageProvider(gatedProvider);
+    // Attach the rejection observer before starting the other store.
+    const failingStore = expectOriginalPersistenceError(
+      storeBlob(data, mimeType, { evalId: missingEvalId }),
+    );
+    try {
+      expect(await created.promise).toBe(false);
+      const adopted = await storeBlob(data, mimeType, {
+        evalId: secondEvalId,
+        location: 'import',
+      });
+      expect(adopted.deduplicated).toBe(true);
+      const files = await snapshotFiles();
+      const rows = await snapshotRows();
+      expect(rows.references).toHaveLength(1);
+      expect(rows.references[0].evalId).toBe(secondEvalId);
+
+      release.resolve();
+      await failingStore;
+
+      expect(await snapshotRows()).toEqual(rows);
+      expect(await provider.exists(hash)).toBe(true);
+      expect(await snapshotFiles()).toEqual(files);
+      expect((await getShareAuthorizedBlob(hash, secondEvalId))?.data).toEqual(data);
+    } finally {
+      release.resolve();
+      await failingStore;
+    }
+  });
+
+  it('retains unreferenced files after failure and permits a later valid adoption', async () => {
+    await expectOriginalPersistenceError(storeBlob(data, mimeType, { evalId: missingEvalId }));
+
+    expect(await snapshotRows()).toEqual({ assets: [], references: [] });
+    expect(await provider.exists(hash)).toBe(true);
+    const files = await snapshotFiles();
+    await expect(getShareAuthorizedBlob(hash, firstEvalId)).resolves.toBeNull();
+
+    await expect(
+      recordBlobReference(hash, { evalId: firstEvalId, location: 'import' }),
+    ).resolves.toBeUndefined();
+    expect(await snapshotRows()).toEqual({ assets: [], references: [] });
+    expect(await snapshotFiles()).toEqual(files);
+    await expect(getShareAuthorizedBlob(hash, firstEvalId)).resolves.toBeNull();
+
+    const adopted = await storeBlob(data, mimeType, { evalId: firstEvalId, location: 'import' });
+
+    expect(adopted.deduplicated).toBe(true);
+    expect(await snapshotFiles()).toEqual(files);
+    const rows = await snapshotRows();
+    expect(rows.assets).toHaveLength(1);
+    expect(rows.references).toHaveLength(1);
+    expect((await getShareAuthorizedBlob(hash, firstEvalId))?.data).toEqual(data);
+  });
+
+  it('keeps the remaining eval authorized when one shared reference cascades away', async () => {
+    const first = await storeBlob(data, mimeType, { evalId: firstEvalId, location: 'import' });
+    const second = await storeBlob(data, mimeType, { evalId: secondEvalId, location: 'import' });
+    const files = await snapshotFiles();
+    expect(first.deduplicated).toBe(false);
+    expect(second.deduplicated).toBe(true);
+    expect((await snapshotRows()).assets).toHaveLength(1);
+    expect((await snapshotRows()).references).toHaveLength(2);
+
+    await db.delete(evalsTable).where(eq(evalsTable.id, firstEvalId));
+
+    expect((await snapshotRows()).references).toHaveLength(1);
+    await expect(getShareAuthorizedBlob(hash, firstEvalId)).resolves.toBeNull();
+    expect((await getShareAuthorizedBlob(hash, secondEvalId))?.data).toEqual(data);
+    expect(await snapshotFiles()).toEqual(files);
+  });
+
+  it('preserves a registered MIME type when another caller deduplicates the bytes', async () => {
+    await storeBlob(data, 'image/png', { evalId: firstEvalId, location: 'import' });
+    const files = await snapshotFiles();
+
+    const stored = await storeBlob(data, 'audio/wav', { evalId: secondEvalId, location: 'import' });
+
+    expect(stored.deduplicated).toBe(true);
+    expect(stored.ref.mimeType).toBe('image/png');
+    expect((await snapshotRows()).assets[0].mimeType).toBe('image/png');
+    expect((await getShareAuthorizedBlob(hash, secondEvalId))?.metadata.mimeType).toBe('image/png');
+    expect(await snapshotFiles()).toEqual(files);
+  });
+
+  it('uses provider metadata when registering newly created bytes', async () => {
+    const store = provider.store.bind(provider);
+    vi.spyOn(provider, 'store').mockImplementation((bytes) => store(bytes, 'image/png'));
+
+    const stored = await storeBlob(data, 'application/octet-stream', {
+      evalId: firstEvalId,
+      location: 'import',
     });
 
-    const db = await getDb();
+    expect(stored.deduplicated).toBe(false);
+    expect(stored.ref.mimeType).toBe('image/png');
+    expect((await snapshotRows()).assets[0].mimeType).toBe('image/png');
+  });
+
+  it('preserves asset-first import storage without granting unclassified access', async () => {
+    const stored = await storeBlob(data, mimeType);
+    const files = await snapshotFiles();
+    expect(stored.ref.hash).toBe(hash);
+    expect((await snapshotRows()).assets).toHaveLength(1);
+    expect((await snapshotRows()).references).toHaveLength(0);
+    await expect(getShareAuthorizedBlob(hash, firstEvalId)).resolves.toBeNull();
+
+    // A registered asset does not make an invalid eval association safe to ignore.
     await expect(
-      db.select().from(blobAssetsTable).where(eq(blobAssetsTable.hash, hash)).get(),
-    ).resolves.toMatchObject({ mimeType: 'application/octet-stream' });
+      recordBlobReference(hash, { evalId: missingEvalId, location: 'import' }),
+    ).rejects.toThrow();
+    expect((await snapshotRows()).references).toHaveLength(0);
+
+    await recordBlobReference(hash, { evalId: firstEvalId, location: 'response.output' });
+    await expect(getShareAuthorizedBlob(hash, firstEvalId)).resolves.toBeNull();
+    await recordBlobReference(hash, { evalId: firstEvalId, location: 'import' });
+
+    expect((await snapshotRows()).references).toHaveLength(1);
+    expect((await getShareAuthorizedBlob(hash, firstEvalId))?.data).toEqual(data);
+    await expect(getShareAuthorizedBlob(hash, secondEvalId)).resolves.toBeNull();
+    expect(await snapshotFiles()).toEqual(files);
   });
 });

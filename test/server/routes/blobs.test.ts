@@ -533,7 +533,7 @@ describe('Blobs Routes', () => {
       expect(mockedGetBlobByHash).toHaveBeenCalledWith(validHash);
     });
 
-    it('should use blob metadata MIME type when available', async () => {
+    it('should use registered asset MIME type when blob metadata differs', async () => {
       setupDbWithAssetAndReference(
         { hash: validHash, mimeType: 'image/png', sizeBytes: 1024, provider: 'local' },
         { evalId: 'eval-789' },
@@ -546,7 +546,7 @@ describe('Blobs Routes', () => {
       const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
 
       expect(response.status).toBe(200);
-      expect(response.header['content-type']).toBe('image/jpeg');
+      expect(response.header['content-type']).toBe('image/png');
       expect(response.header['cache-control']).toBe('public, max-age=31536000, immutable');
       expect(response.header['accept-ranges']).toBe('none');
       expect(mockedGetBlobUrl).not.toHaveBeenCalled();
