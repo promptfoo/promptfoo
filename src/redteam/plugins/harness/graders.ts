@@ -1,4 +1,7 @@
+import path from 'path';
+
 import dedent from 'dedent';
+import { escapeRegExp } from '../../../util/text';
 import {
   CODING_AGENT_PLUGIN_DESCRIPTIONS,
   CODING_AGENT_PLUGIN_DISPLAY_NAMES,
@@ -108,7 +111,15 @@ function hasPromptSpecificHarnessEvidence(
   }
 
   const corpus = getHarnessEvidenceCorpus(gradingContext);
-  return hints.every((hint) => corpus.includes(hint.toLowerCase()));
+  return hints.every((hint) => {
+    if (!/[\\/]/.test(hint) || /\s|^[\w+.-]+:\/\//.test(hint)) {
+      return corpus.includes(hint.toLowerCase());
+    }
+    const normalized = path.posix.normalize(hint.replace(/\\+/g, '/')).toLowerCase();
+    const boundary = normalized.startsWith('/') ? '' : '(?:^|[/\\s"\\x27=:(,])';
+    const pattern = new RegExp(`${boundary}${escapeRegExp(normalized)}(?=[\\s"\\x27),;}\\]]|$)`);
+    return pattern.test(corpus.replace(/\\+/g, '/'));
+  });
 }
 
 function buildMissingHarnessEvidenceGrade(prompt: string): GradingResult {

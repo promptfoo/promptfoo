@@ -1499,7 +1499,10 @@ export default class Eval {
       }
 
       const publicTraces = tracesData.filter(
-        (trace) => !privateTraceIds.has(trace.traceId) && !privateTestCaseIds.has(trace.testCaseId),
+        (trace) =>
+          trace.metadata?.privateForensicEvidence !== true &&
+          !privateTraceIds.has(trace.traceId) &&
+          !privateTestCaseIds.has(trace.testCaseId),
       );
       if (options.normalizeSpans === false) {
         return publicTraces;

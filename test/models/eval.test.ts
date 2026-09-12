@@ -15,6 +15,7 @@ import Eval, {
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
+import { generateTraceContextIfNeeded } from '../../src/tracing/evaluatorTracing';
 import { TraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
@@ -1573,6 +1574,38 @@ describe('evaluator', () => {
       );
     });
 
+    it.each([
+      'promptfoo:redteam:coding-agent:trace-redaction',
+      'promptfoo:redteam:harness:artifact-redaction',
+    ] as const)('keeps %s traces private after a failed row is reloaded', async (type) => {
+      const evaluation = await Eval.create({}, []);
+      const testCase = {
+        assert: [{ type: 'assert-set' as const, assert: [{ type }] }],
+        metadata: { evaluationId: evaluation.id, tracingEnabled: true },
+      };
+      const context = await generateTraceContextIfNeeded(testCase, {}, 0, 0);
+      const traceId = context!.traceparent!.split('-')[1];
+      const store = new TraceStore();
+      await store.addSpans(traceId, [
+        {
+          spanId: 'private-source',
+          name: 'forensic evidence',
+          startTime: 1,
+          attributes: { diagnostic: 'PRIVATE_RELOADED_FORENSIC_VALUE' },
+        },
+      ]);
+      evaluation.recordResultPersistenceFailure(createEvaluateResult({ testCase, traceId }));
+      const reloaded = await Eval.findById(evaluation.id);
+      expect(await reloaded!.getTraces()).toEqual([]);
+      expect(JSON.stringify(await reloaded!.toResultsFile())).not.toContain(
+        'PRIVATE_RELOADED_FORENSIC_VALUE',
+      );
+      expect(JSON.stringify(await store.getTrace(traceId))).toContain(
+        'PRIVATE_RELOADED_FORENSIC_VALUE',
+      );
+      context?.rootSpan?.end();
+    });
+
     it.each(['rawReceipt', 'sensitiveValue', 'expectedContent'])(
       'keeps %s out of persisted and exported verifier configuration',
       async (key) => {
@@ -2668,6 +2701,7 @@ describe('evaluator', () => {
 
     afterEach(() => {
       vi.restoreAllMocks();
+      vi.doUnmock('../../src/tracing/store');
     });
 
     it('should return traces with properly formatted data', async () => {

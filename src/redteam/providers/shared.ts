@@ -35,7 +35,11 @@ import {
   accumulateGradingResponseTokenUsage,
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { requiresTraceRedaction, sanitizeRedactionResult } from '../../util/traceRedaction';
+import {
+  hasRedactionMedia,
+  requiresTraceRedaction,
+  sanitizeRedactionResult,
+} from '../../util/traceRedaction';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -907,13 +911,15 @@ export async function externalizeResponseForRedteamHistory<T extends ProviderRes
 ): Promise<T> {
   const testCase = context?.test as AtomicTestCase | undefined;
   if (requiresTraceRedaction(testCase?.assert)) {
+    if (!hasRedactionMedia(response)) {
+      // The deterministic grader still needs the text before result persistence.
+      return response.raw === undefined ? response : { ...response, raw: undefined };
+    }
     const sanitized = sanitizeRedactionResult({ response, testCase }).response;
-    return sanitized.metadata?.redactionMediaOmitted === true
-      ? {
-          ...sanitized,
-          error: 'Image and audio redaction cannot be verified; provide a text-only report.',
-        }
-      : sanitized;
+    return {
+      ...sanitized,
+      error: 'Image and audio redaction cannot be verified; provide a text-only report.',
+    };
   }
   if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
     return response;

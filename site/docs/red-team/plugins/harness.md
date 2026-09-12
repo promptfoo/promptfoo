@@ -49,3 +49,5 @@ These pages capture additional risk lanes that should be promoted to real plugin
 A useful preflight produces one safe pass, one controlled failure, a trace id, a redacted report, a trap log, a replay command, a version/policy manifest, cleanup evidence, and a canary scan of every persisted artifact.
 
 After preflight passes, add [`coding-agent:core`](/docs/red-team/plugins/coding-agent) or [`coding-agent:codex`](/docs/red-team/plugins/coding-agent).
+
+Harness evidence checks normalize relative artifact paths and Windows separators before matching recorded paths. They retain the full requested relative path, so a different directory or filename suffix does not satisfy the check.

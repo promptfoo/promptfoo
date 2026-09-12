@@ -30,11 +30,17 @@ describe('EvalResult', () => {
     'coding-agent:trace-redaction',
     'harness:artifact-redaction',
     'coding-agent:mcp-resource-injection',
+    'coding-agent:connector-parameter-exfil',
   ] as const)('redacts verifier inputs in public %s result copies', async (pluginId) => {
     const secret = 'protected fixture receipt';
     const value = {
       rawReceipt: secret,
       mcpResource: { sourceOnlyValue: secret, sourceOnlyValues: [secret] },
+      connectorProtectedValue: secret,
+      connectorProtectedValues: [secret],
+      protectedConnectorValue: secret,
+      protectedConnectorValues: [secret],
+      connectorParameterExfil: { protectedValue: secret, protectedValues: [secret] },
       sensitiveValues: [secret],
       protectedFiles: [{ path: 'protected.txt', expectedContent: secret }],
       rawReceiptPath: 'fixtures/receipt.txt',
@@ -75,6 +81,35 @@ describe('EvalResult', () => {
     }
     expect(JSON.stringify(row)).toContain(secret);
   });
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'omits leaked text and provider metadata from public %s result copies',
+    async (pluginId) => {
+      const secret = 'PRIVATE_TEXT_RECEIPT_8964';
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        response: { output: secret, metadata: { diagnostic: secret }, cost: 0.01 },
+        metadata: { diagnostic: secret, custom: 'retained' },
+        testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+        gradingResult: { pass: false, score: 0, reason: 'Protected receipt found.' },
+      });
+      const artifact = sanitizeResultForJsonlArtifact(row);
+      expect(JSON.stringify(artifact)).not.toContain(secret);
+      expect(artifact.response).toMatchObject({
+        cost: 0.01,
+        metadata: { redactionContentOmitted: true },
+      });
+      expect(artifact.metadata?.custom).toBe('retained');
+      const saved = await EvalResult.createFromEvaluateResult('text-copy-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult([row], 'text-bulk-' + pluginId);
+      for (const result of [saved, bulk]) {
+        const persisted = await EvalResult.findById(result.id);
+        expect(JSON.stringify(persisted?.toEvaluateResult())).not.toContain(secret);
+        expect(persisted?.gradingResult?.reason).toBe('Protected receipt found.');
+      }
+      expect(row.response?.output).toBe(secret);
+    },
+  );
 
   it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
     'omits image-bearing %s responses and their metadata echoes from result copies',
@@ -208,7 +243,7 @@ describe('EvalResult', () => {
     });
     const artifact = sanitizeResultForJsonlArtifact(row);
     expect(artifact.response?.raw).toBeUndefined();
-    expect(artifact.response?.output).toBe('Clean report');
+    expect(artifact.response?.metadata?.redactionContentOmitted).toBe(true);
     const saved = await EvalResult.createFromEvaluateResult('private-raw-copy', row, {
       persist: false,
     });

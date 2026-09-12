@@ -61,7 +61,7 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
   return false;
 }
 
-/** Keep raw provider data, unverified media, and response echoes out of public copies. */
+/** Keep privacy-check response bodies and their echoes out of public result copies. */
 export function sanitizeRedactionResult<T extends object>(input: T): T {
   const result = input as T & {
     testCase?: AtomicTestCase;
@@ -72,11 +72,7 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
   if (!response || !requiresTraceRedaction(result.testCase?.assert)) {
     return input;
   }
-  if (!hasRedactionMedia(response)) {
-    return response.raw === undefined
-      ? input
-      : { ...input, response: { ...response, raw: undefined } };
-  }
+  const mediaOmitted = hasRedactionMedia(response);
   const metadata = { ...result.metadata };
   for (const key of Object.keys(response.metadata ?? {})) {
     delete metadata[key];
@@ -85,13 +81,15 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     ...input,
     metadata,
     response: {
-      output: '[Media response omitted: image or audio redaction could not be verified.]',
+      output: mediaOmitted
+        ? '[Media response omitted: image or audio redaction could not be verified.]'
+        : '[Response omitted for trace/artifact redaction.]',
       cached: response.cached,
       cost: response.cost,
       incurredCost: response.incurredCost,
       latencyMs: response.latencyMs,
       tokenUsage: response.tokenUsage,
-      metadata: { redactionMediaOmitted: true },
+      metadata: mediaOmitted ? { redactionMediaOmitted: true } : { redactionContentOmitted: true },
     },
   };
 }
