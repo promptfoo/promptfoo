@@ -172,6 +172,36 @@ describe('EvalResult', () => {
     expect(result.prompt.config).toBe('https://***:***@example.test/path?api_key=%5BREDACTED%5D');
   });
 
+  it('uses intrinsic URL serialization for root prompt configs', () => {
+    const url = new URL('https://user:secret@example.test/path?api_key=secret');
+    Object.defineProperty(url, 'toString', {
+      value() {
+        throw new Error('custom URL serializer ran');
+      },
+    });
+
+    const result = sanitizeResultForJsonlArtifact({
+      prompt: { raw: 'prompt', label: 'prompt', config: url as any },
+    });
+
+    expect(result.prompt.config).toBe('https://***:***@example.test/path?api_key=%5BREDACTED%5D');
+  });
+
+  it('does not invoke stateful Date serializers', () => {
+    const date = new Date('2026-01-01T00:00:00Z');
+    Object.defineProperty(date, 'toISOString', {
+      get() {
+        throw new Error('custom Date serializer ran');
+      },
+    });
+
+    const result = sanitizeResultForJsonlArtifact({
+      prompt: { raw: 'prompt', label: 'prompt', config: date as any },
+    });
+
+    expect(result.prompt.config).toBe('[REDACTED]');
+  });
+
   it('preserves malformed legacy assertion sets without throwing', () => {
     const result = sanitizeResultForJsonlArtifact({
       gradingResult: {
@@ -195,6 +225,35 @@ describe('EvalResult', () => {
 
     expect(result.testCase.vars).toEqual({ prompt: 'fixture input' });
     expect(result.testCase.assert).toEqual([null]);
+  });
+
+  it('preserves malformed legacy assertion collections without iterating them', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: { vars: {}, assert: { type: 'contains' } as any },
+    });
+
+    expect(result.testCase.assert).toEqual({ type: 'contains' });
+  });
+
+  it('projects assertion providers before generic JSON serialization', () => {
+    const provider = {
+      id: 'fixture',
+      config: { apiKey: 'fixture-secret' },
+      toJSON() {
+        throw new Error('custom provider serializer ran');
+      },
+    };
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        assert: [{ type: 'llm-rubric', provider } as any],
+      },
+    });
+
+    expect(result.testCase.assert?.[0].provider).toEqual({
+      id: 'fixture',
+      config: { apiKey: '[REDACTED]' },
+    });
   });
 
   it('reads test-case accessors once while preserving their values', () => {
@@ -1276,7 +1335,10 @@ describe('EvalResult', () => {
         );
 
         expect(JSON.stringify(result.testCase)).not.toContain('sk-ant-api03-THROWING-GETTER');
-        expect(result.testCase.options).toBeUndefined();
+        expect(result.testCase.options?.provider).toEqual({
+          id: 'anthropic:messages:claude',
+          config: {},
+        });
         expect(JSON.stringify(debugSpy.mock.calls)).not.toContain(errorSecret);
       });
 

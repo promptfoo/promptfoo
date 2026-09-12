@@ -121,6 +121,26 @@ export function sanitizeProvider(
   return { id: 'unknown' };
 }
 
+// Test and assertion provider slots also accept string ids and provider maps.
+// Preserve those public shapes while projecting concrete provider objects before
+// generic serialization can invoke an untrusted toJSON hook.
+function sanitizeProviderReference(provider: unknown): unknown {
+  if (typeof provider === 'string') {
+    return provider;
+  }
+  if (!provider || typeof provider !== 'object') {
+    return provider;
+  }
+  if ('id' in provider || 'label' in provider || 'config' in provider) {
+    return sanitizeProvider(provider as ApiProvider | ProviderOptions);
+  }
+  return Object.fromEntries(
+    Object.entries(Object.getOwnPropertyDescriptors(provider))
+      .filter(([, descriptor]) => 'value' in descriptor)
+      .map(([key, descriptor]) => [key, sanitizeProviderReference(descriptor.value)]),
+  );
+}
+
 /**
  * Sanitize an object for database storage by removing circular references
  * and non-serializable values (functions, Timeout objects, etc.).
@@ -186,21 +206,24 @@ function sanitizeAssertionForDb(assertion: Assertion | AssertionSet): Assertion 
   if (!assertion || typeof assertion !== 'object') {
     return sanitizeForDbWithSecrets(assertion) as Assertion;
   }
-  if ('assert' in assertion) {
-    if (Array.isArray(assertion.assert)) {
+  const captured = { ...assertion };
+  if ('assert' in captured) {
+    if (Array.isArray(captured.assert)) {
       return {
-        ...sanitizeForDbWithSecrets(assertion),
-        assert: assertion.assert.map(sanitizeAssertionForDb) as Assertion[],
+        ...sanitizeForDbWithSecrets(captured),
+        assert: captured.assert.map(sanitizeAssertionForDb) as Assertion[],
       };
     }
-    return sanitizeForDbWithSecrets(assertion);
+    return sanitizeForDbWithSecrets(captured);
   }
+  const { provider, ...withoutProvider } = captured;
   return {
-    ...sanitizeForDbWithSecrets(assertion),
-    value: sanitizeForDbWithSecrets(assertion.value, false),
-    ...(assertion.rubricPrompt !== undefined && {
-      rubricPrompt: sanitizeForDbWithSecrets(assertion.rubricPrompt, false),
+    ...sanitizeForDbWithSecrets(withoutProvider),
+    value: sanitizeForDbWithSecrets(captured.value, false),
+    ...(captured.rubricPrompt !== undefined && {
+      rubricPrompt: sanitizeForDbWithSecrets(captured.rubricPrompt, false),
     }),
+    ...(provider && { provider: sanitizeProviderReference(provider) }),
   };
 }
 
@@ -214,9 +237,13 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
     const captured = { ...testCase };
     const options = captured.options && { ...captured.options };
     if (options) {
-      captured.options = options;
+      const { provider: _provider, ...withoutProvider } = options;
+      captured.options = withoutProvider;
     }
     const sanitized = sanitizeForDbWithSecrets(captured);
+    if (options?.provider && sanitized.options) {
+      sanitized.options.provider = sanitizeProviderReference(options.provider);
+    }
     if (captured.vars) {
       sanitized.vars = sanitizeForDbWithSecrets(captured.vars, false);
     }
@@ -240,7 +267,7 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
         };
       }
     }
-    if (captured.assert) {
+    if (Array.isArray(captured.assert)) {
       sanitized.assert = captured.assert.map(sanitizeAssertionForDb);
     }
     return sanitized;

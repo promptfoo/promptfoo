@@ -1126,8 +1126,21 @@ function hasUnsafeJsonSerializer(value: unknown): boolean {
     (value instanceof URL && value.toJSON === URL.prototype.toJSON) ||
     (value instanceof Date &&
       value.toJSON === Date.prototype.toJSON &&
+      !hasPropertyGetter(value, 'toISOString') &&
       value.toISOString === Date.prototype.toISOString)
   );
+}
+
+function hasPropertyGetter(value: object, key: string): boolean {
+  let target: object | null = value;
+  while (target) {
+    const descriptor = Object.getOwnPropertyDescriptor(target, key);
+    if (descriptor) {
+      return Boolean(descriptor.get);
+    }
+    target = Object.getPrototypeOf(target);
+  }
+  return false;
 }
 
 /**
@@ -1175,7 +1188,7 @@ export function sanitizeObject(
       return obj;
     }
     if (obj instanceof URL && obj.toJSON === URL.prototype.toJSON) {
-      return sanitizeUrl(obj.toString());
+      return sanitizeUrl(URL.prototype.toString.call(obj));
     }
     if (hasUnsafeJsonSerializer(obj)) {
       return REDACTED;
@@ -1192,7 +1205,7 @@ export function sanitizeObject(
         const originalValue = descriptor?.value;
         const value =
           originalValue instanceof URL && originalValue.toJSON === URL.prototype.toJSON
-            ? sanitizeUrl(val as string)
+            ? sanitizeUrl(URL.prototype.toString.call(originalValue))
             : originalValue instanceof Error
               ? {
                   name: redactErrorMessages ? REDACTED : originalValue.name,
