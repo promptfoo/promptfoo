@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { mockWindowLocation } from '@app/tests/browserMocks';
 import { callApi } from '@app/utils/api';
-import { ResultFailureReason } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
