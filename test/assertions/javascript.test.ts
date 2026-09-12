@@ -288,6 +288,30 @@ describe('JavaScript file references', () => {
     vi.resetAllMocks();
   });
 
+  it.each([
+    ['file://C:/callbacks/assert.cjs', 'C:/callbacks/assert.cjs', undefined],
+    ['file://C:/callbacks/assert.cjs:check', 'C:/callbacks/assert.cjs', 'check'],
+    ['file:///callbacks/12:00/assert.cjs', '/callbacks/12:00/assert.cjs', undefined],
+    ['file:///callbacks/12:00/assert.cjs:check', '/callbacks/12:00/assert.cjs', 'check'],
+  ])('preserves path colons in %s', async (reference, filePath, functionName) => {
+    const callback = vi.fn(() => true);
+    vi.mocked(path.resolve).mockReturnValue('/resolved/assert.cjs');
+    vi.mocked(path.extname).mockImplementation((value) => (value.endsWith('.cjs') ? '.cjs' : ''));
+    vi.mocked(importModule).mockResolvedValue(
+      functionName ? { [functionName]: callback } : callback,
+    );
+
+    const result = await runAssertion({
+      assertion: { type: 'javascript', value: reference },
+      test: {},
+      providerResponse: { output: 'ok' },
+    });
+
+    expect(path.resolve).toHaveBeenCalledWith('/base/path', filePath);
+    expect(importModule).toHaveBeenCalledWith('/resolved/assert.cjs', functionName);
+    expect(result.pass).toBe(true);
+  });
+
   it('should handle JavaScript file reference with function name', async () => {
     const assertion: Assertion = {
       type: 'javascript',

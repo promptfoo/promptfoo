@@ -120,7 +120,10 @@ describe('doEval environment files', () => {
           );
           const exported = await evaluation.toResultsFile();
           expect(JSON.stringify(exported)).not.toContain('private-' + value);
-          expect(exported.results.results[0].success).toBe(true);
+          const row = exported.results.results[0];
+          expect(row.error).toBeUndefined();
+          expect(row.response?.output).toBe(value);
+          expect(row.success).toBe(true);
           return value;
         }),
       );
