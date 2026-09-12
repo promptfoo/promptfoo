@@ -1215,10 +1215,7 @@ export async function doEval(
         if (cliTests) {
           // resolveConfigs loads `--tests` with no base path, so it resolves against the
           // working directory rather than the directory holding the config file.
-          // `--vars` keeps the config's base path.
-          varPaths.push(
-            ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath),
-          );
+          varPaths.push(...resolveTestsWatchPaths(cliTests, process.cwd()));
         } else {
           varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
           for (const source of testSources ?? []) {

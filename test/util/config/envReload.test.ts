@@ -14,6 +14,7 @@ import Eval from '../../../src/models/eval';
 import { evaluate } from '../../../src/node/evaluate';
 import { nodeEvaluatorRuntime } from '../../../src/node/evaluatorRuntime';
 import { loadApiProvider, loadApiProviders, resolveProvider } from '../../../src/providers/index';
+import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { isApiProvider } from '../../../src/types/providers';
 import { readAzureBlobText } from '../../../src/util/azureBlob';
 import { combineConfigs, readConfig, resolveConfigs } from '../../../src/util/config/load';
@@ -456,6 +457,70 @@ describe('suite environment loading', () => {
     await expect(resolveConfigs({ config: [configPath] }, {})).rejects.toBeInstanceOf(
       AssertValidationError,
     );
+  });
+
+  it.each(['inline', 'jsonl', 'generator'] as const)(
+    'rejects misspelled payload fields in a described %s row',
+    async (source) => {
+      const row = {
+        description: 'checks output',
+        asssert: [{ type: 'equals', value: 'never checked' }],
+      };
+      const configPath = writeConfig(
+        'typo-row',
+        source === 'inline'
+          ? { tests: [row] }
+          : { tests: source === 'jsonl' ? 'cases.jsonl' : 'cases.cjs' },
+      );
+      const directory = path.dirname(configPath);
+      fs.writeFileSync(path.join(directory, 'cases.jsonl'), JSON.stringify(row));
+      fs.writeFileSync(
+        path.join(directory, 'cases.cjs'),
+        `module.exports = () => [${JSON.stringify(row)}];`,
+      );
+      await expect(resolveConfigs({ config: [configPath] }, {})).rejects.toThrow(
+        'Test case must contain',
+      );
+    },
+  );
+
+  it('retains configured grader selection from an external defaultTest', async () => {
+    const configPath = writeConfig('default-grader', { defaultTest: 'file://defaults.yaml' });
+    fs.writeFileSync(
+      path.join(path.dirname(configPath), 'defaults.yaml'),
+      'options:\n  provider: openai:chat:configured-judge',
+    );
+    redteamProviderManager.clearProvider();
+    try {
+      await resolveConfigs({ config: [configPath] }, {});
+      const selection = await redteamProviderManager.getProviderSelection();
+      expect(selection.source).toBe('explicit');
+      expect(selection.provider.id()).toBe('openai:configured-judge');
+    } finally {
+      redteamProviderManager.clearProvider();
+    }
+  });
+
+  it('does not load config test sources replaced by --assertions', async () => {
+    const configPath = writeConfig('assertion-override', { tests: ['file://ignored.cjs'] });
+    fs.writeFileSync(
+      path.join(path.dirname(configPath), 'ignored.cjs'),
+      "throw new Error('Ignored source was executed');",
+    );
+    const assertions = path.join(tempDir, 'assertions.yaml');
+    fs.writeFileSync(assertions, '- type: contains\n  value: selected');
+    fs.writeFileSync(path.join(tempDir, 'outputs.json'), JSON.stringify(['selected output']));
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
+    try {
+      const { testSuite, testSources } = await resolveConfigs(
+        { config: [configPath], assertions, modelOutputs: 'outputs.json' },
+        {},
+      );
+      expect(testSuite.tests?.map((test) => test.vars)).toEqual([{ output: 'selected output' }]);
+      expect(testSources).toEqual([]);
+    } finally {
+      cwd.mockRestore();
+    }
   });
 
   it('accepts a description-only generator row', async () => {

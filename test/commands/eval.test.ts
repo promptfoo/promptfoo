@@ -46,7 +46,7 @@ import {
   getEvalConfigFromCloud,
 } from '../../src/util/cloud';
 import * as defaultConfigModule from '../../src/util/config/default';
-import { ConfigResolutionError, maybeReadConfig, resolveConfigs } from '../../src/util/config/load';
+import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
@@ -123,7 +123,6 @@ vi.mock('chokidar', () => ({
 vi.mock('../../src/util/config/load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/config/load')>()),
   resolveConfigs: vi.fn(),
-  maybeReadConfig: vi.fn(),
 }));
 vi.mock('../../src/util/index', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/index')>()),
@@ -195,7 +194,6 @@ describe('evalCommand', () => {
     chokidarMocks.watch.mockReset().mockReturnValue(chokidarMocks.watcher);
     vi.mocked(globSync).mockReset().mockReturnValue([]);
     vi.mocked(readFileSync).mockReset();
-    vi.mocked(maybeReadConfig).mockReset().mockResolvedValue(undefined);
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);
     vi.mocked(getEvalConfigFromCloud).mockReset();
@@ -747,7 +745,7 @@ describe('evalCommand', () => {
       expect(watched).toContain(path.resolve(watchBase, 'vars.csv'));
     });
 
-    it('recovers a generator object that combineConfigs already expanded', async () => {
+    it('watches retained generator sources', async () => {
       const watched = await watchedPathsFor(
         [{ vars: { question: 'generated' } }] as UnifiedConfig['tests'],
         { path: 'file://gen.py:make_tests' } as unknown as UnifiedConfig['tests'],
@@ -763,29 +761,7 @@ describe('evalCommand', () => {
       expect(watched).toContain(path.resolve(watchBase, 'vars.csv'));
     });
 
-    it('watches command-line tests relative to the working directory', async () => {
-      // resolveConfigs loads cmdObj.tests with no base path, so it resolves against
-      // cwd rather than the directory holding the config file.
-      const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
-      vi.mocked(resolveConfigs).mockResolvedValue({
-        config,
-        testSuite: { prompts: [], providers: [] } as TestSuite,
-        basePath: watchBase,
-      });
-      vi.mocked(evaluate).mockImplementationOnce(
-        async (_testSuite, evalRecord) => evalRecord as Eval,
-      );
-      await doEval(
-        { watch: true, write: false, tests: 'file://cases.csv' },
-        config,
-        defaultConfigPath,
-        {},
-      );
-      const lastCall = chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]] | undefined;
-      expect(lastCall?.[0] ?? []).toContain(path.resolve(process.cwd(), 'cases.csv'));
-    });
-
-    it('does not re-read an executable config, which would run it twice', async () => {
+    it('watches sources returned by resolveConfigs for a JS config', async () => {
       const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
       vi.mocked(resolveConfigs).mockResolvedValue({
         config,
@@ -793,7 +769,6 @@ describe('evalCommand', () => {
         basePath: watchBase,
         testSources: [{ tests: ['file://cases.yaml'], basePath: watchBase }],
       });
-      vi.mocked(globSync).mockImplementation((pattern) => [String(pattern)]);
       vi.mocked(evaluate).mockImplementationOnce(
         async (_testSuite, evalRecord) => evalRecord as Eval,
       );
@@ -805,7 +780,6 @@ describe('evalCommand', () => {
         {},
       );
 
-      expect(maybeReadConfig).not.toHaveBeenCalled();
       expect(chokidarMocks.watch).toHaveBeenCalledWith(
         expect.arrayContaining([path.resolve(watchBase, 'cases.yaml')]),
         expect.anything(),
@@ -836,69 +810,32 @@ describe('evalCommand', () => {
       );
     });
 
-    it('does not recover config test sources when --tests overrides them', async () => {
-      // resolveConfigs() uses cmdObj.tests in place of the config's own tests, so
-      // watching the config's test sources would rerun the evaluation, and any paid
-      // provider calls with it, on an edit to a file that is not part of the run.
-      const config = { prompts: [], providers: [], tests: [] } as UnifiedConfig;
-      vi.mocked(resolveConfigs).mockResolvedValue({
-        config,
-        testSuite: { prompts: [], providers: [] } as TestSuite,
-        basePath: watchBase,
-      });
-      vi.mocked(evaluate).mockImplementationOnce(
-        async (_testSuite, evalRecord) => evalRecord as Eval,
-      );
-
-      await doEval(
-        { watch: true, write: false, tests: 'file://cli-cases.csv' },
-        config,
-        defaultConfigPath,
-        {},
-      );
-
-      expect(maybeReadConfig).not.toHaveBeenCalled();
-      const lastCall = chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]] | undefined;
-      expect(lastCall?.[0] ?? []).toContain(path.resolve(process.cwd(), 'cli-cases.csv'));
-    });
-
-    it('does not recover config test sources when --vars overrides them', async () => {
-      // `--vars` is a documented alias for `--tests` and replaces the config's tests
-      // the same way (see resolveConfigs), so it needs the same guard. Unlike --tests
-      // it keeps the config's base path.
-      const config = { prompts: [], providers: [], tests: 'cli-cases.csv' } as UnifiedConfig;
-      vi.mocked(resolveConfigs).mockResolvedValue({
-        config,
-        testSuite: { prompts: [], providers: [] } as TestSuite,
-        basePath: watchBase,
-      });
-      // Make the config re-read reachable, so the assertion below proves the guard
-      // skipped it rather than the glob mock simply finding no config to read.
-      const resolvedConfig = path.resolve(process.cwd(), defaultConfigPath);
-      vi.mocked(globSync).mockImplementation((pattern) =>
-        pattern === resolvedConfig ? [resolvedConfig] : [],
-      );
-      vi.mocked(maybeReadConfig).mockResolvedValue({
-        prompts: [],
-        providers: [],
-        tests: 'file://config-cases.yaml',
-      } as UnifiedConfig);
-      vi.mocked(evaluate).mockImplementationOnce(
-        async (_testSuite, evalRecord) => evalRecord as Eval,
-      );
-
-      await doEval(
-        { watch: true, write: false, vars: 'cli-cases.csv' },
-        config,
-        defaultConfigPath,
-        {},
-      );
-
-      expect(maybeReadConfig).not.toHaveBeenCalled();
-      const watched = (chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]])[0];
-      expect(watched).toContain(path.resolve(watchBase, 'cli-cases.csv'));
-      expect(watched).not.toContain(path.resolve(watchBase, 'config-cases.yaml'));
-    });
+    it.each(['tests', 'vars'] as const)(
+      'watches only CLI test sources when --%s overrides the config',
+      async (flag) => {
+        const config = {
+          prompts: [],
+          providers: [],
+          tests: 'file://config-cases.yaml',
+        } as UnifiedConfig;
+        vi.mocked(resolveConfigs).mockResolvedValue({
+          config,
+          testSuite: { prompts: [], providers: [] },
+          basePath: watchBase,
+          testSources: [{ tests: ['file://config-cases.yaml'], basePath: watchBase }],
+        });
+        vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => record as Eval);
+        await doEval(
+          { watch: true, write: false, [flag]: 'file://cli-cases.csv' },
+          config,
+          defaultConfigPath,
+          {},
+        );
+        const watched = (chokidarMocks.watch.mock.calls.at(-1) as unknown as [string[]])[0];
+        expect(watched).toContain(path.resolve(process.cwd(), 'cli-cases.csv'));
+        expect(watched).not.toContain(path.resolve(watchBase, 'config-cases.yaml'));
+      },
+    );
 
     it('tolerates tests being absent', async () => {
       const watched = await watchedPathsFor(undefined);

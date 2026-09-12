@@ -1055,7 +1055,7 @@ async function resolveLoadedConfig(
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
 
-  config.defaultTest = defaultTestRaw;
+  config.defaultTest = processedDefaultTest;
   const parsedDefaultTest = processedDefaultTest
     ? await readTest(processedDefaultTest, basePath, true, config.env)
     : undefined;

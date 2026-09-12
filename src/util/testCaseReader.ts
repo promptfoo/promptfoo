@@ -483,6 +483,10 @@ async function readTestWithEnv(
     }
   }
 
+  const isDescriptionOnly =
+    testCase.description &&
+    Object.entries(testCase).every(([key, value]) => key === 'description' || value === undefined);
+
   if (
     !isDefaultTest &&
     !testCase.assert &&
@@ -491,7 +495,7 @@ async function readTestWithEnv(
     !testCase.metadata &&
     !testCase.provider &&
     !testCase.providerOutput &&
-    !testCase.description &&
+    !isDescriptionOnly &&
     typeof testCase.threshold !== 'number'
   ) {
     // Validate the shape of the test case
