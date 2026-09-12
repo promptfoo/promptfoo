@@ -39,48 +39,76 @@ describe('doEval environment files', () => {
 
   it('keeps file defaults below suite values without saving them as config overrides', async () => {
     const configPath = path.join(tempDir, 'config.json');
-    fs.writeFileSync(configPath, JSON.stringify({
-      prompts: ['hello'], providers: ['echo'],
-      env: { PROMPTFOO_REVIEW_ENV_PROBE: '{{env.PROMPTFOO_REVIEW_ENV_PROBE}}' },
-    }));
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        prompts: ['hello'],
+        providers: ['echo'],
+        env: { PROMPTFOO_REVIEW_ENV_PROBE: '{{env.PROMPTFOO_REVIEW_ENV_PROBE}}' },
+      }),
+    );
     const engine = getNunjucksEngine();
-    await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file', FILE_ONLY: 'private' }, async () => {
-      expect(getProcessEnv().PROMPTFOO_REVIEW_ENV_PROBE).toBe('file');
-      expect((await readConfig(configPath)).env).toEqual({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' });
-      for (const [env, expected] of [
-        [undefined, 'file'],
-        [{}, 'file'],
-        [{ PROMPTFOO_REVIEW_ENV_PROBE: undefined }, 'file'],
-        [{ PROMPTFOO_REVIEW_ENV_PROBE: '' }, ''],
-        [{ PROMPTFOO_REVIEW_ENV_PROBE: 'suite' }, 'suite'],
-      ] as const) {
-        cliState.withEnv(env, () => {
-          expect(getEnvString('PROMPTFOO_REVIEW_ENV_PROBE')).toBe(expected);
-          expect(getNunjucksEngineForFilePath().renderString('{{env.PROMPTFOO_REVIEW_ENV_PROBE}}', {})).toBe(expected);
-          expect(engine.renderString('{{env.PROMPTFOO_REVIEW_ENV_PROBE}}', {})).toBe(expected);
-        });
-      }
-    });
+    await cliState.withEnvFileOverrides(
+      { PROMPTFOO_REVIEW_ENV_PROBE: 'file', FILE_ONLY: 'private' },
+      async () => {
+        expect(getProcessEnv().PROMPTFOO_REVIEW_ENV_PROBE).toBe('file');
+        expect((await readConfig(configPath)).env).toEqual({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' });
+        for (const [env, expected] of [
+          [undefined, 'file'],
+          [{}, 'file'],
+          [{ PROMPTFOO_REVIEW_ENV_PROBE: undefined }, 'file'],
+          [{ PROMPTFOO_REVIEW_ENV_PROBE: '' }, ''],
+          [{ PROMPTFOO_REVIEW_ENV_PROBE: 'suite' }, 'suite'],
+        ] as const) {
+          cliState.withEnv(env, () => {
+            expect(getEnvString('PROMPTFOO_REVIEW_ENV_PROBE')).toBe(expected);
+            expect(
+              getNunjucksEngineForFilePath().renderString('{{env.PROMPTFOO_REVIEW_ENV_PROBE}}', {}),
+            ).toBe(expected);
+            expect(engine.renderString('{{env.PROMPTFOO_REVIEW_ENV_PROBE}}', {})).toBe(expected);
+          });
+        }
+      },
+    );
     expect(engine.renderString('{{env.PROMPTFOO_REVIEW_ENV_PROBE}}', {})).toBe('host');
   });
 
-  it.each(['process', 'file', 'suite'] as const)('honors %s template restrictions for file defaults', async (source) => {
-    const restore = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: source === 'process' ? 'true' : 'false' });
-    try {
-      await cliState.withEnvFileOverrides({
-        PROMPTFOO_REVIEW_ENV_PROBE: 'file',
-        PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: source === 'file' ? 'true' : 'false',
-      }, () => cliState.withEnv({ PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: source === 'suite' ? 'true' : 'false' }, () => {
-        const engine = getNunjucksEngine();
-        expect(getEnvString('PROMPTFOO_REVIEW_ENV_PROBE')).toBe('file');
-          expect(getNunjucksEngineForFilePath().renderString('{{env.PROMPTFOO_REVIEW_ENV_PROBE}}', {})).toBe('');
-        expect(engine.renderString('{{env.PROMPTFOO_REVIEW_ENV_PROBE}}', {})).toBe('');
-        expect(engine.renderString('{% for key, value in env %}{{value}}{% endfor %}', {})).not.toContain('file');
-      }));
-    } finally {
-      restore();
-    }
-  });
+  it.each(['process', 'file', 'suite'] as const)(
+    'honors %s template restrictions for file defaults',
+    async (source) => {
+      const restore = mockProcessEnv({
+        PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: source === 'process' ? 'true' : 'false',
+      });
+      try {
+        await cliState.withEnvFileOverrides(
+          {
+            PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+            PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: source === 'file' ? 'true' : 'false',
+          },
+          () =>
+            cliState.withEnv(
+              { PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: source === 'suite' ? 'true' : 'false' },
+              () => {
+                const engine = getNunjucksEngine();
+                expect(getEnvString('PROMPTFOO_REVIEW_ENV_PROBE')).toBe('file');
+                expect(
+                  getNunjucksEngineForFilePath().renderString(
+                    '{{env.PROMPTFOO_REVIEW_ENV_PROBE}}',
+                    {},
+                  ),
+                ).toBe('');
+                expect(engine.renderString('{{env.PROMPTFOO_REVIEW_ENV_PROBE}}', {})).toBe('');
+                expect(
+                  engine.renderString('{% for key, value in env %}{{value}}{% endfor %}', {}),
+                ).not.toContain('file');
+              },
+            ),
+        );
+      } finally {
+        restore();
+      }
+    },
+  );
 
   it('isolates overlapping env files before cloud loading, provider loading, and evaluation', async () => {
     let release!: () => void;
