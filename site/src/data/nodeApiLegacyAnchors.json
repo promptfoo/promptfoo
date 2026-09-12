@@ -45,14 +45,7 @@
       "custom-logic"
     ],
     "Core types": ["typescript-types"],
-    "Runtime options": [
-      "task-save-results",
-      "task-disable-cache",
-      "environment-variables",
-      "error-handling",
-      "common-errors",
-      "performance-tips"
-    ],
+    "Runtime options": ["task-save-results", "task-disable-cache", "performance-tips"],
     "Common snippets": [
       "common-tasks",
       "task-test-multiple-providers",
@@ -64,7 +57,9 @@
       "pattern-streaming-results",
       "pattern-batch-testing-providers"
     ],
-    "Where to go next": ["getting-help", "next-steps"]
+    "Where to go next": ["getting-help", "next-steps"],
+    "Environment": ["environment-variables"],
+    "Handling errors": ["error-handling", "common-errors"]
   },
   "reference": {
     "Node.js API guide": ["node-module-api-reference"],

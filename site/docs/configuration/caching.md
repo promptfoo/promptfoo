@@ -63,6 +63,8 @@ Use `--no-cache` with `--repeat` when you want every run to make fresh LLM calls
 
 Use `promptfoo cache clear` command to clear the cache.
 
+<span id="node-package" />
+
 ## Node.js API
 
 Set `EvaluateOptions.cache` to false to disable cache:

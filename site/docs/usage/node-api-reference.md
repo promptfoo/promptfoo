@@ -165,9 +165,11 @@ tests without running the target, use `generate(options)`. It accepts
 `numTests`, `plugins`, `strategies`, and `envFile`.
 
 `run(options?)` returns `Promise<Eval | undefined>`. Options include `config`,
-`target`, `output`, `maxConcurrency`, and `envPath`. Generation uses `envFile`
+`description`, `output`, `maxConcurrency`, and `envPath`. Generation uses `envFile`
 for an environment file; running uses `envPath` for both phases. Set `cache: false`
-to disable caching during generation and evaluation.
+to disable caching during generation and evaluation. `description` names the resulting eval.
+Configure targets in the source file's `providers` array. The CLI `target` selector
+is not supported by `redteam.run()`; passing it rejects the call before generation.
 
 The `redteam` namespace also exposes `Plugins`, `Strategies`, `Graders`,
 `Extractors`, and `Base.Plugin` / `Base.Grader` for advanced integrations. These

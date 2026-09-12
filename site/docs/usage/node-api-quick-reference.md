@@ -97,6 +97,47 @@ Config fields such as `outputPath`, `sharing`, and `writeLatestResults` belong i
 the test suite itself; see
 [`EvaluateTestSuite`](/docs/api/node/reference/type-aliases/EvaluateTestSuite).
 
+## Environment
+
+<LegacyHeadingAnchors page="quickReference" section="Environment" />
+
+Set provider credentials, such as `OPENAI_API_KEY`, in the process environment before
+starting your application. You can also pass an `env` map to `loadApiProvider()`.
+
+| Variable                                   | Purpose                                 |
+| ------------------------------------------ | --------------------------------------- |
+| `LOG_LEVEL=debug`                          | Include diagnostic logs                 |
+| `PROMPTFOO_CACHE_PATH`                     | Choose the cache directory              |
+| `PROMPTFOO_CACHE_TTL`                      | Set cached-response lifetime in seconds |
+| `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` | Use local red team generation           |
+
+For red team runs, pass `envPath` to load an environment file for both generation
+and evaluation. See the [configuration reference](/docs/configuration/reference).
+
+## Handling errors
+
+<LegacyHeadingAnchors page="quickReference" section="Handling errors" />
+
+Catch rejected API calls and inspect returned results for individual test errors:
+
+```ts
+try {
+  const record = await evaluate(testSuite);
+  const summary = await record.toEvaluateSummary();
+  for (const result of summary.results) {
+    if (result.error) console.error(result.error);
+  }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+}
+```
+
+| Problem                   | Check                                                                                        |
+| ------------------------- | -------------------------------------------------------------------------------------------- |
+| Provider cannot be loaded | Use its full provider ID, such as `openai:chat:gpt-5.5`, or check the custom provider path.  |
+| API key is missing        | Set the provider's environment variable or pass it through `loadApiProvider(id, { env })`.   |
+| Cache read or write fails | Check directory permissions; isolate the issue with `evaluate(testSuite, { cache: false })`. |
+
 ## Common snippets
 
 <LegacyHeadingAnchors page="quickReference" section="Common snippets" />
