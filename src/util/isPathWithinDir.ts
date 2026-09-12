@@ -43,9 +43,7 @@ export async function isPathWithinCanonicalDir(
   try {
     const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(realDir, filePath);
     const realTargetRaw = await fs.realpath(absoluteTarget);
-
-    const prefix = realDir.endsWith(path.sep) ? realDir : `${realDir}${path.sep}`;
-    return realTargetRaw === realDir || realTargetRaw.startsWith(prefix);
+    return isCanonicalPathWithinDir(realTargetRaw, realDir);
   } catch (error: any) {
     // If target doesn't exist (ENOENT), validate parent directory instead.
     // This allows writes to create new files in valid directories.
@@ -66,4 +64,10 @@ export async function isPathWithinCanonicalDir(
     logger.warn(`Path validation failed for ${filePath}: ${error.message ?? error}`);
     return false;
   }
+}
+
+/** Check two already-resolved paths without another filesystem lookup. */
+export function isCanonicalPathWithinDir(realTarget: string, realDir: string): boolean {
+  const prefix = realDir.endsWith(path.sep) ? realDir : `${realDir}${path.sep}`;
+  return realTarget === realDir || realTarget.startsWith(prefix);
 }

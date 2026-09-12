@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 
 import { z } from 'zod';
 import cliState from '../cliState';
-import { isPathWithinCanonicalDir, resolveCanonicalDir } from '../util/isPathWithinDir';
+import { isCanonicalPathWithinDir, resolveCanonicalDir } from '../util/isPathWithinDir';
 import { getNunjucksEngine } from '../util/templates';
 
 const GeneratedDocumentSourceSchema = z.object({
@@ -248,22 +248,31 @@ function getContentTypeFromFilename(filename: string): string {
 async function loadFilePart(
   source: z.infer<typeof PathFileSourceSchema>,
   vars: Record<string, unknown>,
+  basePath: string,
   abortSignal?: AbortSignal,
 ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
   const renderedPath = renderTemplate(source.path, vars);
   const resolvedPath = resolvePath(renderedPath);
-  const basePath = await resolveCanonicalDir(cliState.basePath || process.cwd());
-  if (!(await isPathWithinCanonicalDir(resolvedPath, basePath))) {
+  const canonicalPath = await fs.realpath(resolvedPath).catch(() => {
+    throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
+  });
+  if (!isCanonicalPathWithinDir(canonicalPath, basePath)) {
     throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
   }
-  const file = await fs.open(resolvedPath, 'r');
+  const file = await fs.open(canonicalPath, 'r');
   try {
-    const canonicalPath = await fs.realpath(resolvedPath);
-    const [opened, canonical] = await Promise.all([file.stat(), fs.stat(canonicalPath)]);
+    const [opened, canonical, currentPath] = await Promise.all([
+      file.stat({ bigint: true }),
+      fs.stat(canonicalPath, { bigint: true }),
+      fs.realpath(canonicalPath),
+    ]);
     if (
+      opened.dev === 0n ||
+      opened.ino === 0n ||
       opened.dev !== canonical.dev ||
       opened.ino !== canonical.ino ||
-      !(await isPathWithinCanonicalDir(canonicalPath, basePath))
+      currentPath !== canonicalPath ||
+      !isCanonicalPathWithinDir(currentPath, basePath)
     ) {
       throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
     }
@@ -286,6 +295,7 @@ export async function renderHttpMultipartBody(
   const formData = new FormData();
   const fields: MultipartFieldDescriptor[] = [];
   const files: MultipartFileDescriptor[] = [];
+  let basePath: string | undefined;
 
   for (const part of config.parts) {
     abortSignal?.throwIfAborted();
@@ -302,7 +312,8 @@ export async function renderHttpMultipartBody(
     let defaultFilename: string;
 
     if (part.source.type === 'path') {
-      const file = await loadFilePart(part.source, vars, abortSignal);
+      basePath ??= await resolveCanonicalDir(cliState.basePath || process.cwd());
+      const file = await loadFilePart(part.source, vars, basePath, abortSignal);
       loaded = file;
       defaultFilename = file.filename;
     } else {

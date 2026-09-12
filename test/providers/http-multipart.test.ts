@@ -395,9 +395,8 @@ describe('HttpProvider structured multipart requests', () => {
     vi.spyOn(fs.promises, 'realpath').mockImplementation(async (file) => {
       const canonical = await realpath(file);
       if (String(file) === path.join(link, 'report.txt') && ++sourceResolutions === 1) {
-        const swappedPath = process.platform === 'win32' ? link : safeDir;
-        fs.renameSync(swappedPath, `${swappedPath}-original`);
-        fs.symlinkSync(outsideDir, swappedPath, 'junction');
+        fs.renameSync(safeDir, `${safeDir}-original`);
+        fs.symlinkSync(outsideDir, safeDir, 'junction');
       }
       return canonical;
     });
@@ -418,6 +417,53 @@ describe('HttpProvider structured multipart requests', () => {
               },
               { kind: 'field', name: 'documentQuery', value: '{{prompt}}' },
             ],
+          },
+        },
+      });
+      await expect(provider.callApi('test')).rejects.toThrow(
+        'File path escapes allowed base directory',
+      );
+      expect(mockServer.getLastRequest()).toBeUndefined();
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
+  });
+
+  it('pins the allowed base across path-backed multipart parts', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-base-swap-'));
+    tempDirs.push(tempDir);
+    const baseDir = path.join(tempDir, 'workspace');
+    const outsideDir = path.join(tempDir, 'outside');
+    fs.mkdirSync(baseDir);
+    fs.mkdirSync(outsideDir);
+    fs.writeFileSync(path.join(baseDir, 'first.txt'), 'safe');
+    fs.writeFileSync(path.join(outsideDir, 'second.txt'), 'outside');
+    const open = fs.promises.open;
+    vi.spyOn(fs.promises, 'open').mockImplementation(async (...args) => {
+      const file = await open(...args);
+      if (String(args[0]) === path.join(baseDir, 'first.txt')) {
+        const close = file.close.bind(file);
+        file.close = async () => {
+          await close();
+          fs.renameSync(baseDir, `${baseDir}-original`);
+          fs.symlinkSync(outsideDir, baseDir, 'junction');
+        };
+      }
+      return file;
+    });
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = baseDir;
+    try {
+      const mockServer = await createMultipartDocumentSummarizerServer();
+      const provider = new HttpProvider('http', {
+        config: {
+          url: mockServer.url,
+          multipart: {
+            parts: ['first.txt', 'second.txt'].map((file) => ({
+              kind: 'file' as const,
+              name: 'files',
+              source: { type: 'path' as const, path: file },
+            })),
           },
         },
       });
