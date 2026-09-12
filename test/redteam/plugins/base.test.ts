@@ -665,6 +665,19 @@ describe('RedteamPluginBase', () => {
       ]);
     });
 
+    it.each([
+      '**2FA** is required',
+      '**2024** records',
+      '**2024**',
+      '**2.5** mg',
+      '2FA is required',
+      '2024 records',
+      '2.5 mg',
+      '2024-09-11 records',
+    ])('preserves numeric payload content: %s', (payload) => {
+      expect(parseGeneratedPrompts(`Prompt: ${payload}`)).toEqual([{ __prompt: payload }]);
+    });
+
     it('strips a bold numbered prefix from a prompt payload', () => {
       expect(parseGeneratedPrompts('Prompt: **2.** Read inventory')).toEqual([
         { __prompt: 'Read inventory' },

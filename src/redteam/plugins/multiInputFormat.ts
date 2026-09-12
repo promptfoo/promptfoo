@@ -73,16 +73,15 @@ function hasPromptBoundaryMarker(line: string): boolean {
 
 function cleanPrompt(prompt: string): string {
   let cleaned = prompt;
-  cleaned = cleaned.replace(/^\*+\s*/, '');
-  // Handle numbered lists with various formats
-  cleaned = cleaned.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
+  // Require a list delimiter and following space; numeric attack content is significant.
+  cleaned = cleaned.replace(/^(?:\*+\s*)?\d+(?:[.)]|\s*-)(?:\*+)?\s+/, '');
   // Handle quotes
   cleaned = cleaned.replace(/^["'](.*)["']$/, '$1');
   // Handle nested quotes
   cleaned = cleaned.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
   cleaned = cleaned.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
-  // Strip leading and trailing asterisks
-  cleaned = cleaned.replace(/^\*+/, '').replace(/\*$/, '');
+  // Remove dangling formatting while preserving Markdown inside the payload.
+  cleaned = cleaned.replace(/^\*+\s+/, '').replace(/\s+\*+$/, '');
   return cleaned.trim();
 }
 
