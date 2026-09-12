@@ -2810,7 +2810,7 @@ describe('checkCloudPermissions', () => {
         basePath: path.resolve('.'),
         selectedProviderConfigs: config.providers,
       });
-      vi.mocked(evaluate).mockImplementation(async (suite, evalRecord, options) => {
+      vi.mocked(evaluate).mockImplementationOnce(async (suite, evalRecord, options) => {
         expect(
           restoreTestCaseSelection(suite.tests!, options!.testCaseSelection!, {
             basePath: options!.configBasePath,
