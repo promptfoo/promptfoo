@@ -1,5 +1,5 @@
 import { callGradingProvider, getAndCheckProvider } from './providers';
-import { fail } from './shared';
+import { graderFail } from './shared';
 
 import type { ApiClassificationProvider, GradingConfig, GradingResult } from '../types/index';
 
@@ -29,7 +29,11 @@ export async function matchesClassification(
   );
 
   if (!resp.classification) {
-    return fail(resp.error || 'Unknown error fetching classification');
+    // A provider/transport error is not evidence about the content. Tag it as a
+    // grader failure so inverse-aware callers (`not-classifier`) propagate it
+    // verbatim instead of flipping it into a spurious pass (mirrors moderation
+    // and llm-rubric's graderError handling).
+    return graderFail(resp.error || 'Unknown error fetching classification');
   }
   let score: number;
   if (expected === undefined) {

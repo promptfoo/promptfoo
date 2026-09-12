@@ -134,6 +134,22 @@ describe('matchesClassification', () => {
     });
   });
 
+  it('tags a provider/transport error as a grader failure instead of a legitimate score', async () => {
+    const grading: GradingConfig = {
+      provider: Object.assign(createMockProvider({ id: 'broken-classification-provider' }), {
+        callClassificationApi: vi.fn().mockResolvedValue({ error: 'Request timed out' }),
+      }),
+    };
+
+    await expect(matchesClassification('classA', 'Sample output', 0.5, grading)).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Request timed out',
+      tokensUsed: expect.any(Object),
+      metadata: { graderError: true },
+    });
+  });
+
   it('should use the overridden classification grading config', async () => {
     const expected = 'classA';
     const output = 'Sample output';

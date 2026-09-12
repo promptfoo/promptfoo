@@ -92,12 +92,17 @@ export async function matchesSearchRubric(
   );
 
   if (resp.error || !resp.output) {
+    // A provider/transport error is not evidence about the content. Tag it as a
+    // grader failure so inverse-aware callers (`not-search-rubric`) propagate it
+    // verbatim instead of flipping it into a spurious pass (mirrors moderation
+    // and llm-rubric's graderError handling).
     return {
       pass: false,
       score: 0,
       reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
       tokensUsed: resp.tokenUsage,
       assertion,
+      metadata: { graderError: true },
     };
   }
 
