@@ -114,8 +114,9 @@ function takeJSDocType(source: string): string {
   return source;
 }
 
-function getRequireShadowRanges(
+function getShadowRanges(
   program: ReturnType<typeof parseSync>['program'],
+  name: string,
 ): Array<[number, number]> {
   const ranges: Array<[number, number]> = [];
   const lexicalScopes: Array<[number, number]> = [[0, Number.POSITIVE_INFINITY]];
@@ -157,39 +158,39 @@ function getRequireShadowRanges(
     scopes
       .filter(([start, end]) => offset >= start && offset <= end)
       .sort(([left], [right]) => right - left)[0];
-  const bindsRequire = (node: unknown): boolean => {
+  const bindsName = (node: unknown): boolean => {
     if (!node || typeof node !== 'object') {
       return false;
     }
     const record = node as Record<string, unknown>;
     if (record.type === 'Identifier') {
-      return record.name === 'require';
+      return record.name === name;
     }
     if (record.type === 'AssignmentPattern') {
-      return bindsRequire(record.left);
+      return bindsName(record.left);
     }
     if (record.type === 'RestElement') {
-      return bindsRequire(record.argument);
+      return bindsName(record.argument);
     }
     if (record.type === 'Property') {
-      return bindsRequire(record.value);
+      return bindsName(record.value);
     }
     if (record.type === 'ObjectPattern') {
-      return (record.properties as unknown[]).some(bindsRequire);
+      return (record.properties as unknown[]).some(bindsName);
     }
     if (record.type === 'ArrayPattern') {
-      return (record.elements as unknown[]).some(bindsRequire);
+      return (record.elements as unknown[]).some(bindsName);
     }
     return false;
   };
   const addParams = (node: { body: { start: number; end: number } | null; params: unknown[] }) => {
-    if (node.body && node.params.some(bindsRequire)) {
+    if (node.body && node.params.some(bindsName)) {
       ranges.push([node.body.start, node.body.end]);
     }
   };
   new Visitor({
     FunctionDeclaration(node) {
-      if (node.id?.name === 'require') {
+      if (node.id?.name === name) {
         ranges.push(scopeFor(node.start, lexicalScopes));
       }
       if (node.body) {
@@ -197,7 +198,7 @@ function getRequireShadowRanges(
       }
     },
     FunctionExpression(node) {
-      if (node.id?.name === 'require' && node.body) {
+      if (node.id?.name === name && node.body) {
         ranges.push([node.body.start, node.body.end]);
       }
       addParams(node);
@@ -206,12 +207,12 @@ function getRequireShadowRanges(
       addParams(node);
     },
     VariableDeclaration(node) {
-      if (node.declarations.some((declaration) => bindsRequire(declaration.id))) {
+      if (node.declarations.some((declaration) => bindsName(declaration.id))) {
         ranges.push(scopeFor(node.start, node.kind === 'var' ? functionScopes : lexicalScopes));
       }
     },
     ImportDeclaration(node) {
-      if (node.specifiers.some((specifier) => specifier.local.name === 'require')) {
+      if (node.specifiers.some((specifier) => specifier.local.name === name)) {
         ranges.push([0, Number.POSITIVE_INFINITY]);
       }
     },
@@ -704,9 +705,12 @@ export function reportDependencyOwnership(
           node.type === 'TSImportEqualsDeclaration' &&
           node.moduleReference.type === 'TSExternalModuleReference',
       );
-    const requireShadowRanges = getRequireShadowRanges(result.program);
+    const requireShadowRanges = getShadowRanges(result.program, 'require');
+    const moduleShadowRanges = getShadowRanges(result.program, 'module');
     const isRequireShadowed = (offset: number) =>
       requireShadowRanges.some(([start, end]) => offset >= start && offset <= end);
+    const isModuleShadowed = (offset: number) =>
+      moduleShadowRanges.some(([start, end]) => offset >= start && offset <= end);
     new Visitor({
       ImportDeclaration(node) {
         add(
@@ -770,6 +774,7 @@ export function reportDependencyOwnership(
           load(node, node.arguments[0], 'value');
         } else if (
           node.callee.type === 'MemberExpression' &&
+          !isModuleShadowed(node.start) &&
           !node.callee.computed &&
           node.callee.object.type === 'Identifier' &&
           node.callee.object.name === 'module' &&
