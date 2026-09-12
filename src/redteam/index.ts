@@ -1036,6 +1036,7 @@ export async function synthesize({
   injectVar: string;
   failedPlugins: FailedPluginInfo[];
   generationTokenUsage?: TokenUsage;
+  semanticFrontierDiagnostics?: SemanticFrontierDiagnostic[];
 }> {
   // Add abort check helper
   const checkAbort = () => {
@@ -1730,6 +1731,8 @@ export async function synthesize({
 
   // After generating plugin test cases but before applying strategies:
   const pluginTestCases = testCases;
+  const semanticFrontierDiagnostics =
+    summarizeSemanticFrontierDiagnosticsFromTests(pluginTestCases);
 
   // Initialize strategy results
   const strategyResults: Record<string, { requested: number; generated: number }> = {};
@@ -1802,13 +1805,7 @@ export async function synthesize({
     logger.info('');
   }
 
-  logger.info(
-    generateReport(
-      pluginResults,
-      strategyResults,
-      summarizeSemanticFrontierDiagnosticsFromTests(finalTestCases),
-    ),
-  );
+  logger.info(generateReport(pluginResults, strategyResults, semanticFrontierDiagnostics));
 
   // Calculate failed plugins (those that generated 0 tests when they should have generated some)
   const failedPlugins: FailedPluginInfo[] = Object.entries(pluginResults)
@@ -1822,5 +1819,6 @@ export async function synthesize({
     injectVar,
     failedPlugins,
     generationTokenUsage,
+    ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
   };
 }

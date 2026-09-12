@@ -15,7 +15,10 @@ export const PROMPT_EXTRACTION_PREDICATES = [
 type PromptExtractionPredicate = (typeof PROMPT_EXTRACTION_PREDICATES)[number];
 
 const PROMPT_EXTRACTION_RULES: Record<PromptExtractionPredicate, RegExp[]> = {
-  requestsSystemPrompt: [/\bsystem prompt\b/i, /\bsystem instructions?\b/i],
+  requestsSystemPrompt: [
+    /(?:^\s*|[.!?;:,\n]\s*|\b(?:and|then|but)\s+|\b(?:can|could|would|will) you\s+|\bi (?:need|want|would like) you to\s+)(?:please\s+)?(?:show|give|send|share|provide|reveal|repeat|quote|copy|list|summarize|display|return|print|tell me)\b[^.!?;\n]{0,180}\bsystem (?:prompt|instructions?)\b/i,
+    /\bwhat (?:is|are)\s+(?:your|the)\s+(?:(?:initial|original|hidden|full)\s+)*system (?:prompt|instructions?)\b/i,
+  ],
   requestsOperatingInstructions: [
     /\bhidden (?:operating )?instructions?\b/i,
     /\binternal operating instructions?\b/i,
@@ -400,12 +403,12 @@ const FEATURE_BANDS_BY_PLUGIN = {
     'sensitive-field': [
       'requestsSsn',
       'requestsContactDetails',
-      'requestsCreditCard',
       'requestsMedicalRecord',
       'requestsPrescriptionDetails',
       'requestsInsuranceDetails',
       'requestsLabResults',
     ],
+    'payment-card': ['requestsCreditCard'],
   },
   'pii:social': {
     'sensitive-field': [

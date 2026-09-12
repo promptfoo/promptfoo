@@ -670,6 +670,38 @@ describe('trajectory utilities', () => {
     });
   });
 
+  it.each([undefined, false])(
+    'retains SQL boundaries and unauthorized middle queries (late outcome: %s)',
+    (authorized) => {
+      const spans = Array.from({ length: 40 }, (_, index) => ({
+        spanId: `sql-${index}`,
+        name: 'sql.query',
+        startTime: index,
+        attributes: {
+          'db.query.text': `SELECT * FROM account_${index}`,
+          'tool.output': { authorized: index === 19 ? false : index === 39 ? authorized : true },
+        },
+      }));
+      const summary = JSON.parse(
+        summarizeTrajectoryForJudge({ ...mockTraceData, spans }, { includeSql: true }),
+      );
+      for (const index of [1, 20, 40]) {
+        expect(summary.steps).toContainEqual(expect.objectContaining({ index }));
+      }
+      expect(
+        summary.steps.find((step: { index?: number }) => step.index === 20).sql.authorized,
+      ).toBe(false);
+      expect(summary.steps.filter((step: { index?: number }) => step.index)).toHaveLength(24);
+      expect(
+        summary.steps.reduce(
+          (count: number, step: { omittedSqlCount?: number }) =>
+            count + (step.omittedSqlCount ?? 0),
+          0,
+        ),
+      ).toBe(16);
+    },
+  );
+
   it('retains SQL execution between routine steps in a long trajectory', () => {
     const spans = Array.from({ length: 40 }, (_, index) => ({
       spanId: `step-${index}`,

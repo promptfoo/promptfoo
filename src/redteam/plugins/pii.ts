@@ -426,6 +426,7 @@ export class PiiDirectPlugin extends PortfolioRedteamPluginBase {
       minimumPortfolioSize: 5,
       weights: {
         'sensitive-field': 100,
+        'payment-card': 200,
       },
     };
   }

@@ -718,58 +718,83 @@ describe('synthesize', () => {
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('mockStrategy'));
     });
 
-    it('should render semantic frontier diagnostics when generated tests expose them', async () => {
-      const semanticFrontier = {
-        active: true,
-        complete: false,
-        minimumPortfolioSize: 3,
-        bands: {
-          'sensitive-field': {
-            featureCount: 2,
-            observedFeatureCount: 1,
-            observedFeatureIds: ['requestsPrescriptionDetails'],
-            reachableFeatureCount: 1,
-            reachableFeatureIds: ['requestsPrescriptionDetails'],
-            unreachableFeatureIds: ['requestsRefillDates'],
+    it.each([true, false])(
+      'preserves source frontier diagnostics with basic enabled=%s',
+      async (basicEnabled) => {
+        const semanticFrontier = {
+          active: true,
+          complete: false,
+          minimumPortfolioSize: 3,
+          bands: {
+            'sensitive-field': {
+              featureCount: 2,
+              observedFeatureCount: 1,
+              observedFeatureIds: ['requestsPrescriptionDetails'],
+              reachableFeatureCount: 1,
+              reachableFeatureIds: ['requestsPrescriptionDetails'],
+              unreachableFeatureIds: ['requestsRefillDates'],
+            },
           },
-        },
-      };
-      const mockPluginAction = vi.fn().mockResolvedValue([
-        {
-          metadata: { semanticFrontier },
-          vars: { query: 'frontier-aware prompt one' },
-        },
-        {
-          metadata: { semanticFrontier },
-          vars: { query: 'frontier-aware prompt two' },
-        },
-      ]);
-      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'pii:social' });
+        };
+        const mockPluginAction = vi.fn().mockResolvedValue([
+          {
+            metadata: { semanticFrontier },
+            vars: { query: 'frontier-aware prompt one' },
+          },
+          {
+            metadata: { semanticFrontier },
+            vars: { query: 'frontier-aware prompt two' },
+          },
+        ]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'pii:social' });
 
-      await synthesize({
-        language: 'en',
-        numTests: 2,
-        plugins: [{ id: 'pii:social', numTests: 2 }],
-        prompts: ['Test prompt'],
-        strategies: [],
-        targetIds: ['test-provider'],
-      });
+        vi.spyOn(Strategies, 'find').mockReturnValue({
+          id: 'base64',
+          action: vi
+            .fn()
+            .mockImplementation(async (tests) =>
+              tests.map((test: any) => ({ ...test, vars: { query: 'transformed' } })),
+            ),
+        });
 
-      const reportMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find(
-          (arg): arg is string => typeof arg === 'string' && arg.includes('Test Generation Report'),
-        );
+        const result = await synthesize({
+          language: 'en',
+          numTests: 2,
+          plugins: [{ id: 'pii:social', numTests: 2 }],
+          prompts: ['Test prompt'],
+          strategies: [{ id: 'basic', config: { enabled: basicEnabled } }, { id: 'base64' }],
+          targetIds: ['test-provider'],
+        });
 
-      expect(reportMessage).toBeDefined();
-      const cleanReport = stripAnsi(reportMessage || '');
-      expect(cleanReport).toContain('Semantic Frontier Diagnostics:');
-      expect(cleanReport).toContain('pii:social');
-      expect(cleanReport).toContain('0/1');
-      expect(cleanReport).toContain('Degraded');
-      expect(cleanReport).toContain('requestsRefillDates');
-    });
+        expect(result.semanticFrontierDiagnostics).toEqual([
+          expect.objectContaining({
+            pluginId: 'pii:social',
+            frontierCount: 1,
+            structurallyDegraded: true,
+          }),
+        ]);
+        if (!basicEnabled) {
+          expect(result.testCases.length).toBeGreaterThan(0);
+          expect(result.testCases.every((test) => !test.metadata?.semanticFrontier)).toBe(true);
+        }
+
+        const reportMessage = vi
+          .mocked(logger.info)
+          .mock.calls.map(([arg]) => arg)
+          .find(
+            (arg): arg is string =>
+              typeof arg === 'string' && arg.includes('Test Generation Report'),
+          );
+
+        expect(reportMessage).toBeDefined();
+        const cleanReport = stripAnsi(reportMessage || '');
+        expect(cleanReport).toContain('Semantic Frontier Diagnostics:');
+        expect(cleanReport).toContain('pii:social');
+        expect(cleanReport).toContain('0/1');
+        expect(cleanReport).toContain('Degraded');
+        expect(cleanReport).toContain('requestsRefillDates');
+      },
+    );
 
     it('should use default fan-out values when strategy config omits n', async () => {
       const pluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);

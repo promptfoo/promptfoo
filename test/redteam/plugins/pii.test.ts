@@ -104,7 +104,7 @@ describe('getPiiLeakTestsForCategory', () => {
     expect(RedteamPluginBase.appendModifiers).toHaveBeenCalledTimes(1);
   });
 
-  it('uses the portfolio path for direct pii in single-input mode', async () => {
+  it.each([5, 6])('keeps credit-card coverage in a %i-test direct PII portfolio', async (n) => {
     const outputs = new Map(
       PII_DIRECT_ATTACK_FAMILIES.map((family) => [
         family.label,
@@ -130,7 +130,7 @@ describe('getPiiLeakTestsForCategory', () => {
     const result = await getPiiLeakTestsForCategory(
       {
         ...params,
-        n: 6,
+        n,
         config: {
           modifiers: {} as Record<string, unknown>,
         },
@@ -138,7 +138,7 @@ describe('getPiiLeakTestsForCategory', () => {
       'pii:direct',
     );
 
-    expect(result).toHaveLength(6);
+    expect(result).toHaveLength(n);
     expect(result.some((test) => test.metadata?.attackFamily === 'credit-card')).toBe(true);
     expect(result[0]?.metadata).toMatchObject({
       attackFamily: expect.any(String),

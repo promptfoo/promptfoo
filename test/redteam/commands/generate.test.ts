@@ -399,21 +399,15 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should persist semantic frontier diagnostics in generated output metadata', async () => {
-    const semanticFrontier = {
-      active: true,
-      complete: false,
-      minimumPortfolioSize: 3,
-      bands: {
-        'sensitive-field': {
-          featureCount: 2,
-          observedFeatureCount: 1,
-          observedFeatureIds: ['requestsPrescriptionDetails'],
-          reachableFeatureCount: 1,
-          reachableFeatureIds: ['requestsPrescriptionDetails'],
-          unreachableFeatureIds: ['requestsRefillDates'],
-        },
+    const semanticFrontierDiagnostics = [
+      {
+        completeFrontierCount: 0,
+        frontierCount: 1,
+        pluginId: 'pii:social',
+        structurallyDegraded: true,
+        unreachableFeatureIds: ['requestsRefillDates'],
       },
-    };
+    ];
 
     const options: RedteamCliGenerateOptions = {
       output: 'output.yaml',
@@ -432,16 +426,17 @@ describe('doGenerateRedteam', () => {
     });
 
     vi.mocked(synthesize).mockResolvedValue({
+      semanticFrontierDiagnostics,
       testCases: [
         {
           vars: { input: 'Test input one' },
           assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'pii:social', semanticFrontier },
+          metadata: { pluginId: 'pii:social', strategyId: 'base64' },
         },
         {
           vars: { input: 'Test input two' },
           assert: [{ type: 'equals', value: 'Test output' }],
-          metadata: { pluginId: 'pii:social', semanticFrontier },
+          metadata: { pluginId: 'pii:social', strategyId: 'base64' },
         },
       ],
       purpose: 'Test purpose',
@@ -3210,7 +3205,7 @@ describe('doGenerateRedteam', () => {
         config: {
           redteam: {
             numTests: 2,
-            plugins: ['harmful:hate'] as any,
+            plugins: ['pii:social'] as any,
             strategies: [],
             contexts: [
               { id: 'context1', purpose: 'Context 1 purpose', vars: { role: 'user' } },
@@ -3221,11 +3216,20 @@ describe('doGenerateRedteam', () => {
       });
 
       vi.mocked(synthesize).mockResolvedValue({
+        semanticFrontierDiagnostics: [
+          {
+            pluginId: 'pii:social',
+            frontierCount: 1,
+            completeFrontierCount: 0,
+            structurallyDegraded: true,
+            unreachableFeatureIds: ['requestsRefillDates'],
+          },
+        ],
         testCases: [
           {
             vars: { input: 'Test input' },
             assert: [{ type: 'equals', value: 'Test output' }],
-            metadata: { pluginId: 'harmful:hate' },
+            metadata: { pluginId: 'pii:social', strategyId: 'base64' },
           },
         ],
         purpose: 'Test purpose',
@@ -3243,6 +3247,24 @@ describe('doGenerateRedteam', () => {
       };
 
       await doGenerateRedteam(options);
+
+      expect(writePromptfooConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            semanticFrontierDiagnostics: [
+              {
+                pluginId: 'pii:social',
+                frontierCount: 2,
+                completeFrontierCount: 0,
+                structurallyDegraded: true,
+                unreachableFeatureIds: ['requestsRefillDates'],
+              },
+            ],
+          }),
+        }),
+        'output.yaml',
+        expect.any(Array),
+      );
 
       // synthesize should be called once for each context
       expect(synthesize).toHaveBeenCalledTimes(2);

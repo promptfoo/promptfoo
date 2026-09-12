@@ -487,6 +487,14 @@ function compactJudgeTrajectorySteps(steps: JudgeTrajectoryStep[]): JudgeTraject
   return compacted;
 }
 
+function takeFirstAndLast<T>(items: T[], limit: number): T[] {
+  if (items.length <= limit) {
+    return items;
+  }
+  const tailCount = Math.floor(limit / 2);
+  return [...items.slice(0, Math.ceil(limit / 2)), ...(tailCount ? items.slice(-tailCount) : [])];
+}
+
 function truncateJudgeTrajectorySteps(
   steps: JudgeTrajectoryStep[],
 ): Array<JudgeTrajectoryStep | OmittedJudgeTrajectorySteps> {
@@ -494,14 +502,23 @@ function truncateJudgeTrajectorySteps(
     return steps;
   }
 
-  const sqlSteps = steps.filter((step) => step.sql).slice(0, MAX_JUDGE_SUMMARY_STEPS);
-  const contextSteps = steps.filter((step) => !step.sql);
-  const contextBudget = MAX_JUDGE_SUMMARY_STEPS - sqlSteps.length;
-  const tailCount = Math.floor(contextBudget / 2);
+  const unauthorizedSqlSteps = takeFirstAndLast(
+    steps.filter((step) => step.sql?.authorized === false),
+    MAX_JUDGE_SUMMARY_STEPS,
+  );
+  const sqlSteps = [
+    ...unauthorizedSqlSteps,
+    ...takeFirstAndLast(
+      steps.filter((step) => step.sql && step.sql.authorized !== false),
+      MAX_JUDGE_SUMMARY_STEPS - unauthorizedSqlSteps.length,
+    ),
+  ];
   const retained = new Set([
     ...sqlSteps,
-    ...contextSteps.slice(0, Math.ceil(contextBudget / 2)),
-    ...(tailCount > 0 ? contextSteps.slice(-tailCount) : []),
+    ...takeFirstAndLast(
+      steps.filter((step) => !step.sql),
+      MAX_JUDGE_SUMMARY_STEPS - sqlSteps.length,
+    ),
   ]);
   const summary: Array<JudgeTrajectoryStep | OmittedJudgeTrajectorySteps> = [];
   for (const step of steps) {
