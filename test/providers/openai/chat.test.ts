@@ -1328,6 +1328,46 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(result.error).toContain('cancelled callback');
     });
 
+    it('retains completed callback results when a later callback is cancelled', async () => {
+      const controller = new AbortController();
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  { id: 'first', function: { name: 'first', arguments: '{}' } },
+                  { id: 'second', function: { name: 'second', arguments: '{}' } },
+                ],
+              },
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          functionToolCallbacks: {
+            first: async () => 'first result',
+            second: () => {
+              controller.abort(new Error('cancelled second callback'));
+              return Promise.reject(controller.signal.reason);
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Run tools', undefined, {
+        abortSignal: controller.signal,
+      });
+
+      expect(result.output).toBe('first result');
+      expect(result.error).toContain('cancelled second callback');
+    });
+
     it('should handle errors in function tool callbacks', async () => {
       const mockResponse = {
         data: {
