@@ -568,8 +568,9 @@ describe('DownloadMenu', () => {
             test: { description: 'failed test' },
             vars: [],
             outputs: [
-              { id: 'passed-output', pass: true },
-              { id: 'failed-output', pass: false },
+              { id: 'comparison-failure', evalId: 'comparison-eval', pass: false },
+              { id: 'passed-output', evalId: mockEvalId, pass: true },
+              { id: 'failed-output', evalId: mockEvalId, pass: false },
             ],
           },
         ],

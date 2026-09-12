@@ -296,9 +296,9 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     row.outputs.find((output): output is EvaluateTableOutput => Boolean(output)) ?? null;
 
   const getFailedBaseOutput = (row: EvaluateTableRow): EvaluateTableOutput | null =>
-    row.outputs
-      .slice(0, config?.prompts?.length ?? row.outputs.length)
-      .find((output): output is EvaluateTableOutput => Boolean(output && !output.pass)) ?? null;
+    row.outputs.find((output): output is EvaluateTableOutput =>
+      Boolean(output && !output.pass && (!output.evalId || output.evalId === evalId)),
+    ) ?? null;
 
   const getRowVars = (
     row: EvaluateTableRow,
