@@ -2,8 +2,10 @@ import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
+import { rateLimitTimingFromHeaders } from '../../util/fetch';
 import {
   extractRateLimitErrorCode,
+  extractRateLimitErrorType,
   formatRateLimitErrorMessage,
   HttpRateLimitError,
 } from '../../util/fetch/errors';
@@ -99,18 +101,81 @@ interface FoundryResponseCreateOptions {
  * sometimes set top-level `code` to a transport-level value (e.g.
  * `'ETIMEDOUT'`) that would shadow the more reliable body code.
  */
+/**
+ * Normalize the headers an SDK error carries (a plain record or a `Headers`
+ * instance, on the error itself or on its `response`) to lowercase keys.
+ */
+function sdkErrorHeaders(err: {
+  headers?: unknown;
+  response?: { headers?: unknown };
+}): Record<string, string> | undefined {
+  const raw = err.headers ?? err.response?.headers;
+  if (typeof raw !== 'object' || raw === null) {
+    return undefined;
+  }
+  const entries =
+    typeof (raw as Headers).entries === 'function' && typeof (raw as Headers).get === 'function'
+      ? Array.from((raw as Headers).entries())
+      : Object.entries(raw as Record<string, unknown>);
+  const headers: Record<string, string> = {};
+  for (const [key, value] of entries) {
+    if (typeof value === 'string') {
+      headers[key.toLowerCase()] = value;
+    }
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
+}
+
+/**
+ * Provider response for a structured rate-limit error. The HTTP status and
+ * headers travel in `metadata.http` so the scheduler can honour the
+ * advertised Retry-After instead of its default backoff.
+ */
+function rateLimitResponse(error: HttpRateLimitError, details?: string): ProviderResponse {
+  return {
+    error: formatRateLimitErrorMessage(error, details),
+    metadata: {
+      rateLimitKind: error.kind,
+      http: {
+        status: error.status,
+        statusText: error.statusText,
+        headers: error.headers ?? {},
+      },
+    },
+  };
+}
+
 function rateLimitFromSdkError(error: unknown): HttpRateLimitError | null {
   if (typeof error !== 'object' || error === null) {
     return null;
   }
-  const err = error as { status?: unknown; response?: { status?: unknown }; error?: unknown };
+  const err = error as {
+    status?: unknown;
+    headers?: unknown;
+    response?: { status?: unknown; headers?: unknown };
+    error?: unknown;
+  };
   const status = typeof err.status === 'number' ? err.status : err.response?.status;
   if (status !== 429) {
     return null;
   }
-  // Prefer body-level code; fall back to top-level / `type` aliases.
+  // Prefer body-level code; fall back to top-level / `type` aliases. The type
+  // is forwarded separately so a billing-specific code the allowlist does not
+  // know still classifies as quota via `type: "insufficient_quota"`.
   const code = extractRateLimitErrorCode(err.error) ?? extractRateLimitErrorCode(err);
-  return new HttpRateLimitError({ status: 429, code });
+  const type = extractRateLimitErrorType(err.error) ?? extractRateLimitErrorType(err);
+  // Retry-After decides whether a hard-quota code is really a short per-window
+  // throttle (see HttpRateLimitError), so the SDK's headers must reach it.
+  const headers = sdkErrorHeaders(err);
+  const timing = headers ? rateLimitTimingFromHeaders(headers) : undefined;
+  return new HttpRateLimitError({
+    status: 429,
+    code,
+    type,
+    retryAfterMs: timing?.retryAfterMs,
+    resetAt: timing?.resetAt,
+    headers,
+  });
 }
 
 export class AzureFoundryAgentProvider extends AzureGenericProvider {
@@ -722,10 +787,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const errorMessage = error instanceof Error ? error.message : String(error);
 
     if (error instanceof HttpRateLimitError) {
-      return {
-        error: formatRateLimitErrorMessage(error),
-        metadata: { rateLimitKind: error.kind },
-      };
+      return rateLimitResponse(error);
     }
 
     // The OpenAI SDK throws APIError-shaped objects with `status` and a body
@@ -735,10 +797,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     // context (deployment name, token counts) is preserved.
     const sdkRateLimit = rateLimitFromSdkError(error);
     if (sdkRateLimit) {
-      return {
-        error: formatRateLimitErrorMessage(sdkRateLimit, errorMessage),
-        metadata: { rateLimitKind: sdkRateLimit.kind },
-      };
+      return rateLimitResponse(sdkRateLimit, errorMessage);
     }
 
     if (isContentFilterError(errorMessage)) {

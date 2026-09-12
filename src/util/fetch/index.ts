@@ -15,8 +15,8 @@ import { sleep } from '../../util/time';
 import { sanitizeUrl } from '../sanitizer';
 import {
   extractRateLimitErrorCode,
+  extractRateLimitErrorType,
   HttpRateLimitError,
-  isHardQuotaCode,
   type SystemError,
 } from './errors';
 import { monkeyPatchFetch } from './monkeyPatchFetch';
@@ -455,13 +455,13 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
  */
 async function peekRateLimitBody(
   response: Response,
-): Promise<{ body: unknown; code: string | undefined }> {
+): Promise<{ body: unknown; code: string | undefined; type: string | undefined }> {
   let cloned: Response;
   try {
     cloned = response.clone();
   } catch (err) {
     logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
-    return { body: undefined, code: undefined };
+    return { body: undefined, code: undefined, type: undefined };
   }
 
   let text: string;
@@ -469,20 +469,24 @@ async function peekRateLimitBody(
     text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES);
   } catch (err) {
     logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
-    return { body: undefined, code: undefined };
+    return { body: undefined, code: undefined, type: undefined };
   }
 
   if (!text) {
-    return { body: undefined, code: undefined };
+    return { body: undefined, code: undefined, type: undefined };
   }
 
   try {
     const json = JSON.parse(text);
-    return { body: json, code: extractRateLimitErrorCode(json) };
+    return {
+      body: json,
+      code: extractRateLimitErrorCode(json),
+      type: extractRateLimitErrorType(json),
+    };
   } catch {
     // Keep the raw bytes for diagnostics; no code is extractable.
     logger.debug('[fetch] peekRateLimitBody: response body was not JSON');
-    return { body: text, code: undefined };
+    return { body: text, code: undefined, type: undefined };
   }
 }
 
@@ -536,10 +540,24 @@ async function readBoundedText(response: Response, maxBytes: number): Promise<st
   return new TextDecoder().decode(merged);
 }
 
+/**
+ * Retry-After / reset timing from a rate-limit response's headers, for callers
+ * that build an {@link HttpRateLimitError} from an SDK error rather than a
+ * `Response`. Keeps the header parsing in one place.
+ */
+export function rateLimitTimingFromHeaders(headers: Record<string, string>): {
+  retryAfterMs?: number;
+  resetAt?: number;
+} {
+  const parsed = parseRateLimitHeaders(headers);
+  return { retryAfterMs: parsed.retryAfterMs, resetAt: parsed.resetAt };
+}
+
 function buildHttpRateLimitError(
   response: Response,
   body: unknown,
   code: string | undefined,
+  type: string | undefined,
 ): HttpRateLimitError {
   const headers = Object.fromEntries(response.headers.entries());
   const parsed = parseRateLimitHeaders(headers);
@@ -549,6 +567,7 @@ function buildHttpRateLimitError(
     retryAfterMs: parsed.retryAfterMs,
     resetAt: parsed.resetAt,
     code,
+    type,
     headers,
     body,
   });
@@ -616,29 +635,35 @@ async function handleRateLimitedResponse(
   // error on retry exhaustion would be misleading and pointlessly buffers a
   // 64 KB body peek on every successful call.
   const isHardRateLimit = response.status === 429;
-  const { body, code } = isHardRateLimit
-    ? await peekRateLimitBody(response)
-    : { body: undefined, code: undefined };
   const safeUrl = urlForLog(url);
 
-  // Hard quota codes (e.g. insufficient_quota) won't resolve on retry. Fail
+  // Classify a 429 up front: `HttpRateLimitError` derives `kind` from the body
+  // code / type and the Retry-After downgrade, so the fail-fast decision below
+  // sees the same classification callers do.
+  let rateLimitError: HttpRateLimitError | undefined;
+  if (isHardRateLimit) {
+    const { body, code, type } = await peekRateLimitBody(response);
+    rateLimitError = buildHttpRateLimitError(response, body, code, type);
+  }
+
+  // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail
   // fast with a structured error so the caller can stop instead of amplifying
   // load against an exhausted account.
-  if (isHardRateLimit && isHardQuotaCode(code)) {
+  if (rateLimitError?.kind === 'quota') {
     logger.debug(
-      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${code}), failing fast.`,
+      `Quota exhausted on URL ${safeUrl}: HTTP ${response.status} (code: ${rateLimitError.code}), failing fast.`,
     );
-    throw buildHttpRateLimitError(response, body, code);
+    throw rateLimitError;
   }
 
   if (attempt >= maxRetries) {
-    if (isHardRateLimit) {
+    if (rateLimitError) {
       // No retries remain: throw a structured error instead of a bare string
       // so callers can read Retry-After / reset / code without re-parsing.
       logger.debug(
         `Rate limited on URL ${safeUrl}: HTTP ${response.status} ${response.statusText}, attempt ${attempt + 1}/${maxRetries + 1}, no retries remain.`,
       );
-      throw buildHttpRateLimitError(response, body, code);
+      throw rateLimitError;
     }
     throw new Error(
       `Rate limited: ${response.status} ${response.statusText} after ${maxRetries + 1} attempts`,

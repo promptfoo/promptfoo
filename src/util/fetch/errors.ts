@@ -18,12 +18,15 @@ export interface SystemError extends Error {
  *
  * Note: Azure OpenAI is known to return `insufficient_quota` for both billing
  * exhaustion AND per-minute deployment quota saturation. The
- * {@link HttpRateLimitError} constructor downgrades a quota code to
- * `rate_limit` when a small `Retry-After` is also present — a billing server
- * has no reason to hint at recovery time.
+ * {@link HttpRateLimitError} constructor downgrades such an ambiguous quota
+ * code to `rate_limit` when the server also hints at a near-term recovery
+ * (`Retry-After` / reset header) — a billing server has no reason to hint at
+ * recovery time. The codes in {@link DEFINITIVE_BILLING_ERROR_CODES} name a
+ * billing state explicitly and are never downgraded.
  */
 export const HARD_QUOTA_ERROR_CODES: ReadonlySet<string> = new Set([
   'insufficient_quota',
+  'credit_balance_exhausted',
   'billing_hard_limit_reached',
   'billing_not_active',
   'access_terminated',
@@ -31,10 +34,47 @@ export const HARD_QUOTA_ERROR_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Subset of {@link HARD_QUOTA_ERROR_CODES} that unambiguously describes the
+ * account's billing state (no credits, hard limit reached, billing inactive,
+ * access terminated). Unlike `insufficient_quota` / `quota_exceeded`, these
+ * are not reused for per-window throttling, so a `Retry-After` next to them
+ * (some gateways attach one to every 429) must not turn them retryable.
+ */
+export const DEFINITIVE_BILLING_ERROR_CODES: ReadonlySet<string> = new Set([
+  'credit_balance_exhausted',
+  'billing_hard_limit_reached',
+  'billing_not_active',
+  'access_terminated',
+]);
+
+/**
+ * Body codes that name a per-window throttle outright (OpenAI / Azure OpenAI
+ * `rate_limit_exceeded`, Anthropic `rate_limit_error` / `overloaded_error`,
+ * per-minute token / request buckets). A hard-quota `type` is only a fallback
+ * for an unrecognized `code`; next to one of these it never promotes the error
+ * to `quota`, whether or not the server sent a `Retry-After` / reset header.
+ */
+export const TRANSIENT_RATE_LIMIT_ERROR_CODES: ReadonlySet<string> = new Set([
+  'rate_limit_exceeded',
+  'rate_limit_error',
+  'rate_limit',
+  'rate_limited',
+  'overloaded_error',
+  'too_many_requests',
+  'tokens',
+  'requests',
+  'tokens_per_min',
+  'requests_per_min',
+  'tokens_per_day',
+  'requests_per_day',
+]);
+
+/**
  * Upper bound for the "server hinted a recovery time, so this isn't billing"
- * heuristic. A server that says "retry in &lt;= 1 hour" is signalling a
- * per-window throttle, not a billing exhaustion. Above 1h we treat a
- * Retry-After as ambiguous and let the body code decide.
+ * heuristic. A server that says "retry in &lt;= 1 hour" (via `Retry-After`
+ * or a reset timestamp) is signalling a per-window throttle, not a billing
+ * exhaustion. Above 1h we treat the hint as ambiguous and let the body code
+ * decide.
  */
 const RATE_LIMIT_QUOTA_DOWNGRADE_THRESHOLD_MS = 60 * 60 * 1000;
 
@@ -75,6 +115,12 @@ export interface HttpRateLimitErrorInit {
   resetAt?: number;
   /** Body-level error code (e.g. `insufficient_quota`, `rate_limit_exceeded`). */
   code?: string;
+  /**
+   * Body-level error class sent alongside `code` (e.g. OpenAI's
+   * `type: "insufficient_quota"` next to `code: "credit_balance_exhausted"`).
+   * Only consulted for the quota classification; `code` stays the reported code.
+   */
+  type?: string;
   /** Response headers as a plain object (lowercased keys preferred). */
   headers?: Record<string, string>;
   /** Parsed body — JSON object if parseable, else raw string. */
@@ -114,6 +160,7 @@ export class HttpRateLimitError extends Error {
   readonly retryAfterMs?: number;
   readonly resetAt?: number;
   readonly code?: string;
+  readonly type?: string;
   readonly kind: RateLimitKind;
   readonly headers?: Record<string, string>;
   readonly body?: unknown;
@@ -126,16 +173,23 @@ export class HttpRateLimitError extends Error {
     const retryAfterMs = normalizeNonNegativeMs(init.retryAfterMs);
     const resetAt = normalizeNonNegativeMs(init.resetAt);
 
-    // A hard-quota body code normally implies `kind: 'quota'`. But Azure
-    // OpenAI is known to return `insufficient_quota` for per-minute
-    // deployment saturation too; in that case the server hints at recovery
-    // via `Retry-After`. Trust that hint: if the wait is short, this is
-    // recoverable rate_limit, not billing exhaustion.
-    let kind: RateLimitKind = isHardQuotaCode(init.code) ? 'quota' : 'rate_limit';
+    // A hard-quota body code (or a hard-quota `type` next to an unrecognized
+    // code — a recognized transient code such as `rate_limit_exceeded` wins
+    // over the type) normally implies `kind: 'quota'`. But Azure OpenAI is known to
+    // return `insufficient_quota` for per-minute deployment saturation too; in
+    // that case the server hints at recovery via `Retry-After` or a reset
+    // timestamp. Trust that hint: if the wait is short, this is recoverable
+    // rate_limit, not billing exhaustion. A billing state named outright
+    // (`credit_balance_exhausted`, ...) in either `code` or `type` is never
+    // downgraded — some gateways attach a Retry-After to every 429.
+    const typeImpliesQuota = isHardQuotaCode(init.type) && !isTransientRateLimitCode(init.code);
+    let kind: RateLimitKind =
+      isHardQuotaCode(init.code) || typeImpliesQuota ? 'quota' : 'rate_limit';
     if (
       kind === 'quota' &&
-      retryAfterMs !== undefined &&
-      retryAfterMs <= RATE_LIMIT_QUOTA_DOWNGRADE_THRESHOLD_MS
+      !isDefinitiveBillingCode(init.code) &&
+      !isDefinitiveBillingCode(init.type) &&
+      hasNearTermRecoveryHint(retryAfterMs, resetAt)
     ) {
       kind = 'rate_limit';
     }
@@ -149,6 +203,7 @@ export class HttpRateLimitError extends Error {
     this.retryAfterMs = retryAfterMs;
     this.resetAt = resetAt;
     this.code = init.code;
+    this.type = init.type;
     this.kind = kind;
     // Shallow-copy reference fields so post-construction mutations on the
     // caller's object don't bleed into the captured error.
@@ -159,6 +214,30 @@ export class HttpRateLimitError extends Error {
 
 export function isHardQuotaCode(code: string | undefined): boolean {
   return code !== undefined && HARD_QUOTA_ERROR_CODES.has(code);
+}
+
+export function isDefinitiveBillingCode(code: string | undefined): boolean {
+  return code !== undefined && DEFINITIVE_BILLING_ERROR_CODES.has(code);
+}
+
+export function isTransientRateLimitCode(code: string | undefined): boolean {
+  return code !== undefined && TRANSIENT_RATE_LIMIT_ERROR_CODES.has(code);
+}
+
+/**
+ * Whether the server advertised a recovery within
+ * {@link RATE_LIMIT_QUOTA_DOWNGRADE_THRESHOLD_MS}: an explicit `Retry-After`,
+ * or a reset timestamp whose remaining wait (from now) is within the bound.
+ * A reset timestamp in the past counts as "recovers now".
+ */
+function hasNearTermRecoveryHint(retryAfterMs?: number, resetAt?: number): boolean {
+  if (retryAfterMs !== undefined) {
+    return retryAfterMs <= RATE_LIMIT_QUOTA_DOWNGRADE_THRESHOLD_MS;
+  }
+  if (resetAt !== undefined) {
+    return resetAt - Date.now() <= RATE_LIMIT_QUOTA_DOWNGRADE_THRESHOLD_MS;
+  }
+  return false;
 }
 
 /**
@@ -238,6 +317,29 @@ export function extractRateLimitErrorCode(body: unknown): string | undefined {
     return root.type;
   }
   return undefined;
+}
+
+/**
+ * Best-effort extraction of the broad error class (`error.type` / top-level
+ * `type`) from a parsed response body. OpenAI pairs `type: "insufficient_quota"`
+ * with billing-specific codes such as `credit_balance_exhausted`, so the type
+ * still carries the quota classification when the code is not recognized.
+ * Returns `undefined` when the body has no separate `type` field.
+ */
+export function extractRateLimitErrorType(body: unknown): string | undefined {
+  if (typeof body !== 'object' || body === null) {
+    return undefined;
+  }
+  const root = body as Record<string, unknown>;
+  const nested =
+    typeof root.error === 'object' && root.error !== null
+      ? (root.error as Record<string, unknown>).type
+      : undefined;
+  if (typeof nested === 'string' && nested.length > 0) {
+    return nested;
+  }
+  // SDK wrappers can carry the class at the top level next to a nested `error`.
+  return typeof root.type === 'string' && root.type.length > 0 ? root.type : undefined;
 }
 
 /**
