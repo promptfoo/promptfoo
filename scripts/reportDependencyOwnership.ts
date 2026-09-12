@@ -757,6 +757,15 @@ export function reportDependencyOwnership(
           load(node, node.arguments[0], 'value');
         } else if (
           node.callee.type === 'MemberExpression' &&
+          !node.callee.computed &&
+          node.callee.object.type === 'Identifier' &&
+          node.callee.object.name === 'module' &&
+          node.callee.property.type === 'Identifier' &&
+          node.callee.property.name === 'require'
+        ) {
+          load(node, node.arguments[0], 'value');
+        } else if (
+          node.callee.type === 'MemberExpression' &&
           ((node.callee.computed &&
             node.callee.property.type === 'Literal' &&
             node.callee.property.value === 'resolve') ||

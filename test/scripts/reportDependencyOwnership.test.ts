@@ -874,7 +874,7 @@ describe('dependency ownership report', () => {
   it('records computed loaders without guessing that user paths are missing packages', () => {
     write(
       'src/index.ts',
-      'import(candidate); require(moduleName); require.resolve(`${name}/package.json`); import(`literal-package`);',
+      'import(candidate); require(moduleName); require.resolve(`${name}/package.json`); module.require("module-package"); import(`literal-package`);',
     );
     const report = reportDependencyOwnership(root, config);
     expect(report.computedImports.map((entry) => entry.expression)).toEqual([
@@ -882,7 +882,10 @@ describe('dependency ownership report', () => {
       'require(moduleName)',
       'require.resolve(`${name}/package.json`)',
     ]);
-    expect(report.undeclaredUsages.map((entry) => entry.dependency)).toEqual(['literal-package']);
+    expect(report.undeclaredUsages.map((entry) => entry.dependency)).toEqual([
+      'literal-package',
+      'module-package',
+    ]);
   });
 
   it('records JSDoc import types and audits the standalone action package', () => {
