@@ -202,6 +202,58 @@ describe('EvalResult', () => {
     expect(result.prompt.config).toBe('[REDACTED]');
   });
 
+  it('projects provider slots before generic result serialization', () => {
+    let providerSerializations = 0;
+    const provider = {
+      id: 'openai:chat:gpt-4.1',
+      config: { apiKey: 'sk-provider-secret', model: 'gpt-4.1' },
+      toJSON() {
+        providerSerializations++;
+        return { leak: 'sk-provider-secret' };
+      },
+    };
+
+    const result = sanitizeResultForJsonlArtifact({
+      prompt: { raw: 'prompt', label: 'prompt', config: { provider } as any },
+      testCase: {
+        vars: {},
+        provider: 'openai:chat:gpt-4.1',
+        options: {
+          provider: {
+            'openai:chat:gpt-4.1': { env: { OPENAI_API_KEY: 'sk-env-secret' } },
+          },
+        },
+      } as AtomicTestCase,
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        componentResults: [
+          {
+            pass: true,
+            score: 1,
+            reason: 'ok',
+            assertion: { type: 'llm-rubric', value: 'ok', provider },
+          },
+        ],
+      },
+    });
+
+    expect(providerSerializations).toBe(0);
+    expect(result.prompt.config.provider).toEqual({
+      id: 'openai:chat:gpt-4.1',
+      config: { apiKey: '[REDACTED]', model: 'gpt-4.1' },
+    });
+    expect(result.testCase.provider).toBe('openai:chat:gpt-4.1');
+    expect(result.testCase.options?.provider).toEqual({
+      'openai:chat:gpt-4.1': { env: { OPENAI_API_KEY: '[REDACTED]' } },
+    });
+    expect(result.gradingResult.componentResults[0].assertion.provider).toEqual({
+      id: 'openai:chat:gpt-4.1',
+      config: { apiKey: '[REDACTED]', model: 'gpt-4.1' },
+    });
+  });
+
   it('preserves malformed legacy assertion sets without throwing', () => {
     const result = sanitizeResultForJsonlArtifact({
       gradingResult: {
@@ -1366,6 +1418,30 @@ describe('EvalResult', () => {
           raw: 'fixture prompt',
           config: { temperature: 0 },
         });
+      });
+
+      it('reuses the first trace metadata snapshot during persistence', async () => {
+        let reads = 0;
+        const metadata = {} as Record<string, unknown>;
+        Object.defineProperty(metadata, 'stateful', {
+          enumerable: true,
+          get() {
+            reads++;
+            if (reads > 1) {
+              throw new Error('metadata read twice');
+            }
+            return 'first';
+          },
+        });
+
+        const result = await EvalResult.createFromEvaluateResult(
+          'test-eval-metadata-snapshot',
+          { ...mockEvaluateResult, metadata, traceId: 'trace-id' },
+          { persist: true },
+        );
+
+        expect(reads).toBe(1);
+        expect(result.metadata?.stateful).toBe('first');
       });
     });
 

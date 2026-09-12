@@ -1107,16 +1107,8 @@ function hasUnsafeJsonSerializer(value: unknown): boolean {
   if (!value || typeof value !== 'object') {
     return false;
   }
-  let target: object | null = value;
-  while (target) {
-    const descriptor = Object.getOwnPropertyDescriptor(target, 'toJSON');
-    if (descriptor?.get) {
-      return true;
-    }
-    if (descriptor) {
-      break;
-    }
-    target = Object.getPrototypeOf(target);
+  if (hasPropertyGetter(value, 'toJSON')) {
+    return true;
   }
   if (typeof (value as any).toJSON !== 'function') {
     return false;

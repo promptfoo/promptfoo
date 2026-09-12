@@ -134,6 +134,9 @@ function sanitizeProviderReference(provider: unknown): unknown {
   if ('id' in provider || 'label' in provider || 'config' in provider) {
     return sanitizeProvider(provider as ApiProvider | ProviderOptions);
   }
+  if ('env' in provider) {
+    return sanitizeForDbWithSecrets(provider);
+  }
   return Object.fromEntries(
     Object.entries(Object.getOwnPropertyDescriptors(provider))
       .filter(([, descriptor]) => 'value' in descriptor)
@@ -248,7 +251,9 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
       sanitized.vars = sanitizeForDbWithSecrets(captured.vars, false);
     }
     if (captured.provider) {
-      sanitized.provider = sanitizeProvider(captured.provider);
+      sanitized.provider = sanitizeProviderReference(
+        captured.provider,
+      ) as AtomicTestCase['provider'];
     }
     if (captured.providerOutput !== undefined) {
       sanitized.providerOutput = sanitizeForDbWithSecrets(captured.providerOutput, false);
@@ -284,9 +289,18 @@ function sanitizePromptForDb(prompt: Prompt): Prompt {
   try {
     const captured = { ...prompt };
     const config = captured.config;
+    if (config && typeof config === 'object' && 'provider' in config) {
+      const { provider: _provider, ...withoutProvider } = config;
+      captured.config = withoutProvider;
+    }
     const sanitized = sanitizeForDbWithSecrets(captured, false);
     if (config !== undefined) {
-      sanitized.config = sanitizeForDbWithSecrets(config);
+      sanitized.config = sanitizeForDbWithSecrets(captured.config);
+      if (config && typeof config === 'object' && 'provider' in config && config.provider) {
+        sanitized.config.provider = sanitizeProviderReference(
+          config.provider,
+        ) as Prompt['config']['provider'];
+      }
     }
     return sanitized;
   } catch {
@@ -646,6 +660,7 @@ export function sanitizeResultFieldsForDb(
     response?: ProviderResponse | null;
     gradingResult?: GradingResult | null;
   },
+  persistedMetadata = persistTraceMetadata(result.metadata, result.traceId, result.evaluationId),
 ) {
   return {
     testCase: sanitizeTestCaseForDb(result.testCase),
@@ -654,10 +669,8 @@ export function sanitizeResultFieldsForDb(
     namedScores: sanitizeForDb(result.namedScores),
     ...redactSensitiveResultFieldsForDb({
       response: sanitizeForDb(result.response),
-      gradingResult: sanitizeForDb(result.gradingResult),
-      metadata: sanitizeForDb(
-        persistTraceMetadata(result.metadata, result.traceId, result.evaluationId),
-      ),
+      gradingResult: sanitizeForDb(sanitizeGradingResultForDb(result.gradingResult)),
+      metadata: sanitizeForDb(persistedMetadata),
     }),
   };
 }
@@ -694,7 +707,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
   const artifactResult = result as T & Record<string, unknown>;
   const redacted = redactSensitiveResultFieldsForDb({
     response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
-    gradingResult: sanitizeForDb(artifactResult.gradingResult),
+    gradingResult: sanitizeForDb(sanitizeGradingResultForDb(artifactResult.gradingResult)),
     metadata: sanitizeForDb(artifactResult.metadata),
   });
   const response = projectProviderResponse(redacted.response ?? undefined, {
@@ -777,7 +790,7 @@ export default class EvalResult {
       promptIdx: result.promptIdx,
     });
     const sanitizedFields = persist
-      ? sanitizeResultFieldsForDb({ ...result, response: processedResponse })
+      ? sanitizeResultFieldsForDb({ ...result, response: processedResponse }, persistedMetadata)
       : undefined;
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
