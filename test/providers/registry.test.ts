@@ -424,11 +424,23 @@ describe('Provider Registry', () => {
         expect(provider).toHaveProperty('modelName', model);
       });
 
-      it('keeps earlier Responses-only models on Responses', async () => {
-        const provider = await registry.create('openai:gpt-5.5-pro');
+      // These predate the version gate, so only the Responses-only catalog keeps them
+      // off Chat Completions. Availability verified against GET /v1/models/<id>.
+      it.each([
+        'computer-use-preview',
+        'computer-use-preview-2025-03-11',
+        'gpt-5-codex',
+        'gpt-5.1-codex',
+        'gpt-5.1-codex-max',
+        'gpt-5.1-codex-mini',
+        'gpt-5.2-codex',
+        'gpt-5.5-pro',
+        'o1-pro',
+      ])('keeps earlier Responses-only model %s on Responses', async (model) => {
+        const provider = await registry.create(`openai:${model}`);
 
         expect(provider).toBeInstanceOf(OpenAiResponsesProvider);
-        expect(provider).toHaveProperty('modelName', 'gpt-5.5-pro');
+        expect(provider).toHaveProperty('modelName', model);
       });
 
       it.each([
