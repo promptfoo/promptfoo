@@ -17,7 +17,7 @@ The local `.gitlab-ci.yml` extends the hidden `.promptfoo-eval` job from `gitlab
 ```yaml
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-njv0R8fTNtcNFBeLLUpfyE6ToJ0GAY2zjpdAlyHRnLY='
+    integrity: 'sha256-X7v2mF0qGffhNGFu2Uo0cbFY3hmwaI/pX4s1jxoszr0='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -28,6 +28,8 @@ promptfoo-eval:
 GitLab 17.9 or later supports `include:integrity`. On older GitLab versions, replace `main` in the remote URL with a full, reviewed commit SHA. The template uses Promptfoo's official, digest-pinned non-root container image, so it never installs npm dependencies with provider secrets present.
 
 For Kubernetes runners, set [`automount_service_account_token = false`](https://docs.gitlab.com/runner/executors/kubernetes/#configuration-settings) in the runner configuration. The eval stops before loading repository code if the standard service-account token mount is readable.
+
+Disable GitLab Agent CI access for eval jobs; the template rejects a readable `KUBECONFIG` before executable providers start.
 
 ## Configuration
 

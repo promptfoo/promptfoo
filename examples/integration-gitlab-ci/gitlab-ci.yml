@@ -58,6 +58,11 @@
         exit 1
       fi
 
+      if [ -n "\${KUBECONFIG:-}" ] && [ -r "$KUBECONFIG" ]; then
+        echo 'Disable GitLab Agent CI access before running executable eval code.' >&2
+        exit 1
+      fi
+
       if ! env -i PATH="$PATH" node \
         -e 'const input = process.argv[1]; const value = Number(input); process.exit(/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(input) && Number.isFinite(value) && value >= 0 && value <= 100 ? 0 : 1)' \
         -- "${PROMPTFOO_PASS_RATE_THRESHOLD:-}"; then
@@ -81,6 +86,9 @@
         'CI_DEPENDENCY_PROXY_PASSWORD',
         'CI_DEPLOY_PASSWORD',
         'CI_JOB_TOKEN',
+        'CI_JOB_JWT',
+        'CI_JOB_JWT_V1',
+        'CI_JOB_JWT_V2',
         'CI_REGISTRY_PASSWORD',
         'CI_REPOSITORY_URL',
         'DOCKER_AUTH_CONFIG',
@@ -197,6 +205,8 @@
   # Global setup/teardown hooks must not receive the merge-request write token.
   before_script: []
   after_script: []
+  hooks:
+    pre_get_sources_script: []
   script:
     - |
       export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -344,6 +354,8 @@
           const sharingApp = new URL(sharingAppBaseUrl);
           if (
             shareUrl.origin === sharingApp.origin &&
+            !shareUrl.username &&
+            !shareUrl.password &&
             (shareUrl.protocol === 'https:' || shareUrl.protocol === 'http:')
           ) {
             const destination = shareUrl.href.replace(/[()[\]]/g, (character) =>

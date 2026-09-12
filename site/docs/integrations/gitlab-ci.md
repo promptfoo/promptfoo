@@ -24,7 +24,7 @@ Add the organization-owned template to your `.gitlab-ci.yml` file:
 ```yaml title=".gitlab-ci.yml"
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-njv0R8fTNtcNFBeLLUpfyE6ToJ0GAY2zjpdAlyHRnLY='
+    integrity: 'sha256-X7v2mF0qGffhNGFu2Uo0cbFY3hmwaI/pX4s1jxoszr0='
 
 promptfoo-eval:
   extends: .promptfoo-eval
@@ -182,6 +182,8 @@ Proxy settings are ignored by default to prevent an attacker-controlled `HTTP_PR
 The eval also fails closed when a Kubernetes or custom executor leaves GitLab credentials readable in a long-lived, same-user container init process. Use an executor that starts the sanitized eval as PID 1, or configure runner-level process isolation before enabling executable providers.
 
 Kubernetes runners must set [`automount_service_account_token = false`](https://docs.gitlab.com/runner/executors/kubernetes/#configuration-settings) in the runner configuration. The eval stops before loading repository code if the standard service-account token mount is readable.
+
+Disable GitLab Agent CI access for eval jobs; the template rejects a readable `KUBECONFIG` before executable providers start.
 
 To include a Promptfoo Cloud link, set `PROMPTFOO_SHARE: 'true'` and configure a masked `PROMPTFOO_API_KEY`. Sharing is disabled with `--no-share` by default, including when cloud credentials or sharing-enabled config are present.
 

@@ -23,6 +23,7 @@ interface GitLabJob {
   environment?: { action: string; name: string };
   image: { entrypoint: string[]; name: string };
   id_tokens?: Record<string, { aud: string }>;
+  hooks?: { pre_get_sources_script: string[] };
   script: string[];
   variables: Record<string, string>;
   resource_group?: string;
@@ -147,6 +148,7 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
           CI_JOB_NAME_SLUG: 'promptfoo-eval',
           CI_JOB_STATUS: 'success',
           CI_JOB_TOKEN: 'test-job-token',
+          KUBECONFIG: '',
           CI_MERGE_REQUEST_IID: '7',
           CI_PIPELINE_ID: '100',
           CI_PROJECT_ID: '42',
@@ -289,6 +291,17 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
   });
 
+  it('rejects readable GitLab Agent kubeconfigs before running eval code', async () => {
+    const kubeconfig = path.join(tempDir, 'agent-kubeconfig');
+    fs.writeFileSync(kubeconfig, 'fixture-agent-token');
+
+    const result = await runEvaluation({ KUBECONFIG: kubeconfig });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('GitLab Agent CI access');
+    expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
+  });
+
   it.each(['mkdir', 'env', 'node', 'promptfoo'])(
     'ignores a checkout-controlled %s on PATH',
     async (executable) => {
@@ -366,6 +379,10 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
       expect(fs.existsSync(path.join(tempDir, 'inherited-hook-token'))).toBe(false);
     },
   );
+
+  it('does not inherit token-bearing pre-source hooks', () => {
+    expect(commentJob.hooks?.pre_get_sources_script).toEqual([]);
+  });
 
   it.each(['missing config', 'invalid threshold'])(
     'rejects %s before starting the eval',
@@ -1134,6 +1151,32 @@ exec ${JSON.stringify(process.execPath)} "$@"
 
         expect(comment.status).toBe(0);
         expect(JSON.parse(requests.at(-1)!.body).body).not.toContain('attacker.example');
+      },
+    );
+  });
+
+  it('omits same-origin share URLs with userinfo', async () => {
+    await runEvaluation({
+      PROMPTFOO_SHARE: 'true',
+      PROMPTFOO_TEST_SHARE_URL: 'https://secret@promptfoo.app/eval/rewritten',
+    });
+
+    await withGitLabServer(
+      (request, response) => {
+        response.setHeader('Content-Type', 'application/json');
+        response.end(
+          request.url === '/api/v4/user' ? '{"id":123}' : request.method === 'GET' ? '[]' : '{}',
+        );
+      },
+      async (origin, requests) => {
+        const comment = await runScript(commentJob.script[0], {
+          CI_API_V4_URL: origin + '/api/v4',
+          CI_SERVER_URL: origin,
+          PROMPTFOO_SHARE: 'true',
+        });
+
+        expect(comment.status).toBe(0);
+        expect(JSON.parse(requests.at(-1)!.body).body).not.toContain('secret@');
       },
     );
   });
