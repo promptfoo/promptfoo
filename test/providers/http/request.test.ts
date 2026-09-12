@@ -2193,7 +2193,6 @@ describe('HttpProvider scheduler response envelopes', () => {
     const provider = new HttpProvider('http://example.com/api', {
       config: {
         ...(raw ? { request: 'GET /api HTTP/1.1\nHost: example.com\n\n' } : { method: 'GET' }),
-        debug: true,
         transformResponse: () => ({ ...response, tokenUsage }),
       },
     });
@@ -2202,7 +2201,11 @@ describe('HttpProvider scheduler response envelopes', () => {
     try {
       const result = await wrapProviderWithRateLimiting(provider, registry).callApi(
         'Completed transport',
-        undefined,
+        {
+          prompt: { raw: 'Completed transport', label: 'Completed transport' },
+          vars: {},
+          debug: true,
+        },
         { abortSignal: controller.signal },
       );
       expect(result).toMatchObject(response);

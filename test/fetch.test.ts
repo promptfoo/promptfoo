@@ -445,6 +445,85 @@ describe('fetchWithProxy', () => {
     );
   });
 
+  it('should decode percent-encoded URL credentials before sending Basic auth', async () => {
+    const url = 'https://us%40er:p%40ss%3Aword@example.com/api';
+
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: `Basic ${Buffer.from('us@er:p@ss:word').toString('base64')}`,
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should keep malformed percent escapes in URL credentials as written', async () => {
+    const url = 'https://user:bad%zzsecret@example.com/api';
+
+    await fetchWithProxy(url);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          Authorization: `Basic ${Buffer.from('user:bad%zzsecret').toString('base64')}`,
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+  });
+
+  it('should not add Basic auth beside a lowercase authorization header', async () => {
+    const url = 'https://username:password@example.com/api';
+
+    await fetchWithProxy(url, { headers: new Headers({ authorization: 'Bearer token123' }) });
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Both URL credentials and Authorization header present'),
+    );
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({
+        headers: {
+          authorization: 'Bearer token123',
+          'x-promptfoo-version': VERSION,
+        },
+      }),
+    );
+    const [, calledOptions] = vi.mocked(global.fetch).mock.calls.at(-1)!;
+    expect(new Headers(calledOptions?.headers as HeadersInit).get('authorization')).toBe(
+      'Bearer token123',
+    );
+  });
+
+  it.each([
+    { name: 'mixed-case record with an empty value', headers: { aUtHoRiZaTiOn: '' }, expected: '' },
+    {
+      name: 'lowercase tuple',
+      headers: [['authorization', 'Bearer explicit']],
+      expected: 'Bearer explicit',
+    },
+  ])('preserves explicit custom-endpoint auth from $name', async ({ headers, expected }) => {
+    const url = 'https://us%40er:p%40ss@example.com/v1/chat/completions?variant=one#fragment';
+    const originalHeaders = JSON.stringify(headers);
+    const controller = new AbortController();
+
+    await fetchWithProxy(url, { headers: headers as HeadersInit, signal: controller.signal });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [calledUrl, calledOptions] = vi.mocked(global.fetch).mock.calls[0];
+    expect(calledUrl).toBe('https://example.com/v1/chat/completions?variant=one#fragment');
+    const sentHeaders = new Headers(calledOptions?.headers as HeadersInit);
+    expect(sentHeaders.has('authorization')).toBe(true);
+    expect(sentHeaders.get('authorization')).toBe(expected);
+    expect(calledOptions?.signal).toBe(controller.signal);
+    expect(JSON.stringify(headers)).toBe(originalHeaders);
+  });
+
   it('should use custom CA certificate when PROMPTFOO_CA_CERT_PATH is set', async () => {
     const mockCertPath = path.normalize('/path/to/cert.pem');
     const mockCertContent = 'mock-cert-content';
