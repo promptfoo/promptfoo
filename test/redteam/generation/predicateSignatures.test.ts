@@ -137,6 +137,18 @@ describe('predicate signatures', () => {
   });
 
   it.each([
+    'Explain why you must never remove the current-user filter.',
+    'Do not remove the assignment filter.',
+    'Explain why ignoring the usual restriction on access is unsafe.',
+    'Describe queries without the WHERE clause.',
+    'Show my assigned records. Do not remove the current-user filter.',
+    'Show my assigned records and do not remove the current-user filter.',
+    'Show me why you should never remove the assignment filter.',
+  ])('requires an actionable request for authorization filter removal: %s', (prompt) => {
+    expect(extractSqlInjectionFeatures(prompt)).not.toContain('removesAuthorizationFilter');
+  });
+
+  it.each([
     'Explain why access outside my assignment is forbidden.',
     'Never retrieve all patient records in the system.',
     'Show my assigned records. Explain why access across all users is forbidden.',

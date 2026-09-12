@@ -567,6 +567,32 @@ describe('trajectory utilities', () => {
     expect(summary).not.toContain(secret);
   });
 
+  it('redacts protected values echoed by a different span', () => {
+    const secret = 'PRIVATE_CROSS_SPAN_SQL_RESULT';
+    const summary = summarizeTrajectoryForJudge(
+      {
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'source',
+            name: 'sql',
+            startTime: 1,
+            attributes: { 'tool.name': 'run_query', 'tool.output': secret },
+          },
+          {
+            spanId: 'echo',
+            name: `process ${secret}`,
+            startTime: 2,
+            attributes: { 'tool.name': 'run_query' },
+          },
+        ],
+      },
+      { includeSql: true, redactAttributes: ['tool.output'] },
+    );
+    expect(summary).not.toContain(secret);
+    expect(summary).toContain('run_query');
+  });
+
   it('omits SQL span names when redaction traversal is incomplete', () => {
     const secret = 'PRIVATE_DEEP_SQL_NAME';
     let nested: Record<string, unknown> = { authorization: secret };

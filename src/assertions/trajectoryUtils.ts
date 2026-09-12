@@ -590,18 +590,22 @@ export function summarizeTrajectoryForJudge(
   trace: TraceData,
   options: { includeSql?: boolean; redactAttributes?: string[] } = {},
 ): string {
+  const spans = trace.spans.map((span) => ({
+    ...span,
+    attributes: sanitizeTraceAttributes(span.attributes, {
+      redactAttributes: options.redactAttributes,
+      truncateValues: false,
+    }),
+  }));
+  const redactText = getTraceTextRedactor(
+    trace.spans.map((span, index) => ({
+      original: span.attributes,
+      sanitized: spans[index].attributes,
+    })),
+  );
   const sanitizedTrace = {
     ...trace,
-    spans: trace.spans.map((span) => {
-      const attributes = sanitizeTraceAttributes(span.attributes, {
-        redactAttributes: options.redactAttributes,
-        truncateValues: false,
-      });
-      const redactText = getTraceTextRedactor([
-        { original: span.attributes, sanitized: attributes },
-      ]);
-      return { ...span, name: redactText(span.name), attributes };
-    }),
+    spans: spans.map((span) => ({ ...span, name: redactText(span.name) })),
   };
   const rawSteps = extractTrajectorySteps(sanitizedTrace).map((step, index) => {
     const status = getTrajectoryStepStatus(step);

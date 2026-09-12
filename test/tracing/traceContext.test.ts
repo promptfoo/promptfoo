@@ -333,6 +333,37 @@ describe('fetchTraceContext', () => {
     ]);
   });
 
+  it.each([false, true])(
+    'redacts cross-span output echoes before external persistence (JSON: %s)',
+    async (serialized) => {
+      const secret = 'PRIVATE_EXTERNAL_SQL_RESULT';
+      mockExternalTrace([
+        {
+          spanId: 'source',
+          name: 'sql',
+          startTime: 1,
+          attributes: { 'tool.output': serialized ? JSON.stringify({ rows: [secret] }) : secret },
+        },
+        {
+          spanId: 'echo',
+          name: `process ${secret}`,
+          statusMessage: `received ${secret}`,
+          startTime: 2,
+          attributes: { 'tool.name': 'run_query' },
+        },
+      ]);
+      const result = await fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 0,
+        redactAttributes: ['tool.output'],
+      });
+      expect(result).not.toBeNull();
+      expect(JSON.stringify(storedSpans)).not.toContain(secret);
+      expect(JSON.stringify(result)).not.toContain(secret);
+    },
+  );
+
   it('stores large traces in database-safe batches', async () => {
     const spans = Array.from({ length: 501 }, (_, index) => ({
       spanId: String(index),

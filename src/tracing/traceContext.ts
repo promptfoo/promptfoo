@@ -5,7 +5,7 @@ import {
   type TraceProviderConfig,
   TraceProviderError,
 } from './providers/types';
-import { sanitizeTraceAttributes } from './sanitizeAttributes';
+import { getTraceTextRedactor, sanitizeTraceAttributes } from './sanitizeAttributes';
 import { getTraceStore, type SpanData, type TraceSpanQueryOptions } from './store';
 import { getToolNameFromAttributes } from './toolAttributes';
 
@@ -301,70 +301,26 @@ async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<b
   }
 }
 
-function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanData {
-  const attributes = span.attributes ?? {};
-  const sanitizedAttributes = sanitizeTraceAttributes(attributes, {
-    redactAttributes,
-    sanitizeSensitiveAttributes: false,
-    truncateValues: false,
-  });
-  const redactedValues = new Set<string>();
-  const pendingValues: Array<{ original: unknown; sanitized: unknown }> = [
-    { original: attributes, sanitized: sanitizedAttributes },
-  ];
-  while (pendingValues.length > 0) {
-    const { original, sanitized } = pendingValues.pop()!;
-    if (typeof original !== 'object') {
-      if (original !== undefined && sanitized === '[REDACTED]') {
-        const value = String(original);
-        if (value.length > 0) {
-          redactedValues.add(value);
-        }
-      }
-      continue;
-    }
-    if (!original) {
-      continue;
-    }
-    if (Array.isArray(original)) {
-      for (let index = 0; index < original.length; index++) {
-        pendingValues.push({
-          original: original[index],
-          sanitized: sanitized === '[REDACTED]' ? sanitized : (sanitized as unknown[])?.[index],
-        });
-      }
-      continue;
-    }
-    for (const [key, value] of Object.entries(original)) {
-      pendingValues.push({
-        original: value,
-        sanitized:
-          sanitized === '[REDACTED]' ? sanitized : (sanitized as Record<string, unknown>)?.[key],
-      });
-    }
-  }
-  const orderedRedactedValues = [...redactedValues].sort(
-    (left, right) => right.length - left.length,
-  );
-  const scrubEcho = <T extends string | undefined>(value: T): T => {
-    if (typeof value !== 'string') {
-      return value;
-    }
-
-    let sanitizedValue: string = value;
-    for (const redactedValue of orderedRedactedValues) {
-      sanitizedValue = sanitizedValue.split(redactedValue).join('[REDACTED]');
-    }
-
-    return sanitizedValue as T;
-  };
-
-  return {
+function redactExternalSpans(spans: SpanData[], redactAttributes: string[]): SpanData[] {
+  const sanitized = spans.map((span) => ({
     ...span,
-    name: scrubEcho(span.name),
-    statusMessage: scrubEcho(span.statusMessage),
-    attributes: sanitizedAttributes,
-  };
+    attributes: sanitizeTraceAttributes(span.attributes, {
+      redactAttributes,
+      sanitizeSensitiveAttributes: false,
+      truncateValues: false,
+    }),
+  }));
+  const redactText = getTraceTextRedactor(
+    spans.map((span, index) => ({
+      original: span.attributes,
+      sanitized: sanitized[index].attributes,
+    })),
+  );
+  return sanitized.map((span) => ({
+    ...span,
+    name: redactText(span.name),
+    statusMessage: redactText(span.statusMessage),
+  }));
 }
 
 function getProviderFetchOptions(
@@ -448,7 +404,7 @@ async function fetchFromExternalProvider(
       }
 
       const storedSpans = redactAttributes?.length
-        ? validSpans.map((span) => redactExternalSpan(span, redactAttributes))
+        ? redactExternalSpans(validSpans, redactAttributes)
         : validSpans;
 
       if (!(await storeExternalSpans(traceId, storedSpans))) {

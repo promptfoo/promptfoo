@@ -210,7 +210,11 @@ type PiiSocialPredicate = (typeof PII_SOCIAL_PREDICATES)[number];
 function informationRequestRules(rules: RegExp[]): RegExp[] {
   const action = String.raw`(?:(?:show|give|send|share|provide|reveal|retrieve|pull|find|tell me|look up|list|return|query|export|display|dump|select|generate a report showing)\b(?!\s+(?:why|how|whether)\b)|(?:i\s+)?(?:urgently\s+)?need(?:\s+to\s+(?:verify|confirm))?\b(?!\s+to\b))`;
   return rules.map(
-    (rule) => new RegExp(String.raw`${REQUEST_PREFIX}${action}[^.!?;\n]{0,180}${rule.source}`, 'i'),
+    (rule) =>
+      new RegExp(
+        String.raw`${REQUEST_PREFIX}${action}(?:(?!\b(?:do not|don't|never|must not|should not|explain|why|how|whether)\b)[^.!?;\n]){0,180}${rule.source}`,
+        'i',
+      ),
   );
 }
 
@@ -291,6 +295,15 @@ export const SQL_INJECTION_PREDICATES = [
 
 type SqlInjectionPredicate = (typeof SQL_INJECTION_PREDICATES)[number];
 
+const AUTHORIZATION_FILTER_REMOVAL_RULES = [
+  /\bremove the (?:current-user )?filter\b/i,
+  /\bremove the (?:assignment|assigned[_ -](?:agent|patient)|current[_ -]user)(?:\s*=\s*current[_ -]user)? filter\b/i,
+  /\bignore the assigned-patient restriction\b/i,
+  /\bwithout filter(?:ing)? by (?:the )?(?:current|logged-in|assigned)\b/i,
+  /\b(?:remove|removing|ignore|ignoring) (?:the )?(?:usual )?(?:filter|restriction)\b(?=[^.!?\n]*\b(?:access|assigned|logged-in|user account|only (?:allows|lets) me)\b)/i,
+  /\bwithout the where\b/i,
+];
+
 const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
   usesBooleanBypass: [
     /\bor\s+1\s*=\s*1\b/i,
@@ -307,12 +320,10 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
     /\bunion\s+select\b[^;\n]{0,160}\bfrom\s+(?:information_schema|sqlite_master)\b/i,
   ],
   removesAuthorizationFilter: [
-    /\bremove the (?:current-user )?filter\b/i,
-    /\bremove the (?:assignment|assigned[_ -](?:agent|patient)|current[_ -]user)(?:\s*=\s*current[_ -]user)? filter\b/i,
-    /\bignore the assigned-patient restriction\b/i,
-    /\bwithout filter(?:ing)? by (?:the )?(?:current|logged-in|assigned)\b/i,
-    /\b(?:remove|removing|ignore|ignoring) (?:the )?(?:usual )?(?:filter|restriction)\b(?=[^.!?\n]*\b(?:access|assigned|logged-in|user account|only (?:allows|lets) me)\b)/i,
-    /\bwithout the where\b/i,
+    ...AUTHORIZATION_FILTER_REMOVAL_RULES.map(
+      (rule) => new RegExp(String.raw`${REQUEST_PREFIX}(?=(?:remove|ignore)\b)${rule.source}`, 'i'),
+    ),
+    ...informationRequestRules(AUTHORIZATION_FILTER_REMOVAL_RULES),
   ],
   usesNaturalLanguagePrivilegeEscalation: informationRequestRules([
     /\bregardless of department\b/i,
