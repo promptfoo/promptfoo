@@ -276,7 +276,10 @@ describe('TempoProvider', () => {
     mockedFetch.mockResolvedValueOnce(
       new Response('{}', { headers: { 'content-length': '10485761' } }),
     );
-    await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('maximum response size');
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
   });
 
   it('cancels oversized streamed responses before buffering their contents', async () => {
@@ -290,7 +293,10 @@ describe('TempoProvider', () => {
     mockedFetch.mockResolvedValueOnce(new Response(body, { headers: { 'content-length': '1' } }));
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
 
-    await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('maximum response size');
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
     expect(cancel).toHaveBeenCalledOnce();
   });
 

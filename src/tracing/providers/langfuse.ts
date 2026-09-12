@@ -484,7 +484,9 @@ export class LangfuseProvider implements TraceProvider {
       const contentLength = Number(response.headers.get('content-length'));
       if (contentLength > remainingBytes) {
         await releaseResponse(response, 'Langfuse');
-        throw new TraceProviderError('Langfuse trace exceeds the maximum response size');
+        throw new TraceProviderError('Langfuse trace exceeds the maximum response size', {
+          limitExceeded: true,
+        });
       }
       const body = await readLimitedResponse(response, 'Langfuse', remainingBytes);
       remainingBytes -= new TextEncoder().encode(body).byteLength;

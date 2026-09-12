@@ -249,9 +249,10 @@ describe('BraintrustProvider', () => {
     const cancel = vi.spyOn(oversizedResponse.body!, 'cancel');
     mockedFetch.mockResolvedValue(oversizedResponse);
 
-    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'maximum response size',
-    );
+    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
     expect(cancel).toHaveBeenCalledOnce();
   });
 
@@ -271,9 +272,10 @@ describe('BraintrustProvider', () => {
         }),
       );
 
-      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-        'maximum response size',
-      );
+      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+        message: expect.stringContaining('maximum response size'),
+        limitExceeded: true,
+      });
       expect(cancel).toHaveBeenCalledOnce();
     },
   );
