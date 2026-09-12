@@ -1,11 +1,19 @@
+import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { useRedTeamConfig } from '@app/pages/redteam/setup/hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '@app/pages/redteam/setup/hooks/useRedTeamTargetConfigValidation';
+import { useStore } from '@app/stores/evalConfig';
+import { getCallApiMock, mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
 import { renderWithProviders } from '@app/utils/testutils';
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AddProviderDialog from './AddProviderDialog';
+import { ProvidersListSection } from './ProvidersListSection';
+import RunTestSuiteButton from './RunTestSuiteButton';
 import { normalizeProviders } from './setupReadiness';
+
+vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 
 vi.mock('@app/hooks/useTelemetry', () => ({
   useTelemetry: () => ({ recordEvent: vi.fn() }),
@@ -42,9 +50,27 @@ async function replaceText(
 
 function resetStores() {
   act(() => {
+    useStore.getState().reset();
     useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
     useRedTeamTargetConfigValidation.setState(useRedTeamTargetConfigValidation.getInitialState());
   });
+  localStorage.clear();
+  resetCallApiMock();
+}
+
+function EvalProviderSetup() {
+  const { config, updateConfig } = useStore();
+  return (
+    <MemoryRouter>
+      <EvalHistoryProvider>
+        <ProvidersListSection
+          providers={normalizeProviders(config.providers)}
+          onChange={(providers) => updateConfig({ providers })}
+        />
+        <RunTestSuiteButton />
+      </EvalHistoryProvider>
+    </MemoryRouter>
+  );
 }
 
 const cases = [
@@ -80,6 +106,130 @@ describe('eval provider configuration round trips', () => {
     resetStores();
     vi.clearAllMocks();
   });
+
+  it.each([
+    { type: 'vllm', apiBaseUrl: 'http://localhost:8000/v1' },
+    { type: 'llamafile', apiBaseUrl: 'http://localhost:8080/v1' },
+    { type: 'text-generation-webui', apiBaseUrl: 'http://localhost:5000/v1' },
+  ])(
+    'normalizes an imported $type target on untouched Save and Run',
+    async ({ type, apiBaseUrl }) => {
+      const user = userEvent.setup();
+      act(() =>
+        useStore.getState().setConfig({
+          providers: [{ id: 'openai:chat:gpt-4o', label: 'Imported local', config: { type } }],
+          prompts: ['Hello'],
+          tests: [{}],
+        }),
+      );
+      mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: 'local-job' } }]);
+      renderWithProviders(<EvalProviderSetup />);
+      await user.click(screen.getByRole('button', { name: 'Edit Imported local' }));
+      // Do not touch JSON, Format, cards, or the target ID: import alone must be safe.
+      await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+      const expected = [
+        {
+          id: 'openai:chat:gpt-4o',
+          label: 'Imported local',
+          config: { type, apiBaseUrl, apiKeyRequired: false, useDefaultApiKey: false },
+        },
+      ];
+      expect(useStore.getState().config.providers).toEqual(expected);
+      expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(
+        expected,
+      );
+      await user.click(screen.getByRole('button', { name: 'Run Eval' }));
+      const [, request] = getCallApiMock().mock.calls.find(([path]) => path === '/eval/job')!;
+      expect(JSON.parse(request!.body as string).providers).toEqual(expected);
+    },
+  );
+
+  it('keeps an imported JSON provider file routed after rename, Save, reopen, and Run', async () => {
+    const user = userEvent.setup();
+    act(() =>
+      useStore.getState().setConfig({
+        providers: [
+          { id: 'file://providers.json', label: 'JSON provider', config: { temperature: 0.2 } },
+        ],
+        prompts: ['Hello'],
+        tests: [{}],
+      }),
+    );
+    mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: 'json-job' } }]);
+    renderWithProviders(<EvalProviderSetup />);
+    await user.click(screen.getByRole('button', { name: 'Edit JSON provider' }));
+    expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue('providers.json');
+    await replaceText(
+      user,
+      screen.getByRole('textbox', { name: /Target ID/ }),
+      'providers-prod.json',
+    );
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+    const expected = [
+      { id: 'file://providers-prod.json', label: 'JSON provider', config: { temperature: 0.2 } },
+    ];
+    expect(useStore.getState().config.providers).toEqual(expected);
+    expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(expected);
+    await user.click(screen.getByRole('button', { name: 'Edit JSON provider' }));
+    expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue('providers-prod.json');
+    await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+    await user.click(screen.getByRole('button', { name: 'Run Eval' }));
+    const [, request] = getCallApiMock().mock.calls.find(([path]) => path === '/eval/job')!;
+    expect(JSON.parse(request!.body as string).providers).toEqual(expected);
+  });
+
+  it.each(
+    [
+      { route: 'openai:chat:gpt-4o', id: 'local-target', local: true },
+      { route: 'openai:chat:gpt-4o', id: 'anthropic:messages:identity', local: true },
+      { route: 'anthropic:messages:claude-sonnet', id: 'openai:chat:identity', local: false },
+    ].flatMap((target) =>
+      ['setConfig', 'updateConfig', 'rehydrate'].map((entry) => ({ ...target, entry })),
+    ),
+  )(
+    'submits map route $route with identity $id after $entry',
+    async ({ route, id, local, entry }) => {
+      const user = userEvent.setup();
+      const options = {
+        id,
+        label: 'Imported identity',
+        config: { type: 'vllm', temperature: 0.2 },
+      };
+      const config = { providers: [{ [route]: options }], prompts: ['Hello'], tests: [{}] };
+      await act(async () => {
+        if (entry === 'rehydrate') {
+          localStorage.setItem('promptfoo', JSON.stringify({ state: { config }, version: 0 }));
+          await useStore.persist.rehydrate();
+        } else {
+          useStore.getState()[entry as 'setConfig' | 'updateConfig'](config);
+        }
+      });
+      mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: 'map-job' } }]);
+      renderWithProviders(<EvalProviderSetup />);
+      await user.click(screen.getByRole('button', { name: 'Run Eval' }));
+      const [, request] = getCallApiMock().mock.calls.find(([path]) => path === '/eval/job')!;
+      const expected = [
+        {
+          [route]: {
+            ...options,
+            config: local
+              ? {
+                  ...options.config,
+                  apiBaseUrl: 'http://localhost:8000/v1',
+                  apiKeyRequired: false,
+                  useDefaultApiKey: false,
+                }
+              : options.config,
+          },
+        },
+      ];
+      expect(JSON.parse(request!.body as string).providers).toEqual(expected);
+      expect(useStore.getState().config.providers).toEqual(expected);
+      expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(
+        expected,
+      );
+    },
+  );
 
   it.each(cases)(
     'keeps $label editable after saving and reopening (saved type: $keepType)',

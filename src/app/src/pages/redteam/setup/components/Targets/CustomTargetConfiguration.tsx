@@ -461,9 +461,10 @@ const CustomTargetConfiguration = ({
     setTargetId(value);
 
     // A provider ID can contain script extensions in its opaque model name.
-    // Only file paths (optionally with a Windows drive or function) get a prefix.
+    // Only file paths (optionally with a Windows drive or script function) get a prefix.
     const isScriptPath = /^(?:[a-z]:[\\/])?[^:]*\.(?:py|js)(?::[^/\\]+)?$/i.test(value);
-    const idToSave = isScriptPath ? `file://${value}` : value;
+    const isJsonPath = /^(?:[a-z]:[\\/])?[^:]*\.json$/i.test(value);
+    const idToSave = isScriptPath || isJsonPath ? `file://${value}` : value;
     updateCustomTarget('id', idToSave);
   };
 

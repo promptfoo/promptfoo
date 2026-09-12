@@ -222,6 +222,13 @@ describe('CustomTargetConfiguration', () => {
       ['openai:chat:tenant/model.py:Q4_K_M', 'openai:chat:tenant/model.py:Q4_K_M'],
       ['openai:chat:tenant/model.json-v2', 'openai:chat:tenant/model.json-v2'],
       ['https://example.test/provider.js', 'https://example.test/provider.js'],
+      ['https://example.test/providers.json', 'https://example.test/providers.json'],
+      ['providers-prod.json', 'file://providers-prod.json'],
+      ['./providers-prod.json', 'file://./providers-prod.json'],
+      ['/configs/providers-prod.json', 'file:///configs/providers-prod.json'],
+      ['C:\\configs\\providers-prod.json', 'file://C:\\configs\\providers-prod.json'],
+      ['file://providers-prod.json', 'file://providers-prod.json'],
+      ['providers.json-v2', 'providers.json-v2'],
       ['provider.js:myFunction', 'file://provider.js:myFunction'],
       ['C:\\providers\\script.py:call_api', 'file://C:\\providers\\script.py:call_api'],
     ])('saves %s with its intended provider route', async (value, expectedId) => {

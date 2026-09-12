@@ -5,6 +5,7 @@ import {
   redactAzureBlobSasTokens,
   sanitizeUrlForLogging,
 } from '../../../util/sanitizer';
+import { withLocalProviderType } from '../pages/redteam/setup/components/Targets/helpers';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
@@ -605,6 +606,9 @@ const walkValue = (
         // This credential selector is safe to persist only as a literal boolean.
         // Imported YAML can contain strings or nested values despite the TS type.
         if (normalizeCredentialName(key) === 'use_default_api_key') {
+          if (typeof nestedValue === 'string') {
+            recordCredentialTemplatePaths(nestedValue, templatePaths);
+          }
           return typeof nestedValue === 'boolean' ? [[key, nestedValue]] : [];
         }
         const credential = isHeaders
@@ -728,6 +732,39 @@ const isProviderOptionsMap = (value: unknown): value is Record<string, unknown> 
   isRecord(value) &&
   Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key)) &&
   Object.values(value).every(isRecord);
+
+const normalizeLocalProviderOptions = (provider: unknown, id?: string): unknown => {
+  if (!isRecord(provider) || !isRecord(provider.config)) {
+    return provider;
+  }
+  const config = withLocalProviderType(
+    id ?? (typeof provider.id === 'string' ? provider.id : undefined),
+    provider.config,
+    typeof provider.config.type === 'string' ? provider.config.type : undefined,
+  );
+  return config === provider.config ? provider : { ...provider, config };
+};
+
+const normalizeLocalProviders = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> => {
+  if (!hasOwn(config, 'providers')) {
+    return config;
+  }
+  const normalize = (provider: unknown): unknown =>
+    isProviderOptionsMap(provider)
+      ? Object.fromEntries(
+          Object.entries(provider).map(([id, options]) => [
+            id,
+            normalizeLocalProviderOptions(options, id),
+          ]),
+        )
+      : normalizeLocalProviderOptions(provider);
+  return {
+    ...config,
+    providers: (Array.isArray(config.providers)
+      ? config.providers.map(normalize)
+      : normalize(config.providers)) as UnifiedConfig['providers'],
+  };
+};
 
 // walkValue never rewrites object keys, so after the walk the surviving
 // top-level keys are scrubbed here. This covers a credential-bearing id key on
@@ -1333,11 +1370,11 @@ export const useStore = create<EvalConfigState>()(
     (set, get) => ({
       config: { ...DEFAULT_CONFIG },
 
-      setConfig: (config) => set({ config }),
+      setConfig: (config) => set({ config: normalizeLocalProviders(config) }),
 
       updateConfig: (updates) =>
         set((state) => ({
-          config: { ...state.config, ...updates },
+          config: normalizeLocalProviders({ ...state.config, ...updates }),
         })),
 
       reset: () => set({ config: { ...DEFAULT_CONFIG } }),
@@ -1374,10 +1411,12 @@ export const useStore = create<EvalConfigState>()(
         return {
           ...currentState,
           ...(persistedState as Partial<EvalConfigState> | undefined),
-          config: omitPersistedSensitiveValues({
-            ...DEFAULT_CONFIG,
-            ...persistedConfig,
-          }),
+          config: omitPersistedSensitiveValues(
+            normalizeLocalProviders({
+              ...DEFAULT_CONFIG,
+              ...persistedConfig,
+            }),
+          ),
         };
       },
       onRehydrateStorage: () => (state) => {
