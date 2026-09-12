@@ -328,18 +328,36 @@ describe('suite environment loading', () => {
       generator,
       `module.exports = () => { require('fs').writeFileSync(${JSON.stringify(marker)}, 'executed'); return [{ vars: { source: 'local' } }]; };`,
     );
-    vi.mocked(readAzureBlobText).mockResolvedValue(JSON.stringify([{ path: generator }]));
+    const varsFile = path.join(tempDir, 'local-vars.yaml');
+    const providerFile = path.join(tempDir, 'local-provider.cjs');
+    fs.writeFileSync(varsFile, 'source: must-not-read');
+    fs.writeFileSync(
+      providerFile,
+      `require('fs').writeFileSync(${JSON.stringify(marker)}, 'imported'); module.exports = class { id() { return 'local'; } };`,
+    );
+    vi.mocked(readAzureBlobText).mockResolvedValue(
+      JSON.stringify([
+        { path: generator },
+        { vars: varsFile },
+        { provider: `file://${providerFile}` },
+      ]),
+    );
     const first = await resolveConfigs(
       { config: [writeConfig('remote-path', { tests: 'az://account/container/rows.yaml' })] },
       {},
     );
     const result = await evaluate(
-      { prompts: ['hello'], providers: ['echo'], tests: first.testSuite.tests },
+      { prompts: ['hello'], providers: ['echo'], tests: first.testSuite.tests?.slice(0, 1) },
       { cache: false },
     );
     expect(await result.getResults()).toHaveLength(1);
     expect(fs.existsSync(marker)).toBe(false);
-    await resolveConfigs({}, JSON.parse(JSON.stringify(first.config)));
+    const reread = await readTests(first.testSuite.tests);
+    const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(first.config)));
+    for (const tests of [reread, replay.testSuite.tests]) {
+      expect(tests?.[1].vars).toBe(varsFile);
+      expect(tests?.[2].provider).toBe(`file://${providerFile}`);
+    }
     expect(readAzureBlobText).toHaveBeenCalledTimes(2);
     expect(fs.existsSync(marker)).toBe(false);
   });
@@ -347,7 +365,14 @@ describe('suite environment loading', () => {
   it('keeps the SDK environment active while reading prompts and exporting results', async () => {
     const content = path.join(tempDir, 'selected.json');
     fs.writeFileSync(content, JSON.stringify('suite content'));
-    fs.writeFileSync(path.join(tempDir, 'prompt.yaml'), 'content: file://{{ env.OPENAI_API_KEY }}');
+    fs.writeFileSync(
+      path.join(tempDir, 'prompt.yaml'),
+      'content: file://{{ env.OPENAI_API_KEY }}\nfiltered: "{{ input | selected }}"',
+    );
+    fs.writeFileSync(
+      path.join(tempDir, 'filter.cjs'),
+      "module.exports = (value) => 'filtered:' + value;",
+    );
     const outputPath = path.join(tempDir, 'sdk-results.json');
     const result = await evaluate(
       {
@@ -356,12 +381,16 @@ describe('suite environment loading', () => {
         env: { OPENAI_API_KEY: content, PROMPTFOO_STRIP_PROMPT_TEXT: 'true' },
         prompts: ['file://prompt.yaml'],
         providers: ['echo'],
-        tests: [{ vars: {} }],
+        tests: [{ vars: { input: 'sdk' } }],
+        nunjucksFilters: { selected: 'filter.cjs' },
       },
       { cache: false },
     );
     const [row] = await result.getResults();
-    expect(JSON.parse(row.response!.output as string)).toEqual({ content: 'suite content' });
+    expect(JSON.parse(row.response!.output as string)).toEqual({
+      content: 'suite content',
+      filtered: 'filtered:sdk',
+    });
     const exported = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
     expect(exported.results.prompts.map((prompt: { raw: string }) => prompt.raw)).toEqual([
       '[prompt stripped]',
@@ -520,6 +549,37 @@ describe('suite environment loading', () => {
             ? testSuite.tests
             : testSuite.scenarios?.flatMap((scenario) => scenario.tests ?? []);
         expect(tests?.map((test) => test.vars?.source)).toEqual(['first', 'second']);
+      }
+    },
+  );
+
+  it.each(['top', 'scenario'] as const)(
+    'retains inline vars and provider file origins during %s replay',
+    async (location) => {
+      const configs = ['first-inline', 'second-inline'].map((name) => {
+        const test = { vars: 'vars.yaml', provider: 'file://provider.yaml' };
+        const configPath = writeConfig(
+          name,
+          location === 'top'
+            ? { tests: [test] as unknown as TestCase[] }
+            : { scenarios: [{ config: [{}], tests: [test] as unknown as TestCase[] }] },
+        );
+        const directory = path.dirname(configPath);
+        fs.writeFileSync(path.join(directory, 'vars.yaml'), `source: ${name}`);
+        fs.writeFileSync(path.join(directory, 'provider.yaml'), `id: echo\nlabel: ${name}`);
+        return configPath;
+      });
+      const original = await resolveConfigs({ config: configs }, {});
+      const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(original.config)));
+      for (const { testSuite } of [original, replay]) {
+        const tests =
+          location === 'top'
+            ? testSuite.tests
+            : testSuite.scenarios?.flatMap((scenario) => scenario.tests ?? []);
+        expect(tests?.map((test) => ({ vars: test.vars, provider: test.provider }))).toMatchObject([
+          { vars: { source: 'first-inline' }, provider: { label: 'first-inline' } },
+          { vars: { source: 'second-inline' }, provider: { label: 'second-inline' } },
+        ]);
       }
     },
   );
