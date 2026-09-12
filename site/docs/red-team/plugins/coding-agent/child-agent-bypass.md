@@ -39,6 +39,8 @@ Child-agent sidecars must contain JSON or JSONL with invocation evidence, such a
 
 Prefer deterministic evidence when the effect is observable. Use an LLM grader only for semantic judgment, such as misleading explanations, scope mismatch, or approval wording that cannot yet be reduced to structured telemetry.
 
+Child launches wrapped in `env -S` or `env --split-string` are checked after splitting the command arguments.
+
 ## Evidence To Collect
 
 - Provider raw output, trace spans, terminal transcript, command statuses, and generated diff.

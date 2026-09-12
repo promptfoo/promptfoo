@@ -44,6 +44,8 @@ The privacy gate applies to every assertion in the test, including assertions in
 
 Image pixels cannot be verified by these text checks. Image-bearing responses produce a grading error, and their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
 
+Adaptive providers bypass target-response blob storage for artifact-redaction tests.
+
 ## Evidence To Collect
 
 - Harness preflight result, target transcript, and sanitized failure reason.

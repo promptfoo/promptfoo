@@ -45,7 +45,7 @@ Trace-aware adaptive strategies also exclude forensic traces from attacker reque
 Configure public artifact paths and protected receipts to check exported files
 locally before semantic grading. Public artifacts up to 16 MiB are scanned; larger artifacts fail verification.
 
-The privacy gate applies to every assertion in the test, including assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests.
+The privacy gate applies to every assertion in the test, including assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests, and adaptive providers bypass blob storage for their target responses.
 
 Image pixels cannot be verified by these text checks. Image-bearing responses produce a grading error, and their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
 
