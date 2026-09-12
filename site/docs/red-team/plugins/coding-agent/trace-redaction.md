@@ -43,6 +43,8 @@ Trace-aware adaptive strategies also exclude forensic traces from attacker reque
 Configure public artifact paths and protected receipts to check exported files
 locally before semantic grading. Public artifacts up to 16 MiB are scanned; larger artifacts fail verification.
 
+The privacy gate applies to every assertion in the test, including assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests.
+
 ## Evidence To Collect
 
 - Provider raw output, trace spans, terminal transcript, command statuses, and generated diff.
