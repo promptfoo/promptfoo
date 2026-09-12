@@ -694,44 +694,94 @@ describe('doGenerateRedteam', () => {
     );
   });
 
-  it('summarizes only the current batch when appending tests', async () => {
-    const oldTest = {
-      vars: { input: 'Older generated prompt' },
-      metadata: {
-        pluginId: 'pii:social',
-        semanticFrontier: {
-          active: true,
-          complete: false,
-          minimumPortfolioSize: 1,
-          bands: {
-            pii: {
-              featureCount: 1,
-              observedFeatureCount: 0,
-              observedFeatureIds: [],
-              reachableFeatureCount: 0,
-              reachableFeatureIds: [],
-              unreachableFeatureIds: ['requestsProtectedInformation'],
+  it.each([
+    [true, false],
+    [false, false],
+    [true, true],
+    [false, true],
+  ])(
+    'preserves prior frontier coverage when appending tests with a new frontier: %s',
+    async (hasNewFrontier, storedOnly) => {
+      const oldTest = {
+        vars: { input: 'Older generated prompt' },
+        metadata: {
+          pluginId: 'pii:social',
+          semanticFrontier: {
+            active: true,
+            complete: false,
+            minimumPortfolioSize: 1,
+            bands: {
+              pii: {
+                featureCount: 1,
+                observedFeatureCount: 0,
+                observedFeatureIds: [],
+                reachableFeatureCount: 0,
+                reachableFeatureIds: [],
+                unreachableFeatureIds: ['requestsProtectedInformation'],
+              },
             },
           },
         },
-      },
-    };
-    mockReadFileSync({ tests: [oldTest] });
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [
-        { vars: { input: 'Current generated prompt' }, metadata: { pluginId: 'pii:social' } },
-      ],
-      purpose: 'Test purpose',
-      entities: [],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
-    await doGenerateRedteam({ config: 'config.yaml', cache: true, defaultConfig: {}, write: true });
-    const updated = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0];
-    expect(updated?.tests).toHaveLength(2);
-    expect(updated?.tests).toContainEqual(oldTest);
-    expect(updated?.metadata).not.toHaveProperty('semanticFrontierDiagnostics');
-  });
+      };
+      const savedTest = storedOnly
+        ? { ...oldTest, metadata: { pluginId: 'pii:social', strategyId: 'base64' } }
+        : oldTest;
+      mockReadFileSync({
+        tests: [savedTest],
+        ...(storedOnly && {
+          metadata: {
+            semanticFrontierDiagnostics: [
+              {
+                pluginId: 'pii:social',
+                frontierCount: 1,
+                completeFrontierCount: 0,
+                structurallyDegraded: true,
+                unreachableFeatureIds: ['requestsProtectedInformation'],
+              },
+            ],
+          },
+        }),
+      });
+      vi.mocked(synthesize).mockResolvedValue({
+        semanticFrontierDiagnostics: hasNewFrontier
+          ? [
+              {
+                pluginId: 'pii:social',
+                frontierCount: 1,
+                completeFrontierCount: 1,
+                structurallyDegraded: false,
+                unreachableFeatureIds: [],
+              },
+            ]
+          : [],
+        testCases: [
+          { vars: { input: 'Current generated prompt' }, metadata: { pluginId: 'pii:social' } },
+        ],
+        purpose: 'Test purpose',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      });
+      await doGenerateRedteam({
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      });
+      const updated = vi.mocked(writePromptfooConfig).mock.calls.at(-1)?.[0];
+      expect(updated?.tests).toHaveLength(2);
+      expect(updated?.tests).toContainEqual(savedTest);
+      expect(updated?.metadata?.semanticFrontierDiagnostics).toEqual([
+        {
+          pluginId: 'pii:social',
+          frontierCount: hasNewFrontier ? 2 : 1,
+          completeFrontierCount: hasNewFrontier ? 1 : 0,
+          structurallyDegraded: true,
+          unreachableFeatureIds: ['requestsProtectedInformation'],
+        },
+      ]);
+    },
+  );
 
   it('should remove stale generation metadata when updating a config has no current values', async () => {
     const options: RedteamCliGenerateOptions = {

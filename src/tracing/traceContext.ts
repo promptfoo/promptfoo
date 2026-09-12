@@ -55,6 +55,8 @@ export interface FetchTraceContextOptions
   sanitizeAttributes?: boolean;
   maxRetries?: number;
   retryDelayMs?: number;
+  /** Poll external snapshots until completed spans stop changing or retries are exhausted. */
+  waitForStableSpans?: boolean;
   /** External trace provider configuration (Tempo, Jaeger, etc.) */
   providerConfig?: TraceProviderConfig;
   /** Delay in ms before querying external provider (allows spans to arrive). Default: 3000 */
@@ -379,6 +381,7 @@ async function fetchFromExternalProvider(
   providerConfig: TraceProviderConfig,
   options: {
     queryDelay: number;
+    waitForStableSpans?: boolean;
     maxRetries: number;
     retryDelayMs: number;
     includeInternalSpans: boolean;
@@ -391,8 +394,15 @@ async function fetchFromExternalProvider(
     abortSignal?: AbortSignal;
   },
 ): Promise<TraceContextData | null> {
-  const { queryDelay, maxRetries, retryDelayMs, redactAttributes, abortSignal, ...spanOptions } =
-    options;
+  const {
+    queryDelay,
+    maxRetries,
+    retryDelayMs,
+    waitForStableSpans,
+    redactAttributes,
+    abortSignal,
+    ...spanOptions
+  } = options;
   const providerFetchOptions = getProviderFetchOptions(spanOptions, abortSignal);
 
   let provider: ReturnType<typeof createTraceProvider>;
@@ -408,6 +418,7 @@ async function fetchFromExternalProvider(
     await waitForRetry(queryDelay, abortSignal);
   }
 
+  let previousSnapshot: string | undefined;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (abortSignal?.aborted) {
       throw createTraceAbortError(abortSignal);
@@ -443,6 +454,20 @@ async function fetchFromExternalProvider(
 
       if (!(await storeExternalSpans(traceId, validSpans, redactSpans))) {
         return null;
+      }
+
+      if (waitForStableSpans && attempt < maxRetries) {
+        const snapshot = JSON.stringify(
+          [...validSpans].sort((a, b) => a.spanId.localeCompare(b.spanId)),
+        );
+        const complete = validSpans.every(
+          (span) => span.endTime !== undefined && span.endTime >= span.startTime,
+        );
+        if (snapshot !== previousSnapshot || !complete) {
+          previousSnapshot = snapshot;
+          await waitForRetry(retryDelayMs, abortSignal);
+          continue;
+        }
       }
 
       const spans = await getTraceStore().getSpans(traceId, spanOptions);
@@ -597,6 +622,7 @@ export async function fetchTraceContext(
     retryDelayMs = DEFAULT_RETRY_DELAY_MS,
     providerConfig,
     queryDelay = DEFAULT_QUERY_DELAY_MS,
+    waitForStableSpans = false,
     ...spanOptions
   } = options;
 
@@ -613,6 +639,7 @@ export async function fetchTraceContext(
     const externalConfig = providerConfig!;
     const requestOptions = {
       queryDelay,
+      waitForStableSpans,
       ...fetchOptions,
     };
     // Calls with an abort signal retain independent cancellation ownership.

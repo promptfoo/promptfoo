@@ -1013,6 +1013,7 @@ async function collectExternalTraceAfterProviderCall({
       providerConfig: tracingConfig?.provider,
       queryDelay: tracingConfig?.queryDelay,
       maxRetries: needsTraceForGrading ? 5 : 0,
+      waitForStableSpans: needsTraceForGrading,
       retryDelayMs: 1000,
       includeInternalSpans: true,
       sanitizeAttributes: true,

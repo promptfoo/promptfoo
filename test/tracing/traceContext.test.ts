@@ -425,6 +425,93 @@ describe('fetchTraceContext', () => {
     expect(mocks.addSpans.mock.calls[1][1]).toHaveLength(1);
   });
 
+  it.each(['new-span', 'updated-span'])(
+    'polls a nonempty trace until its %s snapshot settles',
+    async (mode) => {
+      vi.useFakeTimers();
+      try {
+        const model = { spanId: 'model', name: 'model', startTime: 1, endTime: 2 };
+        const initial =
+          mode === 'new-span'
+            ? [model]
+            : [{ ...model, endTime: undefined, attributes: { 'db.query.text': 'SELECT 1' } }];
+        const sql = {
+          spanId: mode === 'new-span' ? 'sql' : 'model',
+          name: 'sql execution',
+          startTime: 1,
+          endTime: 3,
+          attributes: { 'db.query.text': 'SELECT * FROM accounts WHERE id = 1 OR 1=1' },
+        };
+        const completed = mode === 'new-span' ? [model, sql] : [sql];
+        const fetchTrace = vi
+          .fn()
+          .mockResolvedValueOnce({ fetchedAt: 1, traceId: 'trace-1', spans: initial })
+          .mockResolvedValue({ fetchedAt: 2, traceId: 'trace-1', spans: completed });
+        mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+        const pending = fetchTraceContext('trace-1', {
+          providerConfig,
+          queryDelay: 0,
+          maxRetries: 5,
+          retryDelayMs: 1000,
+          waitForStableSpans: true,
+        });
+        await vi.runAllTimersAsync();
+        const result = await pending;
+        expect(fetchTrace).toHaveBeenCalledTimes(3);
+        expect(result?.spans).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ spanId: sql.spanId, endTime: 3, attributes: sql.attributes }),
+          ]),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('bounds polling when external spans never finish', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchTrace = mockExternalTrace([{ spanId: 'pending', name: 'pending', startTime: 1 }]);
+      const pending = fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 2,
+        retryDelayMs: 1000,
+        waitForStableSpans: true,
+      });
+      await vi.runAllTimersAsync();
+      expect((await pending)?.spans).toHaveLength(1);
+      expect(fetchTrace).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels polling after a partial external snapshot', async () => {
+    vi.useFakeTimers();
+    try {
+      const controller = new AbortController();
+      const fetchTrace = mockExternalTrace([{ spanId: 'pending', name: 'pending', startTime: 1 }]);
+      const pending = fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 5,
+        retryDelayMs: 1000,
+        waitForStableSpans: true,
+        abortSignal: controller.signal,
+      });
+      const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+      await vi.advanceTimersByTimeAsync(0);
+      controller.abort();
+      await rejected;
+      await vi.runAllTimersAsync();
+      expect(fetchTrace).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('waits before the initial request and retries missing traces', async () => {
     vi.useFakeTimers();
     try {

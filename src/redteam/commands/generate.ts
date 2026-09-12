@@ -22,6 +22,7 @@ import { getProviderIds } from '../../providers/index';
 import { isPromptfooSampleTarget } from '../../providers/shared';
 import telemetry from '../../telemetry';
 import { EMAIL_OK_STATUS } from '../../types/email';
+import { summarizeSemanticFrontierDiagnosticsFromTests } from '../../types/semanticFrontierDiagnostics';
 import {
   checkCloudPermissions,
   getCloudDatabaseId,
@@ -1004,6 +1005,23 @@ async function doGenerateRedteamInternal(
       if (options.description) {
         existingConfig.description = options.description;
       }
+      const savedFrontierDiagnostics = z
+        .array(
+          z.object({
+            pluginId: z.string().min(1),
+            frontierCount: z.number().int().nonnegative(),
+            completeFrontierCount: z.number().int().nonnegative(),
+            structurallyDegraded: z.boolean(),
+            unreachableFeatureIds: z.array(z.string()),
+          }),
+        )
+        .safeParse(existingConfig.metadata?.semanticFrontierDiagnostics);
+      const combinedFrontierDiagnostics = mergeSemanticFrontierDiagnostics([
+        ...(savedFrontierDiagnostics.success
+          ? savedFrontierDiagnostics.data
+          : summarizeSemanticFrontierDiagnosticsFromTests(testsArray)),
+        ...semanticFrontierDiagnostics,
+      ]);
       existingConfig.tests = [...testsArray, ...redteamTests];
       existingConfig.redteam = { ...(existingConfig.redteam || {}), ...updatedRedteamConfig };
       const existingMetadata = { ...(existingConfig.metadata || {}) };
@@ -1015,7 +1033,9 @@ async function doGenerateRedteamInternal(
         ...existingMetadata,
         configHash: await getConfigHash(configPath, options),
         ...((generationTokenUsage.numRequests ?? 0) > 0 && { generationTokenUsage }),
-        ...(semanticFrontierDiagnostics.length > 0 && { semanticFrontierDiagnostics }),
+        ...(combinedFrontierDiagnostics.length > 0 && {
+          semanticFrontierDiagnostics: combinedFrontierDiagnostics,
+        }),
         generation,
       };
       const author = getAuthor();

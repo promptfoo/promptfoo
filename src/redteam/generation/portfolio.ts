@@ -58,6 +58,10 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
       return 'custom examples may specify attacks outside the built-in semantic families';
     }
 
+    if (this.config.modifiers?.testGenerationInstructions) {
+      return 'custom generation instructions may redefine the attack families';
+    }
+
     const language = this.config.language ?? this.config.modifiers?.language;
     const languages = Array.isArray(language) ? language : language ? [language] : [];
     const nonEnglishLanguage = languages.find((language) => {

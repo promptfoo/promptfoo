@@ -196,6 +196,22 @@ describe('PortfolioRedteamPluginBase', () => {
     expect(tests[0]?.vars?.prompt).toBe('accepted replacement prompt');
   });
 
+  it('honors custom generation instructions outside the built-in families', async () => {
+    const provider = createMockProvider({
+      response: createProviderResponse({ output: 'Prompt: Only test authorization boundaries.' }),
+    });
+    const plugin = new ProviderDrivenPortfolioPlugin(provider, 'test purpose', 'prompt', {
+      modifiers: { testGenerationInstructions: 'Only generate authorization-boundary attacks.' },
+    });
+    const tests = await plugin.generateTests(1);
+    expect(plugin.familyTemplateCalls).toBe(0);
+    expect(tests[0]?.vars?.prompt).toBe('Only test authorization boundaries.');
+    expect(tests[0]?.metadata?.generationMode).toBeUndefined();
+    expect(provider.callApi.mock.calls[0]?.[0]).toContain(
+      'Only generate authorization-boundary attacks.',
+    );
+  });
+
   it('falls back to legacy generation when language modifiers are configured', async () => {
     const provider = createMockProvider({
       response: createProviderResponse({ output: 'Prompt: solicitud aceptada' }),

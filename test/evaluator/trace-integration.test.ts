@@ -544,6 +544,7 @@ describe('evaluator trace integration', () => {
           providerConfig,
           queryDelay: 750,
           maxRetries: 5,
+          waitForStableSpans: true,
           retryDelayMs: 1000,
           redactAttributes: ['secret'],
         }),
