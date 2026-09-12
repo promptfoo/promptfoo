@@ -57,17 +57,27 @@ describe('resolveTracingOptions', () => {
     };
 
     const [first, second] = await Promise.all([
-      cliState.withRequestTracingConfig(firstTracingConfig, async () => {
-        await Promise.resolve();
-        return resolveTracingOptions({ strategyId: 'jailbreak' });
-      }),
-      cliState.withRequestTracingConfig(secondTracingConfig, async () => {
-        await Promise.resolve();
-        return resolveTracingOptions({ strategyId: 'jailbreak' });
-      }),
+      cliState.withRequestTracingConfig(
+        firstTracingConfig,
+        async () => {
+          await Promise.resolve();
+          return resolveTracingOptions({ strategyId: 'jailbreak' });
+        },
+        { enabled: true, includeInGrading: false },
+      ),
+      cliState.withRequestTracingConfig(
+        secondTracingConfig,
+        async () => {
+          await Promise.resolve();
+          return resolveTracingOptions({ strategyId: 'jailbreak' });
+        },
+        { enabled: true, includeInGrading: true },
+      ),
     ]);
 
     expect(first.provider).toEqual(firstTracingConfig.provider);
     expect(second.provider).toEqual(secondTracingConfig.provider);
+    expect(first.includeInGrading).toBe(false);
+    expect(second.includeInGrading).toBe(true);
   });
 });

@@ -549,6 +549,30 @@ describe('trajectory utilities', () => {
     expect(summary.steps[0].sql).toEqual({ query: 'SELECT id FROM accounts' });
   });
 
+  it('keeps a database connection URI out of scalar SQL evidence', () => {
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'connection',
+              name: 'tool.call',
+              startTime: 1,
+              attributes: {
+                'tool.name': 'database',
+                'tool.arguments': 'postgresql://user:private-password@host/private',
+              },
+            },
+          ],
+        },
+        { includeSql: true },
+      ),
+    );
+    expect(summary.steps.every((step: { sql?: unknown }) => !step.sql)).toBe(true);
+    expect(JSON.stringify(summary)).not.toContain('private-password');
+  });
+
   it.each(['gen_ai.tool.call.result', 'ai.toolCall.result'])(
     'retains normalized SQL outcomes from %s',
     (key) => {

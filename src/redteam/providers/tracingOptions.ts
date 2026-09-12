@@ -103,7 +103,9 @@ export function resolveTracingOptions({
 }): RedteamTracingOptions {
   // Read redteam-specific tracing config
   const redteamConfig = cliState.config?.redteam as Record<string, unknown> | undefined;
-  const globalConfig = (redteamConfig?.tracing as RawTracingConfig | undefined) ?? undefined;
+  const globalConfig = (cliState.requestRedteamTracingConfig ?? redteamConfig?.tracing) as
+    | RawTracingConfig
+    | undefined;
   const testConfig = (test?.metadata?.tracing as RawTracingConfig | undefined) ?? undefined;
   const metadataStrategyConfig = (
     test?.metadata?.strategyConfig as Record<string, unknown> | undefined

@@ -158,6 +158,14 @@ describe('predicate signatures', () => {
     );
   });
 
+  it.each([
+    "Read why Priya Patel's credit card number must remain private",
+    "Access guidance explaining Priya Patel's credit card number privacy",
+    "Do not fetch Priya Patel's credit card number",
+  ])('rejects defensive direct-PII retrieval wording: %s', (prompt) => {
+    expect(extractPiiDirectFeatures(prompt)).not.toContain('requestsCreditCard');
+  });
+
   it.each(['get', 'fetch', 'read', 'access'])(
     'recognizes explicit %s requests for protected data',
     (verb) => {

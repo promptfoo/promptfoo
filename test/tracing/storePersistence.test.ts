@@ -5,10 +5,12 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 import { eq } from 'drizzle-orm';
+import request from 'supertest';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
+import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
 import { TraceStore } from '../../src/tracing/store';
 import EvalFactory from '../factories/evalFactory';
 import { removeTempDir } from '../util/utils';
@@ -26,16 +28,123 @@ describe('TraceStore span persistence', () => {
     await db.delete(tracesTable).run();
   });
 
-  async function createTrace(traceId: string): Promise<TraceStore> {
+  async function createTrace(
+    traceId: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<TraceStore> {
     const evaluation = await EvalFactory.create({ numResults: 0 });
     const traceStore = new TraceStore();
     await traceStore.createTrace({
       evaluationId: evaluation.id,
       testCaseId: `${traceId}-test`,
       traceId,
+      metadata,
     });
     return traceStore;
   }
+
+  it.each(['plain', 'json'])(
+    'redacts stored text when the %s source arrives in a later OTLP upload',
+    async (format) => {
+      const traceId = 'e'.repeat(32);
+      const traceStore = await createTrace(traceId, {
+        otlpHttpRedactAttributes: ['authorization'],
+      });
+      const receiver = new OTLPReceiver({
+        acceptFormats: ['json'],
+        redactAttributes: ['authorization'],
+      });
+      const secret = 'PRIVATE_REVERSE_UPLOAD_RECEIPT';
+      const send = (span: Record<string, unknown>) =>
+        request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    spans: [
+                      { traceId, spanId: '1'.repeat(16), startTimeUnixNano: '1000000000', ...span },
+                    ],
+                  },
+                ],
+              },
+            ],
+          });
+      await send({
+        name: `echo ${secret}`,
+        status: { code: 2, message: `error ${secret}` },
+      }).expect(200);
+      await send({
+        spanId: '2'.repeat(16),
+        name: 'source',
+        attributes: [
+          {
+            key: 'authorization',
+            value: { stringValue: format === 'json' ? JSON.stringify({ token: secret }) : secret },
+          },
+        ],
+      }).expect(200);
+      const db = await getDb();
+      const rows = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+      expect(rows).toHaveLength(2);
+      expect(JSON.stringify(rows)).not.toContain(secret);
+      expect(JSON.stringify(await traceStore.getTrace(traceId))).not.toContain(secret);
+      await receiver.stop();
+    },
+  );
+
+  it.each(['concurrent', 'restart'])(
+    'keeps stored and new text private across %s uploads',
+    async (mode) => {
+      const traceId = 'd'.repeat(32);
+      await createTrace(traceId, { otlpHttpRedactAttributes: ['authorization'] });
+      const receiver = new OTLPReceiver({ acceptFormats: ['json'] });
+      const secret = 'PRIVATE_OLD_TRACE_RECEIPT';
+      const send = (id: string, name: string, authorization?: string) =>
+        request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId,
+                        spanId: id.repeat(16),
+                        name,
+                        startTimeUnixNano: '1000000000',
+                        attributes: authorization
+                          ? [{ key: 'authorization', value: { stringValue: authorization } }]
+                          : [],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .expect(200);
+      if (mode === 'concurrent') {
+        await send('1', `echo ${secret} OTHER_PRIVATE_VALUE`);
+        await Promise.all([
+          send('2', 'first source', secret),
+          send('3', 'second source', 'OTHER_PRIVATE_VALUE'),
+        ]);
+      } else {
+        await send('1', 'source', secret);
+        await receiver.stop();
+        await send('2', `echo ${secret}`);
+      }
+      const db = await getDb();
+      const rows = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+      expect(rows).toHaveLength(mode === 'concurrent' ? 3 : 2);
+      expect(JSON.stringify(rows)).not.toContain(secret);
+      expect(JSON.stringify(rows)).not.toContain('OTHER_PRIVATE_VALUE');
+      await receiver.stop();
+    },
+  );
 
   it('ignores duplicate span IDs in a single insertion', async () => {
     const traceStore = await createTrace('single-insertion');

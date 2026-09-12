@@ -554,7 +554,20 @@ function getSqlExecutionDetails(
   const argumentObject = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
   const argumentSql = getFirstStringAttribute(argumentObject, ['sql']);
   const toolName = getToolNameFromAttributes(attributes) ?? step.spanName;
+  const isQueryTool =
+    /(^|[\s.:/-])(?:(?:read|run|execute)_query|(?:run|execute)_sql|query)($|[\s.:/-])/i.test(
+      toolName,
+    );
+  const scalarSql =
+    typeof args === 'string' &&
+    (isQueryTool ||
+      /^\s*(?:select|with|insert|update|delete|merge|create|alter|drop|truncate|grant|revoke|explain|pragma|show|describe|call|exec(?:ute)?)\b/i.test(
+        args,
+      ))
+      ? args.trim()
+      : undefined;
   const isDatabaseOperation =
+    isQueryTool ||
     databaseQuery !== undefined ||
     argumentSql !== undefined ||
     getFirstStringAttribute(attributes, ['db.system', 'db.system.name']) !== undefined ||
@@ -565,9 +578,7 @@ function getSqlExecutionDetails(
     return undefined;
   }
   const query =
-    databaseQuery ??
-    argumentSql ??
-    (typeof args === 'string' ? args.trim() : getFirstStringAttribute(argumentObject, ['query']));
+    databaseQuery ?? argumentSql ?? scalarSql ?? getFirstStringAttribute(argumentObject, ['query']);
   if (!query) {
     return undefined;
   }

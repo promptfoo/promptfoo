@@ -939,7 +939,6 @@ async function callProviderForRunEval({
         repeatIndex,
         test,
         testIndex,
-        testSuite,
         traceContext,
         vars,
       });
@@ -1049,12 +1048,11 @@ async function callActiveProvider({
   repeatIndex,
   test,
   testIndex,
-  testSuite,
   traceContext,
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
+  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   onProviderInvoked: () => void;
@@ -1099,9 +1097,7 @@ async function callActiveProvider({
             async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
           )
         : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
-    return testSuite?.tracing
-      ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
-      : invoke();
+    return invoke();
   };
   const response = rateLimitRegistry
     ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
@@ -1607,7 +1603,15 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   );
 }
 
-async function runEvalInternal({
+async function runEvalInternal(options: RunEvalOptions): Promise<EvaluateResult[]> {
+  return cliState.withRequestTracingConfig(
+    options.testSuite?.tracing ?? { enabled: false },
+    () => runEvalWithTracing(options),
+    options.testSuite?.redteam?.tracing ?? {},
+  );
+}
+
+async function runEvalWithTracing({
   provider,
   prompt, // raw prompt
   test,

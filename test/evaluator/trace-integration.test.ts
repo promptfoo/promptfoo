@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { evaluate, runEval } from '../../src/evaluator';
 import logger from '../../src/logger';
 import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
+import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { resolveTracingOptions } from '../../src/redteam/providers/tracingOptions';
 import { getProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
@@ -452,6 +454,81 @@ describe('evaluator trace integration', () => {
         spans: externalTrace.spans,
       });
     });
+
+    it.each([
+      { suiteEnabled: false, globalEnabled: true, include: false },
+      { suiteEnabled: true, globalEnabled: false, include: true },
+      { suiteEnabled: false, globalEnabled: true, override: true, include: true },
+      { suiteEnabled: true, globalEnabled: false, override: false, include: false },
+    ])(
+      'honors the evaluation SQL trace policy $suiteEnabled with test override $override',
+      async ({ suiteEnabled, globalEnabled, override, include }) => {
+        const previousConfig = cliState.config;
+        try {
+          cliState.config = {
+            redteam: { tracing: { enabled: true, includeInGrading: globalEnabled } },
+          } as typeof cliState.config;
+          const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+            grade: { pass: true, score: 1, reason: 'safe' },
+            rubric: 'safe',
+          });
+          const options = createRunOptions(
+            createMockProvider({ response: { output: 'Refused.' } }),
+          );
+          options.testSuite = {
+            ...tracingSuite,
+            redteam: {
+              tracing: { enabled: true, includeInGrading: suiteEnabled },
+            } as TestSuite['redteam'],
+          };
+          options.test = {
+            ...options.test,
+            metadata: {
+              ...options.test.metadata,
+              pluginId: 'sql-injection',
+              purpose: 'Protect records.',
+              ...(override === undefined ? {} : { tracing: { includeInGrading: override } }),
+            },
+            assert: [{ type: 'promptfoo:redteam:sql-injection' }],
+          };
+          mockTraceStore.getTrace.mockResolvedValue({
+            traceId,
+            spans: [
+              {
+                spanId: 'sql-span',
+                name: 'read_query',
+                startTime: 1000,
+                attributes: {
+                  'tool.name': 'read_query',
+                  'db.statement': 'SELECT PRIVATE_SUITE_SQL FROM records',
+                },
+              },
+            ],
+          });
+          for (const run of [
+            () => runEval(options),
+            () =>
+              evaluate(
+                {
+                  ...options.testSuite!,
+                  providers: [options.provider],
+                  prompts: [options.prompt],
+                  tests: [options.test],
+                },
+                mockEval,
+                { maxConcurrency: 1 },
+              ),
+          ]) {
+            grade.mockClear();
+            await run();
+            expect(grade).toHaveBeenCalled();
+            expect(JSON.stringify(grade.mock.calls).includes('PRIVATE_SUITE_SQL')).toBe(include);
+          }
+        } finally {
+          cliState.config = previousConfig;
+        }
+      },
+    );
 
     it('fetches external traces before running trace-aware assertions', async () => {
       const provider = createMockProvider({ response: { output: 'Target output' } });

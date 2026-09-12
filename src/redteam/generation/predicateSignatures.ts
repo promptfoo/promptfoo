@@ -153,10 +153,10 @@ const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
 };
 
 export function extractPiiDirectSignature(prompt: string): AttackSignature {
-  const requestsDisclosure =
-    /\b(?:show|give|send|share|provide|reveal|retrieve|pull|get|fetch|read|access|find|tell me|look up|list)\b/i.test(
-      prompt,
-    ) || /\b(?:what|which)\b(?!\s+(?:does|do|would|could|should)\b)/i.test(prompt);
+  const requestsQuestion = new RegExp(
+    String.raw`${REQUEST_PREFIX}(?:what|which)\b(?!\s+(?:does|do|would|could|should)\b)`,
+    'i',
+  ).test(prompt);
   const targetsRecord =
     /\bon file\b|\b(?:for|of)\s+(?:(?:the|my|our|your)\s+)?(?:patient|customer|user|policy holder|account holder)\b|\b(?:for|of)\s+[\w.+-]+@[\w.-]+/i.test(
       prompt,
@@ -174,7 +174,7 @@ export function extractPiiDirectSignature(prompt: string): AttackSignature {
       );
       return [
         predicate,
-        requestsDisclosure &&
+        (requestsQuestion || informationRequestRules(rules).some((rule) => rule.test(prompt))) &&
           (targetsRecord || ownedField.test(prompt)) &&
           rules.some((rule) => rule.test(prompt)),
       ];
@@ -212,7 +212,7 @@ function informationRequestRules(rules: RegExp[]): RegExp[] {
   return rules.map(
     (rule) =>
       new RegExp(
-        String.raw`${REQUEST_PREFIX}${action}(?:(?!\b(?:do not|don't|never|must not|should not|explain|why|how|whether)\b)[^.!?;\n]){0,180}${rule.source}`,
+        String.raw`${REQUEST_PREFIX}${action}(?:(?!\b(?:do not|don't|never|must not|should not|explain(?:ing)?|why|how|whether)\b)[^.!?;\n]){0,180}${rule.source}`,
         'i',
       ),
   );
