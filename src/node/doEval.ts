@@ -50,6 +50,7 @@ import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
 import { maybeLoadFromExternalFile } from '../util/file';
+import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import {
   printBorder,
   setupEnv,
@@ -73,6 +74,7 @@ import type {
   CommandLineOptions,
   EvalRuntimeOptions,
   Scenario,
+  TestCase,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
@@ -288,6 +290,55 @@ function isDeclarativeConfig(configPath: string): boolean {
   return ['.yaml', '.yml', '.json'].includes(path.extname(configPath).toLowerCase());
 }
 
+function collectRunProviders(testSuite: TestSuite): Set<ApiProvider> {
+  const providers = new Set(testSuite.providers.filter(isApiProvider));
+  const addProvider = (candidate: unknown) => {
+    if (isApiProvider(candidate)) {
+      providers.add(candidate);
+    } else if (isProviderTypeMap(candidate)) {
+      for (const type of GRADING_PROVIDER_TYPE_KEYS) {
+        const provider = candidate[type];
+        if (isApiProvider(provider)) {
+          providers.add(provider);
+        }
+      }
+    }
+  };
+  const addAssertions = (assertions: TestCase['assert']) => {
+    for (const assertion of assertions ?? []) {
+      if (assertion.type === 'assert-set') {
+        addAssertions(assertion.assert);
+      } else {
+        addProvider(assertion.provider);
+      }
+    }
+  };
+  const addTest = (test: Partial<TestCase> | string | undefined) => {
+    if (!test || typeof test === 'string') {
+      return;
+    }
+    // A supplied test provider can override the target or serve as the default
+    // grader. Only retain existing instances; unused configurations stay lazy.
+    addProvider(test.provider);
+    addProvider(test.options?.provider);
+    addAssertions(test.assert);
+  };
+
+  addTest(testSuite.defaultTest);
+  for (const test of testSuite.tests ?? []) {
+    addTest(test);
+  }
+  for (const scenario of testSuite.scenarios ?? []) {
+    for (const config of scenario.config ?? []) {
+      addTest(config);
+    }
+    for (const test of scenario.tests ?? []) {
+      addTest(test);
+    }
+  }
+  return providers;
+}
+
 export async function doEval(
   cmdObj: Partial<CommandLineOptions & Command>,
   defaultConfig: Partial<UnifiedConfig>,
@@ -302,6 +353,7 @@ export async function doEval(
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
   const activeProviderRuns = new Map<ApiProvider, number>();
+  const pendingProviderCleanups = new Map<ApiProvider, Promise<void>>();
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -941,11 +993,14 @@ export async function doEval(
 
     // Run the evaluation!!!!!!
     let ret;
-    const runProviders = new Set(testSuite.providers.filter(isApiProvider));
+    const runProviders = collectRunProviders(testSuite);
     for (const provider of runProviders) {
       activeProviderRuns.set(provider, (activeProviderRuns.get(provider) ?? 0) + 1);
     }
     try {
+      // Reserve this run's instances before waiting, so another finishing run
+      // cannot schedule a second cleanup while we wait for an earlier one.
+      await Promise.all([...runProviders].map((provider) => pendingProviderCleanups.get(provider)));
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
@@ -991,10 +1046,17 @@ export async function doEval(
       for (const provider of providersToCleanup) {
         // Another watch run may start while an earlier provider's cleanup awaits.
         if (!activeProviderRuns.has(provider)) {
+          const cleanup = Promise.resolve()
+            .then(() => provider.cleanup?.({ reason: 'evaluation-complete' }))
+            .catch((error) => {
+              logger.warn('Provider cleanup failed after evaluation.', { error });
+            });
+          // Register before calling user cleanup, including synchronous re-entry.
+          pendingProviderCleanups.set(provider, cleanup);
           try {
-            await provider.cleanup?.({ reason: 'evaluation-complete' });
-          } catch (error) {
-            logger.warn('Provider cleanup failed after evaluation.', { error });
+            await cleanup;
+          } finally {
+            pendingProviderCleanups.delete(provider);
           }
         }
       }

@@ -12,7 +12,12 @@ import {
 import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { callGradingProvider, callProviderWithContext, getAndCheckProvider } from './providers';
+import {
+  callGradingProvider,
+  callProviderWithContext,
+  getAndCheckProvider,
+  getGradingProviderCallOptions,
+} from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
@@ -81,10 +86,11 @@ export async function matchesAnswerRelevance(
   );
 
   const callEmbeddingApi = embeddingProvider.callEmbeddingApi.bind(embeddingProvider);
+  const callOptions = getGradingProviderCallOptions();
   const inputEmbeddingResp = await callGradingProvider(
     embeddingProvider,
     'answer-relevance.embedding',
-    () => callEmbeddingApi(input),
+    () => (callOptions ? callEmbeddingApi(input, undefined, callOptions) : callEmbeddingApi(input)),
     { callContext: providerCallContext, operationName: 'embeddings' },
   );
   accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
@@ -100,7 +106,10 @@ export async function matchesAnswerRelevance(
     const resp = await callGradingProvider(
       embeddingProvider,
       'answer-relevance.embedding',
-      () => callEmbeddingApi(question),
+      () =>
+        callOptions
+          ? callEmbeddingApi(question, undefined, callOptions)
+          : callEmbeddingApi(question),
       { callContext: providerCallContext, operationName: 'embeddings' },
     );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);

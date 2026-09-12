@@ -127,7 +127,11 @@ export interface ProviderCleanupContext {
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
-  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi?: (
+    input: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
   getSessionId?: () => string;
@@ -149,7 +153,11 @@ export interface ApiProvider extends MinimalApiProvider {
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
-  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: (
+    input: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderEmbeddingResponse>;
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {

@@ -37,6 +37,10 @@
         // code-scan-action/package.json rather than the root manifest.
         "@actions/*",
         "@octokit/rest",
+        // test/providers/sagemaker.profileFallback.test.ts resolves Signin from
+        // credential-provider-login to intercept its exact client. Keep this
+        // SDK-owned transitive dependency typed without a separate root pin.
+        "@aws-sdk/nested-clients",
         // Install-side-effect git-hook tool; never imported.
         "block-no-verify",
         // Transitive pin for google-auth-library behavior (see comments in

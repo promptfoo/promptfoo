@@ -713,6 +713,155 @@ describe('SageMakerEmbeddingProvider', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(['cache lookup', 'SDK response'])(
+    'keeps embedding request, parsing and cache identity stable across %s',
+    async (stage) => {
+      mockIsCacheEnabled.mockReturnValue(true);
+      const cache = new Map<string, string>();
+      let started!: () => void;
+      let finish!: () => void;
+      const held = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const gate = new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      let firstLookup = true;
+      mockCacheGet.mockImplementation(async (key: string) => {
+        if (firstLookup && stage === 'cache lookup') {
+          firstLookup = false;
+          started();
+          await gate;
+        }
+        return cache.get(key);
+      });
+      mockCacheSet.mockImplementation(async (key: string, value: string) => {
+        cache.set(key, value);
+      });
+      mockSend.mockImplementation(async (command, region) => {
+        if (mockSend.mock.calls.length === 1 && stage === 'SDK response') {
+          started();
+          await gate;
+        }
+        const first = command.EndpointName === 'endpoint-A';
+        expect(region).toBe(first ? 'us-east-1' : 'us-west-2');
+        expect(command.ContentType).toBe(first ? 'application/a' : 'application/b');
+        expect(command.Accept).toBe(first ? 'application/a' : 'application/b');
+        expect(JSON.parse(command.Body)).toEqual(
+          first ? { inputs: 'same text' } : { input: 'same text', model: 'embedding' },
+        );
+        return {
+          Body: new TextEncoder().encode(JSON.stringify({ first: [1, 0], second: [0, 1] })),
+        };
+      });
+      const provider = new SageMakerEmbeddingProvider('endpoint-A', {
+        config: {
+          region: 'us-east-1',
+          modelType: 'huggingface',
+          contentType: 'application/a',
+          acceptType: 'application/a',
+          responseFormat: { path: 'json.first' },
+        },
+      });
+      const responseFormat = provider.config.responseFormat;
+      if (!responseFormat) {
+        throw new Error('Missing embedding fixture response format');
+      }
+      const requestA = provider.callEmbeddingApi('same text');
+      void requestA.catch(() => {});
+      try {
+        await Promise.race([
+          held,
+          requestA.then(() => {
+            throw new Error('Request completed before the hold');
+          }),
+        ]);
+        Object.assign(provider.config, {
+          endpoint: 'endpoint-B',
+          region: 'us-west-2',
+          modelType: 'openai',
+          contentType: 'application/b',
+          acceptType: 'application/b',
+        });
+        responseFormat.path = 'json.second';
+        finish();
+        expect(await requestA).toMatchObject({ embedding: [1, 0], tokenUsage: { numRequests: 1 } });
+        expect(mockCacheSet.mock.calls[0][0]).toBe(mockCacheGet.mock.calls[0][0]);
+        expect(await provider.callEmbeddingApi('same text')).toMatchObject({ embedding: [0, 1] });
+        expect(mockSend).toHaveBeenCalledTimes(2);
+        expect(await provider.callEmbeddingApi('same text')).toMatchObject({
+          embedding: [0, 1],
+          cached: true,
+        });
+        expect(mockSend).toHaveBeenCalledTimes(2);
+        Object.assign(provider.config, {
+          endpoint: 'endpoint-A',
+          region: 'us-east-1',
+          modelType: 'huggingface',
+          contentType: 'application/a',
+          acceptType: 'application/a',
+        });
+        responseFormat.path = 'json.first';
+        expect(await provider.callEmbeddingApi('same text')).toMatchObject({
+          embedding: [1, 0],
+          cached: true,
+        });
+        expect(mockSend).toHaveBeenCalledTimes(2);
+        expect(cache.size).toBe(2);
+      } finally {
+        finish();
+        await Promise.allSettled([requestA]);
+        provider.cleanup();
+      }
+    },
+  );
+
+  it('does not cache a late embedding response after caller cancellation', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockCacheGet.mockResolvedValue(undefined);
+    let started!: () => void;
+    let finish!: () => void;
+    const held = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    mockSend.mockImplementation(async () => {
+      started();
+      await gate;
+      // Deliberately ignore SDK cancellation to exercise the late-result guard.
+      return { Body: new TextEncoder().encode(JSON.stringify({ embedding: [1, 0] })) };
+    });
+    const provider = new SageMakerEmbeddingProvider('abort-endpoint', {
+      config: { region: 'us-east-1', modelType: 'custom' },
+    });
+    const controller = new AbortController();
+    const request = provider.callEmbeddingApi('text', undefined, {
+      abortSignal: controller.signal,
+    });
+    void request.catch(() => {});
+    try {
+      await Promise.race([
+        held,
+        request.then(() => {
+          throw new Error('Request was not held');
+        }),
+      ]);
+      const error = new Error('Synthetic embedding cancellation');
+      controller.abort(error);
+      await expect(request).rejects.toBe(error);
+      finish();
+      await mockSend.mock.results[0].value;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(mockCacheSet).not.toHaveBeenCalled();
+    } finally {
+      finish();
+      await Promise.allSettled([request]);
+      provider.cleanup();
+    }
+  });
+
   it('uses one endpoint snapshot for both parts of an embedding cache key', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
     mockCacheGet.mockResolvedValue(JSON.stringify({ embedding: [0.1, 0.2] }));
