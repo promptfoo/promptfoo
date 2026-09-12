@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createClient } from '@libsql/client/node';
 import { closeDb, getDb, getDbPath, isDbOpen } from '../../../src/database/index';
 import logger from '../../../src/logger';
+import type { Transaction } from '@libsql/client/node';
 
 export interface WalCheckpointProbeResult {
   elapsedMs: number;
@@ -27,11 +28,11 @@ const url = pathToFileURL(getDbPath()).href;
 
 if (mode === 'hold-writer') {
   const writer = createClient({ url });
-  await writer.execute('BEGIN IMMEDIATE');
+  const writerTransaction = await writer.transaction('write');
   // Release in another process so the parent's native busy wait cannot delay it.
   process.once('message', () => {
     setTimeout(async () => {
-      await writer.execute('ROLLBACK');
+      await writerTransaction.rollback();
       writer.close();
       process.disconnect?.();
     }, 300);
@@ -51,14 +52,15 @@ if (mode === 'hold-writer') {
   const close =
     mode === 'shutdown' ? (await import('../../../src/mainUtils')).shutdownGracefully : closeDb;
   const reader = mode === 'reader' || mode === 'shutdown' ? createClient({ url }) : undefined;
+  let readerTransaction: Transaction | undefined;
   let writer: ReturnType<typeof fork> | undefined;
   let writerExited: Promise<unknown> | undefined;
   let insertAcknowledged = false;
 
   try {
     if (reader) {
-      await reader.execute('BEGIN');
-      await reader.execute('SELECT * FROM wal_checkpoint_test');
+      readerTransaction = await reader.transaction('read');
+      await readerTransaction.execute('SELECT * FROM wal_checkpoint_test');
       await db.run('INSERT INTO wal_checkpoint_test DEFAULT VALUES');
       insertAcknowledged = true;
     }
@@ -88,9 +90,7 @@ if (mode === 'hold-writer') {
     await Promise.all([insertPromise, close()]);
     const databaseStillOpen = isDbOpen();
 
-    if (reader) {
-      await reader.execute('ROLLBACK');
-    }
+    await readerTransaction?.rollback();
     await writerExited;
     const verifier = createClient({ url });
     let rowCount: number;
@@ -115,6 +115,7 @@ if (mode === 'hold-writer') {
       );
     });
   } finally {
+    readerTransaction?.close();
     reader?.close();
     if (writer && writer.exitCode === null) {
       writer.kill();
