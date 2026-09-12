@@ -396,7 +396,7 @@ receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a 
 evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
 are tracked per trace so each evaluation's traces use its own policy.
 
-If redaction source inspection exceeds 100 nesting levels or 10,000 nodes, the receiver replaces the entire span name, status message, and event names with redaction markers. This prevents unvisited sensitive values from escaping through those fields. ERROR/FATAL logs are stored with an error span status.
+If redaction source inspection exceeds 10,000 nodes or encounters a redacted JSON value, the receiver replaces span names, status messages, and event names throughout the trace batch with redaction markers. This prevents unvisited sensitive values from escaping through those fields. ERROR/FATAL logs are stored with an error span status.
 
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one
@@ -494,9 +494,9 @@ Use environment variables for tokens, passwords, and authentication headers. Pro
 Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. The URL cannot contain credentials, query parameters, or fragments because Promptfoo appends its trace lookup path to that address. Put credentials under `auth` and tenant settings in `headers` instead.
 
 Tempo span events are retained alongside span attributes. Spans containing named tool or guardrail events are included in red team trace context. A malformed event is
-skipped without discarding its parent span or valid sibling events. OTLP JSON and Tempo event timestamps must be decimal uint64 values. Events with missing or invalid timestamps are dropped, and fractional milliseconds are preserved. Malformed nested event attributes do not discard valid sibling events.
+skipped without discarding its parent span or valid sibling events. OTLP JSON, protobuf, and Tempo events require nonzero uint64 timestamps. Events with missing or invalid timestamps are dropped. The stored `timestampNanos` string preserves exact ordering when millisecond numbers cannot distinguish nearby events. Malformed nested event attributes do not discard valid sibling events.
 
-Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in span names, event names, or error messages. If attribute traversal is incomplete or a redacted attribute contains serialized JSON, these text fields are hidden. Default reads of stored traces use the same rule. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
+Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in sibling span names, event names, or error messages. If attribute traversal is incomplete or a redacted attribute contains serialized JSON, these text fields are hidden. Default reads of stored traces use the same rule. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
 
 #### Braintrust
 
@@ -629,7 +629,7 @@ Click the expand icon on any span to reveal a detailed attributes panel showing:
 
 This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
 
-Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. Known secret values echoed in span names, status messages, and event names are also redacted. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
+Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. Known secret values echoed in any span name, status message, or event name in the same trace are also redacted. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
 
 ### Exporting Traces
 

@@ -42,7 +42,7 @@ The row should fail when the protected action path executes without the guardrai
 
 Tool-name, input, and output attributes from one event count as one invocation. A triggered guardrail cannot cover a tool that still executes.
 
-Guardrail events must have a timestamp strictly before the tool event. Missing or equal timestamps cannot establish prior coverage.
+Guardrail events must have a timestamp strictly before the tool event. Exact nanosecond values determine ordering when available, including events less than one microsecond apart. Missing, zero, or equal timestamps cannot establish prior coverage.
 
 ## Evidence To Emit
 
