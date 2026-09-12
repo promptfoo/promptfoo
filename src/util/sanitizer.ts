@@ -39,7 +39,10 @@ function hasUrlUserinfoPassword(url: string): boolean {
 }
 
 function isSecretParameterName(name: string): boolean {
-  return isSecretField(name) || normalizeFieldName(name).endsWith('apikey');
+  const normalized = normalizeFieldName(name);
+  return (
+    isSecretField(name) || SECRET_PARAMETER_SUFFIXES.some((suffix) => normalized.endsWith(suffix))
+  );
 }
 
 /**
@@ -184,6 +187,9 @@ export const SECRET_FIELD_NAMES = new Set([
   'keycontent',
   'certcontent',
 ]);
+
+// Short names such as `sig` need a complete parameter-name match.
+const SECRET_PARAMETER_SUFFIXES = [...SECRET_FIELD_NAMES].filter((name) => name.length > 3);
 
 /**
  * Normalize field names for comparison (lowercase, drop hyphens, underscores,
@@ -627,6 +633,34 @@ export function sanitizeTracingConfigForPersistence(
       provider: sanitizedProvider,
     },
   };
+}
+
+/** Sanitize exported/shared configuration while preserving safe tracing env references. */
+export function sanitizeConfigForOutput(config: Partial<UnifiedConfig>): Partial<UnifiedConfig> {
+  const safe = sanitizeTracingConfigForPersistence(config);
+  const sanitized = sanitizeObject(safe, {
+    context: 'output config',
+    throwOnError: true,
+    maxDepth: Number.POSITIVE_INFINITY,
+  }) as Partial<UnifiedConfig>;
+  const provider = safe.tracing?.provider;
+  const sanitizedProvider = sanitized.tracing?.provider;
+  if (provider && sanitizedProvider) {
+    for (const field of ['auth', 'headers'] as const) {
+      const values = provider[field];
+      if (!values) {
+        continue;
+      }
+      const sanitizedValues = sanitizeObject(values) as Record<string, string>;
+      for (const [key, value] of Object.entries(values)) {
+        if (isSafeTracingCredentialTemplate(value)) {
+          sanitizedValues[key] = value;
+        }
+      }
+      sanitizedProvider[field] = sanitizedValues;
+    }
+  }
+  return sanitized;
 }
 
 /**

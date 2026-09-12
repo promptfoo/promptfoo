@@ -17,7 +17,7 @@ import {
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { redactAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './util/sanitizer';
+import { sanitizeConfigForOutput } from './util/sanitizer';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -141,9 +141,7 @@ async function sendEvalRecord(
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
-  const redactedConfig = redactAzureBlobSasTokens(
-    sanitizeTracingConfigForPersistence(evalRecord.config),
-  );
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.

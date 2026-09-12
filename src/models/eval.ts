@@ -41,7 +41,11 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
+import {
+  sanitizeConfigForOutput,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGenerationTokenUsage,
@@ -1514,7 +1518,7 @@ export default class Eval {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: sanitizeTracingConfigForPersistence(this.config),
+      config: sanitizeConfigForOutput(this.config),
       author: this.author || null,
       prompts: this.getPrompts(),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),

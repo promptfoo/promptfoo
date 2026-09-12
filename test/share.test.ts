@@ -822,6 +822,24 @@ describe('createShareableUrl', () => {
       expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
     });
 
+    it('redacts gateway URL credentials from shared config without changing the live provider', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      const gateway = 'https://gateway.example/v1?tenantClientSecret=short-private-value';
+      mockEval.config = {
+        providers: [{ id: 'openai:chat:test', config: { apiBaseUrl: gateway } }],
+        metadata: { documentationUrl: 'HTTPS://Docs.Example?version=2' },
+      };
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      await createShareableUrl(mockEval as Eval);
+      const request = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(JSON.stringify(request.config)).not.toContain('short-private-value');
+      expect(request.config.providers[0].config.apiBaseUrl).toContain('%5BREDACTED%5D');
+      expect(request.config.metadata.documentationUrl).toBe('HTTPS://Docs.Example?version=2');
+      expect(JSON.stringify(mockEval.config)).toContain(gateway);
+    });
+
     it('redacts Azure Blob SAS tokens from the shared eval config', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       mockEval.config = {

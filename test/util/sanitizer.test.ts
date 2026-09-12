@@ -1829,26 +1829,35 @@ describe('legacy sanitizer aliases', () => {
 });
 
 describe('sanitizeUrl', () => {
-  it.each(['googleApiKey', 'customer_api_key', 'vendor-api-key'])(
-    'redacts short credentials in the namespaced %s parameter',
-    (key) => {
-      const value = 'short-credential';
-      const encoded = `${key}=${value}`;
-      expect(new URL(sanitizeUrl(`https://example.com/?${encoded}`)).searchParams.get(key)).toBe(
-        '[REDACTED]',
-      );
-      expect(sanitizeUrl(`/api?${encoded}`)).toBe(`/api?${key}=%5BREDACTED%5D`);
-      expect(sanitizeUrl(`invalid url?${encoded}`)).toBe('[REDACTED]');
-      expect(sanitizeUrl(`{{ base }}/api?${encoded}`)).toBe(`{{ base }}/api?${key}=%5BREDACTED%5D`);
-      expect(sanitizeUrl(`https://example.com/#${encoded}`)).toBe(
-        `https://example.com/#${key}=%5BREDACTED%5D`,
-      );
-    },
-  );
+  it.each([
+    'googleApiKey',
+    'customer_api_key',
+    'vendor-api-key',
+    'databasePassword',
+    'googleAccessToken',
+    'tenantClientSecret',
+    'tenantSignature',
+    'tenantAuthorization',
+    'vendorSessionId',
+    'vendorPrivateKey',
+    'vendorAccessKeyId',
+  ])('redacts short credentials in the namespaced %s parameter', (key) => {
+    const value = 'short-credential';
+    const encoded = `${key}=${value}`;
+    expect(new URL(sanitizeUrl(`https://example.com/?${encoded}`)).searchParams.get(key)).toBe(
+      '[REDACTED]',
+    );
+    expect(sanitizeUrl(`/api?${encoded}`)).toBe(`/api?${key}=%5BREDACTED%5D`);
+    expect(sanitizeUrl(`invalid url?${encoded}`)).toBe('[REDACTED]');
+    expect(sanitizeUrl(`{{ base }}/api?${encoded}`)).toBe(`{{ base }}/api?${key}=%5BREDACTED%5D`);
+    expect(sanitizeUrl(`https://example.com/#${encoded}`)).toBe(
+      `https://example.com/#${key}=%5BREDACTED%5D`,
+    );
+  });
 
   it('preserves query names that describe limits or key metadata', () => {
     const url =
-      'HTTPS://Safe.Example?tokens_available=10&monkey=yes&api_key_version=2&googleApiKeys=3';
+      'HTTPS://Safe.Example?tokens_available=10&monkey=yes&api_key_version=2&googleApiKeys=3&signatureVersion=2&tokenizer=bpe&secretsEnabled=true&authType=oauth';
     expect(sanitizeUrl(url)).toBe(url);
   });
 
