@@ -10,6 +10,7 @@ import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { applyGpt6AstraRequestRules, isGpt6AstraModel } from '../openai/gpt6';
 import { ResponsesProcessor } from '../responses/index';
+import { parseResponsesInput } from '../responses/input';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -39,7 +40,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
 
     // Initialize the shared response processor
     this.processor = new ResponsesProcessor({
-      modelName: this.deploymentName,
+      // A deployment name is arbitrary, so an explicit `modelName` is what the price table is
+      // keyed on; the request body's `model` only names a real model when `passthrough` set it.
+      modelName: this.config.modelName ?? this.deploymentName,
       providerType: 'azure',
       functionCallbackHandler: this.functionCallbackHandler,
       // The processor invokes costCalculator(modelName, data.usage, requestConfig). calculateAzureCost
@@ -47,7 +50,9 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       // the Responses-shaped usage object (input_tokens/output_tokens) so cost is non-zero.
       costCalculator: (modelName: string, usage: any, config?: any) =>
         calculateAzureCost(
-          typeof config?.model === 'string' ? config.model : modelName,
+          typeof config?.model === 'string' && config.model !== this.deploymentName
+            ? config.model
+            : modelName,
           {
             ...config,
             passthrough: {
@@ -129,17 +134,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       ...context?.prompt?.config,
     };
 
-    let input;
-    try {
-      const parsedJson = JSON.parse(prompt);
-      if (Array.isArray(parsedJson)) {
-        input = parsedJson;
-      } else {
-        input = prompt;
-      }
-    } catch {
-      input = prompt;
-    }
+    const input = parseResponsesInput(prompt);
 
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     const capabilityModelName = (

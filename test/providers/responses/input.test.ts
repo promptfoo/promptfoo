@@ -1,32 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeResponsesInput } from '../../../src/providers/responses/input';
+import { parseResponsesInput } from '../../../src/providers/responses/input';
 
-describe('normalizeResponsesInput', () => {
-  it('returns non-array input unchanged', () => {
-    expect(normalizeResponsesInput('a plain string prompt')).toBe('a plain string prompt');
-    expect(normalizeResponsesInput(undefined)).toBeUndefined();
-    expect(normalizeResponsesInput(null)).toBeNull();
+const parse = (input: unknown) => parseResponsesInput(JSON.stringify(input));
+
+describe('parseResponsesInput', () => {
+  it('returns the prompt unchanged when it is not a JSON array', () => {
+    expect(parseResponsesInput('a plain string prompt')).toBe('a plain string prompt');
+    expect(parseResponsesInput('{"role":"user"}')).toBe('{"role":"user"}');
+    expect(parseResponsesInput('[unterminated')).toBe('[unterminated');
   });
 
   it('rewrites chat-format text parts to input_text', () => {
     // The Responses API rejects `type: "text"` outright (xAI 422, OpenAI 400), so a prompt
     // authored in the chat format must be translated rather than passed through.
-    expect(
-      normalizeResponsesInput([{ role: 'user', content: [{ type: 'text', text: 'hello' }] }]),
-    ).toEqual([{ role: 'user', content: [{ type: 'input_text', text: 'hello' }] }]);
+    expect(parse([{ role: 'user', content: [{ type: 'text', text: 'hello' }] }])).toEqual([
+      { role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
+    ]);
   });
 
   it('uses output_text for assistant turns', () => {
     expect(
-      normalizeResponsesInput([
-        { role: 'assistant', content: [{ type: 'text', text: 'prior reply' }] },
-      ]),
+      parse([{ role: 'assistant', content: [{ type: 'text', text: 'prior reply' }] }]),
     ).toEqual([{ role: 'assistant', content: [{ type: 'output_text', text: 'prior reply' }] }]);
   });
 
   it('flattens nested chat image_url parts into input_image', () => {
     expect(
-      normalizeResponsesInput([
+      parse([
         {
           role: 'user',
           content: [{ type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } }],
@@ -42,7 +42,7 @@ describe('normalizeResponsesInput', () => {
 
   it('preserves the image detail hint from either nesting level', () => {
     expect(
-      normalizeResponsesInput([
+      parse([
         {
           role: 'user',
           content: [{ type: 'image_url', image_url: { url: 'https://x/y.png', detail: 'low' } }],
@@ -58,9 +58,7 @@ describe('normalizeResponsesInput', () => {
 
   it('accepts an already-flat image_url string', () => {
     expect(
-      normalizeResponsesInput([
-        { role: 'user', content: [{ type: 'image_url', image_url: 'https://x/y.png' }] },
-      ]),
+      parse([{ role: 'user', content: [{ type: 'image_url', image_url: 'https://x/y.png' }] }]),
     ).toEqual([{ role: 'user', content: [{ type: 'input_image', image_url: 'https://x/y.png' }] }]);
   });
 
@@ -75,7 +73,7 @@ describe('normalizeResponsesInput', () => {
         ],
       },
     ];
-    expect(normalizeResponsesInput(input)).toEqual(input);
+    expect(parse(input)).toEqual(input);
   });
 
   it('normalizes explicitly typed message items but preserves other typed input items', () => {
@@ -86,7 +84,7 @@ describe('normalizeResponsesInput', () => {
       { type: 'function_call_output', call_id: 'call_1', output: 'done' },
       { type: 'message', role: 'user', content: [{ type: 'text', text: 'hello' }] },
     ];
-    expect(normalizeResponsesInput(input)).toEqual([
+    expect(parse(input)).toEqual([
       { type: 'function_call', call_id: 'call_1', name: 'lookup', arguments: '{}' },
       { type: 'function_call_output', call_id: 'call_1', output: 'done' },
       { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
@@ -102,12 +100,12 @@ describe('normalizeResponsesInput', () => {
       'not an object',
       null,
     ];
-    expect(normalizeResponsesInput(input)).toEqual(input);
+    expect(parse(input)).toEqual(input);
   });
 
   it('normalizes a mixed multimodal turn end to end', () => {
     expect(
-      normalizeResponsesInput([
+      parse([
         { role: 'system', content: [{ type: 'text', text: 'be terse' }] },
         {
           role: 'user',
