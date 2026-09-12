@@ -48,12 +48,16 @@ export interface TraceContextData {
   spans: TraceSpan[];
   insights: string[];
   fetchedAt: number;
+  /** Filtered, sanitized view for model-facing summaries when spans hold complete grading data. */
+  summary?: { spans: TraceSpan[]; insights: string[] };
 }
 
 export interface FetchTraceContextOptions
   extends Omit<TraceSpanQueryOptions, 'includeInternalSpans' | 'sanitizeAttributes'> {
   includeInternalSpans?: boolean;
   sanitizeAttributes?: boolean;
+  /** Read all spans in the requested time range for deterministic grading. */
+  requireComplete?: boolean;
   maxRetries?: number;
   retryDelayMs?: number;
   /** Poll external snapshots until completed spans stop changing or retries are exhausted. */
@@ -617,7 +621,41 @@ export async function fetchTraceContext(
   traceId: string,
   options: FetchTraceContextOptions = {},
 ): Promise<TraceContextData | null> {
+  const context = await fetchTraceContextData(traceId, options);
+  if (!context || !options.requireComplete) {
+    return context;
+  }
+
   const {
+    earliestStartTime,
+    includeInternalSpans,
+    maxSpans,
+    maxDepth,
+    spanFilter,
+    sanitizeAttributes,
+  } = options;
+  const selected = await getTraceStore().getSpans(traceId, {
+    earliestStartTime,
+    includeInternalSpans,
+    maxSpans,
+    maxDepth,
+    spanFilter,
+    sanitizeAttributes,
+  });
+  const spanIds = new Set(context.spans.map((span) => span.spanId));
+  const spans = selected.filter((span) => spanIds.has(span.spanId));
+  const summarySpans = createTraceSpans(
+    options.redactAttributes?.length ? redactExternalSpans(spans, options.redactAttributes) : spans,
+  );
+  return { ...context, summary: { spans: summarySpans, insights: deriveInsights(summarySpans) } };
+}
+
+async function fetchTraceContextData(
+  traceId: string,
+  options: FetchTraceContextOptions = {},
+): Promise<TraceContextData | null> {
+  const {
+    requireComplete = false,
     includeInternalSpans = true,
     sanitizeAttributes = true,
     maxRetries = DEFAULT_MAX_RETRIES,
@@ -631,9 +669,10 @@ export async function fetchTraceContext(
   const fetchOptions = {
     maxRetries,
     retryDelayMs,
-    includeInternalSpans,
-    sanitizeAttributes,
+    sanitizeAttributes: !requireComplete && sanitizeAttributes,
     ...spanOptions,
+    includeInternalSpans: requireComplete || includeInternalSpans,
+    ...(requireComplete ? { maxSpans: undefined, maxDepth: undefined, spanFilter: undefined } : {}),
   };
 
   // If external provider is configured, use it

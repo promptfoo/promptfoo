@@ -66,7 +66,6 @@ interface JudgeTrajectoryStep {
 
 interface OmittedJudgeTrajectorySteps {
   omittedCount: number;
-  omittedSqlCount?: number;
 }
 
 function normalizeStructuredAttribute(value: unknown): unknown {
@@ -124,7 +123,7 @@ function getCommandExecutable(command: string): string | undefined {
   return executable || undefined;
 }
 
-function getTraceCommandToolNames(trace: TraceData): ReadonlySet<string> {
+function getTraceCommandToolNames(trace: Pick<TraceData, 'metadata'>): ReadonlySet<string> {
   const configured = Array.isArray(trace.metadata?.commandToolNames)
     ? trace.metadata.commandToolNames.filter(
         (name: unknown): name is string => typeof name === 'string',
@@ -311,7 +310,9 @@ function isMessageSpan(span: TraceSpan): boolean {
   return span.name === 'agent response' || span.name === 'send input';
 }
 
-export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
+export function extractTrajectorySteps(
+  trace: Pick<TraceData, 'spans' | 'metadata'>,
+): TrajectoryStep[] {
   const commandToolNames = getTraceCommandToolNames(trace);
 
   return [...(trace.spans || [])]
@@ -502,17 +503,10 @@ function truncateJudgeTrajectorySteps(
     return steps;
   }
 
-  const unauthorizedSqlSteps = takeFirstAndLast(
-    steps.filter((step) => step.sql?.authorized === false),
-    MAX_JUDGE_SUMMARY_STEPS,
-  );
-  const sqlSteps = [
-    ...unauthorizedSqlSteps,
-    ...takeFirstAndLast(
-      steps.filter((step) => step.sql && step.sql.authorized !== false),
-      MAX_JUDGE_SUMMARY_STEPS - unauthorizedSqlSteps.length,
-    ),
-  ];
+  const sqlSteps = steps.filter((step) => step.sql);
+  if (sqlSteps.length > MAX_JUDGE_SUMMARY_STEPS) {
+    throw new Error('SQL trace evidence exceeds the judge summary limit and cannot be graded.');
+  }
   const retained = new Set([
     ...sqlSteps,
     ...takeFirstAndLast(
@@ -532,9 +526,6 @@ function truncateJudgeTrajectorySteps(
       summary.push(omission);
     }
     omission.omittedCount += 1;
-    if (step.sql) {
-      omission.omittedSqlCount = (omission.omittedSqlCount ?? 0) + 1;
-    }
   }
   return summary;
 }
@@ -562,13 +553,15 @@ function getSqlExecutionDetails(
     /(^|[\s.:/-])(?:(?:read|run|execute)_query|(?:run|execute)_sql|query)($|[\s.:/-])/i.test(
       toolName,
     );
+  const argumentQuery =
+    typeof args === 'string' ? args : getFirstStringAttribute(argumentObject, ['query']);
   const scalarSql =
-    typeof args === 'string' &&
+    argumentQuery !== undefined &&
     (isQueryTool ||
       /^\s*(?:select|with|insert|update|delete|merge|create|alter|drop|truncate|grant|revoke|explain|pragma|show|describe|call|exec(?:ute)?)\b/i.test(
-        args,
+        argumentQuery,
       ))
-      ? args.trim()
+      ? argumentQuery.trim()
       : undefined;
   const isDatabaseOperation =
     isQueryTool ||
@@ -581,8 +574,7 @@ function getSqlExecutionDetails(
   if (!isDatabaseOperation) {
     return undefined;
   }
-  const query =
-    databaseQuery ?? argumentSql ?? scalarSql ?? getFirstStringAttribute(argumentObject, ['query']);
+  const query = databaseQuery ?? argumentSql ?? scalarSql;
   if (!query) {
     return undefined;
   }
@@ -609,17 +601,15 @@ function getSqlExecutionDetails(
   if (redactedQuery !== query || /\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(redactedQuery)) {
     throw new Error('SQL trace evidence was redacted and cannot be graded.');
   }
-  const omission = ' … [truncated] … ';
-  const retainedLength = 400 - omission.length;
-  sql.query =
-    redactedQuery.length > 400
-      ? `${redactedQuery.slice(0, Math.ceil(retainedLength / 2))}${omission}${redactedQuery.slice(-Math.floor(retainedLength / 2))}`
-      : redactedQuery;
+  if (redactedQuery.length > 400) {
+    throw new Error('SQL trace evidence exceeds the judge summary limit and cannot be graded.');
+  }
+  sql.query = redactedQuery;
   return sql;
 }
 
 export function summarizeTrajectoryForJudge(
-  trace: TraceData,
+  trace: Pick<TraceData, 'traceId' | 'spans' | 'metadata'>,
   options: { includeSql?: boolean; redactAttributes?: string[] } = {},
 ): string {
   const spans = trace.spans.map((span) => ({

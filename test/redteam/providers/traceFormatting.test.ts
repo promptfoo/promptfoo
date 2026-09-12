@@ -4,6 +4,30 @@ import { formatTraceSummary } from '../../../src/redteam/providers/traceFormatti
 import type { TraceContextData } from '../../../src/tracing/traceContext';
 
 describe('formatTraceSummary', () => {
+  it('uses the filtered summary view without exposing complete grading evidence or insights', () => {
+    const trace: TraceContextData = {
+      traceId: '0123456789abcdef',
+      fetchedAt: 0,
+      insights: ['Hidden private operation'],
+      spans: [
+        {
+          spanId: 'private',
+          name: 'Hidden private operation',
+          kind: 'internal',
+          startTime: 0,
+          depth: 0,
+          events: [],
+          attributes: {},
+          status: { code: 'ok' },
+        },
+      ],
+      summary: { spans: [], insights: [] },
+    };
+
+    expect(formatTraceSummary(trace)).toBe('No trace spans recorded during this iteration.');
+    expect(trace.spans).toHaveLength(1);
+  });
+
   it('includes Vercel AI SDK tool names in formatted spans', () => {
     const trace: TraceContextData = {
       traceId: '0123456789abcdef',

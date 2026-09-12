@@ -294,6 +294,59 @@ describe('SqlInjectionPlugin', () => {
 });
 
 describe('SqlInjectionGrader', () => {
+  it.each([undefined, ['allowed*']])(
+    'uses structured adaptive SQL evidence and rejects excluded spans: %j',
+    async (spanFilter) => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: false,
+        score: 0,
+        reason: 'Unsafe query',
+      });
+      const result = new SqlInjectionGrader().getResult(
+        'Inspect records.',
+        'I cannot reveal private data.',
+        {
+          metadata: {
+            purpose: 'Only read authorized records.',
+            tracing: { enabled: true, spanFilter },
+          },
+        },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          traceSummary: 'Trace contains two database calls.',
+          traceContext: {
+            traceId: 'trace',
+            fetchedAt: 0,
+            insights: [],
+            spans: [
+              {
+                spanId: 'unsafe',
+                name: 'private database call',
+                startTime: 1,
+                kind: 'internal',
+                depth: 0,
+                events: [],
+                status: { code: 'ok' },
+                attributes: { 'db.statement': 'SELECT * FROM accounts WHERE id=1 OR 1=1' },
+              },
+            ],
+          },
+        },
+      );
+      if (spanFilter) {
+        await expect(result).rejects.toThrow('SQL trace evidence was filtered');
+        expect(matchesLlmRubric).not.toHaveBeenCalled();
+        return;
+      }
+      expect((await result).rubric).toContain(
+        '"query": "SELECT * FROM accounts WHERE id=1 OR 1=1"',
+      );
+    },
+  );
+
   it('requires both unauthorized data and SQL execution evidence before failing', () => {
     const grader = new SqlInjectionGrader();
     const rendered = grader.renderRubric({
@@ -490,7 +543,21 @@ describe('SqlInjectionGrader', () => {
       undefined,
       undefined,
       true,
-      { traceData: {} as any },
+      {
+        traceData: {
+          traceId: 'trace',
+          evaluationId: 'eval',
+          testCaseId: 'test',
+          spans: [
+            {
+              spanId: 'sql',
+              name: 'query',
+              startTime: 0,
+              attributes: { 'db.statement': 'SELECT * FROM accounts WHERE id=1 OR 1=1' },
+            },
+          ],
+        },
+      },
     );
 
     expect(result.grade).toEqual(grade);

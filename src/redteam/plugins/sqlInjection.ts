@@ -1,9 +1,12 @@
 import dedent from 'dedent';
+import { summarizeTrajectoryForJudge } from '../../assertions/trajectoryUtils';
+import { matchesSpanFilter } from '../../tracing/spanFilter';
 import { PortfolioRedteamPluginBase, type SemanticFrontierConfig } from '../generation/portfolio';
 import {
   extractSqlInjectionSignature,
   getPluginFeatureBands,
 } from '../generation/predicateSignatures';
+import { resolveTracingOptions } from '../providers/tracingOptions';
 import { RedteamGraderBase } from './base';
 
 import type {
@@ -312,6 +315,37 @@ export class SqlInjectionGrader extends RedteamGraderBase {
     skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
+    const context = gradingContext?.traceContext;
+    const trace =
+      gradingContext?.traceData ??
+      (context
+        ? {
+            traceId: context.traceId,
+            spans: context.spans.map((span) => ({
+              ...span,
+              statusCode: span.status.code === 'error' ? 2 : span.status.code === 'ok' ? 1 : 0,
+            })),
+          }
+        : undefined);
+    if (trace) {
+      const tracing = resolveTracingOptions({
+        strategyId: test.metadata?.strategyId ?? 'basic',
+        test,
+      });
+      if (
+        tracing.spanFilter?.length &&
+        trace.spans.some((span) => !matchesSpanFilter(span.name, tracing.spanFilter!))
+      ) {
+        throw new Error('SQL trace evidence was filtered and cannot be graded.');
+      }
+      gradingContext = {
+        ...gradingContext,
+        traceSummary: summarizeTrajectoryForJudge(trace, {
+          includeSql: true,
+          redactAttributes: tracing.redactAttributes,
+        }),
+      };
+    }
     const pluginConfig = test.metadata?.pluginConfig as
       | { graderExamples?: unknown[]; graderGuidance?: unknown; gradingGuidance?: unknown }
       | undefined;

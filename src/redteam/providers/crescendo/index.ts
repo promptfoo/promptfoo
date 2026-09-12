@@ -1232,6 +1232,7 @@ export class CrescendoProvider implements ApiProvider {
 
       if (traceId) {
         const traceContext = await fetchTraceContext(traceId, {
+          requireComplete: tracingOptions.includeInGrading,
           abortSignal: options?.abortSignal,
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,

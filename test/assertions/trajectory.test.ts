@@ -549,7 +549,11 @@ describe('trajectory utilities', () => {
     expect(summary.steps[0].sql).toEqual({ query: 'SELECT id FROM accounts' });
   });
 
-  it('keeps a database connection URI out of scalar SQL evidence', () => {
+  it.each([
+    'postgresql://user:private-password@host/private',
+    { query: 'postgresql://user:private-password@host/private' },
+    JSON.stringify({ query: 'postgresql://user:private-password@host/private' }),
+  ])('keeps database connection data out of SQL evidence: %j', (args) => {
     const summary = JSON.parse(
       summarizeTrajectoryForJudge(
         {
@@ -561,7 +565,7 @@ describe('trajectory utilities', () => {
               startTime: 1,
               attributes: {
                 'tool.name': 'database',
-                'tool.arguments': 'postgresql://user:private-password@host/private',
+                'tool.arguments': args,
               },
             },
           ],
@@ -731,10 +735,9 @@ describe('trajectory utilities', () => {
     },
   );
 
-  it('retains both ends of long readable SQL', () => {
-    const suffix = ' OR 1=1; DROP TABLE accounts; --';
-    const query = `SELECT id FROM accounts WHERE note = '${'x'.repeat(800)}'${suffix}`;
-    const summary = JSON.parse(
+  it('rejects SQL whose middle would be omitted from the judge summary', () => {
+    const query = `SELECT id FROM accounts WHERE note = '${'x'.repeat(400)}' OR 1=1 ${' '.repeat(400)}`;
+    expect(() =>
       summarizeTrajectoryForJudge(
         {
           ...mockTraceData,
@@ -749,10 +752,7 @@ describe('trajectory utilities', () => {
         },
         { includeSql: true },
       ),
-    );
-    expect(summary.steps[0].sql.query).toMatch(/^SELECT id FROM accounts/);
-    expect(summary.steps[0].sql.query).toContain(suffix);
-    expect(summary.steps[0].sql.query.length).toBeLessThanOrEqual(400);
+    ).toThrow('SQL trace evidence exceeds');
   });
 
   it('omits SQL span names when redaction traversal is incomplete', () => {
@@ -924,35 +924,29 @@ describe('trajectory utilities', () => {
     });
   });
 
-  it.each([undefined, false])(
-    'retains SQL boundaries and unauthorized middle queries (late outcome: %s)',
-    (authorized) => {
-      const spans = Array.from({ length: 40 }, (_, index) => ({
+  it.each([24, 25, 40])(
+    'retains all SQL or rejects the summary when it exceeds the budget: %s',
+    (count) => {
+      const spans = Array.from({ length: count }, (_, index) => ({
         spanId: `sql-${index}`,
         name: 'sql.query',
         startTime: index,
         attributes: {
-          'db.query.text': `SELECT * FROM account_${index}`,
-          'tool.output': { authorized: index === 19 ? false : index === 39 ? authorized : true },
+          'db.query.text':
+            index === 12
+              ? 'SELECT * FROM accounts WHERE id=1 OR 1=1'
+              : `SELECT * FROM account_${index}`,
         },
       }));
-      const summary = JSON.parse(
-        summarizeTrajectoryForJudge({ ...mockTraceData, spans }, { includeSql: true }),
-      );
-      for (const index of [1, 20, 40]) {
-        expect(summary.steps).toContainEqual(expect.objectContaining({ index }));
+      const summarize = () =>
+        summarizeTrajectoryForJudge({ ...mockTraceData, spans }, { includeSql: true });
+      if (count > 24) {
+        expect(summarize).toThrow('SQL trace evidence exceeds');
+        return;
       }
-      expect(
-        summary.steps.find((step: { index?: number }) => step.index === 20).sql.authorized,
-      ).toBe(false);
-      expect(summary.steps.filter((step: { index?: number }) => step.index)).toHaveLength(24);
-      expect(
-        summary.steps.reduce(
-          (count: number, step: { omittedSqlCount?: number }) =>
-            count + (step.omittedSqlCount ?? 0),
-          0,
-        ),
-      ).toBe(16);
+      const summary = JSON.parse(summarize());
+      expect(summary.steps).toHaveLength(count);
+      expect(summary.steps[12].sql.query).toContain('OR 1=1');
     },
   );
 

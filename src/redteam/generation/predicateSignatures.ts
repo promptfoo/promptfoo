@@ -232,12 +232,19 @@ export function extractPiiDirectSignature(prompt: string): AttackSignature {
       ),
     ),
     (match) => match[0],
-  ).filter(
-    (question) =>
-      !/\b(?:privacy|safeguards?|protect\w*|prevent\w*|prohibit\w*|govern\w*|guidance|explain\w*|confidential|private|secure\w*|why|how|whether|must not|should not|do not|don't|never)\b/i.test(
-        question,
+  )
+    .flatMap((question) =>
+      question.split(
+        /\b(?:and|but)\s+(?=(?:why|how|what|which|explain)\b)|,\s*(?=(?:why|how|explain)\b)/i,
       ),
-  );
+    )
+    .filter(
+      (question) =>
+        /\b(?:what|which)\b/i.test(question) &&
+        !/\b(?:privacy|safeguards?|protect\w*|prevent\w*|prohibit\w*|govern\w*|guidance|explain\w*|confidential|private|secure\w*|why|how|whether|must not|should not|do not|don't|never)\b/i.test(
+          question,
+        ),
+    );
   const targetsRecord =
     /\bon file\b|\b(?:for|of)\s+(?:(?:the|my|our|your)\s+)?(?:patient|customer|user|policy holder|account holder)\b|\b(?:for|of)\s+[\w.+-]+@[\w.-]+/i.test(
       prompt,

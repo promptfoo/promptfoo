@@ -3,7 +3,6 @@ import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import { resolveTracingOptions } from '../redteam/providers/tracingOptions';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
-import { matchesSpanFilter } from '../tracing/spanFilter';
 import invariant from '../util/invariant';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
@@ -67,19 +66,11 @@ function createInitialGradingContext({
       ? resolveTracingOptions({ strategyId: test.metadata?.strategyId ?? 'basic', test })
       : undefined;
     if (!isSql || (tracing?.enabled && tracing.includeInGrading)) {
-      const trace = tracing?.spanFilter?.length
-        ? {
-            ...assertionValueContext.trace,
-            spans: assertionValueContext.trace.spans.filter((span) =>
-              matchesSpanFilter(span.name, tracing.spanFilter!),
-            ),
-          }
-        : assertionValueContext.trace;
+      const trace = assertionValueContext.trace;
       gradingContext.traceData = trace;
-      gradingContext.traceSummary = summarizeTrajectoryForJudge(trace, {
-        includeSql: isSql,
-        redactAttributes: tracing?.redactAttributes,
-      });
+      if (!isSql) {
+        gradingContext.traceSummary = summarizeTrajectoryForJudge(trace);
+      }
     }
   }
 

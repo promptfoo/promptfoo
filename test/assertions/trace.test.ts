@@ -223,7 +223,7 @@ describe('trace assertions', () => {
     },
   );
 
-  it('applies the SQL span filter to both raw grading context and its summary', async () => {
+  it('rejects SQL grading when a span filter excludes private evidence', async () => {
     mockTraceStore.getTrace.mockResolvedValue({
       ...mockTraceData,
       spans: [
@@ -245,22 +245,21 @@ describe('trace assertions', () => {
       grade: { pass: true, score: 1, reason: 'Fixture verdict' },
       rubric: 'Fixture rubric',
     });
-    await runAssertion({
-      assertion: { type: 'promptfoo:redteam:sql-injection' },
-      prompt: 'Inspect records.',
-      test: {
-        metadata: {
-          purpose: 'Fixture assistant',
-          tracing: { enabled: true, spanFilter: ['allowed*'] },
+    await expect(
+      runAssertion({
+        assertion: { type: 'promptfoo:redteam:sql-injection' },
+        prompt: 'Inspect records.',
+        test: {
+          metadata: {
+            purpose: 'Fixture assistant',
+            tracing: { enabled: true, spanFilter: ['allowed*'] },
+          },
         },
-      },
-      providerResponse: mockProviderResponse,
-      traceId: 'test-trace-id',
-    });
-    const context = grade.mock.calls[0]?.[7];
-    expect(context?.traceData?.spans).toHaveLength(1);
-    expect(context?.traceSummary).toContain('SELECT public');
-    expect(JSON.stringify(context)).not.toContain('PRIVATE_');
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      }),
+    ).rejects.toThrow('SQL trace evidence was filtered');
+    expect(grade).not.toHaveBeenCalled();
   });
 
   it.each(['db.statement', 'db.query.text'])(
@@ -365,8 +364,8 @@ describe('trace assertions', () => {
       const steps = JSON.parse(summary!).steps;
       expect(steps).toHaveLength(2);
       expect(steps.map((step: { sql: unknown }) => step.sql)).toEqual([
-        { query: redactQuery ? '[REDACTED]' : queries[0], authorized: true, rowCount: 1 },
-        { query: redactQuery ? '[REDACTED]' : queries[1], authorized: false, rowCount: 2 },
+        { query: queries[0], authorized: true, rowCount: 1 },
+        { query: queries[1], authorized: false, rowCount: 2 },
       ]);
       expect(summary).not.toMatch(/PRIVATE_/);
     },
