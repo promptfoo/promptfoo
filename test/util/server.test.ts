@@ -189,6 +189,12 @@ describe('Server Utilities', () => {
 
       expect(opener).toHaveBeenCalledWith(`http://localhost:${customPort}`);
     });
+
+    it('should open browser with a custom path', async () => {
+      await openBrowser(BrowserBehavior.OPEN, 5000, '/eval/eval-123');
+
+      expect(opener).toHaveBeenCalledWith('http://localhost:5000/eval/eval-123');
+    });
   });
 
   describe('checkServerFeatureSupport', () => {

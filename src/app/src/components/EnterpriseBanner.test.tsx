@@ -31,6 +31,21 @@ describe('EnterpriseBanner', () => {
     expect(enterpriseLink).toHaveAttribute('href', 'https://www.promptfoo.dev/docs/enterprise/');
   });
 
+  it('should encode reserved characters in the eval ID domain check', async () => {
+    mockCallApiResponse({ isCloudEnabled: true });
+
+    const { container } = render(<EnterpriseBanner evalId="imported/eval?#1&2" />);
+
+    expect(mockCallApi).toHaveBeenCalledTimes(1);
+    expect(mockCallApi).toHaveBeenCalledWith(
+      '/results/share/check-domain?id=imported%2Feval%3F%231%262',
+    );
+
+    await waitFor(() => {
+      expect(container.firstChild).toBeNull();
+    });
+  });
+
   it('should not render anything when evalId is provided and cloud is enabled', async () => {
     mockCallApiResponse({ isCloudEnabled: true });
 

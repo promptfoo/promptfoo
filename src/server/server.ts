@@ -372,6 +372,7 @@ export function createApp() {
 export async function startServer(
   port = getDefaultPort(),
   browserBehavior: BrowserBehavior = BrowserBehavior.ASK,
+  browserPath?: string,
 ): Promise<void> {
   const app = createApp();
 
@@ -555,7 +556,7 @@ export async function startServer(
 
       const url = `http://localhost:${port}`;
       logger.info(`Server running at ${url} and monitoring for new evals.`);
-      openBrowser(browserBehavior, port).catch((error) => {
+      openBrowser(browserBehavior, port, browserPath).catch((error) => {
         logger.error(
           `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
         );

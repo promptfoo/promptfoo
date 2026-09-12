@@ -669,7 +669,7 @@ export const useTableStore = create<TableState>()(
         logger.debug('[EvalStore] Fetching eval table data', { evalId: id, options });
 
         const url = new URL(
-          `/eval/${id}/table`,
+          `/eval/${encodeURIComponent(id)}/table`,
           // URL constructor expects a valid url
           window.location.origin,
         );
@@ -931,7 +931,10 @@ export const useTableStore = create<TableState>()(
         const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
 
         // Build URL with comparison eval IDs as query params
-        const url = new URL(`/eval/${id}/metadata-keys`, window.location.origin);
+        const url = new URL(
+          `/eval/${encodeURIComponent(id)}/metadata-keys`,
+          window.location.origin,
+        );
         comparisonEvalIds.forEach((compId) => {
           url.searchParams.append('comparisonEvalIds', compId);
         });
@@ -1029,7 +1032,10 @@ export const useTableStore = create<TableState>()(
 
       try {
         const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
-        const url = new URL(`/eval/${evalId}/metadata-values`, window.location.origin);
+        const url = new URL(
+          `/eval/${encodeURIComponent(evalId)}/metadata-values`,
+          window.location.origin,
+        );
         url.searchParams.set('key', trimmedKey);
         comparisonEvalIds.forEach((compId) => {
           url.searchParams.append('comparisonEvalIds', compId);

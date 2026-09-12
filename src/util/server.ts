@@ -118,10 +118,15 @@ export async function checkServerRunning(port = getDefaultPort()): Promise<boole
 export async function openBrowser(
   browserBehavior: BrowserBehavior,
   port = getDefaultPort(),
+  browserPath?: string,
 ): Promise<void> {
   const baseUrl = `http://localhost:${port}`;
   let url = baseUrl;
-  if (browserBehavior === BrowserBehavior.OPEN_TO_REPORT) {
+
+  if (browserPath) {
+    const normalizedPath = browserPath.startsWith('/') ? browserPath : `/${browserPath}`;
+    url = `${baseUrl}${normalizedPath}`;
+  } else if (browserBehavior === BrowserBehavior.OPEN_TO_REPORT) {
     url = `${baseUrl}/report`;
   } else if (browserBehavior === BrowserBehavior.OPEN_TO_REDTEAM_CREATE) {
     url = `${baseUrl}/redteam/setup`;

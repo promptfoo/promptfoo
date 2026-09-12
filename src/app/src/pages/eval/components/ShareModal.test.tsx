@@ -126,6 +126,19 @@ describe('ShareModal', () => {
     });
   });
 
+  it('encodes reserved characters in the share-domain check', async () => {
+    const evalId = 'imported/eval?#1&2';
+    mockOnShare.mockResolvedValue('https://promptfoo.app/eval/shared-id');
+
+    render(<ShareModal {...defaultProps} evalId={evalId} />);
+
+    await waitFor(() => {
+      expect(mockCallApi).toHaveBeenCalledWith(
+        '/results/share/check-domain?id=imported%2Feval%3F%231%262',
+      );
+    });
+  });
+
   it('does not rerun the domain check after share URL generation fails', async () => {
     mockOnShare.mockRejectedValueOnce(new Error('Failed to generate share URL'));
 
