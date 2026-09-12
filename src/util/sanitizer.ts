@@ -12,16 +12,19 @@ const DUMMY_BASE = 'http://placeholder';
 export const REDACTED = '[REDACTED]';
 
 const PRIVATE_VERIFIER_FIELD =
-  /(?:canar(?:y|ies)|receipts?$|^(?:forbidden|sensitive|secret(?:env|file)?|syntheticsecret)(?:values?|s)?$|^secretmarkers?$|^expected(?:file|original)?content$)/i;
+  /(?:canar(?:y|ies)|receipts?$|ledgers?$|^(?:forbidden|sensitive|secret(?:env|file)?|syntheticsecret)(?:values?|s)?$|^secretmarkers?$|^expected(?:file|original)?content$)/i;
 
 /** Redact inline verifier inputs from saved configs and result copies, preserving file references. */
 export function sanitizeCodingAgentVerifierInputs<T>(input: T): T {
   const seen = [new WeakMap<object, unknown>(), new WeakMap<object, unknown>()];
   const isCodingAgentId = (id: unknown) =>
     typeof id === 'string' && /^(?:promptfoo:redteam:)?(?:coding-agent|harness):/.test(id);
-  const visit = (value: unknown, verifier = false): unknown => {
+  const visit = (value: unknown, verifier = false, depth = 0): unknown => {
     if (!value || typeof value !== 'object' || (!Array.isArray(value) && isClassInstance(value))) {
       return value;
+    }
+    if (depth >= 32) {
+      return { privateVerifierInputsRedacted: true };
     }
     const object = value as Record<string, unknown>;
     verifier ||= [
@@ -38,7 +41,7 @@ export function sanitizeCodingAgentVerifierInputs<T>(input: T): T {
       const result: unknown[] = [];
       cache.set(value, result);
       for (const item of value) {
-        result.push(visit(item, verifier));
+        result.push(visit(item, verifier, depth + 1));
       }
       return result;
     }
@@ -57,7 +60,7 @@ export function sanitizeCodingAgentVerifierInputs<T>(input: T): T {
         entries.push([key, REDACTED]);
         redacted = true;
       } else {
-        const sanitized = visit(child, verifier);
+        const sanitized = visit(child, verifier, depth + 1);
         entries.push([key, sanitized]);
         if (verifier && sanitized && typeof sanitized === 'object') {
           const children = Array.isArray(sanitized) ? sanitized : [sanitized];

@@ -31,6 +31,34 @@ afterEach(() => {
 });
 
 describe('sanitizeCodingAgentVerifierInputs', () => {
+  it.each(['mcpSourceLedger', 'connectorReadLedger', 'externalizedAgentLedger', 'jobQueueLedgers'])(
+    'redacts the complete inline %s payload',
+    (key) => {
+      const payload = { result: { text: 'PRIVATE_INLINE_LEDGER_PAYLOAD' } };
+      const config = {
+        type: 'promptfoo:redteam:coding-agent:mcp-confused-deputy',
+        value: { [key]: payload },
+      };
+      expect(JSON.stringify(sanitizeCodingAgentVerifierInputs(config))).not.toContain(
+        payload.result.text,
+      );
+      expect(config.value[key]).toBe(payload);
+    },
+  );
+
+  it('bounds deeply nested metadata before general serialization', () => {
+    let nested: Record<string, unknown> = { text: 'PRIVATE_DEEP_METADATA' };
+    for (let i = 0; i < 6000; i++) {
+      nested = { nested };
+    }
+    expect(() =>
+      JSON.stringify(sanitizeCodingAgentVerifierInputs({ metadata: nested })),
+    ).not.toThrow();
+    expect(JSON.stringify(sanitizeCodingAgentVerifierInputs({ metadata: nested }))).not.toContain(
+      'PRIVATE_DEEP_METADATA',
+    );
+  });
+
   it('redacts only verifier-owned copies of shared configuration objects', () => {
     const fixture = { rawReceipt: 'private fixture text', expectedContent: 'expected file text' };
     const config = {
