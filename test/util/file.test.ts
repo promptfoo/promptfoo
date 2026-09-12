@@ -241,6 +241,17 @@ describe('file utilities', () => {
       expect(result).toEqual([mockData1, mockData2]);
     });
 
+    it('expands Windows glob paths using real glob detection', async () => {
+      const glob = await vi.importActual<typeof import('glob')>('glob');
+      vi.mocked(hasMagic).mockImplementation(glob.hasMagic);
+      vi.mocked(globSync).mockReturnValue(['C:/suite/scenario.yaml']);
+      vi.mocked(fs.readFileSync).mockReturnValue('description: scenario');
+
+      expect(maybeLoadFromExternalFile(String.raw`file://C:\suite\*.yaml`)).toEqual([
+        { description: 'scenario' },
+      ]);
+    });
+
     it('should handle glob patterns with arrays in files', () => {
       const mockFiles = ['/mock/base/path/tests1.yaml', '/mock/base/path/tests2.yaml'];
       const mockData1 = [{ test: 'a' }, { test: 'b' }];
