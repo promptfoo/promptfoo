@@ -180,6 +180,8 @@ describe('doRedteamRun', () => {
         output: outputPath,
       }),
     );
+    expect(vi.mocked(doEval).mock.calls[0][0]).toMatchObject({ config: [outputPath] });
+    expect(vi.mocked(doEval).mock.calls[0][0]).not.toHaveProperty('output');
   });
 
   it('passes the run environment file to generation', async () => {

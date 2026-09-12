@@ -7,7 +7,7 @@ import dedent from 'dedent';
 import { globSync } from 'glob';
 import ora from 'ora';
 import { z } from 'zod';
-import { disableCache } from '../cache';
+import { withCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
@@ -629,7 +629,6 @@ export async function doEval(
 
     if (cache === false) {
       logger.info('Cache is disabled.');
-      disableCache();
     }
 
     // Propagate maxConcurrency to cliState for providers (e.g., Python worker pool)
@@ -937,15 +936,18 @@ export async function doEval(
       process.on('SIGINT', sigintHandler);
     }
 
-    // Run the evaluation!!!!!!
+    const evalTestSuite = testSuite;
+    const evalOptions = {
+      ...options,
+      filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+      abortSignal: evaluateOptions.abortSignal,
+      isRedteam: Boolean(config.redteam),
+    };
     let ret;
     try {
-      ret = await evaluate(testSuite, evalRecord, {
-        ...options,
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        abortSignal: evaluateOptions.abortSignal,
-        isRedteam: Boolean(config.redteam),
-      });
+      ret = await withCacheEnabled(cache === false ? false : undefined, () =>
+        evaluate(evalTestSuite, evalRecord, evalOptions),
+      );
 
       // Post-evaluation cleanup for retry-errors mode
       // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics

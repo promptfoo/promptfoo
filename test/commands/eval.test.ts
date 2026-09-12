@@ -5,7 +5,7 @@ import * as path from 'path';
 import { Command } from 'commander';
 import { globSync } from 'glob';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
-import { disableCache } from '../../src/cache';
+import { disableCache, enableCache, isCacheEnabled } from '../../src/cache';
 import cliState from '../../src/cliState';
 import {
   doEval as commandDoEval,
@@ -52,7 +52,6 @@ import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
-vi.mock('../../src/cache');
 vi.mock('../../src/evaluator');
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
@@ -1102,10 +1101,36 @@ describe('evalCommand', () => {
     );
   });
 
-  it('should handle --no-cache option', async () => {
-    const cmdObj = { cache: false };
-    await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
-    expect(disableCache).toHaveBeenCalledTimes(1);
+  it.each([false, true])('isolates --no-cache when evaluation throws=%s', async (throws) => {
+    const previouslyEnabled = isCacheEnabled();
+    enableCache();
+    try {
+      vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+        expect(isCacheEnabled()).toBe(false);
+        if (throws) {
+          throw new Error('fixture evaluation failed');
+        }
+        return evalRecord as Eval;
+      });
+      const run = doEval({ cache: false }, defaultConfig, defaultConfigPath, {});
+      if (throws) {
+        await expect(run).rejects.toThrow('fixture evaluation failed');
+      } else {
+        await run;
+      }
+      expect(isCacheEnabled()).toBe(true);
+      vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+        expect(isCacheEnabled()).toBe(true);
+        return evalRecord as Eval;
+      });
+      await doEval({ cache: true }, defaultConfig, defaultConfigPath, {});
+    } finally {
+      if (previouslyEnabled) {
+        enableCache();
+      } else {
+        disableCache();
+      }
+    }
   });
 
   it('should handle --write option', async () => {
