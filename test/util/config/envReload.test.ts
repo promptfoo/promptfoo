@@ -441,6 +441,45 @@ describe('suite environment loading', () => {
     expect(first.config.scenarios?.[0]).toMatchObject({ tests: [{ provider: 'echo' }] });
   });
 
+  it.each(['PROMPTFOO_DISABLE_TEMPLATING', 'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS'] as const)(
+    'applies config-local %s before rendering env aliases',
+    async (flag) => {
+      const restore = mockProcessEnv({ ACTUAL_SECRET: 'fixture-short' });
+      try {
+        const configPath = writeConfig('restricted-alias', {
+          env: { [flag]: 'true', VISIBLE_VALUE: '{{ env.ACTUAL_SECRET }}' },
+          metadata: { visible: '{{ env.VISIBLE_VALUE }}' },
+        });
+        const config = await readConfig(configPath);
+        expect(JSON.stringify(config)).not.toContain('fixture-short');
+        expect(process.env.ACTUAL_SECRET).toBe('fixture-short');
+      } finally {
+        restore();
+      }
+    },
+  );
+
+  it('uses each scenario config row source root', async () => {
+    const configs = ['first', 'second'].map((name) => {
+      const configPath = writeConfig(name, {
+        prompts: ['{{payload}}'],
+        scenarios: [
+          {
+            config: [{ vars: { payload: 'file://payload.txt' } }],
+            tests: [{ vars: { source: name } }],
+          },
+        ],
+      });
+      fs.writeFileSync(path.join(path.dirname(configPath), 'payload.txt'), name);
+      return configPath;
+    });
+    const { config, testSuite } = await resolveConfigs({ config: configs }, {});
+    const result = await evaluateResolved(testSuite, new Eval(config), {});
+    const rows = await result.getResults();
+    expect(rows.map((row) => row.response?.output).sort()).toEqual(['first', 'second']);
+    expect(rows.every((row) => row.success)).toBe(true);
+  });
+
   it('keeps loading other sources when a test glob matches no files', async () => {
     const configPath = writeConfig('optional-source', {
       tests: ['good/*.yaml', 'optional/*.yaml'],

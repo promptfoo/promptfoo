@@ -1055,7 +1055,10 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
   if (!parsed || typeof parsed !== 'object') {
     return null;
   }
-  const sanitized = sanitizeObject(parsed);
+  const sanitized = sanitizeObject(parsed, {
+    sanitizeUrls: true,
+    maxDepth: Number.POSITIVE_INFINITY,
+  });
   const originalSerialized = JSON.stringify(parsed);
   const sanitizedSerialized = JSON.stringify(sanitized);
   return sanitizedSerialized === originalSerialized ? null : sanitizedSerialized;

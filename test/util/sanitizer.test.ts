@@ -1976,6 +1976,22 @@ describe('sanitizeUrl', () => {
     expect(sanitizeUrlEncodedString(pair)).toBe(`${key}=%5BREDACTED%5D`);
   });
 
+  it('redacts credential URLs inside JSON query and form values', () => {
+    const value = JSON.stringify({
+      endpoint: 'https://inner.example/?tenantClientSecret=short-value',
+    });
+    const pair = `payload=${encodeURIComponent(value)}`;
+    for (const result of [
+      sanitizeUrl(`https://outer.example/?${pair}`),
+      sanitizeUrlEncodedString(pair),
+    ]) {
+      const payload = new URLSearchParams(result.split('?').pop()).get('payload');
+      expect(JSON.parse(payload!).endpoint).toBe(
+        'https://inner.example/?tenantClientSecret=%5BREDACTED%5D',
+      );
+    }
+  });
+
   it('preserves tokenizer settings and pagination cursors in form bodies', () => {
     const body =
       'stop_token=###&eos_token=</s>&pageToken=CAESBk1vcmU&nextPageToken=abc&MAX_TOKEN=4096';

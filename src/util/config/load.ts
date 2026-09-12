@@ -311,7 +311,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
  * @returns The config with env templates rendered
  */
 export function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(config: T): T {
-  return cliState.withEnv(undefined, () => renderConfigEnvTemplatesInScope(config));
+  return cliState.withEnv(config.env, () => renderConfigEnvTemplatesInScope(config));
 }
 
 function renderConfigEnvTemplatesInScope<T extends { env?: Record<string, string> }>(config: T): T {
@@ -809,6 +809,9 @@ async function prepareCombinedConfig(
           typeof scenario === 'object' && scenario?.tests
             ? {
                 ...scenario,
+                ...(Array.isArray(scenario.config) && {
+                  config: scenario.config.map((test: unknown) => makeTestAbsolute(basePath, test)),
+                }),
                 tests: [scenario.tests].flat().map((test) => makeTestAbsolute(basePath, test)),
               }
             : scenario,
