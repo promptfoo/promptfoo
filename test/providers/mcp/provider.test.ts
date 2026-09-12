@@ -268,7 +268,7 @@ describe('MCPProvider', () => {
     });
   });
 
-  it('finishes a cancelled call while its response transform remains pending', async () => {
+  it('preserves completed tool evidence when response transformation is cancelled', async () => {
     mcpClientMock.callTool.mockResolvedValue({ content: 'response' });
     const provider = new MCPProvider({
       config: {
@@ -283,7 +283,11 @@ describe('MCPProvider', () => {
     await vi.waitFor(() => expect(mcpClientMock.callTool).toHaveBeenCalledOnce());
     controller.abort(new Error('cancelled transform'));
 
-    await expect(call).rejects.toThrow('cancelled transform');
+    await expect(call).resolves.toMatchObject({
+      error: 'MCP Provider error: cancelled transform',
+      raw: { content: 'response' },
+      metadata: { toolName: 'slow', toolArgs: {} },
+    });
   });
 
   it('should return the existing invalid prompt contract before calling tools', async () => {

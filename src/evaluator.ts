@@ -1029,9 +1029,6 @@ async function collectExternalTraceAfterProviderCall({
     }
   } catch (error) {
     if (abortSignal?.aborted) {
-      if (!providerFailed) {
-        throw error;
-      }
       return;
     }
     logger.warn(`[Evaluator] Failed to fetch external traces: ${error}`);
@@ -5121,7 +5118,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return interruptedEval;
     }
 
-    if (!evalTimedOut) {
+    if (!evalTimedOut && !providerAbortSignal?.aborted) {
       await this.processComparisonAssertions({
         ciProgressReporter,
         isWebUI,

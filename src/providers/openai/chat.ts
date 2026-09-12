@@ -566,6 +566,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
 
     let completedResponse: ProviderResponse | undefined;
     const mcpToolCalls: McpToolCallEntry[] = [];
+    const results: string[] = [];
     try {
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
@@ -674,7 +675,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? [message.function_call]
         : message.tool_calls;
       if (functionCalls && (config.functionToolCallbacks || this.mcpClient)) {
-        const results = [];
         let hasSuccessfulCallback = false;
         for (const functionCall of functionCalls) {
           const functionName = functionCall.name || functionCall.function?.name;
@@ -841,6 +841,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
       return {
         ...completedResponse,
+        ...(callApiOptions?.abortSignal?.aborted &&
+          results.length > 0 && { output: results.join('\n') }),
         ...(completedResponse && { raw: data }),
         error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
         metadata: {

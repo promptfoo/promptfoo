@@ -600,6 +600,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
               undefined,
               callApiOptions,
             );
+            completedResponse.output = output;
+            callApiOptions?.abortSignal?.throwIfAborted();
           } else {
             // No callbacks configured, return raw tool/function calls
             output = toolCalls ?? functionCall;

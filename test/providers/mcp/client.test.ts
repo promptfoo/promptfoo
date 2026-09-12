@@ -1419,6 +1419,33 @@ describe('MCPClient', () => {
       },
     );
 
+    it.each(['transport', 'client'])(
+      'does not wait for an established %s close after cleanup aborts lifecycle',
+      async (resource) => {
+        const closeContinue = createDeferred<void>();
+        const close = resource === 'transport' ? mockStdioTransport.close : mockClient.close;
+        close.mockReturnValueOnce(closeContinue.promise);
+        mcpClient = new MCPClient({
+          enabled: true,
+          server: { command: 'node', args: ['fixture-server.js'] },
+        });
+        await mcpClient.initialize();
+
+        const cleanup = mcpClient.cleanup();
+        const settled = await Promise.race([
+          cleanup.then(() => true),
+          new Promise<boolean>((resolve) => setImmediate(() => resolve(false))),
+        ]);
+        closeContinue.resolve();
+        await cleanup;
+
+        expect(settled).toBe(true);
+        expect(mockStdioTransport.close).toHaveBeenCalledOnce();
+        expect(mockClient.close).toHaveBeenCalledOnce();
+        expect(mcpClient.connectedServers).toEqual([]);
+      },
+    );
+
     it('closes a connection whose tool discovery failed before registration', async () => {
       mockClient.listTools.mockRejectedValueOnce(new Error('tool discovery failed'));
       mcpClient = new MCPClient({
