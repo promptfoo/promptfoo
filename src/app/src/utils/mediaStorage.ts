@@ -24,7 +24,7 @@ export type BlobRefString = `${typeof BLOB_REF_PREFIX}${string}`;
 /**
  * Get the base URL for the API.
  * Uses the same apiBaseUrl as callApi to ensure correct routing
- * in both development (http://localhost:15500) and production.
+ * in both local development and production.
  */
 function getApiBaseUrl(): string {
   const { apiBaseUrl } = useApiConfig.getState();

@@ -22,6 +22,58 @@ export const browserModuleReplacements = [
   },
 ] as const;
 
+// The dev UI binds this port with strictPort, so the dev API must not share it.
+export const DEV_UI_PORT = '15500';
+
+const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]', '::1'];
+
+/**
+ * True when a URL targets a loopback host on the dev UI port. Such a dev API base URL points
+ * the client at the Vite server instead of the Express API, so requests never reach the backend.
+ */
+export function pointsAtDevUiPort(url: string | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+  try {
+    const parsed = new URL(url);
+    return LOOPBACK_HOSTS.includes(parsed.hostname) && parsed.port === DEV_UI_PORT;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Throws a clear config-load error when the dev API port or base URL collides with the dev UI
+ * port. Only enforced in development; production serves the UI and API from one origin.
+ */
+export function assertDevApiPortsDoNotCollide({
+  nodeEnv,
+  apiPort,
+  remoteApiBaseUrl,
+}: {
+  nodeEnv: string | undefined;
+  apiPort: string;
+  remoteApiBaseUrl: string | undefined;
+}): void {
+  if (nodeEnv !== 'development') {
+    return;
+  }
+  if (apiPort === DEV_UI_PORT) {
+    throw new Error(
+      `API_PORT=${apiPort} collides with the dev UI port (${DEV_UI_PORT}). ` +
+        `Set API_PORT to a different port (the dev API defaults to 18601).`,
+    );
+  }
+  if (pointsAtDevUiPort(remoteApiBaseUrl)) {
+    throw new Error(
+      `The dev API base URL (${remoteApiBaseUrl}) resolves to the dev UI port (${DEV_UI_PORT}), ` +
+        `so client requests would hit the Vite server instead of the API. ` +
+        `Point PROMPTFOO_REMOTE_API_BASE_URL (or API_PORT) at the Express API port (default 18601).`,
+    );
+  }
+}
+
 export const vendorCodeSplittingGroups = [
   {
     name: 'vendor-react',
