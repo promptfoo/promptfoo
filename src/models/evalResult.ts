@@ -141,6 +141,15 @@ function projectTranscriptMetadata<T>(
       delete history.outputAudio;
       delete history.outputImage;
     }
+    // Iterative-image's user turns combine the image output description with
+    // the next input. Its system turn contains only the input instructions.
+    if (
+      ((options.stripPrompt || options.stripOutput) &&
+        (history.role === 'user' || history.role === 'assistant')) ||
+      (options.stripPrompt && history.role === 'system')
+    ) {
+      delete history.content;
+    }
     if (stripVars) {
       delete history.inputVars;
     }
@@ -184,20 +193,41 @@ function projectTranscriptMetadata<T>(
         return message;
       });
     }
-    if (Array.isArray(record.successfulAttacks)) {
-      projected.successfulAttacks = record.successfulAttacks.map((entry) => {
+    for (const key of ['successfulAttacks', 'successfulTurns']) {
+      const entries = record[key];
+      if (!Array.isArray(entries)) {
+        continue;
+      }
+      projected[key] = entries.map((entry) => {
         if (!asRecord(entry)) {
           return entry;
         }
         const attack = { ...entry };
         if (options.stripPrompt) {
           delete attack.prompt;
-          delete attack.message;
+          if (key === 'successfulAttacks') {
+            delete attack.message;
+          }
         }
         if (options.stripOutput) {
           delete attack.response;
         }
         return attack;
+      });
+    }
+    if (Array.isArray(record.audioHistory)) {
+      projected.audioHistory = record.audioHistory.map((entry) => {
+        if (!asRecord(entry)) {
+          return entry;
+        }
+        const turn = { ...entry };
+        if (options.stripPrompt) {
+          delete turn.textPrompt;
+        }
+        if (options.stripOutput) {
+          delete turn.responseTranscript;
+        }
+        return turn;
       });
     }
   }
@@ -288,6 +318,10 @@ function projectTestCase(
     projectedTestCase.prompts = testCase.prompts.map((prompt) =>
       typeof prompt === 'string' ? '[prompt stripped]' : prompt,
     );
+  }
+  if (options.stripPrompt && testCase.options && asRecord(testCase.options)) {
+    const { prefix: _prefix, suffix: _suffix, ...rest } = testCase.options;
+    projectedTestCase.options = rest;
   }
 
   return projectedTestCase;
@@ -824,7 +858,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
  * leaving in-memory rows real for hooks.
  */
 export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
-  if (!table || !Array.isArray(table.body)) {
+  if (!asRecord(table)) {
     return table;
   }
 
@@ -944,18 +978,24 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
           },
         }
       : {}),
-    body: table.body.map((row) =>
-      asRecord(row)
-        ? {
-            ...row,
-            vars: Array.isArray(row.vars) ? sanitizeDisplayVars(row.vars, row.test) : row.vars,
-            test: sanitizeTestCase(row.test) as AtomicTestCase,
-            outputs: Array.isArray(row.outputs)
-              ? (row.outputs.map(sanitizeOutput) as EvaluateTableOutput[])
-              : row.outputs,
-          }
-        : row,
-    ),
+    ...(Array.isArray(table.body)
+      ? {
+          body: table.body.map((row) =>
+            asRecord(row)
+              ? {
+                  ...row,
+                  vars: Array.isArray(row.vars)
+                    ? sanitizeDisplayVars(row.vars, row.test)
+                    : row.vars,
+                  test: sanitizeTestCase(row.test) as AtomicTestCase,
+                  outputs: Array.isArray(row.outputs)
+                    ? (row.outputs.map(sanitizeOutput) as EvaluateTableOutput[])
+                    : row.outputs,
+                }
+              : row,
+          ),
+        }
+      : {}),
   } as EvaluateTable;
 }
 

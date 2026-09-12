@@ -746,7 +746,7 @@ export async function generateEvalCsv(
 export interface StreamCsvOptions {
   /** Whether this is a redteam eval */
   isRedteam?: boolean;
-  /** Optional artifact projection, applied to the header and each bounded batch. */
+  /** Artifact projection: header first, then bounded batches with only head.vars populated. */
   projectTable?: (table: EvaluateTable) => EvaluateTable;
   /** Callback to write a chunk of CSV data */
   write: (data: string) => void | Promise<void>;
@@ -820,7 +820,9 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
     const rows = batchToStreamRows(batchResults, varNames, numPrompts);
     const projectedRows = projectTable
       ? projectTable({
-          head: { vars: varNames, prompts },
+          // Only the projected rows are consumed here. Header prompts were
+          // already sanitized once above, including their nested configs.
+          head: { vars: varNames, prompts: [] },
           body: rows as unknown as EvaluateTableRow[],
         }).body
       : rows;

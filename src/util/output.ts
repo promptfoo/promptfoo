@@ -408,11 +408,16 @@ function projectConfigTest(
   if (!isRecord(test)) {
     return test;
   }
-  return {
+  const projected: Record<string, unknown> = {
     ...test,
     ...(options.stripVars && 'vars' in test && { vars: undefined }),
     ...(options.stripPrompt && 'prompts' in test && { prompts: stripConfigPrompt(test.prompts) }),
   };
+  if (options.stripPrompt && isRecord(test.options)) {
+    const { prefix: _prefix, suffix: _suffix, ...rest } = test.options;
+    projected.options = rest;
+  }
+  return projected;
 }
 
 function stripConfigProviderPrompts(provider: unknown): unknown {

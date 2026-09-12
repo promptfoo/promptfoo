@@ -202,6 +202,83 @@ describe('importCommand', () => {
   });
 
   describe('export projection round trips', () => {
+    describe.each([
+      { name: 'missing', body: undefined },
+      { name: 'null', body: null },
+      { name: 'string', body: 'historical body' },
+      { name: 'object', body: { unavailable: true } },
+    ])('legacy table with $name body', ({ body }) => {
+      it.each([false, true])(
+        'sanitizes its header with prompt stripping=%s',
+        async (stripPrompt) => {
+          const dir = createTempDir();
+          const fixture = {
+            evalId: 'eval-malformed-legacy-body',
+            config: {},
+            results: {
+              version: 2,
+              results: [],
+              stats: { successes: 0, failures: 0 },
+              table: {
+                head: {
+                  vars: ['subject'],
+                  prompts: [
+                    createCompletedPrompt('Legacy header input', {
+                      display: 'Legacy header display',
+                      config: { password: 'Legacy header credential', temperature: 0.25 },
+                    }),
+                  ],
+                },
+                ...(body !== undefined && { body }),
+              },
+            },
+          };
+          const original = structuredClone(fixture);
+          const restore = mockProcessEnv({
+            PROMPTFOO_STRIP_PROMPT_TEXT: String(stripPrompt),
+            PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false',
+            PROMPTFOO_STRIP_TEST_VARS: 'false',
+          });
+          try {
+            const input = path.join(dir, 'legacy.json');
+            fs.writeFileSync(input, JSON.stringify(fixture));
+            importCommand(program);
+            await program.parseAsync(['node', 'test', 'import', input]);
+            expect(process.exitCode).toBeUndefined();
+            const reopened = await Eval.findById(fixture.evalId);
+            expect(reopened).toBeDefined();
+            const sourceTable = await reopened!.getTable();
+            const originalTable = structuredClone(sourceTable);
+            for (const extension of ['json', 'yaml', 'txt', 'xml']) {
+              const output = path.join(dir, `reexport.${extension}`);
+              await writeOutput(output, reopened!, null);
+              const contents = fs.readFileSync(output, 'utf8');
+              expect(contents).not.toContain('Legacy header credential');
+              expect(contents.includes('Legacy header input')).toBe(!stripPrompt);
+              expect(contents.includes('Legacy header display')).toBe(!stripPrompt);
+              if (extension === 'json') {
+                const table = JSON.parse(contents).results.table;
+                expect(table.body).toEqual(body);
+                expect(Object.hasOwn(table, 'body')).toBe(body !== undefined);
+                expect(table.head.vars).toEqual(['subject']);
+                expect(table.head.prompts[0]).toMatchObject({
+                  raw: stripPrompt ? '[prompt stripped]' : 'Legacy header input',
+                  label: stripPrompt ? '[prompt stripped]' : 'Legacy header input',
+                  display: stripPrompt ? '[prompt stripped]' : 'Legacy header display',
+                  config: { password: '[REDACTED]', temperature: 0.25 },
+                });
+              }
+            }
+            expect(sourceTable).toEqual(originalTable);
+            expect(fixture).toEqual(original);
+          } finally {
+            restore();
+            removeTempDir(dir);
+          }
+        },
+      );
+    });
+
     it.each(['namedScores', 'namedScoresCount', 'namedScoreWeights'] as const)(
       'normalizes nonfinite and null %s values through export and persisted import',
       async (metricMap) => {

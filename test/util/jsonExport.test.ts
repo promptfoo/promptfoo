@@ -1,16 +1,25 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { parse as parseCsv } from 'csv-parse/sync';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions';
 import * as blobs from '../../src/blobs';
 import Eval from '../../src/models/eval';
-import EvalResult, { sanitizeResultForJsonlArtifact } from '../../src/models/evalResult';
+import EvalResult, {
+  sanitizeResultForJsonlArtifact,
+  sanitizeTableForArtifact,
+} from '../../src/models/evalResult';
 import { EchoProvider } from '../../src/providers/echo';
 import { getTraceStore } from '../../src/tracing/store';
+import { evalTableToCsv, streamEvalCsv } from '../../src/util/eval/evalTableUtils';
 import { writeOutput } from '../../src/util/index';
 import { sanitizeObject } from '../../src/util/sanitizer';
-import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
+import {
+  createCompletedPrompt,
+  createEvaluateResult,
+  createPromptMetrics,
+} from '../factories/eval';
 import { createTempDir, mockProcessEnv, removeTempDir } from './utils';
 
 import type { TreeSearchOutput } from '../../src/redteam/providers/iterativeTree';
@@ -478,6 +487,31 @@ describe('JSON export with improved error handling', () => {
             },
             null,
             'legacy history entry',
+            { role: 'system', content: 'image system input canary' },
+            {
+              role: 'user',
+              content: 'IMAGE MODEL OUTPUT: blue square; OBJECTIVE: mixed image canary',
+            },
+            { role: 'assistant', content: 'image assistant transcript canary' },
+          ],
+          audioHistory: [
+            {
+              turn: 1,
+              textPrompt: 'voice input canary',
+              audioGenerated: true,
+              responseTranscript: 'voice output canary',
+            },
+            null,
+            'legacy audio entry',
+          ],
+          successfulTurns: [
+            {
+              turn: 1,
+              prompt: 'successful voice input canary',
+              response: 'successful voice output canary',
+            },
+            null,
+            'legacy successful turn',
           ],
           messages: [
             { role: 'system', content: 'system input canary' },
@@ -575,6 +609,32 @@ describe('JSON export with improved error handling', () => {
             sessionId: 'tree-session',
           });
         };
+        const checkProviderTranscripts = (copy: Record<string, any>) => {
+          expect(copy.redteamHistory[3]).toEqual({
+            role: 'system',
+            ...(!strips('prompt') && { content: 'image system input canary' }),
+          });
+          for (const index of [4, 5]) {
+            const entry = metadata.redteamHistory[index] as { role: string; content: string };
+            expect(copy.redteamHistory[index]).toEqual({
+              role: entry.role,
+              ...(!strips('prompt') && !strips('output') && { content: entry.content }),
+            });
+          }
+          expect(copy.audioHistory[0]).toEqual({
+            turn: 1,
+            audioGenerated: true,
+            ...(!strips('prompt') && { textPrompt: 'voice input canary' }),
+            ...(!strips('output') && { responseTranscript: 'voice output canary' }),
+          });
+          expect(copy.audioHistory.slice(1)).toEqual([null, 'legacy audio entry']);
+          expect(copy.successfulTurns[0]).toEqual({
+            turn: 1,
+            ...(!strips('prompt') && { prompt: 'successful voice input canary' }),
+            ...(!strips('output') && { response: 'successful voice output canary' }),
+          });
+          expect(copy.successfulTurns.slice(1)).toEqual([null, 'legacy successful turn']);
+        };
         const checkMetadata = (copy: Record<string, any>) => {
           const history = copy.redteamHistory[0];
           const originalHistory = metadata.redteamHistory[0] as Record<string, unknown>;
@@ -611,7 +671,8 @@ describe('JSON export with improved error handling', () => {
           expect(copy.messages[3].content === undefined).toBe(strips('prompt') || strips('output'));
           expect(copy.messages[2].label).toBe('keep label');
           expect(copy.messages[4]).toBeNull();
-          expect(copy.redteamHistory.slice(1)).toEqual([null, 'legacy history entry']);
+          expect(copy.redteamHistory.slice(1, 3)).toEqual([null, 'legacy history entry']);
+          checkProviderTranscripts(copy);
           checkTree(copy.redteamTreeHistory[0]);
           checkTree(copy.messages[5]);
           expect(copy.redteamTreeHistory.slice(1)).toEqual([null, 'legacy tree entry']);
@@ -648,6 +709,11 @@ describe('JSON export with improved error handling', () => {
               'message input canary',
               'successful input canary',
               'legacy attack message canary',
+              'image system input canary',
+              'mixed image canary',
+              'image assistant transcript canary',
+              'voice input canary',
+              'successful voice input canary',
             ],
             output: [
               'history output canary',
@@ -658,6 +724,10 @@ describe('JSON export with improved error handling', () => {
               'output image canary',
               'successful output canary',
               'legacy attack response canary',
+              'mixed image canary',
+              'image assistant transcript canary',
+              'voice output canary',
+              'successful voice output canary',
             ],
             vars: ['turn vars canary', 'display vars canary'],
             grading: ['grade reason', 'component reason'],
@@ -749,6 +819,196 @@ describe('JSON export with improved error handling', () => {
   });
 
   describe('artifact boundary regressions', () => {
+    it.each(['none', 'prompt', 'output', 'vars'])(
+      'streams three CSV batches with one header projection and %s stripping',
+      async (flag) => {
+        const prompts = ['first', 'second'].map((name) =>
+          createCompletedPrompt(`CSV input ${name}`, {
+            provider: 'echo',
+            config: { password: 'CSV header credential' },
+            metrics: createPromptMetrics({
+              namedScores: { quality: 102 },
+              namedScoresCount: { quality: 102 },
+            }),
+          }),
+        );
+        const eval_ = new Eval({}, { prompts, vars: ['apiKey', 'subject'] });
+        for (let testIdx = 0; testIdx < 102; testIdx++) {
+          const vars = { apiKey: 'CSV row credential', subject: `subject ${testIdx}` };
+          for (const [promptIdx, prompt] of prompts.entries()) {
+            await eval_.addResult(
+              createEvaluateResult({
+                testIdx,
+                promptIdx,
+                prompt,
+                vars,
+                testCase: {
+                  vars,
+                  ...(testIdx === 101 && { description: 'Last batch description' }),
+                },
+                response: { output: `CSV answer ${testIdx} ${promptIdx}` },
+                namedScores: { quality: 1 },
+              }),
+            );
+          }
+        }
+        const table = await eval_.getTable();
+        let configReads = 0;
+        for (const prompt of prompts) {
+          Object.defineProperty(prompt.config, 'nested', {
+            enumerable: true,
+            get() {
+              configReads++;
+              return { templateOptions: { format: 'plain' } };
+            },
+          });
+        }
+        const original = JSON.stringify({ prompts, results: eval_.results, table });
+        const restore = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(flag === 'prompt'),
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(flag === 'output'),
+          PROMPTFOO_STRIP_TEST_VARS: String(flag === 'vars'),
+          PROMPTFOO_STRIP_METADATA: 'false',
+          PROMPTFOO_STRIP_GRADING_RESULT: 'false',
+        });
+        try {
+          configReads = 0;
+          const projectedTable = sanitizeTableForArtifact(table);
+          const expected = evalTableToCsv(projectedTable);
+          const oneProjectionReads = configReads;
+          expect(oneProjectionReads).toBeGreaterThan(0);
+          expect(projectedTable.head.prompts[0].config!.password).toBe('[REDACTED]');
+          configReads = 0;
+          const chunks: string[] = [];
+          await streamEvalCsv(eval_, {
+            projectTable: sanitizeTableForArtifact,
+            write: (chunk) => {
+              chunks.push(chunk);
+            },
+          });
+          expect(configReads).toBe(oneProjectionReads);
+          expect(chunks).toHaveLength(4);
+          const actual = chunks.join('');
+          expect(parseCsv(actual)).toEqual(parseCsv(expected));
+          const rows = parseCsv(actual) as string[][];
+          expect(rows).toHaveLength(103);
+          expect(rows[0].filter((column) => column.includes('Metric: quality'))).toHaveLength(2);
+          expect(rows[102][0]).toBe('Last batch description');
+          expect(rows[1][1]).toBe(flag === 'vars' ? '' : '[REDACTED]');
+          expect(rows[1][2]).toBe(flag === 'vars' ? '' : 'subject 0');
+          expect(actual.includes('CSV input first')).toBe(flag !== 'prompt');
+          expect(actual.includes('CSV answer 101 1')).toBe(flag !== 'output');
+          expect(actual).not.toContain('CSV row credential');
+          expect(JSON.stringify({ prompts, results: eval_.results, table })).toBe(original);
+        } finally {
+          restore();
+        }
+      },
+    );
+
+    it.each(['none', 'prompt', 'output', 'vars'])(
+      'projects test prompt fragments with %s stripping across config, results, and tables',
+      async (flag) => {
+        const testCase = {
+          vars: { subject: 'retained variable' },
+          options: {
+            prefix: 'Case prelude ',
+            suffix: ' Case coda',
+            disableConversationVar: false,
+          },
+        };
+        const config = {
+          tests: [testCase, { options: { prefix: '', suffix: '', runSerially: true } }],
+          defaultTest: {
+            options: { prefix: 'Default prelude ', suffix: ' Default coda', runSerially: true },
+          },
+          scenarios: [
+            {
+              config: [{ options: { prefix: 'Scenario prelude ', disableConversationVar: true } }],
+              tests: [{ options: { suffix: ' Scenario coda', disableDefaultAsserts: true } }],
+            },
+          ],
+        };
+        const prompt = createCompletedPrompt('Case prelude base prompt Case coda', {
+          provider: 'echo',
+        });
+        const eval_ = new Eval(config, { prompts: [prompt], vars: ['subject'] });
+        await eval_.addResult(
+          createEvaluateResult({ prompt, testCase, response: { output: 'retained answer' } }),
+        );
+        const sourceTable = await eval_.getTable();
+        const originalConfig = structuredClone(config);
+        const originalTable = structuredClone(sourceTable);
+        const restore = mockProcessEnv({
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(flag === 'prompt'),
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(flag === 'output'),
+          PROMPTFOO_STRIP_TEST_VARS: String(flag === 'vars'),
+          PROMPTFOO_STRIP_METADATA: 'false',
+          PROMPTFOO_STRIP_GRADING_RESULT: 'false',
+        });
+        try {
+          const expectedOptions =
+            flag === 'prompt' ? { disableConversationVar: false } : testCase.options;
+          const expectedConfigOptions =
+            flag === 'prompt'
+              ? [
+                  expectedOptions,
+                  { runSerially: true },
+                  { runSerially: true },
+                  { disableConversationVar: true },
+                  { disableDefaultAsserts: true },
+                ]
+              : [
+                  config.tests[0].options,
+                  config.tests[1].options,
+                  config.defaultTest.options,
+                  config.scenarios[0].config[0].options,
+                  config.scenarios[0].tests[0].options,
+                ];
+          const table = sanitizeTableForArtifact(sourceTable);
+          expect(table.body[0].test.options).toEqual(expectedOptions);
+          expect(table.body[0].outputs[0].testCase.options).toEqual(expectedOptions);
+          for (const extension of ['json', 'yaml', 'txt', 'xml']) {
+            const file = path.join(tempDir, `fragments.${extension}`);
+            await writeOutput(file, eval_, null);
+            const contents = fs.readFileSync(file, 'utf8');
+            for (const fragment of [
+              'Case prelude',
+              'Case coda',
+              'Default prelude',
+              'Default coda',
+              'Scenario prelude',
+              'Scenario coda',
+            ]) {
+              expect(contents.includes(fragment)).toBe(flag !== 'prompt');
+            }
+            if (extension === 'json') {
+              const exported = JSON.parse(contents);
+              expect(exported.results.results[0].testCase.options).toEqual(expectedOptions);
+              expect(exported.results.results[0].response.output).toBe(
+                flag === 'output' ? '[output stripped]' : 'retained answer',
+              );
+              expect([
+                exported.config.tests[0].options,
+                exported.config.tests[1].options,
+                exported.config.defaultTest.options,
+                exported.config.scenarios[0].config[0].options,
+                exported.config.scenarios[0].tests[0].options,
+              ]).toEqual(expectedConfigOptions);
+              expect(exported.config.tests[0].vars).toEqual(
+                flag === 'vars' ? undefined : testCase.vars,
+              );
+            }
+          }
+          expect(config).toEqual(originalConfig);
+          expect(sourceTable).toEqual(originalTable);
+          expect(testCase.options).toBe(config.tests[0].options);
+        } finally {
+          restore();
+        }
+      },
+    );
+
     it.each([false, true])(
       'projects result prompt selectors with prompt stripping=%s',
       async (strip) => {
