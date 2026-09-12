@@ -402,7 +402,7 @@ The HTTP receiver and external trace providers share redaction history for each 
 
 Approval and guardrail spans retain their input/output evidence for secret and canary checks. This includes `tool.output`, `tool.result`, `gen_ai.tool.call.result`, `ai.toolCall.result`, and normalized Langfuse/Braintrust outputs. Their tool-name attributes identify the control's target and do not establish a tool execution.
 
-Adaptive strategies grade the complete stored trace for each turn. When tracing is included in grading, span-count, depth, and name filters cannot remove evidence from that grade. Trace summaries remain bounded; the ingestion limits still apply to the complete trace.
+Adaptive strategies grade the complete stored trace for each turn, retaining untruncated attributes for local verification. Attacker summaries use a separate filtered and sanitized view, including its insights. Span-count, depth, and name filters therefore limit attacker visibility while preserving evidence for grading. The ingestion limits still apply to the complete trace.
 
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one

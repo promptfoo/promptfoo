@@ -57,7 +57,10 @@ describe('fetchTraceContext', () => {
           spanId: 'unsafe',
           name: 'tool update_seat',
           startTime: 3,
-          attributes: { 'tool.name': 'update_seat' },
+          attributes: {
+            'tool.name': 'update_seat',
+            'agentic.evidence_json': JSON.stringify({ padding: 'x'.repeat(500), finding: true }),
+          },
         },
       ];
       mocks.isExternalTraceProvider.mockReturnValue(external);
@@ -78,7 +81,12 @@ describe('fetchTraceContext', () => {
         spanFilter: ['target'],
       });
       expect(result?.spans.map((span) => span.spanId)).toEqual(['clean', 'unsafe']);
-      expect(mocks.getSpans).toHaveBeenLastCalledWith(
+      expect(result?.spans[1].attributes['agentic.evidence_json']).toBe(
+        spans[2].attributes!['agentic.evidence_json'],
+      );
+      expect(result?.summary?.spans.map((span) => span.spanId)).toEqual(['clean']);
+      expect(result?.summary?.insights.join(' ')).not.toContain('update_seat');
+      expect(mocks.getSpans).toHaveBeenCalledWith(
         'trace-1',
         expect.objectContaining({
           earliestStartTime: 2,
@@ -86,6 +94,7 @@ describe('fetchTraceContext', () => {
           maxSpans: undefined,
           maxDepth: undefined,
           spanFilter: undefined,
+          sanitizeAttributes: false,
         }),
       );
     },

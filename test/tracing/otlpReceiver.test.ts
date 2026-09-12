@@ -1256,10 +1256,12 @@ describe('OTLPReceiver', () => {
       );
     });
 
-    it.each(['plain', 'json'])(
+    it.each(['plain', 'json', 'bytes', 'event-bytes'])(
       'redacts echoes in later OTLP uploads after a %s source',
       async (format) => {
-        const secret = 'PRIVATE_PREVIOUS_BATCH_RECEIPT';
+        const secret = format.includes('bytes')
+          ? Buffer.from('PRIVATE_PREVIOUS_BATCH_RECEIPT').toString('base64')
+          : 'PRIVATE_PREVIOUS_BATCH_RECEIPT';
         const redactingReceiver = new OTLPReceiver({
           acceptFormats: ['json'],
           redactAttributes: ['authorization'],
@@ -1287,17 +1289,25 @@ describe('OTLPReceiver', () => {
                 },
               ],
             });
+        const attributes = [
+          {
+            key: 'authorization',
+            value: format.includes('bytes')
+              ? { bytesValue: secret }
+              : {
+                  stringValue: format === 'json' ? JSON.stringify({ token: secret }) : secret,
+                },
+          },
+        ];
         await send({
           name: 'source',
-          attributes: [
-            {
-              key: 'authorization',
-              value: {
-                stringValue: format === 'json' ? JSON.stringify({ token: secret }) : secret,
-              },
-            },
-          ],
+          attributes: format === 'event-bytes' ? [] : attributes,
+          events:
+            format === 'event-bytes'
+              ? [{ name: `event ${secret}`, timeUnixNano: '1000000100', attributes }]
+              : [],
         }).expect(200);
+        expect(JSON.stringify(vi.mocked(persistSpans).mock.calls.at(-1)![1])).not.toContain(secret);
         await send({
           spanId: '1234567890abcdea',
           name: `echo ${secret}`,

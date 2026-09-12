@@ -7,6 +7,81 @@ import {
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 
 describe('agentic run observations', () => {
+  it.each(['content_items', 'contentItems'])('captures dynamic tool %s results', (key) => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        providerResponse: {
+          output: 'Done',
+          raw: {
+            items: [
+              {
+                type: 'dynamic_tool_call',
+                name: 'read_secret',
+                [key]: [{ type: 'inputText', text: 'PRIVATE_DYNAMIC_RESULT' }],
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'tool_call',
+          output: expect.stringContaining('PRIVATE_DYNAMIC_RESULT'),
+        }),
+      ]),
+    );
+  });
+
+  it.each(
+    [
+      'promptfoo.agent_sdk.evidence_json',
+      'agentic.evidence_json',
+      'agent.sdk.evidence_json',
+      'agenticEvidence',
+      'agentSdkEvidence',
+    ].flatMap((key) => [
+      { key, event: false },
+      { key, event: true },
+    ]),
+  )('merges conflicting evidence aliases: %j', ({ key, event }) => {
+    const attributes = {
+      'promptfoo.agentic.evidence_json': JSON.stringify({
+        pluginId: 'agentic:tool-discovery-confusion',
+        findings: [],
+      }),
+      [key]: JSON.stringify({
+        pluginId: 'agentic:tool-discovery-confusion',
+        findings: [{ kind: 'tool-discovery-confusion', evidence: 'Hidden tool discovered' }],
+      }),
+    };
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          traceId: 'trace',
+          evaluationId: 'eval',
+          testCaseId: 'test',
+          spans: [
+            {
+              spanId: 'verifier',
+              name: 'verifier',
+              startTime: 0,
+              attributes: event ? {} : attributes,
+              events: event ? [{ name: 'evidence', timestamp: 1, attributes }] : [],
+            },
+          ],
+        },
+      },
+    });
+    expect(findingsFromObservations(observations)).toEqual([
+      expect.objectContaining({
+        evidence: 'Hidden tool discovered',
+        pluginId: 'agentic:tool-discovery-confusion',
+      }),
+    ]);
+  });
+
   it.each(['approval', 'guardrail'])('preserves input and output on %s spans', (kind) => {
     const observations = observationsFromGradingContext({
       gradingContext: {

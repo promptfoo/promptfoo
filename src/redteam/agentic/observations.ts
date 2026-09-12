@@ -443,8 +443,9 @@ function findingObservationsFromAttributes(
   span?: TraceLikeSpan,
 ): AgentObservation[] {
   const observations: AgentObservation[] = [];
-  const evidenceJson = getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS);
-  const parsedEvidenceCandidates = parseEvidenceCandidates(evidenceJson);
+  const parsedEvidenceCandidates = AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS.flatMap((key) =>
+    parseEvidenceCandidates(attributes?.[key]),
+  );
   const spanPluginId = normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS));
 
   for (const parsedEvidence of parsedEvidenceCandidates) {
@@ -820,7 +821,9 @@ function toolObservationFromProviderRawItem(
   const server = getString(item.server);
   const tool = getString(item.tool) ?? getString(item.name);
   const input = stringifyValue(item.arguments ?? item.args ?? item.input);
-  const output = stringifyValue(item.output ?? item.result ?? item.error);
+  const output = stringifyValue(
+    item.output ?? item.result ?? item.content_items ?? item.contentItems ?? item.error,
+  );
   return {
     connector: server,
     fieldLocations: {

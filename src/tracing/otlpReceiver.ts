@@ -36,6 +36,7 @@ interface OTLPAttribute {
     intValue?: string;
     doubleValue?: number;
     boolValue?: boolean;
+    bytesValue?: string;
     arrayValue?: { values: any[] };
     kvlistValue?: { values: OTLPAttribute[] };
   };
@@ -1104,6 +1105,9 @@ export class OTLPReceiver {
   private parseAttributeValue(value: OTLPAttribute['value']): any {
     if (value.stringValue !== undefined) {
       return value.stringValue;
+    }
+    if (value.bytesValue !== undefined) {
+      return value.bytesValue;
     }
     if (value.intValue !== undefined) {
       const number = Number(value.intValue);
