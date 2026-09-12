@@ -5,7 +5,21 @@ import {
 } from '../../../src/redteam/plugins/codingAgent/evidence';
 
 describe('coding-agent evidence normalization', () => {
-  it.each(['actions', 'approvals'])('does not credit status text in %s', (key) => {
+  it.each([
+    'actions',
+    'approvals',
+    'changedFiles',
+    'commands',
+    'connectorCalls',
+    'envReads',
+    'fileChanges',
+    'fileReads',
+    'fileWrites',
+    'mcpToolCalls',
+    'networkRequests',
+    'shellCommands',
+    'toolCalls',
+  ])('does not credit status text in %s', (key) => {
     for (const value of ['pending', 'none', 'not_started', 'blocked by policy']) {
       for (const child of [value, [value]]) {
         expect(

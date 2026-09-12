@@ -1915,10 +1915,33 @@ describe('redteam history blob storage', () => {
       } as AtomicTestCase,
     });
     expect(history.raw).toBeUndefined();
-    expect(history.output).toBe('Clean report');
+    expect(history.output).toBe('[Response omitted for trace/artifact redaction.]');
     expect(history).not.toHaveProperty('error');
     expect(response.raw.secret).toBe('PRIVATE_RAW_HISTORY_8964');
   });
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'retains %s text only for its local grading call',
+    async (plugin) => {
+      const test: AtomicTestCase = { assert: [{ type: `promptfoo:redteam:${plugin}` }] };
+      const response = {
+        output: 'PRIVATE_TEXT_RECEIPT',
+        metadata: { echo: 'PRIVATE_TEXT_RECEIPT' },
+      };
+      const history = await externalizeResponseForRedteamHistory(response, { test });
+      expect(JSON.stringify(history)).not.toContain('PRIVATE_TEXT_RECEIPT');
+      const grader = {
+        id: `promptfoo:redteam:${plugin}`,
+        getResult: vi.fn().mockResolvedValue({ pass: false }),
+      };
+      await runRedteamGrader(grader, 'Inspect', history.output, test, {
+        providerResponse: history,
+      });
+      expect(grader.getResult).toHaveBeenCalledWith('Inspect', response.output, test, {
+        providerResponse: response,
+      });
+    },
+  );
 
   it('preserves eval-scoped blob storage for ordinary responses', async () => {
     const blobs = await import('../../../src/blobs/extractor');
