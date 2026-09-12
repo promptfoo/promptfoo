@@ -818,24 +818,27 @@ export class OTLPReceiver {
                 }
                 const nanos = event.timeUnixNano;
                 if (
-                  nanos !== undefined &&
-                  (typeof nanos !== 'string' ||
-                    !/^\d{1,20}$/.test(nanos) ||
-                    BigInt(nanos) > 0xffffffffffffffffn)
+                  typeof nanos !== 'string' ||
+                  !/^\d{1,20}$/.test(nanos) ||
+                  BigInt(nanos) > 0xffffffffffffffffn
                 ) {
                   return [];
                 }
-                const timestamp = nanos === undefined ? startTime : Number(nanos) / 1_000_000;
+                const timestamp = Number(nanos) / 1_000_000;
                 if (!Number.isFinite(timestamp) || timestamp < 0) {
                   return [];
                 }
-                return [
-                  {
-                    name: event.name,
-                    timestamp,
-                    attributes: this.parseAttributes(event.attributes),
-                  },
-                ];
+                try {
+                  return [
+                    {
+                      name: event.name,
+                      timestamp,
+                      attributes: this.parseAttributes(event.attributes),
+                    },
+                  ];
+                } catch {
+                  return [];
+                }
               }),
               statusCode: span.status?.code,
               statusMessage: span.status?.message,

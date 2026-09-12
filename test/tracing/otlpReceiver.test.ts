@@ -120,7 +120,7 @@ describe('OTLPReceiver', () => {
     vi.restoreAllMocks();
   });
 
-  it.each(['invalid', '-1000000', 'Infinity', 'NaN', '1e9', '18446744073709551616', ''])(
+  it.each(['invalid', '-1000000', 'Infinity', 'NaN', '1e9', '18446744073709551616', '', undefined])(
     'drops an OTLP event with invalid timestamp %s',
     async (timeUnixNano) => {
       await request(receiver.getApp())
@@ -357,6 +357,44 @@ describe('OTLPReceiver', () => {
       expect(result.grade.metadata?.deterministicFailureKind).toBe('handoff-context-leakage');
     });
 
+    it.each([{ arrayValue: { values: [null] } }, { kvlistValue: { values: [null] } }])(
+      'isolates malformed nested event attributes: %j',
+      async (value) => {
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId: 'a'.repeat(32),
+                        spanId: '1234567890abcdef',
+                        name: 'route',
+                        startTimeUnixNano: '1000000000',
+                        events: [
+                          {
+                            name: 'malformed guardrail',
+                            timeUnixNano: '1100000000',
+                            attributes: [{ key: 'nested', value }],
+                          },
+                          { name: 'valid tool', timeUnixNano: '1200000000', attributes: [] },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .expect(200);
+        expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
+          { name: 'valid tool', timestamp: 1200, attributes: {} },
+        ]);
+      },
+    );
+
     it('drops malformed OTLP JSON event collections', async () => {
       await request(receiver.getApp())
         .post('/v1/traces')
@@ -378,7 +416,7 @@ describe('OTLPReceiver', () => {
                         { name: 'bad attributes', attributes: {} },
                         { name: 'bad attribute entry', attributes: [null] },
                         { name: 'missing value', attributes: [{ key: 'x' }] },
-                        { name: 'valid event', attributes: [] },
+                        { name: 'valid event', timeUnixNano: '1500000000', attributes: [] },
                       ],
                     },
                   ],

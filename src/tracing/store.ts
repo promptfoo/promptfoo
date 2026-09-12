@@ -2,7 +2,7 @@ import { asc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
-import { sanitizeTraceAttributes } from './sanitizeAttributes';
+import { getTraceTextRedactor, sanitizeTraceAttributes } from './sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from './spanFilter';
 import { SPAN_ROLE_ATTRIBUTE } from './spanRoles';
 
@@ -48,35 +48,6 @@ export interface AddSpansOptions {
   warnIfMissingTrace?: boolean;
 }
 
-function getRedactedValues(raw: unknown, safe: unknown): string[] {
-  const secrets: string[] = [];
-  const pending: Array<[unknown, unknown]> = [[raw, safe]];
-  while (pending.length) {
-    const [value, sanitized] = pending.pop()!;
-    if (sanitized === '<redacted>') {
-      if (value && typeof value === 'object') {
-        pending.push(
-          ...Object.values(value).map((item) => [item, sanitized] as [unknown, unknown]),
-        );
-      } else if (value != null && String(value).length > 0) {
-        secrets.push(String(value));
-      }
-    } else if (value && sanitized && typeof value === 'object' && typeof sanitized === 'object') {
-      for (const [key, item] of Object.entries(value)) {
-        pending.push([item, (sanitized as Record<string, unknown>)[key]]);
-      }
-    }
-  }
-  return secrets;
-}
-
-function scrubEcho<T extends string | undefined>(value: T, secrets: RegExp | undefined): T {
-  if (typeof value !== 'string' || !secrets) {
-    return value;
-  }
-  return value.replace(secrets, '<redacted>') as T;
-}
-
 function serializeSpan(
   span: typeof spansTable.$inferSelect,
   shouldSanitizeAttributes = true,
@@ -93,38 +64,32 @@ function serializeSpan(
       ? sanitizeTraceAttributes(event.attributes)
       : (event.attributes ?? undefined),
   }));
-  const secrets = shouldSanitizeAttributes
-    ? [
-        ...getRedactedValues(rawAttributes, attributes),
-        ...(span.events ?? []).flatMap((event, index) =>
-          getRedactedValues(event.attributes, events?.[index]?.attributes),
-        ),
-      ]
-    : [];
-
-  const secretPattern = secrets.length
-    ? new RegExp(
-        [...new Set(secrets)]
-          .sort((a, b) => b.length - a.length)
-          .map((secret) => secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-          .join('|'),
-        'g',
-      )
-    : undefined;
+  const redactText = getTraceTextRedactor(
+    shouldSanitizeAttributes
+      ? [
+          { original: rawAttributes, sanitized: attributes },
+          ...(span.events ?? []).map((event, index) => ({
+            original: event.attributes,
+            sanitized: events?.[index]?.attributes,
+          })),
+        ]
+      : [],
+    '<redacted>',
+  );
   const safeEvents = events?.map((event) => ({
     ...event,
-    name: scrubEcho(event.name, secretPattern),
+    name: redactText(event.name),
   }));
   return {
     spanId: span.spanId,
     parentSpanId: span.parentSpanId ?? undefined,
-    name: scrubEcho(span.name, secretPattern),
+    name: redactText(span.name),
     startTime: span.startTime,
     endTime: span.endTime ?? undefined,
     attributes,
     ...(safeEvents ? { events: safeEvents } : {}),
     statusCode: span.statusCode ?? undefined,
-    statusMessage: scrubEcho(span.statusMessage ?? undefined, secretPattern),
+    statusMessage: redactText(span.statusMessage ?? undefined),
   };
 }
 

@@ -697,6 +697,41 @@ describe('TraceStore', () => {
     });
 
     it.each([true, false])(
+      'redacts text when %s event attributes exceed the depth limit',
+      async (eventAttributes) => {
+        const secret = 'PRIVATE_DEEP_STORED_VALUE';
+        let nested: Record<string, unknown> = { authorization: secret };
+        for (let i = 0; i < 25; i++) {
+          nested = { nested };
+        }
+        mockDb.select
+          .mockReturnValueOnce({
+            from: vi.fn().mockReturnThis(),
+            where: vi.fn().mockReturnThis(),
+            limit: vi.fn().mockResolvedValue([{ traceId: 'deep-stored' }]),
+          })
+          .mockReturnValueOnce({
+            from: vi.fn().mockReturnThis(),
+            where: vi
+              .fn()
+              .mockResolvedValue([
+                {
+                  spanId: 'span',
+                  name: secret,
+                  statusMessage: secret,
+                  startTime: 1,
+                  attributes: eventAttributes ? {} : nested,
+                  events: [
+                    { name: secret, timestamp: 2, attributes: eventAttributes ? nested : {} },
+                  ],
+                },
+              ]),
+          });
+        expect(JSON.stringify(await traceStore.getTrace('deep-stored'))).not.toContain(secret);
+      },
+    );
+
+    it.each([true, false])(
       'redacts overlapping span and event secrets together: %s',
       async (longerInEvent) => {
         const short = 'SYNTHETIC_SHORT_SECRET';

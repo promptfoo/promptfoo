@@ -81,6 +81,24 @@ describe('TempoProvider', () => {
     mockedFetch.mockImplementation(async () => response(traceResponse));
   });
 
+  it('preserves sub-millisecond event order and drops events without a timestamp', async () => {
+    const data = structuredClone(traceResponse);
+    data.batches[0].scopeSpans[0].spans[0].events = [
+      { name: 'tool update_seat', timeUnixNano: '1704067200000100000', attributes: [] },
+      { name: 'guardrail update_seat', timeUnixNano: '1704067200000200000', attributes: [] },
+      { name: 'undated guardrail', attributes: [] } as any,
+    ];
+    mockedFetch.mockResolvedValue(response(data));
+    const result = await new TempoProvider({
+      id: 'tempo',
+      endpoint: 'http://tempo:3200',
+    }).fetchTrace(TRACE_ID);
+    expect(result?.spans[0].events).toHaveLength(2);
+    expect(result!.spans[0].events![0].timestamp).toBeLessThan(
+      result!.spans[0].events![1].timestamp,
+    );
+  });
+
   it.each([
     { id: 'tempo' },
     { id: 'tempo', endpoint: 'not-a-url' },

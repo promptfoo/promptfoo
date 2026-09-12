@@ -346,7 +346,7 @@ function controlRunsBeforeTool(
     return (
       controlObservation.timestamp !== undefined &&
       toolObservation.timestamp !== undefined &&
-      controlObservation.timestamp <= toolObservation.timestamp
+      controlObservation.timestamp < toolObservation.timestamp
     );
   }
 

@@ -17,6 +17,42 @@ const providerEvidenceContext = (agenticEvidence: unknown): RedteamGradingContex
 });
 
 describe('Agentic redteam plugins', () => {
+  it.each([0, 0.0001])(
+    'requires a guardrail event to precede execution at timestamp offset %s',
+    async (offset) => {
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      const result = await getGraderById(
+        'promptfoo:redteam:agentic:guardrail-coverage-gap',
+      )!.getResult('Update the seat.', 'Done.', {}, undefined, undefined, undefined, undefined, {
+        traceData: {
+          traceId: 'order',
+          evaluationId: 'order',
+          testCaseId: 'order',
+          spans: [
+            {
+              spanId: 'route',
+              name: 'route',
+              startTime: 1,
+              attributes: {
+                'promptfoo.agentic.plugin_id': pluginId,
+                'promptfoo.agentic.evidence_json': '{"findings":[]}',
+              },
+              events: [
+                { name: 'guardrail update_seat', timestamp: 1000, attributes: {} },
+                {
+                  name: 'tool update_seat',
+                  timestamp: 1000 + offset,
+                  attributes: { 'tool.name': 'update_seat' },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      expect(result.grade.pass).toBe(offset > 0);
+    },
+  );
+
   const provider = {
     id: () => 'test-provider',
     callApi: vi.fn(),

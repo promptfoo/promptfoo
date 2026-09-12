@@ -60,11 +60,17 @@ const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
 const BASE64_SPAN_ID_PATTERN = /^[A-Za-z0-9+/]{11}=?$/;
 function nanoToMs(value: string): number {
-  const milliseconds = BigInt(value) / 1_000_000n;
-  if (milliseconds < 0n || milliseconds > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error('Span timestamp is outside the supported range');
+  if (
+    typeof value !== 'string' ||
+    !/^\d{1,20}$/.test(value) ||
+    BigInt(value) > 0xffffffffffffffffn
+  ) {
+    throw new Error('Span timestamp must be an unsigned 64-bit nanosecond value');
   }
-  return Number.parseInt(milliseconds.toString(), 10);
+  const nanos = BigInt(value);
+  const milliseconds = Number.parseInt((nanos / 1_000_000n).toString(), 10);
+  const remainder = Number.parseInt((nanos % 1_000_000n).toString(), 10);
+  return milliseconds + remainder / 1_000_000;
 }
 
 function extractAttributeValue(value: TempoAttributeValue): unknown {
@@ -240,7 +246,7 @@ function transformSpan(
             return [
               {
                 name: event.name,
-                timestamp: event.timeUnixNano ? nanoToMs(event.timeUnixNano) : startTime,
+                timestamp: nanoToMs(event.timeUnixNano ?? ''),
                 attributes: attributesToRecord(
                   event.attributes?.filter(
                     (attribute) =>
