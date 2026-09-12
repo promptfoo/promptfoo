@@ -42,6 +42,20 @@ const FORWARDED_PROVIDER_METADATA_KEYS = [
   'config',
 ] as const satisfies ReadonlyArray<keyof ProviderFunctionWithMetadata>;
 
+// Optional env entries inherit; explicit empty strings still override credentials.
+function mergeProviderEnv(...sources: (EnvOverrides | undefined)[]): EnvOverrides | undefined {
+  const provided = sources.filter((source) => source !== undefined);
+  if (provided.length === 0) {
+    return undefined;
+  }
+  return Object.assign(
+    {},
+    ...provided.map((source) =>
+      Object.fromEntries(Object.entries(source).filter(([, value]) => value !== undefined)),
+    ),
+  );
+}
+
 function createProviderFromFunction(
   provider: ProviderFunctionWithMetadata,
   id: string,
@@ -50,9 +64,7 @@ function createProviderFromFunction(
   const apiProvider: ApiProvider = {
     id: () => provider.label ?? id,
     callApi(...args) {
-      return env === undefined
-        ? provider.apply(this, args)
-        : cliState.withEnv(env, () => provider.apply(this, args));
+      return cliState.withEnv(env, () => provider.apply(this, args));
     },
   };
   // Only forward defined metadata so we don't overwrite downstream defaults
@@ -104,8 +116,7 @@ async function createApiProvider(
 
   // Merge environment overrides: context.env (test suite level) is base,
   // options.env (provider-specific) takes precedence for per-provider customization
-  const mergedEnv: EnvOverrides | undefined =
-    env || options.env ? { ...env, ...options.env } : undefined;
+  const mergedEnv = mergeProviderEnv(env, options.env);
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
@@ -158,11 +169,7 @@ async function createApiProvider(
       prompts: options.prompts ?? cloudProvider.prompts,
       inputs: options.inputs ?? cloudProvider.inputs,
       // Merge all three env sources: context (base) -> cloud -> local (highest priority)
-      env: {
-        ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
-        ...cloudProvider.env, // Cloud provider env overrides context
-        ...options.env, // Local env overrides everything
-      },
+      env: mergeProviderEnv(env, cloudProvider.env, options.env),
     };
 
     logger.debug(
@@ -200,10 +207,7 @@ async function createApiProvider(
     });
 
     // A provider file owns its credentials; only per-provider overrides beat them.
-    const mergedFileEnv: EnvOverrides | undefined =
-      env || fileContent.env || options.env
-        ? { ...env, ...fileContent.env, ...options.env }
-        : undefined;
+    const mergedFileEnv = mergeProviderEnv(env, fileContent.env, options.env);
 
     return loadApiProvider(fileContent.id, {
       basePath,
@@ -216,7 +220,9 @@ async function createApiProvider(
 
   for (const factory of await getProviderFactories(renderedProviderPath)) {
     if (factory.test(renderedProviderPath)) {
-      const ret = await factory.create(renderedProviderPath, providerOptions, context);
+      const ret = await cliState.withEnv(mergedEnv, () =>
+        factory.create(renderedProviderPath, providerOptions, { ...context, env: mergedEnv }),
+      );
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;

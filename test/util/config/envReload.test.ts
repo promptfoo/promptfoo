@@ -270,6 +270,31 @@ describe('suite environment loading', () => {
     },
   );
 
+  it.each(['scalar', 'array', 'generator', 'path'] as const)(
+    'renders a %s test source with the merged config environment',
+    async (form) => {
+      const source = `file://{{ env.PROMPTFOO_CSV_DELIMITER }}/cases.${form === 'generator' || form === 'path' ? 'cjs' : 'yaml'}`;
+      const first = writeConfig('source-owner', {
+        tests:
+          form === 'array' || form === 'generator'
+            ? [source]
+            : form === 'path'
+              ? { path: source }
+              : source,
+      });
+      const second = writeConfig('env-owner', { env: { PROMPTFOO_CSV_DELIMITER: 'data' } });
+      const directory = path.join(path.dirname(first), 'data');
+      fs.mkdirSync(directory);
+      fs.writeFileSync(path.join(directory, 'cases.yaml'), '- vars: { source: selected }');
+      fs.writeFileSync(
+        path.join(directory, 'cases.cjs'),
+        "module.exports = () => [{ vars: { source: 'selected' } }];",
+      );
+      const { testSuite } = await resolveConfigs({ config: [first, second] }, {});
+      expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['selected']);
+    },
+  );
+
   it('isolates overlapping combined config loads', async () => {
     const configs = await Promise.all(
       ['first', 'second'].map((name) => combineConfigs([externalConfig(name)])),
@@ -460,7 +485,7 @@ describe('suite environment loading', () => {
     );
     vi.mocked(readAzureBlobText).mockResolvedValue(
       JSON.stringify([
-        { path: generator },
+        { path: generator, vars: { source: 'remote' } },
         { vars: varsFile },
         { provider: `file://${providerFile}` },
       ]),
@@ -581,7 +606,7 @@ describe('suite environment loading', () => {
     );
   });
 
-  it.each(['inline', 'jsonl', 'generator'] as const)(
+  it.each(['inline', 'jsonl', 'generator', 'remote'] as const)(
     'rejects misspelled payload fields in a described %s row',
     async (source) => {
       const row = {
@@ -592,13 +617,21 @@ describe('suite environment loading', () => {
         'typo-row',
         source === 'inline'
           ? { tests: [row] }
-          : { tests: source === 'jsonl' ? 'cases.jsonl' : 'cases.cjs' },
+          : {
+              tests:
+                source === 'remote'
+                  ? 'az://account/container/rows.json'
+                  : source === 'jsonl'
+                    ? 'cases.jsonl'
+                    : 'cases.cjs',
+            },
       );
       const directory = path.dirname(configPath);
+      vi.mocked(readAzureBlobText).mockResolvedValue(JSON.stringify([row]));
       fs.writeFileSync(path.join(directory, 'cases.jsonl'), JSON.stringify(row));
       fs.writeFileSync(
         path.join(directory, 'cases.cjs'),
-        `module.exports = () => [${JSON.stringify(row)}];`,
+        `module.exports = () => [JSON.parse(require('fs').readFileSync(require('path').join(__dirname, 'cases.jsonl'), 'utf8'))];`,
       );
       await expect(resolveConfigs({ config: [configPath] }, {})).rejects.toThrow(
         'Test case must contain',
@@ -944,6 +977,19 @@ describe('suite environment loading', () => {
     ['readTests', readTests],
     ['loadTestsFromGlob', loadTestsFromGlob],
   ] as const)('%s standalone environment', (_name, loadTests) => {
+    it('uses the supplied base path while expanding nested file references', async () => {
+      const wrongBase = path.join(tempDir, 'previous');
+      fs.mkdirSync(wrongBase);
+      fs.writeFileSync(path.join(wrongBase, 'value.json'), JSON.stringify('wrong suite'));
+      fs.writeFileSync(path.join(tempDir, 'value.json'), JSON.stringify('selected suite'));
+      fs.writeFileSync(
+        path.join(tempDir, 'cases.yaml'),
+        '- metadata: { value: file://value.json }',
+      );
+      const [test] = await cliState.withBasePath(wrongBase, () => loadTests('cases.yaml', tempDir));
+      expect(test.metadata?.value).toBe('selected suite');
+    });
+
     it('uses the supplied environment while parsing CSV', async () => {
       cliState.config = { env: { PROMPTFOO_CSV_DELIMITER: '|' } };
       fs.writeFileSync(path.join(tempDir, 'cases.csv'), 'first;second\none;two\n');
@@ -1333,13 +1379,59 @@ describe('suite environment loading', () => {
     expect(readAzureBlobText).toHaveBeenCalledTimes(1);
   });
 
-  it.each([{}])('retains an explicit empty function-provider environment (%j)', async (env) => {
-    const [provider] = await loadApiProviders(
-      async () => ({ output: getEnvString('OPENAI_API_KEY') }),
-      { env },
+  it.each([{}, undefined])(
+    'retains an empty captured function-provider environment (%j)',
+    async (env) => {
+      const [provider] = await cliState.withEnv(undefined, () =>
+        loadApiProviders(async () => ({ output: getEnvString('OPENAI_API_KEY') }), { env }),
+      );
+      const response = await cliState.withEnv({ OPENAI_API_KEY: 'later-key' }, () =>
+        provider.callApi('Hello'),
+      );
+      expect(response.output).toBe('process-key');
+      expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
+    },
+  );
+
+  it.each(['inline', 'file'] as const)(
+    'inherits credentials past undefined %s provider overrides',
+    async (form) => {
+      const providerFile = path.join(tempDir, 'provider.yaml');
+      fs.writeFileSync(
+        providerFile,
+        'id: openai:chat:test-model\nenv:\n  OPENAI_API_KEY: file-key',
+      );
+      const provider = await loadApiProvider(
+        form === 'file' ? `file://${providerFile}` : 'openai:chat:test-model',
+        {
+          env: { OPENAI_API_KEY: 'suite-key', OPENAI_API_BASE_URL: 'https://suite.example/v1' },
+          options: { env: { OPENAI_API_KEY: undefined } },
+        },
+      );
+      await cliState.withEnv({ OPENAI_API_KEY: 'later-key' }, () => provider.callApi('Hello'));
+      const [, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(new Headers(request?.headers as HeadersInit).get('authorization')).toBe(
+        `Bearer ${form === 'file' ? 'file' : 'suite'}-key`,
+      );
+    },
+  );
+
+  it('passes provider overrides through registry wrappers and constructor env reads', async () => {
+    const provider = await loadApiProvider('cloudflare-ai:chat:test-model', {
+      env: { CLOUDFLARE_API_KEY: 'suite-key', CLOUDFLARE_ACCOUNT_ID: 'suite-account' },
+      options: {
+        env: { CLOUDFLARE_API_KEY: 'provider-key', CLOUDFLARE_ACCOUNT_ID: 'provider-account' },
+        config: { accountIdEnvar: 'CLOUDFLARE_ACCOUNT_ID' },
+      },
+    });
+    await provider.callApi('Hello');
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+    expect(url).toBe(
+      'https://api.cloudflare.com/client/v4/accounts/provider-account/ai/v1/chat/completions',
     );
-    expect((await provider.callApi('Hello')).output).toBe('process-key');
-    expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
+    expect(new Headers(request?.headers as HeadersInit).get('authorization')).toBe(
+      'Bearer provider-key',
+    );
   });
 
   it('uses suite env while expanding nested prompt files', async () => {

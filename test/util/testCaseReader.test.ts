@@ -183,6 +183,7 @@ const clearAllMocks = () => {
   vi.clearAllMocks();
   vi.mocked(globSync).mockReset();
   vi.mocked(fs.readFileSync).mockReset();
+  vi.mocked(fs.existsSync).mockReset();
   vi.mocked(getEnvBool).mockReset();
   vi.mocked(getEnvString).mockReset();
   vi.mocked(fetchCsvFromGoogleSheet).mockReset();

@@ -47,10 +47,10 @@ const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
 
 // Saved remote rows must stay data when a config is serialized and replayed.
 function preserveRemoteTests(tests: TestCase[]): TestCase[] {
-  return tests.map((test) => ({
-    ...test,
-    metadata: { ...test.metadata, __promptfooRemote: true },
-  }));
+  return tests.map((test) => {
+    validateTestCase(test);
+    return { ...test, metadata: { ...test.metadata, __promptfooRemote: true } };
+  });
 }
 
 function isRemoteTestCase(test: TestCaseWithVarsFile): boolean {
@@ -108,6 +108,7 @@ export async function readStandaloneTestsFile(
   basePath: string = cliState.basePath || '',
   config?: Record<string, any>,
 ): Promise<TestCase[]> {
+  varsPath = renderEnvOnlyInObject(varsPath);
   const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
 
   if (varsPath.startsWith('huggingface://datasets/')) {
@@ -535,12 +536,18 @@ async function readTestWithEnv(
     }
   }
 
+  if (!isDefaultTest) {
+    validateTestCase(testCase);
+  }
+  return testCase;
+}
+
+function validateTestCase(testCase: TestCase): void {
   const isDescriptionOnly =
     testCase.description &&
     Object.entries(testCase).every(([key, value]) => key === 'description' || value === undefined);
 
   if (
-    !isDefaultTest &&
     !testCase.assert &&
     !testCase.vars &&
     !testCase.options &&
@@ -550,8 +557,6 @@ async function readTestWithEnv(
     !isDescriptionOnly &&
     typeof testCase.threshold !== 'number'
   ) {
-    // Validate the shape of the test case
-    // We skip validation when loading the default test case, since it may not have all the properties
     throw new Error(
       `Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, description, threshold.\n\nInstead got:\n${JSON.stringify(
         testCase,
@@ -560,8 +565,6 @@ async function readTestWithEnv(
       )}`,
     );
   }
-
-  return testCase;
 }
 
 /**
@@ -575,7 +578,9 @@ export async function loadTestsFromGlob(
   basePath: string = cliState.basePath || '',
   env: EnvOverrides | undefined = cliState.env,
 ): Promise<TestCase[]> {
-  return cliState.withEnv(env, () => loadTestsFromGlobWithEnv(loadTestsGlob, basePath, env));
+  return cliState.withBasePath(basePath, () =>
+    cliState.withEnv(env, () => loadTestsFromGlobWithEnv(loadTestsGlob, basePath, env)),
+  );
 }
 
 async function loadTestsFromGlobWithEnv(
@@ -584,6 +589,7 @@ async function loadTestsFromGlobWithEnv(
   env: EnvOverrides | undefined,
   loadProviders = true,
 ): Promise<TestCase[]> {
+  loadTestsGlob = renderEnvOnlyInObject(loadTestsGlob);
   if (loadTestsGlob.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
       feature: 'huggingface dataset',
@@ -708,6 +714,7 @@ async function readTestsWithEnv(
   loadProviders = true,
 ): Promise<TestCase[]> {
   const loadStandalone = async (source: string, config?: Record<string, any>) => {
+    source = renderEnvOnlyInObject(source);
     const tests = await readStandaloneTestsFile(source, basePath, config);
     if (isRemoteTestsReference(source)) {
       // Resolve local provider and vars references only for local sources.
@@ -719,6 +726,7 @@ async function readTestsWithEnv(
   };
 
   if (typeof tests === 'string') {
+    tests = renderEnvOnlyInObject(tests);
     if (tests.startsWith('az://')) {
       return loadStandalone(tests);
     }
@@ -751,7 +759,8 @@ async function readTestsWithEnv(
   }
 
   const ret: TestCase[] = [];
-  for (const globOrTest of tests) {
+  for (const entry of tests) {
+    const globOrTest = typeof entry === 'string' ? renderEnvOnlyInObject(entry) : entry;
     if (typeof globOrTest === 'string') {
       // Extract path without function name (Windows-aware)
       const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
