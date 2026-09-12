@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { getEnvString } from '../../src/envars';
 import logger from '../../src/logger';
 import * as rubyUtils from '../../src/ruby/rubyUtils';
@@ -70,6 +71,19 @@ describe('Ruby utilities', () => {
     mockExecFileAsync
       .mockResolvedValueOnce({ stdout: 'ruby 3.3.0\n', stderr: '' })
       .mockResolvedValueOnce({ stdout: '', stderr: '' });
+  });
+
+  it('passes file defaults to the Ruby provider', async () => {
+    await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
+      rubyUtils.runRuby('/path/to/script.rb', 'call_api', []),
+    );
+    expect(mockExecFileAsync).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({
+        env: expect.objectContaining({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }),
+      }),
+    );
   });
 
   it('uses secure temporary files without logging arguments or results', async () => {

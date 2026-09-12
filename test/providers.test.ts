@@ -1218,7 +1218,7 @@ describe('loadApiProvider', () => {
     );
   });
 
-  it('should handle file provider with environment variables', async () => {
+  it('prefers the provider-file environment over the suite environment', async () => {
     mockProcessEnv({ OPENAI_API_KEY: 'test-key-from-env' });
     const yamlContent: ProviderOptions = {
       id: 'openai:chat:gpt-4',
@@ -1234,7 +1234,7 @@ describe('loadApiProvider', () => {
 
     const provider = await loadApiProvider('file://test.yaml', {
       basePath: '/test',
-      env: { OPENAI_API_KEY: 'final-override-key' },
+      env: { OPENAI_API_KEY: 'suite-key' },
     });
 
     expect(provider).toBeDefined();
@@ -1242,10 +1242,10 @@ describe('loadApiProvider', () => {
       'gpt-4',
       expect.objectContaining({
         config: expect.objectContaining({
-          apiKey: expect.any(String),
+          apiKey: 'override-key',
         }),
         env: expect.objectContaining({
-          OPENAI_API_KEY: 'final-override-key',
+          OPENAI_API_KEY: 'override-key',
         }),
       }),
     );

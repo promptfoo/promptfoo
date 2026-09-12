@@ -10,7 +10,7 @@ import {
   FS_READONLY_TOOLS,
   OpenCodeSDKProvider,
 } from '../../src/providers/opencode-sdk';
-import { createDeferred } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { MockInstance } from 'vitest';
 
 import type { CallApiContextParams } from '../../src/types/index';
@@ -290,6 +290,36 @@ describe('OpenCodeSDKProvider', () => {
 
   describe('callApi', () => {
     describe('basic functionality', () => {
+      it('passes scoped env-file defaults to the server while preserving provider overrides', async () => {
+        const { default: cliState } =
+          await vi.importActual<typeof import('../../src/cliState')>('../../src/cliState');
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'ok' }]),
+        );
+        try {
+          const provider = new OpenCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'provider-key' },
+          });
+          const result = await cliState.withEnvFileOverrides(
+            { PROMPTFOO_REVIEW_ENV_PROBE: 'file', ANTHROPIC_API_KEY: 'file-key' },
+            () => provider.callApi('Test prompt'),
+          );
+          expect(result.output).toBe('ok');
+          expect(mockCreateOpencode).toHaveBeenCalledWith(
+            expect.objectContaining({
+              env: expect.objectContaining({
+                PROMPTFOO_REVIEW_ENV_PROBE: 'file',
+                ANTHROPIC_API_KEY: 'provider-key',
+              }),
+            }),
+          );
+          expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+        } finally {
+          restoreEnv();
+        }
+      });
+
       it('should successfully call API with simple prompt', async () => {
         mockSessionPrompt.mockResolvedValue(
           createMockPromptResponse(

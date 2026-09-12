@@ -1,4 +1,5 @@
-import { getEnvBool } from '../envars';
+import { isTemplateProcessEnvDisabled } from '../envars';
+import { getProcessEnv } from '../envOverrides';
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { renderEnvOnlyInObject } from '../util/render';
@@ -26,11 +27,8 @@ export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
       return testSuite;
     }
 
-    const processEnvironmentDisabled = getEnvBool(
-      'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
-      getEnvBool('PROMPTFOO_SELF_HOSTED', false),
-    );
-    const processEnvironment = processEnvironmentDisabled ? {} : process.env;
+    const processEnvironmentDisabled = isTemplateProcessEnvDisabled();
+    const processEnvironment = processEnvironmentDisabled ? {} : getProcessEnv();
     let renderedEnv = testSuite.env;
     if (renderedEnv) {
       const maxPasses = Object.keys(renderedEnv).length;

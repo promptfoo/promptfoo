@@ -8,8 +8,6 @@ vi.mock('../../src/providers', () => ({
   loadApiProvider: vi.fn(),
 }));
 
-vi.mock('../../src/cliState');
-
 describe('getGradingProvider', () => {
   const mockProvider = createMockProvider();
 

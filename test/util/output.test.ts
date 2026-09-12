@@ -12,11 +12,13 @@ import { getTraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, ResultFailureReason } from '../../src/types/index';
 import { createJunitXml } from '../../src/util/junit';
 import {
+  createOutputData,
   createOutputMetadata,
   warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
   writeOutput,
 } from '../../src/util/output';
+import { createEvaluateResult } from '../factories/eval';
 import { mockConsole, mockProcessEnv } from './utils';
 
 vi.mock('../../src/database', () => ({
@@ -246,6 +248,124 @@ describe('writeOutput', () => {
     expect(outputJson).not.toContain('tiny-reader-key');
     expect(parsed.config.tracing.provider.headers).toEqual({ 'X-Scope-OrgID': 'tenant-a' });
   });
+
+  it.each(['json', 'yaml'])('redacts gateway URL credentials in %s exports', async (extension) => {
+    const url = 'https://gateway-user:gateway-password@gateway.example/v1?token=short-secret';
+    const eval_ = new Eval({
+      env: { ENVOY_API_BASE_URL: url },
+      providers: [{ id: 'envoy:route', config: { apiBaseUrl: url } }],
+    });
+
+    await writeOutput(`output.${extension}`, eval_, null);
+
+    const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+    const parsed = yaml.load(written) as Record<string, any>;
+    expect(parsed.config.env.ENVOY_API_BASE_URL).toBe(
+      'https://***:***@gateway.example/v1?token=%5BREDACTED%5D',
+    );
+    expect(parsed.config.providers[0].config.apiBaseUrl).toBe(parsed.config.env.ENVOY_API_BASE_URL);
+    expect(written).not.toContain('gateway-user');
+    expect(written).not.toContain('gateway-password');
+    expect(written).not.toContain('short-secret');
+    expect(eval_.config.env).toEqual({ ENVOY_API_BASE_URL: url });
+  });
+
+  it.each([true, false])(
+    'uses saved strip flags (%s) for exports outside the evaluation scope',
+    async (strip) => {
+      const flags = {
+        PROMPTFOO_STRIP_PROMPT_TEXT: String(strip),
+        PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip),
+        PROMPTFOO_STRIP_TEST_VARS: String(strip),
+        PROMPTFOO_STRIP_GRADING_RESULT: String(strip),
+        PROMPTFOO_STRIP_METADATA: String(strip),
+      };
+      const restoreEnv = mockProcessEnv(
+        Object.fromEntries(Object.keys(flags).map((key) => [key, String(!strip)])),
+      );
+      const testCase = {
+        vars: { input: 'private-input' },
+        metadata: { note: 'private-note' },
+        providerOutput: 'private-output',
+      };
+      const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([
+        {
+          traceId: 'trace',
+          evaluationId: 'eval',
+          testCaseId: 'test',
+          metadata: { note: 'private-trace-note' },
+          spans: [
+            {
+              spanId: 'span',
+              name: 'provider',
+              startTime: 1,
+              attributes: {
+                'promptfoo.request.body': 'private-trace-prompt',
+                'promptfoo.response.body': 'private-trace-response',
+              },
+            },
+          ],
+        },
+      ]);
+      const eval_ = new Eval({ env: flags, tests: [testCase], prompts: ['private-config-prompt'] });
+      await eval_.addResult(
+        createEvaluateResult({
+          prompt: { raw: 'private-prompt', template: 'private-template', label: 'label' },
+          testCase,
+          response: { output: 'private-output', raw: 'private-raw-output' },
+          metadata: { note: 'private-note' },
+          gradingResult: { pass: true, score: 1, reason: 'private-grade' },
+        }),
+      );
+      try {
+        eval_.prompts = [
+          {
+            raw: 'private-prompt',
+            template: 'private-template',
+            label: 'public',
+            provider: 'echo',
+          },
+        ];
+        const resultsFile = await eval_.toResultsFile();
+        expect(resultsFile.prompts?.[0].raw).toBe(strip ? '[prompt stripped]' : 'private-prompt');
+        expect(JSON.stringify(resultsFile).includes('private-')).toBe(!strip);
+        const output = await createOutputData(eval_, null);
+        expect(JSON.stringify(output).includes('private-')).toBe(!strip);
+        expect(output.results.results[0]).toMatchObject({ success: true, score: 1 });
+        if (!strip) {
+          expect(output.results.results[0]).toMatchObject({
+            prompt: { raw: 'private-prompt' },
+            testCase,
+            response: { output: 'private-output', raw: 'private-raw-output' },
+            metadata: { note: 'private-note' },
+            gradingResult: { reason: 'private-grade' },
+          });
+        }
+
+        for (const extension of ['json', 'yaml', 'xml', 'jsonl']) {
+          vi.mocked(fsPromises.writeFile).mockClear();
+          vi.mocked(fsPromises.appendFile).mockClear();
+          await writeOutput(`output.${extension}`, eval_, null);
+          const contents = [
+            ...vi.mocked(fsPromises.writeFile).mock.calls,
+            ...vi.mocked(fsPromises.appendFile).mock.calls,
+          ]
+            .map((call) => call[1])
+            .join('');
+          expect(contents, extension).not.toBe('');
+          expect(contents.includes('private-'), extension).toBe(!strip);
+        }
+
+        expect(eval_.config.tests).toEqual([testCase]);
+        expect(eval_.config.prompts).toEqual(['private-config-prompt']);
+        expect(eval_.prompts[0].template).toBe('private-template');
+        expect(eval_.results[0].response?.output).toBe('private-output');
+      } finally {
+        traceSpy.mockRestore();
+        restoreEnv();
+      }
+    },
+  );
 
   it.each([
     {

@@ -63,7 +63,6 @@ import {
   type AssertionType,
   type AtomicTestCase,
   type CompletedPrompt,
-  type EnvOverrides,
   type EvaluateResult,
   type EvaluateStats,
   type GradingResult,
@@ -2350,11 +2349,10 @@ function buildCompletedPrompts(
 function resolveAssertionProviderReferences(
   assertion: AssertionOrSet,
   providerMap: Record<string, ApiProvider>,
-  env?: EnvOverrides,
 ): AssertionOrSet {
   if (assertion.type === 'assert-set') {
     const resolvedAssertions = assertion.assert.map(
-      (child) => resolveAssertionProviderReferences(child, providerMap, env) as Assertion,
+      (child) => resolveAssertionProviderReferences(child, providerMap) as Assertion,
     );
     if (resolvedAssertions.every((child, index) => child === assertion.assert[index])) {
       return assertion;
@@ -2362,21 +2360,16 @@ function resolveAssertionProviderReferences(
     return { ...assertion, assert: resolvedAssertions };
   }
 
-  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap, env);
+  const provider = resolveConfiguredProviderReference(assertion.provider, providerMap);
   return provider === assertion.provider ? assertion : { ...assertion, provider };
 }
 
 function resolveRuntimeGradingProviderReferences(
   testCase: AtomicTestCase,
   providerMap: Record<string, ApiProvider>,
-  env?: EnvOverrides,
 ): void {
   if (testCase.options?.provider) {
-    const provider = resolveConfiguredProviderReference(
-      testCase.options.provider,
-      providerMap,
-      env,
-    );
+    const provider = resolveConfiguredProviderReference(testCase.options.provider, providerMap);
     if (provider !== testCase.options.provider) {
       testCase.options = { ...testCase.options, provider };
     }
@@ -2384,7 +2377,7 @@ function resolveRuntimeGradingProviderReferences(
 
   if (testCase.assert) {
     const assertions = testCase.assert.map((assertion) =>
-      resolveAssertionProviderReferences(assertion, providerMap, env),
+      resolveAssertionProviderReferences(assertion, providerMap),
     );
     if (assertions.some((assertion, index) => assertion !== testCase.assert?.[index])) {
       testCase.assert = assertions;
@@ -2544,7 +2537,7 @@ async function buildRunEvalOptions({
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
     await prepareTestCaseForEval(testSuite, testCase, index);
-    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap, testSuite.env);
+    resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap);
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
       conversations,
@@ -5169,13 +5162,27 @@ export function evaluate<
   options: InternalEvaluateOptions,
   runtime?: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
-  const resolvedRuntime =
-    runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
-  const runtimeTestSuite =
-    resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
-    nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
-    testSuite;
-  const store = resolvedRuntime.createEvaluationStore(evalRecord);
-  const ev = new Evaluator(runtimeTestSuite, store, options, resolvedRuntime);
-  return ev.evaluate();
+  return cliState.withBasePath(testSuite.basePath ?? cliState.basePath, () =>
+    cliState.withEnv(testSuite.env ?? cliState.env, () =>
+      cliState.withConfig(
+        {
+          ...evalRecord.config,
+          defaultTest: testSuite.defaultTest ?? evalRecord.config.defaultTest,
+          redteam: testSuite.redteam ?? evalRecord.config.redteam,
+        },
+        () => {
+          const resolvedRuntime =
+            runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
+          const runtimeTestSuite =
+            resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+            nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+            testSuite;
+          const store = resolvedRuntime.createEvaluationStore(evalRecord);
+          const ev = new Evaluator(runtimeTestSuite, store, options, resolvedRuntime);
+          return ev.evaluate();
+        },
+        testSuite.providers.map((provider) => ({ id: provider.id(), config: provider.config })),
+      ),
+    ),
+  );
 }

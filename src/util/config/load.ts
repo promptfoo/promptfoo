@@ -6,11 +6,12 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
+import Clone from 'rfdc';
 import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
-import { getEnvBool, isCI } from '../../envars';
+import { getEnvBool, isCI, isTemplateProcessEnvDisabled } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts/index';
@@ -44,7 +45,13 @@ import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProv
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
-import { readTest, readTests } from '../testCaseReader';
+import {
+  isRemoteTestsReference,
+  readTest,
+  readTestConfig,
+  readTestConfigs,
+  readTests,
+} from '../testCaseReader';
 import {
   type PromptReferenceSource,
   validateTestPromptReferences,
@@ -52,6 +59,8 @@ import {
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
+
+const clone = Clone({ circles: true });
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
@@ -295,21 +304,24 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
  * Renders environment variable templates in a config object using two-pass rendering.
  * This handles nested templates in config.env (fixes #7079).
  *
- * Pass 1: Render config.env values using only process.env (isolated from cliState)
+ * Pass 1: Render config.env values using process/env-file defaults
  * Pass 2: Render full config using pre-rendered config.env as overrides
  *
  * @param config - The config object to render
  * @returns The config with env templates rendered
  */
 export function renderConfigEnvTemplates<T extends { env?: Record<string, string> }>(config: T): T {
-  // Respect PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS - use empty object if disabled
-  const processEnvDisabled = getEnvBool(
-    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
-    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
-  );
-  const baseEnvForFirstPass = processEnvDisabled ? {} : process.env;
+  return cliState.withEnv(config.env, () => renderConfigEnvTemplatesInScope(config));
+}
 
-  // First pass: render config.env values using only process.env (replaceBase=true)
+function renderConfigEnvTemplatesInScope<T extends { env?: Record<string, string> }>(config: T): T {
+  // Respect PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS - use empty object if disabled
+  const processEnvDisabled = isTemplateProcessEnvDisabled();
+  const baseEnvForFirstPass = processEnvDisabled
+    ? {}
+    : { ...process.env, ...cliState.envFileOverrides };
+
+  // First pass: render config.env from process/file defaults (replaceBase=true)
   // This avoids pulling stale cliState.config?.env in watch/reload scenarios
   const rawConfigEnv = config.env;
   const renderedConfigEnv = rawConfigEnv
@@ -323,7 +335,9 @@ export function renderConfigEnvTemplates<T extends { env?: Record<string, string
     : undefined;
 
   // Second pass: render full config using pre-rendered config.env as overrides
-  const renderedConfig = renderEnvOnlyInObject(config, filteredConfigEnv);
+  const renderedConfig = cliState.withEnv(filteredConfigEnv, () =>
+    renderEnvOnlyInObject(config, filteredConfigEnv),
+  );
   preserveTracingCredentialReferences(
     config as Partial<UnifiedConfig>,
     renderedConfig as Partial<UnifiedConfig>,
@@ -332,6 +346,10 @@ export function renderConfigEnvTemplates<T extends { env?: Record<string, string
 }
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
+  return cliState.withEnv(undefined, () => readConfigInScope(configPath));
+}
+
+async function readConfigInScope(configPath: string): Promise<UnifiedConfig> {
   let ret: UnifiedConfig & {
     targets?: UnifiedConfig['providers'];
     plugins?: RedteamPluginObject[];
@@ -445,6 +463,9 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
     }
     ret.prompts = ['{{prompt}}'];
   }
+  if (ret.basePath !== undefined) {
+    ret.basePath = path.resolve(path.dirname(path.resolve(configPath)), ret.basePath);
+  }
   return ret;
 }
 
@@ -518,14 +539,39 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
   }
 }
 
-/**
- * Reads multiple configuration files and combines them into a single UnifiedConfig.
- *
- * @param {string[]} configPaths - An array of paths to configuration files. Supports glob patterns.
- * @returns {Promise<UnifiedConfig>} A promise that resolves to a unified configuration object.
- */
+/** Reads config files and resolves their tests using the combined environment. */
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
+  const { config, testSources } = await prepareCombinedConfig(configPaths);
+  return { ...config, tests: await readTestSources(testSources, config.env) };
+}
+
+type TestSource = { tests: TestSuiteConfig['tests']; basePath: string };
+
+async function readTestSources(
+  sources: TestSource[],
+  env: TestSuite['env'],
+  loadProviders = true,
+): Promise<TestCase[]> {
+  const read = loadProviders ? readTests : readTestConfigs;
+  const tests: TestCase[] = [];
+  for (const source of sources) {
+    try {
+      tests.push(...(await read(source.tests, source.basePath, env)));
+    } catch (error) {
+      throw new ConfigResolutionError(
+        `Failed to load tests from ${source.basePath || process.cwd()}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  return tests;
+}
+
+/** Combines declarative config and keeps each test source's directory for loading and watch. */
+async function prepareCombinedConfig(
+  configPaths: string[],
+): Promise<{ config: UnifiedConfig; testSources: TestSource[] }> {
   const configs: UnifiedConfig[] = [];
+  const resolvedConfigPaths: string[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
 
@@ -541,9 +587,14 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
       configs.push(config);
+      resolvedConfigPaths.push(globPath);
     }
   }
 
+  const configBasePaths = configs.map(
+    (config, index) => config.basePath ?? path.dirname(resolvedConfigPaths[index]),
+  );
+  const combinedEnv = configs.reduce((env, config) => ({ ...env, ...config.env }), {});
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<unknown>();
   const functionIds = new Map<Function, number>();
@@ -567,22 +618,6 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       });
     }
   });
-
-  const tests: UnifiedConfig['tests'] = [];
-  for (let i = 0; i < configs.length; i++) {
-    const config = configs[i];
-    const configPath = configPaths[i];
-    if (typeof config.tests === 'string') {
-      const newTests = await readTests(config.tests, path.dirname(configPath));
-      tests.push(...newTests);
-    } else if (Array.isArray(config.tests)) {
-      tests.push(...config.tests);
-    } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
-      // Handle TestGeneratorConfig object
-      const newTests = await readTests(config.tests, path.dirname(configPath));
-      tests.push(...newTests);
-    }
-  }
 
   const extensions: UnifiedConfig['extensions'] = [];
   for (const config of configs) {
@@ -630,25 +665,87 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
 
-  const makeAbsolute = (configPath: string, relativePath: string | Prompt) => {
-    if (typeof relativePath === 'string') {
-      if (relativePath.startsWith('file://')) {
-        relativePath =
-          'file://' + path.resolve(path.dirname(configPath), relativePath.slice('file://'.length));
-      }
-      return relativePath;
-    } else if (typeof relativePath === 'object' && relativePath.id) {
-      if (relativePath.id.startsWith('file://')) {
-        relativePath.id =
-          'file://' +
-          path.resolve(path.dirname(configPath), relativePath.id.slice('file://'.length));
-      }
-      return relativePath;
-    } else if (PromptSchema.safeParse(relativePath).success) {
-      return relativePath;
-    } else {
-      throw new Error(`Invalid prompt object: ${JSON.stringify(relativePath)}`);
+  const resolveConfigPath = (basePath: string, reference: string): string => {
+    if (reference.includes('{{')) {
+      reference = cliState.withEnv(combinedEnv, () => renderEnvOnlyInObject(reference));
     }
+    if (reference.includes('{{') || isRemoteTestsReference(reference)) {
+      return reference;
+    }
+    const prefix = reference.startsWith('file://') ? 'file://' : '';
+    return prefix + path.resolve(basePath, reference.slice(prefix.length));
+  };
+
+  const resolveNestedFileReferences = (basePath: string, value: unknown): unknown => {
+    if (typeof value === 'string') {
+      return value.startsWith('file://') ? resolveConfigPath(basePath, value) : value;
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => resolveNestedFileReferences(basePath, item));
+    }
+    if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [
+          key,
+          resolveNestedFileReferences(basePath, item),
+        ]),
+      );
+    }
+    return value;
+  };
+
+  const makeAbsolute = (basePath: string, prompt: string | Prompt) => {
+    if (typeof prompt === 'string') {
+      return prompt.startsWith('file://') ? resolveConfigPath(basePath, prompt) : prompt;
+    }
+    if (prompt.id) {
+      return {
+        ...prompt,
+        id: prompt.id.startsWith('file://') ? resolveConfigPath(basePath, prompt.id) : prompt.id,
+      };
+    }
+    if (PromptSchema.safeParse(prompt).success) {
+      return prompt;
+    }
+    throw new Error(`Invalid prompt object: ${JSON.stringify(prompt)}`);
+  };
+
+  const makeTestAbsolute = (basePath: string, test: unknown): unknown => {
+    if (typeof test === 'string') {
+      return resolveConfigPath(basePath, test);
+    }
+    if (!test || typeof test !== 'object') {
+      return test;
+    }
+    if ('path' in test && typeof test.path === 'string') {
+      return {
+        ...test,
+        path: resolveConfigPath(basePath, test.path),
+        ...('config' in test && { config: resolveNestedFileReferences(basePath, test.config) }),
+      };
+    }
+    const source = test as TestCase;
+    // Keep grader IDs unchanged so references can reuse configured providers.
+    return {
+      ...source,
+      ...(source.vars && {
+        vars:
+          typeof source.vars === 'string'
+            ? resolveConfigPath(basePath, source.vars)
+            : Array.isArray(source.vars)
+              ? source.vars.map((value) => resolveConfigPath(basePath, value))
+              : resolveNestedFileReferences(basePath, source.vars),
+      }),
+      ...(typeof source.provider === 'string' &&
+        source.provider.startsWith('file://') && {
+          provider: resolveConfigPath(basePath, source.provider),
+        }),
+      ...(typeof source.provider === 'object' &&
+        typeof source.provider?.id === 'string' &&
+        source.provider.id.startsWith('file://') && {
+          provider: { ...source.provider, id: resolveConfigPath(basePath, source.provider.id) },
+        }),
+    };
   };
 
   const seenPrompts = new Set<string | Prompt>();
@@ -666,7 +763,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
+      const absolutePrompt = makeAbsolute(configBasePaths[idx], config.prompts);
       addSeenPrompt(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
@@ -677,32 +774,72 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
-        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
+        addSeenPrompt(makeAbsolute(configBasePaths[idx], prompt as string | Prompt));
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
-      invariant(typeof prompts === 'object', 'Cannot mix configs with map and array-type prompts');
-      prompts = { ...prompts, ...config.prompts };
+      invariant(
+        typeof prompts === 'object' && !Array.isArray(prompts),
+        'Cannot mix configs with map and array-type prompts',
+      );
+      prompts = {
+        ...prompts,
+        ...Object.fromEntries(
+          Object.entries(config.prompts).map(([prompt, label]) => [
+            prompt.startsWith('file://') ? resolveConfigPath(configBasePaths[idx], prompt) : prompt,
+            label,
+          ]),
+        ),
+      };
     }
   });
   if (Array.isArray(prompts)) {
     prompts.push(...Array.from(seenPrompts));
   }
 
+  let scenarios: UnifiedConfig['scenarios'];
+  for (const [index, config] of configs.entries()) {
+    if (config.scenarios === undefined) {
+      continue;
+    }
+    scenarios ??= [];
+    const basePath = configBasePaths[index];
+    for (const source of [config.scenarios].flat()) {
+      const loaded =
+        typeof source === 'string' && source.startsWith('file://')
+          ? await cliState.withBasePath(basePath, () =>
+              cliState.withEnv(combinedEnv, () => maybeLoadFromExternalFile(source)),
+            )
+          : source;
+      for (const scenario of [loaded].flat()) {
+        scenarios.push(
+          typeof scenario === 'object' && scenario?.tests
+            ? {
+                ...scenario,
+                ...(Array.isArray(scenario.config) && {
+                  config: scenario.config.map((test: unknown) => makeTestAbsolute(basePath, test)),
+                }),
+                tests: [scenario.tests].flat().map((test) => makeTestAbsolute(basePath, test)),
+              }
+            : scenario,
+        );
+      }
+    }
+  }
+
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
     tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
+    basePath: configBasePaths[0],
     description: configs.map((config) => config.description).join(', '),
     providers,
     prompts,
-    tests,
-    scenarios: configs.some((config) => config.scenarios !== undefined)
-      ? configs.flatMap((config) => config.scenarios || [])
-      : undefined,
-    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
-      // If any config has a string defaultTest (file reference), preserve it
+    tests: [],
+    scenarios,
+    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr, index) => {
+      // The last file default wins; inline defaults only merge when no file was selected.
       if (typeof curr.defaultTest === 'string') {
-        return curr.defaultTest;
+        return makeTestAbsolute(configBasePaths[index], curr.defaultTest) as string;
       }
       // If prev is already a string (file reference), keep it
       if (typeof prev === 'string') {
@@ -731,7 +868,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       return prev;
     }, undefined),
     nunjucksFilters: configs.reduce((prev, curr) => ({ ...prev, ...curr.nunjucksFilters }), {}),
-    env: configs.reduce((prev, curr) => ({ ...prev, ...curr.env }), {}),
+    env: combinedEnv,
     evaluateOptions: configs.reduce((prev, curr) => ({ ...prev, ...curr.evaluateOptions }), {}),
     outputPath: configs.flatMap((config) =>
       typeof config.outputPath === 'string'
@@ -758,7 +895,13 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
-  return combinedConfig;
+  return {
+    config: combinedConfig,
+    testSources: configs.map((config, index) => ({
+      tests: config.tests,
+      basePath: configBasePaths[index],
+    })),
+  };
 }
 
 /**
@@ -775,17 +918,53 @@ export async function resolveConfigs(
   basePath: string;
   commandLineOptions?: Partial<CommandLineOptions>;
   selectedProviderConfigs?: TestSuiteConfig['providers'];
+  testSources?: TestSource[];
 }> {
   let fileConfig: Partial<UnifiedConfig> = {};
+  let testSources: TestSource[] | undefined;
   let defaultConfig = _defaultConfig;
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
-    fileConfig = await combineConfigs(configPaths);
+    const prepared = await prepareCombinedConfig(configPaths);
+    fileConfig = prepared.config;
+    testSources = cmdObj.tests || cmdObj.vars || cmdObj.assertions ? [] : prepared.testSources;
     promptReferenceSources = await readPromptReferenceSources(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
   }
+  const resolved = await cliState.withBasePath(undefined, () =>
+    cliState.withEnv(fileConfig.env || defaultConfig.env || {}, () =>
+      cliState.withConfig({ ...defaultConfig, ...fileConfig }, () =>
+        resolveLoadedConfig(
+          cmdObj,
+          fileConfig,
+          defaultConfig,
+          promptReferenceSources,
+          type,
+          testSources,
+        ),
+      ),
+    ),
+  );
+  cliState.basePath = resolved.basePath;
+  cliState.config = resolved.config;
+  cliState.selectedProviderConfigs = resolved.selectedProviderConfigs;
+  return {
+    ...resolved,
+    testSources: testSources ?? [{ tests: defaultConfig.tests, basePath: resolved.basePath }],
+  };
+}
+
+async function resolveLoadedConfig(
+  cmdObj: Partial<CommandLineOptions>,
+  fileConfig: Partial<UnifiedConfig>,
+  defaultConfig: Partial<UnifiedConfig>,
+  promptReferenceSources: PromptReferenceSource[],
+  type?: 'DatasetGeneration' | 'AssertionGeneration',
+  testSources?: TestSource[],
+) {
+  const configPaths = cmdObj.config;
   // Standalone assertion mode
   if (cmdObj.assertions) {
     telemetry.record('feature_used', {
@@ -820,7 +999,11 @@ export async function resolveConfigs(
   }
 
   // Use base path in cases where path was supplied in the config file
-  const basePath = configPaths ? path.dirname(configPaths[0]) : '';
+  const basePath = path.resolve(
+    fileConfig.basePath ??
+      defaultConfig.basePath ??
+      (configPaths ? path.dirname(configPaths[0]) : ''),
+  );
   let commandLineOptions = normalizeConfiguredCommandLineOptions(
     fileConfig.commandLineOptions || defaultConfig.commandLineOptions,
     configPaths ? `configuration file ${configPaths[0]}` : 'default configuration',
@@ -834,17 +1017,14 @@ export async function resolveConfigs(
   // Load defaultTest from file:// reference if needed
   let processedDefaultTest: Partial<TestCase> | undefined;
   if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
-    // Set basePath in cliState temporarily for file resolution
-    const originalBasePath = cliState.basePath;
-    cliState.basePath = basePath;
     const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
-    cliState.basePath = originalBasePath;
     processedDefaultTest = loaded as Partial<TestCase>;
   } else if (defaultTestRaw) {
     processedDefaultTest = defaultTestRaw as Partial<TestCase>;
   }
 
   const config: Omit<UnifiedConfig, 'commandLineOptions'> = {
+    basePath,
     tags: fileConfig.tags || defaultConfig.tags,
     description: cmdObj.description || fileConfig.description || defaultConfig.description,
     prompts: cmdObj.prompts || fileConfig.prompts || defaultConfig.prompts || [],
@@ -855,9 +1035,6 @@ export async function resolveConfigs(
     sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
       ? false
       : (fileConfig.sharing ?? defaultConfig.sharing),
-    defaultTest: processedDefaultTest
-      ? await readTest(processedDefaultTest, basePath, true)
-      : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
     extensions: [
@@ -869,6 +1046,8 @@ export async function resolveConfigs(
     tracing: fileConfig.tracing || defaultConfig.tracing,
     evaluateOptions: fileConfig.evaluateOptions || defaultConfig.evaluateOptions,
   };
+
+  cliState.config = config;
 
   const hasPrompts = [config.prompts].flat().filter(Boolean).length > 0;
   const hasProviders =
@@ -910,6 +1089,13 @@ export async function resolveConfigs(
   }
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
+
+  config.defaultTest = processedDefaultTest
+    ? await readTestConfig(processedDefaultTest, basePath, true, config.env)
+    : undefined;
+  const parsedDefaultTest = config.defaultTest
+    ? await readTest(clone(config.defaultTest), basePath, true, config.env)
+    : undefined;
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
   // This enables:
@@ -958,16 +1144,26 @@ export async function resolveConfigs(
     env: config.env,
     basePath,
   });
-  const parsedTests: TestCase[] = await readTests(
-    config.tests || [],
-    cmdObj.tests ? undefined : basePath,
+  const testConfigs = await readTestSources(
+    testSources?.length
+      ? testSources
+      : [{ tests: config.tests || [], basePath: cmdObj.tests || cmdObj.vars ? '' : basePath }],
+    config.env,
+    false,
+  );
+  config.tests = testConfigs.map((test) =>
+    clone(isApiProvider(test.provider) ? { ...test, provider: undefined } : test),
+  );
+  const parsedTests = await Promise.all(
+    testConfigs.map((test) => readTest(test, basePath, false, config.env)),
   );
 
+  let parsedScenarios = config.scenarios;
   // Parse testCases for each scenario
-  if (config.scenarios && (!Array.isArray(config.scenarios) || config.scenarios.length > 0)) {
-    config.scenarios = (await maybeLoadFromExternalFile(config.scenarios)) as Scenario[];
+  if (parsedScenarios && (!Array.isArray(parsedScenarios) || parsedScenarios.length > 0)) {
+    parsedScenarios = (await maybeLoadFromExternalFile(parsedScenarios)) as Scenario[];
     // Flatten the scenarios array in case glob patterns were used
-    config.scenarios = config.scenarios.flat().map((scenario) =>
+    parsedScenarios = parsedScenarios.flat().map((scenario) =>
       typeof scenario === 'object'
         ? {
             ...scenario,
@@ -976,19 +1172,20 @@ export async function resolveConfigs(
         : scenario,
     );
   }
-  if (Array.isArray(config.scenarios)) {
+  if (Array.isArray(parsedScenarios)) {
+    config.scenarios = [];
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
-    for (const [scenarioIndex, scenario] of config.scenarios.entries()) {
+    for (const [scenarioIndex, scenario] of parsedScenarios.entries()) {
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
       if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
-        const parsedScenarioTests: TestCase[] = await readTests(
-          scenario.tests,
-          cmdObj.tests ? undefined : basePath,
+        scenario.tests = await readTestSources(
+          [{ tests: scenario.tests, basePath }],
+          config.env,
+          false,
         );
-        scenario.tests = parsedScenarioTests;
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
       const filteredTests = await filterTests(
@@ -1009,7 +1206,15 @@ export async function resolveConfigs(
         },
       );
       invariant(filteredTests, 'filteredTests are undefined');
-      scenario.tests = filteredTests;
+      config.scenarios[scenarioIndex] = clone({
+        ...scenario,
+        tests: filteredTests.map((test) =>
+          isApiProvider(test.provider) ? { ...test, provider: undefined } : test,
+        ),
+      });
+      scenario.tests = await Promise.all(
+        filteredTests.map((test) => readTest(test, basePath, false, config.env)),
+      );
     }
   }
 
@@ -1034,19 +1239,20 @@ export async function resolveConfigs(
       suffix: cmdObj.promptSuffix,
       provider: cmdObj.grader,
       // rubricPrompt
-      ...(processedDefaultTest?.options || {}),
+      ...(parsedDefaultTest?.options || {}),
     },
-    ...(processedDefaultTest || {}),
+    ...(parsedDefaultTest || {}),
   };
 
   const testSuite: TestSuite = {
+    basePath,
     description: config.description,
     tags: config.tags,
     prompts: parsedPrompts,
     providers: parsedProviders,
     providerPromptMap: parsedProviderPromptMap,
     tests: parsedTests,
-    scenarios: config.scenarios as Scenario[],
+    scenarios: parsedScenarios as Scenario[],
     defaultTest,
     derivedMetrics: config.derivedMetrics,
     nunjucksFilters: await readFilters(
@@ -1056,6 +1262,7 @@ export async function resolveConfigs(
     redteam: config.redteam,
     extensions: config.extensions,
     tracing: config.tracing,
+    env: config.env,
   };
 
   // Validate assertions in tests and defaultTest using Zod schema
@@ -1081,7 +1288,6 @@ export async function resolveConfigs(
     { promptReferenceSources },
   );
 
-  cliState.config = config;
   cliState.selectedProviderConfigs = filteredProviderConfigs;
 
   // Extract commandLineOptions from either explicit config files or default config

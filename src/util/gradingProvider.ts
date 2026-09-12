@@ -1,6 +1,5 @@
 import { isApiProvider } from '../types/providers';
 
-import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderTypeMap } from '../types/providers';
 
 type ProviderTypeValue = NonNullable<ProviderTypeMap[keyof ProviderTypeMap]>;
@@ -32,10 +31,10 @@ export function isProviderTypeMap(provider: unknown): provider is ProviderTypeMa
       typeof provider === 'object' &&
       !Array.isArray(provider) &&
       !isApiProvider(provider) &&
-      !Object.hasOwn(provider, 'id') &&
+      !Object.prototype.hasOwnProperty.call(provider, 'id') &&
       GRADING_PROVIDER_TYPE_KEYS.some(
         (providerType) =>
-          Object.hasOwn(provider, providerType) &&
+          Object.prototype.hasOwnProperty.call(provider, providerType) &&
           isTypedProviderValue((provider as Record<string, unknown>)[providerType]),
       ),
   );
@@ -51,7 +50,7 @@ export function buildConfiguredProviderMap(providers: ApiProvider[]): Record<str
     providerMap[provider.id()] = provider;
   }
   for (const provider of providers) {
-    if (provider.label && !Object.hasOwn(providerMap, provider.label)) {
+    if (provider.label && !Object.prototype.hasOwnProperty.call(providerMap, provider.label)) {
       providerMap[provider.label] = provider;
     }
   }
@@ -62,16 +61,15 @@ function getConfiguredProvider(
   id: string,
   providerMap: Record<string, ApiProvider>,
 ): ApiProvider | undefined {
-  return Object.hasOwn(providerMap, id) ? providerMap[id] : undefined;
+  return Object.prototype.hasOwnProperty.call(providerMap, id) ? providerMap[id] : undefined;
 }
 
 function resolveTypedProviderValue(
   provider: ProviderTypeValue,
   providerMap: Record<string, ApiProvider>,
-  env: EnvOverrides | undefined,
 ): ProviderTypeValue {
   if (typeof provider === 'string') {
-    return getConfiguredProvider(provider, providerMap) ?? (env ? { id: provider, env } : provider);
+    return getConfiguredProvider(provider, providerMap) ?? provider;
   }
   if (isApiProvider(provider)) {
     return provider;
@@ -86,15 +84,13 @@ function resolveTypedProviderValue(
     return configuredProvider;
   }
 
-  return env ? { ...provider, env: { ...env, ...provider.env } } : provider;
+  return provider;
 }
 
-// Resolve configured grader references while carrying suite env into typed
-// provider values that must stay lazy until their assertion type is selected.
+// Unconfigured typed entries stay lazy and inherit the evaluation scope when loaded.
 export function resolveConfiguredProviderReference<T>(
   provider: T,
   providerMap: Record<string, ApiProvider>,
-  env?: EnvOverrides,
 ): T | ApiProvider {
   if (typeof provider === 'string') {
     return getConfiguredProvider(provider, providerMap) ?? provider;
@@ -110,7 +106,7 @@ export function resolveConfiguredProviderReference<T>(
       continue;
     }
 
-    const resolvedProvider = resolveTypedProviderValue(nestedProvider, providerMap, env);
+    const resolvedProvider = resolveTypedProviderValue(nestedProvider, providerMap);
     if (resolvedProvider !== nestedProvider) {
       resolvedTypeMap ??= { ...provider };
       resolvedTypeMap[providerType] = resolvedProvider;

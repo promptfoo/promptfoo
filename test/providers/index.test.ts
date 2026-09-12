@@ -1478,11 +1478,25 @@ describe('loadApiProvider', () => {
         },
       })) as AbliterationProvider;
 
-      expect(provider.env?.ABLIT_API_BASE_URL).toBeUndefined();
+      expect(provider.env?.ABLIT_API_BASE_URL).toBe('https://cli-state.example.com/v1');
       expect(provider.config.apiBaseUrl).toBe('https://cli-state.example.com/v1');
       expect(provider.getApiKey()).toBe('provider-key');
     } finally {
       cliState.config = originalConfig;
+    }
+  });
+
+  it('does not inherit cliState env when a suite explicitly has no env', async () => {
+    const originalConfig = cliState.config;
+    const restoreEnv = mockProcessEnv({ ABLIT_API_BASE_URL: undefined });
+    cliState.config = { env: { ABLIT_API_BASE_URL: 'https://previous.example.com/v1' } };
+
+    try {
+      const [provider] = await loadApiProviders(['abliteration:test-model'], { env: {} });
+      expect(provider.config.apiBaseUrl).toBe('https://api.abliteration.ai/v1');
+    } finally {
+      cliState.config = originalConfig;
+      restoreEnv();
     }
   });
 
@@ -2129,7 +2143,8 @@ describe('resolveProvider', () => {
     expect(result).toBeDefined();
     expect(typeof result.id).toBe('function');
     expect(result.id()).toBe('My Custom Provider');
-    expect(result.callApi).toBe(mockFunctionProvider);
+    await expect(result.callApi('Hello')).resolves.toEqual({ output: 'Response for: Hello' });
+    expect(mockFunctionProvider).toHaveBeenCalledWith('Hello');
     expect(result.transform).toBe(mockFunctionProvider.transform);
     expect(result.delay).toBe(250);
   });
@@ -2146,7 +2161,8 @@ describe('resolveProvider', () => {
     expect(result).toBeDefined();
     expect(typeof result.id).toBe('function');
     expect(result.id()).toBe('custom-function');
-    expect(result.callApi).toBe(mockFunctionProvider);
+    await expect(result.callApi('Hello')).resolves.toEqual({ output: 'Response for: Hello' });
+    expect(mockFunctionProvider).toHaveBeenCalledWith('Hello');
   });
 
   it('should handle empty providerMap gracefully', async () => {

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import {
   applyQueryParams,
   discoverTokenEndpoint,
@@ -8,6 +9,7 @@ import {
   getOAuthTokenWithExpiry,
   isMcpErrorResult,
   isMcpToolNameFilter,
+  renderAuthVars,
 } from '../../../src/providers/mcp/util';
 
 import type {
@@ -17,6 +19,17 @@ import type {
 
 // Mock fetchWithProxy for discovery tests
 const mockFetch = vi.fn();
+
+it('resolves MCP auth from file defaults unless explicit vars replace them', () => {
+  const server: MCPServerConfig = { auth: { type: 'bearer', token: '{{MCP_TOKEN}}' } };
+  cliState.withEnvFileOverrides({ MCP_TOKEN: 'file-token' }, () => {
+    expect(renderAuthVars(server).auth).toEqual({ type: 'bearer', token: 'file-token' });
+    expect(renderAuthVars(server, { MCP_TOKEN: 'explicit-token' }).auth).toEqual({
+      type: 'bearer',
+      token: 'explicit-token',
+    });
+  });
+});
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));

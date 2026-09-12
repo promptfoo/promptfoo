@@ -573,7 +573,7 @@ tests:
 
 ### Path Resolution
 
-`file://` paths are resolved relative to your **config file's directory**, not the current working directory. This ensures consistent behavior regardless of where you run `promptfoo` from:
+`file://` paths resolve from your **config file's directory** by default. Set `basePath` to use another directory; a relative `basePath` resolves from the config file's directory. For example:
 
 ```yaml title="src/tests/promptfooconfig.yaml"
 tests:
@@ -587,6 +587,12 @@ tests:
       # Parent directory - resolved as src/shared/context.json
       shared: file://../shared/context.json
 ```
+
+Nested `file://` references inside test and vars files keep the owning config's base directory. With multiple configs, each config's tests use its base directory; configured providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
+
+CLI evaluations save parsed test rows, external defaults, and an absolute base directory. Resume and retry reuse those rows, including generated and remote datasets. Run a new evaluation to pick up changed test sources. An unmatched test-source glob warns and adds no rows; a missing literal test file is an error.
+
+Functions and provider instances returned by JavaScript or TypeScript test generators work in the current run but cannot be restored from saved evaluations. Promptfoo warns when a generator returns them. Use `file://` references for scoring functions and other executable test fields when you need resume or retry.
 
 Without the `file://` prefix, values are passed as plain strings to your provider.
 
