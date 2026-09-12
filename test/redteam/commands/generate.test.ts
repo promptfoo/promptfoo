@@ -19,7 +19,7 @@ import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover
 import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
 import { extractA2AAgentCardInfo } from '../../../src/redteam/extraction/a2aAgentCard';
-import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
+import { extractMcpTools } from '../../../src/redteam/extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../../../src/redteam/index';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import { PartialGenerationError, ProbeLimitExceededError } from '../../../src/redteam/types';
@@ -61,7 +61,7 @@ const { TEST_PROBE_LIMIT } = vi.hoisted(() => ({ TEST_PROBE_LIMIT: 100_000 }));
 
 function resetCommonMocks() {
   vi.mocked(extractA2AAgentCardInfo).mockReset().mockResolvedValue('');
-  vi.mocked(extractMcpToolsInfo).mockReset().mockResolvedValue('');
+  vi.mocked(extractMcpTools).mockReset().mockResolvedValue([]);
   vi.mocked(getCloudDatabaseId).mockReset();
   vi.mocked(isCloudProvider).mockReset().mockReturnValue(false);
   vi.mocked(checkEmailStatusAndMaybeExit).mockReset().mockResolvedValue('ok');
@@ -69,6 +69,8 @@ function resetCommonMocks() {
     emailNeedsValidation: false,
   });
 }
+
+beforeEach(resetCommonMocks);
 
 function mockReadFileSync(content: unknown) {
   vi.mocked(fs.readFileSync).mockImplementation(() =>
@@ -173,7 +175,7 @@ vi.mock('../../../src/util/config/load', async (importOriginal) => {
 vi.mock('../../../src/redteam/extraction/mcpTools', async (importOriginal) => {
   return {
     ...(await importOriginal()),
-    extractMcpToolsInfo: vi.fn(),
+    extractMcpTools: vi.fn(),
   };
 });
 
@@ -914,7 +916,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should use purpose when no config is provided', async () => {
-    vi.mocked(extractMcpToolsInfo).mockResolvedValue('');
+    vi.mocked(extractMcpTools).mockResolvedValue([]);
 
     const options: RedteamCliGenerateOptions = {
       purpose: 'Test purpose',
@@ -1712,9 +1714,13 @@ describe('doGenerateRedteam', () => {
   it.each([undefined, 'Only test authorization boundaries.'])(
     'keeps MCP formatting separate from custom generation instructions: %s',
     async (instructions) => {
-      vi.mocked(extractMcpToolsInfo).mockResolvedValue(
-        '\nAvailable MCP tools:\n{"name":"search_companies","description":"Search companies.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}}}}',
-      );
+      vi.mocked(extractMcpTools).mockResolvedValue([
+        {
+          name: 'search_companies',
+          description: 'Search companies.',
+          inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+        },
+      ]);
 
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
@@ -1756,6 +1762,7 @@ describe('doGenerateRedteam', () => {
       expect(synthesizePurpose).toContain('Original purpose for Alice');
       expect(synthesizePurpose).toContain('"name":"search_companies"');
       expect(synthesizePurpose).not.toContain('{{ user_name }}');
+      expect(vi.mocked(synthesize).mock.calls[0][0].mcpTools).toEqual(await extractMcpTools([]));
       expect(synthesize).toHaveBeenCalledWith(
         expect.objectContaining({
           testGenerationFormat: expect.stringContaining(
@@ -1812,7 +1819,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should handle MCP tools extraction errors gracefully', async () => {
-    vi.mocked(extractMcpToolsInfo).mockRejectedValue(new Error('MCP tools extraction failed'));
+    vi.mocked(extractMcpTools).mockRejectedValue(new Error('MCP tools extraction failed'));
 
     vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
@@ -3612,7 +3619,7 @@ describe('doGenerateRedteam', () => {
 
     it('should use single purpose mode when no contexts are defined', async () => {
       // Reset MCP tools mock to prevent interference from other tests
-      vi.mocked(extractMcpToolsInfo).mockResolvedValue('');
+      vi.mocked(extractMcpTools).mockResolvedValue([]);
 
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',

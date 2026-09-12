@@ -59,6 +59,8 @@ The plugin assesses the AI's response based on:
 
 Shell injection risk grows when natural-language input sits close to command generation. This plugin keeps the review centered on whether the model preserves the legitimate request while refusing the injected execution path.
 
+Generated attack coverage excludes requests to explain or prevent a shell command. Automatic MCP generation also validates tool names and argument types against the advertised schemas before selecting tests.
+
 ## Related Concepts
 
 - [SQL Injection](sql-injection.md)

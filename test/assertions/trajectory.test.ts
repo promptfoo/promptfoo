@@ -551,6 +551,8 @@ describe('trajectory utilities', () => {
 
   it.each([
     'postgresql://user:private-password@host/private',
+    { sql: 'postgresql://user:private-password@host/private' },
+    JSON.stringify({ sql: 'postgresql://user:private-password@host/private' }),
     { query: 'postgresql://user:private-password@host/private' },
     JSON.stringify({ query: 'postgresql://user:private-password@host/private' }),
   ])('keeps database connection data out of SQL evidence: %j', (args) => {

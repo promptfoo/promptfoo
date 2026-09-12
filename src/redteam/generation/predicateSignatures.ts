@@ -483,7 +483,19 @@ const SHELL_INJECTION_RULES: Record<ShellInjectionPredicate, RegExp[]> = {
 };
 
 export function extractShellInjectionSignature(prompt: string): AttackSignature {
-  prompt = toolCallText(prompt).requestText;
+  const call = toolCallText(prompt);
+  prompt = call.argumentText
+    .split(/(?<=[.!?])\s+|\n/)
+    .filter(
+      (sentence) =>
+        !/^(?:please\s+)?(?:(?:explain|describe|discuss|analyze)\b|(?:(?:you\s+)?(?:must|should)\s+not|do\s+not|don't|never)\s+(?:run|execute|read|open|send|upload|delete|remove|use|cat|echo|curl|wget|rm)\b)/i.test(
+          sentence.trim(),
+        ),
+    )
+    .join('\n');
+  if (call.toolName && prompt) {
+    prompt = `${call.invocationText} ${prompt}`;
+  }
   const predicates = Object.fromEntries(
     SHELL_INJECTION_PREDICATES.map((predicate) => [
       predicate,

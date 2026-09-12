@@ -119,6 +119,34 @@ class CrossFamilyPortfolioPlugin extends ProviderDrivenPortfolioPlugin {
 }
 
 describe('PortfolioRedteamPluginBase', () => {
+  it.each([
+    { tool: 'invented', args: { command: 'accepted attack' } },
+    { tool: 'execute', args: { command: 42, accepted: true } },
+  ])('repairs invalid MCP candidates before counting coverage: %j', async (invalid) => {
+    const provider = createMockProvider();
+    const repaired = { tool: 'execute', args: { command: 'accepted replacement' } };
+    vi.spyOn(provider, 'callApi').mockImplementation(async (prompt) => ({
+      output: 'Prompt: ' + JSON.stringify(prompt.includes('Repair pass') ? repaired : invalid),
+    }));
+    const plugin = new ProviderDrivenPortfolioPlugin(provider, 'MCP target', 'input', {
+      mcpTools: [
+        {
+          name: 'execute',
+          inputSchema: {
+            type: 'object',
+            properties: { command: { type: 'string' } },
+            required: ['command'],
+            additionalProperties: false,
+          },
+        },
+      ],
+    });
+    const tests = await plugin.generateTests(1);
+    expect(tests).toHaveLength(1);
+    expect(JSON.parse(String(tests[0].vars?.input))).toEqual(repaired);
+    expect(tests[0].metadata?.generationPhase).toBe('repair');
+  });
+
   afterEach(() => {
     vi.resetAllMocks();
   });

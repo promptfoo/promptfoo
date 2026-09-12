@@ -5,6 +5,7 @@ import { isValidPolicyId } from './plugins/policy/validators';
 
 import type { EventSource } from '../types/eventSource';
 import type { ApiProvider, ProviderOptions, RemoteGenerationContext } from '../types/providers';
+import type { McpToolDefinition } from './mcpToolCall';
 
 // Re-export Inputs from shared to maintain backwards compatibility
 export { type Inputs, InputsSchema };
@@ -164,7 +165,10 @@ export const PluginConfigSchema = z.object({
   __nonce: z.number().optional(),
 });
 
-export type PluginConfig = z.infer<typeof PluginConfigSchema>;
+export type PluginConfig = z.infer<typeof PluginConfigSchema> & {
+  /** Extracted target schemas used to validate generated MCP calls. */
+  mcpTools?: McpToolDefinition[];
+};
 
 export const StrategyConfigSchema = z
   .object({
@@ -294,6 +298,7 @@ export interface RedteamFileConfig extends CommonOptions {
 export interface SynthesizeOptions extends CommonOptions {
   /** Target-specific output formatting, independent of custom attack instructions. */
   testGenerationFormat?: string;
+  mcpTools?: McpToolDefinition[];
   abortSignal?: AbortSignal;
   redteamGenerationContext?: RedteamGenerationContext;
   /** Cloud target database ID used to preserve target-owned task context during generation. */

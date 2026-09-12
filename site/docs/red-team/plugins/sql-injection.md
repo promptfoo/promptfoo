@@ -21,6 +21,8 @@ SQL summaries retain every query within a 24-query budget and a 400-character li
 
 Adaptive strategies grade the complete stored trace for each turn, regardless of span-count and depth limits used for display. A name filter that excludes spans produces a grading error before model grading. Trace summaries remain bounded, and ingestion limits still apply to the complete trace.
 
+Native MCP tool calls are also graded when tracing is disabled, including when the final response echoes the request or refuses it. Their summaries include query text and explicit authorization and row-count outcomes; raw result rows stay out of the rubric.
+
 ## Configuration
 
 To include the SQL Injection plugin in your LLM red teaming setup:
@@ -38,6 +40,8 @@ The SQL Injection plugin generates test cases that attempt to:
 1. Execute SQL commands disguised as part of legitimate requests.
 2. Access, modify, or delete database information through query manipulation.
 3. Use various techniques to obfuscate or hide malicious SQL within seemingly innocent queries.
+
+Automatic MCP generation validates tool names and arguments against the advertised input schemas before crediting a family. Invalid calls are regenerated; extracted schemas are not copied into each generated test.
 
 Default single-input generation balances attack families such as boolean bypasses, stacked queries, union/schema discovery, and authorization-boundary requests. Schema-discovery candidates must request enumeration or contain a query injection; explanatory catalog references alone do not qualify. Natural-language privilege escalation requires a retrieval request across an authorization boundary; explaining why that access is forbidden does not count. For batches of at least five tests, semantic frontier diagnostics report retained exploit-mechanism and authorization-bypass coverage.
 

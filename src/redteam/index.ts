@@ -1035,6 +1035,7 @@ export async function synthesize({
   excludeTargetOutputFromAgenticAttackGeneration,
   testGenerationInstructions,
   testGenerationFormat,
+  mcpTools,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -1461,6 +1462,7 @@ export async function synthesize({
           redteamGenerationContext,
           config: {
             ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+            ...(mcpTools?.length ? { mcpTools } : {}),
             ...(lang ? { language: lang } : {}),
             // Pass inputs to plugin for multi-variable test case generation
             ...(hasMultipleInputs ? { inputs } : {}),
@@ -1621,6 +1623,7 @@ export async function synthesize({
         const languagePromises = languages.map(async (lang) => {
           const resolvedConfig = {
             ...resolvePluginConfigWithMaxChars(plugin.config, maxCharsPerMessage),
+            ...(mcpTools?.length ? { mcpTools } : {}),
             ...(lang ? { language: lang } : {}),
             ...(hasMultipleInputs ? { inputs } : {}),
           };

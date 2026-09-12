@@ -57,7 +57,7 @@ import {
   type Severity,
 } from '../constants';
 import { extractA2AAgentCardInfo } from '../extraction/a2aAgentCard';
-import { extractMcpToolsInfo } from '../extraction/mcpTools';
+import { extractMcpTools } from '../extraction/mcpTools';
 import { MAX_MAX_CONCURRENCY, synthesize } from '../index';
 import { determinePolicyTypeFromId, isValidPolicyObject } from '../plugins/policy/utils';
 import { neverGenerateRemote, shouldGenerateRemote } from '../remoteGeneration';
@@ -667,6 +667,7 @@ async function doGenerateRedteamInternal(
   const rootPurpose = parsedConfig.data.purpose;
   let purposeDetails = '';
   let testGenerationFormat: string | undefined;
+  let mcpTools: Awaited<ReturnType<typeof extractMcpTools>> = [];
   try {
     const a2aAgentCardInfo = await extractA2AAgentCardInfo(testSuite.providers);
     if (a2aAgentCardInfo) {
@@ -681,9 +682,10 @@ async function doGenerateRedteamInternal(
     );
   }
   try {
-    const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
-    if (mcpToolsInfo) {
-      purposeDetails += mcpToolsInfo;
+    mcpTools = await extractMcpTools(testSuite.providers);
+    if (mcpTools.length) {
+      purposeDetails +=
+        '\nAvailable MCP tools:\n' + mcpTools.map((tool) => JSON.stringify(tool)).join('\n');
       logger.info('Added MCP tools information to red team purpose');
       testGenerationFormat = `Generate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
     }
@@ -747,6 +749,7 @@ async function doGenerateRedteamInternal(
             showProgressBar: options.progressBar !== false,
             testGenerationInstructions: config.testGenerationInstructions,
             testGenerationFormat,
+            ...(mcpTools.length ? { mcpTools } : {}),
           } as SynthesizeOptions),
       );
 
@@ -816,6 +819,7 @@ async function doGenerateRedteamInternal(
         showProgressBar: options.progressBar !== false,
         testGenerationInstructions: config.testGenerationInstructions,
         testGenerationFormat,
+        ...(mcpTools.length ? { mcpTools } : {}),
       } as SynthesizeOptions),
     );
 

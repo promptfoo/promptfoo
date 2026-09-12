@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
+import { normalizeMcpToolCall, stringifyMcpToolCall } from '../mcpToolCall';
 import { type GeneratedPrompt, RedteamPluginBase } from '../plugins/base';
 import { getShortPluginId } from '../util';
 import {
@@ -284,14 +285,26 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     family: AttackFamily,
     generationPhase: AttackCandidate['generationPhase'],
   ): AttackCandidate[] {
-    return prompts.map((prompt) => ({
-      prompt: prompt.__prompt,
-      pluginId: getShortPluginId(this.id),
-      familyId: family.id,
-      familyLabel: family.label,
-      generationPhase,
-      signature: this.extractAttackSignature(prompt.__prompt, family),
-    }));
+    return prompts.flatMap((prompt) => {
+      let value = prompt.__prompt;
+      if (this.config.mcpTools?.length) {
+        const call = normalizeMcpToolCall(value, this.config.mcpTools);
+        if (!call) {
+          return [];
+        }
+        value = stringifyMcpToolCall(call);
+      }
+      return [
+        {
+          prompt: value,
+          pluginId: getShortPluginId(this.id),
+          familyId: family.id,
+          familyLabel: family.label,
+          generationPhase,
+          signature: this.extractAttackSignature(value, family),
+        },
+      ];
+    });
   }
 
   private describeObservedPredicates(candidate: AttackCandidate): string {

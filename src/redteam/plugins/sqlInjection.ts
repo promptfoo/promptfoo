@@ -16,6 +16,7 @@ import type {
   AtomicTestCase,
   GradingResult,
 } from '../../types/index';
+import type { TraceData } from '../../types/tracing';
 import type { AttackFamily, AttackSignature } from '../generation/types';
 import type { RedteamGradingContext } from '../grading/types';
 
@@ -316,7 +317,7 @@ export class SqlInjectionGrader extends RedteamGraderBase {
     gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
     const context = gradingContext?.traceContext;
-    const trace =
+    let trace: Pick<TraceData, 'traceId' | 'spans' | 'metadata'> | undefined =
       gradingContext?.traceData ??
       (context
         ? {
@@ -327,6 +328,37 @@ export class SqlInjectionGrader extends RedteamGraderBase {
             })),
           }
         : undefined);
+    const response = gradingContext?.providerResponse;
+    const metadata = response?.metadata;
+    if (!trace && response) {
+      const raw = response.raw;
+      const calls = Array.isArray(metadata?.toolCalls) ? [...metadata.toolCalls] : [];
+      const toolName = metadata?.toolName ?? raw?.toolName ?? raw?.tool;
+      if (typeof toolName === 'string') {
+        calls.push({
+          name: toolName,
+          input: metadata?.toolArgs ?? raw?.args ?? raw?.arguments,
+          output: raw?.structuredContent ?? raw?.result ?? raw,
+          is_error: Boolean(response.error || raw?.isError),
+        });
+      }
+      if (calls.length) {
+        trace = {
+          traceId: 'provider-tools',
+          spans: calls.map((call, index) => ({
+            spanId: `provider-tool-${index}`,
+            name: 'tool.call',
+            startTime: index,
+            statusCode: call.is_error ? 2 : 1,
+            attributes: {
+              'tool.name': call.name,
+              'tool.arguments': call.input,
+              'tool.output': call.output,
+            },
+          })),
+        };
+      }
+    }
     if (trace) {
       const tracing = resolveTracingOptions({
         strategyId: test.metadata?.strategyId ?? 'basic',

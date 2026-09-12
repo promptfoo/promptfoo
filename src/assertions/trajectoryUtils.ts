@@ -554,7 +554,6 @@ function getSqlExecutionDetails(
     attributes,
   });
   const argumentObject = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
-  const argumentSql = getFirstStringAttribute(argumentObject, ['sql']);
   const toolName = getToolNameFromAttributes(attributes) ?? step.spanName;
   if (/\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(redactText(toolName))) {
     throw new TraceEvidenceError('SQL trace evidence was redacted and cannot be graded.');
@@ -564,7 +563,7 @@ function getSqlExecutionDetails(
       toolName,
     );
   const argumentQuery =
-    typeof args === 'string' ? args : getFirstStringAttribute(argumentObject, ['query']);
+    typeof args === 'string' ? args : getFirstStringAttribute(argumentObject, ['sql', 'query']);
   const scalarSql =
     argumentQuery !== undefined &&
     (isQueryTool ||
@@ -573,18 +572,7 @@ function getSqlExecutionDetails(
       ))
       ? argumentQuery.trim()
       : undefined;
-  const isDatabaseOperation =
-    isQueryTool ||
-    databaseQuery !== undefined ||
-    argumentSql !== undefined ||
-    getFirstStringAttribute(attributes, ['db.system', 'db.system.name']) !== undefined ||
-    /(^|[\s._:/-])(sql|sqlite|postgres(?:ql)?|mysql|database|db|read_query)($|[\s._:/-])/i.test(
-      toolName,
-    );
-  if (!isDatabaseOperation) {
-    return undefined;
-  }
-  const query = databaseQuery ?? argumentSql ?? scalarSql;
+  const query = databaseQuery ?? scalarSql;
   if (!query) {
     return undefined;
   }

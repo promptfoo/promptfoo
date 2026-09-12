@@ -300,6 +300,7 @@ export abstract class RedteamPluginBase {
    * @returns An array of test cases.
    */
   protected async promptsToTestCases(prompts: GeneratedPrompt[]): Promise<TestCase[]> {
+    const { mcpTools: _mcpTools, ...pluginConfig } = this.config;
     const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
 
     return Promise.all(
@@ -331,7 +332,7 @@ export abstract class RedteamPluginBase {
             assert: this.getAssertions(promptObj.__prompt),
             metadata: {
               pluginId: getShortPluginId(this.id),
-              pluginConfig: this.config,
+              pluginConfig,
               ...(promptObj.metadata ?? {}),
               ...(materializedInputVars?.metadata
                 ? { inputMaterialization: materializedInputVars.metadata }
