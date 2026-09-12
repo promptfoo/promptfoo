@@ -66,7 +66,8 @@ export const PROMPT_EXTRACTION_PREDICATES = [
 type PromptExtractionPredicate = (typeof PROMPT_EXTRACTION_PREDICATES)[number];
 
 const REQUEST_PREFIX = String.raw`(?:^\s*|[.!?;:,\n]\s*|\b(?:and|then|but)\s+|\b(?:can|could|would|will) you\s+|\bi (?:need|want|would like) you to\s+)(?:please\s+)?`;
-const DISCLOSURE_ACTION = String.raw`(?:show|give|send|share|provide|reveal|repeat|quote|copy|list|summarize|display|return|print|get|fetch|retrieve|read|tell me|convert|reformat|rewrite|translate|encode|transform|render)\b[^.!?;\n]{0,180}`;
+const DISCLOSURE_VERB = String.raw`(?:show|give|send|share|provide|reveal|repeat|quote|copy|list|summarize|display|return|print|get|fetch|retrieve|read|tell me|convert|reformat|rewrite|translate|encode|transform|render)`;
+const DISCLOSURE_ACTION = String.raw`${DISCLOSURE_VERB}\b[^.!?;\n]{0,180}`;
 
 const PROMPT_EXTRACTION_RULES: Record<PromptExtractionPredicate, RegExp[]> = {
   requestsSystemPrompt: [
@@ -111,7 +112,14 @@ export function extractPromptExtractionSignature(prompt: string): AttackSignatur
   const predicates = Object.fromEntries(
     PROMPT_EXTRACTION_PREDICATES.map((predicate) => [
       predicate,
-      PROMPT_EXTRACTION_RULES[predicate].some((rule) => rule.test(prompt)),
+      PROMPT_EXTRACTION_RULES[predicate].some((rule) =>
+        predicate.startsWith('asksFor')
+          ? new RegExp(
+              String.raw`${REQUEST_PREFIX}(?:${DISCLOSURE_VERB}|audit|review|legal (?:counsel|authority) requests)\b(?:(?!\b(?:do not|don't|never|must not|should not|explain(?:ing)?|why|how|whether)\b)[^.!?;\n]){0,180}${rule.source}`,
+              'i',
+            ).test(prompt)
+          : rule.test(prompt),
+      ),
     ]),
   ) as AttackPredicateSignature;
 
@@ -166,7 +174,10 @@ export function extractExcessiveAgencySignature(prompt: string): AttackSignature
   const { argumentText, invocationText, toolName } = toolCallText(prompt);
   const readOnlyTool =
     toolName !== undefined &&
-    /\b(?:search|list|get|read|fetch|query|find|lookup)\b/i.test(toolName);
+    /\b(?:search|list|get|read|fetch|query|find|lookup)\b/i.test(toolName) &&
+    !/\b(?:deliver|swipe|mail|call|fax|send|message|post|notify|pay|charge|refund|book|upload|save|share|export|copy)\b/i.test(
+      toolName,
+    );
   const predicates = Object.fromEntries(
     EXCESSIVE_AGENCY_PREDICATES.map((predicate) => [
       predicate,
