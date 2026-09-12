@@ -69,10 +69,22 @@ const PRELOAD_EXECUTION_FLAGS = new Set([
   '--loader',
   '--experimental-loader',
 ]);
-const UNSAFE_EXECUTION_FLAGS = new Set([
-  '--checkpoint-action',
-  '--to-command',
-  '--use-compress-program',
+const SCRIPT_RUNTIME_NAMES = new Set(['bash', 'node', 'nodejs', 'python', 'python3', 'ruby', 'sh']);
+const SCRIPT_FILE_EXTENSIONS = new Set([
+  'bash',
+  'bat',
+  'cjs',
+  'cmd',
+  'cts',
+  'js',
+  'mjs',
+  'mts',
+  'pl',
+  'ps1',
+  'py',
+  'rb',
+  'sh',
+  'ts',
 ]);
 
 /**
@@ -206,6 +218,7 @@ function renderProviderIdForValidation(providerId: string, env?: EnvOverrides): 
 
 interface ProviderValidationState {
   basePath: string;
+  configPath?: string;
   refBasePath?: string;
   rootConfig?: unknown;
   env?: EnvOverrides;
@@ -285,23 +298,27 @@ function validateJsonSchemaRef(
 
   if (renderedRef.startsWith('#')) {
     const cacheKey = JSON.stringify([
-      state.refBasePath ?? state.basePath,
+      state.configPath,
       renderedRef,
       assertionContext,
       providerConfigContext,
+      state.env,
     ]);
     if (state.validatedConfigFiles.has(cacheKey)) {
       return;
     }
     state.validatedConfigFiles.add(cacheKey);
-    const target = renderedRef
-      .slice(1)
-      .split('/')
-      .filter(Boolean)
-      .reduce<unknown>((current, part) => {
-        const key = part.replace(/~1/g, '/').replace(/~0/g, '~');
-        return Array.isArray(current) ? current[Number(key)] : getObject(current)?.[key];
-      }, state.rootConfig);
+    let pointer: string;
+    try {
+      pointer = decodeURIComponent(renderedRef.slice(1));
+    } catch {
+      throw new ConfigurationError('Invalid JSON-schema reference', renderedRef);
+    }
+    const parts = pointer === '' ? [] : pointer.startsWith('/') ? pointer.slice(1).split('/') : [];
+    const target = parts.reduce<unknown>((current, part) => {
+      const key = part.replace(/~1/g, '/').replace(/~0/g, '~');
+      return Array.isArray(current) ? current[Number(key)] : getObject(current)?.[key];
+    }, state.rootConfig);
     if (target !== undefined) {
       validateFileReferencesInValue(target, state, assertionContext, providerConfigContext);
     }
@@ -688,6 +705,11 @@ function validateExecReference(
     configPrompt
       ? validateConfigFileReference(part, state)
       : validateMcpFilePath(stripProviderFileExport(part), state.basePath);
+  const isScriptPath = (part: string) =>
+    SCRIPT_FILE_EXTENSIONS.has(path.extname(stripProviderFileExport(part)).slice(1).toLowerCase());
+  const command = parts[0];
+  const usesScriptRuntime =
+    command !== undefined && SCRIPT_RUNTIME_NAMES.has(path.basename(command).toLowerCase());
 
   let hasScript = false;
   for (let index = 0; index < parts.length; index++) {
@@ -703,7 +725,7 @@ function validateExecReference(
     if (separator !== -1 && !option.startsWith('-')) {
       throw new ConfigurationError('MCP exec environment overrides are not allowed');
     }
-    if (option === 'node_options' || UNSAFE_EXECUTION_FLAGS.has(option)) {
+    if (option === 'node_options') {
       throw new ConfigurationError('MCP exec runtime options are not allowed');
     }
     const preload =
@@ -725,7 +747,11 @@ function validateExecReference(
     if (looksLikePath(part)) {
       validatePath(part);
       const scriptPath = path.resolve(state.basePath, stripProviderFileExport(part));
-      hasScript ||= fs.existsSync(scriptPath) && fs.statSync(scriptPath).isFile();
+      hasScript ||=
+        (index === 0 || usesScriptRuntime) &&
+        isScriptPath(part) &&
+        fs.existsSync(scriptPath) &&
+        fs.statSync(scriptPath).isFile();
     }
   }
   if (!parts.length || !hasScript) {
@@ -789,6 +815,7 @@ function validateStaticConfigFile(
     basePath: preserveBasePath ? state.basePath : path.dirname(realConfigPath),
     refBasePath: path.dirname(realConfigPath),
     env: mergeProviderEnv(getObject(rawConfig)?.env, state.env),
+    configPath: realConfigPath,
     rootConfig: rawConfig,
   };
   const cacheKey = JSON.stringify([

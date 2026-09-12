@@ -142,6 +142,25 @@ describe('MCP Security', () => {
       expect(() => validateMcpConfigFile('config.yaml')).toThrow(ConfigurationError);
     });
 
+    it('resolves internal refs per file and with JSON Pointer tokens', () => {
+      fs.mkdirSync(path.join(workspace, 'configs'));
+      fs.writeFileSync(
+        path.join(workspace, 'configs', 'safe.json'),
+        JSON.stringify({
+          tests: [{ assert: [{ $ref: '#/defs/' }] }],
+          defs: { '': { type: 'equals' } },
+        }),
+      );
+      fs.writeFileSync(
+        path.join(workspace, 'configs', 'unsafe.json'),
+        JSON.stringify({
+          tests: [{ assert: [{ $ref: '#/defs/unsafe%20key' }] }],
+          defs: { 'unsafe key': { type: 'javascript', value: 'return true' } },
+        }),
+      );
+      expect(() => validateMcpConfigFile('configs/*.json')).toThrow(ConfigurationError);
+    });
+
     it('keeps provider config context when following a schema reference', () => {
       fs.writeFileSync(
         path.join(workspace, 'sub', 'provider-config.yaml'),
@@ -619,8 +638,11 @@ describe('MCP Security', () => {
       ).not.toThrow();
     });
 
-    it('rejects exec options that can launch another command after a workspace path', () => {
+    it('requires exec commands to run a workspace script', () => {
       expect(() => validateProviderId('exec:tar ./script.js --checkpoint-action=exec=sh')).toThrow(
+        ConfigurationError,
+      );
+      expect(() => validateProviderId('exec:tar ./script.js --warning=no-unknown-keyword')).toThrow(
         ConfigurationError,
       );
     });
