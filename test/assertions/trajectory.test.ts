@@ -654,6 +654,79 @@ describe('trajectory utilities', () => {
     expect(summary).toContain('run_query');
   });
 
+  it.each(['tool.name', 'command', 'search.query', 'db.statement', 'tool.arguments'])(
+    'redacts protected values echoed through %s before grading',
+    (key) => {
+      const secret = 'PRIVATE_SQL_SEMANTIC_ECHO';
+      const summary = summarizeTrajectoryForJudge(
+        {
+          ...mockTraceData,
+          spans: [
+            {
+              spanId: 'source',
+              name: 'source',
+              startTime: 1,
+              attributes: { authorization: secret },
+            },
+            {
+              spanId: 'echo',
+              name: 'tool.call',
+              startTime: 2,
+              attributes: {
+                ...(['db.statement', 'tool.arguments'].includes(key) && {
+                  'tool.name': 'run_query',
+                }),
+                [key]: `SELECT '${secret}'`,
+              },
+            },
+          ],
+        },
+        { includeSql: true },
+      );
+      expect(summary).not.toContain(secret);
+      expect(summary).toContain('[REDACTED]');
+    },
+  );
+
+  it.each(['db.statement', 'tool.arguments'])(
+    'retains both ends of long SQL from %s after redacting the complete query',
+    (key) => {
+      const secret = 'PRIVATE_QUERY_AT_TRUNCATION_BOUNDARY';
+      const suffix = ' OR 1=1; DROP TABLE accounts; --';
+      const query = `SELECT id FROM accounts WHERE note = '${'x'.repeat(145)}${secret}${'y'.repeat(500)}'${suffix}`;
+      const summary = JSON.parse(
+        summarizeTrajectoryForJudge(
+          {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'source',
+                name: 'source',
+                startTime: 1,
+                attributes: { authorization: secret },
+              },
+              {
+                spanId: 'sql',
+                name: 'tool.call',
+                startTime: 2,
+                attributes: {
+                  'tool.name': 'run_query',
+                  [key]: key === 'tool.arguments' ? { sql: query } : query,
+                },
+              },
+            ],
+          },
+          { includeSql: true },
+        ),
+      );
+      const sql = summary.steps[1].sql.query;
+      expect(sql).toMatch(/^SELECT id FROM accounts/);
+      expect(sql).toContain(suffix);
+      expect(sql.length).toBeLessThanOrEqual(400);
+      expect(sql).not.toContain('PRIVATE_QUERY');
+    },
+  );
+
   it('omits SQL span names when redaction traversal is incomplete', () => {
     const secret = 'PRIVATE_DEEP_SQL_NAME';
     let nested: Record<string, unknown> = { authorization: secret };
@@ -697,7 +770,7 @@ describe('trajectory utilities', () => {
       { includeSql: true, redactAttributes: ['tool.output'] },
     );
     expect(summary).not.toContain(secret);
-    expect(summary).toContain('run_query');
+    expect(JSON.parse(summary).steps[0].name).toBe('[REDACTED]');
   });
 
   it('omits free-form status messages from model grading', () => {

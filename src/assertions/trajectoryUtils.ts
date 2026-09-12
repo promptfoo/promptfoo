@@ -541,6 +541,7 @@ function truncateJudgeTrajectorySteps(
 
 function getSqlExecutionDetails(
   step: TrajectoryStep,
+  redactText: (value: string) => string,
   redactAttributes?: string[],
 ): JudgeTrajectoryStep['sql'] {
   const attributes = step.attributes;
@@ -591,7 +592,7 @@ function getSqlExecutionDetails(
   const result = output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
   // Keep only query text and explicit outcome indicators. Rows and bind values
   // can contain private data and are not part of the judge summary.
-  return sanitizeTraceAttributes(
+  const sql = sanitizeTraceAttributes(
     {
       query,
       ...(typeof result.authorized === 'boolean' ? { authorized: result.authorized } : {}),
@@ -599,8 +600,16 @@ function getSqlExecutionDetails(
         ? { rowCount: result.rowCount }
         : {}),
     },
-    { redactAttributes },
+    { redactAttributes, truncateValues: false },
   ) as NonNullable<JudgeTrajectoryStep['sql']>;
+  const redactedQuery = redactText(sql.query);
+  const omission = ' … [truncated] … ';
+  const retainedLength = 400 - omission.length;
+  sql.query =
+    redactedQuery.length > 400
+      ? `${redactedQuery.slice(0, Math.ceil(retainedLength / 2))}${omission}${redactedQuery.slice(-Math.floor(retainedLength / 2))}`
+      : redactedQuery;
+  return sql;
 }
 
 export function summarizeTrajectoryForJudge(
@@ -627,13 +636,13 @@ export function summarizeTrajectoryForJudge(
   const rawSteps = extractTrajectorySteps(sanitizedTrace).map((step, index) => {
     const status = getTrajectoryStepStatus(step);
     const sql = options.includeSql
-      ? getSqlExecutionDetails(step, options.redactAttributes)
+      ? getSqlExecutionDetails(step, redactText, options.redactAttributes)
       : undefined;
     return {
       index: index + 1,
       type: step.type,
-      name: step.name,
-      ...(step.spanName === step.name ? {} : { spanName: step.spanName }),
+      name: redactText(step.name),
+      ...(step.spanName === step.name ? {} : { spanName: redactText(step.spanName) }),
       ...(status ? { status } : {}),
       ...(sql ? { sql } : {}),
     };

@@ -24,9 +24,9 @@ import { sanitizeTraceAttributes } from '../../src/tracing/sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from '../../src/tracing/spanFilter';
 import { extractTraceIdFromTraceparent, fetchTraceContext } from '../../src/tracing/traceContext';
 
-import type { SpanData, TraceSpanQueryOptions } from '../../src/tracing/store';
+import type { AddSpansOptions, SpanData, TraceSpanQueryOptions } from '../../src/tracing/store';
 
-const providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
+let providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
 const storedSpans: SpanData[] = [];
 
 function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
@@ -39,10 +39,26 @@ describe('fetchTraceContext', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     storedSpans.length = 0;
-    mocks.addSpans.mockImplementation(async (_traceId: string, spans: SpanData[]) => {
-      storedSpans.push(...spans);
-      return { stored: true };
-    });
+    providerConfig = { id: 'tempo', endpoint: 'http://tempo:3200' };
+    mocks.addSpans.mockImplementation(
+      async (_traceId: string, spans: SpanData[], options?: AddSpansOptions) => {
+        const combined = [...storedSpans, ...spans];
+        const sanitized = options?.redactSpans ? options.redactSpans(combined) : combined;
+        const seen = new Set<string>();
+        storedSpans.splice(
+          0,
+          storedSpans.length,
+          ...sanitized.filter((span) => {
+            if (seen.has(span.spanId)) {
+              return false;
+            }
+            seen.add(span.spanId);
+            return true;
+          }),
+        );
+        return { stored: true };
+      },
+    );
     mocks.getSpans.mockImplementation(async (_traceId: string, options: TraceSpanQueryOptions) => {
       let spans = storedSpans.filter((span) => {
         if (options.earliestStartTime && span.startTime < options.earliestStartTime) {
@@ -349,7 +365,7 @@ describe('fetchTraceContext', () => {
           name: `process ${secret}`,
           statusMessage: `received ${secret}`,
           startTime: 2,
-          attributes: { 'tool.name': 'run_query' },
+          attributes: { 'tool.name': `run_query ${secret}`, 'db.statement': `SELECT '${secret}'` },
         },
       ]);
       const result = await fetchTraceContext('trace-1', {
@@ -361,6 +377,40 @@ describe('fetchTraceContext', () => {
       expect(result).not.toBeNull();
       expect(JSON.stringify(storedSpans)).not.toContain(secret);
       expect(JSON.stringify(result)).not.toContain(secret);
+    },
+  );
+
+  it.each(['source-first', 'echo-first'])(
+    'redacts SQL echoes across external snapshots (%s)',
+    async (order) => {
+      const secret = 'PRIVATE_EXTERNAL_QUERY_ECHO';
+      const source = {
+        spanId: 'source',
+        name: 'source',
+        startTime: 1,
+        attributes: { authorization: secret },
+      };
+      const echo = {
+        spanId: 'echo',
+        name: 'tool.call',
+        startTime: 2,
+        attributes: { 'tool.name': 'run_query', 'db.statement': `SELECT '${secret}'` },
+      };
+      for (const span of order === 'source-first' ? [source, echo] : [echo, source]) {
+        mockExternalTrace([span]);
+        await fetchTraceContext('trace-1', {
+          providerConfig,
+          queryDelay: 0,
+          maxRetries: 0,
+          sanitizeAttributes: false,
+          redactAttributes: ['authorization'],
+        });
+      }
+      expect(storedSpans).toHaveLength(2);
+      expect(JSON.stringify(storedSpans)).not.toContain(secret);
+      expect(storedSpans.find((span) => span.spanId === 'echo')?.attributes?.['db.statement']).toBe(
+        "SELECT '[REDACTED]'",
+      );
     },
   );
 

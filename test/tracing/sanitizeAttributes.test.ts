@@ -21,6 +21,14 @@ it('preserves text around existing redaction markers on repeated sanitization', 
   expect(redact('token [REDACTED] [REDACTED]')).toBe('token <redacted> <redacted>');
 });
 
+it('redacts JSON-escaped copies of private strings without breaking tool arguments', () => {
+  const secret = 'PRIVATE_MULTILINE\n"QUOTED"';
+  const redact = getTraceTextRedactor([{ original: secret, sanitized: '[REDACTED]' }]);
+  expect(JSON.parse(redact(JSON.stringify({ sql: `SELECT '${secret}'` })))).toEqual({
+    sql: "SELECT '[REDACTED]'",
+  });
+});
+
 it('retains source values and incomplete history across redaction batches', () => {
   const state = { secrets: new Set<string>(), length: 0, incomplete: false };
   getTraceTextRedactor(

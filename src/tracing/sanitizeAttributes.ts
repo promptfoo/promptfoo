@@ -2,6 +2,7 @@ export interface AttributeSanitizationOptions {
   redactAttributes?: string[];
   sanitizeSensitiveAttributes?: boolean;
   truncateValues?: boolean;
+  redactText?: (value: string) => string;
 }
 
 const SENSITIVE_ATTRIBUTE_KEYS = [
@@ -88,6 +89,7 @@ export function sanitizeTraceAttributes(
       return '[TRUNCATED]';
     }
     if (typeof value === 'string') {
+      value = options.redactText?.(value) ?? value;
       return truncateValues && value.length > 400 ? `${value.slice(0, 400)}…` : value;
     }
     if (Array.isArray(value)) {
@@ -119,6 +121,27 @@ export interface TraceTextRedactionState {
   secrets: Set<string>;
   length: number;
   incomplete: boolean;
+}
+
+export function getTraceTextRedactionState(
+  states: Map<string, TraceTextRedactionState>,
+  traceId: string | undefined,
+  evidence: unknown,
+): TraceTextRedactionState {
+  const existing = traceId ? states.get(traceId) : undefined;
+  const state = existing ?? {
+    secrets: new Set<string>(),
+    length: 0,
+    incomplete: /\[(?:REDACTED|TRUNCATED)\]/.test(JSON.stringify(evidence)),
+  };
+  if (traceId) {
+    states.delete(traceId);
+    if (states.size >= 1_024) {
+      states.delete(states.keys().next().value!);
+    }
+    states.set(traceId, state);
+  }
+  return state;
 }
 
 export function getTraceTextRedactor(
@@ -174,7 +197,7 @@ export function getTraceTextRedactor(
   }
   const pattern = secrets.size
     ? new RegExp(
-        [...secrets]
+        [...new Set([...secrets].flatMap((value) => [value, JSON.stringify(value).slice(1, -1)]))]
           .sort((a, b) => b.length - a.length)
           .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
           .join('|'),

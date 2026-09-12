@@ -74,6 +74,14 @@ describe('TraceStore span persistence', () => {
       await send({
         name: `echo ${secret}`,
         status: { code: 2, message: `error ${secret}` },
+        attributes: [
+          { key: 'tool.name', value: { stringValue: `process ${secret}` } },
+          { key: 'db.statement', value: { stringValue: `SELECT '${secret}'` } },
+          {
+            key: 'tool.arguments',
+            value: { stringValue: JSON.stringify({ sql: `SELECT '${secret}'` }) },
+          },
+        ],
       }).expect(200);
       await send({
         spanId: '2'.repeat(16),

@@ -591,7 +591,7 @@ describe('OTLPReceiver', () => {
   });
 
   describe('Ingest-time redaction', () => {
-    it('replaces matched attribute values before persisting', async () => {
+    it('redacts matched attributes and text when a protected source is serialized JSON', async () => {
       const redactingReceiver = new OTLPReceiver({
         redactAttributes: ['password', 'authorization', 'tool.arguments'],
       });
@@ -651,10 +651,10 @@ describe('OTLPReceiver', () => {
               'http.password': '[REDACTED]',
               'request.context': {
                 'user.password': '[REDACTED]',
-                safe: 'visible',
+                safe: '[REDACTED]',
               },
               'tool.arguments': '[REDACTED]',
-              'tool.result': 'ok',
+              'tool.result': '[REDACTED]',
             }),
           }),
         ],
@@ -773,7 +773,9 @@ describe('OTLPReceiver', () => {
           .expect(200);
         const spans = vi.mocked(persistSpans).mock.calls.at(-1)![1];
         expect(JSON.stringify(spans)).not.toContain(secret);
-        expect(spans[1].attributes?.['tool.name']).toBe('read_query');
+        expect(spans[1].attributes?.['tool.name']).toBe(
+          format === 'json' ? '[REDACTED]' : 'read_query',
+        );
       },
     );
 
