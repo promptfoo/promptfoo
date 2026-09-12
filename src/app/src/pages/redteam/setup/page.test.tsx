@@ -196,7 +196,7 @@ describe('RedTeamSetupPage', () => {
       const target = {
         id: 'openai:chat:served-custom-model',
         config: {
-          type: 'vllm',
+          type: 'vllm' as const,
           apiBaseUrl: 'https://explicit.example.test/v1',
           apiHost: 'preferred.example.test/tenant',
           apiKey: 'synthetic-inline-key',
@@ -662,33 +662,36 @@ redteam:
       { type: 'vllm', apiBaseUrl: 'http://localhost:8000/v1' },
       { type: 'llamafile', apiBaseUrl: 'http://localhost:8080/v1' },
       { type: 'text-generation-webui', apiBaseUrl: 'http://localhost:5000/v1' },
-    ])('sends normalized $type defaults without an editor event', async ({ type, apiBaseUrl }) => {
-      const user = userEvent.setup();
-      const target = { id: 'openai:chat:served-custom-model', config: { type } };
-      act(() => {
-        useRedTeamConfig.getState().setFullConfig({
-          ...useRedTeamConfig.getState().config,
-          target,
+    ] as const)(
+      'sends normalized $type defaults without an editor event',
+      async ({ type, apiBaseUrl }) => {
+        const user = userEvent.setup();
+        const target = { id: 'openai:chat:served-custom-model', config: { type } };
+        act(() => {
+          useRedTeamConfig.getState().setFullConfig({
+            ...useRedTeamConfig.getState().config,
+            target,
+          });
         });
-      });
-      const view = await mountActualReview();
-      await user.click(screen.getByRole('button', { name: 'Run Now' }));
-      await waitFor(() =>
-        expect(reviewRunGates.setJob).toHaveBeenCalledWith('imported-target-job'),
-      );
-      const requests = mockedCallApi.mock.calls.filter(([url]) => url === '/redteam/run');
-      expect(requests).toHaveLength(1);
-      expect(requests[0][1]?.method).toBe('POST');
-      const body = JSON.parse(String(requests[0][1]?.body));
-      expect(body.config.targets).toEqual([
-        {
-          id: target.id,
-          config: { type, apiBaseUrl, apiKeyRequired: false, useDefaultApiKey: false },
-        },
-      ]);
-      expect(target.config).toEqual({ type });
-      view.unmount();
-    });
+        const view = await mountActualReview();
+        await user.click(screen.getByRole('button', { name: 'Run Now' }));
+        await waitFor(() =>
+          expect(reviewRunGates.setJob).toHaveBeenCalledWith('imported-target-job'),
+        );
+        const requests = mockedCallApi.mock.calls.filter(([url]) => url === '/redteam/run');
+        expect(requests).toHaveLength(1);
+        expect(requests[0][1]?.method).toBe('POST');
+        const body = JSON.parse(String(requests[0][1]?.body));
+        expect(body.config.targets).toEqual([
+          {
+            id: target.id,
+            config: { type, apiBaseUrl, apiKeyRequired: false, useDefaultApiKey: false },
+          },
+        ]);
+        expect(target.config).toEqual({ type });
+        view.unmount();
+      },
+    );
 
     it.each([false, true])(
       'keeps explicit credentials and selector %s in the run request',
@@ -697,7 +700,7 @@ redteam:
         const target = {
           id: 'openai:chat:served-custom-model',
           config: {
-            type: 'vllm',
+            type: 'vllm' as const,
             apiHost: 'preferred.example.test/tenant',
             apiBaseUrl: 'https://custom.example.test/v1',
             apiKey: 'synthetic-inline-key',

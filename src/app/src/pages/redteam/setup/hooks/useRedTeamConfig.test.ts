@@ -5522,7 +5522,7 @@ describe('useRedTeamConfig', () => {
       { type: 'vllm', apiBaseUrl: 'http://localhost:8000/v1' },
       { type: 'llamafile', apiBaseUrl: 'http://localhost:8080/v1' },
       { type: 'text-generation-webui', apiBaseUrl: 'http://localhost:5000/v1' },
-    ];
+    ] as const;
 
     it.each(localTypes)(
       'normalizes an incomplete $type import before persistence, without editor events',
@@ -5585,7 +5585,7 @@ describe('useRedTeamConfig', () => {
     it.each([
       { id: 'openai:chat:gpt-4o', config: {} },
       { id: 'openai:chat:gpt-4o', config: { apiBaseUrl: 'https://untyped.example.test/v1' } },
-      { id: 'ollama:served-model', config: { type: 'vllm' } },
+      { id: 'ollama:served-model', config: { type: 'vllm' as const } },
     ])('leaves nonlocal/untyped import $id unchanged', (target) => {
       useRedTeamConfig.getState().setFullConfig({ ...useRedTeamConfig.getState().config, target });
       expect(useRedTeamConfig.getState().config.target).toEqual(target);
