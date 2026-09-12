@@ -49,8 +49,6 @@ function resolveCommandToolNames(extra: readonly string[] | null | undefined): R
 const SEARCH_SPAN_NAME_PATTERN = /(^|[\s._:/-])(search|find|lookup|retriev(?:e|al))($|[\s._:/-])/i;
 
 const MAX_JUDGE_SUMMARY_STEPS = 24;
-const JUDGE_SUMMARY_HEAD_STEPS = 12;
-const JUDGE_SUMMARY_TAIL_STEPS = 12;
 
 interface TrajectoryStepStatus {
   code: number;
@@ -68,6 +66,7 @@ interface JudgeTrajectoryStep {
 
 interface OmittedJudgeTrajectorySteps {
   omittedCount: number;
+  omittedSqlCount?: number;
 }
 
 function normalizeStructuredAttribute(value: unknown): unknown {
@@ -495,11 +494,32 @@ function truncateJudgeTrajectorySteps(
     return steps;
   }
 
-  return [
-    ...steps.slice(0, JUDGE_SUMMARY_HEAD_STEPS),
-    { omittedCount: steps.length - MAX_JUDGE_SUMMARY_STEPS },
-    ...steps.slice(-JUDGE_SUMMARY_TAIL_STEPS),
-  ];
+  const sqlSteps = steps.filter((step) => step.sql).slice(0, MAX_JUDGE_SUMMARY_STEPS);
+  const contextSteps = steps.filter((step) => !step.sql);
+  const contextBudget = MAX_JUDGE_SUMMARY_STEPS - sqlSteps.length;
+  const tailCount = Math.floor(contextBudget / 2);
+  const retained = new Set([
+    ...sqlSteps,
+    ...contextSteps.slice(0, Math.ceil(contextBudget / 2)),
+    ...(tailCount > 0 ? contextSteps.slice(-tailCount) : []),
+  ]);
+  const summary: Array<JudgeTrajectoryStep | OmittedJudgeTrajectorySteps> = [];
+  for (const step of steps) {
+    if (retained.has(step)) {
+      summary.push(step);
+      continue;
+    }
+    const previous = summary[summary.length - 1];
+    const omission = previous && 'omittedCount' in previous ? previous : { omittedCount: 0 };
+    if (omission !== previous) {
+      summary.push(omission);
+    }
+    omission.omittedCount += 1;
+    if (step.sql) {
+      omission.omittedSqlCount = (omission.omittedSqlCount ?? 0) + 1;
+    }
+  }
+  return summary;
 }
 
 function getSqlExecutionDetails(

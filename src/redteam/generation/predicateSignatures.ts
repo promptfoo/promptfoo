@@ -75,7 +75,9 @@ type ExcessiveAgencyPredicate = (typeof EXCESSIVE_AGENCY_PREDICATES)[number];
 const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
   requestsPhysicalAction: [/\b(physically|deliver|swipe|print out|mail|pick up|hand over)\b/i],
   requestsCommunicationAction: [/\b(call|fax|email|send|message|post|notify)\b/i],
-  requestsPaymentAction: [/\b(pay|charge|refund|book)\b/i],
+  requestsPaymentAction: [
+    /(?:^\s*|[.!?;,:]\s*|\b(?:and|then)\s+|\b(?:can|could|would|will) you\s+|\bi (?:need|want|would like) you to\s+)(?:please\s+)?(?:pay|charge|refund|book)\s+\S/i,
+  ],
   requestsDocumentTransfer: [
     /\b(?:upload|save|share|export|fax|send)\b[^\n]{0,120}\b(?:records?|prescriptions?|histor(?:y|ies)|documents?|decks?|files?|boarding passes?|receipts?|itinerar(?:y|ies)|confirmations?|information|details?)\b/i,
     /\bcopy\b(?!\s+(?:me|us)\b)[^\n]{0,120}\b(?:records?|prescriptions?|histor(?:y|ies)|documents?|decks?|files?|boarding passes?|receipts?|itinerar(?:y|ies)|confirmations?|information|details?)\b/i,
@@ -109,6 +111,7 @@ export function extractExcessiveAgencyFeatures(prompt: string): string[] {
 export const PII_DIRECT_PREDICATES = [
   'requestsSsn',
   'requestsContactDetails',
+  'requestsCreditCard',
   'requestsMedicalRecord',
   'requestsPrescriptionDetails',
   'requestsInsuranceDetails',
@@ -120,6 +123,7 @@ type PiiDirectPredicate = (typeof PII_DIRECT_PREDICATES)[number];
 const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
   requestsSsn: [/\bssn\b/i, /\bsocial[- ]security\b/i],
   requestsContactDetails: [/\baddress\b/i, /\bphone(?: number)?\b/i, /\bemail\b/i],
+  requestsCreditCard: [/\bcredit[- ]card(?: number)?\b/i],
   requestsMedicalRecord: [/\bmedical record\b/i, /\bmedical history\b/i, /\bdiagnosis\b/i],
   requestsPrescriptionDetails: [/\bprescriptions?\b/i, /\bmedications?\b/i],
   requestsInsuranceDetails: [/\binsurance\b/i],
@@ -131,19 +135,28 @@ export function extractPiiDirectSignature(prompt: string): AttackSignature {
     /\b(?:show|give|send|share|provide|reveal|retrieve|pull|find|tell me|look up|list)\b/i.test(
       prompt,
     ) || /\b(?:what|which)\b(?!\s+(?:does|do|would|could|should)\b)/i.test(prompt);
-  const targetsPersonOrRecord =
-    /\b(?:my|your|his|her|their|patient|on file)\b|['’]s\b|[\w.+-]+@[\w.-]+/i.test(prompt) ||
+  const targetsRecord =
+    /\bon file\b|\b(?:for|of)\s+(?:(?:the|my|our|your)\s+)?(?:patient|customer|user|policy holder|account holder)\b|\b(?:for|of)\s+[\w.+-]+@[\w.-]+/i.test(
+      prompt,
+    ) ||
     /\b(?:for|of)\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b/.test(prompt) ||
     /\b(?:policy|account|record)\s+(?:(?:id|number)\s*[:#]?\s*)?[A-Z0-9_-]*\d[A-Z0-9_-]*\b/i.test(
       prompt,
     );
   const predicates = Object.fromEntries(
-    PII_DIRECT_PREDICATES.map((predicate) => [
-      predicate,
-      requestsDisclosure &&
-        targetsPersonOrRecord &&
-        PII_DIRECT_RULES[predicate].some((rule) => rule.test(prompt)),
-    ]),
+    PII_DIRECT_PREDICATES.map((predicate) => {
+      const rules = PII_DIRECT_RULES[predicate];
+      const ownedField = new RegExp(
+        String.raw`(?:\b(?:my|your|his|her|their)|['’]s)\s+(?:(?:full|complete|current|latest|recent|most recent|home|personal)\s+)*(?:${rules.map((rule) => rule.source).join('|')})`,
+        'i',
+      );
+      return [
+        predicate,
+        requestsDisclosure &&
+          (targetsRecord || ownedField.test(prompt)) &&
+          rules.some((rule) => rule.test(prompt)),
+      ];
+    }),
   ) as AttackPredicateSignature;
 
   return {
@@ -387,6 +400,7 @@ const FEATURE_BANDS_BY_PLUGIN = {
     'sensitive-field': [
       'requestsSsn',
       'requestsContactDetails',
+      'requestsCreditCard',
       'requestsMedicalRecord',
       'requestsPrescriptionDetails',
       'requestsInsuranceDetails',

@@ -669,6 +669,31 @@ describe('trajectory utilities', () => {
       name: 'tool_25',
     });
   });
+
+  it('retains SQL execution between routine steps in a long trajectory', () => {
+    const spans = Array.from({ length: 40 }, (_, index) => ({
+      spanId: `step-${index}`,
+      name: `tool-${index}`,
+      startTime: index,
+      attributes:
+        index === 20
+          ? {
+              'db.query.text': 'SELECT * FROM accounts',
+              'tool.output': { authorized: false, rowCount: 10 },
+            }
+          : {},
+    }));
+    const summary = JSON.parse(
+      summarizeTrajectoryForJudge({ ...mockTraceData, spans }, { includeSql: true }),
+    );
+    expect(summary.steps).toContainEqual(
+      expect.objectContaining({
+        index: 21,
+        sql: { query: 'SELECT * FROM accounts', authorized: false, rowCount: 10 },
+      }),
+    );
+    expect(summary.steps.filter((step: { index?: number }) => step.index)).toHaveLength(24);
+  });
 });
 
 describe('trajectory assertions', () => {
