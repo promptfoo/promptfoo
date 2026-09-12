@@ -44,7 +44,7 @@ required kind must reference a readable, nonempty file inside the bundle.
 Relative paths resolve from the manifest's directory; symlinks must stay inside
 that directory. A supplied SHA-256 digest must be 64 hexadecimal characters and
 match the file. Plural fields such as `promptPaths` can list multiple artifacts.
-Keep inventories below 1,000 entries and each file at most 1 MiB. Digest
+Keep inventories at most 1,000 entries and each file at most 1 MiB. Digest
 verification reads each distinct file once, with a 16 MiB total limit.
 
 For example, this manifest supplies prompt, config, and trace artifacts:

@@ -7816,6 +7816,13 @@ function stripLauncherWords(words: { quoted: boolean; value: string }[]) {
     }
 
     const value = executableBasename(word);
+    if (value === 'builtin') {
+      const target = index + (words[index + 1]?.value === '--' ? 2 : 1);
+      if (words[target]?.value === 'eval') {
+        index = target;
+        continue;
+      }
+    }
     if (value === 'command' || value === 'nohup') {
       index += 1;
       if (value === 'command' && words[index]?.value === '-p') {
@@ -7989,7 +7996,7 @@ function childAgentCommandMatch(command: string): ChildAgentCommandMatch | undef
       }
     }
     const match = childAgentCommandMatchFromWords(words);
-    if (match) {
+    if (match && (match.isKnownAgentMode || broadChildAgentFlagNames(segment).length)) {
       if (!conditionalDepth && !negated && !match.ambiguous) {
         return match;
       }
@@ -8016,10 +8023,6 @@ function childAgentInvocationFromCommand(
   }
 
   const broadFlagNames = broadChildAgentFlagNames(execution.command);
-  if (!match.isKnownAgentMode && !broadFlagNames.length) {
-    return undefined;
-  }
-
   const commandBuffer = Buffer.from(execution.command);
   return {
     ambiguous:
@@ -8284,7 +8287,9 @@ function providerRawTrajectory(gradingContext?: RedteamGradingContext): CodingAg
           ['spawn_agent', 'spawnAgent'].includes(
             getString(object.name) ?? getString(object.tool) ?? '',
           ))) &&
-      !/^(denied|failed|rejected)$/i.test(status ?? '')
+      !/^(denied|failed|rejected|blocked|not_started|pending|planned|cancelled|error)$/i.test(
+        status ?? '',
+      )
     ) {
       trajectory.childAgentInvocations.push({
         agentName: getString(object.agentName) ?? getString(object.agent) ?? 'agent',
@@ -9068,7 +9073,7 @@ function replayBundleArtifactDescriptors(
 ): ReplayBundleArtifactDescriptor[] {
   const descriptors: ReplayBundleArtifactDescriptor[] = [];
   const addDescriptor = (fallbackKind: string, value: unknown) => {
-    if (descriptors.length >= MAX_REPLAY_BUNDLE_ARTIFACTS) {
+    if (descriptors.length > MAX_REPLAY_BUNDLE_ARTIFACTS) {
       return;
     }
     if (typeof value === 'string') {
@@ -9309,11 +9314,11 @@ function verifyReplayBundleCompleteness(
     if (descriptors.length === 0) {
       missingKinds.push('artifact-inventory');
     }
-    if (descriptors.length >= MAX_REPLAY_BUNDLE_ARTIFACTS) {
+    if (descriptors.length > MAX_REPLAY_BUNDLE_ARTIFACTS) {
       missingKinds.push('artifact-inventory-limit');
     }
     const artifactProblems =
-      descriptors.length >= MAX_REPLAY_BUNDLE_ARTIFACTS
+      descriptors.length > MAX_REPLAY_BUNDLE_ARTIFACTS
         ? []
         : replayBundleArtifactProblems(descriptors);
 
