@@ -960,6 +960,32 @@ describe('createShareableUrl', () => {
       expect(prompt.id).toBe('file:///home/alice/project/first/prompt.txt');
     });
 
+    it('preserves literal file URLs in processed prompt content and labels', async () => {
+      const prompt = {
+        id: 'file:///home/alice/project/prompt.txt',
+        raw: 'file:///literal/prompt.txt',
+        label: 'file:///literal/label.txt',
+        provider: 'echo',
+      };
+      mockEval.config = { prompts: [prompt] };
+      mockEval.prompts = [prompt];
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [{ id: 'row', prompt }];
+      });
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await createShareableUrl(mockEval as Eval);
+
+      const config = JSON.parse(mockFetch.mock.calls[0][1].body);
+      const [row] = JSON.parse(mockFetch.mock.calls[1][1].body);
+      for (const projected of [config.config.prompts[0], config.prompts[0], row.prompt]) {
+        expect(projected).toMatchObject({ ...prompt, id: 'file://prompt.txt' });
+      }
+      expect(prompt.id).toBe('file:///home/alice/project/prompt.txt');
+    });
+
     it('honors saved strip flags when sharing outside the evaluation scope', async () => {
       const { getEnvBool } = await vi.importActual<typeof import('../src/envars')>('../src/envars');
       vi.mocked(envars.getEnvBool).mockImplementation(getEnvBool);

@@ -28,7 +28,7 @@ import { sanitizeConfigForOutput } from './util/sanitizer';
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
-import type { TestCase } from './types';
+import type { Prompt, TestCase } from './types';
 
 interface ShareDomainResult {
   domain: string;
@@ -185,6 +185,20 @@ function stripProviderPaths<T>(provider: T): T {
   return projected as T;
 }
 
+function stripPromptPaths<T extends Partial<Prompt>>(prompt: T): T {
+  const projected = { ...prompt };
+  if (projected.id) {
+    projected.id = stripFilePaths(projected.id);
+  }
+  if (projected.config?.provider) {
+    projected.config = {
+      ...projected.config,
+      provider: stripProviderPaths(projected.config.provider),
+    };
+  }
+  return projected;
+}
+
 // Mutate only the sanitized share copy; local replay paths stay intact.
 function stripTestPaths(test: TestCase): void {
   if (test.vars) {
@@ -219,18 +233,19 @@ async function sendEvalRecord(
     stripFlags,
   );
   redactedConfig.providers = stripProviderPaths(redactedConfig.providers);
-  // Array form keeps distinct prompt-map entries when filenames match.
-  if (
-    redactedConfig.prompts &&
-    typeof redactedConfig.prompts === 'object' &&
-    !Array.isArray(redactedConfig.prompts)
-  ) {
+  if (typeof redactedConfig.prompts === 'string') {
+    redactedConfig.prompts = stripFilePaths(redactedConfig.prompts);
+  } else if (Array.isArray(redactedConfig.prompts)) {
+    redactedConfig.prompts = redactedConfig.prompts.map((prompt) =>
+      typeof prompt === 'string' ? stripFilePaths(prompt) : stripPromptPaths(prompt),
+    );
+  } else if (redactedConfig.prompts) {
+    // Array form keeps distinct prompt-map entries when filenames match.
     redactedConfig.prompts = Object.entries(redactedConfig.prompts).map(([raw, label]) => ({
-      raw,
+      raw: stripFilePaths(raw),
       label,
     }));
   }
-  redactedConfig.prompts = stripFilePaths(redactedConfig.prompts);
   const tests = [
     ...(Array.isArray(redactedConfig.tests) ? redactedConfig.tests : []),
     redactedConfig.defaultTest,
@@ -252,7 +267,7 @@ async function sendEvalRecord(
     ...evalRecord,
     config: redactedConfig,
     prompts: evalRecord.prompts.map((prompt) =>
-      stripFilePaths(projectPrompt(prompt, stripFlags.shouldStripPromptText)),
+      stripPromptPaths(projectPrompt(prompt, stripFlags.shouldStripPromptText)),
     ),
     results: [],
     traces: projectTracesForOutput(traces, stripFlags),
@@ -504,9 +519,8 @@ async function prepareChunkForShare(
     if (result.testCase) {
       stripTestPaths(result.testCase);
     }
-    result.prompt = stripFilePaths(result.prompt);
-    if (result.prompt?.config?.provider) {
-      result.prompt.config.provider = stripProviderPaths(result.prompt.config.provider);
+    if (result.prompt) {
+      result.prompt = stripPromptPaths(result.prompt);
     }
     return result;
   });
