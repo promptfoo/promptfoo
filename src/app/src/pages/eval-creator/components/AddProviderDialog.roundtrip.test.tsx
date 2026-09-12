@@ -161,10 +161,12 @@ describe('eval provider configuration round trips', () => {
     mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: 'json-job' } }]);
     renderWithProviders(<EvalProviderSetup />);
     await user.click(screen.getByRole('button', { name: 'Edit JSON provider' }));
-    expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue('providers.json');
+    expect(screen.getByRole('textbox', { name: /JavaScript File Path/ })).toHaveValue(
+      'providers.json',
+    );
     await replaceText(
       user,
-      screen.getByRole('textbox', { name: /Target ID/ }),
+      screen.getByRole('textbox', { name: /JavaScript File Path/ }),
       'providers-prod.json',
     );
     await user.click(screen.getByRole('button', { name: 'Save Changes' }));
@@ -174,7 +176,9 @@ describe('eval provider configuration round trips', () => {
     expect(useStore.getState().config.providers).toEqual(expected);
     expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(expected);
     await user.click(screen.getByRole('button', { name: 'Edit JSON provider' }));
-    expect(screen.getByRole('textbox', { name: /Target ID/ })).toHaveValue('providers-prod.json');
+    expect(screen.getByRole('textbox', { name: /JavaScript File Path/ })).toHaveValue(
+      'providers-prod.json',
+    );
     await user.click(screen.getByRole('button', { name: 'Save Changes' }));
     await user.click(screen.getByRole('button', { name: 'Run Eval' }));
     const [, request] = getCallApiMock().mock.calls.find(([path]) => path === '/eval/job')!;
