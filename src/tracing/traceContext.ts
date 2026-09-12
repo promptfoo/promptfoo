@@ -419,6 +419,7 @@ async function fetchFromExternalProvider(
   }
 
   let previousSnapshot: string | undefined;
+  let latestContext: TraceContextData | null = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (abortSignal?.aborted) {
       throw createTraceAbortError(abortSignal);
@@ -432,7 +433,7 @@ async function fetchFromExternalProvider(
           logger.debug(
             `[TraceContext] No spans found for trace ${traceId} from ${provider.id} after ${attempt + 1} attempts`,
           );
-          return null;
+          return latestContext;
         }
         logger.debug(
           `[TraceContext] No spans yet for trace ${traceId} from ${provider.id}, retrying in ${retryDelayMs}ms (attempt ${attempt + 1}/${maxRetries})`,
@@ -456,6 +457,17 @@ async function fetchFromExternalProvider(
         return null;
       }
 
+      const spans = await getTraceStore().getSpans(traceId, spanOptions);
+      if (spans.length > 0) {
+        const traceSpans = createTraceSpans(spans);
+        latestContext = {
+          traceId,
+          spans: traceSpans,
+          insights: deriveInsights(traceSpans),
+          fetchedAt: result.fetchedAt,
+        };
+      }
+
       if (waitForStableSpans && attempt < maxRetries) {
         const snapshot = JSON.stringify(
           [...validSpans].sort((a, b) => a.spanId.localeCompare(b.spanId)),
@@ -470,37 +482,23 @@ async function fetchFromExternalProvider(
         }
       }
 
-      const spans = await getTraceStore().getSpans(traceId, spanOptions);
-      if (spans.length === 0) {
-        return null;
-      }
-
-      const traceSpans = createTraceSpans(spans);
-      const insights = deriveInsights(traceSpans);
-
-      logger.debug(
-        `[TraceContext] Resolved ${traceSpans.length} spans for trace ${traceId} from ${provider.id} with ${insights.length} insights`,
-      );
-
-      return {
-        traceId,
-        spans: traceSpans,
-        insights,
-        fetchedAt: result.fetchedAt,
-      };
+      return latestContext;
     } catch (error) {
       if (abortSignal?.aborted) {
         throw createTraceAbortError(abortSignal);
       }
       logger.error(`[TraceContext] Failed to fetch from ${provider.id}: ${error}`);
-      if (attempt === maxRetries || (error instanceof TraceProviderError && !error.retryable)) {
+      if (error instanceof TraceProviderError && !error.retryable) {
         return null;
+      }
+      if (attempt === maxRetries) {
+        return latestContext;
       }
       await waitForRetry(retryDelayMs, abortSignal);
     }
   }
 
-  return null;
+  return latestContext;
 }
 
 function createTraceAbortError(signal?: AbortSignal): Error {

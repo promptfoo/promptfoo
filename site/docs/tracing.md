@@ -367,7 +367,7 @@ receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a 
 evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
 are tracked per trace so each evaluation's traces use its own policy.
 
-The HTTP receiver redacts stored text again when later uploads reveal a sensitive value. It keeps source history for the 1,024 most recently used traces, with at most 1,000 values or 16,384 characters per trace. If a trace resumes after its history was discarded, its free-text fields are hidden. Unrelated traces remain readable. Duplicate-span retries retain redaction history after receiver restarts, and large integer values remain exact before redaction. Ingestion rejects a batch when stored and incoming data together exceed 10,000 spans or 10 MiB; split larger workloads across traces.
+The HTTP receiver redacts stored text again when later uploads reveal a sensitive value. It keeps source history for the 1,024 most recently used traces, with at most 1,000 values or 16,384 characters per trace. If a trace resumes after its history was discarded, its free-text fields are hidden. Unrelated traces remain readable. Duplicate-span retries retain redaction history after receiver restarts, and large integer values remain exact before redaction. Ingestion limits each upload and stored trace to 10,000 spans and 10 MiB. Duplicate retries do not count as new spans, and external updates replace the previous payload when calculating the stored limit. Split larger workloads across traces.
 
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one
@@ -466,7 +466,7 @@ Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. T
 
 Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in any span name or error message in the fetched trace. When a redacted value contains serialized JSON, those names and messages are hidden before storage. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
 
-For trace-aware assertions, external snapshots are polled until completed spans stop changing or the five-retry limit is reached. At that limit, grading uses the latest available evidence; increase `queryDelay` if your backend takes longer to ingest a trace.
+For trace-aware assertions, external snapshots are polled until completed spans stop changing or the five-retry limit is reached. At that limit, grading uses the latest successful snapshot, including when later polls return no spans or encounter temporary backend errors; increase `queryDelay` if your backend takes longer to ingest a trace.
 
 #### Braintrust
 

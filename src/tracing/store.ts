@@ -49,6 +49,14 @@ export interface AddSpansOptions {
   redactSpans?: (spans: SpanData[]) => SpanData[];
 }
 
+function spanPayloadBytes(span: SpanData): number {
+  return (
+    Buffer.byteLength(span.name) +
+    Buffer.byteLength(JSON.stringify(span.attributes) ?? '') +
+    Buffer.byteLength(span.statusMessage ?? '')
+  );
+}
+
 function serializeSpan(
   span: typeof spansTable.$inferSelect,
   shouldSanitizeAttributes = true,
@@ -260,20 +268,41 @@ export class TraceStore {
       const redact = options?.redactSpans;
       if (redact) {
         await db.transaction(async (tx) => {
+          const payloadBytes = sql<number>`
+            length(cast(${spansTable.name} as blob))
+            + coalesce(length(cast(${spansTable.attributes} as blob)), 0)
+            + coalesce(length(cast(${spansTable.statusMessage} as blob)), 0)
+          `;
           const [size] = await tx
             .select({
               count: sql<number>`count(*)`,
-              bytes: sql<number>`coalesce(sum(
-                length(cast(${spansTable.name} as blob))
-                + coalesce(length(cast(${spansTable.attributes} as blob)), 0)
-                + coalesce(length(cast(${spansTable.statusMessage} as blob)), 0)
-              ), 0)`,
+              bytes: sql<number>`coalesce(sum(${payloadBytes}), 0)`,
             })
             .from(spansTable)
             .where(eq(spansTable.traceId, traceId));
+          // Bound each input before hydrating existing payloads, including duplicate uploads.
           if (
-            size.count + spans.length > 10_000 ||
-            size.bytes + Buffer.byteLength(JSON.stringify(spans)) > 10 * 1024 * 1024
+            size.count > 10_000 ||
+            spans.length > 10_000 ||
+            size.bytes > 10 * 1024 * 1024 ||
+            Buffer.byteLength(JSON.stringify(spans)) > 10 * 1024 * 1024
+          ) {
+            throw new Error('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
+          }
+          const storedSizes = await tx
+            .select({ spanId: spansTable.spanId, bytes: payloadBytes })
+            .from(spansTable)
+            .where(eq(spansTable.traceId, traceId));
+          const projectedSizes = new Map(storedSizes.map((span) => [span.spanId, span.bytes]));
+          for (const span of spans) {
+            if (options?.updateExisting || !projectedSizes.has(span.spanId)) {
+              projectedSizes.set(span.spanId, spanPayloadBytes(span));
+            }
+          }
+          if (
+            projectedSizes.size > 10_000 ||
+            [...projectedSizes.values()].reduce((total, bytes) => total + bytes, 0) >
+              10 * 1024 * 1024
           ) {
             throw new Error('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
           }
@@ -289,6 +318,19 @@ export class TraceStore {
             if (redactedSpanIds.has(span.spanId)) {
               span.attributes = { ...span.attributes, 'promptfoo.redaction.history': '[REDACTED]' };
             }
+          }
+          // Redaction history markers can also increase the stored payload.
+          projectedSizes.clear();
+          for (const span of sanitized) {
+            if (options?.updateExisting || !projectedSizes.has(span.spanId)) {
+              projectedSizes.set(span.spanId, spanPayloadBytes(span));
+            }
+          }
+          if (
+            [...projectedSizes.values()].reduce((total, bytes) => total + bytes, 0) >
+            10 * 1024 * 1024
+          ) {
+            throw new Error('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
           }
           for (const [index, previous] of existing.entries()) {
             const span = sanitized[index];

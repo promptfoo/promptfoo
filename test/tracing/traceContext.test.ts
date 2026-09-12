@@ -469,6 +469,74 @@ describe('fetchTraceContext', () => {
     },
   );
 
+  it.each(['empty', 'error'])(
+    'retains the latest usable snapshot when later stability polls return %s',
+    async (mode) => {
+      vi.useFakeTimers();
+      try {
+        const span = {
+          spanId: 'sql',
+          name: 'sql execution',
+          startTime: 1,
+          endTime: 2,
+          attributes: { 'db.query.text': 'SELECT * FROM accounts WHERE id = 1 OR 1=1' },
+        };
+        const fetchTrace = vi.fn().mockResolvedValueOnce({
+          fetchedAt: 123,
+          traceId: 'trace-1',
+          spans: [span],
+        });
+        if (mode === 'empty') {
+          fetchTrace.mockResolvedValue({ fetchedAt: 456, traceId: 'trace-1', spans: [] });
+        } else {
+          fetchTrace.mockRejectedValue(new Error('temporary backend failure'));
+        }
+        mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+        const pending = fetchTraceContext('trace-1', {
+          providerConfig,
+          queryDelay: 0,
+          maxRetries: 2,
+          retryDelayMs: 1000,
+          waitForStableSpans: true,
+        });
+        await vi.runAllTimersAsync();
+        expect(await pending).toMatchObject({ fetchedAt: 123, spans: [span] });
+        expect(fetchTrace).toHaveBeenCalledTimes(3);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('keeps polling when the first snapshot has no matching spans', async () => {
+    vi.useFakeTimers();
+    try {
+      const sql = { spanId: 'sql', name: 'sql execution', startTime: 1, endTime: 2 };
+      const fetchTrace = vi
+        .fn()
+        .mockResolvedValueOnce({
+          fetchedAt: 1,
+          traceId: 'trace-1',
+          spans: [{ ...sql, spanId: 'other', name: 'other' }],
+        })
+        .mockResolvedValue({ fetchedAt: 2, traceId: 'trace-1', spans: [sql] });
+      mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+      const pending = fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 2,
+        retryDelayMs: 1000,
+        waitForStableSpans: true,
+        spanFilter: ['sql*'],
+      });
+      await vi.runAllTimersAsync();
+      expect(await pending).toMatchObject({ fetchedAt: 2, spans: [sql] });
+      expect(fetchTrace).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('bounds polling when external spans never finish', async () => {
     vi.useFakeTimers();
     try {

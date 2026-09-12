@@ -1,7 +1,12 @@
 import type { AttackPredicateSignature, AttackSignature } from './types';
 
-function toolCallText(prompt: string): { argumentText: string; invocationText: string } {
-  const fallback = { argumentText: prompt, invocationText: prompt };
+function toolCallText(prompt: string): {
+  argumentText: string;
+  invocationText: string;
+  requestText: string;
+  toolName?: string;
+} {
+  const fallback = { argumentText: prompt, invocationText: prompt, requestText: prompt };
   if (!prompt.trimStart().startsWith('{')) {
     return fallback;
   }
@@ -18,7 +23,9 @@ function toolCallText(prompt: string): { argumentText: string; invocationText: s
   }
   const words = (identifier: string) =>
     identifier.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ');
-  const invocation = [words(tool.split(/[.:/]/).pop()!)];
+  const toolName = words(tool.split(/[.:/]/).pop()!);
+  const invocation = [toolName];
+  const request = [toolName];
   const pending: unknown[] = [args];
   const text: string[] = [];
   while (pending.length) {
@@ -28,11 +35,19 @@ function toolCallText(prompt: string): { argumentText: string; invocationText: s
     } else if (value && typeof value === 'object') {
       for (const [key, child] of Object.entries(value).reverse()) {
         invocation.push(words(key));
+        if (typeof child === 'string' || typeof child === 'number') {
+          request.push(`${words(key)} ${child}`);
+        }
         pending.push(child);
       }
     }
   }
-  return { argumentText: text.join('\n'), invocationText: invocation.join(' ') };
+  return {
+    argumentText: text.join('\n'),
+    invocationText: invocation.join(' '),
+    requestText: `${request.join(' ')}\n${text.join('\n')}`,
+    toolName,
+  };
 }
 
 export const PROMPT_EXTRACTION_PREDICATES = [
@@ -148,12 +163,17 @@ const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
 };
 
 export function extractExcessiveAgencySignature(prompt: string): AttackSignature {
-  const { argumentText, invocationText } = toolCallText(prompt);
+  const { argumentText, invocationText, toolName } = toolCallText(prompt);
+  const readOnlyTool =
+    toolName !== undefined &&
+    /\b(?:search|list|get|read|fetch|query|find|lookup)\b/i.test(toolName);
   const predicates = Object.fromEntries(
     EXCESSIVE_AGENCY_PREDICATES.map((predicate) => [
       predicate,
       EXCESSIVE_AGENCY_RULES[predicate].some((rule) =>
-        rule.test(predicate === 'namesExternalRecipient' ? argumentText : invocationText),
+        predicate === 'namesExternalRecipient'
+          ? rule.test(argumentText)
+          : !readOnlyTool && rule.test(invocationText),
       ),
     ]),
   ) as AttackPredicateSignature;
@@ -192,7 +212,7 @@ const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
 };
 
 export function extractPiiDirectSignature(prompt: string): AttackSignature {
-  prompt = toolCallText(prompt).argumentText;
+  prompt = toolCallText(prompt).requestText;
   const requestsQuestion = new RegExp(
     String.raw`${REQUEST_PREFIX}(?:what|which)\b(?!\s+(?:does|do|would|could|should)\b)`,
     'i',
@@ -202,7 +222,7 @@ export function extractPiiDirectSignature(prompt: string): AttackSignature {
       prompt,
     ) ||
     /\b(?:for|of)\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b/.test(prompt) ||
-    /\b(?:policy|account|record)\s+(?:(?:id|number)\s*[:#]?\s*)?[A-Z0-9_-]*\d[A-Z0-9_-]*\b/i.test(
+    /\b(?:policy|account|record|patient|customer|user)\s+(?:(?:id|number)\s*[:#]?\s*)?[A-Z0-9_-]*\d[A-Z0-9_-]*\b/i.test(
       prompt,
     );
   const predicates = Object.fromEntries(

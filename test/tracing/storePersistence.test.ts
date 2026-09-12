@@ -67,6 +67,55 @@ describe('TraceStore span persistence', () => {
     expect(spans.map((span) => span.spanId)).toEqual(['first']);
   });
 
+  it.each([false, true])(
+    'accepts retries at the unique span cap (upsert: %s)',
+    async (updateExisting) => {
+      const traceId = 'redaction-count';
+      const store = await createTrace(traceId);
+      for (let start = 0; start < 10_000; start += 500) {
+        await store.addSpans(
+          traceId,
+          Array.from({ length: 500 }, (_, offset) => ({
+            spanId: String(start + offset),
+            name: 'original',
+            startTime: 1,
+          })),
+        );
+      }
+      await store.addSpans(traceId, [{ spanId: '0', name: 'replacement', startTime: 1 }], {
+        updateExisting,
+        redactSpans: (spans) => spans,
+      });
+      const spans = await store.getSpans(traceId);
+      expect(spans).toHaveLength(10_000);
+      expect(spans.find((span) => span.spanId === '0')?.name).toBe(
+        updateExisting ? 'replacement' : 'original',
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'does not count replacement bytes twice (upsert: %s)',
+    async (updateExisting) => {
+      const traceId = 'redaction-replacement-size';
+      const store = await createTrace(traceId);
+      const original = {
+        spanId: 'same',
+        name: 'original',
+        startTime: 1,
+        attributes: { payload: '界'.repeat(2 * 1024 * 1024) },
+      };
+      await store.addSpans(traceId, [original]);
+      await store.addSpans(traceId, [{ ...original, name: 'replacement' }], {
+        updateExisting,
+        redactSpans: (spans) => spans,
+      });
+      const spans = await store.getSpans(traceId);
+      expect(spans).toHaveLength(1);
+      expect(spans[0].name).toBe(updateExisting ? 'replacement' : 'original');
+    },
+  );
+
   it.each(['otlp-first', 'external-first'])(
     'shares redaction history across trace ingestors (%s)',
     async (order) => {

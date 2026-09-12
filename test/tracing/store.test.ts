@@ -148,7 +148,12 @@ describe('TraceStore', () => {
 
   describe('addSpans', () => {
     it('rejects a cumulative span overflow before loading stored payloads', async () => {
-      const where = vi.fn().mockResolvedValue([{ count: 10_000, bytes: 1 }]);
+      const where = vi
+        .fn()
+        .mockResolvedValueOnce([{ count: 10_000, bytes: 1 }])
+        .mockResolvedValueOnce(
+          Array.from({ length: 10_000 }, (_, index) => ({ spanId: String(index), bytes: 0 })),
+        );
       mockDb.select.mockReturnValue({ from: vi.fn().mockReturnThis(), where });
       const redactSpans = vi.fn((spans) => spans);
       await expect(
@@ -157,7 +162,7 @@ describe('TraceStore', () => {
           redactSpans,
         }),
       ).rejects.toThrow('Trace redaction limit exceeded');
-      expect(mockDb.select).toHaveBeenCalledTimes(1);
+      expect(mockDb.select).toHaveBeenCalledTimes(2);
       expect(redactSpans).not.toHaveBeenCalled();
       expect(mockDb.insert).not.toHaveBeenCalled();
     });
@@ -178,7 +183,11 @@ describe('TraceStore', () => {
             .fn()
             .mockResolvedValue(
               selection
-                ? [{ count: stored ? 1 : 0, bytes: 0 }]
+                ? 'spanId' in (selection as object)
+                  ? stored
+                    ? [{ spanId: original.spanId, bytes: 0 }]
+                    : []
+                  : [{ count: stored ? 1 : 0, bytes: 0 }]
                 : stored
                   ? [{ id: 'stored', ...original }]
                   : [],
