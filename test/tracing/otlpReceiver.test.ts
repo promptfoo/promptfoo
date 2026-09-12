@@ -124,6 +124,99 @@ describe('OTLPReceiver', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(
+    ['json', 'protobuf'].flatMap((format) =>
+      [-100, 0, 100].map((offset) => [format, offset] as const),
+    ),
+  )('grades epoch-scale span ordering from %s with end offset %s', async (format, offset) => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const traceId = 'a'.repeat(32);
+    const id = (value: string) => (format === 'json' ? value : Buffer.from(value, 'hex'));
+    const data = {
+      resourceSpans: [
+        {
+          scopeSpans: [
+            {
+              spans: [
+                {
+                  traceId: id(traceId),
+                  spanId: id('b'.repeat(16)),
+                  parentSpanId: id('d'.repeat(16)),
+                  name: 'guardrail update_seat',
+                  startTimeUnixNano: '1699999999999999000',
+                  endTimeUnixNano: String(1700000000000000000n + BigInt(offset)),
+                  attributes: [{ key: 'guardrail.outcome', value: { stringValue: 'allowed' } }],
+                },
+                {
+                  traceId: id(traceId),
+                  spanId: id('c'.repeat(16)),
+                  parentSpanId: id('d'.repeat(16)),
+                  name: 'tool update_seat',
+                  startTimeUnixNano: '1700000000000000000',
+                  attributes: [
+                    { key: 'tool.name', value: { stringValue: 'update_seat' } },
+                    { key: 'promptfoo.agentic.plugin_id', value: { stringValue: pluginId } },
+                    {
+                      key: 'promptfoo.agentic.evidence_json',
+                      value: { stringValue: '{"findings":[]}' },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    await request(receiver.getApp())
+      .post('/v1/traces')
+      .set('Content-Type', format === 'json' ? 'application/json' : 'application/x-protobuf')
+      .send(format === 'json' ? data : await encodeOTLPRequest(data))
+      .expect(200);
+    const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+      'Update the seat.',
+      'Done.',
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: {
+          traceId,
+          evaluationId: 'eval',
+          testCaseId: 'case',
+          spans: persistSpans.mock.calls[0][1],
+        },
+      },
+    );
+    expect(result.grade.pass).toBe(offset <= 0);
+  });
+
+  it('keeps retried OTLP log identities while retaining distinct tool calls', async () => {
+    const log = {
+      traceId: 'a'.repeat(32),
+      spanId: 'b'.repeat(16),
+      timeUnixNano: '1700000000000000000',
+      body: { stringValue: 'tool update_seat' },
+      attributes: [{ key: 'gen_ai.tool.call.id', value: { stringValue: 'call-1' } }],
+    };
+    const send = (record: typeof log) =>
+      request(receiver.getApp())
+        .post('/v1/logs')
+        .send({ resourceLogs: [{ scopeLogs: [{ logRecords: [record] }] }] })
+        .expect(200);
+    await send(log);
+    await send(structuredClone(log));
+    await send({
+      ...log,
+      attributes: [{ key: 'gen_ai.tool.call.id', value: { stringValue: 'call-2' } }],
+    });
+    const ids = persistSpans.mock.calls.map((call) => call[1][0].spanId);
+    expect(ids[1]).toBe(ids[0]);
+    expect(ids[2]).not.toBe(ids[0]);
+  });
+
   it('preserves unrelated trace text after the redaction history reaches capacity', () => {
     const redactingReceiver = new OTLPReceiver({ redactAttributes: ['authorization'] });
     for (let index = 0; index < 1_025; index++) {

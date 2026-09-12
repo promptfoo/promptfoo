@@ -148,10 +148,6 @@ function isZeroTraceId(id: string): boolean {
   return /^0+$/.test(id) || BASE64_ZERO_TRACE_ID.test(id);
 }
 
-function randomSpanId(): string {
-  return crypto.randomBytes(8).toString('hex');
-}
-
 function getStringAttribute(attributes: Record<string, any>, key: string): string | undefined {
   const value = attributes[key];
   return typeof value === 'string' ? value : undefined;
@@ -732,6 +728,8 @@ export class OTLPReceiver {
             'otel.scope.version': scopeSpan.scope?.version,
             'otel.span.kind': spanKindName,
             'otel.span.kind_code': span.kind,
+            'otel.span.start_time_unix_nano': span.startTimeUnixNano,
+            'otel.span.end_time_unix_nano': span.endTimeUnixNano,
           };
           const startTime = Number(span.startTimeUnixNano) / 1_000_000;
 
@@ -891,9 +889,8 @@ export class OTLPReceiver {
 
     // Log's own span_id is the span the log was emitted from, so that span
     // becomes our synthesized span's parent. Fall back to the resource-level
-    // promptfoo.parent_span_id the provider injected. We mint a fresh 16-hex
-    // span id so multiple logs within the same span don't collide on
-    // (trace_id, span_id).
+    // promptfoo.parent_span_id the provider injected. Hash the original record
+    // so retries retain their identity while distinct logs remain separate.
     const hasValidInlineSpanId = !!log.spanId && !isZeroSpanId(log.spanId);
     const rawParentSpanId = hasValidInlineSpanId
       ? log.spanId
@@ -907,7 +904,23 @@ export class OTLPReceiver {
     return {
       traceId,
       span: {
-        spanId: randomSpanId(),
+        spanId: crypto
+          .createHash('sha256')
+          .update(
+            JSON.stringify([
+              traceId,
+              parentSpanId,
+              timeNano,
+              scopeLog.scope,
+              log.severityNumber,
+              log.severityText,
+              bodyValue,
+              log.attributes,
+              resourceAttributes,
+            ]),
+          )
+          .digest('hex')
+          .slice(0, 16),
         parentSpanId,
         name,
         startTime,
@@ -976,6 +989,8 @@ export class OTLPReceiver {
           'otel.scope.version': scopeSpan.scope?.version,
           'otel.span.kind': spanKindName,
           'otel.span.kind_code': spanKindCode,
+          'otel.span.start_time_unix_nano': span.startTimeUnixNano?.toString(),
+          'otel.span.end_time_unix_nano': span.endTimeUnixNano?.toString(),
         },
         events: (span.events ?? []).flatMap((event) => {
           const nanos = event.timeUnixNano?.toString();

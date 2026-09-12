@@ -32,6 +32,7 @@ export type AgentObservation = {
   command?: string;
   connector?: string;
   endTimestamp?: number;
+  endTimestampNanos?: string;
   evidence?: string;
   eventId?: string;
   fieldLocations?: Partial<
@@ -381,6 +382,7 @@ function controlObservationFromSpan(
     return {
       kind: 'guardrail',
       endTimestamp: span.endTime,
+      tool: getToolNameFromAttributes(attributes),
       location,
       outcome: failed
         ? 'error'
@@ -408,6 +410,7 @@ function controlObservationFromSpan(
     return {
       kind: 'approval',
       endTimestamp: span.endTime,
+      tool: getToolNameFromAttributes(attributes),
       location,
       outcome: failed
         ? 'error'
@@ -607,12 +610,15 @@ function observationsFromTraceAttributes(
     source,
     span,
   );
-  const normalizedToolObservations = normalizedToolObservationsFromAttributes(
-    attributes,
-    baseLocation,
-    source,
-    span,
-  );
+  const spanType = stringifyValue(attributes?.['openai.agents.span_type'])?.toLowerCase();
+  const dedicatedControl =
+    spanType === 'guardrail' ||
+    spanType === 'approval' ||
+    (!inferredToolFromSpanName(span?.name) &&
+      /(?:^|[.\s:/_-])(?:guardrail|approval)(?:$|[.\s:/_-])/i.test(span?.name ?? ''));
+  const normalizedToolObservations = dedicatedControl
+    ? []
+    : normalizedToolObservationsFromAttributes(attributes, baseLocation, source, span);
   observations.push(...normalizedToolObservations);
   const normalizedToolName = normalizedToolObservations[0]?.tool;
 
@@ -624,7 +630,7 @@ function observationsFromTraceAttributes(
 
     const normalizedAttributeName = attributeName.toLowerCase();
     const mapped = traceAttributeField(normalizedAttributeName);
-    if (!mapped) {
+    if (!mapped || (dedicatedControl && mapped.kind === 'tool_call')) {
       continue;
     }
     if (isDuplicateNormalizedToolObservation(mapped, value, normalizedToolName)) {
@@ -636,7 +642,7 @@ function observationsFromTraceAttributes(
   }
 
   const spanTool = inferredToolFromSpanName(span?.name);
-  if (spanTool) {
+  if (spanTool && !dedicatedControl) {
     observations.push({
       callId: getString(getAttribute(attributes, TOOL_CALL_ID_ATTRIBUTES)),
       fieldLocations: { tool: baseLocation },
@@ -652,6 +658,15 @@ function observationsFromTraceAttributes(
   }
 
   return observations;
+}
+
+function nanosecondTimestamp(value: unknown): string | undefined {
+  return typeof value === 'string' &&
+    /^\d{1,20}$/.test(value) &&
+    BigInt(value) > 0n &&
+    BigInt(value) <= 0xffffffffffffffffn
+    ? value
+    : undefined;
 }
 
 export function observationsFromTraceData(
@@ -676,19 +691,17 @@ export function observationsFromTraceData(
       ...(controlObservation ? [controlObservation] : []),
       ...observationsFromTraceAttributes(traceSpan.attributes, spanLocation, spanSource, traceSpan),
     ];
+    const startNanos = isLog
+      ? logTimestamp
+      : traceSpan.attributes?.['otel.span.start_time_unix_nano'];
+    const endNanos = traceSpan.attributes?.['otel.span.end_time_unix_nano'];
     observations.push(
-      ...spanObservations.map((observation) =>
-        isLog
-          ? {
-              ...observation,
-              eventId: spanLocation,
-              timestampNanos:
-                typeof logTimestamp === 'string' && /^\d{1,20}$/.test(logTimestamp)
-                  ? logTimestamp
-                  : undefined,
-            }
-          : observation,
-      ),
+      ...spanObservations.map((observation) => ({
+        ...observation,
+        ...(isLog && { eventId: traceSpan.spanId ?? spanLocation }),
+        timestampNanos: nanosecondTimestamp(startNanos),
+        endTimestampNanos: nanosecondTimestamp(endNanos),
+      })),
     );
 
     traceSpan.events?.forEach((event, eventIndex) => {

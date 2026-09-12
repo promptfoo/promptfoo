@@ -226,6 +226,8 @@ function transformSpan(
     attributes: {
       ...resourceAttributes,
       ...attributesToRecord(span.attributes),
+      'otel.span.start_time_unix_nano': span.startTimeUnixNano,
+      'otel.span.end_time_unix_nano': endTimeUnixNano,
       ...(scopeName && { 'otel.scope.name': scopeName }),
       ...(typeof span.kind === 'number' && {
         'otel.span.kind': SPAN_KIND_NAMES[span.kind] ?? 'unspecified',

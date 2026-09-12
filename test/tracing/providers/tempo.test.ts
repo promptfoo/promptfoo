@@ -81,6 +81,22 @@ describe('TempoProvider', () => {
     mockedFetch.mockImplementation(async () => response(traceResponse));
   });
 
+  it('preserves exact span nanoseconds for guardrail ordering', async () => {
+    const data = structuredClone(traceResponse);
+    const span = data.batches[0].scopeSpans[0].spans[0];
+    span.startTimeUnixNano = '1700000000000000000';
+    span.endTimeUnixNano = '1700000000000000100';
+    mockedFetch.mockResolvedValue(response(data));
+    const result = await new TempoProvider({
+      id: 'tempo',
+      endpoint: 'http://tempo:3200',
+    }).fetchTrace(TRACE_ID);
+    expect(result?.spans[0].attributes).toMatchObject({
+      'otel.span.start_time_unix_nano': span.startTimeUnixNano,
+      'otel.span.end_time_unix_nano': span.endTimeUnixNano,
+    });
+  });
+
   it('preserves sub-millisecond event order and drops events without a timestamp', async () => {
     const data = structuredClone(traceResponse);
     data.batches[0].scopeSpans[0].spans[0].events = [
