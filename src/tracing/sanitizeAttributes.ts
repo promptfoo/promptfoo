@@ -121,6 +121,27 @@ export interface TraceTextRedactionState {
   incomplete: boolean;
 }
 
+export function getTraceTextRedactionState(
+  states: Map<string, TraceTextRedactionState>,
+  traceId: string | undefined,
+  evidence: unknown,
+): TraceTextRedactionState {
+  const existing = traceId ? states.get(traceId) : undefined;
+  const state = existing ?? {
+    secrets: new Set<string>(),
+    length: 0,
+    incomplete: /\[(?:REDACTED|TRUNCATED)\]/.test(JSON.stringify(evidence)),
+  };
+  if (traceId) {
+    states.delete(traceId);
+    if (states.size >= 1_024) {
+      states.delete(states.keys().next().value!);
+    }
+    states.set(traceId, state);
+  }
+  return state;
+}
+
 export function getTraceTextRedactor(
   pairs: { original: unknown; sanitized: unknown }[],
   replacement = '[REDACTED]',

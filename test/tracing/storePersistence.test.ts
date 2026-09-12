@@ -6,12 +6,14 @@ import { promisify } from 'node:util';
 
 import { eq } from 'drizzle-orm';
 import request from 'supertest';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import { OTLPReceiver } from '../../src/tracing/otlpReceiver';
+import * as traceProviders from '../../src/tracing/providers';
 import { TraceStore } from '../../src/tracing/store';
+import { fetchTraceContext } from '../../src/tracing/traceContext';
 import EvalFactory from '../factories/evalFactory';
 import { removeTempDir } from '../util/utils';
 
@@ -42,6 +44,59 @@ describe('TraceStore span persistence', () => {
     });
     return traceStore;
   }
+
+  it.each(['source-first', 'echo-first'])(
+    'redacts persisted external trace text across %s partial snapshots',
+    async (order) => {
+      const traceId = 'external-' + order;
+      const traceStore = await createTrace(traceId);
+      const secret = 'PRIVATE_EXTERNAL_PERSISTED_VALUE';
+      const source = {
+        spanId: 'source',
+        name: 'source',
+        startTime: 1,
+        attributes: { authorization: secret },
+      };
+      const echo = {
+        spanId: 'echo',
+        name: `span ${secret}`,
+        startTime: 2,
+        statusMessage: `failed ${secret}`,
+        events: [{ name: `event ${secret}`, timestamp: 3, attributes: {} }],
+      };
+      const snapshots = order === 'source-first' ? [[source], [echo]] : [[echo], [source]];
+      const fetchTrace = vi.fn().mockImplementation(async () => ({
+        traceId,
+        spans: snapshots.shift(),
+        fetchedAt: Date.now(),
+      }));
+      const providerSpy = vi
+        .spyOn(traceProviders, 'createTraceProvider')
+        .mockReturnValue({ id: 'tempo', fetchTrace });
+      const providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
+      try {
+        for (let call = 0; call < 2; call++) {
+          expect(
+            await fetchTraceContext(traceId, {
+              providerConfig,
+              redactAttributes: ['authorization'],
+              queryDelay: 0,
+              maxRetries: 0,
+            }),
+          ).not.toBeNull();
+        }
+        const spans = await traceStore.getSpans(traceId, { sanitizeAttributes: false });
+        expect(spans).toHaveLength(2);
+        expect(JSON.stringify(spans)).not.toContain(secret);
+        const db = await getDb();
+        expect(
+          JSON.stringify(await db.select().from(spansTable).where(eq(spansTable.traceId, traceId))),
+        ).not.toContain(secret);
+      } finally {
+        providerSpy.mockRestore();
+      }
+    },
+  );
 
   it.each(['tool update_seat', 'guardrail update_seat'])(
     'retains an internal span containing a name-only %s event',

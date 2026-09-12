@@ -16,7 +16,11 @@ import {
   PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from './resourceAttributes';
-import { getTraceTextRedactor, type TraceTextRedactionState } from './sanitizeAttributes';
+import {
+  getTraceTextRedactionState,
+  getTraceTextRedactor,
+  type TraceTextRedactionState,
+} from './sanitizeAttributes';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
 interface OTLPAttribute {
@@ -369,28 +373,6 @@ export class OTLPReceiver {
     return redacted;
   }
 
-  private getTextRedactionState(
-    traceId: string | undefined,
-    spans: SpanData[],
-  ): TraceTextRedactionState {
-    const existing = traceId ? this.textRedactionByTrace.get(traceId) : undefined;
-    const state = existing ?? {
-      secrets: new Set<string>(),
-      length: 0,
-      incomplete: /\[(?:REDACTED|TRUNCATED)\]/.test(
-        JSON.stringify(spans.map((span) => ({ attributes: span.attributes, events: span.events }))),
-      ),
-    };
-    if (traceId) {
-      this.textRedactionByTrace.delete(traceId);
-      if (this.textRedactionByTrace.size >= 1_024) {
-        this.textRedactionByTrace.delete(this.textRedactionByTrace.keys().next().value!);
-      }
-      this.textRedactionByTrace.set(traceId, state);
-    }
-    return state;
-  }
-
   private redactSpans(
     spans: SpanData[],
     redactAttributePatterns: string[],
@@ -416,7 +398,7 @@ export class OTLPReceiver {
         })),
       ]),
       '[REDACTED]',
-      this.getTextRedactionState(traceId, spans),
+      getTraceTextRedactionState(this.textRedactionByTrace, traceId, spans),
     );
     return sanitized.map((span) => ({
       ...span,

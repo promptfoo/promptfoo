@@ -24,9 +24,9 @@ import { sanitizeTraceAttributes } from '../../src/tracing/sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from '../../src/tracing/spanFilter';
 import { extractTraceIdFromTraceparent, fetchTraceContext } from '../../src/tracing/traceContext';
 
-import type { SpanData, TraceSpanQueryOptions } from '../../src/tracing/store';
+import type { AddSpansOptions, SpanData, TraceSpanQueryOptions } from '../../src/tracing/store';
 
-const providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
+let providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
 const storedSpans: SpanData[] = [];
 
 function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
@@ -39,10 +39,26 @@ describe('fetchTraceContext', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     storedSpans.length = 0;
-    mocks.addSpans.mockImplementation(async (_traceId: string, spans: SpanData[]) => {
-      storedSpans.push(...spans);
-      return { stored: true };
-    });
+    providerConfig = { id: 'tempo', endpoint: 'http://tempo:3200' };
+    mocks.addSpans.mockImplementation(
+      async (_traceId: string, spans: SpanData[], options?: AddSpansOptions) => {
+        const combined = [...storedSpans, ...spans];
+        const sanitized = options?.redactSpans ? options.redactSpans(combined) : combined;
+        const seen = new Set<string>();
+        storedSpans.splice(
+          0,
+          storedSpans.length,
+          ...sanitized.filter((span) => {
+            if (seen.has(span.spanId)) {
+              return false;
+            }
+            seen.add(span.spanId);
+            return true;
+          }),
+        );
+        return { stored: true };
+      },
+    );
     mocks.getSpans.mockImplementation(async (_traceId: string, options: TraceSpanQueryOptions) => {
       let spans = storedSpans.filter((span) => {
         if (options.earliestStartTime && span.startTime < options.earliestStartTime) {
@@ -430,6 +446,121 @@ describe('fetchTraceContext', () => {
       expect(JSON.stringify(storedSpans)).not.toContain(secret);
     },
   );
+
+  it.each([
+    ['source-first', false],
+    ['source-first', true],
+    ['echo-first', false],
+    ['echo-first', true],
+  ] as const)(
+    'redacts partial external snapshots in %s order (JSON: %s)',
+    async (order, serialized) => {
+      const secret = 'PRIVATE_EXTERNAL_PREVIOUS_SNAPSHOT';
+      const source = {
+        spanId: 'source',
+        name: 'source',
+        startTime: 1,
+        attributes: { authorization: serialized ? JSON.stringify({ token: secret }) : secret },
+      };
+      const echo = {
+        spanId: 'echo',
+        name: `request ${secret}`,
+        statusMessage: `status ${secret}`,
+        startTime: 2,
+        events: [{ name: `event ${secret}`, timestamp: 3, attributes: {} }],
+      };
+      const snapshots = order === 'source-first' ? [[source], [echo]] : [[echo], [source]];
+      for (const spans of snapshots) {
+        mockExternalTrace(spans);
+        await fetchTraceContext('trace-1', {
+          providerConfig,
+          queryDelay: 0,
+          maxRetries: 0,
+          redactAttributes: ['authorization'],
+        });
+      }
+      expect(storedSpans).toHaveLength(2);
+      expect(JSON.stringify(storedSpans)).not.toContain(secret);
+      expect(storedSpans.find((span) => span.spanId === 'echo')?.events?.[0].name).toContain(
+        '[REDACTED]',
+      );
+    },
+  );
+
+  it('sanitizes stored event names when a repeated span reveals a secret', async () => {
+    const secret = 'PRIVATE_EXTERNAL_REPEATED_SPAN';
+    const echo = {
+      spanId: 'same',
+      name: `span ${secret}`,
+      startTime: 1,
+      events: [{ name: `event ${secret}`, timestamp: 2, attributes: {} }],
+    };
+    for (const spans of [[echo], [{ ...echo, attributes: { authorization: secret } }]]) {
+      mockExternalTrace(spans);
+      await fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 0,
+        redactAttributes: ['authorization'],
+      });
+    }
+    expect(storedSpans).toHaveLength(1);
+    expect(JSON.stringify(storedSpans)).not.toContain(secret);
+  });
+
+  it.each(['attribute', 'span-name'])(
+    'suppresses new text when prior external %s redaction state is unavailable',
+    async (field) => {
+      storedSpans.push({
+        spanId: 'old',
+        name: field === 'span-name' ? '[REDACTED]' : 'source',
+        startTime: 1,
+        attributes: field === 'attribute' ? { authorization: '[REDACTED]' } : {},
+      });
+      mockExternalTrace([
+        {
+          spanId: 'new',
+          name: 'PRIVATE_EXTERNAL_UNKNOWN',
+          startTime: 2,
+          events: [{ name: 'PRIVATE_EXTERNAL_UNKNOWN', timestamp: 3, attributes: {} }],
+        },
+      ]);
+      await fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 0,
+        redactAttributes: ['authorization'],
+      });
+      expect(JSON.stringify(storedSpans)).not.toContain('PRIVATE_EXTERNAL_UNKNOWN');
+    },
+  );
+
+  it('redacts each database batch using the complete external snapshot', async () => {
+    const secret = 'PRIVATE_EXTERNAL_LATER_BATCH';
+    mockExternalTrace([
+      ...Array.from({ length: 500 }, (_, index) => ({
+        spanId: String(index),
+        name: `span ${secret}`,
+        startTime: index,
+      })),
+      { spanId: 'source', name: 'source', startTime: 501, attributes: { authorization: secret } },
+    ]);
+    const addSpans = mocks.addSpans.getMockImplementation()!;
+    mocks.addSpans.mockImplementation(async (...args) => {
+      const result = await addSpans(...args);
+      expect(JSON.stringify(storedSpans)).not.toContain(secret);
+      return result;
+    });
+    expect(
+      await fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 0,
+        redactAttributes: ['authorization'],
+      }),
+    ).not.toBeNull();
+    expect(storedSpans).toHaveLength(501);
+  });
 
   it('stores large traces in database-safe batches', async () => {
     const spans = Array.from({ length: 501 }, (_, index) => ({
