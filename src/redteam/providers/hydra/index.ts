@@ -617,16 +617,14 @@ export class HydraProvider implements ApiProvider {
           continue;
         }
 
-        // For audio/image transforms, send a hybrid format:
-        // - Previous turns as text (for context)
-        // - Current turn as audio/image (the actual attack)
-        // This allows the target model to understand conversation context while receiving the current attack in the transformed format
+        // Match the target's history mode when combining text with the current audio/image turn.
         if (lastTransformResult.audio || lastTransformResult.image) {
-          // Build hybrid payload with conversation history + current transformed turn
-          const historyWithoutCurrentTurn = this.conversationHistory.slice(0, -1);
           const hybridPayload = {
             _promptfoo_audio_hybrid: true,
-            history: historyWithoutCurrentTurn,
+            history:
+              this.stateful || this.sendCurrentTurnOnly
+                ? []
+                : this.conversationHistory.slice(0, -1),
             currentTurn: {
               role: 'user' as const,
               transcript: nextMessage, // Original text for reference
@@ -643,7 +641,7 @@ export class HydraProvider implements ApiProvider {
             `${this.logPrefix} Using hybrid format (history + audio/image current turn)`,
             {
               turn,
-              historyLength: historyWithoutCurrentTurn.length,
+              historyLength: hybridPayload.history.length,
               hasAudio: !!lastTransformResult.audio,
               hasImage: !!lastTransformResult.image,
             },

@@ -638,6 +638,18 @@ describe('Plugins', () => {
         n: 1,
         config: {
           excludeStrategies: ['custom-strategy'],
+          ...{
+            rawReceipt: 'PRIVATE_REMOTE_RECEIPT',
+            sensitiveValue: 'PRIVATE_REMOTE_VALUE',
+            externalizedAgentLedger: { jobs: [{ prompt: 'PRIVATE_REMOTE_JOB' }] },
+            protectedFiles: [{ path: 'protected.txt', expectedContent: 'PRIVATE_REMOTE_CONTENT' }],
+            targetManifest: {
+              name: 'Fixture',
+              files: ['README.md'],
+              ...{ rawReceipt: 'PRIVATE_REMOTE_MANIFEST' },
+            },
+            scenarioContext: 'Read the repository harness.',
+          },
           agenticAttackProfile: { runtimeKind: 'connector-agent', requiresTraceEvidence: false },
         },
         delayMs: 0,
@@ -645,6 +657,12 @@ describe('Plugins', () => {
 
       const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
       const requestBody = JSON.parse((callArgs[1] as any).body);
+      expect(JSON.stringify(requestBody)).not.toContain('PRIVATE_REMOTE_');
+      expect(requestBody.config.scenarioContext).toBe('Read the repository harness.');
+      expect(requestBody.targetManifest.files).toEqual(['README.md']);
+      expect(result?.[0].assert?.[0]).toMatchObject({
+        value: { rawReceipt: 'PRIVATE_REMOTE_RECEIPT', sensitiveValue: 'PRIVATE_REMOTE_VALUE' },
+      });
       expect(requestBody.config.excludeStrategies).toEqual([
         ...CANARY_BREAKING_STRATEGY_IDS,
         'custom-strategy',

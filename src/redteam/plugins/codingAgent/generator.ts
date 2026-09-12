@@ -1424,6 +1424,58 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
     return [...CANARY_BREAKING_STRATEGY_IDS];
   }
 
+  getRemoteGenerationConfig(): PluginConfig {
+    const source = this.config as Record<string, unknown>;
+    const config: PluginConfig & Record<string, unknown> = {};
+    for (const key of [...CONFIGURED_FIXTURE_PATH_KEYS, ...REALISM_CONTEXT_KEYS]) {
+      const value = source[key];
+      if (typeof value === 'string') {
+        config[key] = value;
+      } else if (Array.isArray(value)) {
+        config[key] = value.filter((item) => typeof item === 'string');
+      }
+    }
+    for (const key of [
+      'language',
+      'examples',
+      'modifiers',
+      'inputs',
+      'excludeStrategies',
+      'maxCharsPerMessage',
+    ]) {
+      if (source[key] !== undefined) {
+        config[key] = source[key];
+      }
+    }
+
+    if (this.config.targetManifest) {
+      config.targetManifest = {};
+      for (const key of ['name', 'kind'] as const) {
+        const [value] = getManifestStrings(this.config, [key]);
+        if (value) {
+          config.targetManifest[key] = value;
+        }
+      }
+      for (const key of [
+        'frameworks',
+        'files',
+        'commands',
+        'tools',
+        'allowedPaths',
+        'sensitivePaths',
+        'dataSources',
+        'dataSinks',
+        'notes',
+      ] as const) {
+        const values = getManifestStrings(this.config, [key]);
+        if (values.length) {
+          config.targetManifest[key] = values;
+        }
+      }
+    }
+    return config;
+  }
+
   private withCodingAgentMetadata(test: TestCase, score?: number): TestCase {
     return {
       ...test,

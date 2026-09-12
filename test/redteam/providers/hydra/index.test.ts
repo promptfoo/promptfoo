@@ -2326,6 +2326,39 @@ describe('HydraProvider', () => {
       expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
     });
 
+    it.each(['audio', 'image'] as const)(
+      'omits previous turns from current-turn-only %s payloads',
+      async (media) => {
+        mockApplyRuntimeTransforms.mockResolvedValue({
+          transformedPrompt: 'attack',
+          [media]: { data: 'fixture', format: media === 'audio' ? 'mp3' : 'png' },
+        });
+        mockAgentProvider.callApi.mockResolvedValue({ output: 'Current attack' });
+        mockTargetProvider.callApi.mockResolvedValue({ output: 'Public response' });
+        const provider = new HydraProvider({
+          injectVar: 'input',
+          maxTurns: 2,
+          sendCurrentTurnOnly: true,
+          _perTurnLayers: [{ id: media }],
+        });
+        await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'goal' },
+          prompt: { raw: '{{input}}', label: 'test' },
+          test: {
+            assert: [{ type: 'harmful:test' }],
+            metadata: { goal: 'goal', pluginId: 'coding-agent:mcp-confused-deputy' },
+          },
+        } as CallApiContextParams);
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        for (const [prompt] of mockTargetProvider.callApi.mock.calls) {
+          const payload = JSON.parse(prompt);
+          expect(payload.history).toEqual([]);
+          expect(payload.currentTurn[media].data).toBe('fixture');
+        }
+      },
+    );
+
     it('should include outputAudio in redteamHistory when target returns audio', async () => {
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',

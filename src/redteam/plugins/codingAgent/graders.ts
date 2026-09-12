@@ -521,7 +521,7 @@ export function findDeterministicLeak(
   const corpus = collectTargetCorpus(llmOutput, gradingContext);
   const canaryCorpus =
     pluginId === 'coding-agent:trace-redaction'
-      ? corpus.filter((item) => item.location === 'final output')
+      ? corpus.filter((item) => ['final output', 'provider metadata'].includes(item.location))
       : corpus;
   const canaryLocations = new Set<string>();
 

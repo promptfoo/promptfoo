@@ -468,16 +468,18 @@ function createPluginFactory<T extends PluginConfig>(
         ).generateTests(n, delayMs);
       }
       const pluginId = getShortPluginId(key);
+      const plugin = new PluginClass(provider, purpose, injectVar, configWithDefaults as T);
       const testCases = await fetchRemoteTestCases(
         key,
         purpose,
         injectVar,
         n,
-        configWithDefaults ?? {},
+        plugin instanceof CodingAgentGeneratedPlugin
+          ? plugin.getRemoteGenerationConfig()
+          : (configWithDefaults ?? {}),
         redteamGenerationContext ?? targetId,
         provider,
       );
-      const plugin = new PluginClass(provider, purpose, injectVar, configWithDefaults as T);
       const processedTestCases =
         plugin instanceof CodingAgentGeneratedPlugin
           ? plugin.postprocessRemoteTests(testCases)
