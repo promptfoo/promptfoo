@@ -125,6 +125,7 @@ describe('resolveInternalModule', () => {
 
     it.each([
       ['.js', '.d.ts'],
+      ['.jsx', '.d.ts'],
       ['.mjs', '.d.mts'],
       ['.cjs', '.d.cts'],
     ])('maps explicit %s imports to %s declarations', (runtime, declaration) => {

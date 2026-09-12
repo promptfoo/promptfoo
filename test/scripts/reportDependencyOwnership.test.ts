@@ -972,6 +972,13 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it('does not treat a destructured property key as a require binding', () => {
+    write('src/index.js', "const { require: loader } = registry; require('external');");
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'external' }),
+    ]);
+  });
+
   it('classifies test declarations as tests', () => {
     write('src/component.test.d.ts', "import 'test-only';");
     expect(

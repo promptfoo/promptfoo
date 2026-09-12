@@ -165,9 +165,22 @@ function getRequireShadowRanges(
     if (record.type === 'Identifier') {
       return record.name === 'require';
     }
-    return Object.values(record).some((value) =>
-      Array.isArray(value) ? value.some(bindsRequire) : bindsRequire(value),
-    );
+    if (record.type === 'AssignmentPattern') {
+      return bindsRequire(record.left);
+    }
+    if (record.type === 'RestElement') {
+      return bindsRequire(record.argument);
+    }
+    if (record.type === 'Property') {
+      return bindsRequire(record.value);
+    }
+    if (record.type === 'ObjectPattern') {
+      return (record.properties as unknown[]).some(bindsRequire);
+    }
+    if (record.type === 'ArrayPattern') {
+      return (record.elements as unknown[]).some(bindsRequire);
+    }
+    return false;
   };
   const addParams = (node: { body: { start: number; end: number } | null; params: unknown[] }) => {
     if (node.body && node.params.some(bindsRequire)) {
