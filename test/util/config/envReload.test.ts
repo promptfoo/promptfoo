@@ -8,6 +8,7 @@ import { AssertValidationError } from '../../../src/assertions/validateAssertion
 import { fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { getEnvString } from '../../../src/envars';
+import { getProcessEnv } from '../../../src/envOverrides';
 import { evaluate as evaluateResolved } from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import { getGradingProvider, getRemoteGradingContext } from '../../../src/matchers/providers';
@@ -139,21 +140,29 @@ describe('suite environment loading', () => {
     const configPath = writeConfig('file-defaults', {
       env: { OPENAI_API_KEY: '{{env.OPENAI_API_KEY}}' },
     });
-    await cliState.withEnvFileOverrides({ OPENAI_API_KEY: 'file-key' }, async () => {
-      const config = await readConfig(configPath);
-      expect(config.env?.OPENAI_API_KEY).toBe('file-key');
-      expect(cliState.env).toBeUndefined();
-      for (const env of [undefined, {}, { OPENAI_API_KEY: undefined }]) {
-        cliState.withEnv(env, () => {
-          expect(getEnvString('OPENAI_API_KEY')).toBe('file-key');
-          expect(getNunjucksEngine().renderString('{{env.OPENAI_API_KEY}}', {})).toBe('file-key');
+    await cliState.withEnvFileOverrides(
+      { OPENAI_API_KEY: 'file-key', OPENAI_API_BASE_URL: undefined, OPENAI_ORGANIZATION: '' },
+      async () => {
+        expect(getProcessEnv()).toMatchObject({
+          OPENAI_API_KEY: 'file-key',
+          OPENAI_API_BASE_URL: 'https://process.example/v1',
+          OPENAI_ORGANIZATION: '',
         });
-      }
-      cliState.withEnv({ OPENAI_API_KEY: '' }, () => {
-        expect(getEnvString('OPENAI_API_KEY')).toBe('');
-        expect(getNunjucksEngine().renderString('{{env.OPENAI_API_KEY}}', {})).toBe('');
-      });
-    });
+        const config = await readConfig(configPath);
+        expect(config.env?.OPENAI_API_KEY).toBe('file-key');
+        expect(cliState.env).toBeUndefined();
+        for (const env of [undefined, {}, { OPENAI_API_KEY: undefined }]) {
+          cliState.withEnv(env, () => {
+            expect(getEnvString('OPENAI_API_KEY')).toBe('file-key');
+            expect(getNunjucksEngine().renderString('{{env.OPENAI_API_KEY}}', {})).toBe('file-key');
+          });
+        }
+        cliState.withEnv({ OPENAI_API_KEY: '' }, () => {
+          expect(getEnvString('OPENAI_API_KEY')).toBe('');
+          expect(getNunjucksEngine().renderString('{{env.OPENAI_API_KEY}}', {})).toBe('');
+        });
+      },
+    );
     expect(cliState.envFileOverrides).toBeUndefined();
     expect(process.env.OPENAI_API_KEY).toBe('process-key');
   });

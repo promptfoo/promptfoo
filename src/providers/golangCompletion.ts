@@ -5,6 +5,7 @@ import path from 'path';
 import util from 'util';
 
 import { getCache, isCacheEnabled } from '../cache';
+import { getProcessEnv } from '../envOverrides';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
@@ -134,8 +135,10 @@ export class GolangProvider implements ApiProvider {
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
         const goExecutable = this.config.goExecutable || 'go';
+        const env = getProcessEnv();
         const { stdout: packageJson } = await execFileAsync(goExecutable, ['list', '-json', '.'], {
           cwd: scriptDir,
+          env,
         });
         const packageInfo = JSON.parse(packageJson) as { ImportPath?: string; Name?: string };
         let buildDir = scriptDir;
@@ -161,17 +164,18 @@ export class GolangProvider implements ApiProvider {
 
         await execFileAsync(goExecutable, ['build', '-o', executablePath, ...buildFiles], {
           cwd: buildDir,
+          env,
         });
 
         const jsonArgs = safeJsonStringify(args) || '[]';
         logger.debug(`Running Go executable: ${executablePath}`);
 
         // Execute compiled binary with args (no shell escaping needed)
-        const { stdout, stderr } = await execFileAsync(executablePath, [
-          tempScriptPath,
-          functionName,
-          jsonArgs,
-        ]);
+        const { stdout, stderr } = await execFileAsync(
+          executablePath,
+          [tempScriptPath, functionName, jsonArgs],
+          { env },
+        );
         if (stderr) {
           logger.error(`Golang script stderr: ${stderr}`);
         }

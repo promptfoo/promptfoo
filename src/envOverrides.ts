@@ -33,3 +33,14 @@ export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides
     return undefined;
   }
 }
+
+/** Environment inherited by child processes, including invocation-local file values. */
+export function getProcessEnv(): NodeJS.ProcessEnv {
+  const fileEnv = getEnvOverrides('file');
+  return fileEnv
+    ? {
+        ...process.env,
+        ...Object.fromEntries(Object.entries(fileEnv).filter(([, value]) => value !== undefined)),
+      }
+    : process.env;
+}
