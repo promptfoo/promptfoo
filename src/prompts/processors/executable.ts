@@ -2,7 +2,7 @@ import { execFile } from 'child_process';
 import { stat as fsStat, readFile } from 'fs/promises';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import logger from '../../logger';
+import { getProcessEnv } from '../../envOverrides';
 import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
@@ -56,7 +56,6 @@ export const executablePromptFunction = async (
     cachedResult = await cache.get(cacheKey);
 
     if (cachedResult) {
-      logger.debug(`Returning cached result for executable prompt ${scriptPath}`);
       return cachedResult as string;
     }
   }
@@ -70,14 +69,12 @@ export const executablePromptFunction = async (
 
     const options = {
       cwd: context.config?.basePath,
+      env: getProcessEnv(),
       timeout: context.config?.timeout || 60000, // Default 60 second timeout
     };
 
-    logger.debug(`Executing prompt script: ${command} ${scriptArgs.join(' ')}`);
-
     execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
       if (error) {
-        logger.error(`Error running executable prompt ${scriptPath}: ${error.message}`);
         reject(error);
         return;
       }
@@ -86,14 +83,11 @@ export const executablePromptFunction = async (
       const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
 
       if (errorOutput) {
-        logger.debug(`Error output from executable prompt ${scriptPath}: ${errorOutput}`);
         if (!standardOutput) {
           reject(new Error(errorOutput));
           return;
         }
       }
-
-      logger.debug(`Output from executable prompt ${scriptPath}: ${standardOutput}`);
 
       if (fileHashes.length > 0 && isCacheEnabled()) {
         const cache = getCache();

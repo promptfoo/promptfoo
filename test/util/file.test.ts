@@ -6,6 +6,7 @@ import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
+  getNunjucksEngineForFilePath,
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -369,6 +370,29 @@ describe('file utilities', () => {
 
       mockProcessEnv({ TEST_ROOT_PATH: undefined });
     });
+
+    it.each([false, true])(
+      'uses scoped env-file paths with template restriction %s',
+      (disabled) => {
+        const restoreEnv = mockProcessEnv({
+          TEST_ROOT_PATH: 'host',
+          PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: String(disabled),
+        });
+        try {
+          const rendered = cliState.withEnvFileOverrides(
+            { TEST_ROOT_PATH: 'file', PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'false' },
+            () =>
+              cliState.withEnv({}, () =>
+                getNunjucksEngineForFilePath().renderString('{{ env.TEST_ROOT_PATH }}', {}),
+              ),
+          );
+          expect(rendered).toBe(disabled ? '' : 'file');
+          expect(process.env.TEST_ROOT_PATH).toBe('host');
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
 
     it('should ignore basePath when file path is absolute', () => {
       const basePath = '/base/path';

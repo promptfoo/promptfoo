@@ -304,7 +304,7 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
  * Renders environment variable templates in a config object using two-pass rendering.
  * This handles nested templates in config.env (fixes #7079).
  *
- * Pass 1: Render config.env values using only process.env (isolated from cliState)
+ * Pass 1: Render config.env values using process/env-file defaults
  * Pass 2: Render full config using pre-rendered config.env as overrides
  *
  * @param config - The config object to render

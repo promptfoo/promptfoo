@@ -7,7 +7,7 @@ import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import { getEnvBool, isTemplateProcessEnvDisabled } from '../envars';
-import { getEnvOverrides } from '../envOverrides';
+import { getEnvOverrides, getProcessEnv } from '../envOverrides';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
@@ -52,7 +52,7 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
 
   // Add environment variables as template globals
   env.addGlobal('env', {
-    ...(isTemplateProcessEnvDisabled() ? {} : process.env),
+    ...(isTemplateProcessEnvDisabled() ? {} : getProcessEnv()),
     ...getEnvOverrides(),
   });
 
