@@ -1362,6 +1362,41 @@ describe('suite environment loading', () => {
     },
   );
 
+  it.each(['relative', 'absolute'] as const)(
+    'uses the same %s basePath for discovered, explicit, and replayed configs',
+    async (form) => {
+      const source = path.join(tempDir, 'base-override/assets');
+      const configPath = writeConfig('base-override', {
+        basePath: form === 'relative' ? 'assets' : source,
+        tests: ['cases.yaml'],
+      });
+      fs.mkdirSync(source);
+      fs.writeFileSync(path.join(source, 'cases.yaml'), '- vars: { source: custom-base }');
+      const discovered = await resolveConfigs({}, await readConfig(configPath));
+      const explicit = await resolveConfigs({ config: [configPath] }, {});
+      const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(explicit.config)));
+      for (const loaded of [discovered, explicit, replay]) {
+        expect(loaded.basePath).toBe(source);
+        expect(loaded.config.basePath).toBe(source);
+        expect(loaded.testSuite.tests?.[0].vars?.source).toBe('custom-base');
+      }
+      expect(explicit.testSources?.[0].basePath).toBe(source);
+    },
+  );
+
+  it('retains an absolute SDK basePath in saved config', async () => {
+    const result = await evaluate(
+      {
+        basePath: path.relative(process.cwd(), tempDir),
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests: [{ vars: {} }],
+      },
+      { cache: false },
+    );
+    expect(result.config.basePath).toBe(tempDir);
+  });
+
   it('scopes a direct readTest to its supplied directory', async () => {
     const current = path.join(tempDir, 'current');
     fs.mkdirSync(current);

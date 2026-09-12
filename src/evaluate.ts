@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
@@ -180,6 +182,7 @@ function createSerializableUnifiedConfig(
   const droppedRef = { value: false };
   const config = {
     ...testSuite,
+    basePath: cliState.basePath,
     providers: toSerializableProviderRef(testSuite.providers),
     defaultTest: toSerializableTestCase(testSuite.defaultTest, droppedRef),
     tests: Array.isArray(testSuite.tests)
@@ -321,7 +324,7 @@ export async function evaluateWithSource(
   testSuite: EvaluateTestSuite,
   options: InternalEvaluateOptions = {},
 ) {
-  return cliState.withBasePath(testSuite.basePath ?? '', () =>
+  return cliState.withBasePath(path.resolve(testSuite.basePath ?? ''), () =>
     cliState.withEnv(testSuite.env ?? {}, () => evaluateWithEnv(testSuite, options)),
   );
 }

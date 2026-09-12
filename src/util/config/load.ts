@@ -461,6 +461,9 @@ async function readConfigInScope(configPath: string): Promise<UnifiedConfig> {
     }
     ret.prompts = ['{{prompt}}'];
   }
+  if (ret.basePath !== undefined) {
+    ret.basePath = path.resolve(path.dirname(path.resolve(configPath)), ret.basePath);
+  }
   return ret;
 }
 
@@ -580,6 +583,9 @@ async function prepareCombinedConfig(
     }
   }
 
+  const configBasePaths = configs.map(
+    (config, index) => config.basePath ?? path.dirname(resolvedConfigPaths[index]),
+  );
   const combinedEnv = configs.reduce((env, config) => ({ ...env, ...config.env }), {});
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<unknown>();
@@ -651,7 +657,7 @@ async function prepareCombinedConfig(
 
   let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
 
-  const resolveConfigPath = (configPath: string, reference: string): string => {
+  const resolveConfigPath = (basePath: string, reference: string): string => {
     if (reference.includes('{{')) {
       reference = cliState.withEnv(combinedEnv, () => renderEnvOnlyInObject(reference));
     }
@@ -659,35 +665,35 @@ async function prepareCombinedConfig(
       return reference;
     }
     const prefix = reference.startsWith('file://') ? 'file://' : '';
-    return prefix + path.resolve(path.dirname(configPath), reference.slice(prefix.length));
+    return prefix + path.resolve(basePath, reference.slice(prefix.length));
   };
 
-  const resolveNestedFileReferences = (configPath: string, value: unknown): unknown => {
+  const resolveNestedFileReferences = (basePath: string, value: unknown): unknown => {
     if (typeof value === 'string') {
-      return value.startsWith('file://') ? resolveConfigPath(configPath, value) : value;
+      return value.startsWith('file://') ? resolveConfigPath(basePath, value) : value;
     }
     if (Array.isArray(value)) {
-      return value.map((item) => resolveNestedFileReferences(configPath, item));
+      return value.map((item) => resolveNestedFileReferences(basePath, item));
     }
     if (value && typeof value === 'object') {
       return Object.fromEntries(
         Object.entries(value).map(([key, item]) => [
           key,
-          resolveNestedFileReferences(configPath, item),
+          resolveNestedFileReferences(basePath, item),
         ]),
       );
     }
     return value;
   };
 
-  const makeAbsolute = (configPath: string, prompt: string | Prompt) => {
+  const makeAbsolute = (basePath: string, prompt: string | Prompt) => {
     if (typeof prompt === 'string') {
-      return prompt.startsWith('file://') ? resolveConfigPath(configPath, prompt) : prompt;
+      return prompt.startsWith('file://') ? resolveConfigPath(basePath, prompt) : prompt;
     }
     if (prompt.id) {
       return {
         ...prompt,
-        id: prompt.id.startsWith('file://') ? resolveConfigPath(configPath, prompt.id) : prompt.id,
+        id: prompt.id.startsWith('file://') ? resolveConfigPath(basePath, prompt.id) : prompt.id,
       };
     }
     if (PromptSchema.safeParse(prompt).success) {
@@ -696,9 +702,9 @@ async function prepareCombinedConfig(
     throw new Error(`Invalid prompt object: ${JSON.stringify(prompt)}`);
   };
 
-  const makeTestAbsolute = (configPath: string, test: unknown): unknown => {
+  const makeTestAbsolute = (basePath: string, test: unknown): unknown => {
     if (typeof test === 'string') {
-      return resolveConfigPath(configPath, test);
+      return resolveConfigPath(basePath, test);
     }
     if (!test || typeof test !== 'object') {
       return test;
@@ -706,8 +712,8 @@ async function prepareCombinedConfig(
     if ('path' in test && typeof test.path === 'string') {
       return {
         ...test,
-        path: resolveConfigPath(configPath, test.path),
-        ...('config' in test && { config: resolveNestedFileReferences(configPath, test.config) }),
+        path: resolveConfigPath(basePath, test.path),
+        ...('config' in test && { config: resolveNestedFileReferences(basePath, test.config) }),
       };
     }
     const source = test as TestCase;
@@ -717,14 +723,14 @@ async function prepareCombinedConfig(
       ...(source.vars && {
         vars:
           typeof source.vars === 'string'
-            ? resolveConfigPath(configPath, source.vars)
+            ? resolveConfigPath(basePath, source.vars)
             : Array.isArray(source.vars)
-              ? source.vars.map((value) => resolveConfigPath(configPath, value))
-              : resolveNestedFileReferences(configPath, source.vars),
+              ? source.vars.map((value) => resolveConfigPath(basePath, value))
+              : resolveNestedFileReferences(basePath, source.vars),
       }),
       ...(typeof source.provider === 'string' &&
         source.provider.startsWith('file://') && {
-          provider: resolveConfigPath(configPath, source.provider),
+          provider: resolveConfigPath(basePath, source.provider),
         }),
     };
   };
@@ -744,7 +750,7 @@ async function prepareCombinedConfig(
   configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(resolvedConfigPaths[idx], config.prompts);
+      const absolutePrompt = makeAbsolute(configBasePaths[idx], config.prompts);
       addSeenPrompt(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
@@ -755,7 +761,7 @@ async function prepareCombinedConfig(
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
-        addSeenPrompt(makeAbsolute(resolvedConfigPaths[idx], prompt as string | Prompt));
+        addSeenPrompt(makeAbsolute(configBasePaths[idx], prompt as string | Prompt));
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
@@ -767,9 +773,7 @@ async function prepareCombinedConfig(
         ...prompts,
         ...Object.fromEntries(
           Object.entries(config.prompts).map(([prompt, label]) => [
-            prompt.startsWith('file://')
-              ? resolveConfigPath(resolvedConfigPaths[idx], prompt)
-              : prompt,
+            prompt.startsWith('file://') ? resolveConfigPath(configBasePaths[idx], prompt) : prompt,
             label,
           ]),
         ),
@@ -786,13 +790,13 @@ async function prepareCombinedConfig(
       continue;
     }
     scenarios ??= [];
-    const configPath = resolvedConfigPaths[index];
+    const basePath = configBasePaths[index];
     for (const source of [config.scenarios].flat()) {
       const loaded =
         typeof source === 'string' && source.startsWith('file://')
-          ? await cliState.withBasePath(path.dirname(configPath), () =>
+          ? await cliState.withBasePath(basePath, () =>
               cliState.withEnv(combinedEnv, () =>
-                maybeLoadFromExternalFile(resolveConfigPath(configPath, source)),
+                maybeLoadFromExternalFile(resolveConfigPath(basePath, source)),
               ),
             )
           : source;
@@ -801,7 +805,7 @@ async function prepareCombinedConfig(
           typeof scenario === 'object' && scenario?.tests
             ? {
                 ...scenario,
-                tests: [scenario.tests].flat().map((test) => makeTestAbsolute(configPath, test)),
+                tests: [scenario.tests].flat().map((test) => makeTestAbsolute(basePath, test)),
               }
             : scenario,
         );
@@ -812,7 +816,7 @@ async function prepareCombinedConfig(
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
     tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
-    basePath: resolvedConfigPaths.length ? path.dirname(resolvedConfigPaths[0]) : undefined,
+    basePath: configBasePaths[0],
     description: configs.map((config) => config.description).join(', '),
     providers,
     prompts,
@@ -821,7 +825,7 @@ async function prepareCombinedConfig(
     defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr, index) => {
       // The last file default wins; inline defaults only merge when no file was selected.
       if (typeof curr.defaultTest === 'string') {
-        return makeTestAbsolute(resolvedConfigPaths[index], curr.defaultTest) as string;
+        return makeTestAbsolute(configBasePaths[index], curr.defaultTest) as string;
       }
       // If prev is already a string (file reference), keep it
       if (typeof prev === 'string') {
@@ -881,13 +885,13 @@ async function prepareCombinedConfig(
   combinedConfig.tests = configs.flatMap((config, index) =>
     [config.tests || []]
       .flat()
-      .map((test) => makeTestAbsolute(resolvedConfigPaths[index], test) as TestCase),
+      .map((test) => makeTestAbsolute(configBasePaths[index], test) as TestCase),
   );
   return {
     config: combinedConfig,
     testSources: configs.map((config, index) => ({
       tests: config.tests,
-      basePath: path.dirname(resolvedConfigPaths[index]),
+      basePath: configBasePaths[index],
     })),
   };
 }
@@ -980,10 +984,11 @@ async function resolveLoadedConfig(
   }
 
   // Use base path in cases where path was supplied in the config file
-  const basePath =
+  const basePath = path.resolve(
     fileConfig.basePath ??
-    defaultConfig.basePath ??
-    (configPaths ? path.dirname(configPaths[0]) : '');
+      defaultConfig.basePath ??
+      (configPaths ? path.dirname(configPaths[0]) : ''),
+  );
   let commandLineOptions = normalizeConfiguredCommandLineOptions(
     fileConfig.commandLineOptions || defaultConfig.commandLineOptions,
     configPaths ? `configuration file ${configPaths[0]}` : 'default configuration',

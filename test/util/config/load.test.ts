@@ -1565,7 +1565,7 @@ describe('resolveConfigs', () => {
 
     await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(cliState.basePath).toBe(path.dirname('config.json'));
+    expect(cliState.basePath).toBe(path.resolve(path.dirname('config.json')));
   });
 
   it('should include YAML location when an inline test references a missing prompt', async () => {
@@ -1665,7 +1665,7 @@ describe('resolveConfigs', () => {
     );
     expect(readTests).toHaveBeenCalledWith(
       [`file://${path.resolve('/mock/cwd/tests.yaml')}`],
-      '.',
+      path.resolve('.'),
       {},
     );
 
