@@ -278,6 +278,9 @@ function setupMocks() {
       args: string[] | undefined,
       options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
     ) => {
+      if (command === 'git' && args?.[0] === 'rev-parse') {
+        options?.listeners?.stdout?.(Buffer.from('abc123\n'));
+      }
       if (isPromptfooExecCommand(command, args) && options?.listeners?.stdout) {
         const response = JSON.stringify({
           success: true,
@@ -1004,7 +1007,7 @@ describe('code-scan-action main', () => {
         );
       });
 
-      expect(mocks.exec.exec).not.toHaveBeenCalled();
+      expect(getActionNodeExecCalls()).toHaveLength(0);
     });
   });
 
@@ -1306,6 +1309,47 @@ describe('code-scan-action main', () => {
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });
 
+    it('does not write SARIF when the scanner skipped changed files', async () => {
+      mockPromptfooScanResponse({
+        success: true,
+        comments: [],
+        skippedFiles: 1,
+      });
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.warning).toHaveBeenCalledWith(
+          'SARIF not written because 1 changed file was skipped.',
+        );
+      });
+      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it('fails before scanning when the checkout is not the PR head', async () => {
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'git' && args?.[0] === 'rev-parse') {
+            options?.listeners?.stdout?.(Buffer.from('merge-commit\n'));
+          }
+          return 0;
+        },
+      );
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(
+          expect.stringContaining('Workspace HEAD (merge-commit) does not match PR head abc123'),
+        );
+      });
+      expect(mocks.actionGithub.getPRFiles).not.toHaveBeenCalled();
+    });
+
     it('posts file-only findings from ordinary scan responses as general fallback comments', async () => {
       const { createComment, createReview } = mockFallbackPosting();
       mockPromptfooScanResponse({
@@ -1532,7 +1576,7 @@ describe('code-scan-action main', () => {
 
       expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
-      expect(mocks.exec.exec).not.toHaveBeenCalled();
+      expect(getActionNodeExecCalls()).toHaveLength(0);
     });
 
     it('refuses to write when sarif-output-path escapes GITHUB_WORKSPACE', async () => {

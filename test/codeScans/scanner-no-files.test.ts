@@ -79,11 +79,13 @@ describe('Scanner machine-readable output', () => {
     initialLogLevel = 'info',
     loadConfigError,
     processDiffError,
+    processDiffResult = [],
     configApiHost,
   }: {
     initialLogLevel?: string;
     loadConfigError?: Error;
     processDiffError?: Error;
+    processDiffResult?: FileRecord[];
     configApiHost?: string;
   } = {}) {
     let currentLogLevel = initialLogLevel;
@@ -95,7 +97,7 @@ describe('Scanner machine-readable output', () => {
     vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
       processDiff: processDiffError
         ? vi.fn().mockRejectedValue(processDiffError)
-        : vi.fn().mockResolvedValue([]),
+        : vi.fn().mockResolvedValue(processDiffResult),
     }));
     vi.doMock('../../src/codeScan/git/diff', () => ({
       validateOnBranch: vi.fn().mockResolvedValue('main'),
@@ -244,6 +246,33 @@ describe('Scanner machine-readable output', () => {
       expect(getLogLevel()).toBe('info');
     },
   );
+
+  it('reports skipped files in machine-readable no-file responses', async () => {
+    mockScanner({
+      processDiffResult: [
+        {
+          path: 'package-lock.json',
+          status: 'M',
+          skipReason: 'denylist',
+          shaA: 'abc123',
+          shaB: 'def456',
+          linesAdded: 10,
+          linesRemoved: 5,
+        },
+      ],
+    });
+
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { displayScanResults } = await import('../../src/codeScan/scanner/output');
+
+    await executeScan('/test/repo', { json: true, diffsOnly: true });
+
+    expect(displayScanResults).toHaveBeenCalledWith(
+      { success: true, comments: [], review: 'No files to scan', skippedFiles: 1 },
+      expect.any(Number),
+      { format: CodeScanOutputFormat.JSON, githubPr: undefined },
+    );
+  });
 
   it.each([
     ['CLI option', 'https://cli.example', 'https://config.example', 'https://cli.example'],

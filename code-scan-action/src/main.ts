@@ -338,6 +338,24 @@ async function fetchBaseBranch(baseBranch: string): Promise<void> {
   }
 }
 
+async function assertWorkspaceHead(context: PullRequestContext): Promise<void> {
+  let output = '';
+  const exitCode = await exec.exec('git', ['rev-parse', 'HEAD'], {
+    listeners: {
+      stdout: (data: Buffer) => {
+        output += data.toString();
+      },
+    },
+    ignoreReturnCode: true,
+  });
+  const workspaceHead = output.trim();
+  if (exitCode !== 0 || (workspaceHead && workspaceHead !== context.sha)) {
+    throw new Error(
+      `Workspace HEAD (${workspaceHead || 'unknown'}) does not match PR head ${context.sha}`,
+    );
+  }
+}
+
 function buildCliArgs(
   apiHost: string,
   configPath: string,
@@ -992,7 +1010,7 @@ async function handleScanResponse(
   inputs: ActionInputs,
   context: PullRequestContext,
 ): Promise<void> {
-  const { comments, commentsPosted, review, skipReason } = scanResponse;
+  const { comments, commentsPosted, review, skipReason, skippedFiles = 0 } = scanResponse;
   const hasPrFindings = hasPrPostableFindings(comments);
 
   // A skipped scan is not a clean scan. SARIF is withheld entirely for any response
@@ -1019,8 +1037,12 @@ async function handleScanResponse(
   // location-backed finding) uploaded under the same Code Scanning category can be treated
   // as authoritative and silently close prior real alerts that are merely absent from this
   // incomplete scan. Surviving findings are still surfaced through PR comments below.
-  if (!skipReason) {
+  if (!skipReason && skippedFiles === 0) {
     emitConfiguredSarifOutput(scanResponse, inputs);
+  } else if (skippedFiles > 0) {
+    core.warning(
+      `SARIF not written because ${skippedFiles} changed file${skippedFiles === 1 ? ' was' : 's were'} skipped.`,
+    );
   }
 
   if ((hasPrFindings || review) && commentsPosted === false) {
@@ -1085,6 +1107,7 @@ async function runCodeScan(): Promise<void> {
   core.info('🔍 Starting Promptfoo Code Scan...');
 
   const context = await getGitHubContext(inputs.githubToken);
+  await assertWorkspaceHead(context);
   core.info(`📋 Scanning PR #${context.number} in ${context.owner}/${context.repo}`);
 
   core.info('🔎 Checking if this is a setup PR...');
@@ -1113,6 +1136,7 @@ async function runCodeScan(): Promise<void> {
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
     const scanResponse = await getScanResponse(cliArgs, oidcToken, inputs.promptfooVersion);
 
+    await assertWorkspaceHead(context);
     await handleScanResponse(scanResponse, inputs, context);
     logActCommentPreview(scanResponse.comments);
   } finally {

@@ -247,7 +247,12 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
       // For non-text formats (JSON, SARIF), emit a structured empty response for programmatic consumption
       if (outputFormat !== CodeScanOutputFormat.TEXT) {
-        const response: ScanResponse = { success: true, comments: [], review: msg };
+        const response: ScanResponse = {
+          success: true,
+          comments: [],
+          review: msg,
+          ...(skippedFiles.length ? { skippedFiles: skippedFiles.length } : {}),
+        };
         displayScanResults(response, Date.now() - startTime, {
           format: outputFormat,
           githubPr: options.githubPr,
@@ -303,6 +308,9 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       spinner,
       abortController,
     });
+    if (skippedFiles.length > 0) {
+      scanResponse.skippedFiles = skippedFiles.length;
+    }
 
     // Stop spinner silently
     if (showSpinner && spinner) {
