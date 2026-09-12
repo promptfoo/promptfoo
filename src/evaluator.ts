@@ -8,6 +8,7 @@ import { globSync } from 'glob';
 import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
+  getRedteamTraceQueryOptions,
   hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
   runAssertions,
@@ -1002,6 +1003,10 @@ async function collectExternalTraceAfterProviderCall({
     test,
     testSuite ? (testSuite.redteam ?? {}) : undefined,
   );
+  const redteamTraceOptions = getRedteamTraceQueryOptions(
+    test,
+    testSuite ? (testSuite.redteam ?? {}) : undefined,
+  );
   const needsTraceForGrading =
     !providerFailed &&
     !response?.error &&
@@ -1018,9 +1023,10 @@ async function collectExternalTraceAfterProviderCall({
     const trace = await fetchTraceContext(traceId, {
       providerConfig: tracingConfig?.provider,
       queryDelay: tracingConfig?.queryDelay,
+      ...(includeRedteamTrace && redteamTraceOptions),
       maxRetries: needsTraceForGrading ? 5 : 0,
       retryDelayMs: 1000,
-      includeInternalSpans: true,
+      includeInternalSpans: includeRedteamTrace ? redteamTraceOptions.includeInternalSpans : true,
       sanitizeAttributes: true,
       redactAttributes: tracingConfig?.otlp?.http?.redactAttributes,
       abortSignal,
@@ -1439,6 +1445,10 @@ async function gradeRunEvalResponse({
     test,
     testSuite ? (testSuite.redteam ?? {}) : undefined,
   );
+  const redteamTraceOptions = getRedteamTraceQueryOptions(
+    test,
+    testSuite ? (testSuite.redteam ?? {}) : undefined,
+  );
   if (
     traceId &&
     hasTraceAwareAssertions(test.assert, includeRedteamTrace) &&
@@ -1472,6 +1482,7 @@ async function gradeRunEvalResponse({
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
           includeRedteamTrace,
+          traceOptions: includeRedteamTrace ? redteamTraceOptions : undefined,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, abortSignal);
@@ -1493,6 +1504,7 @@ async function gradeRunEvalResponse({
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
         includeRedteamTrace,
+        traceOptions: includeRedteamTrace ? redteamTraceOptions : undefined,
       }),
   );
   applyGradingResult(ret, checkResult);

@@ -295,12 +295,7 @@ export class TraceStore {
     }
   }
 
-  async getTrace(
-    traceId: string,
-    options: TraceAttributeSanitizationOptions = {},
-  ): Promise<TraceData | null> {
-    const { sanitizeAttributes: shouldSanitize = true } = options;
-
+  async getTrace(traceId: string, options: TraceSpanQueryOptions = {}): Promise<TraceData | null> {
     try {
       logger.debug(`[TraceStore] Fetching trace ${traceId}`);
       const db = await this.getDatabase();
@@ -318,7 +313,7 @@ export class TraceStore {
 
       const trace = traces[0];
       logger.debug(`[TraceStore] Found trace ${traceId}, fetching spans`);
-      const spans = await db.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+      const spans = await this.getSpans(traceId, options);
       logger.debug(`[TraceStore] Found ${spans.length} spans for trace ${traceId}`);
 
       return {
@@ -326,7 +321,7 @@ export class TraceStore {
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
         metadata: trace.metadata ?? undefined,
-        spans: spans.map((span) => serializeSpan(span, shouldSanitize)),
+        spans,
       };
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace: ${error}`);
@@ -411,7 +406,7 @@ export class TraceStore {
           continue;
         }
 
-        const rawAttributes = row.attributes ?? {};
+        const rawAttributes = row.attributes ?? undefined;
 
         if (!includeInternalSpans && isGraderOwnedSpan(row, rowsBySpanId, graderOwnedSpanIds)) {
           continue;
@@ -423,7 +418,10 @@ export class TraceStore {
           name: row.name,
           startTime: row.startTime,
           endTime: row.endTime ?? undefined,
-          attributes: shouldSanitize ? sanitizeTraceAttributes(rawAttributes) : rawAttributes,
+          attributes:
+            shouldSanitize && rawAttributes
+              ? sanitizeTraceAttributes(rawAttributes)
+              : rawAttributes,
           statusCode: row.statusCode ?? undefined,
           statusMessage: row.statusMessage ?? undefined,
         };

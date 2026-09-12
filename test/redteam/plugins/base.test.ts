@@ -2472,7 +2472,7 @@ describe('RedteamGraderBase', () => {
         });
         const githubToken = `ghp_${'a'.repeat(36)}`;
         const slackToken = `xoxb-1234567890-1234567890-${'a'.repeat(24)}`;
-        const command = `API_KEY="fixture-env-key" AWS_SECRET_ACCESS_KEY=fixture-aws-key aws configure set aws_secret_access_key fixture-positional-key; curl --client-secret fixture-client-secret --user alice:fixture-user-secret --proxy-user bob:fixture-proxy-secret --user=alice:fixture-equals-user-secret --proxy-user=bob:fixture-equals-proxy-secret http://169.254.169.254/latest/meta-data/ -H 'Authorization: Bearer fixture-header-token' -H 'Authorization: ApiKey fixture-api-key' -H 'X-Api-Key: fixture-x-api-key' -H 'Cookie: sessionid=fixture-session; foo=fixture-cookie' -H Cookie:fixture-unquoted; rm -rf /workspace --data '${githubToken}' --data '${slackToken}'; curl https://user:fixture-password@example.com/path?token=fixture-query-token; -----BEGIN OPENSSH PRIVATE KEY----- fixture-private-key -----END OPENSSH PRIVATE KEY-----`;
+        const command = `API_KEY="fixture-env-key" AWS_SECRET_ACCESS_KEY=fixture-aws-key aws configure set aws_secret_access_key fixture-positional-key; curl --client-secret fixture-client-secret --user alice:fixture-user-secret --proxy-user bob:fixture-proxy-secret --user=alice:fixture-equals-user-secret --proxy-user=bob:fixture-equals-proxy-secret http://169.254.169.254/latest/meta-data/ -H 'Authorization: Bearer fixture-header-token' -H 'Authorization: ApiKey fixture-api-key' -H 'X-Api-Key: fixture-x-api-key' -H 'Cookie: sessionid=fixture-session; foo=fixture-cookie' -H Cookie:fixture-unquoted; rm -rf /workspace --data '${githubToken}' --data '${slackToken}'; curl https://user:fixture-password@example.com/path?token=fixture-query-token#fixture-fragment; curl /collect?data=fixture-relative-query; curl https://hooks.slack.com/services/T/B/fixture-no-query-webhook; sshpass -p fixture-sshpass; redis-cli -afixture-redis; sqlcmd -P fixture-sql; -----BEGIN OPENSSH PRIVATE KEY----- fixture-private-key -----END OPENSSH PRIVATE KEY-----; -----BEGIN PGP PRIVATE KEY BLOCK----- fixture-pgp-key -----END PGP PRIVATE KEY BLOCK-----; -----BEGIN PRIVATE KEY----- fixture-truncated-key`;
         await new HarmfulGrader().getResult(
           'test prompt',
           "I can't do that.",
@@ -2506,6 +2506,14 @@ describe('RedteamGraderBase', () => {
                   statusCode: 2,
                   statusMessage: 'blocked',
                 },
+                {
+                  spanId: 'process',
+                  name: 'process',
+                  startTime: 1,
+                  attributes: {
+                    'process.command_line': 'curl /process?data=fixture-process-query',
+                  },
+                },
               ],
             },
           },
@@ -2522,12 +2530,22 @@ describe('RedteamGraderBase', () => {
         expect(rubric).not.toContain('fixture-equals-user-secret');
         expect(rubric).not.toContain('fixture-equals-proxy-secret');
         expect(rubric).not.toContain('fixture-query-token');
+        expect(rubric).not.toContain('fixture-fragment');
+        expect(rubric).not.toContain('fixture-relative-query');
+        expect(rubric).not.toContain('fixture-process-query');
+        expect(rubric).not.toContain('fixture-no-query-webhook');
+        expect(rubric).toContain('/process');
+        expect(rubric).not.toContain('fixture-sshpass');
+        expect(rubric).not.toContain('fixture-redis');
+        expect(rubric).not.toContain('fixture-sql');
         expect(rubric).not.toContain('fixture-header-token');
         expect(rubric).not.toContain('fixture-api-key');
         expect(rubric).not.toContain('fixture-x-api-key');
         expect(rubric).not.toContain('fixture-positional-key');
         expect(rubric).not.toContain('fixture-client-secret');
         expect(rubric).not.toContain('fixture-private-key');
+        expect(rubric).not.toContain('fixture-pgp-key');
+        expect(rubric).not.toContain('fixture-truncated-key');
         expect(rubric).not.toContain('fixture-json-env');
         expect(rubric).not.toContain('fixture-json-header');
         expect(rubric).not.toContain('fixture-session');
@@ -2575,6 +2593,8 @@ describe('RedteamGraderBase', () => {
                       '--proxy-pass',
                       'argv-proxy-pass-secret',
                     ],
+                    sshArgs: ['sshpass', '-p', 'argv-sshpass-secret'],
+                    redisArgs: ['redis-cli', '-aargv-redis-secret'],
                     command:
                       'curl --password \\\n continued-secret --pass first-secret --pass=second-secret --proxy-pass proxy-pass-secret; curl https://example.test/path?data=query-secret',
                   },
@@ -2588,6 +2608,8 @@ describe('RedteamGraderBase', () => {
       expect(rubric).not.toContain('argv-secret');
       expect(rubric).not.toContain('argv-pass-secret');
       expect(rubric).not.toContain('argv-proxy-pass-secret');
+      expect(rubric).not.toContain('argv-sshpass-secret');
+      expect(rubric).not.toContain('argv-redis-secret');
       expect(rubric).not.toContain('continued-secret');
       expect(rubric).not.toContain('first-secret');
       expect(rubric).not.toContain('second-secret');

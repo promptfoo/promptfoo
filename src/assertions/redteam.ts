@@ -80,6 +80,17 @@ export function shouldIncludeRedteamTrace(
   return tracing.enabled && tracing.includeInGrading;
 }
 
+export function getRedteamTraceQueryOptions(
+  test: AtomicTestCase,
+  redteamConfig?: RedteamFileConfig,
+) {
+  const { includeInternalSpans, maxSpans, spanFilter } = resolveTestTracingOptions(
+    test,
+    redteamConfig,
+  );
+  return { includeInternalSpans, maxSpans, spanFilter };
+}
+
 /**
  * As the name implies, this function "handles" redteam assertions by either calling the
  * grader or preferably returning a `storedGraderResult` if it exists on the provider response.

@@ -400,6 +400,8 @@ function redactTraceValue(
   }
   if (Array.isArray(value)) {
     const redacted: unknown[] = [];
+    const shortPasswordFlag =
+      typeof value[0] === 'string' ? getShortPasswordFlag(value[0]) : undefined;
     for (let index = 0; index < value.length; index++) {
       if (budget.remaining <= 0) {
         redacted.push('[TRUNCATED]');
@@ -416,8 +418,18 @@ function redactTraceValue(
           option === 'proxy-user' ||
           option === 'pass' ||
           option === 'proxy-pass' ||
+          option === shortPasswordFlag ||
           isSecretField(option));
-      if (isSecretOption) {
+      if (
+        typeof entry === 'string' &&
+        index > 0 &&
+        shortPasswordFlag &&
+        entry.startsWith(`-${shortPasswordFlag}`) &&
+        entry !== `-${shortPasswordFlag}`
+      ) {
+        budget.remaining--;
+        redacted.push(`-${shortPasswordFlag}[REDACTED]`);
+      } else if (isSecretOption) {
         budget.remaining--;
         redacted.push('[REDACTED]');
       } else {
@@ -455,17 +467,18 @@ function redactTraceValue(
 }
 
 function redactTraceEvidence(text: string): string {
-  if (text.length <= 32_000 && /^\s*[\[{]/.test(text)) {
+  const bounded = truncateTraceEvidence(text, 32_000);
+  if (/^\s*[\[{]/.test(bounded)) {
     try {
-      return JSON.stringify(redactTraceValue(JSON.parse(text)));
+      return JSON.stringify(redactTraceValue(JSON.parse(bounded)));
     } catch {
       // Trace summaries may be prose rather than serialized trajectory steps.
     }
   }
-  return redactPrivateKeys(text.replace(/\\\r?\n\s*/g, ' '))
+  return redactPrivateKeys(bounded.replace(/\\\r?\n\s*/g, ' '))
     .replace(/\b(AccountKey\s*=\s*)[^;\s\"'\\]+/gi, '$1[REDACTED]')
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/@\s"'`\\]+)@/gi, '$1[REDACTED]@')
-    .replace(/\bhttps?:\/\/[^\s"'`\\]+/gi, (url) => {
+    .replace(/\bhttps?:\/\/[^\s"'`\\]+|(?<![:\w])\/[^\s"'`\\?#]+[?#][^\s"'`\\]+/gi, (url) => {
       const sanitized = redactTraceUrl(url);
       if (/^https?:\/\/hooks\.slack\.com\//i.test(sanitized)) {
         return sanitized.replace(/(\/services\/[^/?#\s]+\/[^/?#\s]+\/)[^/?#\s]+/i, '$1[REDACTED]');
@@ -509,6 +522,7 @@ function redactTraceEvidence(text: string): string {
       /(^|\s)((?:--?(?:api[-_]?key|pass|password|proxy-pass|proxy-user|secret|token|user)|-u)(?:\s+|=))(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
       '$1$2[REDACTED]',
     )
+    .replace(/\b(?:sshpass|redis-cli|sqlcmd)\b[^\r\n;&|]*/gi, redactShortPasswordFlags)
     .replace(
       /\b(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{35}|(?:Bearer|Basic)\s+[^\s"'`\\]+)/gi,
       '[REDACTED]',
@@ -523,15 +537,42 @@ function redactTraceEvidence(text: string): string {
 function redactTraceUrl(value: string): string {
   const sanitized = sanitizeUrl(value);
   try {
-    const url = new URL(sanitized);
-    if (!url.search) {
+    const isAbsolute = /^https?:\/\//i.test(sanitized);
+    const url = new URL(sanitized, 'https://trace.invalid');
+    if (!url.search && !url.hash) {
       return sanitized;
     }
-    url.search = '[REDACTED]';
-    return url.toString();
+    if (url.search) {
+      url.search = '[REDACTED]';
+    }
+    if (url.hash) {
+      url.hash = '[REDACTED]';
+    }
+    return isAbsolute ? url.toString() : url.pathname + url.search + url.hash;
   } catch {
     return sanitized;
   }
+}
+
+function redactShortPasswordFlags(command: string): string {
+  const flag = getShortPasswordFlag(command);
+  if (!flag) {
+    return command;
+  }
+  return command.replace(
+    new RegExp('(^|\\s)(-' + flag + ')(?:\\s+|=)?(?:"[^"]*"|\'[^\']*\'|[^\\s"\'\\;]+)', 'g'),
+    '$1$2 [REDACTED]',
+  );
+}
+
+function getShortPasswordFlag(command: string): string | undefined {
+  return /^sshpass\b/i.test(command)
+    ? 'p'
+    : /^redis-cli\b/i.test(command)
+      ? 'a'
+      : /^sqlcmd\b/i.test(command)
+        ? 'P'
+        : undefined;
 }
 
 function truncateTraceEvidence(text: string, limit: number): string {
@@ -543,20 +584,12 @@ function truncateTraceEvidence(text: string, limit: number): string {
 }
 
 function redactPrivateKeys(text: string): string {
-  let redacted = text;
-  let start = redacted.toUpperCase().indexOf('-----BEGIN ');
-  while (start >= 0) {
-    const searchable = redacted.toUpperCase();
-    const headerEnd = searchable.indexOf('PRIVATE KEY-----', start);
-    const footerStart = headerEnd >= 0 ? searchable.indexOf('-----END ', headerEnd) : -1;
-    const end = footerStart >= 0 ? searchable.indexOf('PRIVATE KEY-----', footerStart) : -1;
-    if (headerEnd < 0 || end < 0) {
-      break;
-    }
-    redacted = redacted.slice(0, start) + '[REDACTED]' + redacted.slice(end + 15);
-    start = redacted.toUpperCase().indexOf('-----BEGIN ', start + 10);
-  }
-  return redacted;
+  return text
+    .replace(
+      /-----BEGIN [^\r\n-]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?-----END [^\r\n-]*PRIVATE KEY(?: BLOCK)?-----/gi,
+      '[REDACTED]',
+    )
+    .replace(/-----BEGIN [^\r\n-]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*$/gi, '[REDACTED]');
 }
 
 function hasTraceEvidence(context?: RedteamGradingContext): boolean {

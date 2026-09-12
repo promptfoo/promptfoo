@@ -521,6 +521,9 @@ return {
 
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
       sanitizeAttributes: false,
+      includeInternalSpans: false,
+      maxSpans: 50,
+      spanFilter: undefined,
     });
   });
 
@@ -533,7 +536,13 @@ return {
         assert: [{ type: 'promptfoo:redteam:rbac' as const }],
         metadata: {
           pluginId: 'rbac',
-          tracing: { enabled: true, includeInGrading: true },
+          tracing: {
+            enabled: true,
+            includeInGrading: true,
+            includeInternalSpans: true,
+            maxSpans: 1,
+            spanFilter: ['http.*'],
+          },
         },
       },
       providerResponse: {
@@ -541,11 +550,13 @@ return {
         metadata: { storedGraderResult: { pass: true, score: 1, reason: 'stored' } },
       },
       traceId: 'test-trace-id',
-      includeRedteamTrace: true,
     });
 
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
       sanitizeAttributes: false,
+      includeInternalSpans: true,
+      maxSpans: 1,
+      spanFilter: ['http.*'],
     });
   });
 
