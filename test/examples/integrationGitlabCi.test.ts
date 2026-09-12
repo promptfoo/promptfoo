@@ -429,6 +429,8 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     const inspection = blocks.find((block) => block['inspect-promptfoo-results'])[
       'inspect-promptfoo-results'
     ];
+    expect(inspection.cache).toEqual([]);
+    expect(inspection.artifacts).toEqual({});
     const result = await runScript(inspection.script.join('\n'));
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('Skipping');
