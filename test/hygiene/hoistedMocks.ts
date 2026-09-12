@@ -1141,7 +1141,7 @@ export function findHoistedPersistentMockWithoutReset(
   function recordPersistentSetter(receiver: Value, method: string, node: Node, context: Context) {
     if (context.phase === 'reset' && !hasConditionalSetup(context) && !method.endsWith('Once')) {
       for (const key of mockKeys(receiver)) {
-        if (!hoistedMocks.has(key) || context.hookResets?.has(key)) {
+        if (!hoistedMocks.has(key)) {
           continue;
         }
         const setups = scopedSetupSetters.get(key) ?? [];
@@ -1275,6 +1275,20 @@ export function findHoistedPersistentMockWithoutReset(
       suitesWithTests.add(context.suite);
     }
     if (receiver && method) {
+      if (
+        method === 'forEach' &&
+        receiver.kind === 'object' &&
+        receiver.array &&
+        receiver.elements &&
+        args[0]?.kind === 'function'
+      ) {
+        for (const [index, element] of receiver.elements.entries()) {
+          invoke(args[0], [element.value, literal(index), receiver], context, node, {
+            tail: false,
+          });
+        }
+        return MISSING;
+      }
       if (
         (method === 'call' || method === 'apply') &&
         members(receiver).every((part) => part.kind === 'function')
@@ -1740,8 +1754,7 @@ export function findHoistedPersistentMockWithoutReset(
       case 'UpdateExpression':
         return evaluateMutation(node.argument, context, node.operator, node.prefix);
       case 'ClassExpression':
-        executeClass(node, context);
-        return UNKNOWN;
+        return executeClass(node, context);
       case 'TaggedTemplateExpression': {
         const tag = evaluate(node.tag, context);
         for (const expression of node.quasi.expressions) {
@@ -1804,7 +1817,8 @@ export function findHoistedPersistentMockWithoutReset(
   function executeClass(
     node: Extract<Node, { type: 'ClassDeclaration' | 'ClassExpression' }>,
     context: Context,
-  ) {
+  ): Extract<Value, { kind: 'object' }> {
+    const properties = new Map<string, ValueSlot>();
     for (const decorator of node.decorators) {
       evaluate(decorator.expression, context);
     }
@@ -1834,9 +1848,14 @@ export function findHoistedPersistentMockWithoutReset(
         member.static &&
         member.value
       ) {
-        evaluate(member.value, context);
+        const value = evaluate(member.value, context);
+        const key = propertyName(member.key, member.computed);
+        if (key !== undefined) {
+          properties.set(key, value);
+        }
       }
     }
+    return { kind: 'object', properties, unknownProperties: false, array: false };
   }
 
   function executeVariables(

@@ -2180,4 +2180,24 @@ describe('hoisted mock provenance', () => {
       describe('sibling', () => { it('uses mock', () => mock()); });`;
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
   });
+
+  it('retains static mock properties on hoisted class expressions', () => {
+    const source = `const Holder = vi.hoisted(() => class { static mock = vi.fn().mockReturnValue('x') });
+      beforeEach(() => Holder.mock.mockReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('keeps a setup setter that follows a reset in the same hook', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn());
+      describe('first', () => { beforeEach(() => { mock.mockReset(); mock.mockReturnValue('x'); }); it('a', () => mock()); });
+      describe('second', () => { it('b', () => mock()); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it('follows resets through known array forEach callbacks', () => {
+    const source = `const first = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      const second = vi.hoisted(() => vi.fn().mockReturnValue('y'));
+      beforeEach(() => [first, second].forEach((mock) => mock.mockReset()));`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
 });
