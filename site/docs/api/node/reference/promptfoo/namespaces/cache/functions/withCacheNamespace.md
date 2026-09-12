@@ -13,7 +13,7 @@ import { cache } from 'promptfoo';
 <!-- prettier-ignore -->
 > **withCacheNamespace**\<`T`\>(`namespace`, `fn`): `Promise`\<`T`\>
 
-Defined in: [src/cache.ts:291](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L291)
+Defined in: [src/cache.ts:295](https://github.com/promptfoo/promptfoo/blob/main/src/cache.ts#L295)
 
 Run an async operation inside an isolated cache namespace.
 
