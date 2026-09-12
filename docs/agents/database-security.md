@@ -111,3 +111,23 @@ const results = await queryWithFilter(filter);
 - `src/models/eval.ts` - Main eval queries and JSON-path helper
 - `src/util/calculateFilteredMetrics.ts` - Metrics aggregation queries
 - `src/database/index.ts` - Database connection
+
+## Transaction Handles
+
+Inside `db.transaction(async (tx) => ...)`, use `tx` for every query and pass it
+into helpers that need database access. Root `db.run`, `db.all`, query builders,
+and client methods reject inside the callback. Catching that error leaves the
+transaction usable; letting it escape rolls the transaction back. Nested root
+`db.transaction` callbacks reuse the active transaction and do not commit it
+independently.
+
+Promptfoo serializes top-level operations and configures libSQL with one pooled
+connection so foreign-key, busy-timeout, and WAL settings survive transaction
+reuse. Reconnecting during a transaction would close its connection and must not
+be used to recover a root call.
+
+For direct libSQL clients in fixtures, hold `await client.transaction('write')`
+(or `'read'`) and call `commit()`, `rollback()`, or `close()` on that handle.
+libSQL 0.18 rolls back unfinished transactions when a client operation returns
+its connection to the pool, so separate `client.execute('BEGIN')` and
+`client.execute('ROLLBACK')` calls cannot hold a lock across operations.

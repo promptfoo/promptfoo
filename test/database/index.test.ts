@@ -616,25 +616,45 @@ describe('database', () => {
       ).resolves.toEqual([{ id: 'inner' }, { id: 'outer' }]);
     });
 
-    it('does not deadlock when a transaction callback calls root db.* helpers', async () => {
+    it('rejects root calls without aborting the active transaction', async () => {
       const db = await getDb();
-      await db.run('CREATE TABLE root_call_inside_tx_test (id INTEGER PRIMARY KEY, val TEXT)');
+      await db.run('CREATE TABLE root_call_inside_tx_test (id INTEGER PRIMARY KEY)');
+
+      await db.transaction(async (tx) => {
+        await tx.run('INSERT INTO root_call_inside_tx_test VALUES (1)');
+        await expect(db.all('SELECT 1')).rejects.toMatchObject({
+          cause: expect.objectContaining({
+            message: expect.stringContaining('transaction handle'),
+          }),
+        });
+        await expect(
+          db.run('INSERT INTO root_call_inside_tx_test VALUES (2)'),
+        ).rejects.toMatchObject({
+          cause: expect.objectContaining({
+            message: expect.stringContaining('transaction handle'),
+          }),
+        });
+        await expect(tx.all('SELECT id FROM root_call_inside_tx_test')).resolves.toEqual([
+          { id: 1 },
+        ]);
+      });
+      await expect(db.all('SELECT id FROM root_call_inside_tx_test')).resolves.toEqual([{ id: 1 }]);
+    });
+
+    it('rolls back when an uncaught root call rejects inside a transaction', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE root_call_rollback_test (id INTEGER PRIMARY KEY)');
 
       await expect(
-        Promise.race([
-          db.transaction(async (tx) => {
-            await tx.run("INSERT INTO root_call_inside_tx_test (id, val) VALUES (1, 'in-tx')");
-            const rows = await db.all<{ value: number }>('SELECT 1 AS value');
-            expect(rows[0]?.value).toBe(1);
-          }),
-          new Promise((_, reject) => {
-            setTimeout(
-              () => reject(new Error('root db call inside transaction deadlocked')),
-              1_000,
-            );
-          }),
-        ]),
-      ).resolves.toBeUndefined();
+        db.transaction(async (tx) => {
+          await tx.run('INSERT INTO root_call_rollback_test VALUES (1)');
+          await db.run('INSERT INTO root_call_rollback_test VALUES (2)');
+        }),
+      ).rejects.toMatchObject({
+        cause: expect.objectContaining({ message: expect.stringContaining('transaction handle') }),
+      });
+      await db.run('INSERT INTO root_call_rollback_test VALUES (3)');
+      await expect(db.all('SELECT id FROM root_call_rollback_test')).resolves.toEqual([{ id: 3 }]);
     });
 
     it('should enforce foreign keys inside top-level transactions', async () => {
@@ -826,7 +846,9 @@ describe('database', () => {
           mode,
         );
 
-        expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
+        expect(result.firstError).toMatch(
+          mode === 'root-in-transaction' ? /transaction handle/ : /SQLITE_BUSY|SQLITE_LOCKED/,
+        );
         expect(result.followupError).toBeNull();
         expect(result.followupRowsAffected).toBe(1);
         expect(result.callbackCalls).toBe(callbackCalls);
