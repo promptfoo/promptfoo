@@ -363,7 +363,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
   }
 
   try {
-    return importModule(claudeCodePath);
+    return await importModule(claudeCodePath);
   } catch (err) {
     logger.error(`Failed to load Claude Agent SDK: ${err}`);
     if ((err as any).stack) {
@@ -1490,9 +1490,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       env.CLAUDE_CODE_ENABLE_TODO_TOOLS ??= '1';
     }
 
-    // Ensure API key is available to Claude Agent SDK
-    if (this.apiKey) {
-      env.ANTHROPIC_API_KEY = this.apiKey;
+    // Prompt config overrides provider config; explicit keys take precedence over env.
+    const effectiveApiKey = config.apiKey || this.apiKey;
+    if (effectiveApiKey) {
+      env.ANTHROPIC_API_KEY = effectiveApiKey;
     }
     // Subprocess environment can contain credentials under arbitrary names and value formats.
     // Keep it out of persistent key material and scope reuse to this provider instance instead.
@@ -1500,7 +1501,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Could potentially do more to validate credentials for Bedrock/Vertex here, but Anthropic key is the main use case
     if (
-      !this.apiKey &&
+      !effectiveApiKey &&
       !(
         config.apiKeyRequired === false ||
         env.CLAUDE_CODE_USE_BEDROCK ||
@@ -1636,14 +1637,15 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
       permissionMode: config.permission_mode === 'manual' ? 'default' : config.permission_mode,
       planModeInstructions: config.plan_mode_instructions,
-      systemPrompt: config.custom_system_prompt
-        ? config.custom_system_prompt
-        : {
-            type: 'preset',
-            preset: 'claude_code',
-            append: config.append_system_prompt,
-            ...(config.exclude_dynamic_sections ? { excludeDynamicSections: true } : {}),
-          },
+      systemPrompt:
+        config.custom_system_prompt == null
+          ? {
+              type: 'preset',
+              preset: 'claude_code',
+              append: config.append_system_prompt,
+              ...(config.exclude_dynamic_sections ? { excludeDynamicSections: true } : {}),
+            }
+          : config.custom_system_prompt,
       maxThinkingTokens: config.max_thinking_tokens,
       allowedTools,
       disallowedTools,
@@ -1715,7 +1717,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     const settingsConfigurationBypassesCache =
       config.settings !== undefined || config.managed_settings !== undefined;
     const extraArgsBypassCache = Object.keys(config.extra_args ?? {}).length > 0;
-    const promptEnvironmentOverrideBypassesCache = config.env !== this.config.env;
+    const promptCredentialOverrideBypassesCache =
+      config.env !== this.config.env || config.apiKey !== this.config.apiKey;
     const statefulSessionBypassesCache = Boolean(
       config.continue || config.resume || config.session_id,
     );
@@ -1737,8 +1740,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     if (extraArgsBypassCache) {
       logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: extra_args is open-ended');
     }
-    if (promptEnvironmentOverrideBypassesCache) {
-      logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: prompt config overrides environment');
+    if (promptCredentialOverrideBypassesCache) {
+      logger.debug(
+        '[ClaudeCodeSDKProvider] Bypassing cache: prompt config overrides credentials or environment',
+      );
     }
     if (statefulSessionBypassesCache) {
       logger.debug('[ClaudeCodeSDKProvider] Bypassing cache: session history is mutable');
@@ -1753,7 +1758,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       sensitiveMcpBypassesCache ||
       settingsConfigurationBypassesCache ||
       extraArgsBypassCache ||
-      promptEnvironmentOverrideBypassesCache ||
+      promptCredentialOverrideBypassesCache ||
       statefulSessionBypassesCache ||
       externalCredentialProviderBypassesCache
         ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
@@ -2412,20 +2417,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     return '[Anthropic Claude Agent SDK Provider]';
   }
 
-  /**
-   * For normal Claude Agent SDK support, just use the Anthropic API key
-   * Users can also use Bedrock (with CLAUDE_CODE_USE_BEDROCK env var) or Vertex (with CLAUDE_CODE_USE_VERTEX env var)
-   */
+  // Credentials may be supplied per prompt, so validate the merged config in callApi.
   requiresApiKey(): boolean {
-    if (this.config.apiKeyRequired === false) {
-      return false;
-    }
-    return !(
-      this.env?.CLAUDE_CODE_USE_BEDROCK ||
-      this.env?.CLAUDE_CODE_USE_VERTEX ||
-      getEnvString('CLAUDE_CODE_USE_BEDROCK') ||
-      getEnvString('CLAUDE_CODE_USE_VERTEX')
-    );
+    return false;
   }
 
   getApiKey(): string | undefined {
