@@ -534,8 +534,9 @@ describe('database', () => {
     });
 
     it('should initialize database with WAL mode', async () => {
+      vi.mocked(getEnvBool).mockReturnValue(false);
       const db = await getDb();
-      expect(db).toBeDefined();
+      await expect(db.all('PRAGMA journal_mode')).resolves.toEqual([{ journal_mode: 'wal' }]);
     });
 
     it('should return same instance on subsequent calls', async () => {
@@ -597,19 +598,25 @@ describe('database', () => {
       const db = await getDb();
       await db.run('CREATE TABLE nested_transaction_test (id TEXT PRIMARY KEY)');
 
-      await expect(
-        Promise.race([
-          db.transaction(async (tx) => {
-            await tx.run("INSERT INTO nested_transaction_test (id) VALUES ('outer')");
-            await db.transaction(async (nestedTx) => {
-              await nestedTx.run("INSERT INTO nested_transaction_test (id) VALUES ('inner')");
-            });
-          }),
-          new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('nested transaction timed out')), 1_000);
-          }),
-        ]),
-      ).resolves.toBeUndefined();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('nested transaction timed out')), 1_000);
+      });
+      try {
+        await expect(
+          Promise.race([
+            db.transaction(async (tx) => {
+              await tx.run("INSERT INTO nested_transaction_test (id) VALUES ('outer')");
+              await db.transaction(async (nestedTx) => {
+                await nestedTx.run("INSERT INTO nested_transaction_test (id) VALUES ('inner')");
+              });
+            }),
+            timeoutPromise,
+          ]),
+        ).resolves.toBeUndefined();
+      } finally {
+        clearTimeout(timeout);
+      }
 
       await expect(
         db.all<{ id: string }>('SELECT id FROM nested_transaction_test ORDER BY id'),
@@ -740,6 +747,60 @@ describe('database', () => {
   });
 
   describe('closeDb', () => {
+    it.each([false, true])(
+      'drains accepted work before closing with WAL disabled=%s',
+      async (disableWAL) => {
+        vi.mocked(getEnvBool).mockImplementation(
+          (key) => key === 'PROMPTFOO_DISABLE_WAL_MODE' && disableWAL,
+        );
+        const db = await getDb();
+        await db.run('CREATE TABLE shutdown_test (id INTEGER PRIMARY KEY)');
+        const started = createDeferred<void>();
+        const release = createDeferred<void>();
+        const transaction = db.transaction(async (tx) => {
+          started.resolve();
+          await release.promise;
+          await expect(closeDb()).rejects.toThrow('inside a transaction');
+          await tx.run('INSERT INTO shutdown_test VALUES (1)');
+        });
+        await started.promise;
+        const accepted = db.run('INSERT INTO shutdown_test VALUES (2)').execute();
+        const closing = closeDb();
+        const secondClose = closeDb();
+        try {
+          await expect(getDb()).rejects.toThrow('closing');
+          await expect(db.run('INSERT INTO shutdown_test VALUES (3)')).rejects.toThrow();
+          await expect(db.transaction(async () => {})).rejects.toThrow('closing');
+        } finally {
+          release.resolve();
+        }
+        await Promise.all([transaction, accepted, closing, secondClose]);
+        expect(isDbOpen()).toBe(false);
+        const reopened = await getDb();
+        await expect(reopened.all('SELECT id FROM shutdown_test ORDER BY id')).resolves.toEqual([
+          { id: 1 },
+          { id: 2 },
+        ]);
+        await expect(db.run('INSERT INTO shutdown_test VALUES (4)')).rejects.toThrow();
+      },
+    );
+
+    it('rejects closing from inside a transaction without deadlocking', async () => {
+      const db = await getDb();
+      await db.transaction(async (tx) => {
+        await expect(closeDb()).rejects.toThrow('inside a transaction');
+        await expect(tx.all('SELECT 1 AS value')).resolves.toEqual([{ value: 1 }]);
+      });
+    });
+
+    it('waits for in-flight initialization before closing', async () => {
+      const initializing = getDb();
+      const closing = closeDb();
+      await Promise.all([initializing, closing]);
+      expect(isDbOpen()).toBe(false);
+      expect(await getDb()).not.toBe(await initializing);
+    });
+
     it('logs a successful file-backed WAL checkpoint', async () => {
       const result = await runDatabaseProbe<WalCheckpointProbeResult>(
         'walCheckpointProbe',

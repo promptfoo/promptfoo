@@ -414,74 +414,75 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       // Create WebSocket connection
       const wsClient = await createStreamingConnection(apiKey, this.config.voiceId, streamConfig);
 
-      // Handle streaming
-      const session = await handleStreamingTTS(wsClient, prompt, undefined, startTime);
+      try {
+        // Handle streaming
+        const session = await handleStreamingTTS(wsClient, prompt, undefined, startTime);
 
-      // Close connection
-      wsClient.close();
+        // Combine chunks into single audio buffer
+        const combinedAudio = combineStreamingChunks(session.chunks);
 
-      // Combine chunks into single audio buffer
-      const combinedAudio = combineStreamingChunks(session.chunks);
+        // Calculate metrics
+        const metrics = calculateStreamingMetrics(session, prompt.length);
 
-      // Calculate metrics
-      const metrics = calculateStreamingMetrics(session, prompt.length);
-
-      // Encode audio
-      const audioData = await encodeAudio(
-        combinedAudio,
-        this.config.outputFormat || 'mp3_44100_128',
-      );
-
-      const ttsResponse: TTSResponse = {
-        audio: audioData,
-        voiceId: this.config.voiceId,
-        modelId: this.config.modelId,
-        alignments: session.alignments,
-      };
-
-      // Save to file if configured
-      if (this.config.saveAudio && this.config.audioOutputPath) {
-        const savedPath = await saveAudioFile(
-          audioData,
-          this.config.audioOutputPath,
-          `tts-streaming-${Date.now()}`,
+        // Encode audio
+        const audioData = await encodeAudio(
+          combinedAudio,
+          this.config.outputFormat || 'mp3_44100_128',
         );
-        logger.debug('[ElevenLabs TTS] Streaming audio saved to file', { path: savedPath });
-      }
 
-      // Track cost
-      const cost = this.costTracker.trackTTS(prompt.length, {
-        voiceId: this.config.voiceId,
-        modelId: this.config.modelId,
-        streaming: true,
-      });
+        const ttsResponse: TTSResponse = {
+          audio: audioData,
+          voiceId: this.config.voiceId,
+          modelId: this.config.modelId,
+          alignments: session.alignments,
+        };
 
-      return {
-        output: `Generated ${prompt.length} characters of speech (streaming)`,
-        cached: false,
-        audio: {
-          data: ttsResponse.audio.data,
-          format: ttsResponse.audio.format,
-        },
-        tokenUsage: {
-          total: prompt.length,
-          prompt: prompt.length,
-          completion: 0,
-          numRequests: 1,
-        },
-        cost,
-        metadata: {
-          voiceId: ttsResponse.voiceId,
-          modelId: ttsResponse.modelId,
-          outputFormat: this.config.outputFormat,
-          latency: Date.now() - startTime,
-          cacheHit: false,
+        // Save to file if configured
+        if (this.config.saveAudio && this.config.audioOutputPath) {
+          const savedPath = await saveAudioFile(
+            audioData,
+            this.config.audioOutputPath,
+            `tts-streaming-${Date.now()}`,
+          );
+          logger.debug('[ElevenLabs TTS] Streaming audio saved to file', { path: savedPath });
+        }
+
+        // Track cost
+        const cost = this.costTracker.trackTTS(prompt.length, {
+          voiceId: this.config.voiceId,
+          modelId: this.config.modelId,
           streaming: true,
-          audioDuration: ttsResponse.audio.durationMs,
-          audioSize: ttsResponse.audio.sizeBytes,
-          ...metrics,
-        },
-      };
+        });
+
+        return {
+          output: `Generated ${prompt.length} characters of speech (streaming)`,
+          cached: false,
+          audio: {
+            data: ttsResponse.audio.data,
+            format: ttsResponse.audio.format,
+          },
+          tokenUsage: {
+            total: prompt.length,
+            prompt: prompt.length,
+            completion: 0,
+            numRequests: 1,
+          },
+          cost,
+          metadata: {
+            voiceId: ttsResponse.voiceId,
+            modelId: ttsResponse.modelId,
+            outputFormat: this.config.outputFormat,
+            latency: Date.now() - startTime,
+            cacheHit: false,
+            streaming: true,
+            audioDuration: ttsResponse.audio.durationMs,
+            audioSize: ttsResponse.audio.sizeBytes,
+            ...metrics,
+          },
+        };
+      } finally {
+        wsClient.close();
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('[ElevenLabs TTS] Streaming failed', { error: errorMessage });

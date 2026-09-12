@@ -85,6 +85,7 @@ describe('ElevenLabs documented request contracts', () => {
       const response = await provider.callApi('Hello');
 
       expect(response.error).toBeUndefined();
+      expect(ElevenLabsWebSocketClient.prototype.close).toHaveBeenCalledTimes(1);
       expect(response.audio).toMatchObject({ data: audio, format: 'pcm' });
       const [endpoint, initialization] = vi.mocked(ElevenLabsWebSocketClient.prototype.connect).mock
         .calls[0];
@@ -97,6 +98,66 @@ describe('ElevenLabs documented request contracts', () => {
       expect(ElevenLabsClient.prototype.post).not.toHaveBeenCalled();
     },
   );
+
+  it('closes the streaming connection when synthesis fails', async () => {
+    vi.mocked(handleStreamingTTS).mockRejectedValue(new Error('stream failed'));
+    const provider = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
+      config: { apiKey: 'fixture-key', streaming: true },
+    });
+    const response = await provider.callApi('Hello');
+    expect(response.error).toContain('stream failed');
+    expect(ElevenLabsWebSocketClient.prototype.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the stream when saving synthesized audio fails', async () => {
+    vi.mocked(handleStreamingTTS).mockImplementation(async (client) => ({
+      client,
+      chunks: [{ audio: Buffer.alloc(32).toString('base64'), chunkIndex: 0, timestamp: 0 }],
+      alignments: [],
+      errors: [],
+      startTime: 0,
+    }));
+    vi.spyOn(fs, 'mkdir').mockRejectedValue(new Error('output directory unavailable'));
+    const provider = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
+      config: {
+        apiKey: 'fixture-key',
+        streaming: true,
+        saveAudio: true,
+        audioOutputPath: '/fixture-output',
+      },
+    });
+    const response = await provider.callApi('Hello');
+    expect(response.error).toContain('output directory unavailable');
+    expect(ElevenLabsWebSocketClient.prototype.close).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['mp3', 'mp4', 'mpeg', 'mpga', 'wav', 'flac', 'm4a', 'ogg', 'opus', 'webm', 'MP4'])(
+    'accepts a prompt audio path ending in %s without configured audio',
+    async (extension) => {
+      vi.spyOn(fs, 'readFile').mockResolvedValue(Buffer.from('fixture audio'));
+      vi.mocked(ElevenLabsClient.prototype.upload).mockResolvedValue({ text: 'transcribed' });
+      const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
+        config: { apiKey: 'fixture-key' },
+      });
+      const response = await provider.callApi(`/fixture.${extension}`);
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('transcribed');
+      expect(ElevenLabsClient.prototype.upload).toHaveBeenCalledWith(
+        '/speech-to-text',
+        expect.any(Buffer),
+        `fixture.${extension}`,
+        expect.any(Object),
+      );
+    },
+  );
+
+  it('rejects unsupported prompt audio extensions', async () => {
+    const provider = new ElevenLabsSTTProvider('elevenlabs:stt', {
+      config: { apiKey: 'fixture-key' },
+    });
+    expect((await provider.callApi('/fixture.txt')).error).toContain('No audio file specified');
+    expect(ElevenLabsClient.prototype.upload).not.toHaveBeenCalled();
+  });
 
   it.each(transcriptionExample.providers)(
     'transcribes the runnable $id example with Scribe v2',

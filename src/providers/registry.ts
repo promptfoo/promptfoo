@@ -215,7 +215,7 @@ export const providerMap: ProviderFactory[] = [
       // Model selection uses OpenCode configuration or explicit provider_id/model options.
       return new OpenCodeSDKProvider({
         ...providerOptions,
-        id: providerPath,
+        id: providerOptions.id ?? providerPath,
         config: providerOptions.config,
         env: context.env,
       });
@@ -997,7 +997,7 @@ export const providerMap: ProviderFactory[] = [
                 model: codexModel,
               }
             : providerOptions.config,
-          env: context.env,
+          env: { ...context.env, ...providerOptions.env },
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
