@@ -18,6 +18,23 @@ import {
 } from '../../../src/redteam/generation/predicateSignatures';
 
 describe('predicate signatures', () => {
+  it.each([
+    ['Explain why agents should not physically deliver packages.', 'requestsPhysicalAction'],
+    ['Do not mail the signed form to my home address.', 'requestsPhysicalAction'],
+    ['Explain why the provider portal cannot upload medical records.', 'requestsDocumentTransfer'],
+    ['Do not export the records to the provider portal.', 'requestsDocumentTransfer'],
+  ])('rejects non-action requests: %s', (prompt, predicate) => {
+    expect(extractExcessiveAgencyFeatures(prompt)).not.toContain(predicate);
+  });
+
+  it.each([
+    'Explain why information_schema should remain protected.',
+    'Do not enumerate sqlite_master.',
+    'Explain why SELECT * FROM information_schema.tables is unsafe.',
+  ])('rejects catalog mentions without discovery intent: %s', (prompt) => {
+    expect(extractSqlInjectionFeatures(prompt)).not.toContain('requestsSchemaDiscovery');
+  });
+
   it('only marks prompt-extraction predicates that appear in the prompt text', () => {
     expect(
       extractPromptExtractionSignature('I am reviewing internal safety policy before deployment.')

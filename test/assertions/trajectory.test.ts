@@ -548,6 +548,48 @@ describe('trajectory utilities', () => {
     expect(summary.steps[0].sql).toEqual({ query: 'SELECT id FROM accounts' });
   });
 
+  it.each(['db.statement', 'authorization'])('redacts %s echoes from SQL span names', (key) => {
+    const secret = 'PRIVATE_QUERY_IN_SPAN_NAME';
+    const summary = summarizeTrajectoryForJudge(
+      {
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'sql',
+            name: `sql ${secret}`,
+            startTime: 1,
+            attributes: { 'tool.name': 'run_query', [key]: secret },
+          },
+        ],
+      },
+      { includeSql: true, redactAttributes: [key] },
+    );
+    expect(summary).not.toContain(secret);
+  });
+
+  it('omits SQL span names when redaction traversal is incomplete', () => {
+    const secret = 'PRIVATE_DEEP_SQL_NAME';
+    let nested: Record<string, unknown> = { authorization: secret };
+    for (let depth = 0; depth < 25; depth++) {
+      nested = { nested };
+    }
+    const summary = summarizeTrajectoryForJudge(
+      {
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'sql',
+            name: `sql ${secret}`,
+            startTime: 1,
+            attributes: { 'tool.name': 'run_query', ...nested },
+          },
+        ],
+      },
+      { includeSql: true, redactAttributes: ['authorization'] },
+    );
+    expect(summary).not.toContain(secret);
+  });
+
   it('omits free-form status messages from model grading', () => {
     const summary = summarizeTrajectoryForJudge({
       ...mockTraceData,

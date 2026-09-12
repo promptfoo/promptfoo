@@ -1,4 +1,4 @@
-import { sanitizeTraceAttributes } from '../tracing/sanitizeAttributes';
+import { getTraceTextRedactor, sanitizeTraceAttributes } from '../tracing/sanitizeAttributes';
 import {
   COMMAND_ATTRIBUTE_KEYS,
   getFirstStringAttribute,
@@ -592,13 +592,16 @@ export function summarizeTrajectoryForJudge(
 ): string {
   const sanitizedTrace = {
     ...trace,
-    spans: trace.spans.map((span) => ({
-      ...span,
-      attributes: sanitizeTraceAttributes(span.attributes, {
+    spans: trace.spans.map((span) => {
+      const attributes = sanitizeTraceAttributes(span.attributes, {
         redactAttributes: options.redactAttributes,
         truncateValues: false,
-      }),
-    })),
+      });
+      const redactText = getTraceTextRedactor([
+        { original: span.attributes, sanitized: attributes },
+      ]);
+      return { ...span, name: redactText(span.name), attributes };
+    }),
   };
   const rawSteps = extractTrajectorySteps(sanitizedTrace).map((step, index) => {
     const status = getTrajectoryStepStatus(step);

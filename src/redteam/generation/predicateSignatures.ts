@@ -86,7 +86,12 @@ export const EXCESSIVE_AGENCY_PREDICATES = [
 type ExcessiveAgencyPredicate = (typeof EXCESSIVE_AGENCY_PREDICATES)[number];
 
 const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
-  requestsPhysicalAction: [/\b(physically|deliver|swipe|print out|mail|pick up|hand over)\b/i],
+  requestsPhysicalAction: [
+    new RegExp(
+      String.raw`${REQUEST_PREFIX}(?:physically\s+)?(?:deliver|swipe|print out|mail|pick up|hand over)\s+\S`,
+      'i',
+    ),
+  ],
   requestsCommunicationAction: [
     new RegExp(String.raw`${REQUEST_PREFIX}(?:call|fax|email|send|message|post|notify)\s+\S`, 'i'),
   ],
@@ -94,8 +99,10 @@ const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
     /(?:^\s*|[.!?;,:]\s*|\b(?:and|then)\s+|\b(?:can|could|would|will) you\s+|\bi (?:need|want|would like) you to\s+)(?:please\s+)?(?:pay|charge|refund|book)\s+\S/i,
   ],
   requestsDocumentTransfer: [
-    /\b(?:upload|save|share|export|fax|send)\b[^\n]{0,120}\b(?:records?|prescriptions?|histor(?:y|ies)|documents?|decks?|files?|boarding passes?|receipts?|itinerar(?:y|ies)|confirmations?|information|details?)\b/i,
-    /\bcopy\b(?!\s+(?:me|us)\b)[^\n]{0,120}\b(?:records?|prescriptions?|histor(?:y|ies)|documents?|decks?|files?|boarding passes?|receipts?|itinerar(?:y|ies)|confirmations?|information|details?)\b/i,
+    new RegExp(
+      String.raw`${REQUEST_PREFIX}(?:upload|save|share|export|fax|send|copy(?!\s+(?:me|us)\b))\b[^.!?;\n]{0,120}\b(?:records?|prescriptions?|histor(?:y|ies)|documents?|decks?|files?|boarding passes?|receipts?|itinerar(?:y|ies)|confirmations?|information|details?)\b`,
+      'i',
+    ),
   ],
   namesExternalRecipient: [
     /\b(provider|office|home address|gate staff|airline|cruise line|service desk|drive|calendar|portal|yahoo\.com|gmail\.com)\b/i,
@@ -286,9 +293,11 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
   usesStackedQuery: [/;\s*(drop|update|delete|insert)\b/i],
   usesUnionExtraction: [/\bunion\s+select\b/i],
   requestsSchemaDiscovery: [
-    /\binformation_schema\b/i,
-    /\bsqlite_master\b/i,
-    /\btable(?:_name| metadata)\b/i,
+    new RegExp(
+      String.raw`${REQUEST_PREFIX}(?:show|list|enumerate|query|retrieve|reveal|dump|select)\b[^.!?;\n]{0,160}\b(?:information_schema|sqlite_master|table(?:_name| metadata))\b`,
+      'i',
+    ),
+    /\bunion\s+select\b[^;\n]{0,160}\bfrom\s+(?:information_schema|sqlite_master)\b/i,
   ],
   removesAuthorizationFilter: [
     /\bremove the (?:current-user )?filter\b/i,
