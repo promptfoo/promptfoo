@@ -12,7 +12,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
-import { extractFirstJsonObject } from '../util/json';
+import { extractJsonObjectsWithMeta, selectVerdictObject } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callProviderWithContext,
@@ -87,7 +87,14 @@ function parseFactualityJsonResponse(
   responseText: string,
 ): { option: string; reason: string } | undefined {
   try {
-    const jsonData = extractFirstJsonObject<{ category?: string; reason?: string }>(responseText);
+    // Security: verdict selection hardening. Prefer a COMPLETE verdict-shaped
+    // object over any UNTERMINATED (auto-closed) trailing fragment the judge
+    // echoed from the model-under-test, and unwrap merged verdict shells
+    // before reading the category.
+    const jsonData = selectVerdictObject<{ category?: string; reason?: string }>(
+      extractJsonObjectsWithMeta(responseText),
+      ['category'],
+    );
     if (!jsonData?.category || typeof jsonData.category !== 'string') {
       return undefined;
     }

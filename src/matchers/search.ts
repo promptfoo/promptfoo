@@ -3,7 +3,7 @@ import { DEFAULT_WEB_SEARCH_PROMPT } from '../prompts/grading';
 import { DEFAULT_ANTHROPIC_MODEL } from '../providers/anthropic/defaults';
 import { getDefaultProviders } from '../providers/defaults';
 import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webSearchUtils';
-import { extractFirstJsonObject } from '../util/json';
+import { extractJsonObjectsWithMeta, selectVerdictObject } from '../util/json';
 import { callProviderWithContext, getGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import { tryParse } from './shared';
@@ -102,12 +102,35 @@ export async function matchesSearchRubric(
   }
 
   try {
-    const result = extractFirstJsonObject(String(resp.output)) as {
+    // Security: verdict selection hardening. Prefer a COMPLETE verdict-shaped
+    // object over any UNTERMINATED (auto-closed) trailing fragment the judge
+    // echoed from the model-under-test, and unwrap merged verdict shells
+    // before reading the verdict.
+    const entries = extractJsonObjectsWithMeta(String(resp.output));
+    if (entries.length === 0) {
+      // Preserve the legacy behavior of extractFirstJsonObject: no JSON at all
+      // falls through to the naive substring matcher below.
+      throw new Error(`Expected a JSON object, but got ${String(resp.output)}`);
+    }
+    const result = selectVerdictObject<{
       pass?: boolean;
       score?: number;
       reason?: string;
       searchResults?: unknown;
-    };
+    }>(entries, ['pass', 'score']);
+    if (!result) {
+      // Security: the response contains conflicting verdict JSON (injected by
+      // the model-under-test and echoed by the judge). Fail closed rather than
+      // falling back to substring matching, which would trust that text.
+      return {
+        pass: false,
+        score: 0,
+        reason:
+          'Search rubric evaluation failed: ambiguous verdict (conflicting JSON objects) in provider response',
+        tokensUsed: resp.tokenUsage,
+        assertion,
+      };
+    }
 
     // Apply threshold if specified
     let pass = result.pass ?? false;
