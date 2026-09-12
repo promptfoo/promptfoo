@@ -966,11 +966,19 @@ describe('suite environment loading', () => {
     },
   );
 
-  it.each(['top', 'scenario'] as const)(
-    'retains inline vars and provider file origins during %s replay',
-    async (location) => {
+  it.each([
+    ['top', false],
+    ['top', true],
+    ['scenario', false],
+    ['scenario', true],
+  ] as const)(
+    'retains inline vars and provider file origins during %s replay (object provider: %s)',
+    async (location, objectProvider) => {
       const configs = ['first-inline', 'second-inline'].map((name) => {
-        const test = { vars: 'vars.yaml', provider: 'file://provider.yaml' };
+        const test = {
+          vars: 'vars.yaml',
+          provider: objectProvider ? { id: 'file://provider.yaml' } : 'file://provider.yaml',
+        };
         const configPath = writeConfig(
           name,
           location === 'top'

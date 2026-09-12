@@ -738,6 +738,11 @@ async function prepareCombinedConfig(
         source.provider.startsWith('file://') && {
           provider: resolveConfigPath(basePath, source.provider),
         }),
+      ...(typeof source.provider === 'object' &&
+        typeof source.provider?.id === 'string' &&
+        source.provider.id.startsWith('file://') && {
+          provider: { ...source.provider, id: resolveConfigPath(basePath, source.provider.id) },
+        }),
     };
   };
 

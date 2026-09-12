@@ -40,12 +40,8 @@ vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 vi.mock('glob', async (importOriginal) => ({
-  escape: (await importOriginal<typeof import('glob')>()).escape,
+  ...(await importOriginal<typeof import('glob')>()),
   globSync: vi.fn(),
-  hasMagic: vi.fn((pattern: string | string[]) => {
-    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
-  }),
 }));
 vi.mock('../../src/providers', () => ({
   loadApiProvider: vi.fn(),
@@ -1855,6 +1851,22 @@ describe('loadTestsFromGlob', () => {
     expect(logger.warn).toHaveBeenCalledWith(
       `No test files found for path: ${path.resolve(basePath, 'missing-*.yaml')}`,
     );
+  });
+
+  it.each(['missing].yaml', 'fixtures/{case}.yaml'])(
+    'rejects a missing literal path containing non-glob punctuation: %s',
+    async (source) => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(globSync).mockReturnValue([]);
+      await expect(loadTestsFromGlob(source)).rejects.toThrow('No test files found');
+    },
+  );
+
+  it('allows an empty brace expansion', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(globSync).mockReturnValue([]);
+    await expect(loadTestsFromGlob('fixtures/{first,second}.yaml')).resolves.toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No test files found'));
   });
 
   it('should handle Hugging Face dataset URLs', async () => {
