@@ -3,6 +3,7 @@ import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
+import { TraceLimitError } from '../../../../src/tracing/store';
 import * as traceContext from '../../../../src/tracing/traceContext';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
@@ -377,6 +378,44 @@ describe('CrescendoProvider', () => {
 
     expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
     expect(fetchTraceContextSpy).not.toHaveBeenCalled();
+  });
+
+  it('stops Crescendo when trace collection is incomplete', async () => {
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+      stateful: true,
+      tracing: { enabled: true },
+    });
+    vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+      generatedQuestion: 'attack prompt',
+    });
+    vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+    vi.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+      value: false,
+      metadata: 0,
+      rationale: '',
+    });
+    mockTargetProvider.callApi.mockResolvedValue({
+      output: 'Clean fallback response',
+    });
+    const fetchTraceContextSpy = vi
+      .spyOn(traceContext, 'fetchTraceContext')
+      .mockRejectedValue(new TraceLimitError());
+
+    await expect(
+      provider.callApi('test prompt', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'test objective' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      }),
+    ).rejects.toThrow(TraceLimitError);
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
+    expect(fetchTraceContextSpy).toHaveBeenCalledOnce();
   });
 
   describe('Unblocking functionality', () => {

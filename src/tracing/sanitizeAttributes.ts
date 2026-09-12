@@ -140,7 +140,9 @@ export function getTraceTextRedactionState(
   const state = existing ?? {
     secrets: new Set<string>(),
     length: 0,
-    incomplete: /\[(?:REDACTED|TRUNCATED)\]/.test(JSON.stringify(evidence)),
+    incomplete:
+      Array.isArray(evidence) &&
+      evidence.some((span) => span?.attributes?.['promptfoo.redaction.history'] === '[REDACTED]'),
   };
   if (traceId) {
     states.delete(traceId);

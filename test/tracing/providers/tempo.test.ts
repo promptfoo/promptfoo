@@ -253,6 +253,21 @@ describe('TempoProvider', () => {
     });
   });
 
+  it('preserves the full snapshot so storage can reject an oversized trace atomically', async () => {
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const spans = Array.from({ length: 10_001 }, (_, index) => ({
+      traceId: TRACE_ID,
+      spanId: (index + 1).toString(16).padStart(16, '0'),
+      name: 'tool execution',
+      startTimeUnixNano: '1000000',
+    }));
+    mockedFetch.mockResolvedValueOnce(response({ batches: [{ scopeSpans: [{ spans }] }] }));
+
+    const trace = await provider.fetchTrace(TRACE_ID);
+    expect(trace?.spans).toHaveLength(10_001);
+    expect(trace?.spans.at(-1)?.spanId).toBe(spans.at(-1)?.spanId);
+  });
+
   it('rejects invalid or oversized trace responses', async () => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
     mockedFetch.mockResolvedValueOnce(response({ unexpected: [] }));

@@ -49,6 +49,13 @@ export interface AddSpansOptions {
   redactSpans?: (spans: SpanData[]) => SpanData[];
 }
 
+export class TraceLimitError extends Error {
+  constructor() {
+    super('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
+    this.name = 'TraceLimitError';
+  }
+}
+
 function validateTracePayloadSize(
   spans: SpanData[],
   updateExisting: boolean,
@@ -59,7 +66,9 @@ function validateTracePayloadSize(
     if (updateExisting || !sizes.has(span.spanId)) {
       sizes.set(
         span.spanId,
-        Buffer.byteLength(span.name) +
+        Buffer.byteLength(span.spanId) +
+          Buffer.byteLength(span.parentSpanId ?? '') +
+          Buffer.byteLength(span.name) +
           Buffer.byteLength(JSON.stringify(span.attributes) ?? '') +
           Buffer.byteLength(span.statusMessage ?? ''),
       );
@@ -69,7 +78,7 @@ function validateTracePayloadSize(
     sizes.size > 10_000 ||
     [...sizes.values()].reduce((total, bytes) => total + bytes, 0) > 10 * 1024 * 1024
   ) {
-    throw new Error('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
+    throw new TraceLimitError();
   }
 }
 
@@ -241,6 +250,19 @@ export class TraceStore {
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
       }
 
+      // Only the store may create persisted redaction-history markers.
+      spans = spans.map((span) => {
+        if (
+          !span.attributes ||
+          !Object.prototype.hasOwnProperty.call(span.attributes, 'promptfoo.redaction.history')
+        ) {
+          return span;
+        }
+        const attributes = { ...span.attributes };
+        delete attributes['promptfoo.redaction.history'];
+        return { ...span, attributes };
+      });
+
       const insertSpans = async (connection: Pick<typeof db, 'insert'>, incoming: SpanData[]) => {
         const spanRecords = incoming.map((span) => {
           logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
@@ -262,29 +284,35 @@ export class TraceStore {
           return;
         }
 
-        const insert = connection.insert(spansTable).values(spanRecords);
-        const target = [spansTable.traceId, spansTable.spanId];
-        await (options?.updateExisting
-          ? insert.onConflictDoUpdate({
-              target,
-              set: {
-                parentSpanId: sql`excluded.parent_span_id`,
-                name: sql`excluded.name`,
-                startTime: sql`excluded.start_time`,
-                endTime: sql`excluded.end_time`,
-                attributes: sql`excluded.attributes`,
-                statusCode: sql`excluded.status_code`,
-                statusMessage: sql`excluded.status_message`,
-              },
-            })
-          : insert.onConflictDoNothing({ target })
-        ).run();
+        for (let index = 0; index < spanRecords.length; index += 500) {
+          const insert = connection
+            .insert(spansTable)
+            .values(spanRecords.slice(index, index + 500));
+          const target = [spansTable.traceId, spansTable.spanId];
+          await (options?.updateExisting
+            ? insert.onConflictDoUpdate({
+                target,
+                set: {
+                  parentSpanId: sql`excluded.parent_span_id`,
+                  name: sql`excluded.name`,
+                  startTime: sql`excluded.start_time`,
+                  endTime: sql`excluded.end_time`,
+                  attributes: sql`excluded.attributes`,
+                  statusCode: sql`excluded.status_code`,
+                  statusMessage: sql`excluded.status_message`,
+                },
+              })
+            : insert.onConflictDoNothing({ target })
+          ).run();
+        }
       };
 
       const redact = options?.redactSpans;
       await db.transaction(async (tx) => {
         const payloadBytes = sql<number>`
-            length(cast(${spansTable.name} as blob))
+            length(cast(${spansTable.spanId} as blob))
+            + coalesce(length(cast(${spansTable.parentSpanId} as blob)), 0)
+            + length(cast(${spansTable.name} as blob))
             + coalesce(length(cast(${spansTable.attributes} as blob)), 0)
             + coalesce(length(cast(${spansTable.statusMessage} as blob)), 0)
           `;
@@ -302,7 +330,7 @@ export class TraceStore {
           size.bytes > 10 * 1024 * 1024 ||
           Buffer.byteLength(JSON.stringify(spans)) > 10 * 1024 * 1024
         ) {
-          throw new Error('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
+          throw new TraceLimitError();
         }
         const storedSizes = await tx
           .select({ spanId: spansTable.spanId, bytes: payloadBytes })
@@ -315,10 +343,15 @@ export class TraceStore {
         }
         const stored = await tx.select().from(spansTable).where(eq(spansTable.traceId, traceId));
         const existing = stored.map((span) => serializeSpan(span, false));
-        const sanitized = redact([...existing, ...spans]);
+        const original = [...existing, ...spans];
+        const sanitized = redact(original);
         const redactedSpanIds = new Set(
           sanitized
-            .filter((span) => /\[(?:REDACTED|TRUNCATED)\]/.test(JSON.stringify(span)))
+            .filter(
+              (span, index) =>
+                JSON.stringify(span) !== JSON.stringify(original[index]) &&
+                /\[(?:REDACTED|TRUNCATED)\]/.test(JSON.stringify(span)),
+            )
             .map((span) => span.spanId),
         );
         for (const span of sanitized) {
@@ -348,6 +381,16 @@ export class TraceStore {
       logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
       return { stored: true };
     } catch (error) {
+      if (error instanceof TraceLimitError) {
+        const db = await this.getDatabase();
+        await db
+          .update(tracesTable)
+          .set({
+            metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceIncomplete', 'limit exceeded')`,
+          })
+          .where(eq(tracesTable.traceId, traceId))
+          .run();
+      }
       logger.error(`[TraceStore] Failed to add spans: ${error}`);
       throw error;
     }

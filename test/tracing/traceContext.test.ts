@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   addSpans: vi.fn(),
   createTraceProvider: vi.fn(),
   getSpans: vi.fn(),
+  getTraceMetadata: vi.fn(),
   getTraceStore: vi.fn(),
   isExternalTraceProvider: vi.fn(),
   logger: { debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
@@ -20,8 +21,12 @@ vi.mock('../../src/tracing/store', async (importOriginal) => ({
 }));
 
 import { TraceProviderError } from '../../src/tracing/providers/types';
-import { sanitizeTraceAttributes } from '../../src/tracing/sanitizeAttributes';
+import {
+  getTraceTextRedactionState,
+  sanitizeTraceAttributes,
+} from '../../src/tracing/sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from '../../src/tracing/spanFilter';
+import { TraceLimitError } from '../../src/tracing/store';
 import { extractTraceIdFromTraceparent, fetchTraceContext } from '../../src/tracing/traceContext';
 
 import type { AddSpansOptions, SpanData, TraceSpanQueryOptions } from '../../src/tracing/store';
@@ -36,6 +41,53 @@ function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
 }
 
 describe('fetchTraceContext', () => {
+  it.each([false, true])(
+    'rejects incomplete local traces even with no visible spans (%s)',
+    async (hasSpans) => {
+      mocks.isExternalTraceProvider.mockReturnValue(false);
+      mocks.getTraceMetadata.mockResolvedValue({ promptfooTraceIncomplete: 'limit exceeded' });
+      if (hasSpans) {
+        storedSpans.push({ spanId: 'clean-prefix', name: 'target.call', startTime: 1 });
+      }
+      await expect(fetchTraceContext('trace-1', { maxRetries: 0 })).rejects.toThrow(
+        TraceLimitError,
+      );
+    },
+  );
+
+  it('rejects previously incomplete external traces before fetching a clean snapshot', async () => {
+    const fetchTrace = mockExternalTrace([
+      { spanId: 'clean-prefix', name: 'target.call', startTime: 1 },
+    ]);
+    mocks.getTraceMetadata.mockResolvedValue({ promptfooTraceIncomplete: 'limit exceeded' });
+    await expect(
+      fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 0 }),
+    ).rejects.toThrow(TraceLimitError);
+    expect(fetchTrace).not.toHaveBeenCalled();
+  });
+
+  it('propagates external snapshot limits without retrying or falling back to absent evidence', async () => {
+    const fetchTrace = mockExternalTrace([
+      { spanId: 'clean-prefix', name: 'target.call', startTime: 1 },
+    ]);
+    mocks.addSpans.mockRejectedValue(new TraceLimitError());
+    await expect(
+      fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 2 }),
+    ).rejects.toThrow(TraceLimitError);
+    expect(fetchTrace).toHaveBeenCalledOnce();
+  });
+
+  it('distinguishes raw redaction text from persisted redaction history', () => {
+    expect(
+      getTraceTextRedactionState({}, 'raw', [{ attributes: { note: '[REDACTED]' } }]).incomplete,
+    ).toBe(false);
+    expect(
+      getTraceTextRedactionState({}, 'stored', [
+        { attributes: { 'promptfoo.redaction.history': '[REDACTED]' } },
+      ]).incomplete,
+    ).toBe(true);
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
     storedSpans.length = 0;
@@ -78,7 +130,11 @@ describe('fetchTraceContext', () => {
             : sanitizeTraceAttributes(span.attributes),
       }));
     });
-    mocks.getTraceStore.mockReturnValue({ addSpans: mocks.addSpans, getSpans: mocks.getSpans });
+    mocks.getTraceStore.mockReturnValue({
+      addSpans: mocks.addSpans,
+      getSpans: mocks.getSpans,
+      getTraceMetadata: mocks.getTraceMetadata,
+    });
     mocks.isExternalTraceProvider.mockReturnValue(true);
   });
 
@@ -410,7 +466,7 @@ describe('fetchTraceContext', () => {
     },
   );
 
-  it('stores large traces in database-safe batches', async () => {
+  it('submits the complete external snapshot atomically', async () => {
     const spans = Array.from({ length: 501 }, (_, index) => ({
       spanId: String(index),
       name: 'target.call',
@@ -420,9 +476,8 @@ describe('fetchTraceContext', () => {
 
     await fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 0 });
 
-    expect(mocks.addSpans).toHaveBeenCalledTimes(2);
-    expect(mocks.addSpans.mock.calls[0][1]).toHaveLength(500);
-    expect(mocks.addSpans.mock.calls[1][1]).toHaveLength(1);
+    expect(mocks.addSpans).toHaveBeenCalledOnce();
+    expect(mocks.addSpans.mock.calls[0][1]).toHaveLength(501);
   });
 
   it.each(['new-span', 'updated-span'])(

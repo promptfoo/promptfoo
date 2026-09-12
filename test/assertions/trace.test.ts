@@ -136,6 +136,21 @@ describe('trace assertions', () => {
     ],
   };
 
+  it.each(['javascript', 'not-javascript', 'promptfoo:redteam:sql-injection'] as const)(
+    'rejects incomplete trace evidence for %s',
+    async (type) => {
+      await expect(
+        runAssertion({
+          assertion: { type, value: 'true' },
+          test: { ...mockTest, metadata: { tracing: { enabled: true } } },
+          providerResponse: mockProviderResponse,
+          traceId: 'test-trace-id',
+          traceData: { ...mockTraceData, metadata: { promptfooTraceIncomplete: 'limit exceeded' } },
+        }),
+      ).rejects.toThrow('Cannot grade incomplete trace');
+    },
+  );
+
   it('passes captured trace evidence to the SQL injection grader', async () => {
     mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
     const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
