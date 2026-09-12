@@ -215,7 +215,7 @@ const createMockQuery = (messages: Partial<SDKMessage> | Partial<SDKMessage>[]):
 // Helper to create mock success response
 const createMockResponse = (
   result: string,
-  usage?: { input_tokens?: number; output_tokens?: number },
+  usage?: Partial<MockUsage>,
   cost = 0.001,
   sessionId = 'test-session-123',
   terminalReason?: TerminalReason,
@@ -226,7 +226,7 @@ const createMockResponse = (
     session_id: sessionId,
     uuid: '12345678-1234-1234-1234-123456789abc' as `${string}-${string}-${string}-${string}-${string}`,
     result,
-    usage: createMockUsage(usage?.input_tokens, usage?.output_tokens),
+    usage: { ...createMockUsage(), ...usage },
     total_cost_usd: cost,
     duration_ms: 1000,
     duration_api_ms: 800,
@@ -307,8 +307,75 @@ describe('ClaudeCodeSDKProvider', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     cliState.setActiveOtlpReceiver();
     await clearCache();
+  });
+
+  it('reports installation guidance for an asynchronously rejected SDK import', async () => {
+    vi.mocked(importModule).mockRejectedValueOnce(new Error('module initialization failed'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+    const result = await provider.callApi('Import failure');
+    expect(result.error).toContain('Failed to load @anthropic-ai/claude-agent-sdk');
+    expect(result.error).toContain('npm install @anthropic-ai/claude-agent-sdk');
+  });
+
+  it.each(['', null])(
+    'honors empty system prompts while defaulting null (%j)',
+    async (systemPrompt) => {
+      mockQuery.mockReturnValue(createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test-key', custom_system_prompt: systemPrompt as unknown as string },
+      });
+      await provider.callApi('Empty system prompt');
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            systemPrompt:
+              systemPrompt === null ? expect.objectContaining({ preset: 'claude_code' }) : '',
+          }),
+        }),
+      );
+    },
+  );
+
+  it('uses prompt API keys without reusing responses across credentials', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', undefined);
+    enableCache();
+    const provider = new ClaudeCodeSDKProvider();
+    for (const key of ['prompt-key-one', 'prompt-key-two']) {
+      mockQuery.mockReturnValue(createMockResponse(key));
+      const result = await provider.callApi('Same prompt', {
+        vars: {},
+        prompt: { raw: 'Same prompt', label: 'test', config: { apiKey: key } },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(key);
+      expect(mockQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            env: expect.objectContaining({ ANTHROPIC_API_KEY: key }),
+          }),
+        }),
+      );
+    }
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives the merged prompt API key precedence over the provider key', async () => {
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'provider-key' } });
+    await provider.callApi('Override', {
+      vars: {},
+      prompt: { raw: 'Override', label: 'test', config: { apiKey: 'prompt-key' } },
+    });
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          env: expect.objectContaining({ ANTHROPIC_API_KEY: 'prompt-key' }),
+        }),
+      }),
+    );
   });
 
   describe('constructor', () => {
@@ -448,6 +515,11 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 10,
             completion: 20,
             total: 30,
+            completionDetails: {
+              reasoning: 0,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+            },
           },
           cost: 0.002,
           raw: expect.stringContaining('"type":"result"'),
@@ -512,8 +584,8 @@ describe('ClaudeCodeSDKProvider', () => {
             result: 'Test response',
             usage: createMockUsage(10, 20),
             modelUsage: {
-              'claude-sonnet-4-5': createMockModelUsage(10, 20, 3, 2),
-              'claude-haiku-4-5': createMockModelUsage(40, 60, 7, 5),
+              'claude-sonnet-4-5': { ...createMockModelUsage(10, 20, 3, 2), thinkingTokens: 5 },
+              'claude-haiku-4-5': { ...createMockModelUsage(40, 60, 7, 5), thinkingTokens: 15 },
             },
             total_cost_usd: 0.002,
             duration_ms: 1000,
@@ -534,11 +606,40 @@ describe('ClaudeCodeSDKProvider', () => {
           completion: 80,
           total: 147,
           completionDetails: {
+            reasoning: 20,
             cacheReadInputTokens: 10,
             cacheCreationInputTokens: 7,
           },
         });
       });
+
+      it.each([0, 12])(
+        'should retain %i thinking tokens from result usage',
+        async (thinkingTokens) => {
+          mockQuery.mockReturnValue(
+            createMockResponse('Test response', {
+              input_tokens: 10,
+              output_tokens: 20,
+              output_tokens_details: { thinking_tokens: thinkingTokens },
+            }),
+          );
+          const provider = new ClaudeCodeSDKProvider({
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          const result = await provider.callApi('Test prompt');
+
+          expect(result.tokenUsage).toEqual({
+            prompt: 10,
+            completion: 20,
+            total: 30,
+            completionDetails: {
+              reasoning: thinkingTokens,
+              cacheReadInputTokens: 0,
+              cacheCreationInputTokens: 0,
+            },
+          });
+        },
+      );
 
       it('should report no token usage when the SDK reports neither source', async () => {
         mockQuery.mockReturnValue(
@@ -577,7 +678,7 @@ describe('ClaudeCodeSDKProvider', () => {
             uuid: '87654321-4321-4321-4321-210987654321',
             usage: createMockUsage(10, 0),
             modelUsage: {
-              'claude-sonnet-4-5': createMockModelUsage(35, 0, 5),
+              'claude-sonnet-4-5': { ...createMockModelUsage(35, 0, 5), thinkingTokens: 0 },
             },
             total_cost_usd: 0.001,
             duration_ms: 500,
@@ -600,6 +701,7 @@ describe('ClaudeCodeSDKProvider', () => {
           completion: 0,
           total: 40,
           completionDetails: {
+            reasoning: 0,
             cacheReadInputTokens: 5,
             cacheCreationInputTokens: 0,
           },
@@ -648,6 +750,11 @@ describe('ClaudeCodeSDKProvider', () => {
           prompt: 10,
           completion: 0,
           total: 10,
+          completionDetails: {
+            reasoning: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+          },
         });
       });
 
@@ -763,7 +870,16 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(result.output).toBe('Main agent final answer');
         expect(result.sessionId).toBe('main-session');
         expect(result.cost).toBe(0.003);
-        expect(result.tokenUsage).toEqual({ prompt: 20, completion: 30, total: 50 });
+        expect(result.tokenUsage).toEqual({
+          prompt: 20,
+          completion: 30,
+          total: 50,
+          completionDetails: {
+            reasoning: 0,
+            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: 0,
+          },
+        });
         expect(result.metadata?.numTurns).toBe(4);
         expect(result.metadata?.terminalReason).toBe('completed');
         // Raw should reflect the main agent's result, not the sub-agent's
@@ -1605,15 +1721,18 @@ describe('ClaudeCodeSDKProvider', () => {
         mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
       });
 
-      it('should report missing key when no Vertex/Bedrock env is set', () => {
+      it('defers missing-key validation until prompt config is available', async () => {
         mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
         mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
         mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
 
         const provider = new ClaudeCodeSDKProvider();
         const result = checkProviderApiKeys([provider]);
-        expect(result.size).toBe(1);
-        expect(result.get('ANTHROPIC_API_KEY')).toEqual(['anthropic:claude-agent-sdk']);
+        expect(result.size).toBe(0);
+        await expect(provider.callApi('Missing credentials')).rejects.toThrow(
+          'Anthropic API key is not set',
+        );
+        expect(mockQuery).not.toHaveBeenCalled();
       });
 
       it('should not report missing key when apiKeyRequired is false', () => {

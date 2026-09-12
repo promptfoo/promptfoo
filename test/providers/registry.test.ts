@@ -3,6 +3,7 @@ import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { isFoundationModelProvider } from '../../src/providers/constants';
 import { LlamaApiProvider } from '../../src/providers/llamaApi';
+import { MCPProvider } from '../../src/providers/mcp';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiResponsesProvider } from '../../src/providers/openai/responses';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
@@ -164,6 +165,29 @@ describe('Provider Registry', () => {
         options: { env: { COMETAPI_KEY: 'provider-key' } },
       });
       expect((provider as CometApiImageProvider).getApiKey()).toBe('provider-key');
+    });
+
+    it('enables MCP when optional configuration omits enabled', async () => {
+      const factory = providerMap.find((entry) => entry.test('mcp'));
+      expect(factory).toBeDefined();
+
+      const configured = await factory!.create(
+        'mcp:docs',
+        { config: { verbose: false } },
+        mockContext,
+      );
+      expect(configured).toBeInstanceOf(MCPProvider);
+      expect((configured as MCPProvider).config).toMatchObject({
+        enabled: true,
+        verbose: false,
+        serverName: 'docs',
+      });
+
+      const disabled = await factory!.create('mcp', { config: { enabled: false } }, mockContext);
+      expect((disabled as MCPProvider).config).toMatchObject({ enabled: false });
+
+      const nullish = await factory!.create('mcp', { config: { enabled: null } }, mockContext);
+      expect((nullish as MCPProvider).config).toMatchObject({ enabled: true });
     });
 
     describe('getProviderFactories boundary contract', () => {
@@ -1630,6 +1654,14 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
       [
+        'google:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-3.5-flash-lite',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
         'palm:chat-bison',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
@@ -1651,6 +1683,14 @@ describe('Provider Registry', () => {
       ],
       [
         'vertex:chat:gemini-2.5-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.6-flash',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-3.5-flash-lite',
         async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
       [
@@ -1689,7 +1729,7 @@ describe('Provider Registry', () => {
         async () => (await import('../../src/providers/google/vertex')).VertexEmbeddingProvider,
       ],
       [
-        'vertex:video:veo-3.1-generate-preview',
+        'vertex:video:veo-3.1-generate-001',
         async () => (await import('../../src/providers/google/video')).GoogleVideoProvider,
       ],
     ] as const)(
@@ -1706,7 +1746,7 @@ describe('Provider Registry', () => {
     );
 
     it('applies vertexai config and provider id for vertex:video routes', async () => {
-      const providerPath = 'vertex:video:veo-3.1-generate-preview';
+      const providerPath = 'vertex:video:veo-3.1-generate-001';
       const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
       expect(factory).toBeDefined();
       const provider = await factory!.create(providerPath, bareOptions, bareContext);

@@ -318,6 +318,14 @@ describe('MCP Security', () => {
       'openai:chat:team/served-model:revision-1',
       'huggingface:chat:organization/model-name',
       'openrouter:organization/model-name',
+      'openai:chat:ft:gpt-4.1-mini-2025-04-14:company-name::ID',
+      'openai:responses:ft:gpt-4.1-nano-2025-04-14:openai::BTz2REMH',
+      'openai:completion:ft:babbage-002:company-name::ID',
+      'openai:chat:ft:gpt-4.1-mini-2025-04-14:company-name::ID:ckpt-step-2000',
+      'openai:chat:team/served-model::revision-1',
+      'bedrock:converse:arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-pro-v1:0',
+      'ollama:chat:organization/model-name:latest',
+      'openrouter:organization/model-name:free',
     ])('accepts model modes and namespaces: %s', (providerId) => {
       expect(() => validateProviderId(providerId)).not.toThrow();
     });
