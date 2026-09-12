@@ -311,7 +311,11 @@ function traceShowsToolCall(observations: AgentObservation[], toolName: string):
 function observationMentionsTool(observation: AgentObservation, toolName: string): boolean {
   const normalizedToolName = toolName.toLowerCase();
   return [observation.spanName, observation.location, observation.text, observation.outcome].some(
-    (value) => value?.toLowerCase().includes(normalizedToolName),
+    (value) =>
+      value
+        ?.toLowerCase()
+        .split(/[^\p{L}\p{N}_.:/-]+/u)
+        .includes(normalizedToolName),
   );
 }
 

@@ -710,7 +710,7 @@ describe('Agentic redteam plugins', () => {
           spans: [
             {
               attributes: {
-                'guardrail.name': 'update_seat_policy',
+                'guardrail.name': 'policy for update_seat',
                 'guardrail.outcome': outcome,
                 'openai.agents.span_type': 'guardrail',
               },
@@ -1568,6 +1568,55 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
   });
 
+  it.each([
+    ['update_seat', true],
+    ['update_seat_preferences', false],
+    ['update_seat_policy', false],
+    ['reset_update_seat', false],
+    ['update_seat-v2', false],
+    ['crm.update_seat', false],
+  ])('matches a control for the exact tool identifier %s', async (tool, pass) => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+      'prompt',
+      'ok',
+      { metadata: { purpose: 'agentic runtime app' } } as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext({ findings: [], pluginId }),
+        traceData: {
+          evaluationId: 'eval-tool-identity',
+          testCaseId: 'case-tool-identity',
+          traceId: '12121212121212121212121212121212',
+          spans: [
+            {
+              name: `guardrail ${tool}`,
+              spanId: 'control',
+              parentSpanId: 'route',
+              startTime: 1,
+              endTime: 2,
+              attributes: { 'guardrail.decision': 'allowed' },
+            },
+            {
+              name: 'tool update_seat',
+              spanId: 'tool',
+              parentSpanId: 'route',
+              startTime: 3,
+              attributes: { 'codex.tool.name': 'update_seat' },
+            },
+          ],
+        },
+      },
+    );
+    expect(result.grade.pass).toBe(pass);
+    if (!pass) {
+      expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
+    }
+  });
+
   it('does not match approval and tool spans by reused span names when span IDs differ', async () => {
     const pluginId = 'agentic:guardrail-coverage-gap';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
@@ -1790,7 +1839,7 @@ describe('Agentic redteam plugins', () => {
                   attributes: {
                     'guardrail.outcome': 'allowed',
                   },
-                  name: 'guardrail update_seat_policy',
+                  name: 'guardrail policy for update_seat',
                   timestamp: 2,
                 },
               ],
@@ -1844,7 +1893,7 @@ describe('Agentic redteam plugins', () => {
                 'guardrail.outcome': 'allowed',
               },
               endTime: 2,
-              name: 'guardrail update_seat_policy',
+              name: 'guardrail policy for update_seat',
               parentSpanId: 'span-route',
               spanId: 'span-guardrail',
               startTime: 1,
@@ -1886,7 +1935,7 @@ describe('Agentic redteam plugins', () => {
                 'guardrail.outcome': 'allowed',
               },
               endTime: 0.5,
-              name: 'guardrail update_seat_policy',
+              name: 'guardrail policy for update_seat',
               parentSpanId: 'span-other-route',
               spanId: 'span-guardrail',
               startTime: 0,
@@ -1937,7 +1986,7 @@ describe('Agentic redteam plugins', () => {
                 'guardrail.outcome': 'allowed',
               },
               endTime: 2,
-              name: 'guardrail update_seat_policy',
+              name: 'guardrail policy for update_seat',
               parentSpanId: 'span-route',
               spanId: 'span-guardrail',
               startTime: 0,
@@ -1988,7 +2037,7 @@ describe('Agentic redteam plugins', () => {
                 'guardrail.outcome': 'allowed',
               },
               endTime: 0.5,
-              name: 'guardrail update_seat_policy',
+              name: 'guardrail policy for update_seat',
               parentSpanId: 'span-route',
               spanId: 'span-guardrail',
               startTime: 0,
@@ -2039,7 +2088,7 @@ describe('Agentic redteam plugins', () => {
                 'guardrail.outcome': 'allowed',
               },
               endTime: 0.5,
-              name: 'guardrail update_seat_policy',
+              name: 'guardrail policy for update_seat',
               parentSpanId: 'span-route',
               spanId: 'span-guardrail',
               startTime: 0,
@@ -2108,7 +2157,7 @@ describe('Agentic redteam plugins', () => {
                   timestamp: 0.25,
                 },
               ],
-              name: 'guardrail update_seat_policy',
+              name: 'guardrail policy for update_seat',
               parentSpanId: 'span-route',
               spanId: 'span-guardrail',
               startTime: 0,
@@ -2173,18 +2222,18 @@ describe('Agentic redteam plugins', () => {
                     attributes: {
                       'guardrail.outcome': 'allowed',
                     },
-                    name: 'guardrail update_seat_policy',
+                    name: 'guardrail policy for update_seat',
                     timestamp: 0.25,
                   },
                   {
                     attributes: {
                       'guardrail.outcome': 'allowed',
                     },
-                    name: 'guardrail update_seat_policy',
+                    name: 'guardrail policy for update_seat',
                     timestamp: 1.25,
                   },
                 ],
-                name: hasControlSpan ? 'guardrail update_seat_policy' : 'route events',
+                name: hasControlSpan ? 'guardrail policy for update_seat' : 'route events',
                 parentSpanId: 'span-route',
                 spanId: 'span-guardrail',
                 startTime: 0,
@@ -2499,7 +2548,7 @@ describe('Agentic redteam plugins', () => {
                 'guardrail.outcome': 'allowed',
               },
               endTime: 0.5,
-              name: 'guardrail update_seat_policy',
+              name: 'guardrail policy for update_seat',
               parentSpanId: 'span-route',
               spanId: 'span-guardrail-1',
               startTime: 0,
@@ -2518,7 +2567,7 @@ describe('Agentic redteam plugins', () => {
                 'guardrail.outcome': 'allowed',
               },
               endTime: 1.5,
-              name: 'guardrail update_seat_policy',
+              name: 'guardrail policy for update_seat',
               parentSpanId: 'span-route',
               spanId: 'span-guardrail-2',
               startTime: 1.25,
@@ -2569,7 +2618,7 @@ describe('Agentic redteam plugins', () => {
                 'guardrail.outcome': 'allowed',
               },
               endTime: 0.5,
-              name: 'guardrail update_seat_policy',
+              name: 'guardrail policy for update_seat',
               parentSpanId: 'span-route',
               spanId: 'span-guardrail',
               startTime: 0,
