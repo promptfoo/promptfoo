@@ -378,6 +378,7 @@ export class OTLPReceiver {
     // credential into an error message) must be scrubbed too — otherwise the secret leaks
     // through a span field the operator believes `redactAttributes` covers.
     const redactedSourceValues = new Set<string>();
+    let incompleteSourceTraversal = false;
     const collectRedactedSourceValues = (value: unknown, key?: string): void => {
       const pending: Array<{ value: unknown; key?: string; sensitive: boolean; depth: number }> = [
         { value, key, sensitive: false, depth: 0 },
@@ -395,6 +396,7 @@ export class OTLPReceiver {
           continue;
         }
         if (current.depth >= 100) {
+          incompleteSourceTraversal = true;
           continue;
         }
         if (Array.isArray(current.value)) {
@@ -416,6 +418,7 @@ export class OTLPReceiver {
           );
         }
       }
+      incompleteSourceTraversal ||= pending.length > 0;
     };
     for (const attributeSet of [
       attributes,
@@ -428,11 +431,21 @@ export class OTLPReceiver {
     const secrets = [...redactedSourceValues]
       .sort((a, b) => b.length - a.length)
       .map((secret) => secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const secretPattern = secrets.length > 0 ? new RegExp(secrets.join('|'), 'g') : undefined;
+    const secretPattern =
+      !incompleteSourceTraversal && secrets.length > 0
+        ? new RegExp(secrets.join('|'), 'g')
+        : undefined;
     const scrubEcho = <T extends string | undefined>(value: T): T => {
-      return typeof value === 'string' && secretPattern
-        ? (value.replace(secretPattern, '[REDACTED]') as T)
-        : value;
+      if (typeof value !== 'string') {
+        return value;
+      }
+      return (
+        incompleteSourceTraversal
+          ? '[REDACTED]'
+          : secretPattern
+            ? value.replace(secretPattern, '[REDACTED]')
+            : value
+      ) as T;
     };
 
     return {
@@ -914,7 +927,8 @@ export class OTLPReceiver {
     const parentSpanId = rawParentSpanId ? this.convertId(rawParentSpanId, 16) : undefined;
 
     const severityIsError =
-      typeof log.severityNumber === 'number' && log.severityNumber >= SEVERITY_NUMBER_ERROR;
+      (typeof log.severityNumber === 'number' && log.severityNumber >= SEVERITY_NUMBER_ERROR) ||
+      /^(?:ERROR|FATAL)[1-4]?$/i.test(log.severityText ?? '');
 
     return {
       traceId,
@@ -926,7 +940,7 @@ export class OTLPReceiver {
         endTime,
         attributes,
         // OTEL logs don't carry a span status; treat as OK unless severity indicates error.
-        statusCode: 1,
+        statusCode: severityIsError ? 2 : 1,
         statusMessage: severityIsError ? log.severityText : undefined,
       },
     };

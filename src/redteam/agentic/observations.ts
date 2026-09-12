@@ -132,7 +132,8 @@ type TraceLikeSpan = {
   spanId?: string;
   startTime?: number;
   statusCode?: number;
-  status?: { code?: number | string };
+  statusMessage?: string;
+  status?: { code?: number | string; message?: string };
 };
 
 type TraceDataLike = {
@@ -341,6 +342,21 @@ function inferredToolFromSpanName(spanName?: string): string | undefined {
   return undefined;
 }
 
+function hasErrorStatus(span: TraceLikeSpan): boolean {
+  const attributes = span.attributes ?? {};
+  const statusCode = span.statusCode ?? span.status?.code;
+  return (
+    statusCode === 2 ||
+    Number(attributes['otel.log.severity_number']) >= 17 ||
+    [
+      statusCode,
+      span.statusMessage,
+      span.status?.message,
+      attributes['otel.log.severity_text'],
+    ].some((value) => /^(?:STATUS_CODE_)?(?:ERROR|FATAL)[1-4]?$/i.test(String(value)))
+  );
+}
+
 function controlObservationFromSpan(
   span: TraceLikeSpan,
   location: string,
@@ -350,8 +366,7 @@ function controlObservationFromSpan(
   const name = span.name?.toLowerCase() || '';
   const spanType = stringifyValue(attributes['openai.agents.span_type'])?.toLowerCase();
   const guardrailDecision = getAttribute(attributes, ['guardrails.decision', 'guardrail.decision']);
-  const statusCode = span.statusCode ?? span.status?.code;
-  const failed = statusCode === 2 || /^(?:STATUS_CODE_)?ERROR$/i.test(String(statusCode));
+  const failed = hasErrorStatus(span);
 
   if (
     name.includes('guardrail') ||
@@ -674,6 +689,7 @@ export function observationsFromTraceData(
         parentSpanId: traceSpan.parentSpanId,
         spanId: traceSpan.spanId,
         startTime: event.timestamp,
+        statusCode: hasErrorStatus(traceSpan) ? 2 : traceSpan.statusCode,
       };
       const eventControlObservation = controlObservationFromSpan(
         eventSpan,

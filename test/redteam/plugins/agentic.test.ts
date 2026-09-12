@@ -1879,6 +1879,9 @@ describe('Agentic redteam plugins', () => {
     ['approval', { statusCode: 2 }],
     ['guardrail', { status: { code: 'error' } }],
     ['approval', { status: { code: 'ERROR' } }],
+    ['guardrail', { statusCode: 1, attributes: { 'otel.log.severity_number': 17 } }],
+    ['approval', { statusCode: 1, attributes: { 'otel.log.severity_text': 'FATAL' } }],
+    ['guardrail', { statusCode: 1, statusMessage: 'ERROR' }],
   ])('rejects a %s control with OTEL error status %j', async (kind, status) => {
     const pluginId = 'agentic:guardrail-coverage-gap';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`)!;
@@ -1911,6 +1914,46 @@ describe('Agentic redteam plugins', () => {
               parentSpanId: 'route',
               startTime: 2,
               attributes: { 'tool.name': 'update_seat' },
+            },
+          ],
+        },
+      },
+    );
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
+  });
+
+  it.each(['guardrail', 'approval'])('rejects an event %s on a failed OTEL span', async (kind) => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+      'prompt',
+      'completed',
+      {} as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext({ findings: [], mode: 'hardened', pluginId }),
+        traceData: {
+          evaluationId: 'eval-event-controls',
+          testCaseId: 'case',
+          traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          spans: [
+            {
+              name: 'route',
+              spanId: 'route',
+              startTime: 0,
+              endTime: 3,
+              statusCode: 2,
+              events: [
+                { name: `${kind} update_seat`, timestamp: 1 },
+                {
+                  name: 'tool update_seat',
+                  timestamp: 2,
+                  attributes: { 'tool.name': 'update_seat' },
+                },
+              ],
             },
           ],
         },

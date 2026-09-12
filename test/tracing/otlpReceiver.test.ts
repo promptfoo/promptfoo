@@ -1004,6 +1004,31 @@ describe('OTLPReceiver', () => {
       expect(span.events[0].name).toBe('[REDACTED][REDACTED]');
     });
 
+    it.each(['depth', 'nodes'])(
+      'redacts exposed text when source collection exceeds its %s limit',
+      (limit) => {
+        const secret = 'PRIVATE_OMITTED_LEAF';
+        const value =
+          limit === 'depth'
+            ? Array.from({ length: 101 }).reduce<unknown>((child) => ({ nested: child }), secret)
+            : [secret, ...Array.from({ length: 10001 }, () => 'public')];
+        const receiver = new OTLPReceiver({ redactAttributes: ['authorization'] });
+        const span = (receiver as any).redactSpan(
+          {
+            name: secret,
+            statusMessage: secret,
+            attributes: { authorization: value },
+            events: [{ name: secret }],
+          },
+          ['authorization'],
+        );
+        expect(span.name).toBe('[REDACTED]');
+        expect(span.statusMessage).toBe('[REDACTED]');
+        expect(span.events[0].name).toBe('[REDACTED]');
+        expect(JSON.stringify(span)).not.toContain(secret);
+      },
+    );
+
     it('scrubs echoes of strings nested below a redacted collection key', () => {
       const redactingReceiver = new OTLPReceiver({ redactAttributes: ['authorization'] });
       const span = (redactingReceiver as any).redactSpan(
@@ -1849,10 +1874,30 @@ describe('OTLPReceiver', () => {
       const [, spans] = mockTraceStore.addSpans.mock.calls[0];
       const span = (spans as any[])[0];
       expect(span.statusMessage).toBe('ERROR');
-      // The synthesized span still reports statusCode=1 (OK for the OTEL span itself)
-      // while statusMessage surfaces the severity — verifies the mapping contract.
+      expect(span.statusCode).toBe(2);
       expect(span.attributes['otel.log.severity_number']).toBe(17);
     });
+
+    it.each(['ERROR', 'FATAL', 'ERROR2'])(
+      'maps text-only %s log severity to failed span status',
+      async (severityText) => {
+        await request(receiver.getApp())
+          .post('/v1/logs')
+          .set('Content-Type', 'application/json')
+          .send(
+            makeLogsRequest([
+              {
+                traceId: hexTraceId,
+                spanId: hexParentSpanId,
+                severityText,
+                body: { stringValue: 'guardrail update_seat' },
+              },
+            ]),
+          )
+          .expect(200);
+        expect(mockTraceStore.addSpans.mock.calls[0][1][0].statusCode).toBe(2);
+      },
+    );
 
     it('uses claude_code.event.name as a secondary span-name source when event.name is absent', async () => {
       const req = makeLogsRequest([
