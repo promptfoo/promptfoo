@@ -1529,18 +1529,23 @@ describe('evaluator', () => {
         'private-trace',
         'private-indexed',
         'private-named',
+        'failed-private-trace',
+        'failed-private-indexed',
         'ordinary-trace',
       ].entries()) {
-        await evaluation.addResult(
-          createEvaluateResult({
-            testIdx,
-            traceId: testIdx === 1 || testIdx === 2 ? undefined : traceId,
-            testCase: {
-              assert: testIdx < 3 ? [{ type: 'assert-set', assert: [{ type }] }] : [],
-              metadata: testIdx === 2 ? { testCaseId: 'custom-private-case' } : {},
-            },
-          }),
-        );
+        const result = createEvaluateResult({
+          testIdx,
+          traceId: [1, 2, 4].includes(testIdx) ? undefined : traceId,
+          testCase: {
+            assert: testIdx < 5 ? [{ type: 'assert-set', assert: [{ type }] }] : [],
+            metadata: testIdx === 2 ? { testCaseId: 'custom-private-case' } : {},
+          },
+        });
+        if (testIdx === 3 || testIdx === 4) {
+          evaluation.recordResultPersistenceFailure(result);
+        } else {
+          await evaluation.addResult(result);
+        }
         await store.createTrace({
           evaluationId: evaluation.id,
           testCaseId: testIdx === 2 ? 'custom-private-case' : `${testIdx}-0`,
@@ -1552,7 +1557,7 @@ describe('evaluator', () => {
             name: 'trace',
             startTime: 1,
             attributes: {
-              diagnostic: testIdx < 3 ? 'PRIVATE_FORENSIC_VALUE' : 'ordinary diagnostic',
+              diagnostic: testIdx < 5 ? 'PRIVATE_FORENSIC_VALUE' : 'ordinary diagnostic',
             },
           },
         ]);

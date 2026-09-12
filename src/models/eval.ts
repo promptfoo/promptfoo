@@ -1473,22 +1473,29 @@ export default class Eval {
       // Redaction graders need local forensic evidence; exports and sharing must omit it.
       const privateTraceIds = new Set<string>();
       const privateTestCaseIds = new Set<string>();
-      for await (const batch of this.fetchResultsBatched()) {
-        for (const result of batch) {
-          if (requiresTraceRedaction(result.testCase.assert)) {
-            if (result.traceId) {
-              privateTraceIds.add(result.traceId);
-            }
-            privateTestCaseIds.add(`${result.testIdx}-${result.promptIdx}`);
-            const testCaseId = result.testCase.metadata?.testCaseId;
-            if (typeof testCaseId === 'string') {
-              privateTestCaseIds.add(testCaseId);
-            }
-            if ('id' in result.testCase && typeof result.testCase.id === 'string') {
-              privateTestCaseIds.add(result.testCase.id);
-            }
-          }
+      const excludePrivateTrace = (
+        result: Pick<EvaluateResult, 'testCase' | 'traceId' | 'testIdx' | 'promptIdx'>,
+      ) => {
+        if (!requiresTraceRedaction(result.testCase.assert)) {
+          return;
         }
+        if (result.traceId) {
+          privateTraceIds.add(result.traceId);
+        }
+        privateTestCaseIds.add(`${result.testIdx}-${result.promptIdx}`);
+        const testCaseId = result.testCase.metadata?.testCaseId;
+        if (typeof testCaseId === 'string') {
+          privateTestCaseIds.add(testCaseId);
+        }
+        if ('id' in result.testCase && typeof result.testCase.id === 'string') {
+          privateTestCaseIds.add(result.testCase.id);
+        }
+      };
+      for (const result of this.failedResults.values()) {
+        excludePrivateTrace(result);
+      }
+      for await (const batch of this.fetchResultsBatched()) {
+        batch.forEach(excludePrivateTrace);
       }
 
       const publicTraces = tracesData.filter(

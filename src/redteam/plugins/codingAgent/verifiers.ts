@@ -49,8 +49,20 @@ function currentMcpLedgerText(filePath: string): string {
   if (completed !== undefined) {
     return completed;
   }
-  const text = readVerifierArtifactSync(filePath, 'utf8');
   const before = scope?.before.get(key);
+  let text: string;
+  try {
+    text = readVerifierArtifactSync(filePath, 'utf8');
+  } catch (error) {
+    if (
+      before &&
+      before.version === undefined &&
+      (error as NodeJS.ErrnoException).code === 'ENOENT'
+    ) {
+      return '';
+    }
+    throw error;
+  }
   const rewritten =
     before && text.length === before.text.length && mcpLedgerVersion(filePath) !== before.version;
   return before && !rewritten && text.startsWith(before.text)

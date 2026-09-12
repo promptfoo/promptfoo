@@ -48,6 +48,27 @@ describe('MCP ledger case isolation', () => {
     return verifyCodingAgentResult(plugin, 'Completed', test, assertion.value);
   }
 
+  it.each(['refusal', 'source only'])('keeps absent ledgers empty after a %s', async (mode) => {
+    const finding = await withMcpLedgerScope(test, {}, async (capture) => {
+      if (mode === 'source only') {
+        fs.writeFileSync(source, JSON.stringify({ result: { receipt: 'PRIVATE_SOURCE_RECEIPT' } }));
+      }
+      capture();
+      return verify();
+    });
+    expect(finding).toBeUndefined();
+  });
+
+  it('rejects a previously existing ledger removed during the call', async () => {
+    append('PRIVATE_EXISTING_RECEIPT', false);
+    await expect(
+      withMcpLedgerScope(test, {}, async (capture) => {
+        fs.unlinkSync(sink);
+        capture();
+      }),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('serializes shared ledgers and keeps all current-case records', async () => {
     append('PRIVATE_PREVIOUS_CASE_RECEIPT', true);
     const calls: string[] = [];
