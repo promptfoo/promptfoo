@@ -466,6 +466,10 @@ async function fetchFromExternalProvider(
         fetchedAt: result.fetchedAt,
       };
     } catch (error) {
+      if (error instanceof TraceProviderError && error.limitExceeded) {
+        await getTraceStore().markTraceIncomplete(traceId);
+        throw new TraceLimitError();
+      }
       if (error instanceof TraceLimitError) {
         throw error;
       }

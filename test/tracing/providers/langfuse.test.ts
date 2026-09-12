@@ -592,9 +592,10 @@ describe('LangfuseProvider', () => {
       new Response('{}', { headers: { 'content-length': String(10 * 1024 * 1024 + 1) } }),
     );
 
-    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'maximum response size',
-    );
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
   });
 
   it('applies the response size limit across paginated observation requests', async () => {
@@ -608,9 +609,10 @@ describe('LangfuseProvider', () => {
     const cancel = vi.spyOn(secondPage.body!, 'cancel');
     mockedFetch.mockResolvedValueOnce(firstPage).mockResolvedValueOnce(secondPage);
 
-    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'maximum response size',
-    );
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
     expect(cancel).toHaveBeenCalledOnce();
   });
 
@@ -624,9 +626,10 @@ describe('LangfuseProvider', () => {
     });
     mockedFetch.mockResolvedValue(new Response(body, { headers: { 'content-length': '1' } }));
 
-    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'maximum response size',
-    );
+    await expect(new LangfuseProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
     expect(cancel).toHaveBeenCalledOnce();
   });
 

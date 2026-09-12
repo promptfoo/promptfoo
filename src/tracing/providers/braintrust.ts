@@ -194,7 +194,9 @@ export class BraintrustProvider implements TraceProvider {
 
     if (Number(response.headers.get('content-length')) > MAX_TRACE_RESPONSE_BYTES) {
       await releaseResponse(response, 'Braintrust');
-      throw new TraceProviderError('Braintrust trace exceeds the maximum response size');
+      throw new TraceProviderError('Braintrust trace exceeds the maximum response size', {
+        limitExceeded: true,
+      });
     }
     const body = await readLimitedResponse(response, 'Braintrust');
 

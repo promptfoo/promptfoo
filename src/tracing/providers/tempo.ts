@@ -391,7 +391,9 @@ export class TempoProvider implements TraceProvider {
     const contentLength = Number(response.headers.get('content-length'));
     if (contentLength > MAX_TRACE_RESPONSE_BYTES) {
       await releaseResponse(response, 'Tempo');
-      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
+      throw new TraceProviderError('Tempo trace exceeds the maximum response size', {
+        limitExceeded: true,
+      });
     }
     const body = await readLimitedResponse(response, 'Tempo');
     const data = JSON.parse(body) as TempoTraceResponse;

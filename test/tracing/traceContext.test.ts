@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   createTraceProvider: vi.fn(),
   getSpans: vi.fn(),
   getTraceMetadata: vi.fn(),
+  markTraceIncomplete: vi.fn(),
   getTraceStore: vi.fn(),
   isExternalTraceProvider: vi.fn(),
   logger: { debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
@@ -64,6 +65,19 @@ describe('fetchTraceContext', () => {
       fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 0 }),
     ).rejects.toThrow(TraceLimitError);
     expect(fetchTrace).not.toHaveBeenCalled();
+  });
+
+  it('persists external response limits and rejects grading without retrying', async () => {
+    const fetchTrace = vi
+      .fn()
+      .mockRejectedValue(new TraceProviderError('Response too large', { limitExceeded: true }));
+    mocks.createTraceProvider.mockReturnValue({ id: 'tempo', fetchTrace });
+    await expect(
+      fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 2 }),
+    ).rejects.toThrow(TraceLimitError);
+    expect(fetchTrace).toHaveBeenCalledOnce();
+    expect(mocks.markTraceIncomplete).toHaveBeenCalledWith('trace-1');
+    expect(mocks.addSpans).not.toHaveBeenCalled();
   });
 
   it('propagates external snapshot limits without retrying or falling back to absent evidence', async () => {
@@ -134,6 +148,7 @@ describe('fetchTraceContext', () => {
       addSpans: mocks.addSpans,
       getSpans: mocks.getSpans,
       getTraceMetadata: mocks.getTraceMetadata,
+      markTraceIncomplete: mocks.markTraceIncomplete,
     });
     mocks.isExternalTraceProvider.mockReturnValue(true);
   });

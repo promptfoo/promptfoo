@@ -417,14 +417,7 @@ export class TraceStore {
       return { stored: true };
     } catch (error) {
       if (error instanceof TraceLimitError) {
-        const db = await this.getDatabase();
-        await db
-          .update(tracesTable)
-          .set({
-            metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceIncomplete', 'limit exceeded')`,
-          })
-          .where(eq(tracesTable.traceId, traceId))
-          .run();
+        await this.markTraceIncomplete(traceId);
       }
       logger.error(`[TraceStore] Failed to add spans: ${error}`);
       throw error;
@@ -513,6 +506,17 @@ export class TraceStore {
       logger.error(`[TraceStore] Failed to get trace: ${error}`);
       throw error;
     }
+  }
+
+  async markTraceIncomplete(traceId: string): Promise<void> {
+    const db = await this.getDatabase();
+    await db
+      .update(tracesTable)
+      .set({
+        metadata: sql`json_set(coalesce(${tracesTable.metadata}, '{}'), '$.promptfooTraceIncomplete', 'limit exceeded')`,
+      })
+      .where(eq(tracesTable.traceId, traceId))
+      .run();
   }
 
   async getTraceMetadata(traceId: string): Promise<Record<string, any> | undefined> {
