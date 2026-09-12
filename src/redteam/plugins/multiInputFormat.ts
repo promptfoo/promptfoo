@@ -73,15 +73,15 @@ function hasPromptBoundaryMarker(line: string): boolean {
 
 function cleanPrompt(prompt: string): string {
   let cleaned = prompt;
-  // Handle numbered lists with various formats
-  cleaned = cleaned.replace(/^\d+[\.\)\-]?\s*-?\s*/, '');
+  // Require a list delimiter and following space; numeric attack content is significant.
+  cleaned = cleaned.replace(/^(?:\*+\s*)?\d+(?:[.)]|\s*-)(?:\*+)?\s+/, '');
   // Handle quotes
   cleaned = cleaned.replace(/^["'](.*)["']$/, '$1');
   // Handle nested quotes
   cleaned = cleaned.replace(/^'([^']*(?:'{2}[^']*)*)'$/, (_, p1) => p1.replace(/''/g, "'"));
   cleaned = cleaned.replace(/^"([^"]*(?:"{2}[^"]*)*)"$/, (_, p1) => p1.replace(/""/g, '"'));
-  // Strip leading and trailing asterisks
-  cleaned = cleaned.replace(/^\*+/, '').replace(/\*$/, '');
+  // Remove dangling formatting while preserving Markdown inside the payload.
+  cleaned = cleaned.replace(/^\*+\s+/, '').replace(/\s+\*+$/, '');
   return cleaned.trim();
 }
 
@@ -202,7 +202,10 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
     if (!hasPromptMarker(line)) {
       return null;
     }
-    let prompt = removePrefix(line.replace(/^\s*[-*]\s+(?=\**prompt\s*:)/i, ''), 'Prompt');
+    let prompt = removePrefix(
+      line.replace(/^\s*(?:\d+[.)-]?\s*)?[-*]\s+(?=\**prompt\s*:)/i, ''),
+      'Prompt',
+    );
     prompt = cleanPrompt(prompt);
 
     if (prompt.length === 0) {
@@ -212,11 +215,11 @@ function parseLegacyPrompts(lines: string[]): { __prompt: string }[] {
     return prompt;
   };
 
-  // Split only when a semicolon introduces another prompt marker. SQL and shell
-  // prompts commonly contain semicolons as content.
+  // Split only before a new prompt marker; semicolons within attack payloads are content.
+  // Newlines already separate prompts; retain trailing payload semicolons and line indexes.
   const promptLines = lines.flatMap((line, lineIndex) =>
     line
-      .split(/;\s*(?=(?:\d+[\.\)\-]?\s*)?(?:[-*]\s*)?\**Prompt\s*:\**)/i)
+      .split(/;(?=\s*(?:\*+\s*)?(?:\d+[.)-]?\s*)?(?:[-*]\s*)?(?:\*+\s*)?Prompt\s*:)/i)
       .map((segment) => ({ line: segment, lineIndex })),
   );
 

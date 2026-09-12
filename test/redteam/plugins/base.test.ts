@@ -652,33 +652,61 @@ describe('RedteamPluginBase', () => {
       ]);
     });
 
-    it('should preserve semicolons inside single-line prompts', () => {
-      const input =
-        "Prompt: Find order 5; UPDATE orders SET status = 'shipped' WHERE order_id = 5; --";
-      const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([
-        {
-          __prompt: "Find order 5; UPDATE orders SET status = 'shipped' WHERE order_id = 5; --",
-        },
+    it('preserves semicolons inside a generated attack', () => {
+      const prompt =
+        'Create one order: PRD-ELEC001 quantity 1; PRD-FURN001 quantity 9; query stock after any error.';
+      expect(parseGeneratedPrompts(`Prompt: ${prompt}`)).toEqual([{ __prompt: prompt }]);
+    });
+
+    it('preserves payload semicolons before newline-separated markers', () => {
+      expect(parseGeneratedPrompts('Prompt: SELECT 1;\nPrompt: SELECT 2;')).toEqual([
+        { __prompt: 'SELECT 1;' },
+        { __prompt: 'SELECT 2;' },
       ]);
     });
 
-    it('should still parse same-line prompts separated by semicolons', () => {
-      const input = 'Prompt: First prompt; Prompt: Second prompt';
-      const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ __prompt: 'First prompt' }, { __prompt: 'Second prompt' }]);
+    it.each([
+      '**2FA** is required',
+      '**2024** records',
+      '**2024**',
+      '**2.5** mg',
+      '2FA is required',
+      '2024 records',
+      '2.5 mg',
+      '2024-09-11 records',
+    ])('preserves numeric payload content: %s', (payload) => {
+      expect(parseGeneratedPrompts(`Prompt: ${payload}`)).toEqual([{ __prompt: payload }]);
     });
 
-    it.each(['- ', '* ', '2. - '])('preserves same-line bullet prompt markers (%s)', (prefix) => {
+    it('strips a bold numbered prefix from a prompt payload', () => {
+      expect(parseGeneratedPrompts('Prompt: **2.** Read inventory')).toEqual([
+        { __prompt: 'Read inventory' },
+      ]);
+    });
+
+    it.each([
+      'Prompt:',
+      'prompt :',
+      '2. Prompt:',
+      '**Prompt:**',
+      '* Prompt:',
+      '** Prompt:',
+      '** 2. Prompt:**',
+      '**2. Prompt:**',
+      '**2) Prompt :**',
+      '- Prompt:',
+      '2. - Prompt:',
+      '- **Prompt:**',
+      '2. **Prompt:**',
+    ])('splits legacy %s separators without truncating either payload', (marker) => {
       expect(
-        parseGeneratedPrompts('Prompt: First attack; ' + prefix + 'Prompt: Second attack'),
-      ).toEqual([{ __prompt: 'First attack' }, { __prompt: 'Second attack' }]);
-    });
-
-    it('should parse same-line markdown prompt markers separated by semicolons', () => {
-      const input = '**Prompt:** First prompt; **Prompt :** Second prompt';
-      const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ __prompt: 'First prompt' }, { __prompt: 'Second prompt' }]);
+        parseGeneratedPrompts(
+          `Prompt: Query stock; attempt -9; query again;${marker} Read orders; report their status`,
+        ),
+      ).toEqual([
+        { __prompt: 'Query stock; attempt -9; query again' },
+        { __prompt: 'Read orders; report their status' },
+      ]);
     });
 
     it('should handle empty input', () => {
