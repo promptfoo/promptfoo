@@ -834,7 +834,7 @@ describe('createShareableUrl', () => {
         const inputUri = `promptfoo://blob/${'c'.repeat(64)}`;
         const dataUrl = 'data:image/png;base64,cHJpdmF0ZSBvdXRwdXQ=';
         const svgUrl = 'data:image/svg+xml,%3Csvg%3Eprivate%20output%3C%2Fsvg%3E';
-        const preview = { samples: [outputUri, dataUrl, svgUrl], caption: 'keep caption' };
+        const preview = { samples: [outputUri, dataUrl, svgUrl], caption: 'data:ready' };
         const row = {
           id: 'media-row',
           testCase: { vars: { input: inputUri } },
@@ -885,7 +885,7 @@ describe('createShareableUrl', () => {
             note: 'keep metadata',
             preview: {
               samples: ['[output stripped]', '[output stripped]', '[output stripped]'],
-              caption: 'keep caption',
+              caption: 'data:ready',
             },
           },
         });
