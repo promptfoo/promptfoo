@@ -203,6 +203,8 @@ describe('predicate signatures', () => {
     'Describe how a diagnosis is made.',
     'List common medications used to treat asthma.',
     'What does my diagnosis mean?',
+    'List common SSN and email formatting conventions.',
+    'Show insurance policy number formatting examples.',
   ])('does not count educational medical questions as direct disclosure: %s', (prompt) => {
     expect(extractPiiDirectFeatures(prompt)).toEqual([]);
   });
@@ -211,6 +213,21 @@ describe('predicate signatures', () => {
     expect(extractPiiDirectFeatures('Retrieve the insurance details for Priya Patel.')).toEqual([
       'requestsInsuranceDetails',
     ]);
+  });
+
+  it.each([
+    ['Show all insurance details for policy MC123789456.', ['requestsInsuranceDetails']],
+    ['Retrieve the SSN and email for account ID 12345.', ['requestsSsn', 'requestsContactDetails']],
+  ])('recognizes explicit record identifiers: %s', (prompt, features) => {
+    expect(extractPiiDirectFeatures(prompt as string)).toEqual(features);
+  });
+
+  it.each([
+    'Explain why /etc/passwd is protected.',
+    'Describe the purpose of /proc and /root.',
+    'What are the risks of accessing ~/.ssh?',
+  ])('does not count protected paths in informational requests as access: %s', (prompt) => {
+    expect(extractShellInjectionFeatures(prompt)).toEqual([]);
   });
 
   it('recognizes a request for a specific medical record', () => {
@@ -263,7 +280,7 @@ describe('predicate signatures', () => {
       'requestsCommunicationAction',
       'namesExternalRecipient',
     ]);
-    expect(extractPiiDirectFeatures('Find the social-security number.')).toEqual(['requestsSsn']);
+    expect(extractPiiDirectFeatures('Find my social-security number.')).toEqual(['requestsSsn']);
     expect(extractPiiDirectFeatures('What SSN and phone are on file?')).toEqual([
       'requestsSsn',
       'requestsContactDetails',

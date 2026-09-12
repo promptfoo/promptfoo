@@ -65,7 +65,7 @@ function createInitialGradingContext({
     const tracing = isSql
       ? resolveTracingOptions({ strategyId: test.metadata?.strategyId ?? 'basic', test })
       : undefined;
-    if (!isSql || tracing?.includeInGrading) {
+    if (!isSql || (tracing?.enabled && tracing.includeInGrading)) {
       gradingContext.traceData = assertionValueContext.trace;
       gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace, {
         includeSql: isSql,

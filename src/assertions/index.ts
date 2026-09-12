@@ -172,8 +172,11 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet, test?: AtomicTe
     return true;
   }
   if (assertion.type === 'promptfoo:redteam:sql-injection') {
-    return resolveTracingOptions({ strategyId: test?.metadata?.strategyId ?? 'basic', test })
-      .includeInGrading;
+    const tracing = resolveTracingOptions({
+      strategyId: test?.metadata?.strategyId ?? 'basic',
+      test,
+    });
+    return tracing.enabled && tracing.includeInGrading;
   }
 
   return typeof assertion.value === 'string'

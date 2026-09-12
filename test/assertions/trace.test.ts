@@ -2,6 +2,7 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/assertions/index';
+import { handleRedteam } from '../../src/assertions/redteam';
 import cliState from '../../src/cliState';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -145,7 +146,7 @@ describe('trace assertions', () => {
     await runAssertion({
       assertion: { type: 'promptfoo:redteam:sql-injection' },
       prompt: 'Perform the requested action.',
-      test: { metadata: { purpose: 'Fixture assistant' } },
+      test: { metadata: { purpose: 'Fixture assistant', tracing: { enabled: true } } },
       providerResponse: mockProviderResponse,
       traceId: 'test-trace-id',
     });
@@ -207,7 +208,12 @@ describe('trace assertions', () => {
       await runAssertion({
         assertion: { type: 'promptfoo:redteam:sql-injection' },
         prompt: 'Perform the requested action.',
-        test: { metadata: { purpose: 'Only return records belonging to the authenticated user.' } },
+        test: {
+          metadata: {
+            purpose: 'Only return records belonging to the authenticated user.',
+            tracing: { enabled: true },
+          },
+        },
         providerResponse: { output: 'I cannot help with that.' },
         traceId: 'test-trace-id',
       });
@@ -223,10 +229,15 @@ describe('trace assertions', () => {
     },
   );
 
-  it.each(['global', 'test', 'strategy'] as const)(
-    'honors the SQL trace grading opt-out from %s configuration',
-    async (source) => {
-      const tracing = { includeInGrading: false };
+  it.each([
+    ...['global', 'test', 'strategy'].flatMap((source) => [
+      { source, tracing: { enabled: true, includeInGrading: false } },
+      { source, tracing: { enabled: false, includeInGrading: true } },
+    ]),
+    { source: 'root-only', tracing: undefined },
+  ])(
+    'requires SQL grading opt-in from $source configuration: $tracing',
+    async ({ source, tracing }) => {
       const test: AtomicTestCase = {
         assert: [{ type: 'promptfoo:redteam:sql-injection' }],
         metadata: {
@@ -237,6 +248,8 @@ describe('trace assertions', () => {
       };
       if (source === 'global') {
         cliState.config = { ...originalConfig, redteam: { tracing } };
+      } else if (source === 'root-only') {
+        cliState.config = { ...originalConfig, tracing: { enabled: true } };
       }
       mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
       const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
@@ -256,8 +269,33 @@ describe('trace assertions', () => {
         providerResponse: mockProviderResponse,
         traceId: 'test-trace-id',
       });
+      await handleRedteam({
+        assertion: { type: 'promptfoo:redteam:sql-injection' },
+        baseType: 'promptfoo:redteam:sql-injection',
+        assertionValueContext: {
+          prompt: 'Perform the requested action.',
+          vars: {},
+          test,
+          logProbs: [],
+          provider: undefined,
+          providerResponse: mockProviderResponse,
+          trace: mockTraceData,
+        },
+        cost: 0,
+        inverse: false,
+        latencyMs: 0,
+        logProbs: [],
+        output: 'Fixture response',
+        outputString: 'Fixture response',
+        prompt: 'Perform the requested action.',
+        provider: undefined,
+        providerResponse: mockProviderResponse,
+        renderedValue: undefined,
+        test,
+        valueFromScript: undefined,
+      });
       expect(mockTraceStore.getTrace).not.toHaveBeenCalled();
-      expect(grade).toHaveBeenCalledTimes(2);
+      expect(grade).toHaveBeenCalledTimes(3);
       for (const call of grade.mock.calls) {
         expect(call[7]?.traceData).toBeUndefined();
         expect(call[7]?.traceSummary).toBeUndefined();

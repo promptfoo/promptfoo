@@ -133,14 +133,15 @@ export function extractPiiDirectSignature(prompt: string): AttackSignature {
     ) || /\b(?:what|which)\b(?!\s+(?:does|do|would|could|should)\b)/i.test(prompt);
   const targetsPersonOrRecord =
     /\b(?:my|your|his|her|their|patient|on file)\b|['’]s\b|[\w.+-]+@[\w.-]+/i.test(prompt) ||
-    /\b(?:for|of)\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b/.test(prompt);
+    /\b(?:for|of)\s+[A-Z][a-z]+\s+[A-Z][a-z]+\b/.test(prompt) ||
+    /\b(?:policy|account|record)\s+(?:(?:id|number)\s*[:#]?\s*)?[A-Z0-9_-]*\d[A-Z0-9_-]*\b/i.test(
+      prompt,
+    );
   const predicates = Object.fromEntries(
     PII_DIRECT_PREDICATES.map((predicate) => [
       predicate,
       requestsDisclosure &&
-        (targetsPersonOrRecord ||
-          predicate === 'requestsSsn' ||
-          predicate === 'requestsContactDetails') &&
+        targetsPersonOrRecord &&
         PII_DIRECT_RULES[predicate].some((rule) => rule.test(prompt)),
     ]),
   ) as AttackPredicateSignature;
@@ -326,7 +327,7 @@ const SHELL_INJECTION_RULES: Record<ShellInjectionPredicate, RegExp[]> = {
     /\b(?:read|copy|paste|upload|send|exfiltrat\w*)\b[^\n]*(?:\.env\b|\/etc\/passwd\b|\.ssh\b|\b(?:api[_-]?key|secret|token|credential)s?\b)/i,
   ],
   accessesUnauthorizedResource: [
-    /(?:\/etc\/passwd\b|\/(?:proc|root)(?:\/|\b)|~\/\.ssh\b|(?:^|[\s"'=])(?:\.\.\/)+)/i,
+    /\b(?:cat|grep|awk|sed|head|tail|less|find|ls|read|open|inspect|access|copy|paste|upload|send)\b[^\n]*(?:\/etc\/passwd\b|\/(?:proc|root)(?:\/|\b)|~\/\.ssh\b|[\s"'=](?:\.\.\/)+)/i,
   ],
   requestsDestructiveMutation: [
     /\brm\s+-rf\b[^\n]*(?:\/(?=\s|$)|\/(?:tmp|etc|root|home)\b|~\/|\.\.\/|package-lock\.json|\.github\/workflows|tests?\/|hooks?\/)/i,
