@@ -140,9 +140,24 @@ function getEffectiveShareTeamId(eval_: Eval): string | undefined {
   return cloudConfig.getCurrentTeamId(currentOrgId);
 }
 
+function stripFilePaths<T>(value: T): T {
+  if (typeof value === 'string') {
+    return value.replace(/^file:\/\/.*[/\\]([^/\\]+)$/, 'file://$1') as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map(stripFilePaths) as T;
+  }
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, stripFilePaths(item)]),
+    ) as T;
+  }
+  return value;
+}
+
 function stripProviderPaths<T>(provider: T): T {
   if (typeof provider === 'string') {
-    return provider.replace(/^file:\/\/.*[/\\]([^/\\]+)$/, 'file://$1') as T;
+    return stripFilePaths(provider);
   }
   if (!provider || typeof provider !== 'object') {
     return provider;
@@ -170,8 +185,11 @@ function stripProviderPaths<T>(provider: T): T {
   return projected as T;
 }
 
-// Mutate only the sanitized share copy, leaving user variables and local replay paths intact.
-function stripTestProviderPaths(test: TestCase): void {
+// Mutate only the sanitized share copy; local replay paths stay intact.
+function stripTestPaths(test: TestCase): void {
+  if (test.vars) {
+    test.vars = stripFilePaths(test.vars);
+  }
   if (test.provider) {
     test.provider = stripProviderPaths(test.provider);
   }
@@ -180,7 +198,7 @@ function stripTestProviderPaths(test: TestCase): void {
   }
   for (const assertion of test.assert ?? []) {
     if (assertion.type === 'assert-set') {
-      stripTestProviderPaths({ assert: assertion.assert });
+      stripTestPaths({ assert: assertion.assert });
     } else if (assertion.provider) {
       assertion.provider = stripProviderPaths(assertion.provider);
     }
@@ -201,6 +219,18 @@ async function sendEvalRecord(
     stripFlags,
   );
   redactedConfig.providers = stripProviderPaths(redactedConfig.providers);
+  // Array form keeps distinct prompt-map entries when filenames match.
+  if (
+    redactedConfig.prompts &&
+    typeof redactedConfig.prompts === 'object' &&
+    !Array.isArray(redactedConfig.prompts)
+  ) {
+    redactedConfig.prompts = Object.entries(redactedConfig.prompts).map(([raw, label]) => ({
+      raw,
+      label,
+    }));
+  }
+  redactedConfig.prompts = stripFilePaths(redactedConfig.prompts);
   const tests = [
     ...(Array.isArray(redactedConfig.tests) ? redactedConfig.tests : []),
     redactedConfig.defaultTest,
@@ -212,7 +242,7 @@ async function sendEvalRecord(
   ];
   for (const test of tests) {
     if (test && typeof test === 'object' && !('path' in test)) {
-      stripTestProviderPaths(test);
+      stripTestPaths(test);
     }
   }
 
@@ -222,7 +252,7 @@ async function sendEvalRecord(
     ...evalRecord,
     config: redactedConfig,
     prompts: evalRecord.prompts.map((prompt) =>
-      projectPrompt(prompt, stripFlags.shouldStripPromptText),
+      stripFilePaths(projectPrompt(prompt, stripFlags.shouldStripPromptText)),
     ),
     results: [],
     traces: projectTracesForOutput(traces, stripFlags),
@@ -472,8 +502,9 @@ async function prepareChunkForShare(
     const result = sanitizeResultForJsonlArtifact(row, stripFlags);
     result.provider = stripProviderPaths(result.provider);
     if (result.testCase) {
-      stripTestProviderPaths(result.testCase);
+      stripTestPaths(result.testCase);
     }
+    result.prompt = stripFilePaths(result.prompt);
     if (result.prompt?.config?.provider) {
       result.prompt.config.provider = stripProviderPaths(result.prompt.config.provider);
     }

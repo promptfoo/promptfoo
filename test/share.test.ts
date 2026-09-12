@@ -873,7 +873,16 @@ describe('createShareableUrl', () => {
                 ],
               },
             ],
-            vars: { basePath: 'user-variable' },
+            vars: {
+              basePath: 'user-variable',
+              nested: {
+                files: [
+                  'file:///home/alice/project/input.txt',
+                  'file://C:\\Users\\alice\\project\\image.png',
+                ],
+              },
+              literal: '/ordinary/user/data',
+            },
             metadata: { note: 'private-note' },
             providerOutput: 'private-output',
           },
@@ -909,9 +918,47 @@ describe('createShareableUrl', () => {
           expect(uploaded.testCase.vars).toBeUndefined();
         } else {
           expect(uploaded.testCase.vars.basePath).toBe('user-variable');
+          expect(uploaded.testCase.vars.nested.files).toEqual([
+            'file://input.txt',
+            'file://image.png',
+          ]);
+          expect(uploaded.testCase.vars.literal).toBe('/ordinary/user/data');
+          expect(row.testCase.vars.nested.files[0]).toBe('file:///home/alice/project/input.txt');
         }
       },
     );
+
+    it('removes prompt file roots without losing map entries with matching filenames', async () => {
+      const prompts = {
+        'file:///home/alice/project/first/prompt.txt': 'first',
+        'file:///home/alice/project/second/prompt.txt': 'second',
+        'literal prompt': 'literal',
+      };
+      mockEval.config = { prompts };
+      const prompt = {
+        id: 'file:///home/alice/project/first/prompt.txt',
+        raw: 'content',
+        label: 'first',
+        provider: 'echo',
+      };
+      mockEval.prompts = [prompt];
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await createShareableUrl(mockEval as Eval);
+
+      const uploaded = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(uploaded.config.prompts).toEqual([
+        { raw: 'file://prompt.txt', label: 'first' },
+        { raw: 'file://prompt.txt', label: 'second' },
+        { raw: 'literal prompt', label: 'literal' },
+      ]);
+      expect(uploaded.prompts[0]).toEqual({ ...prompt, id: 'file://prompt.txt' });
+      expect(mockFetch.mock.calls[0][1].body).not.toContain('/home/alice');
+      expect(mockEval.config.prompts).toEqual(prompts);
+      expect(prompt.id).toBe('file:///home/alice/project/first/prompt.txt');
+    });
 
     it('honors saved strip flags when sharing outside the evaluation scope', async () => {
       const { getEnvBool } = await vi.importActual<typeof import('../src/envars')>('../src/envars');
