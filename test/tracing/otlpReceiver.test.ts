@@ -17,6 +17,7 @@ import { OTLPReceiver, startOTLPReceiver, stopOTLPReceiver } from '../../src/tra
 
 import type { TraceStore } from '../../src/tracing/store';
 import type { AtomicTestCase } from '../../src/types';
+import type { TraceSpanEvent } from '../../src/types/tracing';
 
 // Helper to create protobuf-encoded OTLP data for tests
 let protoRoot: protobuf.Root | null = null;
@@ -153,7 +154,9 @@ describe('OTLPReceiver', () => {
         'a'.repeat(32),
         [
           expect.objectContaining({
-            events: [{ name: 'valid tool', timestamp: 1500, attributes: {} }],
+            events: [
+              { name: 'valid tool', timestamp: 1500, timestampNanos: '1500000000', attributes: {} },
+            ],
           }),
         ],
         expect.any(Object),
@@ -324,6 +327,7 @@ describe('OTLPReceiver', () => {
         {
           name: 'agentic runtime verifier',
           timestamp: 1700000000500,
+          timestampNanos: '1700000000500000000',
           attributes: expect.objectContaining({
             'promptfoo.agentic.plugin_id': pluginId,
           }),
@@ -390,7 +394,7 @@ describe('OTLPReceiver', () => {
           })
           .expect(200);
         expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
-          { name: 'valid tool', timestamp: 1200, attributes: {} },
+          { name: 'valid tool', timestamp: 1200, timestampNanos: '1200000000', attributes: {} },
         ]);
       },
     );
@@ -670,6 +674,94 @@ describe('OTLPReceiver', () => {
       expect(response.body.error).toMatch(/invalid protobuf/i);
     });
 
+    it('drops protobuf events without a nonzero timestamp', async () => {
+      const data = {
+        resourceSpans: [
+          {
+            scopeSpans: [
+              {
+                spans: [
+                  {
+                    traceId: Buffer.from('a'.repeat(32), 'hex'),
+                    spanId: Buffer.from('b'.repeat(16), 'hex'),
+                    name: 'route',
+                    startTimeUnixNano: '1700000000000000000',
+                    events: [
+                      { name: 'guardrail undated' },
+                      { name: 'guardrail zero', timeUnixNano: '0' },
+                      { name: 'tool update_seat', timeUnixNano: '1700000000000000200' },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .set('Content-Type', 'application/x-protobuf')
+        .send(await encodeOTLPRequest(data))
+        .expect(200);
+      expect(
+        mockTraceStore.addSpans.mock.calls[0][1][0].events?.map(
+          (event: TraceSpanEvent) => event.name,
+        ),
+      ).toEqual(['tool update_seat']);
+    });
+
+    it.each(['json', 'protobuf'])(
+      'grades epoch-scale event ordering from %s nanoseconds',
+      async (format) => {
+        const pluginId = 'agentic:guardrail-coverage-gap';
+        const traceId = 'a'.repeat(32);
+        const span = {
+          traceId: format === 'json' ? traceId : Buffer.from(traceId, 'hex'),
+          spanId: format === 'json' ? 'b'.repeat(16) : Buffer.from('b'.repeat(16), 'hex'),
+          name: 'route',
+          startTimeUnixNano: '1700000000000000000',
+          attributes: [
+            { key: 'promptfoo.agentic.plugin_id', value: { stringValue: pluginId } },
+            { key: 'promptfoo.agentic.evidence_json', value: { stringValue: '{"findings":[]}' } },
+          ],
+          events: [
+            {
+              name: 'guardrail update_seat',
+              timeUnixNano: '1700000000000000200',
+              attributes: [{ key: 'guardrail.decision', value: { stringValue: 'allow' } }],
+            },
+            {
+              name: 'tool update_seat',
+              timeUnixNano: '1700000000000000300',
+              attributes: [{ key: 'tool.name', value: { stringValue: 'update_seat' } }],
+            },
+          ],
+        };
+        const data = { resourceSpans: [{ scopeSpans: [{ spans: [span] }] }] };
+        await request(receiver.getApp())
+          .post('/v1/traces')
+          .set('Content-Type', format === 'json' ? 'application/json' : 'application/x-protobuf')
+          .send(format === 'json' ? data : await encodeOTLPRequest(data))
+          .expect(200);
+        const spans = mockTraceStore.addSpans.mock.calls[0][1];
+        const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+          'Update the seat.',
+          'ok',
+          { metadata: { purpose: 'Check before each seat update.' } } as AtomicTestCase,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          { traceData: { traceId, evaluationId: 'eval', testCaseId: 'case', spans } },
+        );
+        expect(result.grade.pass).toBe(true);
+        expect(spans[0].events?.map((event: TraceSpanEvent) => event.timestampNanos)).toEqual([
+          '1700000000000000200',
+          '1700000000000000300',
+        ]);
+      },
+    );
+
     it('should accept valid OTLP protobuf traces', async () => {
       // Manually override the traceStore property for this test too
       (receiver as any).traceStore = mockTraceStore;
@@ -753,6 +845,7 @@ describe('OTLPReceiver', () => {
               {
                 name: 'guardrail decision',
                 timestamp: 1700000000500,
+                timestampNanos: '1700000000500000000',
                 attributes: { 'guardrails.decision': 'blocked' },
               },
             ],
@@ -1067,15 +1160,33 @@ describe('OTLPReceiver', () => {
       );
     });
 
+    it('redacts sibling span and event echoes in the same OTLP batch', () => {
+      const secret = 'PRIVATE_OTLP_SIBLING_SECRET';
+      const spans = (receiver as any).redactSpans(
+        [
+          { name: 'source', attributes: { authorization: secret } },
+          {
+            name: `span ${secret}`,
+            attributes: {},
+            events: [{ name: `event ${secret}`, attributes: {} }],
+          },
+        ],
+        ['authorization'],
+      );
+      expect(JSON.stringify(spans)).not.toContain(secret);
+    });
+
     it('does not reprocess redaction markers while scrubbing span and event echoes', () => {
       const receiver = new OTLPReceiver({ redactAttributes: ['authorization'] });
-      const span = (receiver as any).redactSpan(
-        {
-          name: 'RERE',
-          statusMessage: 'RE',
-          attributes: { authorization: 'RE' },
-          events: [{ name: 'RERE', attributes: { authorization: ['R', 'E'] } }],
-        },
+      const [span] = (receiver as any).redactSpans(
+        [
+          {
+            name: 'RERE',
+            statusMessage: 'RE',
+            attributes: { authorization: 'RE' },
+            events: [{ name: 'RERE', attributes: { authorization: ['R', 'E'] } }],
+          },
+        ],
         ['authorization'],
       );
       expect(span.name).toBe('[REDACTED][REDACTED]');
@@ -1092,13 +1203,15 @@ describe('OTLPReceiver', () => {
             ? Array.from({ length: 101 }).reduce<unknown>((child) => ({ nested: child }), secret)
             : [secret, ...Array.from({ length: 10001 }, () => 'public')];
         const receiver = new OTLPReceiver({ redactAttributes: ['authorization'] });
-        const span = (receiver as any).redactSpan(
-          {
-            name: secret,
-            statusMessage: secret,
-            attributes: { authorization: value },
-            events: [{ name: secret }],
-          },
+        const [span] = (receiver as any).redactSpans(
+          [
+            {
+              name: secret,
+              statusMessage: secret,
+              attributes: { authorization: value },
+              events: [{ name: secret }],
+            },
+          ],
           ['authorization'],
         );
         expect(span.name).toBe('[REDACTED]');
@@ -1110,11 +1223,13 @@ describe('OTLPReceiver', () => {
 
     it('scrubs echoes of strings nested below a redacted collection key', () => {
       const redactingReceiver = new OTLPReceiver({ redactAttributes: ['authorization'] });
-      const span = (redactingReceiver as any).redactSpan(
-        {
-          attributes: { authorization: ['Bearer nested-token'] },
-          name: 'Bearer nested-token',
-        },
+      const [span] = (redactingReceiver as any).redactSpans(
+        [
+          {
+            attributes: { authorization: ['Bearer nested-token'] },
+            name: 'Bearer nested-token',
+          },
+        ],
         ['authorization'],
       );
 

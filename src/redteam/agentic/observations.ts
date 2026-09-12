@@ -53,6 +53,7 @@ export type AgentObservation = {
   spanId?: string;
   spanName?: string;
   timestamp?: number;
+  timestampNanos?: string;
   text?: string;
   to?: string;
   tool?: string;
@@ -127,6 +128,7 @@ type TraceLikeSpan = {
     attributes?: Record<string, unknown>;
     name?: string;
     timestamp?: number;
+    timestampNanos?: string;
   }>;
   name?: string;
   parentSpanId?: string;
@@ -679,6 +681,10 @@ export function observationsFromTraceData(
     );
 
     traceSpan.events?.forEach((event, eventIndex) => {
+      const timestampNanos =
+        typeof event.timestampNanos === 'string' && /^\d{1,20}$/.test(event.timestampNanos)
+          ? event.timestampNanos
+          : undefined;
       const eventLocation = `${spanLocation} event ${eventIndex + 1}`;
       const inheritedPluginId = getAttribute(traceSpan.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS);
       const eventSpan = {
@@ -700,7 +706,7 @@ export function observationsFromTraceData(
         'trace-event',
       );
       if (eventControlObservation) {
-        observations.push({ ...eventControlObservation, eventId: eventLocation });
+        observations.push({ ...eventControlObservation, eventId: eventLocation, timestampNanos });
       }
       observations.push(
         ...observationsFromTraceAttributes(
@@ -708,7 +714,7 @@ export function observationsFromTraceData(
           eventLocation,
           'trace-event',
           eventSpan,
-        ).map((observation) => ({ ...observation, eventId: eventLocation })),
+        ).map((observation) => ({ ...observation, eventId: eventLocation, timestampNanos })),
       );
     });
   });

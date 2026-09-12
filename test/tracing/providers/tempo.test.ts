@@ -84,8 +84,8 @@ describe('TempoProvider', () => {
   it('preserves sub-millisecond event order and drops events without a timestamp', async () => {
     const data = structuredClone(traceResponse);
     data.batches[0].scopeSpans[0].spans[0].events = [
-      { name: 'tool update_seat', timeUnixNano: '1704067200000100000', attributes: [] },
-      { name: 'guardrail update_seat', timeUnixNano: '1704067200000200000', attributes: [] },
+      { name: 'tool update_seat', timeUnixNano: '1704067200000000200', attributes: [] },
+      { name: 'guardrail update_seat', timeUnixNano: '1704067200000000300', attributes: [] },
       { name: 'undated guardrail', attributes: [] } as any,
     ];
     mockedFetch.mockResolvedValue(response(data));
@@ -94,9 +94,10 @@ describe('TempoProvider', () => {
       endpoint: 'http://tempo:3200',
     }).fetchTrace(TRACE_ID);
     expect(result?.spans[0].events).toHaveLength(2);
-    expect(result!.spans[0].events![0].timestamp).toBeLessThan(
-      result!.spans[0].events![1].timestamp,
-    );
+    expect(result!.spans[0].events!.map((event) => event.timestampNanos)).toEqual([
+      '1704067200000000200',
+      '1704067200000000300',
+    ]);
   });
 
   it.each([
@@ -136,6 +137,7 @@ describe('TempoProvider', () => {
         {
           name: 'tool event',
           timestamp: 1704067200500,
+          timestampNanos: '1704067200500000000',
           attributes: { command: 'echo fixture' },
         },
       ],
@@ -175,6 +177,7 @@ describe('TempoProvider', () => {
         {
           name: 'tool event',
           timestamp: 1704067200500,
+          timestampNanos: '1704067200500000000',
           attributes: { command: 'echo fixture' },
         },
       ]);

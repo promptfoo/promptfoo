@@ -239,14 +239,21 @@ function transformSpan(
     statusMessage: span.status?.message,
     events: Array.isArray(span.events)
       ? span.events.flatMap((event) => {
-          if (!event || typeof event.name !== 'string' || !event.name.trim()) {
+          if (
+            !event ||
+            typeof event.name !== 'string' ||
+            !event.name.trim() ||
+            !event.timeUnixNano ||
+            /^0+$/.test(event.timeUnixNano)
+          ) {
             return [];
           }
           try {
             return [
               {
                 name: event.name,
-                timestamp: nanoToMs(event.timeUnixNano ?? ''),
+                timestamp: nanoToMs(event.timeUnixNano),
+                timestampNanos: event.timeUnixNano,
                 attributes: attributesToRecord(
                   event.attributes?.filter(
                     (attribute) =>

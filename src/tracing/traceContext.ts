@@ -12,6 +12,7 @@ import { getToolNameFromAttributes } from './toolAttributes';
 export interface TraceEvent {
   name: string;
   timestamp: number;
+  timestampNanos?: string;
   attributes: Record<string, any>;
 }
 
@@ -304,27 +305,31 @@ async function storeExternalSpans(traceId: string, spans: SpanData[]): Promise<b
   }
 }
 
-function redactExternalSpan(span: SpanData, redactAttributes: string[]): SpanData {
+function redactExternalSpans(spans: SpanData[], redactAttributes: string[]): SpanData[] {
   const options = { redactAttributes, sanitizeSensitiveAttributes: false, truncateValues: false };
-  const attributes = sanitizeTraceAttributes(span.attributes, options);
-  const events = span.events?.map((event) => ({
-    ...event,
-    attributes: sanitizeTraceAttributes(event.attributes, options),
-  }));
-  const redactText = getTraceTextRedactor([
-    { original: span.attributes, sanitized: attributes },
-    ...(span.events ?? []).map((event, index) => ({
-      original: event.attributes,
-      sanitized: events?.[index].attributes,
+  const sanitized = spans.map((span) => ({
+    ...span,
+    attributes: sanitizeTraceAttributes(span.attributes, options),
+    events: span.events?.map((event) => ({
+      ...event,
+      attributes: sanitizeTraceAttributes(event.attributes, options),
     })),
-  ]);
-  return {
+  }));
+  const redactText = getTraceTextRedactor(
+    spans.flatMap((span, index) => [
+      { original: span.attributes, sanitized: sanitized[index].attributes },
+      ...(span.events ?? []).map((event, eventIndex) => ({
+        original: event.attributes,
+        sanitized: sanitized[index].events?.[eventIndex].attributes,
+      })),
+    ]),
+  );
+  return sanitized.map((span) => ({
     ...span,
     name: redactText(span.name),
     statusMessage: redactText(span.statusMessage),
-    attributes,
-    events: events?.map((event) => ({ ...event, name: redactText(event.name) })),
-  };
+    events: span.events?.map((event) => ({ ...event, name: redactText(event.name) })),
+  }));
 }
 
 function getProviderFetchOptions(
@@ -408,7 +413,7 @@ async function fetchFromExternalProvider(
       }
 
       const storedSpans = redactAttributes?.length
-        ? validSpans.map((span) => redactExternalSpan(span, redactAttributes))
+        ? redactExternalSpans(validSpans, redactAttributes)
         : validSpans;
 
       if (!(await storeExternalSpans(traceId, storedSpans))) {
@@ -515,9 +520,7 @@ async function fetchFromLocalStore(
       }
 
       const traceSpans = createTraceSpans(
-        redactAttributes?.length
-          ? spans.map((span) => redactExternalSpan(span, redactAttributes))
-          : spans,
+        redactAttributes?.length ? redactExternalSpans(spans, redactAttributes) : spans,
       );
       const insights = deriveInsights(traceSpans);
 

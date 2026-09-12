@@ -392,6 +392,45 @@ describe('fetchTraceContext', () => {
     ]);
   });
 
+  it.each([false, true])(
+    'redacts sibling event echoes before external storage (JSON: %s)',
+    async (serialized) => {
+      const secret = 'PRIVATE_EXTERNAL_SIBLING_EVENT';
+      mockExternalTrace([
+        {
+          spanId: 'source',
+          name: 'source',
+          startTime: 1,
+          attributes: {},
+          events: [
+            {
+              name: 'source event',
+              timestamp: 2,
+              attributes: {
+                authorization: serialized ? JSON.stringify({ value: secret }) : secret,
+              },
+            },
+          ],
+        },
+        {
+          spanId: 'echo',
+          name: `span ${secret}`,
+          startTime: 3,
+          attributes: {},
+          events: [{ name: `event ${secret}`, timestamp: 4, attributes: {} }],
+        },
+      ]);
+      const result = await fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 0,
+        redactAttributes: ['authorization'],
+      });
+      expect(result).not.toBeNull();
+      expect(JSON.stringify(storedSpans)).not.toContain(secret);
+    },
+  );
+
   it('stores large traces in database-safe batches', async () => {
     const spans = Array.from({ length: 501 }, (_, index) => ({
       spanId: String(index),

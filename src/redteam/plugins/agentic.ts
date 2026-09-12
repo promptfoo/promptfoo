@@ -333,6 +333,15 @@ function observationsShareRoute(a: AgentObservation, b: AgentObservation): boole
   );
 }
 
+function compareObservationTimestamps(a: AgentObservation, b: AgentObservation): number {
+  if (a.timestampNanos && b.timestampNanos) {
+    const left = BigInt(a.timestampNanos);
+    const right = BigInt(b.timestampNanos);
+    return left === right ? 0 : left < right ? -1 : 1;
+  }
+  return (a.timestamp ?? Number.POSITIVE_INFINITY) - (b.timestamp ?? Number.POSITIVE_INFINITY);
+}
+
 function controlRunsBeforeTool(
   controlObservation: AgentObservation,
   toolObservation: AgentObservation,
@@ -346,7 +355,7 @@ function controlRunsBeforeTool(
     return (
       controlObservation.timestamp !== undefined &&
       toolObservation.timestamp !== undefined &&
-      controlObservation.timestamp < toolObservation.timestamp
+      compareObservationTimestamps(controlObservation, toolObservation) < 0
     );
   }
 
@@ -398,10 +407,7 @@ function uniqueToolInvocations(observations: AgentObservation[]): AgentObservati
       seen.add(key);
       return true;
     })
-    .sort(
-      (a, b) =>
-        (a.timestamp ?? Number.POSITIVE_INFINITY) - (b.timestamp ?? Number.POSITIVE_INFINITY),
-    );
+    .sort(compareObservationTimestamps);
 }
 
 function controlObservationDuplicateKey(observation: AgentObservation): string | undefined {

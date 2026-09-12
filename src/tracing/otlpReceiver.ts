@@ -16,6 +16,7 @@ import {
   PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from './resourceAttributes';
+import { getTraceTextRedactor } from './sanitizeAttributes';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
 interface OTLPAttribute {
@@ -367,98 +368,33 @@ export class OTLPReceiver {
     return redacted;
   }
 
-  private redactSpan(span: SpanData, redactAttributePatterns: string[]): SpanData {
+  private redactSpans(spans: SpanData[], redactAttributePatterns: string[]): SpanData[] {
     if (redactAttributePatterns.length === 0) {
-      return span;
+      return spans;
     }
-    const attributes = span.attributes ?? {};
-    // Collect the values of attributes whose KEY will be redacted. A span `name` or
-    // `statusMessage` that echoes one of those values (e.g. an exporter copies a redacted
-    // attribute such as `otel.log.body` or `event.name` into the span name, or echoes a
-    // credential into an error message) must be scrubbed too — otherwise the secret leaks
-    // through a span field the operator believes `redactAttributes` covers.
-    const redactedSourceValues = new Set<string>();
-    let incompleteSourceTraversal = false;
-    const collectRedactedSourceValues = (value: unknown, key?: string): void => {
-      const pending: Array<{ value: unknown; key?: string; sensitive: boolean; depth: number }> = [
-        { value, key, sensitive: false, depth: 0 },
-      ];
-      let visited = 0;
-      while (pending.length > 0 && ++visited <= 10_000) {
-        const current = pending.pop()!;
-        const sensitive =
-          current.sensitive ||
-          Boolean(current.key && this.shouldRedactAttribute(current.key, redactAttributePatterns));
-        if (['string', 'number', 'boolean'].includes(typeof current.value)) {
-          if (sensitive && String(current.value).length > 0) {
-            redactedSourceValues.add(String(current.value));
-          }
-          continue;
-        }
-        if (current.depth >= 100) {
-          incompleteSourceTraversal = true;
-          continue;
-        }
-        if (Array.isArray(current.value)) {
-          pending.push(
-            ...current.value.map((item) => ({
-              value: item,
-              sensitive,
-              depth: current.depth + 1,
-            })),
-          );
-        } else if (current.value && typeof current.value === 'object') {
-          pending.push(
-            ...Object.entries(current.value).map(([nestedKey, nestedValue]) => ({
-              value: nestedValue,
-              key: nestedKey,
-              sensitive,
-              depth: current.depth + 1,
-            })),
-          );
-        }
-      }
-      incompleteSourceTraversal ||= pending.length > 0;
-    };
-    for (const attributeSet of [
-      attributes,
-      ...(span.events ?? []).map((event) => event.attributes ?? {}),
-    ]) {
-      for (const [key, value] of Object.entries(attributeSet)) {
-        collectRedactedSourceValues(value, key);
-      }
-    }
-    const secrets = [...redactedSourceValues]
-      .sort((a, b) => b.length - a.length)
-      .map((secret) => secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const secretPattern =
-      !incompleteSourceTraversal && secrets.length > 0
-        ? new RegExp(secrets.join('|'), 'g')
-        : undefined;
-    const scrubEcho = <T extends string | undefined>(value: T): T => {
-      if (typeof value !== 'string') {
-        return value;
-      }
-      return (
-        incompleteSourceTraversal
-          ? '[REDACTED]'
-          : secretPattern
-            ? value.replace(secretPattern, '[REDACTED]')
-            : value
-      ) as T;
-    };
-
-    return {
+    const sanitized = spans.map((span) => ({
       ...span,
-      name: scrubEcho(span.name),
-      statusMessage: scrubEcho(span.statusMessage),
-      attributes: this.redactAttributes(attributes, redactAttributePatterns),
+      attributes: this.redactAttributes(span.attributes, redactAttributePatterns),
       events: span.events?.map((event) => ({
         ...event,
-        name: scrubEcho(event.name),
         attributes: this.redactAttributes(event.attributes, redactAttributePatterns),
       })),
-    };
+    }));
+    const redactText = getTraceTextRedactor(
+      spans.flatMap((span, index) => [
+        { original: span.attributes, sanitized: sanitized[index].attributes },
+        ...(span.events ?? []).map((event, eventIndex) => ({
+          original: event.attributes,
+          sanitized: sanitized[index].events?.[eventIndex].attributes,
+        })),
+      ]),
+    );
+    return sanitized.map((span) => ({
+      ...span,
+      name: redactText(span.name),
+      statusMessage: redactText(span.statusMessage),
+      events: span.events?.map((event) => ({ ...event, name: redactText(event.name) })),
+    }));
   }
 
   private setupMiddleware(): void {
@@ -714,7 +650,7 @@ export class OTLPReceiver {
       );
       const sanitized =
         redactAttributePatterns.length > 0
-          ? spans.map((span) => this.redactSpan(span, redactAttributePatterns))
+          ? this.redactSpans(spans, redactAttributePatterns)
           : spans;
       await this.traceStore.addSpans(traceId, sanitized, {
         skipTraceCheck: false,
@@ -820,6 +756,7 @@ export class OTLPReceiver {
                 if (
                   typeof nanos !== 'string' ||
                   !/^\d{1,20}$/.test(nanos) ||
+                  BigInt(nanos) === 0n ||
                   BigInt(nanos) > 0xffffffffffffffffn
                 ) {
                   return [];
@@ -833,6 +770,7 @@ export class OTLPReceiver {
                     {
                       name: event.name,
                       timestamp,
+                      timestampNanos: nanos,
                       attributes: this.parseAttributes(event.attributes),
                     },
                   ];
@@ -1020,14 +958,20 @@ export class OTLPReceiver {
           'otel.span.kind': spanKindName,
           'otel.span.kind_code': spanKindCode,
         },
-        events: (span.events ?? []).map((event) => ({
-          name: event.name,
-          timestamp:
-            this.toMilliseconds(event.timeUnixNano) ??
-            this.toMilliseconds(span.startTimeUnixNano) ??
-            0,
-          attributes: this.parseDecodedAttributes(event.attributes),
-        })),
+        events: (span.events ?? []).flatMap((event) => {
+          const nanos = event.timeUnixNano?.toString();
+          if (!nanos || !/^\d{1,20}$/.test(nanos) || BigInt(nanos) === 0n || !event.name.trim()) {
+            return [];
+          }
+          return [
+            {
+              name: event.name,
+              timestamp: Number(nanos) / 1_000_000,
+              timestampNanos: nanos,
+              attributes: this.parseDecodedAttributes(event.attributes),
+            },
+          ];
+        }),
         statusCode: span.status?.code,
         statusMessage: span.status?.message,
       },

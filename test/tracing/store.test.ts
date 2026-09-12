@@ -696,6 +696,36 @@ describe('TraceStore', () => {
       });
     });
 
+    it.each(['getTrace', 'getTracesByEvaluation', 'getSpans'] as const)(
+      'redacts sibling span and event echoes in %s',
+      async (method) => {
+        const secret = 'PRIVATE_SIBLING_EVENT_SECRET';
+        const rows = [
+          { spanId: 'source', name: 'source', startTime: 1, attributes: { authorization: secret } },
+          {
+            spanId: 'echo',
+            name: `span ${secret}`,
+            startTime: 2,
+            attributes: {},
+            events: [{ name: `event ${secret}`, timestamp: 3, attributes: {} }],
+          },
+        ];
+        const query = (value: unknown, chain = false) => ({
+          from: vi.fn().mockReturnThis(),
+          where: chain ? vi.fn().mockReturnThis() : vi.fn().mockResolvedValue(value),
+          limit: vi.fn().mockResolvedValue(value),
+          orderBy: vi.fn().mockResolvedValue(value),
+        });
+        if (method !== 'getSpans') {
+          mockDb.select.mockReturnValueOnce(
+            query([{ traceId: 'siblings' }], method === 'getTrace'),
+          );
+        }
+        mockDb.select.mockReturnValueOnce(query(rows, method === 'getSpans'));
+        expect(JSON.stringify(await traceStore[method]('siblings'))).not.toContain(secret);
+      },
+    );
+
     it.each([true, false])(
       'redacts text when %s event attributes exceed the depth limit',
       async (eventAttributes) => {

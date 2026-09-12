@@ -48,49 +48,55 @@ export interface AddSpansOptions {
   warnIfMissingTrace?: boolean;
 }
 
-function serializeSpan(
-  span: typeof spansTable.$inferSelect,
+function serializeSpans(
+  spans: (typeof spansTable.$inferSelect)[],
   shouldSanitizeAttributes = true,
-): SpanData {
-  const rawAttributes = span.attributes ?? undefined;
-  const attributes = rawAttributes
-    ? shouldSanitizeAttributes
-      ? sanitizeTraceAttributes(rawAttributes)
-      : rawAttributes
-    : undefined;
-  const events = span.events?.map((event) => ({
-    ...event,
-    attributes: shouldSanitizeAttributes
-      ? sanitizeTraceAttributes(event.attributes)
-      : (event.attributes ?? undefined),
-  }));
-  const redactText = getTraceTextRedactor(
-    shouldSanitizeAttributes
-      ? [
-          { original: rawAttributes, sanitized: attributes },
-          ...(span.events ?? []).map((event, index) => ({
-            original: event.attributes,
-            sanitized: events?.[index]?.attributes,
-          })),
-        ]
-      : [],
-    '<redacted>',
-  );
-  const safeEvents = events?.map((event) => ({
-    ...event,
-    name: redactText(event.name),
-  }));
-  return {
+): SpanData[] {
+  const sanitized = spans.map((span) => ({
     spanId: span.spanId,
     parentSpanId: span.parentSpanId ?? undefined,
-    name: redactText(span.name),
+    name: span.name,
     startTime: span.startTime,
     endTime: span.endTime ?? undefined,
-    attributes,
-    ...(safeEvents ? { events: safeEvents } : {}),
+    attributes: span.attributes
+      ? shouldSanitizeAttributes
+        ? sanitizeTraceAttributes(span.attributes)
+        : span.attributes
+      : undefined,
+    ...(span.events
+      ? {
+          events: span.events.map((event) => ({
+            ...event,
+            attributes: shouldSanitizeAttributes
+              ? sanitizeTraceAttributes(event.attributes)
+              : (event.attributes ?? undefined),
+          })),
+        }
+      : {}),
     statusCode: span.statusCode ?? undefined,
-    statusMessage: redactText(span.statusMessage ?? undefined),
-  };
+    statusMessage: span.statusMessage ?? undefined,
+  }));
+  if (!shouldSanitizeAttributes) {
+    return sanitized;
+  }
+  const redactText = getTraceTextRedactor(
+    spans.flatMap((span, index) => [
+      { original: span.attributes, sanitized: sanitized[index].attributes },
+      ...(span.events ?? []).map((event, eventIndex) => ({
+        original: event.attributes,
+        sanitized: sanitized[index].events?.[eventIndex].attributes,
+      })),
+    ]),
+    '<redacted>',
+  );
+  return sanitized.map((span) => ({
+    ...span,
+    name: redactText(span.name),
+    statusMessage: redactText(span.statusMessage),
+    ...(span.events
+      ? { events: span.events.map((event) => ({ ...event, name: redactText(event.name) })) }
+      : {}),
+  }));
 }
 
 function isGraderOwnedSpan(
@@ -307,7 +313,7 @@ export class TraceStore {
             evaluationId: trace.evaluationId,
             testCaseId: trace.testCaseId,
             metadata: trace.metadata ?? undefined,
-            spans: spans.map((span) => serializeSpan(span, shouldSanitize)),
+            spans: serializeSpans(spans, shouldSanitize),
           };
         }),
       );
@@ -351,7 +357,7 @@ export class TraceStore {
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
         metadata: trace.metadata ?? undefined,
-        spans: spans.map((span) => serializeSpan(span, shouldSanitize)),
+        spans: serializeSpans(spans, shouldSanitize),
       };
     } catch (error) {
       logger.error(`[TraceStore] Failed to get trace: ${error}`);
@@ -431,7 +437,8 @@ export class TraceStore {
       const spanMap = new Map<string, SpanData>();
       const depthCache = new Map<string, number>();
 
-      for (const row of rows) {
+      const serialized = serializeSpans(rows, shouldSanitize);
+      for (const [index, row] of rows.entries()) {
         if (earliestStartTime && row.startTime < earliestStartTime) {
           continue;
         }
@@ -442,7 +449,7 @@ export class TraceStore {
           continue;
         }
 
-        const spanData = serializeSpan(row, shouldSanitize);
+        const spanData = serialized[index];
 
         const hasExplicitFilter = Boolean(spanFilter?.length);
 
