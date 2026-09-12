@@ -844,7 +844,12 @@ export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T 
 /**
  * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
-function sanitizeJsonString(str: string, depth: number, maxDepth: number): string {
+function sanitizeJsonString(
+  str: string,
+  depth: number,
+  maxDepth: number,
+  redactStringValues = true,
+): string {
   const redactedAzureBlobUri = redactAzureBlobSasToken(str);
   if (redactedAzureBlobUri !== str) {
     return redactedAzureBlobUri;
@@ -853,7 +858,7 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
   try {
     const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') {
-      const sanitized = recursiveSanitize(parsed, depth, maxDepth);
+      const sanitized = recursiveSanitize(parsed, depth, maxDepth, false, redactStringValues);
       return JSON.stringify(sanitized);
     }
   } catch {
@@ -865,7 +870,7 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
     }
 
     // Not JSON - check if it looks like a secret
-    if (looksLikeSecret(str)) {
+    if (redactStringValues && looksLikeSecret(str)) {
       return REDACTED;
     }
   }
@@ -1073,7 +1078,7 @@ function recursiveSanitize(
 
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
-    return redactStringValues ? sanitizeJsonString(obj, depth, maxDepth) : obj;
+    return sanitizeJsonString(obj, depth, maxDepth, redactStringValues);
   }
 
   // Handle primitives and null/undefined
@@ -1172,7 +1177,7 @@ export function sanitizeObject(
 
     // Handle strings - check if they're JSON and sanitize if so
     if (typeof obj === 'string') {
-      return redactStringValues ? sanitizeJsonString(obj, 0, maxDepth) : obj;
+      return sanitizeJsonString(obj, 0, maxDepth, redactStringValues);
     }
 
     // Handle other primitives

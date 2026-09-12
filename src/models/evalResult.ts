@@ -134,8 +134,18 @@ function sanitizeProviderReference(provider: unknown): unknown {
   if (Array.isArray(provider)) {
     return provider.map(sanitizeProviderReference);
   }
-  if ('id' in provider || 'label' in provider || 'config' in provider) {
+  if (typeof (provider as { id?: unknown }).id === 'function') {
     return sanitizeProvider(provider as ApiProvider | ProviderOptions);
+  }
+  if ('id' in provider || 'label' in provider || 'config' in provider) {
+    const { id, label, config, ...options } = provider as ProviderOptions;
+    const sanitizedOptions = sanitizeForDbWithSecrets(options);
+    return {
+      ...(sanitizedOptions && typeof sanitizedOptions === 'object' ? sanitizedOptions : {}),
+      id,
+      ...(label !== undefined && { label }),
+      ...(config && { config: sanitizeProviderConfig(config) }),
+    };
   }
   if ('env' in provider) {
     return sanitizeForDbWithSecrets(provider);
@@ -214,10 +224,11 @@ function sanitizeAssertionForDb(assertion: Assertion | AssertionSet): Assertion 
   }
   const captured = { ...assertion };
   if ('assert' in captured) {
-    if (Array.isArray(captured.assert)) {
+    const { assert, ...withoutAssertions } = captured;
+    if (Array.isArray(assert)) {
       return {
-        ...sanitizeForDbWithSecrets(captured),
-        assert: captured.assert.map(sanitizeAssertionForDb) as Assertion[],
+        ...sanitizeForDbWithSecrets(withoutAssertions),
+        assert: assert.map(sanitizeAssertionForDb) as Assertion[],
       };
     }
     return sanitizeForDbWithSecrets(captured);
@@ -473,32 +484,37 @@ function redactHttpHeadersOnMetadata<T>(
 }
 
 // Redact transport headers and assertion configs on each grading component.
-function sanitizeGradingResultForDb<T>(gradingResult: T): T {
+function sanitizeGradingResultForDb<T>(gradingResult: T, seen = new WeakSet<object>()): T {
   if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
     return gradingResult;
   }
+  if (seen.has(gradingResult)) {
+    return {} as T;
+  }
+  seen.add(gradingResult);
 
   const gr = gradingResult as Record<string, unknown>;
   let mutated = false;
   const next: Record<string, unknown> = { ...gr };
+  const { metadata, assertion, componentResults } = next;
 
-  if (gr.metadata !== undefined) {
-    const redacted = redactHttpHeadersOnMetadata(gr.metadata);
-    if (redacted !== gr.metadata) {
+  if (metadata !== undefined) {
+    const redacted = redactHttpHeadersOnMetadata(metadata);
+    if (redacted !== metadata) {
       next.metadata = redacted;
       mutated = true;
     }
   }
 
-  if (asRecord(gr.assertion)) {
-    next.assertion = sanitizeAssertionForDb(gr.assertion as Assertion | AssertionSet);
+  if (asRecord(assertion)) {
+    next.assertion = sanitizeAssertionForDb(assertion as Assertion | AssertionSet);
     mutated = true;
   }
 
-  if (Array.isArray(gr.componentResults)) {
+  if (Array.isArray(componentResults)) {
     let componentMutated = false;
-    const nextComponents = gr.componentResults.map((component) => {
-      const redacted = sanitizeGradingResultForDb(component);
+    const nextComponents = componentResults.map((component) => {
+      const redacted = sanitizeGradingResultForDb(component, seen);
       if (redacted !== component) {
         componentMutated = true;
       }

@@ -266,6 +266,19 @@ describe('EvalResult', () => {
     });
   });
 
+  it('redacts known secret keys inside JSON variable strings', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: { payload: JSON.stringify({ apiKey: 'sk-json-secret', label: 'kept' }) },
+      } as AtomicTestCase,
+    });
+
+    expect(JSON.parse(result.testCase.vars?.payload as string)).toEqual({
+      apiKey: '[REDACTED]',
+      label: 'kept',
+    });
+  });
+
   it('preserves malformed legacy assertion sets without throwing', () => {
     const result = sanitizeResultForJsonlArtifact({
       gradingResult: {
@@ -318,6 +331,78 @@ describe('EvalResult', () => {
       id: 'fixture',
       config: { apiKey: '[REDACTED]' },
     });
+  });
+
+  it('projects nested assertion-set providers before generic serialization', () => {
+    const provider = {
+      id: 'fixture',
+      config: { apiKey: 'fixture-secret' },
+      toJSON() {
+        throw new Error('custom provider serializer ran');
+      },
+    };
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        assert: [{ type: 'assert-set', assert: [{ type: 'llm-rubric', provider }] }] as any,
+      },
+    });
+
+    expect((result.testCase.assert?.[0] as any).assert[0].provider).toEqual({
+      id: 'fixture',
+      config: { apiKey: '[REDACTED]' },
+    });
+  });
+
+  it('preserves declarative provider option fields', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        provider: {
+          id: 'openai:chat:gpt-4.1',
+          prompts: ['judge'],
+          delay: 1,
+          env: { OPENAI_API_KEY: 'sk-option-secret' },
+        } as any,
+      },
+    });
+
+    expect(result.testCase.provider).toEqual({
+      id: 'openai:chat:gpt-4.1',
+      prompts: ['judge'],
+      delay: 1,
+      env: { OPENAI_API_KEY: '[REDACTED]' },
+    });
+  });
+
+  it('cuts circular grading components before generic serialization', () => {
+    const component: any = { pass: true, score: 1, reason: 'ok' };
+    component.componentResults = [component];
+
+    const result = sanitizeResultForJsonlArtifact({
+      gradingResult: { pass: true, score: 1, reason: 'ok', componentResults: [component] },
+    });
+
+    expect(result.gradingResult.componentResults[0].componentResults).toEqual([{}]);
+  });
+
+  it('reads grading-result provider accessors once', () => {
+    let reads = 0;
+    const gradingResult: any = { pass: true, score: 1, reason: 'ok' };
+    Object.defineProperty(gradingResult, 'assertion', {
+      enumerable: true,
+      get() {
+        if (++reads > 1) {
+          throw new Error('unexpected second read');
+        }
+        return { type: 'llm-rubric', provider: { id: 'fixture' } };
+      },
+    });
+
+    const result = sanitizeResultForJsonlArtifact({ gradingResult });
+
+    expect(result.gradingResult.assertion.provider).toEqual({ id: 'fixture' });
+    expect(reads).toBe(1);
   });
 
   it('reads test-case accessors once while preserving their values', () => {
