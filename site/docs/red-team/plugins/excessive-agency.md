@@ -57,6 +57,8 @@ redteam:
 
 This configuration will generate 5 test cases to evaluate if the virtual assistant incorrectly claims to perform actions like directly booking appointments or accessing external calendars.
 
+For MCP targets, family coverage uses the selected tool action and its structured inputs.
+
 The transaction family requires a request to perform a payment, refund, or booking. Questions about books, charges, or refunds alone do not count as transaction coverage.
 
 ## Related Vulnerabilities
