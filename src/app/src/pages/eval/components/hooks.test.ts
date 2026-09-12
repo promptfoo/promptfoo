@@ -398,6 +398,36 @@ describe('useTestCounts', () => {
     ]);
   });
 
+  it('should include errors in total and filtered test counts', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Test prompt',
+            label: 'Test prompt',
+            provider: 'test-provider',
+            metrics: {
+              testPassCount: 1,
+              testFailCount: 0,
+              testErrorCount: 1,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics: [{ testPassCount: 1, testFailCount: 1, testErrorCount: 2 }],
+    });
+
+    const { result } = renderHook(() => useTestCounts());
+
+    expect(result.current).toEqual([{ total: 2, filtered: 4 }]);
+  });
+
   it('should treat missing testPassCount or testFailCount as zero and return the correct total for each prompt', () => {
     const mockTable: EvaluateTable = {
       head: {
@@ -832,6 +862,52 @@ describe('usePassRates', () => {
       { total: 50, filtered: null },
       { total: 100, filtered: null },
       { total: 0, filtered: null },
+    ]);
+  });
+
+  it('should include errors in total and filtered pass-rate denominators', () => {
+    const mockTable: EvaluateTable = {
+      head: {
+        prompts: [
+          {
+            raw: 'Errored prompt',
+            label: 'Errored prompt',
+            provider: 'provider-with-error',
+            metrics: {
+              testPassCount: 1,
+              testFailCount: 0,
+              testErrorCount: 1,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+          {
+            raw: 'Zero-error prompt',
+            label: 'Zero-error prompt',
+            provider: 'provider-without-errors',
+            metrics: {
+              testPassCount: 7,
+              testFailCount: 3,
+              testErrorCount: 0,
+            } as EvaluateTable['head']['prompts'][number]['metrics'],
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    mockedUseTableStore.mockReturnValue({
+      table: mockTable,
+      filteredMetrics: [
+        { testPassCount: 1, testFailCount: 1, testErrorCount: 2 },
+        { testPassCount: 7, testFailCount: 3, testErrorCount: 0 },
+      ],
+    });
+
+    const { result } = renderHook(() => usePassRates());
+
+    expect(result.current).toEqual([
+      { total: 50, filtered: 25 },
+      { total: 70, filtered: 70 },
     ]);
   });
 

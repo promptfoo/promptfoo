@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { Chart } from 'chart.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import ResultsCharts from './ResultsCharts';
+import ResultsCharts, { getPassRate } from './ResultsCharts';
 import { useTableStore } from './store';
 
 // Mock Chart.js
@@ -58,6 +58,68 @@ describe('ResultsCharts', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('preserves legacy performance-history pass rates without an error count', () => {
+    expect(getPassRate({ testPassCount: 7, testFailCount: 3, score: 0.7 })).toBe(70);
+  });
+
+  it('includes errors in performance-history pass rates', () => {
+    expect(getPassRate({ testPassCount: 1, testFailCount: 0, testErrorCount: 1, score: 1 })).toBe(
+      50,
+    );
+    expect(getPassRate({ testPassCount: 7, testFailCount: 3, testErrorCount: 0, score: 0.7 })).toBe(
+      70,
+    );
+    expect(getPassRate({ testPassCount: 0, testFailCount: 0, testErrorCount: 0, score: 0 })).toBe(
+      0,
+    );
+  });
+
+  it('includes errors in the pass-rate chart denominator', () => {
+    const mockTable = {
+      head: {
+        prompts: [
+          {
+            provider: 'provider-with-error',
+            metrics: {
+              testPassCount: 1,
+              testFailCount: 0,
+              testErrorCount: 1,
+              namedScores: {},
+            },
+          },
+          {
+            provider: 'provider-without-errors',
+            metrics: {
+              testPassCount: 7,
+              testFailCount: 3,
+              testErrorCount: 0,
+              namedScores: {},
+            },
+          },
+        ],
+        vars: [],
+      },
+      body: [],
+    };
+
+    vi.mocked(useTableStore).mockReturnValue({
+      table: mockTable,
+      evalId: 'test-eval',
+      config: { description: 'test config' },
+      setTable: vi.fn(),
+      fetchEvalData: vi.fn(),
+    });
+
+    render(<ResultsCharts scores={[]} />);
+
+    const passRateConfig = vi
+      .mocked(Chart)
+      .mock.calls.map(([, config]) => config)
+      .find((config) => config.data?.labels?.[0] === 'Pass Rate (%)');
+
+    expect(passRateConfig?.data?.datasets.map((dataset) => dataset.data)).toEqual([[50], [70]]);
   });
 
   it('renders chart canvases without a close button', () => {
