@@ -635,8 +635,15 @@ export function calculateOpenAIUsageCostFromTokenUsage(
     : cost;
 }
 
-function normalizeServiceTier(serviceTier: string | null | undefined): OpenAIProcessingTier {
+function normalizeServiceTier(
+  serviceTier: string | null | undefined,
+): OpenAIProcessingTier | undefined {
   switch (serviceTier) {
+    case null:
+    case undefined:
+    case 'default':
+    case 'standard':
+      return 'standard';
     case 'fast':
       return 'priority';
     case 'batch':
@@ -644,7 +651,7 @@ function normalizeServiceTier(serviceTier: string | null | undefined): OpenAIPro
     case 'priority':
       return serviceTier;
     default:
-      return 'standard';
+      return undefined;
   }
 }
 
@@ -979,11 +986,11 @@ export function calculateOpenAIUsageCost(
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
   const tier = normalizeServiceTier(options.serviceTier);
+  const hasCustomTextCost =
+    config.cost !== undefined || config.inputCost !== undefined || config.outputCost !== undefined;
   const modelRates =
-    getModelRates(modelName, tier, usage.totalInputTokens) ??
-    (modelName === 'chat-latest' &&
-    tier !== 'standard' &&
-    (config.cost !== undefined || config.inputCost !== undefined || config.outputCost !== undefined)
+    (tier && getModelRates(modelName, tier, usage.totalInputTokens)) ??
+    ((!tier || (modelName === 'chat-latest' && tier !== 'standard')) && hasCustomTextCost
       ? { text: { input: 0 } }
       : undefined);
   if (!modelRates) {
