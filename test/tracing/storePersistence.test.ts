@@ -46,6 +46,28 @@ describe('TraceStore span persistence', () => {
     return traceStore;
   }
 
+  it('rejects cumulative redaction payloads over 10 MiB before reading them into the redactor', async () => {
+    const store = await createTrace('redaction-size');
+    const redactSpans = vi.fn((spans) => spans);
+    const attributes = { payload: '界'.repeat(2 * 1024 * 1024) };
+    await store.addSpans(
+      'redaction-size',
+      [{ spanId: 'first', name: 'first', startTime: 1, attributes }],
+      { redactSpans },
+    );
+    redactSpans.mockClear();
+    await expect(
+      store.addSpans(
+        'redaction-size',
+        [{ spanId: 'second', name: 'second', startTime: 2, attributes }],
+        { redactSpans },
+      ),
+    ).rejects.toThrow('Trace redaction limit exceeded');
+    expect(redactSpans).not.toHaveBeenCalled();
+    const spans = await store.getSpans('redaction-size');
+    expect(spans.map((span) => span.spanId)).toEqual(['first']);
+  });
+
   it.each(['otlp-first', 'external-first'])(
     'shares redaction history across trace ingestors (%s)',
     async (order) => {
