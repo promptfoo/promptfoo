@@ -84,4 +84,20 @@ describe('resultFormatter fallback diagnostics', () => {
     expect(component.metric).toBe('contains-metric');
     expect(component.pass).toBe(true);
   });
+
+  it('labels assertion-set aggregates from their metadata', () => {
+    const summary = buildSummaryWithFallbackDiagnostic();
+    summary.results[0].gradingResult!.componentResults = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Set passed',
+        metadata: { assertionSet: { type: 'assert-set', metric: 'set-metric' } },
+      },
+    ];
+
+    const [component] = formatEvaluationResults(summary).results[0].assertions!.componentResults;
+    expect(component.type).toBe('assert-set');
+    expect(component.metric).toBe('set-metric');
+  });
 });

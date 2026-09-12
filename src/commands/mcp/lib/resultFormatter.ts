@@ -138,14 +138,17 @@ function formatSingleResult(
       totalAssertions: scoringComponentResults.length,
       passedAssertions: scoringComponentResults.filter((r) => r.pass).length,
       failedAssertions: scoringComponentResults.filter((r) => !r.pass).length,
-      componentResults: scoringComponentResults.slice(0, assertionLimit).map((cr, idx) => ({
-        index: idx,
-        type: cr.assertion?.type || 'unknown',
-        pass: cr.pass,
-        score: cr.score,
-        reason: truncateText(cr.reason || '', 100),
-        metric: cr.assertion?.metric,
-      })),
+      componentResults: scoringComponentResults.slice(0, assertionLimit).map((cr, idx) => {
+        const assertion = cr.assertion ?? cr.metadata?.assertionSet;
+        return {
+          index: idx,
+          type: assertion?.type || 'unknown',
+          pass: cr.pass,
+          score: cr.score,
+          reason: truncateText(cr.reason || '', 100),
+          metric: assertion?.metric,
+        };
+      }),
     };
   }
 
