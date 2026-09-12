@@ -317,7 +317,7 @@ function redactCredentials(response: ProviderResponse, credentials: string[]): P
       let joined = '';
       for (let end = start; end < values.length && joined.length < credential.length; end++) {
         if (values[end].includes(credential)) {
-          return false;
+          return end > start && credential.startsWith(joined);
         }
         joined += values[end];
         if (end > start && joined.includes(credential)) {
