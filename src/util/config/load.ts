@@ -858,7 +858,7 @@ export async function resolveConfigs(
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
   }
-  const resolved = await cliState.withEnv(fileConfig.env || defaultConfig.env, () =>
+  const resolved = await cliState.withEnv(fileConfig.env || defaultConfig.env || {}, () =>
     resolveLoadedConfig(
       cmdObj,
       fileConfig,

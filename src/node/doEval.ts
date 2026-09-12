@@ -520,6 +520,7 @@ export async function doEval(
       } = await resolveConfigs(cmdObj, defaultConfig));
     }
 
+    // Fill the active scope in place; replacing runEnv would leave it empty.
     Object.assign(runEnv, testSuite.env);
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>

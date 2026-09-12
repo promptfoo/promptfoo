@@ -10,7 +10,7 @@ import { evaluate as evaluateResolved } from '../../../src/evaluator';
 import { renderLlmRubricPrompt } from '../../../src/matchers/rubric';
 import Eval from '../../../src/models/eval';
 import { evaluate } from '../../../src/node/evaluate';
-import { loadApiProvider, loadApiProviders } from '../../../src/providers/index';
+import { loadApiProvider, loadApiProviders, resolveProvider } from '../../../src/providers/index';
 import { isApiProvider } from '../../../src/types/providers';
 import { readAzureBlobText } from '../../../src/util/azureBlob';
 import { combineConfigs, resolveConfigs } from '../../../src/util/config/load';
@@ -110,6 +110,37 @@ describe('suite environment loading', () => {
       `Bearer ${name}-key`,
     );
   }
+
+  it.each([undefined, {}])(
+    'selects the same optional env in readers and loaders (%j)',
+    async (env) => {
+      await cliState.withEnv(
+        { OPENAI_API_KEY: 'scoped-key', OPENAI_API_BASE_URL: 'https://scoped.example/v1' },
+        async () => {
+          const test = { provider: 'openai:chat:test-model' };
+          const loaded = [
+            (await readTest(test, '', false, env)).provider,
+            (await readTests([test], '', env))[0].provider,
+            await loadApiProvider(test.provider, { env }),
+            (await loadApiProviders([test.provider], { env }))[0],
+          ];
+          for (const provider of loaded) {
+            expect(provider).toHaveProperty('env', env ?? cliState.env);
+          }
+          const fn = await resolveProvider(
+            async () => ({ output: getEnvString('OPENAI_API_KEY') }),
+            {},
+            { env },
+          );
+          expect(
+            await cliState.withEnv({ OPENAI_API_KEY: 'later-key' }, () => fn.callApi('')),
+          ).toEqual({
+            output: env ? 'process-key' : 'scoped-key',
+          });
+        },
+      );
+    },
+  );
 
   it.each(['assertion', 'typed', 'options', 'test'] as const)(
     'uses the provider file credentials for a %s provider',
@@ -315,7 +346,7 @@ describe('suite environment loading', () => {
     expect(config.tests).toHaveLength(2);
   });
 
-  it.each([undefined, {}, { OPENAI_API_KEY: 'replacement-key' }])(
+  it.each([{}, { OPENAI_API_KEY: 'replacement-key' }])(
     'isolates provider URL templates with explicit env %j',
     async (env) => {
       const [provider] = await loadApiProviders(
@@ -543,17 +574,14 @@ describe('suite environment loading', () => {
     expect(readAzureBlobText).toHaveBeenCalledTimes(1);
   });
 
-  it.each([undefined, {}])(
-    'retains an explicit empty function-provider environment (%j)',
-    async (env) => {
-      const [provider] = await loadApiProviders(
-        async () => ({ output: getEnvString('OPENAI_API_KEY') }),
-        { env },
-      );
-      expect((await provider.callApi('Hello')).output).toBe('process-key');
-      expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
-    },
-  );
+  it.each([{}])('retains an explicit empty function-provider environment (%j)', async (env) => {
+    const [provider] = await loadApiProviders(
+      async () => ({ output: getEnvString('OPENAI_API_KEY') }),
+      { env },
+    );
+    expect((await provider.callApi('Hello')).output).toBe('process-key');
+    expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
+  });
 
   it.each([false, true])(
     'resolves process-backed grading paths unless disabled (%j)',

@@ -60,7 +60,9 @@ interface CliState {
   readonly activeOtlpReceiver?: ActiveOtlpReceiver;
 
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
+  /** The innermost environment scope, or the last config's env outside a scope. */
   readonly env?: EnvOverrides;
+  /** Replaces the outer env for this call and its async work; undefined masks config env. */
   withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T;
   withRequestTracingConfig<T>(
     tracingConfig: NonNullable<TestSuite['tracing']>,
