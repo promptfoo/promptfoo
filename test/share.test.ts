@@ -1034,7 +1034,7 @@ describe('createShareableUrl', () => {
       expect(traceBodies.map((body) => body.length)).toEqual([2, 1, 1]);
     });
 
-    it('does not split trace chunks after a server failure', async () => {
+    it('does not split trace chunks after a network failure', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       const traces = ['first', 'second'].map((traceId) => ({
         traceId,
@@ -1047,12 +1047,7 @@ describe('createShareableUrl', () => {
       mockFetch
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: mockEval.id }) })
         .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 500,
-          statusText: 'Server Error',
-          text: () => Promise.resolve('receiver unavailable'),
-        });
+        .mockRejectedValueOnce(new TypeError('fetch failed'));
 
       const result = await createShareableUrl(mockEval as Eval, { silent: true });
 
