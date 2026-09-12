@@ -457,7 +457,11 @@ async function fetchFromExternalProvider(
 
       const spans = await getTraceStore().getSpans(traceId, spanOptions);
       if (spans.length === 0) {
-        return null;
+        if (attempt === maxRetries) {
+          return null;
+        }
+        await waitForRetry(retryDelayMs, abortSignal);
+        continue;
       }
 
       const traceSpans = createTraceSpans(spans);

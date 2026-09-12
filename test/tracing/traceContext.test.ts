@@ -108,6 +108,41 @@ describe('fetchTraceContext', () => {
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
   });
 
+  it('retries when fetched spans become empty after filtering', async () => {
+    const fetchTrace = vi
+      .fn()
+      .mockResolvedValueOnce({
+        fetchedAt: 1,
+        traceId: 'trace-1',
+        spans: [{ spanId: 'parent', name: 'parent', startTime: 1 }],
+      })
+      .mockResolvedValueOnce({
+        fetchedAt: 2,
+        traceId: 'trace-1',
+        spans: [
+          {
+            spanId: 'tool',
+            parentSpanId: 'parent',
+            name: 'execute_tool search',
+            startTime: 2,
+            attributes: { 'gen_ai.tool.name': 'search' },
+          },
+        ],
+      });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      retryDelayMs: 0,
+      maxRetries: 1,
+      spanFilter: ['tool'],
+    });
+
+    expect(fetchTrace).toHaveBeenCalledTimes(2);
+    expect(result?.spans.map((span) => span.name)).toEqual(['execute_tool search']);
+  });
+
   it('keeps meaningful internal external spans before applying the span limit', async () => {
     const spans = [
       {

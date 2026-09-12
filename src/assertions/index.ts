@@ -480,10 +480,23 @@ async function runAssertionInternal({
   };
 
   // Add trace data if traceId is available
-  if (traceId && (traceData !== undefined || assertionMayNeedTraceContext(assertion))) {
+  const effectiveIncludeRedteamTrace = includeRedteamTrace ?? shouldIncludeRedteamTrace(test);
+  const needsRedteamTrace =
+    effectiveIncludeRedteamTrace &&
+    getAssertionBaseType(assertion).startsWith('promptfoo:redteam:');
+  if (
+    traceId &&
+    (traceData !== undefined ||
+      assertionMayNeedTraceContext(assertion, effectiveIncludeRedteamTrace))
+  ) {
     try {
       const resolvedTraceData =
-        traceData === undefined ? await loadTraceData(traceId, traceOptions) : traceData;
+        traceData === undefined
+          ? await loadTraceData(
+              traceId,
+              traceOptions ?? (needsRedteamTrace ? getRedteamTraceQueryOptions(test) : undefined),
+            )
+          : traceData;
       if (resolvedTraceData) {
         context.trace = {
           traceId: resolvedTraceData.traceId,

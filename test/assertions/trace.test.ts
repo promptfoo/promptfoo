@@ -560,6 +560,57 @@ return {
     });
   });
 
+  it('only derives red-team filters for direct red-team assertions', async () => {
+    mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+    const test = {
+      ...mockTest,
+      metadata: {
+        pluginId: 'rbac',
+        tracing: { enabled: true, includeInGrading: true, maxSpans: 1 },
+      },
+    };
+
+    await runAssertion({
+      assertion: { type: 'trace-span-count', value: { pattern: '*', min: 1 } },
+      test,
+      providerResponse: mockProviderResponse,
+      traceId: 'test-trace-id',
+    });
+    expect(mockTraceStore.getTrace).toHaveBeenLastCalledWith('test-trace-id', {
+      sanitizeAttributes: false,
+    });
+
+    await runAssertion({
+      assertion: { type: 'promptfoo:redteam:rbac' },
+      test,
+      providerResponse: {
+        ...mockProviderResponse,
+        metadata: { storedGraderResult: { pass: true, score: 1, reason: 'stored' } },
+      },
+      traceId: 'test-trace-id',
+    });
+    expect(mockTraceStore.getTrace).toHaveBeenLastCalledWith('test-trace-id', {
+      sanitizeAttributes: false,
+      includeInternalSpans: false,
+      maxDepth: 5,
+      maxSpans: 1,
+      spanFilter: undefined,
+    });
+
+    const traceCalls = mockTraceStore.getTrace.mock.calls.length;
+    await runAssertion({
+      assertion: { type: 'promptfoo:redteam:rbac' },
+      test,
+      providerResponse: {
+        ...mockProviderResponse,
+        metadata: { storedGraderResult: { pass: true, score: 1, reason: 'stored' } },
+      },
+      traceId: 'test-trace-id',
+      includeRedteamTrace: false,
+    });
+    expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(traceCalls);
+  });
+
   it('honors test tracing when the active suite has no red-team block', async () => {
     mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
 

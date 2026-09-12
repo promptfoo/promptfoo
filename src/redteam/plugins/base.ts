@@ -479,22 +479,26 @@ function redactTraceEvidence(text: string): string {
   return redactPrivateKeys(bounded.replace(/\\\r?\n\s*/g, ' '))
     .replace(/\b(AccountKey\s*=\s*)[^;\s\"'\\]+/gi, '$1[REDACTED]')
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/@\s"'`\\]+)@/gi, '$1[REDACTED]@')
-    .replace(/\bhttps?:\/\/[^\s"'`\\]+|(?<![:\w])\/[^\s"'`\\?#]+[?#][^\s"'`\\]+/gi, (url) => {
-      const sanitized = redactTraceUrl(url);
-      if (/^https?:\/\/hooks\.slack\.com\//i.test(sanitized)) {
-        return sanitized.replace(/(\/services\/[^/?#\s]+\/[^/?#\s]+\/)[^/?#\s]+/i, '$1[REDACTED]');
-      }
-      return /^https?:\/\/(?:[^/]+\.)?discord(?:app)?\.com\//i.test(sanitized)
-        ? sanitized.replace(/(\/api\/webhooks\/[^/?#\s]+\/)[^/?#\s]+/i, '$1[REDACTED]')
-        : sanitized;
-    })
+    .replace(
+      /\bhttps?:\/\/[^\s"'`\\]+|(?<![:\w])\/[^\s"'`\\?#]+[?#][^\s"'`\\]+|[?#][^\s"'`\\]+/gi,
+      (url) => {
+        const sanitized = redactTraceUrl(url);
+        if (/^https?:\/\/hooks\.slack\.com\//i.test(sanitized)) {
+          return sanitized.replace(
+            /(\/services\/[^/?#\s]+\/[^/?#\s]+\/)[^/?#\s]+/i,
+            '$1[REDACTED]',
+          );
+        }
+        return /^https?:\/\/(?:[^/]+\.)?discord(?:app)?\.com\//i.test(sanitized)
+          ? sanitized.replace(/(\/api\/webhooks\/[^/?#\s]+\/)[^/?#\s]+/i, '$1[REDACTED]')
+          : sanitized;
+      },
+    )
     .replace(/(['"])([\w-]+)(\s*:\s*)[^'"]*\1/gi, (match, quote, key, separator) =>
       isTracingCredentialHeader(key, '') ? quote + key + separator + '[REDACTED]' + quote : match,
     )
-    .replace(
-      /\b([\w-]+)(\s*:\s*)[^"'\\;&|\r\n]*?(?=;|&&|\|\||\r?\n|\s+-[A-Za-z]|$)/gi,
-      (match, key, separator) =>
-        isTracingCredentialHeader(key, '') ? key + separator + '[REDACTED]' : match,
+    .replace(/\b([\w-]+)(\s*:\s*)[^\s"'\\;&|\r\n]+/gi, (match, key, separator) =>
+      isTracingCredentialHeader(key, '') ? key + separator + '[REDACTED]' : match,
     )
     .replace(
       /(^|\s)((?:--?[\w-]+|-u)\s+)(?:"[^"]*"|'[^']*'|[^\s"'\\;]+)/gi,
@@ -510,10 +514,7 @@ function redactTraceEvidence(text: string): string {
           ? prefix + key + separator + '[REDACTED]'
           : match,
     )
-    .replace(
-      /\b((?:set-)?cookie\s*:\s*)[^"'`\\;&|\r\n]*?(?=;|&&|\|\||\r?\n|\s+-[A-Za-z]|$)/gi,
-      '$1[REDACTED]',
-    )
+    .replace(/\b((?:set-)?cookie\s*:\s*)[^\s"'`\\;&|\r\n]+/gi, '$1[REDACTED]')
     .replace(/\b(authorization\s*:\s*)[^"'`\s\\;]+/gi, '$1[REDACTED]')
     .replace(
       /(^|\s)((?:--?(?:api[-_]?key|pass|password|proxy-pass|proxy-user|secret|token|user)|-u)(?:\s+|=))(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,

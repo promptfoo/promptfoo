@@ -126,8 +126,8 @@ function traceCreatedBefore(cutoffTime: number) {
 }
 
 function computeDepth(
-  span: SpanData,
-  spanMap: Map<string, SpanData>,
+  span: { spanId: string; parentSpanId?: string | null },
+  spanMap: Map<string, { spanId: string; parentSpanId?: string | null }>,
   depthCache: Map<string, number>,
 ): number {
   if (depthCache.has(span.spanId)) {
@@ -425,7 +425,6 @@ export class TraceStore {
           statusCode: row.statusCode ?? undefined,
           statusMessage: row.statusMessage ?? undefined,
         };
-
         const hasExplicitFilter = Boolean(spanFilter?.length);
 
         if (hasExplicitFilter && !matchesSpanFilter(spanData.name, spanFilter!)) {
@@ -446,7 +445,7 @@ export class TraceStore {
       let spans = Array.from(spanMap.values());
 
       if (maxDepth !== undefined) {
-        spans = spans.filter((span) => computeDepth(span, spanMap, depthCache) < maxDepth);
+        spans = spans.filter((span) => computeDepth(span, rowsBySpanId, depthCache) < maxDepth);
       }
 
       if (maxSpans !== undefined) {
