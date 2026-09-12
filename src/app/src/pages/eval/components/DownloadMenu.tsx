@@ -17,7 +17,7 @@ import {
   prefetchEvalConfig,
 } from '../../../utils/api';
 import { useTableStore as useResultsViewStore } from './store';
-import { getPromptEvalId } from './utils';
+import { getPromptEvalId, getPromptIndex } from './utils';
 
 type ResultsViewState = ReturnType<typeof useResultsViewStore.getState>;
 type ResultsTable = NonNullable<ResultsViewState['table']>;
@@ -170,7 +170,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     },
     [],
   );
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (previousEvalIdRef.current === evalId) {
       return;
     }
@@ -506,6 +506,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
               ? Object.values(fullConfig.prompts)
               : [];
         const leanValue = prompt.label || prompt.display || prompt.raw;
+        const ownerPromptIndex = getPromptIndex(table, idx);
         const matchingPrompt = fullConfigPrompts.find(
           (candidate) =>
             candidate &&
@@ -515,7 +516,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
         );
         return hasPlaceholder(leanValue)
           ? (getConfigPromptDisplayValue(
-              matchingPrompt ?? fullConfigPrompts[idx % fullConfigPrompts.length],
+              matchingPrompt ?? fullConfigPrompts[ownerPromptIndex % fullConfigPrompts.length],
             ) ?? leanValue)
           : leanValue;
       });

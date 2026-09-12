@@ -16,10 +16,14 @@ describe('trimEvalTableForApi', () => {
     const table = createEvaluateTable({
       head: {
         prompts: [
-          createCompletedPrompt(huge, {
-            label: 'huge prompt',
-            provider: 'test-provider',
-          }),
+          {
+            ...createCompletedPrompt(huge, {
+              id: 'prompt-1',
+              label: 'huge prompt',
+              provider: 'test-provider',
+            }),
+            evalId: 'eval-1',
+          } as any,
         ],
         vars: ['image', 'plain'],
       },
@@ -80,6 +84,7 @@ describe('trimEvalTableForApi', () => {
     const cell = trimmed.body[0].outputs[0];
 
     expect(trimmed.head.prompts[0].raw).toBe(`[content omitted: ${huge.length} characters]`);
+    expect(trimmed.head.prompts[0]).toMatchObject({ id: 'prompt-1', evalId: 'eval-1' });
     expect(trimmed.body[0].vars).toEqual([`[content omitted: ${huge.length} characters]`, 'small']);
     expect(trimmed.body[0].test.vars).toBeUndefined();
     expect(trimmed.body[0].test.assert).toEqual([{ type: 'contains' }]);

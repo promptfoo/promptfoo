@@ -78,6 +78,7 @@ import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } f
 import {
   getNamedMetricTotals,
   getPromptEvalId,
+  getPromptIndex,
   parseEvalOutputPromptHash,
   setEvalDetailsHash,
   useEvalDetailsHash,
@@ -1322,6 +1323,7 @@ function PromptColumnHeader({
   maxTextLength,
   evalId,
   promptEvalId,
+  ownerPromptIndex,
   onFailureFilterToggle,
   setFilterMode,
   setCustomMetricsDialogOpen,
@@ -1344,6 +1346,7 @@ function PromptColumnHeader({
   maxTextLength: number;
   evalId: string | null;
   promptEvalId: string | null;
+  ownerPromptIndex: number;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   setFilterMode: (mode: EvalResultsFilterMode) => void;
   setCustomMetricsDialogOpen: (open: boolean) => void;
@@ -1432,7 +1435,7 @@ function PromptColumnHeader({
                         typeof candidate === 'object' &&
                         ((prompt.id && candidate.id === prompt.id) ||
                           candidate.label === prompt.label),
-                  ) ?? prompts[idx];
+                  ) ?? prompts[ownerPromptIndex % prompts.length];
                 if (typeof fullPrompt === 'string') {
                   return fullPrompt;
                 }
@@ -2486,6 +2489,7 @@ function ResultsTable({
                 maxTextLength={maxTextLength}
                 evalId={evalId}
                 promptEvalId={evalId ? getPromptEvalId({ head, body }, idx, evalId) : null}
+                ownerPromptIndex={getPromptIndex({ head }, idx)}
                 onFailureFilterToggle={onFailureFilterToggle}
                 setFilterMode={setFilterMode}
                 setCustomMetricsDialogOpen={setCustomMetricsDialogOpen}

@@ -635,16 +635,18 @@ export function mergeComparisonTables(
     head: {
       prompts: [
         // Main eval prompts with eval ID prefix
-        ...mainTable.head.prompts.map((prompt) => ({
+        ...mainTable.head.prompts.map((prompt, originalPromptIndex) => ({
           ...prompt,
           evalId: mainEvalId,
+          originalPromptIndex,
           label: `[${mainEvalId}] ${prompt.label || ''}`,
         })),
         // Comparison eval prompts with their eval ID prefixes
         ...comparisonData.flatMap(({ evalId, table }) =>
-          table.head.prompts.map((prompt) => ({
+          table.head.prompts.map((prompt, originalPromptIndex) => ({
             ...prompt,
             evalId,
+            originalPromptIndex,
             label: `[${evalId}] ${prompt.label || ''}`,
           })),
         ),

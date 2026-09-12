@@ -8,6 +8,7 @@ import {
   getNamedMetricTotal,
   getNamedMetricTotals,
   getPromptEvalId,
+  getPromptIndex,
   hasHumanRating,
   hashVarSchema,
   parseEvalOutputPromptHash,
@@ -61,6 +62,20 @@ describe('comparison prompt ownership', () => {
         'base-eval',
       ),
     ).toBe('comparison-eval');
+  });
+
+  it('uses the owner-local index retained on comparison prompts', () => {
+    expect(
+      getPromptIndex(
+        {
+          head: {
+            prompts: [{}, {}, {}, {}, { originalPromptIndex: 2 }] as any,
+            vars: [],
+          },
+        },
+        4,
+      ),
+    ).toBe(2);
   });
 });
 

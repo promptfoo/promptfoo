@@ -373,6 +373,17 @@ export function trimEvalTableForApi<T extends TableLike>(
       }
     }
   }
+  const sourcePrompts = (table.head as { prompts?: Array<{ id?: string; evalId?: string }> })
+    .prompts;
+  const targetPrompts = (trimmed.head as { prompts?: Array<{ id?: string; evalId?: string }> })
+    .prompts;
+  for (const [promptIndex, prompt] of sourcePrompts?.entries() ?? []) {
+    const target = targetPrompts?.[promptIndex];
+    if (target) {
+      target.id = prompt.id;
+      target.evalId = prompt.evalId;
+    }
+  }
   return trimmed;
 }
 

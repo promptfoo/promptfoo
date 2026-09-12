@@ -31,6 +31,13 @@ export function getPromptEvalId(
   );
 }
 
+export function getPromptIndex(table: Pick<EvaluateTable, 'head'>, promptIndex: number): number {
+  return (
+    (table.head.prompts[promptIndex] as { originalPromptIndex?: number } | undefined)
+      ?.originalPromptIndex ?? promptIndex
+  );
+}
+
 /**
  * Builds the URL hash used for deep-linking to an eval output details dialog.
  * Public URLs use one-based row/prompt numbers while the UI uses zero-based indexes internally.

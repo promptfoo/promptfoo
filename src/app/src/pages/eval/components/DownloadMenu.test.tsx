@@ -368,14 +368,40 @@ describe('DownloadMenu', () => {
     expect(JSON.parse(await blob.text())[0].prompts).toEqual(['full prompt', 'full prompt']);
   });
 
-  it('hydrates comparison DPO prompts from their owning evaluations', async () => {
+  it('hydrates comparison DPO prompts by owner-local index', async () => {
     vi.mocked(useResultsViewStore).mockReturnValue({
       table: {
         head: {
           vars: [],
           prompts: [
-            { provider: 'base', raw: '[content omitted: 120000 characters]' },
-            { provider: 'comparison', raw: '[content omitted: 120000 characters]' },
+            {
+              provider: 'base-1',
+              raw: '[content omitted: 120000 characters]',
+              originalPromptIndex: 0,
+            },
+            {
+              provider: 'base-2',
+              raw: '[content omitted: 120000 characters]',
+              originalPromptIndex: 1,
+            },
+            {
+              provider: 'comparison-1',
+              raw: '[content omitted: 120000 characters]',
+              evalId: 'eval-2',
+              originalPromptIndex: 0,
+            },
+            {
+              provider: 'comparison-2',
+              raw: '[content omitted: 120000 characters]',
+              evalId: 'eval-2',
+              originalPromptIndex: 1,
+            },
+            {
+              provider: 'comparison-3',
+              raw: '[content omitted: 120000 characters]',
+              evalId: 'eval-2',
+              originalPromptIndex: 2,
+            },
           ],
         },
         body: [
@@ -384,6 +410,9 @@ describe('DownloadMenu', () => {
             vars: [],
             outputs: [
               { evalId: mockEvalId, pass: true, text: 'base' },
+              { evalId: mockEvalId, pass: true, text: 'base' },
+              { evalId: 'eval-2', pass: true, text: 'comparison' },
+              { evalId: 'eval-2', pass: true, text: 'comparison' },
               { evalId: 'eval-2', pass: true, text: 'comparison' },
             ],
           },
@@ -393,8 +422,10 @@ describe('DownloadMenu', () => {
       evalId: mockEvalId,
     });
     fetchEvalConfigMock
-      .mockResolvedValueOnce({ config: { ...mockConfig, prompts: ['base prompt'] } })
-      .mockResolvedValueOnce({ config: { ...mockConfig, prompts: ['comparison prompt'] } });
+      .mockResolvedValueOnce({ config: { ...mockConfig, prompts: ['base 1', 'base 2'] } })
+      .mockResolvedValueOnce({
+        config: { ...mockConfig, prompts: ['comparison 1', 'comparison 2', 'comparison 3'] },
+      });
 
     renderDownloadDialog();
     await userEvent.click(screen.getByText('DPO JSON'));
@@ -403,7 +434,13 @@ describe('DownloadMenu', () => {
     expect(fetchEvalConfigMock).toHaveBeenCalledWith(mockEvalId);
     expect(fetchEvalConfigMock).toHaveBeenCalledWith('eval-2');
     const blob = downloadBlobMock.mock.calls[0][0] as Blob;
-    expect(JSON.parse(await blob.text())[0].prompts).toEqual(['base prompt', 'comparison prompt']);
+    expect(JSON.parse(await blob.text())[0].prompts).toEqual([
+      'base 1',
+      'base 2',
+      'comparison 1',
+      'comparison 2',
+      'comparison 3',
+    ]);
   });
 
   it('does not toast a stale advanced export rejection after unmount', async () => {
