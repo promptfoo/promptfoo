@@ -63,6 +63,7 @@ const PREFIX_ONLY_BUILTINS = new Set(
     .map((moduleName) => moduleName.slice('node:'.length))
     .filter((moduleName) => !builtinModules.includes(moduleName)),
 );
+PREFIX_ONLY_BUILTINS.add('sqlite');
 
 export function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
