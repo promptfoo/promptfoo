@@ -282,69 +282,69 @@ export class TraceStore {
       };
 
       const redact = options?.redactSpans;
-      if (redact) {
-        await db.transaction(async (tx) => {
-          const payloadBytes = sql<number>`
+      await db.transaction(async (tx) => {
+        const payloadBytes = sql<number>`
             length(cast(${spansTable.name} as blob))
             + coalesce(length(cast(${spansTable.attributes} as blob)), 0)
             + coalesce(length(cast(${spansTable.statusMessage} as blob)), 0)
           `;
-          const [size] = await tx
-            .select({
-              count: sql<number>`count(*)`,
-              bytes: sql<number>`coalesce(sum(${payloadBytes}), 0)`,
+        const [size] = await tx
+          .select({
+            count: sql<number>`count(*)`,
+            bytes: sql<number>`coalesce(sum(${payloadBytes}), 0)`,
+          })
+          .from(spansTable)
+          .where(eq(spansTable.traceId, traceId));
+        // Bound each input before hydrating existing payloads, including duplicate uploads.
+        if (
+          size.count > 10_000 ||
+          spans.length > 10_000 ||
+          size.bytes > 10 * 1024 * 1024 ||
+          Buffer.byteLength(JSON.stringify(spans)) > 10 * 1024 * 1024
+        ) {
+          throw new Error('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
+        }
+        const storedSizes = await tx
+          .select({ spanId: spansTable.spanId, bytes: payloadBytes })
+          .from(spansTable)
+          .where(eq(spansTable.traceId, traceId));
+        validateTracePayloadSize(spans, options?.updateExisting ?? false, storedSizes);
+        if (!redact) {
+          await insertSpans(tx, spans);
+          return;
+        }
+        const stored = await tx.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+        const existing = stored.map((span) => serializeSpan(span, false));
+        const sanitized = redact([...existing, ...spans]);
+        const redactedSpanIds = new Set(
+          sanitized
+            .filter((span) => /\[(?:REDACTED|TRUNCATED)\]/.test(JSON.stringify(span)))
+            .map((span) => span.spanId),
+        );
+        for (const span of sanitized) {
+          if (redactedSpanIds.has(span.spanId)) {
+            span.attributes = { ...span.attributes, 'promptfoo.redaction.history': '[REDACTED]' };
+          }
+        }
+        // Redaction history markers can also increase the stored payload.
+        validateTracePayloadSize(sanitized, options?.updateExisting ?? false);
+        for (const [index, previous] of existing.entries()) {
+          const span = sanitized[index];
+          if (JSON.stringify(previous) === JSON.stringify(span)) {
+            continue;
+          }
+          await tx
+            .update(spansTable)
+            .set({
+              name: span.name,
+              attributes: span.attributes,
+              statusMessage: span.statusMessage,
             })
-            .from(spansTable)
-            .where(eq(spansTable.traceId, traceId));
-          // Bound each input before hydrating existing payloads, including duplicate uploads.
-          if (
-            size.count > 10_000 ||
-            spans.length > 10_000 ||
-            size.bytes > 10 * 1024 * 1024 ||
-            Buffer.byteLength(JSON.stringify(spans)) > 10 * 1024 * 1024
-          ) {
-            throw new Error('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
-          }
-          const storedSizes = await tx
-            .select({ spanId: spansTable.spanId, bytes: payloadBytes })
-            .from(spansTable)
-            .where(eq(spansTable.traceId, traceId));
-          validateTracePayloadSize(spans, options?.updateExisting ?? false, storedSizes);
-          const stored = await tx.select().from(spansTable).where(eq(spansTable.traceId, traceId));
-          const existing = stored.map((span) => serializeSpan(span, false));
-          const sanitized = redact([...existing, ...spans]);
-          const redactedSpanIds = new Set(
-            sanitized
-              .filter((span) => /\[(?:REDACTED|TRUNCATED)\]/.test(JSON.stringify(span)))
-              .map((span) => span.spanId),
-          );
-          for (const span of sanitized) {
-            if (redactedSpanIds.has(span.spanId)) {
-              span.attributes = { ...span.attributes, 'promptfoo.redaction.history': '[REDACTED]' };
-            }
-          }
-          // Redaction history markers can also increase the stored payload.
-          validateTracePayloadSize(sanitized, options?.updateExisting ?? false);
-          for (const [index, previous] of existing.entries()) {
-            const span = sanitized[index];
-            if (JSON.stringify(previous) === JSON.stringify(span)) {
-              continue;
-            }
-            await tx
-              .update(spansTable)
-              .set({
-                name: span.name,
-                attributes: span.attributes,
-                statusMessage: span.statusMessage,
-              })
-              .where(eq(spansTable.id, stored[index].id))
-              .run();
-          }
-          await insertSpans(tx, sanitized.slice(existing.length));
-        });
-      } else {
-        await insertSpans(db, spans);
-      }
+            .where(eq(spansTable.id, stored[index].id))
+            .run();
+        }
+        await insertSpans(tx, sanitized.slice(existing.length));
+      });
       logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
       return { stored: true };
     } catch (error) {

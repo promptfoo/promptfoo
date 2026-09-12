@@ -158,6 +158,56 @@ describe('trace assertions', () => {
     });
   });
 
+  it.each(['single', 'set', 'batch'])(
+    'collects delayed local SQL spans across the bounded window (%s)',
+    async (mode) => {
+      mockProcessEnv({
+        PROMPTFOO_TRACE_FETCH_MAX_ATTEMPTS: '4',
+        PROMPTFOO_TRACE_FETCH_STABLE_POLLS: '2',
+      });
+      const completed = {
+        ...mockTraceData,
+        spans: [
+          ...mockTraceData.spans,
+          {
+            spanId: 'late-query',
+            name: 'db.query',
+            startTime: 1600,
+            endTime: 1700,
+            attributes: { 'db.statement': 'SELECT id FROM accounts WHERE 1=1' },
+          },
+        ],
+      };
+      mockTraceStore.getTrace
+        .mockResolvedValueOnce(mockTraceData)
+        .mockResolvedValueOnce(mockTraceData)
+        .mockResolvedValue(completed);
+      const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Injected query' },
+        rubric: 'Fixture rubric',
+      });
+      const assertion: Assertion = { type: 'promptfoo:redteam:sql-injection' };
+      const test: AtomicTestCase = {
+        metadata: { purpose: 'Protect account records.', tracing: { enabled: true } },
+        assert: mode === 'set' ? [{ type: 'assert-set', assert: [assertion] }] : [assertion],
+      };
+      const params = {
+        prompt: 'Query my account.',
+        test,
+        providerResponse: mockProviderResponse,
+        traceId: 'test-trace-id',
+      };
+      if (mode === 'single') {
+        await runAssertion({ ...params, assertion });
+      } else {
+        await runAssertions(params);
+      }
+      expect(mockTraceStore.getTrace).toHaveBeenCalledTimes(4);
+      expect(grade.mock.calls[0]?.[7]?.traceData?.spans).toHaveLength(3);
+      expect(grade.mock.calls[0]?.[7]?.traceSummary).toContain('SELECT id FROM accounts');
+    },
+  );
+
   it('applies the SQL span filter to both raw grading context and its summary', async () => {
     mockTraceStore.getTrace.mockResolvedValue({
       ...mockTraceData,

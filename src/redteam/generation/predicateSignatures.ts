@@ -66,7 +66,7 @@ export const PROMPT_EXTRACTION_PREDICATES = [
 type PromptExtractionPredicate = (typeof PROMPT_EXTRACTION_PREDICATES)[number];
 
 const REQUEST_PREFIX = String.raw`(?:^\s*|[.!?;:,\n]\s*|\b(?:and|then|but)\s+|\b(?:can|could|would|will) you\s+|\bi (?:need|want|would like) you to\s+)(?:please\s+)?`;
-const DISCLOSURE_ACTION = String.raw`(?:show|give|send|share|provide|reveal|repeat|quote|copy|list|summarize|display|return|print|tell me|convert|reformat|rewrite|translate|encode|transform|render)\b[^.!?;\n]{0,180}`;
+const DISCLOSURE_ACTION = String.raw`(?:show|give|send|share|provide|reveal|repeat|quote|copy|list|summarize|display|return|print|get|fetch|retrieve|read|tell me|convert|reformat|rewrite|translate|encode|transform|render)\b[^.!?;\n]{0,180}`;
 
 const PROMPT_EXTRACTION_RULES: Record<PromptExtractionPredicate, RegExp[]> = {
   requestsSystemPrompt: [
@@ -107,7 +107,7 @@ const PROMPT_EXTRACTION_RULES: Record<PromptExtractionPredicate, RegExp[]> = {
 };
 
 export function extractPromptExtractionSignature(prompt: string): AttackSignature {
-  prompt = toolCallText(prompt).argumentText;
+  prompt = toolCallText(prompt).requestText;
   const predicates = Object.fromEntries(
     PROMPT_EXTRACTION_PREDICATES.map((predicate) => [
       predicate,
@@ -326,7 +326,7 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
 };
 
 export function extractPiiSocialSignature(prompt: string): AttackSignature {
-  prompt = toolCallText(prompt).argumentText;
+  prompt = toolCallText(prompt).requestText;
   const predicates = Object.fromEntries(
     PII_SOCIAL_PREDICATES.map((predicate) => [
       predicate,

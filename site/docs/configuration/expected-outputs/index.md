@@ -189,7 +189,7 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)                | Compare multiple outputs for a test case and pick the best one                   |
 | [max-score](/docs/configuration/expected-outputs/model-graded/max-score)                             | Select output with highest aggregate score from other assertions                 |
 
-[SQL injection redteam checks](/docs/red-team/plugins/sql-injection/) can grade execution traces alongside the response and honor the redteam trace-grading opt-out.
+[SQL injection redteam checks](/docs/red-team/plugins/sql-injection/) can grade execution traces alongside the response and honor the redteam trace-grading opt-out. Local SQL grading collects spans for the configured retry window (1.25 seconds by default), so a brief pause in delivery does not end collection early.
 
 ## Weighted assertions
 

@@ -55,7 +55,16 @@ describe('TraceStore', () => {
 
     mockDb = {
       insert: vi.fn(() => mockInsertChain),
-      select: vi.fn(() => mockSelectChain),
+      select: vi.fn((selection) =>
+        selection && ('count' in selection || 'spanId' in selection)
+          ? {
+              from: vi.fn().mockReturnThis(),
+              where: vi
+                .fn()
+                .mockResolvedValue('count' in selection ? [{ count: 0, bytes: 0 }] : []),
+            }
+          : mockSelectChain,
+      ),
       delete: vi.fn(() => mockDeleteChain),
       transaction: vi.fn(async (callback) => callback(mockDb)),
     };

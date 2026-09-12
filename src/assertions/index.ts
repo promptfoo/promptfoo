@@ -191,7 +191,10 @@ export function hasTraceAwareAssertions(
   return Boolean(assertions?.some((assertion) => assertionMayNeedTraceContext(assertion, test)));
 }
 
-async function loadTraceData(traceId: string): Promise<TraceData | null> {
+async function loadTraceData(
+  traceId: string,
+  waitForFullWindow = false,
+): Promise<TraceData | null> {
   const traceStore = getTraceStore();
   const maxAttempts = Math.min(
     MAX_TRACE_FETCH_MAX_ATTEMPTS,
@@ -221,7 +224,10 @@ async function loadTraceData(traceId: string): Promise<TraceData | null> {
       stableObservations = spanCount === lastSpanCount ? stableObservations + 1 : 1;
       lastSpanCount = spanCount;
 
-      if (stableObservations >= stablePolls || attempt === maxAttempts - 1) {
+      if (
+        (!waitForFullWindow && stableObservations >= stablePolls) ||
+        attempt === maxAttempts - 1
+      ) {
         return latestTrace;
       }
     } else {
@@ -469,7 +475,10 @@ async function runAssertionInternal({
   // Add trace data if traceId is available
   if (traceId && assertionMayNeedTraceContext(assertion, test)) {
     try {
-      const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
+      const resolvedTraceData =
+        traceData === undefined
+          ? await loadTraceData(traceId, assertion.type === 'promptfoo:redteam:sql-injection')
+          : traceData;
       if (resolvedTraceData) {
         context.trace = {
           traceId: resolvedTraceData.traceId,
@@ -826,7 +835,10 @@ export async function runAssertions({
   let preloadedTraceData: TraceData | null | undefined;
   if (shouldPreloadTrace && traceId) {
     try {
-      preloadedTraceData = await loadTraceData(traceId);
+      preloadedTraceData = await loadTraceData(
+        traceId,
+        asserts.some(({ assertion }) => assertion.type === 'promptfoo:redteam:sql-injection'),
+      );
     } catch (error) {
       logger.debug(`Failed to preload trace data for assertions: ${error}`);
       preloadedTraceData = null;
