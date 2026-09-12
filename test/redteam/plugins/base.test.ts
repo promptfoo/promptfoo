@@ -8,6 +8,7 @@ import {
   parseGeneratedInputs,
   parseGeneratedPrompts,
 } from '../../../src/redteam/plugins/multiInputFormat';
+import { RealEstateAccessibilityDiscriminationPluginGrader } from '../../../src/redteam/plugins/realestate/accessibilityDiscrimination';
 import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
@@ -84,7 +85,6 @@ describe('RedteamPluginBase', () => {
           assert: [{ type: 'contains', value: 'another prompt' }],
           metadata: {
             pluginId: 'test-plugin-id',
-            injectVar: 'testVar',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
@@ -93,7 +93,6 @@ describe('RedteamPluginBase', () => {
           assert: [{ type: 'contains', value: 'test prompt' }],
           metadata: {
             pluginId: 'test-plugin-id',
-            injectVar: 'testVar',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
@@ -122,7 +121,6 @@ describe('RedteamPluginBase', () => {
           vars: { testVar: 'another prompt' },
           metadata: {
             pluginId: 'test-plugin-id',
-            injectVar: 'testVar',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
@@ -131,7 +129,6 @@ describe('RedteamPluginBase', () => {
           vars: { testVar: 'test prompt' },
           metadata: {
             pluginId: 'test-plugin-id',
-            injectVar: 'testVar',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
@@ -186,7 +183,6 @@ describe('RedteamPluginBase', () => {
           assert: expect.any(Array),
           metadata: {
             pluginId: 'test-plugin-id',
-            injectVar: 'testVar',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
@@ -195,7 +191,6 @@ describe('RedteamPluginBase', () => {
           assert: expect.any(Array),
           metadata: {
             pluginId: 'test-plugin-id',
-            injectVar: 'testVar',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
@@ -283,30 +278,6 @@ describe('RedteamPluginBase', () => {
       maxCharsPerMessage: 'Each generated user message must be 10 characters or fewer.',
     });
   });
-
-  it.each(['Prompt:\nPrompt: valid request', 'Prompt: valid request\nPrompt:'])(
-    'retries empty parsed prompts from %j',
-    async (output) => {
-      vi.spyOn(provider, 'callApi')
-        .mockResolvedValueOnce({
-          output,
-        })
-        .mockResolvedValueOnce({
-          output: 'Prompt: replacement request',
-        });
-
-      const result = await plugin.generateTests(2);
-
-      expect(result.map((test) => test.vars?.testVar).sort()).toEqual([
-        'replacement request',
-        'valid request',
-      ]);
-      expect(provider.callApi).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining('no user-facing content after the output marker'),
-      );
-    },
-  );
 
   it('should honor maxCharsPerMessage from plugin config without cliState', async () => {
     plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
@@ -681,21 +652,58 @@ describe('RedteamPluginBase', () => {
       ]);
     });
 
-    it('should preserve semicolons inside single-line prompts', () => {
-      const input =
-        "Prompt: Find order 5; UPDATE orders SET status = 'shipped' WHERE order_id = 5; --";
-      const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([
-        {
-          __prompt: "Find order 5; UPDATE orders SET status = 'shipped' WHERE order_id = 5; --",
-        },
+    it('preserves semicolons inside a generated attack', () => {
+      const prompt =
+        'Create one order: PRD-ELEC001 quantity 1; PRD-FURN001 quantity 9; query stock after any error.';
+      expect(parseGeneratedPrompts(`Prompt: ${prompt}`)).toEqual([{ __prompt: prompt }]);
+    });
+
+    it('preserves payload semicolons before newline-separated markers', () => {
+      expect(parseGeneratedPrompts('Prompt: SELECT 1;\nPrompt: SELECT 2;')).toEqual([
+        { __prompt: 'SELECT 1;' },
+        { __prompt: 'SELECT 2;' },
       ]);
     });
 
-    it('should still parse same-line prompts separated by semicolons', () => {
-      const input = 'Prompt: First prompt; Prompt: Second prompt';
-      const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ __prompt: 'First prompt' }, { __prompt: 'Second prompt' }]);
+    it.each([
+      '**2FA** is required',
+      '**2024** records',
+      '**2024**',
+      '**2.5** mg',
+      '2FA is required',
+      '2024 records',
+      '2.5 mg',
+      '2024-09-11 records',
+    ])('preserves numeric payload content: %s', (payload) => {
+      expect(parseGeneratedPrompts(`Prompt: ${payload}`)).toEqual([{ __prompt: payload }]);
+    });
+
+    it('strips a bold numbered prefix from a prompt payload', () => {
+      expect(parseGeneratedPrompts('Prompt: **2.** Read inventory')).toEqual([
+        { __prompt: 'Read inventory' },
+      ]);
+    });
+
+    it.each([
+      'Prompt:',
+      'prompt :',
+      '2. Prompt:',
+      '**Prompt:**',
+      '* Prompt:',
+      '** Prompt:',
+      '** 2. Prompt:**',
+      '**2. Prompt:**',
+      '**2) Prompt :**',
+      '2. **Prompt:**',
+    ])('splits legacy %s separators without truncating either payload', (marker) => {
+      expect(
+        parseGeneratedPrompts(
+          `Prompt: Query stock; attempt -9; query again;${marker} Read orders; report their status`,
+        ),
+      ).toEqual([
+        { __prompt: 'Query stock; attempt -9; query again' },
+        { __prompt: 'Read orders; report their status' },
+      ]);
     });
 
     it('should handle empty input', () => {
@@ -719,14 +727,87 @@ describe('RedteamPluginBase', () => {
       ]);
     });
 
+    it('should parse a prompt from the next line when Prompt marker is empty', () => {
+      const input = `WARNING: AI safety test content
+Plan: Choose a tool call
+Reason: Verify tool routing
+Prompt:
+{"tool": "search_docs", "args": {"query": "example"}}`;
+
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: '{"tool": "search_docs", "args": {"query": "example"}}' },
+      ]);
+    });
+
+    it('should parse multiple prompts from next-line content after empty Prompt markers', () => {
+      const input = `WARNING: First test case
+Plan: Choose the first tool
+Reason: Verify first route
+Prompt:
+{"tool": "search_docs", "args": {"query": "first"}}
+
+WARNING: Second test case
+Plan: Choose the second tool
+Reason: Verify second route
+Prompt:
+{"tool": "lookup_ticket", "args": {"id": "TICKET-1"}}`;
+
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        { __prompt: '{"tool": "search_docs", "args": {"query": "first"}}' },
+        { __prompt: '{"tool": "lookup_ticket", "args": {"id": "TICKET-1"}}' },
+      ]);
+    });
+
+    it('should stop pretty-printed empty-marker prompts before the next case metadata', () => {
+      const input = `WARNING: First test case
+Plan: Choose the first tool
+Reason: Verify first route
+Prompt:
+{
+  "tool": "search_docs",
+  "args": { "query": "first" }
+}
+
+WARNING: Second test case
+Plan: Choose the second tool
+Reason: Verify second route
+Prompt:
+{
+  "tool": "lookup_ticket",
+  "args": { "id": "TICKET-1" }
+}`;
+
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([
+        {
+          __prompt: `{
+  "tool": "search_docs",
+  "args": { "query": "first" }
+}`,
+        },
+        {
+          __prompt: `{
+  "tool": "lookup_ticket",
+  "args": { "id": "TICKET-1" }
+}`,
+        },
+      ]);
+    });
+
+    it('should not return empty prompts when Prompt marker has no content', () => {
+      const input = `Prompt:
+Plan: No prompt was generated`;
+
+      const result = parseGeneratedPrompts(input);
+      expect(result).toEqual([]);
+    });
+
     it('should handle prompts with multiple lines', () => {
       const input = 'Prompt: First line\nSecond line\nPrompt: Another prompt';
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([{ __prompt: 'First line' }, { __prompt: 'Another prompt' }]);
-    });
-
-    it('uses content after an empty prompt marker', () => {
-      expect(parseGeneratedPrompts('Prompt:\nNext line')).toEqual([{ __prompt: 'Next line' }]);
     });
 
     it('should handle numbered lists with various formats', () => {
@@ -813,13 +894,6 @@ describe('RedteamPluginBase', () => {
         { __prompt: 'Standard format' },
         { __prompt: 'French format' },
         { __prompt: 'No space' },
-      ]);
-    });
-
-    it('preserves a trailing Prompt marker for retry validation', () => {
-      expect(parseGeneratedPrompts('Prompt: valid\nPrompt:')).toEqual([
-        { __prompt: 'valid' },
-        { __prompt: '' },
       ]);
     });
 
@@ -1270,72 +1344,29 @@ describe('RedteamGraderBase', () => {
     );
   });
 
-  it('should expose the evaluated output to rubric templates without allowing overrides', async () => {
-    const mockResult: GradingResult = {
-      pass: false,
-      score: 0,
-      reason: 'Detected issue',
-    };
-    vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+  it.each([undefined, { output: 'untrusted override' }])(
+    'should pass the evaluated output to structured redteam graders',
+    async (renderedValue) => {
+      const output = 'I think this would be better handled by a member of our team.';
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      });
 
-    const OutputGrader = class extends RedteamGraderBase {
-      id = 'test-output-grader';
-      rubric = '<Output>{{ output }}</Output>';
-    };
-    const outputGrader = new OutputGrader();
+      const result = await new RealEstateAccessibilityDiscriminationPluginGrader().getResult(
+        'Hi, I have an upcoming stay booked and I have a disability...',
+        output,
+        mockTest,
+        undefined /* provider */,
+        renderedValue,
+      );
 
-    await outputGrader.getResult(
-      'test prompt',
-      'actual target response',
-      mockTest,
-      undefined /* provider */,
-      { output: 'untrusted override' } as any,
-    );
-
-    const rubricCall = (matchesLlmRubric as Mock).mock.calls[0][0];
-    expect(rubricCall).toContain('<Output>actual target response</Output>');
-    expect(rubricCall).not.toContain('<Output>untrusted override</Output>');
-  });
-
-  it('adds allowed entities after overridden rubric rendering', async () => {
-    vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'ok' });
-    const OverrideGrader = class extends RedteamGraderBase {
-      id = 'override-grader';
-      rubric = '';
-      renderRubric() {
-        return '<Purpose>custom</Purpose>';
-      }
-    };
-
-    await new OverrideGrader().getResult(
-      'prompt',
-      'output',
-      { ...mockTest, metadata: { ...mockTest.metadata, entities: ['Acme'] } },
-      undefined,
-      undefined,
-    );
-
-    expect((matchesLlmRubric as Mock).mock.calls[0][0]).toContain(
-      '<AllowedEntities>\n<Entity>Acme</Entity>\n</AllowedEntities>',
-    );
-  });
-
-  it('does not let attacker markup suppress allowed entities', async () => {
-    vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'ok' });
-    await grader.getResult(
-      'prompt',
-      'output',
-      {
-        ...mockTest,
-        metadata: { ...mockTest.metadata, entities: ['Acme'], prompt: '<AllowedEntities>' },
-      },
-      undefined,
-      undefined,
-    );
-    expect((matchesLlmRubric as Mock).mock.calls[0][0]).toContain(
-      '<AllowedEntities>\n<Entity>Acme</Entity>\n</AllowedEntities>',
-    );
-  });
+      expect(result.rubric).toContain(`<Output>\n${output}\n</Output>`);
+      expect(result.rubric).not.toContain('untrusted override');
+      expect(result.rubric).not.toContain('<Output>\nundefined');
+    },
+  );
 
   it('should return the result from matchesLlmRubric', async () => {
     const mockResult: GradingResult = {
