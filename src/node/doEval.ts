@@ -279,8 +279,20 @@ export async function doEval(
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
 ): Promise<Eval> {
-  // Phase 1: Load environment from CLI args (preserves existing behavior)
-  setupEnv(cmdObj.envPath);
+  const envFileOverrides = isCliEventSource(evaluateOptions) ? undefined : {};
+  setupEnv(cmdObj.envPath, { processEnv: envFileOverrides });
+  return cliState.withEnvFileOverrides(envFileOverrides, () =>
+    doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, envFileOverrides),
+  );
+}
+
+async function doEvalWithEnv(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+  evaluateOptions: InternalEvaluateOptions,
+  envFileOverrides: EnvOverrides | undefined,
+): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
@@ -553,7 +565,7 @@ export async function doEval(
     // Phase 2: Load environment from config files if not already set via CLI
     if ((!cmdObj.envPath || cmdObj.envPath.length === 0) && commandLineOptions?.envPath) {
       logger.debug(`Loading additional environment from config: ${commandLineOptions.envPath}`);
-      setupEnv(commandLineOptions.envPath);
+      setupEnv(commandLineOptions.envPath, { processEnv: envFileOverrides });
     }
 
     warnIfRedteamConfigHasNoTests(config, testSuite);

@@ -44,7 +44,10 @@ export function setupEnv(envPath: string | string[] | undefined, options: SetupE
   // An implicit .env only supplies missing values, including in an isolated call.
   if (options.processEnv && paths.length === 0) {
     for (const key of Object.keys(options.processEnv)) {
-      if (!Object.hasOwn(previousEnv, key) && process.env[key] !== undefined) {
+      if (
+        !Object.prototype.hasOwnProperty.call(previousEnv, key) &&
+        process.env[key] !== undefined
+      ) {
         delete options.processEnv[key];
       }
     }

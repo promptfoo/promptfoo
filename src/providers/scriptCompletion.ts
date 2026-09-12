@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 
 import { getCache, isCacheEnabled } from '../cache';
+import { getEnvOverrides } from '../envOverrides';
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
@@ -103,7 +104,10 @@ export class ScriptCompletionProvider implements ApiProvider {
         safeJsonStringify(this.options || {}) as string,
         safeJsonStringify(context || {}) as string,
       ]);
-      const options = this.options?.config.basePath ? { cwd: this.options.config.basePath } : {};
+      const options = {
+        ...(this.options?.config.basePath && { cwd: this.options.config.basePath }),
+        env: { ...process.env, ...getEnvOverrides('file') },
+      };
 
       const child = execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
         if (error) {

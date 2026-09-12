@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import { PythonShell } from 'python-shell';
+import { getEnvOverrides } from '../envOverrides';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
@@ -55,6 +56,7 @@ export class PythonWorker {
     this.process = new PythonShell(wrapperPath, {
       mode: 'text',
       pythonPath: resolvedPythonPath,
+      env: { ...process.env, ...getEnvOverrides('file') },
       args: [this.scriptPath, this.functionName],
       stdio: ['pipe', 'pipe', 'pipe'],
     });
