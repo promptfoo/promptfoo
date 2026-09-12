@@ -10,6 +10,7 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
+import { getStripFlags, sanitizeResultForJsonlArtifact } from './models/evalResult';
 import {
   checkCloudPermissions,
   getOrgContext,
@@ -141,7 +142,10 @@ async function sendEvalRecord(
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
-  const { basePath: _basePath, ...redactedConfig } = sanitizeConfigForOutput(evalRecord.config);
+  const { basePath: _basePath, ...redactedConfig } = sanitizeConfigForOutput(
+    evalRecord.config,
+    getStripFlags(),
+  );
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.
@@ -217,7 +221,15 @@ async function sendChunkOfResults(
   headers: Record<string, string>,
 ): Promise<ChunkSendResult> {
   const targetUrl = `${url}/${evalId}/results`;
-  const stringifiedChunk = JSON.stringify(chunk);
+  const sharedResults = chunk.map((row) => {
+    const result = sanitizeResultForJsonlArtifact(row);
+    if (result.provider?.config) {
+      const { basePath: _basePath, ...config } = result.provider.config;
+      result.provider = { ...result.provider, config };
+    }
+    return result;
+  });
+  const stringifiedChunk = JSON.stringify(sharedResults);
   const chunkSizeBytes = Buffer.byteLength(stringifiedChunk, 'utf8');
 
   logger.debug(

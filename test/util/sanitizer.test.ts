@@ -71,6 +71,44 @@ describe('looksLikeSecret', () => {
 });
 
 describe('sanitizeConfigForOutput', () => {
+  it('keeps distinct URL map entries when their redacted keys collide', () => {
+    const redacted = 'https://example.com/?token=%5BREDACTED%5D';
+    const values = {
+      'https://example.com/?token=first-private-value': 'first',
+      'https://example.com/?token=second-private-value': 'second',
+      [redacted]: 'original',
+      [redacted + '#1']: 'original-fragment',
+    };
+    const output = sanitizeObject(values);
+    expect(Object.values(output).sort()).toEqual(Object.values(values).sort());
+    expect(output[redacted]).toBe('original');
+    expect(output[redacted + '#1']).toBe('original-fragment');
+    expect(JSON.stringify(output)).not.toContain('private-value');
+  });
+
+  it('strips saved test data while preserving remote-row safety and local replay data', () => {
+    const test = {
+      vars: { input: 'private test vars' },
+      metadata: { note: 'private metadata', __promptfooRemote: true },
+      providerOutput: 'private recorded output',
+      assert: [{ type: 'equals' as const, value: 'answer' }],
+    };
+    const config = {
+      tests: [test],
+      defaultTest: test,
+      scenarios: [{ config: [test], tests: [test] }],
+    };
+    const output = sanitizeConfigForOutput(config, {
+      shouldStripTestVars: true,
+      shouldStripMetadata: true,
+      shouldStripResponseOutput: true,
+    });
+    expect(JSON.stringify(output)).not.toContain('private');
+    expect(output.tests).toEqual([{ metadata: { __promptfooRemote: true }, assert: test.assert }]);
+    expect(config.tests[0]).toBe(test);
+    expect(config.tests[0].vars.input).toBe('private test vars');
+  });
+
   it('redacts credentials in URL provider IDs and map keys without changing safe IDs', () => {
     const url = 'https://gateway.example/v1?tenantClientSecret=short-value';
     const safeUrl = 'HTTPS://Safe.Example/v1?oauth=true&useSession=false&sameSiteCookie=lax';
@@ -1916,7 +1954,8 @@ describe('sanitizeUrl', () => {
   });
 
   it('preserves boolean request controls while redacting credential values', () => {
-    const controls = 'includeCredentials=false&requireAuthorization=true&with_credentials=false';
+    const controls =
+      'includeCredentials=false&requireAuthorization=true&with_credentials=false&includecredentials=false&IncludeCredentials=true';
     for (const base of ['https://example.com/?', '/api?', '{{ base }}/api?', 'invalid url?']) {
       expect(sanitizeUrl(base + controls)).toBe(base + controls);
     }

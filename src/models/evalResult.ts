@@ -72,18 +72,24 @@ function projectPrompt(prompt: Prompt, stripPromptText: boolean): Prompt {
 
 function projectTestCase(
   testCase: AtomicTestCase,
-  options: { stripMetadata: boolean; stripVars: boolean },
+  options: { stripMetadata: boolean; stripVars: boolean; stripOutput: boolean },
 ): AtomicTestCase {
-  if (!options.stripMetadata && !options.stripVars) {
+  if (!options.stripMetadata && !options.stripVars && !options.stripOutput) {
     return testCase;
   }
 
-  const projectedTestCase = options.stripMetadata
+  const projectedTestCase: AtomicTestCase = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(testCase)
     : { ...testCase };
 
   if (options.stripVars) {
     projectedTestCase.vars = undefined;
+  }
+  if (options.stripOutput) {
+    delete projectedTestCase.providerOutput;
+  }
+  if (options.stripMetadata && testCase.metadata?.__promptfooRemote === true) {
+    projectedTestCase.metadata = { __promptfooRemote: true };
   }
 
   return projectedTestCase;
@@ -529,9 +535,8 @@ function redactSensitiveResultFieldsForDb<
   };
 }
 
-// Read the `PROMPTFOO_STRIP_*` output-projection flags. Shared by the JSONL-artifact
-// sanitizer and the EvalResult -> EvaluateResult projection so both honor the same env.
-function getStripFlags() {
+// Shared by configuration and result-row output projections.
+export function getStripFlags() {
   return {
     shouldStripPromptText: getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
     shouldStripResponseOutput: getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false),
@@ -578,6 +583,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
             {
               stripMetadata: shouldStripMetadata,
               stripVars: shouldStripTestVars,
+              stripOutput: shouldStripResponseOutput,
             },
           ),
         }
@@ -982,6 +988,7 @@ export default class EvalResult {
     const testCase = projectTestCase(this.testCase, {
       stripMetadata: shouldStripMetadata,
       stripVars: shouldStripTestVars,
+      stripOutput: shouldStripResponseOutput,
     });
     // Mirror the live accounting in the evaluator: a response counts as one provider
     // request even when it reports no token usage, and a grading result counts as one

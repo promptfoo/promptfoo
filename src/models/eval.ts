@@ -64,6 +64,7 @@ import {
 } from './evalPerformance';
 import EvalResult, {
   getResultIndexKey,
+  getStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
   stripTraceLinkageFromMetadata,
@@ -1518,7 +1519,7 @@ export default class Eval {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: sanitizeConfigForOutput(this.config),
+      config: sanitizeConfigForOutput(this.config, getStripFlags()),
       author: this.author || null,
       prompts: this.getPrompts(),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),

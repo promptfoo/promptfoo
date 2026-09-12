@@ -822,6 +822,52 @@ describe('createShareableUrl', () => {
       expect(uploadBlobRefsForShare).not.toHaveBeenCalled();
     });
 
+    it.each([false, true])(
+      'omits runtime provider paths from uploads (strip data: %s)',
+      async (stripData) => {
+        vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+        vi.mocked(envars.getEnvBool).mockImplementation(
+          (key) =>
+            stripData &&
+            [
+              'PROMPTFOO_STRIP_TEST_VARS',
+              'PROMPTFOO_STRIP_METADATA',
+              'PROMPTFOO_STRIP_RESPONSE_OUTPUT',
+            ].includes(key),
+        );
+        const row = {
+          id: 'source-row',
+          provider: {
+            id: 'openai:chat:test',
+            config: { basePath: '/home/alice/project', temperature: 0 },
+          },
+          testCase: {
+            vars: { basePath: 'user-variable' },
+            metadata: { note: 'private-note' },
+            providerOutput: 'private-output',
+          },
+        };
+        mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+          yield [row];
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
+        expect(uploaded.provider.config).toEqual({ temperature: 0 });
+        expect(row.provider.config.basePath).toBe('/home/alice/project');
+        if (stripData) {
+          expect(JSON.stringify(uploaded)).not.toContain('private-');
+          expect(uploaded.testCase.vars).toBeUndefined();
+        } else {
+          expect(uploaded.testCase.vars.basePath).toBe('user-variable');
+        }
+      },
+    );
+
     it('redacts gateway URL credentials from shared config without changing the live provider', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       const gateway = 'https://gateway.example/v1?tenantClientSecret=short-private-value';

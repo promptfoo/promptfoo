@@ -49,7 +49,7 @@ function isSecretParameter(name: string, value: string | undefined): boolean {
   // Boolean controls such as includeCredentials are settings, not credential values.
   if (
     /^(?:true|false)$/i.test(value ?? '') &&
-    /(?:^|[.\[])(?:include|require|use|with|enable|disable)(?:[A-Z]|[_-])[^.\[\]]*\]?$/.test(name)
+    /(?:^|[.\[])(?:include|require|use|with|enable|disable)(?:[a-z]|[_-])[^.\[\]]*\]?$/i.test(name)
   ) {
     return false;
   }
@@ -648,13 +648,53 @@ export function sanitizeTracingConfigForPersistence(
 }
 
 /** Sanitize exported/shared configuration while preserving safe tracing env references. */
-export function sanitizeConfigForOutput(config: Partial<UnifiedConfig>): Partial<UnifiedConfig> {
+export function sanitizeConfigForOutput(
+  config: Partial<UnifiedConfig>,
+  options: {
+    shouldStripTestVars?: boolean;
+    shouldStripMetadata?: boolean;
+    shouldStripResponseOutput?: boolean;
+  } = {},
+): Partial<UnifiedConfig> {
   const safe = sanitizeTracingConfigForPersistence(config);
   const sanitized = sanitizeObject(safe, {
     context: 'output config',
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as Partial<UnifiedConfig>;
+  const {
+    shouldStripTestVars: stripVars,
+    shouldStripMetadata: stripMetadata,
+    shouldStripResponseOutput: stripOutput,
+  } = options;
+  const tests = [
+    ...(Array.isArray(sanitized.tests) ? sanitized.tests : []),
+    sanitized.defaultTest,
+    ...(sanitized.scenarios ?? []).flatMap((scenario) =>
+      typeof scenario === 'object'
+        ? [...(scenario.config ?? []), ...(Array.isArray(scenario.tests) ? scenario.tests : [])]
+        : [],
+    ),
+  ];
+  for (const test of tests) {
+    if (!test || typeof test !== 'object') {
+      continue;
+    }
+    if (stripVars && 'vars' in test) {
+      delete test.vars;
+    }
+    if (stripMetadata && 'metadata' in test) {
+      // Keep the internal marker so exported remote rows cannot execute local file references.
+      if (test.metadata?.__promptfooRemote === true) {
+        test.metadata = { __promptfooRemote: true };
+      } else {
+        delete test.metadata;
+      }
+    }
+    if (stripOutput && 'providerOutput' in test) {
+      delete test.providerOutput;
+    }
+  }
   const provider = safe.tracing?.provider;
   const sanitizedProvider = sanitized.tracing?.provider;
   if (provider && sanitizedProvider) {
@@ -1072,9 +1112,17 @@ export function sanitizeUrlEncodedString(value: string): string {
  */
 function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap = false): any {
   const sanitized: any = {};
+  let keySuffix = 0;
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [rawKey, value] of Object.entries(obj)) {
-    const key = /^https?:\/\//i.test(rawKey) ? sanitizeUrl(rawKey) : rawKey;
+    const redactedKey = /^https?:\/\//i.test(rawKey) ? sanitizeUrl(rawKey) : rawKey;
+    let key = redactedKey;
+    while (
+      Object.prototype.hasOwnProperty.call(sanitized, key) ||
+      (key !== rawKey && Object.prototype.hasOwnProperty.call(obj, key))
+    ) {
+      key = `${redactedKey}#${++keySuffix}`;
+    }
     if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
     } else if (typeof value === 'string' && looksLikeSecret(value)) {

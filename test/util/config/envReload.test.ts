@@ -20,6 +20,7 @@ import { isApiProvider } from '../../../src/types/providers';
 import { readAzureBlobText } from '../../../src/util/azureBlob';
 import { combineConfigs, readConfig, resolveConfigs } from '../../../src/util/config/load';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
+import { sanitizeConfigForOutput } from '../../../src/util/sanitizer';
 import { getNunjucksEngine } from '../../../src/util/templates';
 import {
   loadTestsFromGlob,
@@ -532,7 +533,9 @@ describe('suite environment loading', () => {
     expect(fs.existsSync(marker)).toBe(false);
     const reread = await readTests(first.testSuite.tests);
     const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(first.config)));
-    for (const tests of [reread, replay.testSuite.tests]) {
+    const exported = sanitizeConfigForOutput(first.config, { shouldStripMetadata: true });
+    const exportedReplay = await resolveConfigs({}, JSON.parse(JSON.stringify(exported)));
+    for (const tests of [reread, replay.testSuite.tests, exportedReplay.testSuite.tests]) {
       expect(tests?.[1].vars).toBe(varsFile);
       expect(tests?.[2].provider).toBe(`file://${providerFile}`);
     }

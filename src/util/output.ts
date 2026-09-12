@@ -16,6 +16,7 @@ import logger from '../logger';
 import {
   asEvaluateResult,
   getResultIndexKey,
+  getStripFlags,
   sanitizeResultForJsonlArtifact,
 } from '../models/evalResult';
 import { PromptfooAttributes } from '../tracing/genaiTracer';
@@ -445,7 +446,7 @@ export async function createOutputData(
   options: OutputOptions = {},
 ): Promise<OutputFile> {
   const summary = await evalRecord.toEvaluateSummary();
-  const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config, getStripFlags());
   let traces;
   try {
     // TraceStore redacts sensitive attribute keys on reads by default.
@@ -613,7 +614,7 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, getStripFlags());
     const metadata = createOutputMetadata(evalRecord);
     const template = await fsPromises.readFile(
       path.join(getDirectory(), 'tableOutput.html'),
@@ -727,7 +728,7 @@ export async function writeOutput(
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, getStripFlags());
 
     // Sanitize data for XML builder to prevent textValue.replace errors
     const sanitizeForXml = (obj: any): any => {
