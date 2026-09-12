@@ -345,7 +345,7 @@ function inferredToolFromSpanName(spanName?: string): string | undefined {
   return undefined;
 }
 
-function hasErrorStatus(span: TraceLikeSpan): boolean {
+export function hasErrorStatus(span: TraceLikeSpan): boolean {
   const attributes = span.attributes ?? {};
   const statusCode = span.statusCode ?? span.status?.code;
   return (

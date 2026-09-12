@@ -4,6 +4,7 @@ import {
   type AgentObservation,
   type AgentRunFinding,
   findingsFromObservations,
+  hasErrorStatus,
   observationsFromTraceData,
 } from '../agentic/observations';
 import {
@@ -492,9 +493,10 @@ function hasGuardrailOrApprovalForTool(
     observations.filter(
       (observation) =>
         (observation.kind === 'guardrail' || observation.kind === 'approval') &&
-        !/^(blocked|denied|rejected|error|errored|skipped|fail(?:ed|ure)?)$/i.test(
-          observation.outcome?.trim() ?? '',
-        ),
+        (observation.outcome === undefined ||
+          /^(allow(?:ed)?|approved|pass(?:ed)?|success(?:ful)?|succeeded|completed|ok|true|yes|1)$/i.test(
+            observation.outcome.trim(),
+          )),
     ),
   );
   const controlsByTool = toolObservations.map((tool) =>
@@ -667,14 +669,15 @@ function hasRelevantAgenticRuntimeTraceEvidence(
 ): boolean {
   return spans.some(
     (span) =>
-      traceAttributesMatchPlugin(span.attributes, pluginId) ||
-      span.events?.some((event) =>
-        traceAttributesMatchPlugin(
-          event.attributes,
-          pluginId,
-          normalizePluginId(getAttribute(span.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)),
-        ),
-      ),
+      !hasErrorStatus(span) &&
+      (traceAttributesMatchPlugin(span.attributes, pluginId) ||
+        span.events?.some((event) =>
+          traceAttributesMatchPlugin(
+            event.attributes,
+            pluginId,
+            normalizePluginId(getAttribute(span.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)),
+          ),
+        )),
   );
 }
 

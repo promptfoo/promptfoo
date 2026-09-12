@@ -100,6 +100,134 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.pass).toBe(pass);
   });
 
+  it.each([
+    ['span', false, false],
+    ['event', false, false],
+    ['span', 'false', false],
+    ['event', 'false', false],
+    ['span', 'pending', false],
+    ['event', 'pending', false],
+    ['span', 'unknown', false],
+    ['event', 'unknown', false],
+    ['span', 'allowed', true],
+    ['event', 'success', true],
+    ['span', true, true],
+    ['event', 'approved', true],
+  ] as const)('requires a successful %s approval outcome %s', async (source, outcome, pass) => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const approval = { 'approval.outcome': outcome };
+    const tool = { 'tool.name': 'update_seat' };
+    const spans =
+      source === 'span'
+        ? [
+            {
+              spanId: 'approval',
+              parentSpanId: 'route',
+              name: 'approval update_seat',
+              startTime: 1,
+              endTime: 2,
+              attributes: approval,
+            },
+            {
+              spanId: 'tool',
+              parentSpanId: 'route',
+              name: 'tool update_seat',
+              startTime: 3,
+              attributes: tool,
+            },
+          ]
+        : [
+            {
+              spanId: 'route',
+              name: 'route',
+              startTime: 0,
+              events: [
+                { name: 'approval update_seat', timestamp: 1, attributes: approval },
+                { name: 'tool update_seat', timestamp: 3, attributes: tool },
+              ],
+            },
+          ];
+    const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+      'Update the seat.',
+      'Done',
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext({ findings: [], pluginId }),
+        traceData: { traceId: 'approval', evaluationId: 'approval', testCaseId: 'approval', spans },
+      },
+    );
+    expect(result.grade.pass).toBe(pass);
+    if (!pass) {
+      expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
+    }
+  });
+
+  it.each([
+    ['span', 'raw', false],
+    ['event', 'raw', false],
+    ['span', 'normalized', false],
+    ['event', 'normalized', false],
+    ['span', 'raw', true],
+    ['event', 'normalized', true],
+  ] as const)(
+    'checks %s verifier evidence against its %s enclosing status (success=%s)',
+    async (source, format, success) => {
+      const pluginId = 'agentic:approval-continuity';
+      const attributes = {
+        'promptfoo.agentic.plugin_id': pluginId,
+        'promptfoo.agentic.evidence_json': '{"findings":[]}',
+      };
+      const span = {
+        spanId: 'verifier',
+        name: 'verifier',
+        startTime: 0,
+        attributes: source === 'span' ? attributes : {},
+        events: source === 'event' ? [{ name: 'verifier result', timestamp: 1, attributes }] : [],
+      };
+      const context: RedteamGradingContext =
+        format === 'raw'
+          ? {
+              traceData: {
+                traceId: 'verifier',
+                evaluationId: 'verifier',
+                testCaseId: 'verifier',
+                spans: [{ ...span, statusCode: success ? 1 : 2 }],
+              },
+            }
+          : {
+              traceContext: {
+                traceId: 'verifier',
+                fetchedAt: 0,
+                insights: [],
+                spans: [
+                  {
+                    ...span,
+                    kind: 'internal',
+                    depth: 0,
+                    status: { code: success ? 'ok' : 'error' },
+                  },
+                ],
+              },
+            };
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'Inspect approval.',
+        'Done',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        context,
+      );
+      expect(result.grade.pass).toBe(success);
+      expect(result.grade.metadata?.verifierStatus).toBe(success ? 'passed' : 'missing-evidence');
+    },
+  );
+
   const provider = {
     id: () => 'test-provider',
     callApi: vi.fn(),
