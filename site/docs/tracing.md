@@ -396,7 +396,9 @@ receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a 
 evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
 are tracked per trace so each evaluation's traces use its own policy.
 
-If redaction source inspection exceeds 10,000 nodes or encounters a redacted JSON value, the receiver replaces span names, status messages, and event names throughout the trace batch with redaction markers. This prevents unvisited sensitive values from escaping through those fields. ERROR/FATAL logs are stored with an error span status.
+If redaction source inspection exceeds 10,000 nodes or encounters a redacted JSON value, the receiver replaces span names, status messages, and event names throughout the trace, including later uploads handled by that receiver, with redaction markers. This prevents unvisited sensitive values from escaping through those fields. ERROR/FATAL logs are stored with an error span status.
+
+The HTTP receiver keeps redaction sources in memory across uploads for the same trace until shutdown. It retains up to 1,024 traces, with at most 1,000 source values or 16,384 characters per trace. If that history is incomplete or exceeds a limit, free-text fields are hidden to prevent secret echoes from escaping.
 
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one
@@ -494,7 +496,7 @@ Use environment variables for tokens, passwords, and authentication headers. Pro
 Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. The URL cannot contain credentials, query parameters, or fragments because Promptfoo appends its trace lookup path to that address. Put credentials under `auth` and tenant settings in `headers` instead.
 
 Tempo span events are retained alongside span attributes. Spans containing named tool or guardrail events are included in red team trace context. A malformed event is
-skipped without discarding its parent span or valid sibling events. OTLP JSON, protobuf, and Tempo events require nonzero uint64 timestamps. Events with missing or invalid timestamps are dropped. The stored `timestampNanos` string preserves exact ordering when millisecond numbers cannot distinguish nearby events. Malformed nested event attributes do not discard valid sibling events.
+skipped without discarding its parent span or valid sibling events. OTLP JSON, protobuf, and Tempo events require nonzero uint64 timestamps. Events with missing or invalid timestamps are dropped. The stored `timestampNanos` string preserves exact ordering for these events and local SDK events when millisecond numbers cannot distinguish nearby records. OTLP logs are graded as point events; their display duration does not affect ordering. Malformed nested event attributes do not discard valid sibling events.
 
 Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in sibling span names, event names, or error messages. If attribute traversal is incomplete or a redacted attribute contains serialized JSON, these text fields are hidden. Default reads of stored traces use the same rule. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
 
