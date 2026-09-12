@@ -195,6 +195,16 @@ describe('resolveTestsWatchPaths', () => {
     expect(watched).toEqual([path.join(base, 'vars.csv')]);
   });
 
+  it('watches every reference of an array-valued var', () => {
+    // generateVarCombinations() fans an array out into one case per entry and
+    // renderPrompt() then loads each file, so all of them feed the evaluation.
+    const watched = resolve([
+      { vars: { doc: ['file://tests/a.yaml', 'file://tests/b.yaml'] } },
+    ] as unknown as TestSuiteConfig['tests']);
+    expect(watched).toContain(path.join(base, 'tests/a.yaml'));
+    expect(watched).toContain(path.join(base, 'tests/b.yaml'));
+  });
+
   it('ignores remote references', () => {
     expect(
       resolve('https://docs.google.com/spreadsheets/d/abc' as TestSuiteConfig['tests']),
