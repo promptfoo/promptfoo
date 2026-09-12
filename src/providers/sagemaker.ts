@@ -1597,19 +1597,9 @@ export class SageMakerEmbeddingProvider
    * Generate a consistent cache key for SageMaker embedding requests
    * Uses crypto.createHash to generate a shorter, more efficient key
    */
-  private getCacheKey(text: string): string {
-    const endpoint = this.getEndpointName();
-    // Create a deterministic representation of the request parameters
-    const configForKey = {
-      endpoint,
-      modelType: this.config.modelType,
-      contentType: this.getContentType(),
-      acceptType: this.getAcceptType(),
-      region: this.getRegion(),
-      responseFormat: this.config.responseFormat,
-    };
-
-    const configStr = JSON.stringify(configForKey);
+  private getCacheKey(text: string, request: { endpoint: string }): string {
+    const { endpoint } = request;
+    const configStr = JSON.stringify(request);
 
     // Generate shorter, more efficient hashed keys
     const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
@@ -1654,9 +1644,17 @@ export class SageMakerEmbeddingProvider
     }
     const transformedText = transformResult.value;
     const isTransformed = transformedText !== text;
+    const request = {
+      endpoint: this.getEndpointName(),
+      modelType: this.config.modelType || 'custom',
+      contentType: this.getContentType(),
+      acceptType: this.getAcceptType(),
+      region: this.getRegion(),
+      responseFormat: this.config.responseFormat,
+    };
 
     if (isTransformed) {
-      logger.debug(`Text transformed for SageMaker embedding endpoint ${this.getEndpointName()}`);
+      logger.debug(`Text transformed for SageMaker embedding endpoint ${request.endpoint}`);
       logger.debug(`Original: ${text.substring(0, 100)}${text.length > 100 ? '...' : ''}`);
       logger.debug(
         `Transformed: ${transformedText.substring(0, 100)}${transformedText.length > 100 ? '...' : ''}`,
@@ -1665,7 +1663,8 @@ export class SageMakerEmbeddingProvider
 
     // Check if we should use cache - use the transformed text for cache key
     const bustCache = context?.debug === true; // If debug mode is on, bust the cache
-    const cacheKey = isCacheEnabled() && !bustCache ? this.getCacheKey(transformedText) : undefined;
+    const cacheKey =
+      isCacheEnabled() && !bustCache ? this.getCacheKey(transformedText, request) : undefined;
     if (cacheKey) {
       const cache = (await getCache)
         ? await getCache()
@@ -1674,7 +1673,7 @@ export class SageMakerEmbeddingProvider
       // Try to get from cache
       const cachedResult = await cache.get<string>(cacheKey);
       if (cachedResult) {
-        logger.debug(`Using cached SageMaker embedding response for ${this.getEndpointName()}`);
+        logger.debug(`Using cached SageMaker embedding response for ${request.endpoint}`);
 
         try {
           // Parse the cached result
@@ -1696,17 +1695,17 @@ export class SageMakerEmbeddingProvider
     // Apply delay if specified and not using cached response
     if (delayMs && delayMs > 0) {
       logger.debug(
-        `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
+        `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${request.endpoint}`,
       );
       await sleep(delayMs, abortSignal);
     }
 
     // Not in cache or cache disabled, make the actual API call
     abortSignal.throwIfAborted();
-    const runtime = await this.getSageMakerRuntimeInstance(undefined, generation);
+    const runtime = await this.getSageMakerRuntimeInstance(request.region, generation);
 
     let payload;
-    const modelType = this.config.modelType || 'custom';
+    const modelType = request.modelType;
 
     logger.debug(`Formatting embedding payload for model type: ${modelType}`);
 
@@ -1735,16 +1734,16 @@ export class SageMakerEmbeddingProvider
         break;
     }
 
-    logger.debug(`Calling SageMaker embedding endpoint ${this.getEndpointName()}`);
+    logger.debug(`Calling SageMaker embedding endpoint ${request.endpoint}`);
     logger.debug(`With payload: ${payload}`);
 
     try {
       const { InvokeEndpointCommand } = await import('@aws-sdk/client-sagemaker-runtime');
 
       const command = new InvokeEndpointCommand({
-        EndpointName: this.getEndpointName(),
-        ContentType: this.getContentType(),
-        Accept: this.getAcceptType(),
+        EndpointName: request.endpoint,
+        ContentType: request.contentType,
+        Accept: request.acceptType,
         Body: payload,
       });
 
@@ -1782,10 +1781,9 @@ export class SageMakerEmbeddingProvider
         (Array.isArray(responseJson) ? responseJson[0] : responseJson);
 
       // If response format specifies a path, extract it using JavaScript expression evaluation
-      if (this.config.responseFormat?.path) {
+      if (request.responseFormat?.path) {
+        const pathExpression = request.responseFormat.path;
         try {
-          const pathExpression = this.config.responseFormat.path;
-
           // Extract data using the expression
           const extracted = await this.extractFromPath(responseJson, pathExpression);
 
@@ -1821,7 +1819,7 @@ export class SageMakerEmbeddingProvider
           }
         } catch (error) {
           logger.warn(
-            `Failed to extract embedding from path expression: ${this.config.responseFormat.path}, Error: ${error}`,
+            `Failed to extract embedding from path expression: ${pathExpression}, Error: ${error}`,
           );
           logger.debug(
             `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,

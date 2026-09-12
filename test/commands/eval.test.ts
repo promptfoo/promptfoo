@@ -2230,14 +2230,16 @@ describe('evalCommand', () => {
   );
 
   it.each(['success', 'error'])(
-    'preserves evaluation %s and later cleanup when provider cleanup rejects',
+    'preserves evaluation %s and later cleanup when provider cleanup throws',
     async (outcome) => {
       const cleanupError = new Error('MCP initialization failed');
       const evaluationError = new Error('primary evaluation failed');
       const failingProvider = {
         id: () => 'failing-cleanup-provider',
         callApi: async () => ({ output: 'ok' }),
-        cleanup: vi.fn().mockRejectedValue(cleanupError),
+        cleanup: vi.fn(() => {
+          throw cleanupError;
+        }),
       } satisfies ApiProvider;
       const laterProvider = {
         id: () => 'later-cleanup-provider',
@@ -2249,7 +2251,15 @@ describe('evalCommand', () => {
         .mockReset()
         .mockResolvedValue({
           config,
-          testSuite: { prompts: [], providers: [failingProvider, laterProvider] },
+          testSuite: {
+            prompts: [],
+            providers: [laterProvider],
+            tests: [
+              {
+                assert: [{ type: 'llm-rubric', value: 'ok', provider: { text: failingProvider } }],
+              },
+            ],
+          },
           basePath: path.resolve('/'),
         });
       vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());

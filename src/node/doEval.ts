@@ -232,6 +232,18 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
 const activeProviderRuns = new Map<ApiProvider, number>();
 const pendingProviderCleanups = new Map<ApiProvider, Promise<void>>();
 
+function addProviderValue(value: unknown, providers: Set<ApiProvider>): void {
+  if (isApiProvider(value)) {
+    providers.add(value);
+  } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const provider of Object.values(value)) {
+      if (isApiProvider(provider)) {
+        providers.add(provider);
+      }
+    }
+  }
+}
+
 function addGradingProviders(
   assertions: AssertionOrSet[] | undefined,
   providers: Set<ApiProvider>,
@@ -239,8 +251,8 @@ function addGradingProviders(
   for (const assertion of assertions ?? []) {
     if (assertion.type === 'assert-set') {
       addGradingProviders(assertion.assert, providers);
-    } else if (isApiProvider(assertion.provider)) {
-      providers.add(assertion.provider);
+    } else {
+      addProviderValue(assertion.provider, providers);
     }
   }
 }
@@ -250,9 +262,7 @@ function addTestProviders(test: Partial<TestCase> | undefined, providers: Set<Ap
     return;
   }
   for (const provider of [test.provider, test.options?.provider]) {
-    if (isApiProvider(provider)) {
-      providers.add(provider);
-    }
+    addProviderValue(provider, providers);
   }
   addGradingProviders(test.assert, providers);
 }
@@ -1030,7 +1040,8 @@ export async function doEval(
           activeProviderRuns.set(provider, remainingRuns);
         } else {
           activeProviderRuns.delete(provider);
-          const cleanup = Promise.resolve(provider.cleanup?.({ reason: 'evaluation-complete' }))
+          const cleanup = Promise.resolve()
+            .then(() => provider.cleanup?.({ reason: 'evaluation-complete' }))
             .catch((error) => logger.warn('Provider cleanup failed after evaluation.', { error }))
             .finally(() => {
               if (pendingProviderCleanups.get(provider) === cleanup) {

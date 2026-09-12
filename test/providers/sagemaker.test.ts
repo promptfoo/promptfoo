@@ -732,6 +732,13 @@ describe('SageMakerEmbeddingProvider', () => {
     vi.spyOn(provider, 'getEndpointName')
       .mockReturnValueOnce('first-endpoint')
       .mockReturnValue('later-endpoint');
+    vi.spyOn(provider, 'getContentType')
+      .mockReturnValueOnce('application/json')
+      .mockReturnValue('text/plain');
+    vi.spyOn(provider, 'getAcceptType')
+      .mockReturnValueOnce('application/json')
+      .mockReturnValue('text/plain');
+    vi.spyOn(provider, 'getRegion').mockReturnValueOnce('us-east-1').mockReturnValue('us-west-2');
 
     const result = provider.callEmbeddingApi('text');
     await sent;
@@ -754,6 +761,14 @@ describe('SageMakerEmbeddingProvider', () => {
     expect(key).toMatch(/^sagemaker:embedding:v1:first-endpoint:/);
     expect(key.endsWith(`:${configHash}`)).toBe(true);
     expect(mockCacheSet.mock.calls[0][0]).toBe(key);
+    expect(mockSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        EndpointName: 'first-endpoint',
+        ContentType: 'application/json',
+        Accept: 'application/json',
+      }),
+      'us-east-1',
+    );
   });
 
   describe('cache flag behavior', () => {
