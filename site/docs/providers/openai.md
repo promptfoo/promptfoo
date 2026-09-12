@@ -763,7 +763,9 @@ tests:
       product: a blue ceramic mug
 ```
 
-GPT Image 2.5 also accepts `quality: xhigh` and `quality: max`. For transparent output, use `background: transparent` with PNG or WebP. Cost comes from the response's token usage; it is left unset when usage is missing because older models' per-image estimates do not apply. See the [Image API guide](https://developers.openai.com/api/docs/guides/image-generation).
+GPT Image 2.5 also accepts `quality: xhigh` and `quality: max`. For transparent output, use `background: transparent` with PNG or WebP. See the [Image API guide](https://developers.openai.com/api/docs/guides/image-generation).
+
+Image cost comes from the response's token usage when the model publishes token rates, and otherwise from a per-image list price. Models with neither — including GPT Image 2.5 responses that carry no usage — report no cost rather than an estimate.
 
 This provider supports generation only. Image editing, masks, reference images, variations, and streaming are not implemented.
 
