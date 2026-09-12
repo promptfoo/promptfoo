@@ -1,3 +1,4 @@
+import { FIXED_PAGE_CONTAINER_TOP } from '@app/components/layout/PageContainer';
 import { RenderResult, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -96,6 +97,12 @@ function renderWithProviders({
 }
 
 describe('Prompts', () => {
+  it('offsets the fixed page container by the update banner height', () => {
+    const { container } = renderWithProviders({ data: mockPrompts });
+
+    expect(container.firstElementChild).toHaveStyle({ top: FIXED_PAGE_CONTAINER_TOP });
+  });
+
   it('should display the label column with correct values', () => {
     renderWithProviders({ data: mockPrompts });
 

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table';
-import { PageContainer } from '@app/components/layout/PageContainer';
+import { FIXED_PAGE_CONTAINER_TOP, PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
@@ -253,7 +253,10 @@ export default function History({
   );
 
   return (
-    <PageContainer className="fixed top-[calc(var(--nav-height)+var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
+    <PageContainer
+      className="fixed left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0"
+      style={{ top: FIXED_PAGE_CONTAINER_TOP }}
+    >
       <PageHeader>
         <div className="container max-w-7xl mx-auto p-6">
           <h1 className="text-2xl font-bold tracking-tight">Evaluation History</h1>
