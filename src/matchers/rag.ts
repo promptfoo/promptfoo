@@ -98,15 +98,20 @@ export async function matchesAnswerRelevance(
   const questionsWithScores: { question: string; similarity: number }[] = [];
 
   for (const question of candidateQuestions) {
-    const resp = await callGradingProvider(
-      embeddingProvider,
-      'answer-relevance.embedding',
-      (context, options) =>
-        options || context
-          ? callEmbeddingApi(question, context, options)
-          : callEmbeddingApi(question),
-      { callContext: providerCallContext, operationName: 'embeddings' },
-    );
+    let resp;
+    try {
+      resp = await callGradingProvider(
+        embeddingProvider,
+        'answer-relevance.embedding',
+        (context, options) =>
+          options || context
+            ? callEmbeddingApi(question, context, options)
+            : callEmbeddingApi(question),
+        { callContext: providerCallContext, operationName: 'embeddings' },
+      );
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : String(error), tokensUsed);
+    }
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
       return fail(resp.error || 'No embedding', tokensUsed);
