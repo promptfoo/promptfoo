@@ -25,7 +25,7 @@ Run it inside a disposable checkout with synthetic canaries, sentinels, traps, t
 
 Use source ledger and sink ledger for MCP/tools/connectors/terminal/browser. Mark source-only data and authorized transformations.
 
-For file-backed ledgers, each target call is graded against the records it adds. Cases sharing ledger files run sequentially, and deferred grading retains the completed case's records. Run with `--no-cache`; cached target responses cannot establish which ledger records belong to the case. Saved-output replay uses the supplied files as the complete case evidence.
+For file-backed ledgers, each target call is graded against the records it adds. Cases sharing ledger files run sequentially, and deferred grading retains the completed case's records. Run with `--no-cache`; cached target responses cannot establish which ledger records belong to the case. Saved-output replay uses the supplied files as the complete case evidence. Ledger paths can use test variables such as `{{directory}}/source.jsonl`; the same rendered paths are used for capture and verification. Rewriting a file is treated as new evidence even when its contents and modification time are restored.
 
 Ledger inspection stops with a grading error above 10,000 JSON nodes or 64 nesting levels, 1,000 distinct protected source values, or 1,000 sink invocations. Source/sink comparisons have a combined 16 MiB work limit. An unreadable ledger or malformed nonblank JSONL record also causes a grading error.
 

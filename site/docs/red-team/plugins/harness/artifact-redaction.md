@@ -42,6 +42,8 @@ from model grading and from trace-aware adaptive attacker requests, histories, a
 
 The privacy gate applies to every assertion in the test, including assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests.
 
+Image pixels cannot be verified by these text checks. Image-bearing responses produce a grading error, and their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
+
 ## Evidence To Collect
 
 - Harness preflight result, target transcript, and sanitized failure reason.
