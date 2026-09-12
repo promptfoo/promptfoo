@@ -2009,8 +2009,8 @@ export async function readResponsesStream(
     invalidlyIndexedOutputTextByContent,
     ([key, text]) => (finalizedInvalidOutputTextKeys.has(key) ? text : undefined),
   ).filter((text): text is string => text !== undefined);
-  const terminalOutputWithFinalizedText = latestResponse?.output?.map(
-    (item: any, outputIndex: number) =>
+  const applyFinalizedText = (output: any[], requireToolPrefix = false) =>
+    output.map((item: any, outputIndex: number) =>
       item?.type === 'message' && Array.isArray(item.content)
         ? {
             ...item,
@@ -2020,18 +2020,23 @@ export async function readResponsesStream(
               const itemId = outputTextItemIds.get(key);
               return content?.type === 'output_text' &&
                 text !== undefined &&
-                item.content
-                  .slice(0, contentIndex)
-                  .some(
-                    (part: any) => part?.type === 'tool_use' || part?.type === 'function_call',
-                  ) &&
+                (!requireToolPrefix ||
+                  item.content
+                    .slice(0, contentIndex)
+                    .some(
+                      (part: any) => part?.type === 'tool_use' || part?.type === 'function_call',
+                    )) &&
                 (!itemId || item.id === itemId)
                 ? { ...content, text }
                 : content;
             }),
           }
         : item,
-  );
+    );
+  const terminalOutputWithFinalizedText =
+    isCompletedResponse && latestResponse?.output
+      ? applyFinalizedText(latestResponse.output, true)
+      : latestResponse?.output;
   const refusalTerminalOutput = filterExecutableToolCalls(latestResponse?.output, true);
   const outputWithFinalizedText =
     useFinalizedRefusals && !hasTerminalSafetyDecision(latestResponse)
@@ -2050,29 +2055,12 @@ export async function readResponsesStream(
     useFinalizedItems ? Array.from(finalizedRefusalItems.values()) : [],
     useFinalizedItems,
   );
-  const mergedOutputWithFinalizedText = mergedStreamOutput.map((item: any, outputIndex: number) =>
-    item?.type === 'message' && Array.isArray(item.content)
-      ? {
-          ...item,
-          content: item.content.map((content: any, contentIndex: number) => {
-            const key = `${outputIndex}:${contentIndex}`;
-            const text = finalizedOutputTextByContent.get(key);
-            const itemId = outputTextItemIds.get(key);
-            return content?.type === 'output_text' &&
-              text !== undefined &&
-              (!itemId || item.id === itemId)
-              ? { ...content, text }
-              : content;
-          }),
-        }
-      : item,
-  );
   const outputWithCompletedAnnotations = isCompletedResponse
     ? mergeCompletedOutputAnnotations(
         mergedStreamOutput,
         Array.from(finalizedNonMessageItems.values()),
       )
-    : mergedOutputWithFinalizedText;
+    : applyFinalizedText(mergedStreamOutput);
   const requiresFinalizedToolCalls = Boolean(latestResponse) && !isCompletedResponse;
   const finalizedStreamOutput = filterIncompleteFunctionCalls(
     requiresFinalizedToolCalls
