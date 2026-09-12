@@ -375,6 +375,14 @@ describe('structured value assertions', () => {
         }),
       ),
     ).toBeUndefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({
+          type: 'trajectory:tool-set',
+          value: { tools: '{{ expected_tools }}' } as any,
+        }),
+      ),
+    ).toBeUndefined();
   });
 
   it('validates trace span assertion value shapes', () => {

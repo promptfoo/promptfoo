@@ -571,10 +571,13 @@ function getTokensUsedValueError(value: unknown): string | undefined {
 }
 
 function getTrajectoryToolSetValueError(value: unknown): string | undefined {
-  const normalizedValue =
-    isRecord(value) && isNunjucksOutputExpression(value.mode)
-      ? { ...value, mode: 'subset' }
-      : value;
+  const normalizedValue = isRecord(value)
+    ? {
+        ...value,
+        ...(isNunjucksOutputExpression(value.mode) && { mode: 'subset' }),
+        ...(isNunjucksOutputExpression(value.tools) && { tools: ['template'] }),
+      }
+    : value;
   const configError = trajectoryToolSetConfigError(normalizedValue);
   if (configError) {
     return configError;

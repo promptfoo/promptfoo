@@ -1376,13 +1376,16 @@ export const useStore = create<EvalConfigState>()(
       merge: (persistedState, currentState) => {
         const persistedConfig = (persistedState as Partial<EvalConfigState> | undefined)?.config;
 
+        let sourceEvalId = (persistedState as Partial<EvalConfigState> | undefined)?.sourceEvalId;
+        const persisted = omitPersistedSensitiveValues(persistedConfig ?? {}, () => {
+          sourceEvalId = undefined;
+        });
+        const config = { ...DEFAULT_CONFIG, ...persisted };
         return {
           ...currentState,
           ...(persistedState as Partial<EvalConfigState> | undefined),
-          config: omitPersistedSensitiveValues({
-            ...DEFAULT_CONFIG,
-            ...persistedConfig,
-          }),
+          config,
+          sourceEvalId,
         };
       },
       onRehydrateStorage: () => (state) => {

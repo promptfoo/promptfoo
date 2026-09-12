@@ -79,6 +79,21 @@ describe('evalConfig store', () => {
       expect(persisted.sourceEvalId).toBeUndefined();
     });
 
+    it('clears rehydrated lineage when credential redaction fails closed', () => {
+      const config = new Proxy(
+        {},
+        {
+          ownKeys: () => {
+            throw new Error('fixture redaction failure');
+          },
+        },
+      );
+      const merge = useStore.persist.getOptions().merge!;
+      const state = merge({ config, sourceEvalId: 'source-eval' }, useStore.getState()) as any;
+      expect(state.config).toEqual(DEFAULT_CONFIG);
+      expect(state.sourceEvalId).toBeUndefined();
+    });
+
     it('should reset to default config', () => {
       // First, modify the config
       useStore.getState().updateConfig({
