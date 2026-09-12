@@ -439,7 +439,9 @@ export class LiveSession {
         if (
           typeof event.delta !== 'string' ||
           !Number.isFinite(event.start_ms) ||
-          !Number.isFinite(event.end_ms)
+          !Number.isFinite(event.end_ms) ||
+          event.start_ms < 0 ||
+          event.end_ms < event.start_ms
         ) {
           this.fail('Invalid GPT-Live transcript delta.');
           return;
@@ -480,6 +482,10 @@ export class LiveSession {
         this.readUsage(event);
         break;
       case 'session.delegation.created':
+        if (!this.started) {
+          this.fail('GPT-Live received delegation before session.started.');
+          return;
+        }
         this.handleDelegation(event);
         break;
       case 'response.event':
@@ -489,6 +495,10 @@ export class LiveSession {
         this.handleApiError(event);
         break;
       case 'session.closed':
+        if (!this.started) {
+          this.fail('GPT-Live session closed before session.started.');
+          return;
+        }
         this.finalized = this.readUsage(event);
         this.reason = safeLabel(event.reason);
         if (this.reason === 'content') {
@@ -798,7 +808,18 @@ export class LiveSession {
   private recordBackendUsage(response: OpenAI.Responses.Response): void {
     const config = this.options.config.delegation;
     const model = response.model || (config?.type === 'responses' ? config.responses.model : '');
-    const usage = response.usage;
+    const rawUsage = response.usage;
+    const details = rawUsage && getOpenAICompletionTokenDetails(rawUsage);
+    const valid = (value: unknown) =>
+      typeof value === 'number' && Number.isFinite(value) && value >= 0;
+    const usage =
+      rawUsage &&
+      [rawUsage.input_tokens, rawUsage.output_tokens, rawUsage.total_tokens].every(valid) &&
+      (rawUsage.input_tokens_details?.cached_tokens === undefined ||
+        valid(rawUsage.input_tokens_details.cached_tokens)) &&
+      (!details || Object.values(details).every(valid))
+        ? rawUsage
+        : undefined;
     this.backendResponses.push({
       id: response.id,
       model,
@@ -815,7 +836,7 @@ export class LiveSession {
         prompt: usage.input_tokens,
         completion: usage.output_tokens,
         cached: usage.input_tokens_details?.cached_tokens,
-        completionDetails: getOpenAICompletionTokenDetails(usage),
+        completionDetails: details,
       });
       const cost = calculateOpenAIUsageCost(model, this.options.config, usage, {
         serviceTier:
@@ -829,13 +850,25 @@ export class LiveSession {
     }
   }
 
+  private hasPendingWork(): boolean {
+    return (
+      Boolean(this.pendingHandlers || this.backendTurns.size) ||
+      [...this.commands].some(
+        ([id, command]) =>
+          id !== OPENING_COMMENTARY_ID &&
+          command.pending &&
+          command.name === 'session.commentary.append',
+      )
+    );
+  }
+
   private closeSession(): void {
     if (this.closing || this.done) {
       return;
     }
     this.closing = true;
     this.clearStartupTimer();
-    if (this.pendingHandlers || this.backendTurns.size) {
+    if (this.hasPendingWork()) {
       this.setError(PENDING_WORK_ERROR);
     }
     this.handlerController.abort();
@@ -869,7 +902,7 @@ export class LiveSession {
     this.ws.terminate();
     this.proxyAgent?.destroy();
     const safetyEnded = this.reason === 'content' && this.finalized;
-    if (!safetyEnded && (this.pendingHandlers || this.backendTurns.size)) {
+    if (!safetyEnded && this.hasPendingWork()) {
       this.setError('GPT-Live session ended with backend work pending. Increase responseWindowMs.');
     }
     const output = this.transcript
@@ -903,8 +936,7 @@ export class LiveSession {
       voiceCost !== undefined &&
       this.backendCost !== undefined &&
       !this.delegations.some((delegation) => delegation.target === 'client') &&
-      !this.backendTurns.size &&
-      !this.pendingHandlers
+      !this.hasPendingWork()
         ? voiceCost + this.backendCost
         : undefined;
     this.resolve({

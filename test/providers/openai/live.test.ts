@@ -344,6 +344,19 @@ describe('OpenAiLiveProvider', () => {
     expect(socket.terminate).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    { type: 'session.delegation.created', delegation: { id: 'early', target: 'client' } },
+    { type: 'session.closed', reason: 'content', usage: { seconds: 1 } },
+  ])('rejects $type before session.started', async (event) => {
+    const handler = vi.fn().mockResolvedValue('unused');
+    const result = provider({ delegationHandler: handler }).callApi('Hi');
+    const socket = await connect();
+    emit(socket, event);
+    const response = await result;
+    expect(response.error).toContain('before session.started');
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('starts a text prompt response window after the opening instruction is acknowledged', async () => {
     const result = provider().callApi('Hi');
     const socket = await connect();
@@ -871,6 +884,33 @@ describe('OpenAiLiveProvider', () => {
     expect((await result).error).toBe(
       'GPT-Live rejected session.commentary.append (invalid_value): Content exceeds 500 tokens.',
     );
+  });
+
+  it.each([
+    { start_ms: -1, end_ms: 0 },
+    { start_ms: 2, end_ms: 1 },
+  ])('rejects invalid transcript timing %j', async ({ start_ms, end_ms }) => {
+    const result = provider().callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    emit(socket, { type: 'session.output_transcript.delta', delta: 'x', start_ms, end_ms });
+    expect((await result).error).toBe('Invalid GPT-Live transcript delta.');
+  });
+
+  it('reports unacknowledged delegated commentary when capture closes', async () => {
+    const result = provider({ delegationHandler: async () => 'The order shipped.' }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    emit(socket, {
+      type: 'session.delegation.created',
+      offset_ms: 5,
+      delegation: { id: 'd', target: 'client' },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    text(socket);
+    await vi.advanceTimersByTimeAsync(100);
+    closed(socket);
+    expect((await result).error).toContain('backend work pending');
   });
 
   it('bounds aggregate transcript growth', async () => {
@@ -1513,6 +1553,31 @@ describe('OpenAiLiveProvider', () => {
     },
   );
 
+  it('ignores malformed delegated Responses usage', async () => {
+    const result = provider({
+      delegation: { type: 'responses', responses: { model: 'gpt-4.1-mini' } },
+    }).callApi('Hi');
+    const socket = await connect();
+    start(socket);
+    backend(socket, { type: 'response.created', response: { id: 'resp_1' } });
+    backend(socket, {
+      type: 'response.completed',
+      response: {
+        id: 'resp_1',
+        output: [],
+        usage: { input_tokens: '10', output_tokens: -1, total_tokens: 9 },
+      },
+    });
+    text(socket);
+    await vi.advanceTimersByTimeAsync(100);
+    closed(socket, 60);
+    const output = await result;
+    expect(output.tokenUsage).toMatchObject({ numRequests: 2 });
+    expect(output.tokenUsage?.total).toBe(0);
+    expect(output.cost).toBeUndefined();
+    expect(output.metadata?.backendResponses[0].usage).toBeUndefined();
+  });
+
   it('handles nested function calls even when the terminal response output is empty', async () => {
     const handler = vi.fn().mockResolvedValue('result');
     const result = provider({
@@ -1851,12 +1916,14 @@ describe('OpenAiLiveProvider', () => {
       offsetMs: 42,
       transcript: [{ role: 'user', delta: 'order 42' }],
     });
-    expect(socket.sent.at(-1)).toEqual({
+    const append = socket.sent.at(-1);
+    expect(append).toEqual({
       type: 'session.commentary.append',
       event_id: eventId,
       delegation_id: 'opaque-id',
       content: 'The order shipped.',
     });
+    emit(socket, { type: 'session.commentary.appended', client_event_id: append.event_id });
     text(socket, 'Shipped.');
     await vi.advanceTimersByTimeAsync(100);
     closed(socket);
