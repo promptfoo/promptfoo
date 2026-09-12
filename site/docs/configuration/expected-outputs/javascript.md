@@ -119,6 +119,9 @@ interface TraceData {
 }
 
 interface AssertionValueFunctionContext {
+  // Invocation-local environment, omitted from serialized context
+  env?: Record<string, string | undefined>;
+
   // Raw prompt sent to LLM
   prompt: string | undefined;
 

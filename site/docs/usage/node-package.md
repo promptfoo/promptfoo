@@ -48,6 +48,8 @@ The evaluate function returns an `Eval` record. Call `toEvaluateSummary()` on th
 
 A `ProviderFunction` is a Javascript function that implements an LLM API call. It takes a prompt string and a context. It returns the LLM response or an error. See [`ProviderFunction` type](/docs/configuration/reference#providerfunction).
 
+During an eval, JavaScript providers, prompts, assertions, and extension hooks can read `context.env` for the current invocation's environment. Suite overrides take precedence over env-file values and the host environment. Use `context.env?.MY_API_KEY` in callbacks when concurrent MCP evals load different env files; the host's `process.env` stays unchanged. This runtime property is omitted when the context is serialized.
+
 You can load providers using the `loadApiProvider` function:
 
 ```ts
