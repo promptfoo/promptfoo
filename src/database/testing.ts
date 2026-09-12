@@ -67,8 +67,8 @@ export async function closeTestDatabaseClient(client: TestDatabaseClient): Promi
     }
 
     try {
-      // libsql requires a process-wide shared in-memory cache for its internal
-      // connections. Reset it only after the final module graph has stopped using it.
+      // Clients from separate module graphs share one in-memory schema. Reset it
+      // only after the final module graph has stopped using it.
       if (clients.size === 0) {
         await resetTestDatabaseClient(client);
       }
