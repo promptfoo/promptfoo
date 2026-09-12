@@ -1198,7 +1198,20 @@ function redactPrimitiveLeaf(value: unknown, key: string | undefined): unknown {
   if (typeof value === 'string' && key && /^(?:id|provider(?:id|s)?)$/i.test(key)) {
     const url = value.match(/^([a-z][\w-]*:)?(https?:\/\/.+)$/i);
     if (url) {
-      return (url[1] ?? '') + sanitizeUrlForLogging(url[2]);
+      const sanitized = sanitizeUrlForLogging(url[2]);
+      if (url[1]?.toLowerCase() === 'webhook:') {
+        try {
+          const parsed = new URL(sanitized);
+          parsed.pathname = parsed.pathname.replace(
+            /^\/(?:(hooks|webhooks|services)\/)?[\s\S]*$/i,
+            (_path, route) => `/${route ? `${route}/` : ''}%5BREDACTED%5D`,
+          );
+          return url[1] + parsed.toString();
+        } catch {
+          return url[1] + REDACTED;
+        }
+      }
+      return (url[1] ?? '') + sanitized;
     }
   }
   if (typeof key === 'string') {
@@ -1480,12 +1493,19 @@ export function sanitizeUrlForLogging(url: string): string {
   try {
     const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
-    parsed.pathname = parsed.pathname
-      .split('/')
-      .map((segment) => {
+    const segments = parsed.pathname.split('/');
+    const webhookRoot = segments.findIndex(
+      (segment) =>
+        /^(?:hooks|webhooks)$/i.test(segment) ||
+        (parsed.hostname === 'hooks.slack.com' && segment === 'services'),
+    );
+    parsed.pathname = segments
+      .map((segment, index) => {
         try {
           const decoded = decodeURIComponent(segment);
-          return OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) || looksLikeSecret(decoded)
+          return (webhookRoot > 0 && index > webhookRoot && segment !== '') ||
+            OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
+            looksLikeSecret(decoded)
             ? '%5BREDACTED%5D'
             : segment;
         } catch {

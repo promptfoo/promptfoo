@@ -14,7 +14,11 @@ import {
   showRedteamProviderLabelMissingWarning as commandShowRedteamProviderLabelMissingWarning,
   evalCommand,
 } from '../../src/commands/eval';
-import { evaluate, PromptSuggestionsRejectedError } from '../../src/evaluator';
+import {
+  evaluate,
+  PromptSuggestionsRejectedError,
+  restoreTestCaseSelection,
+} from '../../src/evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -2452,7 +2456,15 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
 
-    expect(loadApiProvider).toHaveBeenCalledWith('test-grader', expect.objectContaining({}));
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          options: expect.objectContaining({ provider: 'test-grader' }),
+        }),
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it('should handle repeat option', async () => {
@@ -2783,6 +2795,40 @@ describe('checkCloudPermissions', () => {
     },
   );
 
+  it.each([{}, { input: 'override' }] as Record<string, string>[])(
+    'fingerprints CLI defaults before selecting filtered tests: %j',
+    async (vars) => {
+      const config = { providers: ['echo'], prompts: ['{{input}}'] } as UnifiedConfig;
+      const testSuite: TestSuite = {
+        prompts: [],
+        providers: [{ id: () => 'echo', callApi: async () => ({ output: 'ok' }) }],
+        tests: [{ vars: { input: 'first' } }, { vars: { input: 'second' } }],
+      };
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        config,
+        testSuite,
+        basePath: path.resolve('.'),
+        selectedProviderConfigs: config.providers,
+      });
+      vi.mocked(evaluate).mockImplementation(async (suite, evalRecord, options) => {
+        expect(
+          restoreTestCaseSelection(suite.tests!, options!.testCaseSelection!, {
+            basePath: options!.configBasePath,
+            defaultTest: suite.defaultTest,
+          }),
+        ).toEqual([0]);
+        return evalRecord;
+      });
+      await doEval(
+        { write: false, table: false, filterFirstN: 1, var: vars },
+        config,
+        defaultConfigPath,
+        {},
+      );
+      expect(evaluate).toHaveBeenCalled();
+    },
+  );
+
   it('should ignore config-injected internal selection metadata', async () => {
     const tests: NonNullable<TestSuite['tests']> = [
       { vars: { input: 'first' } },
@@ -3035,7 +3081,7 @@ describe('doEval with external defaultTest', () => {
       expect.objectContaining({
         defaultTest: expect.objectContaining({
           options: expect.objectContaining({
-            provider: mockProvider,
+            provider: 'test-grader',
           }),
         }),
       }),
@@ -3111,7 +3157,7 @@ describe('doEval with external defaultTest', () => {
           assert: [{ type: 'equals', value: 'test' }],
           vars: { existing: 'var', key: 'value' },
           options: expect.objectContaining({
-            provider: mockProvider,
+            provider: 'test-grader',
           }),
         }),
       }),

@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
@@ -6,7 +7,8 @@ import { isDeepStrictEqual } from 'util';
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
+import { load as loadYaml } from 'js-yaml';
 import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
@@ -105,6 +107,7 @@ import {
   isProviderAllowed,
   sanitizeProviderIdForLog,
 } from './util/provider';
+import { isProviderConfigFileReference } from './util/providerRef';
 import { promptYesNo } from './util/readline';
 import { redactSecretLeaves } from './util/sanitizer';
 import { getExecutableSourceHash, getFileSourceHash } from './util/sourceHash';
@@ -2504,8 +2507,32 @@ function canonicalizeSelectionFingerprintValue(
   basePath: string,
   seen = new WeakSet<object>(),
   providerReference = false,
+  providerFiles = new Set<string>(),
 ): unknown {
   if (typeof value === 'string') {
+    if (providerReference && isProviderConfigFileReference(value)) {
+      const filePath = fs.realpathSync(path.resolve(basePath, value.slice('file://'.length)));
+      if (providerFiles.has(filePath)) {
+        throw new Error(`Circular provider config: ${value}`);
+      }
+      providerFiles.add(filePath);
+      try {
+        const configs = loadYaml(fs.readFileSync(filePath, 'utf8'));
+        return {
+          reference: value,
+          sourceHash: getFileSourceHash(filePath),
+          providers: canonicalizeSelectionFingerprintValue(
+            redactSecretLeaves(configs),
+            basePath,
+            seen,
+            true,
+            providerFiles,
+          ),
+        };
+      } finally {
+        providerFiles.delete(filePath);
+      }
+    }
     if (providerReference && value.startsWith('exec:')) {
       return {
         reference: value,
@@ -2520,6 +2547,23 @@ function canonicalizeSelectionFingerprintValue(
       : providerPath || (providerReference && /\.(?:[cm]?js|ts)(?::[^/\\]+)?$/.test(value))
         ? parsePathOrGlob(basePath, providerPath ?? value)
         : undefined;
+    if (file && hasMagic(file.filePath, { magicalBraces: true, windowsPathsNoEscape: true })) {
+      const files = globSync(file.filePath, { cwd: basePath, windowsPathsNoEscape: true }).sort();
+      return {
+        reference: value,
+        sourceHash: files.length
+          ? createHash('sha256')
+              .update(
+                JSON.stringify(
+                  files.map((source) =>
+                    getFileSourceHash(path.resolve(basePath, source), file.functionName),
+                  ),
+                ),
+              )
+              .digest('hex')
+          : getFileSourceHash(path.resolve(basePath, file.filePath), file.functionName),
+      };
+    }
     return file
       ? {
           reference: value,
@@ -2546,28 +2590,37 @@ function canonicalizeSelectionFingerprintValue(
   try {
     if (Array.isArray(value)) {
       return value.map((item) =>
-        canonicalizeSelectionFingerprintValue(item, basePath, seen, providerReference),
+        canonicalizeSelectionFingerprintValue(
+          item,
+          basePath,
+          seen,
+          providerReference,
+          providerFiles,
+        ),
       );
     }
     if (value instanceof Date) {
       return value.toISOString();
     }
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => {
-        const sourceKey = providerReference
-          ? canonicalizeSelectionFingerprintValue(key, basePath, seen, true)
-          : key;
-        const isProvider = key === 'provider' || key === 'providers';
-        return [
-          typeof sourceKey === 'string' ? sourceKey : JSON.stringify(sourceKey),
-          canonicalizeSelectionFingerprintValue(
-            isProvider ? redactSecretLeaves(item) : item,
-            basePath,
-            seen,
-            providerReference || isProvider,
-          ),
-        ];
-      }),
+      Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => {
+          const sourceKey = providerReference
+            ? canonicalizeSelectionFingerprintValue(key, basePath, seen, true, providerFiles)
+            : key;
+          const isProvider = key === 'provider' || key === 'providers';
+          return [
+            typeof sourceKey === 'string' ? sourceKey : JSON.stringify(sourceKey),
+            canonicalizeSelectionFingerprintValue(
+              isProvider ? redactSecretLeaves(item) : item,
+              basePath,
+              seen,
+              providerReference || isProvider,
+              providerFiles,
+            ),
+          ];
+        }),
     );
   } finally {
     seen.delete(value);

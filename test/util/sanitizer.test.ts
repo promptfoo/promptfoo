@@ -32,6 +32,24 @@ afterEach(() => {
 });
 
 describe('redactSecretLeaves', () => {
+  it('preserves ordinary HTTP service identities', () => {
+    const id = 'https://api.example.test/services/public';
+    expect(redactSecretLeaves({ id })).toEqual({ id });
+  });
+
+  it.each([
+    'webhook:https://example.test/services/T123/B456/AbCdEfGhIjKlMnOpQrStUvWx',
+    'webhook:https://example.test/AbCdEfGhIjKlMnOpQrStUvWx',
+    'webhook:https://bad host/AbCdEfGhIjKlMnOpQrStUvWx',
+    'https://hooks.slack.com/services/T123/B456/AbCdEfGhIjKlMnOpQrStUvWx',
+  ])('redacts arbitrary webhook credentials from identity %s', (id) => {
+    for (const key of ['id', 'providerId', 'provider', 'providers']) {
+      expect(JSON.stringify(redactSecretLeaves({ [key]: id }))).not.toContain(
+        'AbCdEfGhIjKlMnOpQrStUvWx',
+      );
+    }
+  });
+
   it.each(['id', 'providerId', 'provider', 'providers'])(
     'redacts credentials inside URL-bearing %s values',
     (key) => {

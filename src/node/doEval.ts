@@ -28,7 +28,6 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { loadApiProvider } from '../providers/index';
 import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
@@ -724,6 +723,21 @@ async function doEvalWithEnv(
     if (resumeEval?.runtimeOptions?.promptSelection) {
       validatedPromptSelection = structuredClone(resumeEval.runtimeOptions.promptSelection);
     }
+    if (!resumeEval && (cmdObj.grader || Object.keys(cmdObj.var ?? {}).length > 0)) {
+      const defaults = typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : {};
+      testSuite.defaultTest = {
+        ...defaults,
+        ...(cmdObj.grader ? { options: { ...defaults.options, provider: cmdObj.grader } } : {}),
+        ...(Object.keys(cmdObj.var ?? {}).length > 0
+          ? { vars: { ...defaults.vars, ...cmdObj.var } }
+          : {}),
+      };
+      config.defaultTest = testSuite.defaultTest;
+      if (cliState.config) {
+        cliState.config.defaultTest = testSuite.defaultTest;
+      }
+    }
+
     if (resumeEval?.runtimeOptions?.testCaseSelection) {
       validatedTestCaseSelection = structuredClone(resumeEval.runtimeOptions.testCaseSelection);
     }
@@ -1070,33 +1084,6 @@ async function doEvalWithEnv(
       cache,
     };
 
-    if (!resumeEval && cmdObj.grader) {
-      if (typeof testSuite.defaultTest === 'string') {
-        testSuite.defaultTest = {};
-      }
-      testSuite.defaultTest = testSuite.defaultTest || {};
-      testSuite.defaultTest.options = testSuite.defaultTest.options || {};
-      testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
-        basePath: cliState.basePath,
-      });
-      // Also update cliState.config so redteam providers can access the grader
-      if (cliState.config) {
-        // Normalize string shorthand to object
-        if (typeof cliState.config.defaultTest === 'string') {
-          cliState.config.defaultTest = {};
-        }
-        cliState.config.defaultTest = cliState.config.defaultTest || {};
-        cliState.config.defaultTest.options = cliState.config.defaultTest.options || {};
-        cliState.config.defaultTest.options.provider = testSuite.defaultTest.options.provider;
-      }
-    }
-    if (!resumeEval && cmdObj.var) {
-      if (typeof testSuite.defaultTest === 'string') {
-        testSuite.defaultTest = {};
-      }
-      testSuite.defaultTest = testSuite.defaultTest || {};
-      testSuite.defaultTest.vars = { ...testSuite.defaultTest.vars, ...cmdObj.var };
-    }
     const runtimeTags = resumeEval ? undefined : runtimeTagsForEval(cmdObj, commandLineOptions);
     if (runtimeTags) {
       // config.tags is the persisted sink (Eval.create reads it); cliState.config

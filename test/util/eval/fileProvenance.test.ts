@@ -33,6 +33,63 @@ describe('file-backed replay provenance', () => {
     }
   });
 
+  it.each(['edit', 'add', 'remove'])(
+    'tracks file globs across %s changes without rejecting unchanged selections',
+    (change) => {
+      const basePath = directory();
+      fs.writeFileSync(path.join(basePath, 'a.txt'), 'first');
+      fs.writeFileSync(path.join(basePath, 'b.txt'), 'second');
+      const tests = [{ vars: { input: 'file://*.txt' } }];
+      const selection = createTestCaseSelection(tests, [0], { basePath });
+      expect(restoreTestCaseSelection(tests, selection, { basePath })).toEqual([0]);
+      if (change === 'edit') {
+        fs.writeFileSync(path.join(basePath, 'a.txt'), 'other');
+      }
+      if (change === 'add') {
+        fs.writeFileSync(path.join(basePath, 'c.txt'), 'third');
+      }
+      if (change === 'remove') {
+        fs.unlinkSync(path.join(basePath, 'b.txt'));
+      }
+      expect(() => restoreTestCaseSelection(tests, selection, { basePath })).toThrow('no longer');
+    },
+  );
+
+  it('preserves identities when serialization omits undefined options', () => {
+    const tests = [{ vars: { input: 'same' } }];
+    const defaultTest = { options: { prefix: undefined, provider: 'echo' } };
+    const selection = createTestCaseSelection(tests, [0], { defaultTest });
+    expect(
+      restoreTestCaseSelection(tests, selection, {
+        defaultTest: JSON.parse(JSON.stringify(defaultTest)),
+      }),
+    ).toEqual([0]);
+  });
+
+  it('rejects circular provider configuration before replay', () => {
+    const basePath = directory();
+    fs.writeFileSync(path.join(basePath, 'grader.yaml'), 'id: file://grader.yaml');
+    expect(() =>
+      createTestCaseSelection([{ options: { provider: 'file://grader.yaml' } }], [0], { basePath }),
+    ).toThrow('Circular provider config');
+  });
+
+  it.each(['assertion', 'default'])(
+    'tracks provider config implementations in %s graders',
+    (scope) => {
+      const basePath = directory();
+      fs.writeFileSync(path.join(basePath, 'grader.yaml'), 'id: python:grader.py');
+      fs.writeFileSync(path.join(basePath, 'grader.py'), 'first');
+      const grader = { assert: [{ type: 'llm-rubric', provider: 'file://grader.yaml' }] };
+      const tests = [scope === 'assertion' ? grader : {}];
+      const context = { basePath, ...(scope === 'default' ? { defaultTest: grader } : {}) };
+      const selection = createTestCaseSelection(tests, [0], context);
+      expect(restoreTestCaseSelection(tests, selection, context)).toEqual([0]);
+      fs.writeFileSync(path.join(basePath, 'grader.py'), 'other');
+      expect(() => restoreTestCaseSelection(tests, selection, context)).toThrow('no longer');
+    },
+  );
+
   it.each([
     ['python', 'provider.py', PythonProvider],
     ['golang', 'provider.go', GolangProvider],

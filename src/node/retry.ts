@@ -544,7 +544,10 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
   logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
 
   // Load configuration - from provided config file or from original evaluation
-  const { testSuite, commandLineOptions, config } = await resolveRetryConfigs(originalEval, cmdObj);
+  const { testSuite, commandLineOptions, config, basePath } = await resolveRetryConfigs(
+    originalEval,
+    cmdObj,
+  );
   if (originalEval.prompts.length > 0) {
     testSuite.prompts = getPromptsForReplay(originalEval.prompts, testSuite.prompts);
   }
@@ -603,6 +606,7 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
 
   // Set up evaluation options
   const evaluateOptions: InternalEvaluateOptions = {
+    configBasePath: basePath || originalEval.runtimeOptions?.configBasePath || process.cwd(),
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
