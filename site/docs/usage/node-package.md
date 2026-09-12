@@ -69,6 +69,10 @@ const providerWithOptions = await loadApiProvider('azure:chat:test', {
 
 During `loadApiProvider` and `loadApiProviders`, an omitted or `undefined` `env` inherits the active environment. An object replaces it, including `{}`. Environment variables in a provider file override suite environment variables, and explicit provider `env` options override the file. Providers that read environment variables later use the environment active at that call.
 
+Environment files loaded by reusable Node/MCP eval calls stay within that call. The values remain available to provider configuration templates and subprocesses, subject to each provider's environment inheritance controls, without changing the host's `process.env`. Custom JavaScript providers should use templated provider config for values supplied by those files.
+
+Pass environment files with the invocation's `envPath` (CLI: `--env-file`) when values are needed during config or provider loading. Config-defined `commandLineOptions.envPath` retains its existing timing: it loads after config resolution.
+
 ### Assertion functions
 
 An `Assertion` can take an `AssertionValueFunction` as its `value`. The function receives:
