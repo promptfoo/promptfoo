@@ -443,8 +443,10 @@ function findingObservationsFromAttributes(
   span?: TraceLikeSpan,
 ): AgentObservation[] {
   const observations: AgentObservation[] = [];
-  const parsedEvidenceCandidates = AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS.flatMap((key) =>
-    parseEvidenceCandidates(attributes?.[key]),
+  const parsedEvidenceCandidates = Object.entries(attributes ?? {}).flatMap(([key, value]) =>
+    AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS.some((alias) => alias.toLowerCase() === key.toLowerCase())
+      ? parseEvidenceCandidates(value)
+      : [],
   );
   const spanPluginId = normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS));
 

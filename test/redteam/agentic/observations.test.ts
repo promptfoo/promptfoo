@@ -41,6 +41,12 @@ describe('agentic run observations', () => {
       'agent.sdk.evidence_json',
       'agenticEvidence',
       'agentSdkEvidence',
+      'Promptfoo.Agentic.Evidence_Json',
+      'PROMPTFOO.AGENT_SDK.EVIDENCE_JSON',
+      'Agentic.Evidence_Json',
+      'AGENT.SDK.EVIDENCE_JSON',
+      'AGENTICEVIDENCE',
+      'AgentSDKEvidence',
     ].flatMap((key) => [
       { key, event: false },
       { key, event: true },
