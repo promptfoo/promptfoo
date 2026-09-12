@@ -261,4 +261,41 @@ it('preserves unknown usage and vendor prompt-cache accounting', () => {
       'ai-studio',
     ),
   ).toMatchObject({ total: 7, cached: 3, completionDetails: { reasoning: 1 } });
+  expect(
+    getGeminiTokenUsage({ cachedContentTokenCount: 3 } as any, true, 'ai-studio'),
+  ).toMatchObject({
+    total: undefined,
+    cached: 3,
+  });
+  expect(
+    getGeminiTokenUsage(
+      { totalTokenCount: 7, cachedContentTokenCount: 3 } as any,
+      true,
+      'ai-studio',
+    ),
+  ).toMatchObject({ total: 7, cached: 7 });
 });
+
+it.each([
+  ['ai-studio', false],
+  ['unified', false],
+  ['vertex', true],
+] as const)(
+  'keeps %s passthrough safety settings in their original request order',
+  async (facade, afterMarker) => {
+    const { body } = await prepareGeminiRequest(
+      'gemini-2.5-flash',
+      {
+        passthrough: { marker: true, safetySettings: [{ category: 'HARM_CATEGORY_HATE_SPEECH' }] },
+      },
+      'Hello',
+      undefined,
+      facade,
+      facade === 'vertex',
+      vi.fn().mockResolvedValue([]),
+    );
+
+    const keys = Object.keys(body);
+    expect(keys.indexOf('safetySettings') > keys.indexOf('marker')).toBe(afterMarker);
+  },
+);

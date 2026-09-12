@@ -372,6 +372,7 @@ describe('Azure Moderation', () => {
       await vi.waitFor(() => expect(cache.set).toHaveBeenCalledOnce());
       controller.abort(new Error('cancelled cache write'));
       await expect(call).resolves.toMatchObject({
+        flags: [],
         error: expect.stringContaining('cancelled cache write'),
       });
     });

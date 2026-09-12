@@ -41,6 +41,43 @@ import type {
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+
+class GoogleFunctionCallbackError extends Error {
+  constructor(
+    message: string,
+    readonly partialOutput?: ProviderResponse['output'],
+  ) {
+    super(message);
+  }
+}
+
+export function getCallbackErrorOutput(
+  error: unknown,
+  output: ProviderResponse['output'],
+  aborted?: boolean,
+): ProviderResponse['output'] {
+  return error instanceof GoogleFunctionCallbackError && error.partialOutput !== undefined
+    ? error.partialOutput
+    : aborted
+      ? output
+      : undefined;
+}
+
+function joinCallbackResults(results: unknown[]): string {
+  return results
+    .map((result) => {
+      if (typeof result === 'string') {
+        return result;
+      }
+      try {
+        return JSON.stringify(result) ?? String(result);
+      } catch {
+        return String(result);
+      }
+    })
+    .join('\n');
+}
+
 import type { MCPClient } from '../mcp/client';
 import type {
   CompletionOptions,
@@ -676,27 +713,17 @@ export abstract class GoogleGenericProvider implements ApiProvider {
           await this.executeFunctionCallback(functionName, args, config, callId, signal),
         );
       } catch (error) {
-        throw new Error(
+        throw new GoogleFunctionCallbackError(
           `Function callback '${functionName}' failed after ${results.length} completed callback(s). ` +
             `Check for side effects before retrying: ${String(error)}`,
+          results.length ? joinCallbackResults(results) : undefined,
         );
       }
     }
     if (results.length === 1) {
       return results[0] ?? '';
     }
-    return results
-      .map((result) => {
-        if (typeof result === 'string') {
-          return result;
-        }
-        try {
-          return JSON.stringify(result) ?? String(result);
-        } catch {
-          return String(result);
-        }
-      })
-      .join('\n');
+    return joinCallbackResults(results);
   }
 
   /**
