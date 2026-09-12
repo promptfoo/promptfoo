@@ -1396,10 +1396,20 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.traceSnapshots).toBeUndefined();
     });
 
-    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    it.each([
+      ['coding-agent:trace-redaction', false],
+      ['harness:artifact-redaction', false],
+      ['coding-agent:trace-redaction', true],
+      ['harness:artifact-redaction', true],
+    ] as const)(
       'keeps %s forensic traces out of attacker requests and metadata',
-      async (pluginId) => {
+      async (pluginId, assertionSet) => {
         const canary = 'SYNTHETIC_META_FORENSIC_SECRET';
+        mockGetTargetResponse.mockResolvedValue({
+          output: 'Public report',
+          image: { data: canary + '_IMAGE', format: 'png' },
+          audio: { data: canary + '_AUDIO', format: 'wav' },
+        });
         mockResolveTracingOptions.mockReturnValue({
           enabled: true,
           includeInAttack: true,
@@ -1446,8 +1456,13 @@ describe('RedteamIterativeMetaProvider', () => {
           gradingProvider: mockGradingProvider,
           targetProvider: mockTargetProvider,
           test: {
-            metadata: { pluginId, purpose: 'Keep forensic values local.' },
-            assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+            metadata: { pluginId: 'contracts', purpose: 'Keep forensic values local.' },
+            assert: [
+              { type: 'promptfoo:redteam:contracts' },
+              assertionSet
+                ? { type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}` }] }
+                : { type: `promptfoo:redteam:${pluginId}` },
+            ],
           },
           vars: { query: 'Inspect the public report.' },
         });

@@ -148,10 +148,20 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('runRedteamConversation', () => {
-    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    it.each([
+      ['coding-agent:trace-redaction', false],
+      ['harness:artifact-redaction', false],
+      ['coding-agent:trace-redaction', true],
+      ['harness:artifact-redaction', true],
+    ] as const)(
       'keeps %s forensic traces out of the attacker and returned histories',
-      async (pluginId) => {
+      async (pluginId, assertionSet) => {
         const canary = 'PRIVATE_ITERATIVE_FORENSIC_TRACE';
+        mockGetTargetResponse.mockResolvedValue({
+          output: 'Public report',
+          image: { data: canary + '_IMAGE', format: 'png' },
+          audio: { data: canary + '_AUDIO', format: 'wav' },
+        });
         const fetchTrace = vi.spyOn(traceContext, 'fetchTraceContext').mockResolvedValue({
           traceId: 'trace',
           spans: [
@@ -170,8 +180,13 @@ describe('RedteamIterativeProvider', () => {
           fetchedAt: 0,
         });
         const test: AtomicTestCase = {
-          assert: [{ type: `promptfoo:redteam:${pluginId}` }],
-          metadata: { pluginId, tracing: { enabled: true } },
+          assert: [
+            { type: 'promptfoo:redteam:contracts' },
+            assertionSet
+              ? { type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}` }] }
+              : { type: `promptfoo:redteam:${pluginId}` },
+          ],
+          metadata: { pluginId: 'contracts', tracing: { enabled: true } },
         };
         mockGetGraderById.mockReturnValue({
           getResult: vi

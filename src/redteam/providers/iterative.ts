@@ -20,7 +20,6 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { TRACE_REDACTION_ASSERTIONS } from '../constants/traceRedaction';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -56,6 +55,7 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
+  requiresTraceRedaction,
   runRedteamGrader,
   type TargetResponse,
 } from './shared';
@@ -243,9 +243,7 @@ export async function runRedteamConversation({
     test,
     config: test?.metadata?.strategyConfig,
   });
-  const redactTrace = test?.assert?.some((assertion) =>
-    TRACE_REDACTION_ASSERTIONS.has(assertion.type),
-  );
+  const redactTrace = requiresTraceRedaction(test?.assert);
   if (redactTrace) {
     tracingOptions.includeInAttack = false;
   }
@@ -803,11 +801,11 @@ export async function runRedteamConversation({
       output: targetResponse.output,
       // Only include audio/image if data is present
       outputAudio:
-        targetResponse.audio?.data && targetResponse.audio?.format
+        !redactTrace && targetResponse.audio?.data && targetResponse.audio?.format
           ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
           : undefined,
       outputImage:
-        targetResponse.image?.data && targetResponse.image?.format
+        !redactTrace && targetResponse.image?.data && targetResponse.image?.format
           ? { data: targetResponse.image.data, format: targetResponse.image.format }
           : undefined,
       score: currentScore,

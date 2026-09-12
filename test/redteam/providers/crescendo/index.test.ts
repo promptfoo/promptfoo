@@ -7,7 +7,7 @@ import * as traceContext from '../../../../src/tracing/traceContext';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
-import type { Message } from '../../../../src/redteam/providers/shared';
+import type { Message, TargetResponse } from '../../../../src/redteam/providers/shared';
 import type { AtomicTestCase } from '../../../../src/types/index';
 
 // Hoisted mock for getGraderById
@@ -226,13 +226,23 @@ describe('CrescendoProvider', () => {
     expect(provider.config.continueAfterSuccess).toBe(false);
   });
 
-  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+  it.each([
+    ['coding-agent:trace-redaction', false],
+    ['harness:artifact-redaction', false],
+    ['coding-agent:trace-redaction', true],
+    ['harness:artifact-redaction', true],
+  ] as const)(
     'keeps %s forensic traces out of the attacker and returned snapshots',
-    async (pluginId) => {
+    async (pluginId, assertionSet) => {
       const canary = 'PRIVATE_CRESCENDO_FORENSIC_TRACE';
       const test: AtomicTestCase = {
-        assert: [{ type: `promptfoo:redteam:${pluginId}` }],
-        metadata: { pluginId, purpose: 'Fixture' },
+        assert: [
+          { type: 'promptfoo:redteam:contracts' },
+          assertionSet
+            ? { type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}` }] }
+            : { type: `promptfoo:redteam:${pluginId}` },
+        ],
+        metadata: { pluginId: 'contracts', purpose: 'Fixture' },
       };
       const fetchTrace = vi.spyOn(traceContext, 'fetchTraceContext').mockResolvedValue({
         traceId: 'trace',
@@ -263,7 +273,12 @@ describe('CrescendoProvider', () => {
           lastResponseSummary: 'Public report',
         }),
       });
-      mockTargetProvider.callApi.mockResolvedValue({ output: 'Public report' });
+      const targetResponse: TargetResponse = {
+        output: 'Public report',
+        image: { data: canary + '_IMAGE', format: 'png' },
+        audio: { data: canary + '_AUDIO', format: 'wav' },
+      };
+      mockTargetProvider.callApi.mockResolvedValue(targetResponse);
       const provider = new CrescendoProvider({
         injectVar: 'objective',
         maxTurns: 2,

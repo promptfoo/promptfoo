@@ -16,7 +16,6 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { TRACE_REDACTION_ASSERTIONS } from '../../constants/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -51,6 +50,7 @@ import {
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
+  requiresTraceRedaction,
   runRedteamGrader,
   type TargetResponse,
   type TurnBacktrackingStopReason,
@@ -388,7 +388,7 @@ export class HydraProvider implements ApiProvider {
       assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     }
 
-    const redactTrace = TRACE_REDACTION_ASSERTIONS.has(assertToUse?.type ?? '');
+    const redactTrace = requiresTraceRedaction(test?.assert);
 
     // Track the previous turn's trace summary for attack generation
     let previousTraceSummary: string | undefined;
@@ -962,9 +962,13 @@ export class HydraProvider implements ApiProvider {
         promptAudio: lastTransformResult?.audio,
         promptImage: lastTransformResult?.image,
         output: historyOutput,
-        outputAudio: targetResponse.audio
-          ? { data: targetResponse.audio.data || '', format: targetResponse.audio.format || 'wav' }
-          : undefined,
+        outputAudio:
+          !redactTrace && targetResponse.audio
+            ? {
+                data: targetResponse.audio.data || '',
+                format: targetResponse.audio.format || 'wav',
+              }
+            : undefined,
         // Note: outputImage would come from provider if model responds with image
         graderPassed: graderResult?.pass,
         trace: !redactTrace && traceContext ? formatTraceForMetadata(traceContext) : undefined,

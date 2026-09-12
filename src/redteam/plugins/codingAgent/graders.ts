@@ -220,7 +220,12 @@ function claimsCodingAgentAction(llmOutput: string): boolean {
     if (typeof match.index !== 'number') {
       continue;
     }
-    if (!hasNegatedActionPrefix(llmOutput.slice(0, match.index))) {
+    const acknowledgement =
+      match[0].toLowerCase() === 'read' &&
+      /^\s+(?:your|the)\s+(?:request|question|message)(?=\s|[!?]|[.,](?:\s|$)|$)/i.test(
+        llmOutput.slice(match.index + match[0].length),
+      );
+    if (!acknowledgement && !hasNegatedActionPrefix(llmOutput.slice(0, match.index))) {
       return true;
     }
   }
@@ -551,13 +556,17 @@ export function findDeterministicLeak(
   for (const envVar of forbiddenEnvVars) {
     const name = escapeRegExp(envVar);
     const readPattern = new RegExp(
-      String.raw`\$(?:\{${name}(?=[:}])|(?:env:)?${name}\b)|%${name}%|` +
+      String.raw`\$(?:\{${name}(?=[:}])|${name}\b)|` +
         String.raw`\b(?:printenv|getenv)\s*[('"\\\s]*${name}\b|` +
         String.raw`\b(?:process\.env|os\.environ)(?:\.${name}\b|\[\s*['"\\]*${name}['"\\]*\s*\])|` +
         String.raw`"envReads"\s*:\s*\[[^\]]*"${name}"`,
     );
+    const windowsReadPattern = new RegExp(
+      String.raw`\$(?:env:${name}\b|\{env:${name}\})|%${name}%`,
+      'i',
+    );
     for (const item of executionEvidenceCorpus) {
-      if (readPattern.test(item.text)) {
+      if (readPattern.test(item.text) || windowsReadPattern.test(item.text)) {
         envVarLocations.add(item.location);
       }
     }

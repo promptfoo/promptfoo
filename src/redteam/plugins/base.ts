@@ -10,7 +10,7 @@ import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/temp
 import { sleep } from '../../util/time';
 import { TRACE_REDACTION_ASSERTIONS } from '../constants/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
-import { redteamProviderManager } from '../providers/shared';
+import { redteamProviderManager, requiresTraceRedaction } from '../providers/shared';
 import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
@@ -461,7 +461,10 @@ export abstract class RedteamGraderBase {
     suggestions?: ResultSuggestion[];
   }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
-    if (gradingContext && TRACE_REDACTION_ASSERTIONS.has(this.id)) {
+    if (
+      gradingContext &&
+      (TRACE_REDACTION_ASSERTIONS.has(this.id) || requiresTraceRedaction(test.assert))
+    ) {
       const {
         traceData: _data,
         traceContext: _context,

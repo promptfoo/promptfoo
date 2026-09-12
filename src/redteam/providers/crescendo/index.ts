@@ -19,7 +19,6 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { TRACE_REDACTION_ASSERTIONS } from '../../constants/traceRedaction';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -61,6 +60,7 @@ import {
   isValidChatMessageArray,
   type RoundBacktrackingStopReason,
   redteamProviderManager,
+  requiresTraceRedaction,
   runRedteamGrader,
   type TargetResponse,
   tryUnblocking,
@@ -392,7 +392,7 @@ export class CrescendoProvider implements ApiProvider {
       assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     }
 
-    const redactTrace = TRACE_REDACTION_ASSERTIONS.has(assertToUse?.type ?? '');
+    const redactTrace = requiresTraceRedaction(test?.assert);
     if (redactTrace) {
       tracingOptions.includeInAttack = false;
     }
@@ -716,11 +716,11 @@ export class CrescendoProvider implements ApiProvider {
           promptImage: lastTransformResult?.image,
           output: lastResponse.output,
           outputAudio:
-            lastResponse.audio?.data && lastResponse.audio?.format
+            !redactTrace && lastResponse.audio?.data && lastResponse.audio?.format
               ? { data: lastResponse.audio.data, format: lastResponse.audio.format }
               : undefined,
           outputImage:
-            lastResponse.image?.data && lastResponse.image?.format
+            !redactTrace && lastResponse.image?.data && lastResponse.image?.format
               ? { data: lastResponse.image.data, format: lastResponse.image.format }
               : undefined,
           // Include input vars for multi-input mode (extracted from current prompt)

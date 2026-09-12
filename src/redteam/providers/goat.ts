@@ -19,7 +19,6 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { TRACE_REDACTION_ASSERTIONS } from '../constants/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -50,6 +49,7 @@ import {
   callTargetProvider,
   getGraderAssertionValue,
   getLastMessageContent,
+  requiresTraceRedaction,
   runRedteamGrader,
   tryUnblocking,
 } from './shared';
@@ -271,7 +271,7 @@ export default class GoatProvider implements ApiProvider {
       }
     }
 
-    const redactTrace = TRACE_REDACTION_ASSERTIONS.has(assertToUse?.type ?? '');
+    const redactTrace = requiresTraceRedaction(test?.assert);
     if (redactTrace) {
       tracingOptions.includeInAttack = false;
     }
@@ -686,7 +686,7 @@ export default class GoatProvider implements ApiProvider {
               promptImage: lastTransformResult?.image,
               output: endedOutput,
               outputAudio:
-                targetResponse.audio?.data && targetResponse.audio?.format
+                !redactTrace && targetResponse.audio?.data && targetResponse.audio?.format
                   ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
                   : undefined,
               inputVars: currentRenderInputVars,
@@ -733,7 +733,7 @@ export default class GoatProvider implements ApiProvider {
           promptImage: lastTransformResult?.image,
           output: finalOutput,
           outputAudio:
-            targetResponse.audio?.data && targetResponse.audio?.format
+            !redactTrace && targetResponse.audio?.data && targetResponse.audio?.format
               ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
               : undefined,
           // Note: outputImage not tracked as ProviderResponse doesn't include image yet

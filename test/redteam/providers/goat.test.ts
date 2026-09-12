@@ -201,9 +201,14 @@ describe('RedteamGoatProvider', () => {
     }
   });
 
-  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+  it.each([
+    ['coding-agent:trace-redaction', false],
+    ['harness:artifact-redaction', false],
+    ['coding-agent:trace-redaction', true],
+    ['harness:artifact-redaction', true],
+  ] as const)(
     'keeps %s forensic traces out of the attacker and returned snapshots',
-    async (pluginId) => {
+    async (pluginId, assertionSet) => {
       const canary = 'PRIVATE_GOAT_FORENSIC_TRACE';
       const fetchTrace = vi.spyOn(traceContext, 'fetchTraceContext').mockResolvedValue({
         traceId: 'trace',
@@ -238,8 +243,13 @@ describe('RedteamGoatProvider', () => {
             target,
             { goal: 'Inspect report' },
             {
-              assert: [{ type: `promptfoo:redteam:${pluginId}` }],
-              metadata: { pluginId, purpose: 'Fixture' },
+              assert: [
+                { type: 'promptfoo:redteam:contracts' },
+                assertionSet
+                  ? { type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}` }] }
+                  : { type: `promptfoo:redteam:${pluginId}` },
+              ],
+              metadata: { pluginId: 'contracts', purpose: 'Fixture' },
             },
           ),
           traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',

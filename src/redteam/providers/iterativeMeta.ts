@@ -16,7 +16,6 @@ import {
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { getAgenticAttackProfile } from '../agenticProfile';
-import { TRACE_REDACTION_ASSERTIONS } from '../constants/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -48,6 +47,7 @@ import {
   getGraderAssertionValue,
   getTargetResponse,
   redteamProviderManager,
+  requiresTraceRedaction,
   runRedteamGrader,
   type TargetResponse,
 } from './shared';
@@ -206,7 +206,7 @@ export async function runMetaAgentRedteam({
   const assertToUse =
     test?.assert?.find((a) => a.type && a.type.includes(test.metadata?.pluginId)) ??
     test?.assert?.find((a) => a.type);
-  const redactTrace = TRACE_REDACTION_ASSERTIONS.has(assertToUse?.type ?? '');
+  const redactTrace = requiresTraceRedaction(test?.assert);
 
   // Resolve tracing options
   const tracingOptions = resolveTracingOptions({
@@ -687,11 +687,11 @@ export async function runMetaAgentRedteam({
       output: targetResponse.output,
       // Only include audio/image if data is present
       outputAudio:
-        targetResponse.audio?.data && targetResponse.audio?.format
+        !redactTrace && targetResponse.audio?.data && targetResponse.audio?.format
           ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
           : undefined,
       outputImage:
-        targetResponse.image?.data && targetResponse.image?.format
+        !redactTrace && targetResponse.image?.data && targetResponse.image?.format
           ? { data: targetResponse.image.data, format: targetResponse.image.format }
           : undefined,
       score: 0, // Not used in meta strategy

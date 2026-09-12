@@ -2703,9 +2703,14 @@ describe('HydraProvider', () => {
       expect(result.metadata?.traceSnapshots).toBeUndefined();
     });
 
-    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    it.each([
+      ['coding-agent:trace-redaction', false],
+      ['harness:artifact-redaction', false],
+      ['coding-agent:trace-redaction', true],
+      ['harness:artifact-redaction', true],
+    ] as const)(
       'keeps forensic traces out of returned %s histories',
-      async (pluginId) => {
+      async (pluginId, assertionSet) => {
         const canary = 'SYNTHETIC_HYDRA_FORENSIC_SECRET';
         mockResolveTracingOptions.mockReturnValue({
           enabled: true,
@@ -2727,7 +2732,10 @@ describe('HydraProvider', () => {
         mockFormatTraceSummary.mockReturnValue(canary);
         mockFormatTraceForMetadata.mockReturnValue({ name: canary });
         mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
-        mockTargetProvider.callApi.mockResolvedValue({ output: 'Public report' });
+        mockTargetProvider.callApi.mockResolvedValue({
+          output: 'Public report',
+          audio: { data: canary + '_AUDIO', format: 'wav' },
+        });
         mockGrader.getResult
           .mockResolvedValueOnce({ grade: { pass: true, score: 1, reason: 'Continue' } })
           .mockResolvedValue({ grade: { pass: false, score: 0, reason: 'Unsafe report' } });
@@ -2737,8 +2745,13 @@ describe('HydraProvider', () => {
           vars: { input: 'test goal' },
           prompt: { raw: 'test prompt', label: 'test' },
           test: {
-            assert: [{ type: `promptfoo:redteam:${pluginId}` }],
-            metadata: { goal: 'test goal', pluginId },
+            assert: [
+              { type: 'promptfoo:redteam:contracts' },
+              assertionSet
+                ? { type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}` }] }
+                : { type: `promptfoo:redteam:${pluginId}` },
+            ],
+            metadata: { goal: 'test goal', pluginId: 'contracts' },
           },
           traceparent: '00-trace123-span456-01',
         } as CallApiContextParams);
