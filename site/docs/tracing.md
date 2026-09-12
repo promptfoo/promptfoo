@@ -396,6 +396,8 @@ receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a 
 evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
 are tracked per trace so each evaluation's traces use its own policy.
 
+If redaction source inspection exceeds 100 nesting levels or 10,000 nodes, the receiver replaces the entire span name, status message, and event names with redaction markers. This prevents unvisited sensitive values from escaping through those fields. ERROR/FATAL logs are stored with an error span status.
+
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one
 another's results — each trace is redacted with its own policy, not the active receiver's.
