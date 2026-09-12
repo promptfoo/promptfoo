@@ -12,15 +12,14 @@ import type { OutputFormat } from './types';
 export async function encodeAudio(buffer: Buffer, format: OutputFormat): Promise<AudioData> {
   const base64 = buffer.toString('base64');
 
-  // Map format to file extension
-  const extension = getFileExtension(format);
+  const audioFormat = getAudioFormat(format);
 
   // Estimate duration (rough approximation based on bitrate)
   const durationMs = estimateDuration(buffer.length, format);
 
   return {
     data: base64,
-    format: extension,
+    format: audioFormat,
     sizeBytes: buffer.length,
     durationMs,
   };
@@ -36,14 +35,15 @@ export async function saveAudioFile(
 ): Promise<string> {
   await fs.mkdir(outputPath, { recursive: true });
 
-  const rawFilename = filename || `audio-${Date.now()}.${audioData.format}`;
+  const extension = audioData.format === 'basic' ? 'ulaw' : audioData.format;
+  const rawFilename = filename || `audio-${Date.now()}.${extension}`;
   const sanitized = path.basename(rawFilename).replace(/[\\/]/g, '').replace(/\0/g, '').trim();
 
   if (!sanitized || sanitized === '.' || sanitized === '..') {
     throw new Error('Invalid filename for audio output');
   }
 
-  const expectedExtension = `.${audioData.format}`;
+  const expectedExtension = `.${extension}`;
   const existingExtension = path.extname(sanitized);
   const baseName = existingExtension ? sanitized.slice(0, -existingExtension.length) : sanitized;
   if (!baseName) {
@@ -68,15 +68,15 @@ export async function saveAudioFile(
 }
 
 /**
- * Get file extension from output format
+ * Get the MIME subtype for the returned audio bytes
  */
-function getFileExtension(format: OutputFormat): string {
+function getAudioFormat(format: OutputFormat): string {
   if (format.startsWith('mp3_')) {
     return 'mp3';
   } else if (format.startsWith('pcm_')) {
     return 'pcm';
   } else if (format.startsWith('ulaw_')) {
-    return 'wav';
+    return 'basic';
   }
   return 'mp3'; // Default
 }
