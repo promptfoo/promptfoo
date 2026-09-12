@@ -123,11 +123,19 @@ export interface TraceTextRedactionState {
   incomplete: boolean;
 }
 
+const textRedactionByStore = new WeakMap<object, Map<string, TraceTextRedactionState>>();
+
+export function clearTraceTextRedactionState(store: object): void {
+  textRedactionByStore.delete(store);
+}
+
 export function getTraceTextRedactionState(
-  states: Map<string, TraceTextRedactionState>,
+  store: object,
   traceId: string | undefined,
   evidence: unknown,
 ): TraceTextRedactionState {
+  const states = textRedactionByStore.get(store) ?? new Map<string, TraceTextRedactionState>();
+  textRedactionByStore.set(store, states);
   const existing = traceId ? states.get(traceId) : undefined;
   const state = existing ?? {
     secrets: new Set<string>(),

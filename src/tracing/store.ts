@@ -45,6 +45,7 @@ export interface TraceSpanQueryOptions extends TraceAttributeSanitizationOptions
 export interface AddSpansOptions {
   skipTraceCheck?: boolean;
   warnIfMissingTrace?: boolean;
+  updateExisting?: boolean;
   redactSpans?: (spans: SpanData[]) => SpanData[];
 }
 
@@ -237,11 +238,23 @@ export class TraceStore {
           return;
         }
 
-        await connection
-          .insert(spansTable)
-          .values(spanRecords)
-          .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
-          .run();
+        const insert = connection.insert(spansTable).values(spanRecords);
+        const target = [spansTable.traceId, spansTable.spanId];
+        await (options?.updateExisting
+          ? insert.onConflictDoUpdate({
+              target,
+              set: {
+                parentSpanId: sql`excluded.parent_span_id`,
+                name: sql`excluded.name`,
+                startTime: sql`excluded.start_time`,
+                endTime: sql`excluded.end_time`,
+                attributes: sql`excluded.attributes`,
+                statusCode: sql`excluded.status_code`,
+                statusMessage: sql`excluded.status_message`,
+              },
+            })
+          : insert.onConflictDoNothing({ target })
+        ).run();
       };
 
       const redact = options?.redactSpans;

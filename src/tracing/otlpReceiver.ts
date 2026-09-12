@@ -16,10 +16,10 @@ import {
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from './resourceAttributes';
 import {
+  clearTraceTextRedactionState,
   getTraceTextRedactionState,
   getTraceTextRedactor,
   sanitizeTraceAttributes,
-  type TraceTextRedactionState,
 } from './sanitizeAttributes';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
@@ -287,7 +287,6 @@ export class OTLPReceiver {
   private commandToolNames?: string[];
   private redactAttributePatterns: string[] = [];
   private tracePoliciesByEvaluationId = new Map<string, RegisteredTracePolicy>();
-  private textRedactionByTrace = new Map<string, TraceTextRedactionState>();
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
@@ -353,7 +352,7 @@ export class OTLPReceiver {
         sanitized: sanitized[index].attributes,
       })),
       '[REDACTED]',
-      getTraceTextRedactionState(this.textRedactionByTrace, traceId, spans),
+      getTraceTextRedactionState(this.traceStore, traceId, spans),
     );
     return sanitized.map((span) => ({
       ...span,
@@ -1053,7 +1052,7 @@ export class OTLPReceiver {
 
   stop(): Promise<void> {
     logger.debug('[OtlpReceiver] Stopping receiver');
-    this.textRedactionByTrace.clear();
+    clearTraceTextRedactionState(this.traceStore);
     return new Promise((resolve) => {
       if (this.server) {
         this.server.close(() => {
