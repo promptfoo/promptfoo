@@ -587,6 +587,18 @@ not valid json`,
     expect(result).toEqual(mockTestCases);
   });
 
+  it('warns that generated functions cannot be saved for replay while retaining the live function', async () => {
+    const scoring = () => ({ pass: true, score: 0.25, reason: 'custom score' });
+    vi.mocked(importModule).mockResolvedValue(() => [{ assertScoringFunction: scoring }]);
+
+    const result = await readStandaloneTestsFile('generated.cjs');
+
+    expect(result[0].assertScoringFunction).toBe(scoring);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('function values that cannot be saved for resume/retry'),
+    );
+  });
+
   it('should pass config to JS test generator function', async () => {
     const mockFn = vi.fn().mockResolvedValue([{ vars: { a: 1 } }]);
     vi.mocked(importModule).mockResolvedValue(mockFn);
@@ -1824,6 +1836,15 @@ describe('loadTestsFromGlob', () => {
 
   afterEach(() => {
     clearAllMocks();
+  });
+
+  it('includes the resolved source path when no test files match', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(globSync).mockReturnValue([]);
+    const basePath = path.resolve('fixture-config');
+    await expect(loadTestsFromGlob('missing-*.yaml', basePath)).rejects.toThrow(
+      path.resolve(basePath, 'missing-*.yaml'),
+    );
   });
 
   it('should handle Hugging Face dataset URLs', async () => {

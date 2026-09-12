@@ -294,13 +294,30 @@ function getStandaloneTestsFileMetadata(
   };
 }
 
+function containsFunction(value: unknown, seen = new Set<object>()): boolean {
+  if (typeof value === 'function') {
+    return true;
+  }
+  if (!value || typeof value !== 'object' || seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
+  return Object.values(value).some((item) => containsFunction(item, seen));
+}
+
 async function readJavascriptTestCases(
   pathWithoutFunction: string,
   maybeFunctionName: string | undefined,
   finalConfig: Record<string, any> | undefined,
 ): Promise<TestCase[]> {
   const mod = await importModule(pathWithoutFunction, maybeFunctionName);
-  return typeof mod === 'function' ? await mod(finalConfig) : mod;
+  const tests = typeof mod === 'function' ? await mod(finalConfig) : mod;
+  if (containsFunction(tests)) {
+    logger.warn(
+      `Tests from ${pathWithoutFunction} contain function values that cannot be saved for resume/retry. Use file:// references for executable test fields.`,
+    );
+  }
+  return tests;
 }
 
 async function readPythonTestCases(
@@ -636,7 +653,7 @@ async function loadTestsFromGlobWithEnv(
 
   const ret: TestCase[] = [];
   if (testFiles.length < 1) {
-    throw new Error(`No test files found for path: ${loadTestsGlob}`);
+    throw new Error(`No test files found for path: ${resolvedPath}`);
   }
   for (const testFile of testFiles) {
     let testCases: TestCase[] | undefined;
