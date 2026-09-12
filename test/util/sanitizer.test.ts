@@ -1099,6 +1099,17 @@ describe('sanitizeObject', () => {
       expect(sanitizeObject({ credential: new Credential() })).toEqual({
         credential: '[REDACTED]',
       });
+
+      let reads = 0;
+      const accessorCredential = {
+        get toJSON() {
+          reads++;
+          return reads === 1 ? () => ({ message: 'fixture-accessor-token' }) : undefined;
+        },
+      };
+      expect(sanitizeObject({ credential: accessorCredential })).toEqual({
+        credential: '[REDACTED]',
+      });
     });
 
     it('does not trust a custom Buffer serializer that renames credentials', () => {
@@ -1187,16 +1198,19 @@ describe('sanitizeObject', () => {
     });
 
     it('should redact Error messages when requested', () => {
+      const error = new Error('Invalid API key sk-error-message-should-not-persist');
+      error.name = 'Authentication failed for sk-error-name-should-not-persist';
       const result = sanitizeObject(
-        { error: new Error('Invalid API key sk-error-message-should-not-persist') },
+        { error },
         { redactErrorMessages: true },
       );
 
       expect(result.error).toEqual({
-        name: 'Error',
+        name: '[REDACTED]',
         message: '[REDACTED]',
       });
       expect(JSON.stringify(result)).not.toContain('sk-error-message-should-not-persist');
+      expect(JSON.stringify(result)).not.toContain('sk-error-name-should-not-persist');
     });
 
     it('should redact Error messages before custom toJSON serialization', () => {
@@ -1210,7 +1224,7 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject({ error }, { redactErrorMessages: true });
 
       expect(result.error).toEqual({
-        name: 'Error',
+        name: '[REDACTED]',
         message: '[REDACTED]',
       });
       expect(JSON.stringify(result)).not.toContain(secret);

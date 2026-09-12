@@ -184,10 +184,13 @@ function sanitizeForDbWithSecrets<T>(obj: T, redactStringValues = true): T {
 
 function sanitizeAssertionForDb(assertion: Assertion | AssertionSet): Assertion | AssertionSet {
   if ('assert' in assertion) {
-    return {
-      ...sanitizeForDbWithSecrets(assertion),
-      assert: assertion.assert.map(sanitizeAssertionForDb) as Assertion[],
-    };
+    if (Array.isArray(assertion.assert)) {
+      return {
+        ...sanitizeForDbWithSecrets(assertion),
+        assert: assertion.assert.map(sanitizeAssertionForDb) as Assertion[],
+      };
+    }
+    return sanitizeForDbWithSecrets(assertion);
   }
   return {
     ...sanitizeForDbWithSecrets(assertion),

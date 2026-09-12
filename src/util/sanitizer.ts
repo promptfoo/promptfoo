@@ -1104,7 +1104,21 @@ function recursiveSanitize(
 }
 
 function hasUnsafeJsonSerializer(value: unknown): boolean {
-  if (!value || typeof value !== 'object' || typeof (value as any).toJSON !== 'function') {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  let target: object | null = value;
+  while (target) {
+    const descriptor = Object.getOwnPropertyDescriptor(target, 'toJSON');
+    if (descriptor?.get) {
+      return true;
+    }
+    if (descriptor) {
+      break;
+    }
+    target = Object.getPrototypeOf(target);
+  }
+  if (typeof (value as any).toJSON !== 'function') {
     return false;
   }
   return !(
@@ -1178,7 +1192,7 @@ export function sanitizeObject(
             ? sanitizeUrl(val as string)
             : originalValue instanceof Error
               ? {
-                  name: originalValue.name,
+                  name: redactErrorMessages ? REDACTED : originalValue.name,
                   message: redactErrorMessages ? REDACTED : originalValue.message,
                 }
               : originalValue !== val && hasUnsafeJsonSerializer(originalValue)

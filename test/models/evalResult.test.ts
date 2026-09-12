@@ -161,6 +161,19 @@ describe('EvalResult', () => {
     expect(result.prompt.config).toBe('opaque config');
   });
 
+  it('preserves malformed legacy assertion sets without throwing', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Fixture',
+        assertion: { type: 'assert-set', assert: null } as any,
+      },
+    });
+
+    expect(result.gradingResult?.assertion).toEqual({ type: 'assert-set', assert: null });
+  });
+
   it('reads test-case accessors once while preserving their values', () => {
     let reads = 0;
     const testCase = { options: {}, assert: [] } as AtomicTestCase;
@@ -262,7 +275,7 @@ describe('EvalResult', () => {
         config: {
           apiKey: '[REDACTED]',
           lastError: {
-            name: 'Error',
+            name: '[REDACTED]',
             message: '[REDACTED]',
           },
           retryAfterNanos: '1',
@@ -274,7 +287,10 @@ describe('EvalResult', () => {
         id: 'test-provider',
         config: { lastError },
       } as unknown as ProviderOptions);
-      expect(withoutBigInt.config?.lastError).toEqual({ name: 'Error', message: '[REDACTED]' });
+      expect(withoutBigInt.config?.lastError).toEqual({
+        name: '[REDACTED]',
+        message: '[REDACTED]',
+      });
       expect(JSON.stringify(withoutBigInt)).not.toContain(errorSecret);
     });
 
