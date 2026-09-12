@@ -1062,6 +1062,7 @@ export async function fetchWithCache<T = unknown>(
 
   if (dedupeAbortableRequests) {
     let inflightResponse = sharedAbortableInflightFetchResponses.get(inflightCacheKey);
+    const coalesced = inflightResponse !== undefined;
     if (!inflightResponse) {
       const controller = new AbortController();
       const sharedRequestOptions = {
@@ -1090,7 +1091,8 @@ export async function fetchWithCache<T = unknown>(
       inflightResponse,
       callerSignal ?? undefined,
     );
-    return deserializeFetchResponse<T>(response, false, cache, cacheKey);
+    const result = deserializeFetchResponse<T>(response, false, cache, cacheKey);
+    return coalesced ? { ...result, coalesced: true } : result;
   }
 
   let inflightResponse = inflightFetchResponses.get(inflightCacheKey);

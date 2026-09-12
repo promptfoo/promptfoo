@@ -1535,7 +1535,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             finishReason: incompleteReason === 'max_output_tokens' ? 'length' : incompleteReason,
             ...(incompleteReason === 'content_filter'
               ? {
-                  error: 'Response incomplete: content_filter',
                   isRefusal: true,
                   guardrails: { flagged: true },
                 }

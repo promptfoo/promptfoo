@@ -8,10 +8,11 @@ import { OpenAiResponsesProvider } from '../../../../src/providers/openai/respon
 
 describe('OpenAiResponsesProvider refusals', () => {
   describe('refusal handling', () => {
-    it('should handle explicit refusal content in message', async () => {
+    it('keeps incomplete content-filter refusals gradeable', async () => {
       const mockApiResponse = {
         id: 'resp_abc123',
-        status: 'completed',
+        status: 'incomplete',
+        incomplete_details: { reason: 'content_filter' },
         model: 'gpt-4o',
         output: [
           {
@@ -19,8 +20,8 @@ describe('OpenAiResponsesProvider refusals', () => {
             role: 'assistant',
             content: [
               {
-                type: 'refusal',
-                refusal: 'I cannot fulfill this request due to content policy violation.',
+                type: 'output_text',
+                text: 'I cannot fulfill this request due to content policy violation.',
               },
             ],
           },
@@ -43,7 +44,9 @@ describe('OpenAiResponsesProvider refusals', () => {
 
       const result = await provider.callApi('Test prompt with refusal');
 
+      expect(result.error).toBeUndefined();
       expect(result.isRefusal).toBe(true);
+      expect(result.guardrails).toEqual({ flagged: true });
       expect(result.output).toBe('I cannot fulfill this request due to content policy violation.');
     });
 

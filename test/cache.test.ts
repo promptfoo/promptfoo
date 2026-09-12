@@ -962,7 +962,10 @@ describe('fetchWithCache', () => {
       expect(sharedSignal?.aborted).toBe(false);
 
       resolveUpstreamRequest(mockFetchWithRetriesResponse(true, { data: 'shared' }));
-      await expect(secondRequest).resolves.toMatchObject({ data: { data: 'shared' } });
+      await expect(secondRequest).resolves.toMatchObject({
+        data: { data: 'shared' },
+        coalesced: true,
+      });
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
