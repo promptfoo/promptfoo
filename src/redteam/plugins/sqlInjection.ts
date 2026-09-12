@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { summarizeTrajectoryForJudge } from '../../assertions/trajectoryUtils';
+import { summarizeTrajectoryForJudge, TraceEvidenceError } from '../../assertions/trajectoryUtils';
 import { matchesSpanFilter } from '../../tracing/spanFilter';
 import { PortfolioRedteamPluginBase, type SemanticFrontierConfig } from '../generation/portfolio';
 import {
@@ -336,7 +336,7 @@ export class SqlInjectionGrader extends RedteamGraderBase {
         tracing.spanFilter?.length &&
         trace.spans.some((span) => !matchesSpanFilter(span.name, tracing.spanFilter!))
       ) {
-        throw new Error('SQL trace evidence was filtered and cannot be graded.');
+        throw new TraceEvidenceError('SQL trace evidence was filtered and cannot be graded.');
       }
       gradingContext = {
         ...gradingContext,

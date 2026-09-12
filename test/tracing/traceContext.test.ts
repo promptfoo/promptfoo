@@ -43,6 +43,43 @@ function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
 
 describe('fetchTraceContext', () => {
   it.each([false, true])(
+    'collects late spans through the complete grading window (external: %s)',
+    async (external) => {
+      const early = [{ spanId: 'target', name: 'target.call', startTime: 1, endTime: 2 }];
+      const complete = [
+        ...early,
+        {
+          spanId: 'sql',
+          name: 'database.query',
+          startTime: 2,
+          endTime: 3,
+          attributes: { 'db.query.text': 'SELECT * FROM secrets' },
+        },
+      ];
+      mocks.isExternalTraceProvider.mockReturnValue(external);
+      let read;
+      if (external) {
+        read = mockExternalTrace(complete);
+        read
+          .mockResolvedValueOnce({ spans: early, fetchedAt: 1 })
+          .mockResolvedValueOnce({ spans: early, fetchedAt: 2 });
+      } else {
+        read = mocks.getSpans;
+        read.mockResolvedValue(complete).mockResolvedValueOnce(early).mockResolvedValueOnce(early);
+      }
+      const result = await fetchTraceContext('trace-1', {
+        ...(external ? { providerConfig } : {}),
+        requireComplete: true,
+        maxRetries: 3,
+        retryDelayMs: 0,
+        queryDelay: 0,
+      });
+      expect(result?.spans.map((span) => span.spanId)).toEqual(['target', 'sql']);
+      expect(read).toHaveBeenCalledTimes(external ? 4 : 5);
+    },
+  );
+
+  it.each([false, true])(
     'reads complete grading evidence despite view filters (external: %s)',
     async (external) => {
       const spans: SpanData[] = [

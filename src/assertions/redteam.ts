@@ -196,6 +196,9 @@ export const handleRedteam = async ({
       },
     };
   } catch (error) {
+    if (error instanceof Error && error.name === 'TraceEvidenceError') {
+      throw error;
+    }
     // For iterative strategies, check if only SOME turns had grader errors (not all).
     // If only some failed, we can be lenient. If ALL failed, we should still ERROR.
     const redteamHistory = providerResponse.metadata?.redteamHistory as

@@ -380,10 +380,13 @@ describe('CrescendoProvider', () => {
     expect(fetchTraceContextSpy).not.toHaveBeenCalled();
   });
 
-  it('stops Crescendo when trace collection is incomplete', async () => {
+  it.each([
+    new TraceLimitError(),
+    Object.assign(new Error('SQL trace evidence was filtered'), { name: 'TraceEvidenceError' }),
+  ])('stops Crescendo when trace evidence is incomplete: %s', async (error) => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',
-      maxTurns: 1,
+      maxTurns: 2,
       maxBacktracks: 0,
       redteamProvider: mockRedTeamProvider,
       stateful: true,
@@ -403,7 +406,7 @@ describe('CrescendoProvider', () => {
     });
     const fetchTraceContextSpy = vi
       .spyOn(traceContext, 'fetchTraceContext')
-      .mockRejectedValue(new TraceLimitError());
+      .mockRejectedValue(error);
 
     await expect(
       provider.callApi('test prompt', {
@@ -412,7 +415,7 @@ describe('CrescendoProvider', () => {
         prompt: { raw: 'test prompt', label: 'test' },
         traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
       }),
-    ).rejects.toThrow(TraceLimitError);
+    ).rejects.toThrow(error);
 
     expect(mockTargetProvider.callApi).toHaveBeenCalledOnce();
     expect(fetchTraceContextSpy).toHaveBeenCalledOnce();

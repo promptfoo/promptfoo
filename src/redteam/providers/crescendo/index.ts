@@ -754,7 +754,10 @@ export class CrescendoProvider implements ApiProvider {
         logger.debug(`[Crescendo] Continuing to round ${roundNum + 1}`);
       } catch (error) {
         // Stop the strategy when cancelled or when trace evidence is incomplete
-        if (error instanceof Error && ['AbortError', 'TraceLimitError'].includes(error.name)) {
+        if (
+          error instanceof Error &&
+          ['AbortError', 'TraceLimitError', 'TraceEvidenceError'].includes(error.name)
+        ) {
           logger.debug('[Crescendo] Operation stopped');
           throw error;
         }

@@ -202,10 +202,13 @@ describe('RedteamGoatProvider', () => {
     }
   });
 
-  it('stops GOAT when trace collection is incomplete', async () => {
+  it.each([
+    new TraceLimitError(),
+    Object.assign(new Error('SQL trace evidence was filtered'), { name: 'TraceEvidenceError' }),
+  ])('stops GOAT when trace evidence is incomplete: %s', async (error) => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
-      maxTurns: 1,
+      maxTurns: 2,
       tracing: { enabled: true },
     });
     const targetProvider = createMockTargetProvider('clean fallback response');
@@ -215,10 +218,10 @@ describe('RedteamGoatProvider', () => {
     };
     const fetchTraceContextSpy = vi
       .spyOn(traceContext, 'fetchTraceContext')
-      .mockRejectedValue(new TraceLimitError());
+      .mockRejectedValue(error);
 
     try {
-      await expect(provider.callApi('test prompt', context)).rejects.toThrow(TraceLimitError);
+      await expect(provider.callApi('test prompt', context)).rejects.toThrow(error);
 
       expect(targetProvider.callApi).toHaveBeenCalledOnce();
       expect(fetchTraceContextSpy).toHaveBeenCalledOnce();

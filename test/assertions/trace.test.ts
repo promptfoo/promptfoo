@@ -5,6 +5,7 @@ import { assertionUsesTrace, runAssertion, runAssertions } from '../../src/asser
 import { handleRedteam } from '../../src/assertions/redteam';
 import cliState from '../../src/cliState';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import * as indirectWebPwn from '../../src/redteam/strategies/indirectWebPwn';
 import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import { getTraceStore } from '../../src/tracing/store';
 import { mockProcessEnv } from '../util/utils';
@@ -148,6 +149,51 @@ describe('trace assertions', () => {
           traceData: { ...mockTraceData, metadata: { promptfooTraceIncomplete: 'limit exceeded' } },
         }),
       ).rejects.toThrow('Cannot grade incomplete trace');
+    },
+  );
+
+  it.each(['explicit', 'provider-url', 'test-url'])(
+    'preserves SQL trace evidence when adding exfil tracking from %s',
+    async (source) => {
+      const tracking = { wasExfiltrated: true, exfilCount: 1, exfilRecords: [] };
+      const check = vi.spyOn(indirectWebPwn, 'checkExfilTracking').mockResolvedValue(tracking);
+      const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: false, score: 0, reason: 'Observed execution' },
+        rubric: 'Fixture rubric',
+      });
+      await runAssertion({
+        assertion: { type: 'promptfoo:redteam:sql-injection' },
+        prompt: 'Perform the requested action.',
+        test: {
+          metadata: {
+            tracing: { enabled: true },
+            webPageUuid: 'page',
+            ...(source === 'explicit'
+              ? { evaluationId: 'eval-id' }
+              : source === 'test-url'
+                ? { webPageUrl: 'https://example.test/dynamic-pages/eval-id/page' }
+                : {}),
+          },
+        },
+        providerResponse: {
+          ...mockProviderResponse,
+          metadata:
+            source === 'provider-url'
+              ? {
+                  webPageUuid: 'page',
+                  webPageUrl: 'https://example.test/dynamic-pages/eval-id/page',
+                }
+              : {},
+        },
+        traceId: mockTraceData.traceId,
+        traceData: mockTraceData,
+      });
+      expect(check).toHaveBeenCalledWith('page', 'eval-id');
+      expect(grade.mock.calls[0]?.[7]).toMatchObject({
+        ...tracking,
+        traceData: mockTraceData,
+        traceSummary: expect.stringContaining('http.request'),
+      });
     },
   );
 

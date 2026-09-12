@@ -56,7 +56,7 @@ export interface FetchTraceContextOptions
   extends Omit<TraceSpanQueryOptions, 'includeInternalSpans' | 'sanitizeAttributes'> {
   includeInternalSpans?: boolean;
   sanitizeAttributes?: boolean;
-  /** Read all spans in the requested time range for deterministic grading. */
+  /** Read all spans through the bounded collection window for deterministic grading. */
   requireComplete?: boolean;
   maxRetries?: number;
   retryDelayMs?: number;
@@ -374,6 +374,7 @@ async function fetchFromExternalProvider(
   providerConfig: TraceProviderConfig,
   options: {
     queryDelay: number;
+    requireComplete?: boolean;
     waitForStableSpans?: boolean;
     maxRetries: number;
     retryDelayMs: number;
@@ -392,6 +393,7 @@ async function fetchFromExternalProvider(
     maxRetries,
     retryDelayMs,
     waitForStableSpans,
+    requireComplete,
     redactAttributes,
     abortSignal,
     ...spanOptions
@@ -463,6 +465,10 @@ async function fetchFromExternalProvider(
         };
       }
 
+      if (requireComplete && attempt < maxRetries) {
+        await waitForRetry(retryDelayMs, abortSignal);
+        continue;
+      }
       if (waitForStableSpans && attempt < maxRetries) {
         const snapshot = JSON.stringify(
           [...validSpans].sort((a, b) => a.spanId.localeCompare(b.spanId)),
@@ -533,6 +539,7 @@ async function waitForRetry(delay: number, signal?: AbortSignal): Promise<void> 
 async function fetchFromLocalStore(
   traceId: string,
   options: {
+    requireComplete?: boolean;
     maxRetries: number;
     retryDelayMs: number;
     includeInternalSpans: boolean;
@@ -545,7 +552,14 @@ async function fetchFromLocalStore(
     abortSignal?: AbortSignal;
   },
 ): Promise<TraceContextData | null> {
-  const { maxRetries, retryDelayMs, abortSignal, redactAttributes, ...spanOptions } = options;
+  const {
+    maxRetries,
+    retryDelayMs,
+    abortSignal,
+    redactAttributes,
+    requireComplete,
+    ...spanOptions
+  } = options;
   const traceStore = getTraceStore();
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -556,6 +570,11 @@ async function fetchFromLocalStore(
       const spans = await traceStore.getSpans(traceId, spanOptions);
       if ((await traceStore.getTraceMetadata(traceId))?.promptfooTraceIncomplete) {
         throw new TraceLimitError();
+      }
+
+      if (requireComplete && attempt < maxRetries) {
+        await waitForRetry(retryDelayMs, abortSignal);
+        continue;
       }
 
       if (spans.length === 0) {
@@ -667,6 +686,7 @@ async function fetchTraceContextData(
   } = options;
 
   const fetchOptions = {
+    requireComplete,
     maxRetries,
     retryDelayMs,
     sanitizeAttributes: !requireComplete && sanitizeAttributes,

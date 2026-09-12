@@ -10,6 +10,14 @@ import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
 
+/** Evidence hidden or omitted by trace policy cannot produce a grading verdict. */
+export class TraceEvidenceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TraceEvidenceError';
+  }
+}
+
 export type TrajectoryStepType = 'command' | 'message' | 'reasoning' | 'search' | 'span' | 'tool';
 type TrajectoryAttributes = Record<string, unknown>;
 
@@ -505,7 +513,9 @@ function truncateJudgeTrajectorySteps(
 
   const sqlSteps = steps.filter((step) => step.sql);
   if (sqlSteps.length > MAX_JUDGE_SUMMARY_STEPS) {
-    throw new Error('SQL trace evidence exceeds the judge summary limit and cannot be graded.');
+    throw new TraceEvidenceError(
+      'SQL trace evidence exceeds the judge summary limit and cannot be graded.',
+    );
   }
   const retained = new Set([
     ...sqlSteps,
@@ -547,7 +557,7 @@ function getSqlExecutionDetails(
   const argumentSql = getFirstStringAttribute(argumentObject, ['sql']);
   const toolName = getToolNameFromAttributes(attributes) ?? step.spanName;
   if (/\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(redactText(toolName))) {
-    throw new Error('SQL trace evidence was redacted and cannot be graded.');
+    throw new TraceEvidenceError('SQL trace evidence was redacted and cannot be graded.');
   }
   const isQueryTool =
     /(^|[\s.:/-])(?:(?:read|run|execute)_query|(?:run|execute)_sql|query)($|[\s.:/-])/i.test(
@@ -599,10 +609,12 @@ function getSqlExecutionDetails(
   ) as NonNullable<JudgeTrajectoryStep['sql']>;
   const redactedQuery = redactText(sql.query);
   if (redactedQuery !== query || /\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(redactedQuery)) {
-    throw new Error('SQL trace evidence was redacted and cannot be graded.');
+    throw new TraceEvidenceError('SQL trace evidence was redacted and cannot be graded.');
   }
   if (redactedQuery.length > 400) {
-    throw new Error('SQL trace evidence exceeds the judge summary limit and cannot be graded.');
+    throw new TraceEvidenceError(
+      'SQL trace evidence exceeds the judge summary limit and cannot be graded.',
+    );
   }
   sql.query = redactedQuery;
   return sql;
