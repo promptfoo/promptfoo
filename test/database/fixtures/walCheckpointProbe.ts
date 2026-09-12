@@ -9,6 +9,7 @@ import type { Transaction } from '@libsql/client/node';
 
 export interface WalCheckpointProbeResult {
   elapsedMs: number;
+  journalMode: string;
   insertAcknowledged: boolean;
   isDbOpen: boolean;
   logs: Array<{
@@ -45,6 +46,9 @@ if (mode === 'hold-writer') {
   logger.warn = (message, context) => logs.push({ level: 'warn', message, context });
 
   const db = await getDb();
+  const [{ journal_mode: journalMode }] = await db.all<{ journal_mode: string }>(
+    'PRAGMA journal_mode',
+  );
   await db.run('PRAGMA wal_autocheckpoint = 0');
   await db.run('CREATE TABLE wal_checkpoint_test (id INTEGER PRIMARY KEY)');
   await db.run('INSERT INTO wal_checkpoint_test DEFAULT VALUES');
@@ -107,6 +111,7 @@ if (mode === 'hold-writer') {
       console.log(
         `PROMPTFOO_DATABASE_PROBE_RESULT=${JSON.stringify({
           elapsedMs: Date.now() - startedAt,
+          journalMode,
           insertAcknowledged,
           isDbOpen: databaseStillOpen,
           logs,

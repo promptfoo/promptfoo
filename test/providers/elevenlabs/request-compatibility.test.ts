@@ -117,7 +117,10 @@ describe('ElevenLabs documented request contracts', () => {
       errors: [],
       startTime: 0,
     }));
-    vi.spyOn(fs, 'mkdir').mockRejectedValue(new Error('output directory unavailable'));
+    vi.spyOn(fs, 'mkdir').mockImplementation(async () => {
+      expect(ElevenLabsWebSocketClient.prototype.close).toHaveBeenCalledTimes(1);
+      throw new Error('output directory unavailable');
+    });
     const provider = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
       config: {
         apiKey: 'fixture-key',

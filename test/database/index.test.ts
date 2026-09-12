@@ -20,6 +20,7 @@ import { getConfigDirectoryPath } from '../../src/util/config/manage';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { LockRecoveryProbeResult } from './fixtures/lockRecoveryProbe';
+import type { ShutdownQueueProbeResult } from './fixtures/shutdownQueueProbe';
 import type { WalCheckpointProbeResult } from './fixtures/walCheckpointProbe';
 
 vi.mock('../../src/envars', async (importOriginal) => {
@@ -94,7 +95,7 @@ const execFileAsync = promisify(execFile);
 const DATABASE_PROBE_RESULT_PREFIX = 'PROMPTFOO_DATABASE_PROBE_RESULT=';
 
 async function runDatabaseProbe<T>(
-  fixture: 'walCheckpointProbe' | 'lockRecoveryProbe',
+  fixture: 'walCheckpointProbe' | 'lockRecoveryProbe' | 'shutdownQueueProbe',
   tempConfigDir: string,
   mode: string,
 ): Promise<T> {
@@ -109,7 +110,7 @@ async function runDatabaseProbe<T>(
         IS_TESTING: 'false',
         LOG_LEVEL: 'error',
         PROMPTFOO_CONFIG_DIR: tempConfigDir,
-        PROMPTFOO_DISABLE_WAL_MODE: 'false',
+        PROMPTFOO_DISABLE_WAL_MODE: mode === 'wal-disabled' ? 'true' : 'false',
         PROMPTFOO_DISABLE_TELEMETRY: 'true',
         PROMPTFOO_DISABLE_UPDATE_CHECK: 'true',
       },
@@ -534,9 +535,12 @@ describe('database', () => {
     });
 
     it('should initialize database with WAL mode', async () => {
-      vi.mocked(getEnvBool).mockReturnValue(false);
-      const db = await getDb();
-      await expect(db.all('PRAGMA journal_mode')).resolves.toEqual([{ journal_mode: 'wal' }]);
+      const result = await runDatabaseProbe<WalCheckpointProbeResult>(
+        'walCheckpointProbe',
+        tempConfigDir,
+        'none',
+      );
+      expect(result.journalMode).toBe('wal');
     });
 
     it('should return same instance on subsequent calls', async () => {
@@ -747,41 +751,16 @@ describe('database', () => {
   });
 
   describe('closeDb', () => {
-    it.each([false, true])(
-      'drains accepted work before closing with WAL disabled=%s',
-      async (disableWAL) => {
-        vi.mocked(getEnvBool).mockImplementation(
-          (key) => key === 'PROMPTFOO_DISABLE_WAL_MODE' && disableWAL,
+    it.each(['wal-enabled', 'wal-disabled'])(
+      'drains accepted work before closing with %s',
+      async (mode) => {
+        const result = await runDatabaseProbe<ShutdownQueueProbeResult>(
+          'shutdownQueueProbe',
+          tempConfigDir,
+          mode,
         );
-        const db = await getDb();
-        await db.run('CREATE TABLE shutdown_test (id INTEGER PRIMARY KEY)');
-        const started = createDeferred<void>();
-        const release = createDeferred<void>();
-        const transaction = db.transaction(async (tx) => {
-          started.resolve();
-          await release.promise;
-          await expect(closeDb()).rejects.toThrow('inside a transaction');
-          await tx.run('INSERT INTO shutdown_test VALUES (1)');
-        });
-        await started.promise;
-        const accepted = db.run('INSERT INTO shutdown_test VALUES (2)').execute();
-        const closing = closeDb();
-        const secondClose = closeDb();
-        try {
-          await expect(getDb()).rejects.toThrow('closing');
-          await expect(db.run('INSERT INTO shutdown_test VALUES (3)')).rejects.toThrow();
-          await expect(db.transaction(async () => {})).rejects.toThrow('closing');
-        } finally {
-          release.resolve();
-        }
-        await Promise.all([transaction, accepted, closing, secondClose]);
-        expect(isDbOpen()).toBe(false);
-        const reopened = await getDb();
-        await expect(reopened.all('SELECT id FROM shutdown_test ORDER BY id')).resolves.toEqual([
-          { id: 1 },
-          { id: 2 },
-        ]);
-        await expect(db.run('INSERT INTO shutdown_test VALUES (4)')).rejects.toThrow();
+        expect(result.isDbOpen).toBe(false);
+        expect(result.persistedIds).toEqual([1, 2]);
       },
     );
 
