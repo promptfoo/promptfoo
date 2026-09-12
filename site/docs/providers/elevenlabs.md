@@ -83,12 +83,15 @@ Generate high-quality voice synthesis with multiple models and voices:
 - `elevenlabs:tts:<voice_id>` - TTS with specified voice ID (e.g., `elevenlabs:tts:21m00Tcm4TlvDq8ikWAM` for Rachel)
 - `elevenlabs:tts` - TTS with default voice
 
+Use a voice ID from your [ElevenLabs voice list](https://elevenlabs.io/docs/api-reference/voices/search), not a display name such as `rachel`. Set it in the provider ID or `config.voiceId`; an explicit `voiceId` takes precedence. Voice availability depends on your account.
+
 **Models available:**
 
 - `eleven_flash_v2_5` - Fastest, lowest latency (~200ms)
-- `eleven_turbo_v2_5` - High quality, fast
-- `eleven_multilingual_v2` - Best for non-English languages
-- `eleven_monolingual_v1` - English only, high quality
+- `eleven_turbo_v2_5` - Deprecated low-latency model; prefer Flash v2.5 for new configurations
+- `eleven_multilingual_v2` - Default model, suited to consistent long-form speech
+
+[ElevenLabs scheduled monolingual and multilingual v1 for removal on July 9, 2026](https://elevenlabs.io/docs/changelog/2026/6/8). Legacy type values remain for compatible endpoints; use a current model for the native API.
 
 **Example:**
 
@@ -105,7 +108,7 @@ providers:
 
 ### Speech-to-Text (STT)
 
-Transcribe audio with speaker diarization and accuracy metrics:
+Transcribe audio with speaker diarization and accuracy metrics. The default is `scribe_v2`; [ElevenLabs scheduled Scribe v1 for removal on July 9, 2026](https://elevenlabs.io/docs/changelog/2026/6/8). The legacy `modelId: scribe_v1` remains configurable for compatible endpoints.
 
 - `elevenlabs:stt` - Speech-to-text transcription
 
@@ -121,7 +124,7 @@ Transcribe audio with speaker diarization and accuracy metrics:
 providers:
   - id: elevenlabs:stt
     config:
-      modelId: scribe_v1
+      modelId: scribe_v2
       diarization: true
       maxSpeakers: 3
 ```
@@ -185,24 +188,26 @@ All providers support these common parameters:
 
 ### TTS-Specific Parameters
 
-| Parameter                   | Description                                               |
-| --------------------------- | --------------------------------------------------------- |
-| `modelId`                   | TTS model (e.g., `eleven_flash_v2_5`)                     |
-| `voiceId`                   | Voice ID (e.g., `21m00Tcm4TlvDq8ikWAM`)                   |
-| `voiceSettings`             | Voice customization (stability, similarity, style, speed) |
-| `outputFormat`              | Audio format (e.g., `mp3_44100_128`, `pcm_44100`)         |
-| `seed`                      | Seed for deterministic output                             |
-| `streaming`                 | Enable WebSocket streaming for low latency                |
-| `pronunciationRules`        | Custom pronunciation rules (creates a dictionary at init) |
-| `pronunciationDictionaryId` | Apply an existing pronunciation dictionary by ID          |
-| `voiceDesign`               | Generate voice from text description                      |
-| `voiceRemix`                | Modify voice characteristics (gender, accent, age)        |
+| Parameter                   | Description                                                                                  |
+| --------------------------- | -------------------------------------------------------------------------------------------- |
+| `modelId`                   | TTS model (e.g., `eleven_flash_v2_5`)                                                        |
+| `voiceId`                   | Voice ID (e.g., `21m00Tcm4TlvDq8ikWAM`)                                                      |
+| `voiceSettings`             | Voice customization (stability, similarity, style, speed)                                    |
+| `outputFormat`              | Audio format (e.g., `mp3_44100_128`, `pcm_44100`)                                            |
+| `seed`                      | Best-effort repeatability for HTTP and WebSocket TTS; deterministic output is not guaranteed |
+| `streaming`                 | Enable WebSocket streaming for low latency                                                   |
+| `pronunciationRules`        | Custom pronunciation rules (creates a dictionary at init)                                    |
+| `pronunciationDictionaryId` | Apply an existing pronunciation dictionary by ID                                             |
+| `voiceDesign`               | Generate voice from text description                                                         |
+| `voiceRemix`                | Modify voice characteristics (gender, accent, age)                                           |
+
+`ulaw_8000` returns raw 8 kHz μ-law audio with media type `audio/basic`. Saved files use the `.ulaw` extension.
 
 ### STT-Specific Parameters
 
 | Parameter     | Description                                |
 | ------------- | ------------------------------------------ |
-| `modelId`     | STT model (default: `scribe_v1`)           |
+| `modelId`     | STT model (default: `scribe_v2`)           |
 | `language`    | ISO 639-1 language code (e.g., `en`, `es`) |
 | `diarization` | Enable speaker diarization                 |
 | `maxSpeakers` | Expected number of speakers (hint)         |
@@ -254,29 +259,11 @@ tests:
 
 ### Speech-to-Text: Accuracy Testing
 
-With a local recording at `audio/test-recording.mp3`:
-
-```yaml
-prompts:
-  - '{{audioFile}}'
-
-providers:
-  - id: elevenlabs:stt
-    config:
-      diarization: true
-      calculateWER: true
-      referenceText: 'The quick brown fox jumps over the lazy dog.'
-
-tests:
-  - description: WER is acceptable
-    vars:
-      audioFile: audio/test-recording.mp3
-    assert:
-      - type: javascript
-        value: context.metadata?.wer?.wer < 0.05
-```
+Use the [transcription accuracy guide](/docs/guides/evaluate-elevenlabs/#part-3-speech-to-text-accuracy) to provide a recording and reference transcript, then assert on the word error rate in `context.providerResponse.metadata.wer`.
 
 ### Conversational Agents: Evaluation
+
+The provider returns a text summary in `output` and structured evaluation results in `context.providerResponse.metadata.evaluationResults`. Use explicit criterion IDs to check that every required result is present and passed.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -293,10 +280,12 @@ providers:
         prompt: You are a helpful customer support agent
         llmModel: gpt-4o
       evaluationCriteria:
-        - name: greeting
+        - id: greeting
+          name: greeting
           weight: 0.8
           passingThreshold: 0.8
-        - name: understanding
+        - id: understanding
+          name: understanding
           weight: 1.0
           passingThreshold: 0.9
 
@@ -305,26 +294,20 @@ tests:
     assert:
       - type: javascript
         value: |
-          const results = context.metadata?.evaluationResults ?? [];
-          const passed = results.filter((result) => result.passed);
-          return passed.length >= 2;
+          const results = context.providerResponse.metadata?.evaluationResults;
+          const required = ['greeting', 'understanding'];
+          return Array.isArray(results) && required.every(id =>
+            results.some(result => result.criterion === id && result.passed === true)
+          );
 ```
 
 ### Audio Processing: Pipeline
 
-```yaml
-# 1. Remove noise from audio
-providers:
-  - id: elevenlabs:isolation
+Run each stage as a separate eval and pass the saved results to the next stage:
 
-# 2. Transcribe cleaned audio
-providers:
-  - id: elevenlabs:stt
-
-# 3. Generate subtitles
-providers:
-  - id: elevenlabs:alignment
-```
+1. Use `elevenlabs:isolation` with the original audio path in `vars.audioFile`. Save the returned audio to a file such as `audio/cleaned.mp3`.
+2. Use `elevenlabs:stt` with `prompts: ['{{audioFile}}']` and `vars.audioFile: audio/cleaned.mp3`. Save the transcription text from the output.
+3. Use `elevenlabs:alignment` with the cleaned audio path in `vars.audioFile` and the transcription in `vars.transcript` to generate time-aligned output.
 
 ## Advanced Features
 
@@ -414,28 +397,11 @@ providers:
 
 ## Cost Tracking
 
-ElevenLabs usage is tracked automatically:
+Promptfoo reports estimated costs when the provider has enough usage information. Estimates use built-in rates and may differ from your bill; consult [ElevenLabs pricing](https://elevenlabs.io/pricing) for current plans and rates.
 
-**TTS Costs:**
+STT estimates require a known audio duration in the API response's `duration_ms` field. Responses without duration omit `cost`; they do not report free transcription. A `cost` assertion requires a reported cost, so omit it for native Scribe responses without duration.
 
-- Flash v2.5: ~$0.015 per 1,000 characters
-- Turbo v2.5: ~$0.02 per 1,000 characters
-- Multilingual v2: ~$0.03 per 1,000 characters
-
-**STT Costs:**
-
-- ~$0.10 per minute of audio
-
-**Agent Costs:**
-
-- Based on conversation duration (~$0.10-0.50 per minute depending on LLM)
-
-**Supporting API Costs:**
-
-- Audio Isolation: ~$0.10 per minute
-- Forced Alignment: ~$0.05 per minute
-
-View costs in eval results:
+For responses that include a cost estimate, apply a budget assertion:
 
 ```yaml
 tests:
@@ -472,26 +438,22 @@ prompts:
 
 providers:
   - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
-    label: flash-model
+    label: Flash Model (Fastest)
     config:
       modelId: eleven_flash_v2_5
-      voiceId: 21m00Tcm4TlvDq8ikWAM
 
   - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
-    label: turbo-model
+    label: Turbo Model (Legacy Comparison)
     config:
       modelId: eleven_turbo_v2_5
-      voiceId: 21m00Tcm4TlvDq8ikWAM
 
 tests:
-  - description: Flash model completes quickly
-    providers: [flash-model]
+  - description: Audio generation completes quickly
     assert:
       - type: latency
         threshold: 1000
 
-  - description: Turbo model has better quality
-    providers: [turbo-model]
+  - description: Audio generation stays within the cost budget
     assert:
       - type: cost
         threshold: 0.01
@@ -499,25 +461,7 @@ tests:
 
 ### Transcription Accuracy Pipeline
 
-Save the TTS output as `audio/tts-output.mp3`, then use this STT fragment to measure transcription accuracy:
-
-```yaml
-prompts:
-  - '{{audioFile}}'
-
-providers:
-  - id: elevenlabs:stt
-    config:
-      calculateWER: true
-      referenceText: 'The meeting is scheduled for Thursday at 2 PM in conference room B. Please bring your laptop and quarterly report.'
-
-tests:
-  - vars:
-      audioFile: audio/tts-output.mp3
-    assert:
-      - type: javascript
-        value: context.metadata?.wer?.wer < 0.03
-```
+Generate and save speech in a TTS eval, then pass the saved audio file path and `config.referenceText` to a separate STT eval. The [transcription pipeline guide](/docs/guides/evaluate-elevenlabs/#part-3-speech-to-text-accuracy) shows both configs and an assertion using `context.providerResponse.metadata.wer`.
 
 ### Agent Regression Testing
 
@@ -538,11 +482,13 @@ providers:
         prompt: You are a customer service agent. Always confirm cancellations.
         llmModel: gpt-4o
       evaluationCriteria:
-        - name: confirmation_requested
+        - id: confirmation_requested
+          name: confirmation_requested
           description: Agent asks for confirmation before canceling
           weight: 1.0
           passingThreshold: 0.9
-        - name: professional_tone
+        - id: professional_tone
+          name: professional_tone
           description: Agent maintains professional tone
           weight: 0.8
           passingThreshold: 0.8
@@ -552,8 +498,11 @@ tests:
     assert:
       - type: javascript
         value: |
-          const criteria = context.metadata?.evaluationResults ?? [];
-          return criteria.length >= 2 && criteria.every((criterion) => criterion.passed);
+          const results = context.providerResponse.metadata?.evaluationResults;
+          const required = ['confirmation_requested', 'professional_tone'];
+          return Array.isArray(results) && required.every(id =>
+            results.some(result => result.criterion === id && result.passed === true)
+          );
 ```
 
 ## Best Practices
@@ -561,9 +510,8 @@ tests:
 ### 1. Choose the Right Model
 
 - **Flash v2.5**: Use for real-time applications, live streaming, or when latency is critical (&lt;200ms)
-- **Turbo v2.5**: Use for high-quality pre-recorded content where quality matters more than speed
+- **Turbo v2.5**: Keep for legacy comparisons; [ElevenLabs recommends Flash for new configurations](https://elevenlabs.io/docs/overview/models#deprecated-models)
 - **Multilingual v2**: Use for non-English languages or when switching between languages
-- **Monolingual v1**: Use for English-only content requiring the highest quality
 
 ### 2. Optimize Voice Settings
 
@@ -693,9 +641,18 @@ prompts:
 
 ### 6. Monitoring and Observability
 
-**Track key metrics:**
+**Check TTS latency, estimated cost, and audio metadata:**
 
 ```yaml
+prompts:
+  - 'Check the generated audio format and size.'
+
+providers:
+  - id: elevenlabs:tts:21m00Tcm4TlvDq8ikWAM
+    config:
+      modelId: eleven_flash_v2_5
+      outputFormat: pcm_16000
+
 tests:
   - assert:
       # Latency thresholds
@@ -706,16 +663,13 @@ tests:
       - type: cost
         threshold: 0.50
 
-      # Quality metrics
+      # Audio metadata
       - type: javascript
         value: |
-          // Track custom metrics
-          const result = JSON.parse(output);
-          if (result.audio) {
-            console.log('Audio size:', result.audio.sizeBytes);
-            console.log('Format:', result.audio.format);
-          }
-          return true;
+          const response = context.providerResponse;
+          return response.audio?.format === 'pcm'
+            && Number.isFinite(response.metadata?.audioSize)
+            && response.metadata.audioSize > 0;
 ```
 
 **Use labels for organized results:**
@@ -864,7 +818,7 @@ curl -H "xi-api-key: $ELEVENLABS_API_KEY" https://api.elevenlabs.io/v1/voices
 Solution: Cost tracking is estimated based on:
 
 - TTS: Character count × model rate
-- STT: Audio duration × per-minute rate
+- STT: Known audio duration × per-minute rate; omitted when duration is unavailable
 - Agents: Conversation duration × LLM rates
 
 For exact costs, check your [ElevenLabs billing dashboard](https://elevenlabs.io/app/usage).
