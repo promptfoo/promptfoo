@@ -17,7 +17,7 @@ import {
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
-import { mockProcessEnv } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { LockRecoveryProbeResult } from './fixtures/lockRecoveryProbe';
 import type { WalCheckpointProbeResult } from './fixtures/walCheckpointProbe';
@@ -662,7 +662,7 @@ describe('database', () => {
       async (outcome) => {
         const db = await getDb();
         await db.run('CREATE TABLE deferred_transaction_test (id INTEGER PRIMARY KEY)');
-        const { promise: released, resolve: release } = Promise.withResolvers<void>();
+        const { promise: released, resolve: release } = createDeferred<void>();
         let followup: Promise<void> | undefined;
 
         const outer = db.transaction(async (tx) => {
