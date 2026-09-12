@@ -48,6 +48,11 @@ vi.mock('../../../src/util/azureBlob', async (importOriginal) => ({
   readAzureBlobText: vi.fn(),
 }));
 
+vi.mock('../../../src/util/cloud', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/util/cloud')>()),
+  getProviderFromCloud: vi.fn(async () => ({ id: 'echo' })),
+}));
+
 describe('suite environment loading', () => {
   let tempDir: string;
   let restoreEnv: () => void;
@@ -218,7 +223,7 @@ describe('suite environment loading', () => {
     expect(cliState.config?.env?.OPENAI_API_KEY).toBe('previous-key');
   });
 
-  it.each(['sdk', 'resolved'] as const)(
+  it.each(['sdk', 'resolved', 'cloud'] as const)(
     'isolates config and selected targets during overlapping %s evaluations',
     async (mode) => {
       let release!: () => void;
@@ -230,9 +235,13 @@ describe('suite environment loading', () => {
       cliState.selectedProviderConfigs = ['promptfoo://provider/stale'];
       const results = await Promise.all(
         ['first', 'second'].map(async (name) => {
+          const targetConfig =
+            mode === 'cloud'
+              ? (await loadApiProvider(`promptfoo://provider/${name}`, { env: {} })).config
+              : { linkedTargetId: `promptfoo://provider/${name}` };
           const provider = {
             id: () => `target-${name}`,
-            config: { linkedTargetId: `promptfoo://provider/${name}` },
+            config: targetConfig,
             async callApi() {
               if (++arrived === 2) {
                 release();
@@ -1479,30 +1488,34 @@ describe('suite environment loading', () => {
     },
   );
 
-  it('preserves remote dataset references through config resolution', async () => {
-    vi.mocked(readAzureBlobText).mockResolvedValue(
-      '- vars: missing-vars.yaml\n  provider: file://missing-provider.js\n',
-    );
-    const configPath = writeConfig('remote', { tests: 'az://account/container/tests.yaml' });
-    const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
-    expect(testSuite.tests).toEqual([
-      {
-        description: 'Row #1',
-        vars: 'missing-vars.yaml',
-        provider: 'file://missing-provider.js',
-        metadata: { __promptfooRemote: true },
-      },
-    ]);
-    expect(readAzureBlobText).toHaveBeenCalledTimes(1);
-    const result = await evaluate(
-      { prompts: ['Hello'], providers: ['echo'], tests: testSuite.tests },
-      { cache: false },
-    );
-    const rows = await result.getResults();
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ success: true, response: { output: 'Hello' } });
-    expect(readAzureBlobText).toHaveBeenCalledTimes(1);
-  });
+  it.each(['scalar', 'array'] as const)(
+    'preserves %s remote dataset references through config resolution',
+    async (form) => {
+      vi.mocked(readAzureBlobText).mockResolvedValue(
+        '- vars: missing-vars.yaml\n  provider: file://missing-provider.js\n',
+      );
+      const source = 'az://account/container/tests.yaml';
+      const configPath = writeConfig('remote', { tests: form === 'array' ? [source] : source });
+      const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+      expect(testSuite.tests).toEqual([
+        {
+          description: 'Row #1',
+          vars: 'missing-vars.yaml',
+          provider: 'file://missing-provider.js',
+          metadata: { __promptfoo: { remote: true } },
+        },
+      ]);
+      expect(readAzureBlobText).toHaveBeenCalledTimes(1);
+      const result = await evaluate(
+        { prompts: ['Hello'], providers: ['echo'], tests: testSuite.tests },
+        { cache: false },
+      );
+      const rows = await result.getResults();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ success: true, response: { output: 'Hello' } });
+      expect(readAzureBlobText).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it.each([{}, undefined])(
     'retains an empty captured function-provider environment (%j)',

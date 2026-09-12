@@ -1923,7 +1923,7 @@ describe('evaluator', () => {
           success, score, metadata
         ) VALUES
         ('promptfoo-ns-1', '${eval_.id}', 0, 0, '{}', '{}', '{}', 1, 1.0,
-          '{"userKey": "shown", "__promptfoo": {"traceLinkage": {"traceId": "abc"}}}')`,
+          '{"userKey": "shown", "__promptfoo": {"remote": true, "traceLinkage": {"traceId": "abc"}}}')`,
       );
 
       const keys = await EvalQueries.getMetadataKeysFromEval(eval_.id);

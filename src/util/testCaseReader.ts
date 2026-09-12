@@ -50,12 +50,18 @@ const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
 function preserveRemoteTests(tests: TestCase[]): TestCase[] {
   return tests.map((test) => {
     validateTestCase(test);
-    return { ...test, metadata: { ...test.metadata, __promptfooRemote: true } };
+    return {
+      ...test,
+      metadata: {
+        ...test.metadata,
+        __promptfoo: { ...test.metadata?.__promptfoo, remote: true },
+      },
+    };
   });
 }
 
 function isRemoteTestCase(test: TestCaseWithVarsFile): boolean {
-  return test.metadata?.__promptfooRemote === true;
+  return test.metadata?.__promptfoo?.remote === true;
 }
 
 export async function readTestFiles(
@@ -793,6 +799,7 @@ async function readTestsWithEnv(
       const pathWithoutSheet = globOrTest.split('#')[0];
       // Read standalone sources, then resolve provider and vars references for local rows.
       if (
+        isRemoteTestsReference(globOrTest) ||
         isJavascriptFile(pathWithoutFunction) ||
         pathWithoutFunction.endsWith('.py') ||
         pathWithoutSheet.endsWith('.xlsx') ||

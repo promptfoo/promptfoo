@@ -712,8 +712,8 @@ export function sanitizeConfigForOutput(
     }
     if (stripMetadata && 'metadata' in test) {
       // Keep the internal marker so exported remote rows cannot execute local file references.
-      if (test.metadata?.__promptfooRemote === true) {
-        test.metadata = { __promptfooRemote: true };
+      if (test.metadata?.__promptfoo?.remote === true) {
+        test.metadata = { __promptfoo: { remote: true } };
       } else {
         delete test.metadata;
       }

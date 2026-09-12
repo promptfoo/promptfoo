@@ -89,8 +89,8 @@ function projectTestCase(
   if (options.stripOutput) {
     delete projectedTestCase.providerOutput;
   }
-  if (options.stripMetadata && testCase.metadata?.__promptfooRemote === true) {
-    projectedTestCase.metadata = { __promptfooRemote: true };
+  if (options.stripMetadata && testCase.metadata?.__promptfoo?.remote === true) {
+    projectedTestCase.metadata = { __promptfoo: { remote: true } };
   }
 
   return projectedTestCase;

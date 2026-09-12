@@ -182,7 +182,11 @@ async function createApiProvider(
       env: mergedOptions.env,
     };
 
-    return loadApiProvider(cloudProvider.id, mergedContext);
+    const provider = await loadApiProvider(cloudProvider.id, mergedContext);
+    // Preserve the target already fetched above for per-evaluation grading context.
+    provider.config ??= {};
+    provider.config.linkedTargetId ??= renderedProviderPath;
+    return provider;
   }
 
   if (isProviderConfigFileReference(renderedProviderPath)) {

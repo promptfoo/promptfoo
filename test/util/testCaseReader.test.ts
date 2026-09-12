@@ -1204,6 +1204,10 @@ describe('readTests', () => {
       - description: Azure YAML remote data case
         vars: vars1.yaml
         provider: file://providers/local.js
+        metadata:
+          source: dataset-column
+          __promptfoo:
+            retained: internal-value
         assert:
           - type: equals
             value: ready
@@ -1211,12 +1215,16 @@ describe('readTests', () => {
 
     const result = await readTests(blobUri);
 
-    expect(result).toMatchObject([
+    expect(result).toEqual([
       {
         assert: [{ type: 'equals', value: 'ready' }],
         description: 'Azure YAML remote data case',
         provider: 'file://providers/local.js',
         vars: 'vars1.yaml',
+        metadata: {
+          source: 'dataset-column',
+          __promptfoo: { retained: 'internal-value', remote: true },
+        },
       },
     ]);
     expect(globSync).not.toHaveBeenCalled();

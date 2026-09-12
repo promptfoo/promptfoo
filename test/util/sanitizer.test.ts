@@ -122,7 +122,7 @@ describe('sanitizeConfigForOutput', () => {
   it('strips saved test data while preserving remote-row safety and local replay data', () => {
     const test = {
       vars: { input: 'private test vars' },
-      metadata: { note: 'private metadata', __promptfooRemote: true },
+      metadata: { note: 'private metadata', __promptfoo: { remote: true } },
       providerOutput: 'private recorded output',
       assert: [{ type: 'equals' as const, value: 'answer' }],
     };
@@ -137,7 +137,9 @@ describe('sanitizeConfigForOutput', () => {
       shouldStripResponseOutput: true,
     });
     expect(JSON.stringify(output)).not.toContain('private');
-    expect(output.tests).toEqual([{ metadata: { __promptfooRemote: true }, assert: test.assert }]);
+    expect(output.tests).toEqual([
+      { metadata: { __promptfoo: { remote: true } }, assert: test.assert },
+    ]);
     expect(config.tests[0]).toBe(test);
     expect(config.tests[0].vars.input).toBe('private test vars');
   });
