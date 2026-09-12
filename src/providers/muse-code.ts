@@ -281,7 +281,11 @@ function parseResponse(result: ProcessResult): ProviderResponse {
   return { ...response, output: terminal.payload.text };
 }
 
-function redactCredentials(response: ProviderResponse, credentials: string[]): ProviderResponse {
+function redactCredentials(
+  response: ProviderResponse,
+  credentials: string[],
+  historicalCredentials: string[] = [],
+): ProviderResponse {
   const shouldStripRaw =
     getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false) ||
     getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
@@ -331,8 +335,13 @@ function redactCredentials(response: ProviderResponse, credentials: string[]): P
       containsSplitCredential(rawStrings, credential) ||
       containsSplitCredential(eventTexts, credential),
   );
+  const hasHistoricalCredential = historicalCredentials.some((credential) =>
+    rawStrings.some((value) => value.includes(credential)),
+  );
   const sanitizedResponse =
-    shouldStripRaw || hasSplitCredential ? { ...response, raw: undefined } : response;
+    shouldStripRaw || hasSplitCredential || hasHistoricalCredential
+      ? { ...response, raw: undefined }
+      : response;
   return JSON.parse(
     JSON.stringify(sanitizedResponse, (_key, value) => {
       if (typeof value === 'string') {
@@ -528,9 +537,10 @@ export class MuseCodeProvider implements ApiProvider {
     let tempDir: string | undefined;
     const env = this.buildEnv(config);
     const currentCredentials = collectEnvCredentials(env, config.base_url);
-    const credentials = config.session_id
-      ? [...(this.sessionCredentials.get(config.session_id) ?? new Set()), ...currentCredentials]
-      : currentCredentials;
+    const historicalCredentials = config.session_id
+      ? [...(this.sessionCredentials.get(config.session_id) ?? new Set())]
+      : [];
+    const credentials = [...historicalCredentials, ...currentCredentials];
     if (config.session_id) {
       this.sessionCredentials.set(config.session_id, new Set(credentials));
     }
@@ -562,7 +572,7 @@ export class MuseCodeProvider implements ApiProvider {
         env,
       );
       // Redact credentials from the actual child environment before tracing or persistence.
-      return redactCredentials(parseResponse(result), credentials);
+      return redactCredentials(parseResponse(result), credentials, historicalCredentials);
     } catch (error) {
       return redactCredentials(
         {
