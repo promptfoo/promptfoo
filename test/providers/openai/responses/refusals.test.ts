@@ -14,18 +14,7 @@ describe('OpenAiResponsesProvider refusals', () => {
         status: 'incomplete',
         incomplete_details: { reason: 'content_filter' },
         model: 'gpt-4o',
-        output: [
-          {
-            type: 'message',
-            role: 'assistant',
-            content: [
-              {
-                type: 'output_text',
-                text: 'I cannot fulfill this request due to content policy violation.',
-              },
-            ],
-          },
-        ],
+        output: [],
         usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
       };
 
@@ -47,7 +36,7 @@ describe('OpenAiResponsesProvider refusals', () => {
       expect(result.error).toBeUndefined();
       expect(result.isRefusal).toBe(true);
       expect(result.guardrails).toEqual({ flagged: true });
-      expect(result.output).toBe('I cannot fulfill this request due to content policy violation.');
+      expect(result.output).toBe('');
     });
 
     it('should handle direct refusal in message object', async () => {

@@ -1535,6 +1535,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             finishReason: incompleteReason === 'max_output_tokens' ? 'length' : incompleteReason,
             ...(incompleteReason === 'content_filter'
               ? {
+                  error: undefined,
+                  output: billedResult.output ?? '',
                   isRefusal: true,
                   guardrails: { flagged: true },
                 }
