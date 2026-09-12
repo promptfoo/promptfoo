@@ -209,7 +209,33 @@
 }
 
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family:
+    'Inter',
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    Ubuntu,
+    Cantarell,
+    'Noto Sans',
+    sans-serif;
+
+  /* Promptfoo brand tokens */
+  --pf-red: #e53a3a;
+  --pf-red-dark: #cb3434;
+  --pf-red-darker: #b32e2e;
+  --pf-red-darkest: #991515;
+  --pf-red-light: #ff7a7a;
+  --pf-red-lighter: #ffa0a0;
+  --pf-red-lightest: #ffc6c6;
+  --pf-red-bg: #ffe8e8;
+  --pf-logo-orange: #fe2c06;
+  --pf-logo-maroon: #8a0a1c;
+  --pf-blue-accent: #3578e5;
+  --pf-ink: #10191c;
+  --pf-ink-soft: #525860;
+  --pf-font-base: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --pf-font-mono: 'JetBrains Mono', 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
   /* Z-index scale for layered components
    * Banner < AppBar < Modal < Dropdown ensures proper stacking:
@@ -227,14 +253,14 @@
   /* Layout dimensions */
   --nav-height: 3.5rem; /* Navigation bar height (h-14 = 56px) */
 
-  /* Design tokens - Light mode (aligned with MUI theme) */
+  /* Design tokens - Light mode (Promptfoo brand, red primary) */
   --background: 210 40% 98%; /* #f8fafc - slate-50 */
   --foreground: 222.2 47.4% 11.2%; /* #0f172a - slate-900 */
   --card: 0 0% 100%; /* #ffffff */
   --card-foreground: 222.2 47.4% 11.2%;
   --popover: 0 0% 100%; /* #ffffff */
   --popover-foreground: 222.2 47.4% 11.2%;
-  --primary: 217.2 91.2% 52.9%; /* #2563eb - blue-600 */
+  --primary: 0 77% 56%; /* #e53a3a - pf-red */
   --primary-foreground: 0 0% 100%; /* #ffffff */
   --secondary: 210 40% 96.1%; /* #f1f5f9 - slate-100 */
   --secondary-foreground: 222.2 47.4% 11.2%; /* slate-900 */
@@ -246,7 +272,7 @@
   --destructive-foreground: 0 0% 100%;
   --border: 214.3 31.8% 91.4%; /* #e2e8f0 - slate-200 */
   --input: 214.3 31.8% 91.4%;
-  --ring: 217.2 91.2% 52.9%;
+  --ring: 0 77% 56%; /* match primary */
   --radius: 0.5rem;
 
   /* Severity colors */
@@ -267,7 +293,7 @@
   /* Light mode colors */
   --background-color: #f5f5f5;
   --text-color: #404040;
-  --link-color: #2e6585;
+  --link-color: #b32e2e; /* pf-red-darker */
   --border-color: lightgray;
   --table-border-color: lightgray;
   --pass-color: green;
@@ -298,7 +324,7 @@
   --card-foreground: 210 40% 98%;
   --popover: 222.2 20% 10%;
   --popover-foreground: 210 40% 98%;
-  --primary: 217.2 91.2% 59.8%; /* #3b82f6 - blue-500 */
+  --primary: 0 100% 74%; /* #ff7a7a - pf-red-light for dark mode contrast */
   --primary-foreground: 0 0% 100%;
   --secondary: 217.2 20% 20%; /* slate-800 equivalent */
   --secondary-foreground: 210 40% 98%; /* off-white */
@@ -310,7 +336,7 @@
   --destructive-foreground: 0 0% 100%;
   --border: 217.2 15% 22%; /* Softer, blue-tinted border - NOT pure black */
   --input: 217.2 15% 22%;
-  --ring: 217.2 91.2% 59.8%;
+  --ring: 0 100% 74%; /* match primary */
 
   /* Severity colors - Dark mode */
   --severity-informational: 217 91% 60%;
@@ -318,7 +344,7 @@
   /* Keep synced with prefers-color-scheme above */
   --background-color: #1a1a1a;
   --text-color: #f0f0f0;
-  --link-color: #6fcaff;
+  --link-color: #ff7a7a; /* pf-red-light */
   --border-color: #444444;
   --table-border-color: #444444;
   --pass-color: #b1e9b3;
@@ -389,6 +415,35 @@ input[type='search']::-webkit-search-decoration {
 }
 
 @media print {
+  /* Scoped to @media print so they only apply to the PDF export. */
+  :root {
+    --pf-red: #e53a3a;
+    --pf-red-dark: #cb3434;
+    --pf-red-darker: #b32e2e;
+    --pf-red-darkest: #991515;
+    --pf-red-tint: #fff6f6;
+    --pf-logo-maroon: #8a0a1c;
+    --pf-ink: #10191c;
+    --pf-ink-soft: #525860;
+    --pf-border: #e3e6eb;
+    --pf-surface-alt: #f6f7f8;
+    --pf-surface-dark: #10191c;
+    --pf-font-base: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --pf-font-mono: 'JetBrains Mono', 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  /* Force all elements to print their backgrounds/colors even when
+   * the user leaves "Background graphics" unchecked in the print dialog.
+   * Without this, brand fills (red-tint callouts, dark code blocks,
+   * zebra table rows, severity card backgrounds) are stripped. */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   header,
   footer,
   .MuiAppBar-root,
@@ -406,8 +461,30 @@ input[type='search']::-webkit-search-decoration {
   }
 
   @page {
-    size: A4;
-    margin: 0.25in;
+    size: A4 portrait;
+    margin: 22mm 20mm 22mm 20mm;
+    @bottom-right {
+      content: counter(page) ' / ' counter(pages);
+      font-family: var(--pf-font-base);
+      font-size: 8.5pt;
+      color: #8a8f97;
+    }
+    @bottom-left {
+      content: 'promptfoo';
+      font-family: var(--pf-font-base);
+      font-size: 8.5pt;
+      color: #8a8f97;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+  }
+  @page :first {
+    @bottom-left {
+      content: '';
+    }
+    @bottom-right {
+      content: '';
+    }
   }
 
   /* Body and container styles */
@@ -416,8 +493,140 @@ input[type='search']::-webkit-search-decoration {
   #root {
     -webkit-print-color-adjust: exact;
     color-adjust: exact;
+    print-color-adjust: exact;
     background-color: white !important;
     background: white !important;
+    font-family: var(--pf-font-base) !important;
+    color: var(--pf-ink) !important;
+    font-size: 10.5pt;
+    line-height: 1.6;
+  }
+
+  /* Brand typography */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--pf-font-base) !important;
+    color: var(--pf-ink) !important;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    line-height: 1.2;
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  h1 {
+    font-size: 26pt;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
+  h2 {
+    font-size: 18pt;
+    padding-bottom: 6pt;
+    border-bottom: 2px solid var(--pf-red);
+    margin-bottom: 14pt;
+  }
+  h3 {
+    font-size: 13pt;
+  }
+  h4 {
+    font-size: 11pt;
+    color: var(--pf-red-darker) !important;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  a {
+    color: var(--pf-red-darker) !important;
+    text-decoration: none;
+  }
+
+  ul,
+  ol {
+    margin: 0 0 12pt;
+  }
+  li {
+    margin-bottom: 4pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  li::marker {
+    color: var(--pf-red);
+  }
+
+  blockquote {
+    margin: 14pt 0;
+    padding: 12pt 16pt;
+    border-left: 4pt solid var(--pf-red);
+    background: var(--pf-red-tint) !important;
+    border-radius: 2pt;
+    color: var(--pf-ink) !important;
+    font-style: normal;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  code {
+    font-family: var(--pf-font-mono) !important;
+    font-size: 9pt;
+    background: var(--pf-surface-alt) !important;
+    color: var(--pf-red-darkest) !important;
+    padding: 1pt 5pt;
+    border-radius: 3pt;
+  }
+  pre {
+    background: var(--pf-surface-dark) !important;
+    color: #e8eef2 !important;
+    padding: 12pt 14pt;
+    border-radius: 6pt;
+    font-family: var(--pf-font-mono) !important;
+    font-size: 8.5pt;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  pre code {
+    background: transparent !important;
+    padding: 0;
+    color: inherit !important;
+    font-size: inherit;
+  }
+
+  /* Tables — red accent under thead, zebra rows */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10pt 0 14pt;
+    font-size: 9.5pt;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  thead th {
+    text-align: left;
+    background: var(--pf-surface-alt) !important;
+    color: var(--pf-ink) !important;
+    font-weight: 600;
+    padding: 8pt 10pt;
+    border-bottom: 2px solid var(--pf-red) !important;
+  }
+  tbody td {
+    padding: 7pt 10pt;
+    border-bottom: 1px solid var(--pf-border) !important;
+  }
+  tbody tr:nth-child(even) td {
+    background: #fafbfc !important;
+  }
+
+  /* Horizontal rule — brand gradient */
+  hr {
+    border: none;
+    height: 2px;
+    background: linear-gradient(90deg, var(--pf-red) 0%, transparent 100%) !important;
+    margin: 18pt 0;
   }
 
   .report-header {
@@ -451,7 +660,7 @@ input[type='search']::-webkit-search-decoration {
     --card-foreground: 222.2 47.4% 11.2%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 47.4% 11.2%;
-    --primary: 217.2 91.2% 52.9%;
+    --primary: 0 77% 56%;
     --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -463,7 +672,7 @@ input[type='search']::-webkit-search-decoration {
     --destructive-foreground: 0 0% 100%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 217.2 91.2% 52.9%;
+    --ring: 0 77% 56%;
     --severity-informational: 217 91% 46%;
 
     --background-color: #f5f5f5;
@@ -496,6 +705,15 @@ input[type='search']::-webkit-search-decoration {
   [data-theme='dark'] body,
   [data-theme='dark'] #root {
     background-color: #ffffff !important;
-    color: #000000 !important;
+    color: var(--pf-ink) !important;
+  }
+
+  /* Avoid orphans/widows on paragraphs and keep figures together */
+  p,
+  figure {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    orphans: 3;
+    widows: 3;
   }
 }
