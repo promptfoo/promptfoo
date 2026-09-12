@@ -20,6 +20,8 @@ export const SEARCH_ATTRIBUTE_KEYS = [
   'search_query',
 ] as const;
 
+export const ACTION_ATTRIBUTE_KEYS = ['url.full', 'http.url', 'file.path'] as const;
+
 const TOOL_ATTRIBUTE_FAMILIES: readonly ToolAttributeFamily[] = [
   {
     prefix: 'tool',

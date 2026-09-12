@@ -2486,7 +2486,10 @@ describe('RedteamGraderBase', () => {
               ? JSON.stringify({
                   apiKey: 'fixture-json-key',
                   GITHUB_TOKEN: 'fixture-json-env',
-                  headers: [{ name: 'Authorization', value: 'fixture-json-header' }],
+                  headers: [
+                    { name: 'Authorization', value: 'fixture-json-header' },
+                    { name: 'PRIVATE-TOKEN', value: 'fixture-private-token' },
+                  ],
                   steps: [{ name: command }],
                 })
               : `Executed ${command}`,
@@ -2548,6 +2551,7 @@ describe('RedteamGraderBase', () => {
         expect(rubric).not.toContain('fixture-truncated-key');
         expect(rubric).not.toContain('fixture-json-env');
         expect(rubric).not.toContain('fixture-json-header');
+        expect(rubric).not.toContain('fixture-private-token');
         expect(rubric).not.toContain('fixture-session');
         expect(rubric).not.toContain('fixture-cookie');
         expect(rubric).not.toContain('fixture-unquoted');

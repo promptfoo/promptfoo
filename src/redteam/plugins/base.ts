@@ -16,6 +16,7 @@ import invariant from '../../util/invariant';
 import {
   isSecretEnvVarName,
   isSecretField,
+  isTracingCredentialHeader,
   sanitizeObject,
   sanitizeUrl,
 } from '../../util/sanitizer';
@@ -453,7 +454,7 @@ function redactTraceValue(
       if (
         entryKey === 'value' &&
         headerName &&
-        (isSecretField(headerName) || isSecretEnvVarName(headerName))
+        isTracingCredentialHeader(headerName, String(record[entryKey]))
       ) {
         budget.remaining--;
         redacted[entryKey] = '[REDACTED]';
@@ -488,16 +489,12 @@ function redactTraceEvidence(text: string): string {
         : sanitized;
     })
     .replace(/(['"])([\w-]+)(\s*:\s*)[^'"]*\1/gi, (match, quote, key, separator) =>
-      isSecretField(key) || /^(?:authorization|(?:set-)?cookie)$/i.test(key)
-        ? quote + key + separator + '[REDACTED]' + quote
-        : match,
+      isTracingCredentialHeader(key, '') ? quote + key + separator + '[REDACTED]' + quote : match,
     )
     .replace(
       /\b([\w-]+)(\s*:\s*)[^"'\\;&|\r\n]*?(?=;|&&|\|\||\r?\n|\s+-[A-Za-z]|$)/gi,
       (match, key, separator) =>
-        isSecretField(key) || /^(?:authorization|(?:set-)?cookie)$/i.test(key)
-          ? key + separator + '[REDACTED]'
-          : match,
+        isTracingCredentialHeader(key, '') ? key + separator + '[REDACTED]' : match,
     )
     .replace(
       /(^|\s)((?:--?[\w-]+|-u)\s+)(?:"[^"]*"|'[^']*'|[^\s"'\\;]+)/gi,

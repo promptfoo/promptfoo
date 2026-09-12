@@ -839,18 +839,30 @@ export async function runAssertions({
   const effectiveIncludeRedteamTrace = includeRedteamTrace ?? shouldIncludeRedteamTrace(test);
   const effectiveTraceOptions =
     traceOptions ?? (effectiveIncludeRedteamTrace ? getRedteamTraceQueryOptions(test) : undefined);
-  const shouldPreloadTrace =
-    !!traceId &&
+  const needsRedteamTrace =
+    effectiveIncludeRedteamTrace &&
     asserts.some(({ assertion }) =>
-      assertionMayNeedTraceContext(assertion, effectiveIncludeRedteamTrace),
+      getAssertionBaseType(assertion).startsWith('promptfoo:redteam:'),
     );
+  const needsOrdinaryTrace = asserts.some(({ assertion }) =>
+    assertionMayNeedTraceContext(assertion, false),
+  );
   let preloadedTraceData: TraceData | null | undefined;
-  if (shouldPreloadTrace && traceId) {
+  let preloadedRedteamTraceData: TraceData | null | undefined;
+  if (traceId && needsOrdinaryTrace) {
     try {
-      preloadedTraceData = await loadTraceData(traceId, effectiveTraceOptions);
+      preloadedTraceData = await loadTraceData(traceId);
     } catch (error) {
       logger.debug(`Failed to preload trace data for assertions: ${error}`);
       preloadedTraceData = null;
+    }
+  }
+  if (traceId && needsRedteamTrace) {
+    try {
+      preloadedRedteamTraceData = await loadTraceData(traceId, effectiveTraceOptions);
+    } catch (error) {
+      logger.debug(`Failed to preload red-team trace data for assertions: ${error}`);
+      preloadedRedteamTraceData = null;
     }
   }
 
@@ -876,7 +888,9 @@ export async function runAssertions({
       latencyMs,
       assertIndex: index,
       traceId,
-      traceData: preloadedTraceData,
+      traceData: getAssertionBaseType(assertion).startsWith('promptfoo:redteam:')
+        ? preloadedRedteamTraceData
+        : preloadedTraceData,
       includeRedteamTrace: effectiveIncludeRedteamTrace,
       traceOptions: effectiveTraceOptions,
     });

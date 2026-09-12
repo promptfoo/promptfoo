@@ -522,6 +522,39 @@ return {
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
       sanitizeAttributes: false,
       includeInternalSpans: false,
+      maxDepth: 5,
+      maxSpans: 50,
+      spanFilter: undefined,
+    });
+  });
+
+  it('keeps ordinary trace assertions unfiltered beside red-team grading', async () => {
+    mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+
+    await runAssertions({
+      test: {
+        ...mockTest,
+        assert: [
+          { type: 'trace-span-count', value: { pattern: '*', min: 1 } },
+          { type: 'promptfoo:redteam:rbac' as const },
+        ],
+        metadata: { pluginId: 'rbac' },
+      },
+      providerResponse: {
+        ...mockProviderResponse,
+        metadata: { storedGraderResult: { pass: true, score: 1, reason: 'stored' } },
+      },
+      traceId: 'test-trace-id',
+      includeRedteamTrace: true,
+    });
+
+    expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
+      sanitizeAttributes: false,
+    });
+    expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
+      sanitizeAttributes: false,
+      includeInternalSpans: false,
+      maxDepth: 5,
       maxSpans: 50,
       spanFilter: undefined,
     });
@@ -555,6 +588,7 @@ return {
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
       sanitizeAttributes: false,
       includeInternalSpans: true,
+      maxDepth: 5,
       maxSpans: 1,
       spanFilter: ['http.*'],
     });
