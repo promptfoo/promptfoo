@@ -1546,7 +1546,7 @@ describe('AIStudioChatProvider', () => {
           "Function callback 'fail' failed after 1 completed callback(s)",
         );
         expect(response.error).toContain('Check for side effects before retrying');
-        expect(response.output).toBeUndefined();
+        expect(response.output).toBe('completed');
         expect(response.cached).toBe(cached);
         expect(response.tokenUsage).toMatchObject({
           total: 15,
