@@ -63,6 +63,7 @@ Only select config content from a trusted workflow or base revision. A config re
 - name: Checkout code
   uses: actions/checkout@v6
   with:
+    ref: ${{ github.event.pull_request.head.sha || github.ref }}
     fetch-depth: 0
 
 - name: Load trusted Code Scan config

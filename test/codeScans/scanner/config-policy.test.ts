@@ -251,7 +251,7 @@ describe('scanner config policy boundary', () => {
 
     expect(processDiff).toHaveBeenCalled();
     expect(displayScanResults).toHaveBeenCalledWith(
-      { success: true, comments: [], review: 'No files to scan' },
+      { success: true, comments: [], review: 'No files to scan', skippedFiles: 1 },
       expect.any(Number),
       { format: CodeScanOutputFormat.JSON, githubPr: undefined },
     );
