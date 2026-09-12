@@ -10,6 +10,7 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
+import { type default as EvalResult, sanitizeResultForJsonlArtifact } from './models/evalResult';
 import {
   checkCloudPermissions,
   getOrgContext,
@@ -24,7 +25,6 @@ import {
 } from './util/sanitizer';
 
 import type Eval from './models/eval';
-import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
 
 interface ShareDomainResult {
@@ -416,7 +416,7 @@ async function prepareChunkForShare(
     );
   }
 
-  return chunkToSend;
+  return chunkToSend.map(sanitizeResultForJsonlArtifact);
 }
 
 async function sendChunkedResults(

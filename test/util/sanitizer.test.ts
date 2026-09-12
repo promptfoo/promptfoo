@@ -1077,22 +1077,27 @@ describe('sanitizeObject', () => {
       expect(result.l1.l2.l3.l4.l5.l6.token).toBe('[REDACTED]');
     });
 
-    it('keeps infinite-depth sanitization bounded for nested raw HTTP', () => {
-      const raw = 'GET / HTTP/1.1\n\n'.repeat(100);
-      expect(() => sanitizeObject(raw, { maxDepth: Number.POSITIVE_INFINITY })).not.toThrow();
+    it('redacts the remainder after bounding nested raw HTTP', () => {
+      const raw = 'GET / HTTP/1.1\n\n'.repeat(100) + '{"apiKey":"body-secret"}';
+      const result = sanitizeObject(raw, { maxDepth: Number.POSITIVE_INFINITY });
+      expect(result).not.toContain('body-secret');
     });
 
     it('redacts structured credential maps without hiding ordinary keys', () => {
       expect(
         sanitizeObject({
           apiKey: { raw: 'tiny' },
-          headers: { 'X-Client-Secret': 'tiny' },
+          headers: { 'X-Client-Secret': 'tiny', 'X-Session-Token': 'tiny' },
+          auth_password: 'tiny',
+          device_token: 'paired-token',
           tls: { key: '-----BEGIN PRIVATE KEY-----\ntiny', cert: 'public' },
           key: 'public',
         }),
       ).toEqual({
         apiKey: '[REDACTED]',
-        headers: { 'X-Client-Secret': '[REDACTED]' },
+        headers: { 'X-Client-Secret': '[REDACTED]', 'X-Session-Token': '[REDACTED]' },
+        auth_password: '[REDACTED]',
+        device_token: '[REDACTED]',
         tls: { key: '[REDACTED]', cert: 'public' },
         key: 'public',
       });
@@ -1459,6 +1464,11 @@ describe('sanitizeObject', () => {
 
       expect(result.request).not.toContain('Bearer secret');
       expect(result.request).not.toContain('sid=secret');
+    });
+
+    it('sanitizes form bodies with trailing HTTP whitespace', () => {
+      const result = sanitizeObject({ request: 'POST / HTTP/1.1\r\n\r\napi_key=tiny\r\n' });
+      expect(result.request).not.toContain('tiny');
     });
 
     it('should sanitize URLs with basic auth credentials in url field', () => {

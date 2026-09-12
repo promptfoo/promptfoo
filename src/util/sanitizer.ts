@@ -122,7 +122,9 @@ export const SECRET_FIELD_NAMES = new Set([
   'idtoken',
   'bearertoken',
   'authtoken',
+  'authpassword',
   'clientsecret',
+  'devicetoken',
   'webhooksecret',
   'anthropicapikey',
   'awsbearertokenbedrock',
@@ -202,6 +204,14 @@ export function normalizeFieldName(fieldName: string): string {
  */
 export function isSecretField(fieldName: string): boolean {
   return SECRET_FIELD_NAMES.has(normalizeFieldName(fieldName));
+}
+
+function isSecretHeaderField(fieldName: string): boolean {
+  const normalized = normalizeFieldName(fieldName);
+  return (
+    isSecretField(fieldName) ||
+    /(?:apikey|authtoken|accesstoken|sessiontoken|clientsecret)$/.test(normalized)
+  );
 }
 
 /**
@@ -856,10 +866,12 @@ function sanitizeJsonString(
       return JSON.stringify(sanitized);
     }
   } catch {
-    if (looksLikeUrlEncodedFormData(str)) {
-      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
-      if (sanitizedUrlEncoded !== str) {
-        return sanitizedUrlEncoded;
+    const terminalWhitespace = str.match(/[\r\n]+$/)?.[0] ?? '';
+    const formBody = terminalWhitespace ? str.slice(0, -terminalWhitespace.length) : str;
+    if (looksLikeUrlEncodedFormData(formBody)) {
+      const sanitizedUrlEncoded = sanitizeUrlEncodedString(formBody);
+      if (sanitizedUrlEncoded !== formBody) {
+        return sanitizedUrlEncoded + terminalWhitespace;
       }
     }
 
@@ -881,10 +893,9 @@ function sanitizeJsonString(
       const isRawHttp =
         headers !== rawHeaders ||
         /^(?:[A-Z]+\s+\S+\s+HTTP\/\d(?:\.\d)?|HTTP\/\d(?:\.\d)?\s+\d{3})/i.test(rawHeaders);
-      const sanitizedBody =
-        isRawHttp && depth < maxDepth && rawHttpMessages < MAX_RAW_HTTP_MESSAGES
-          ? sanitizeJsonString(body, depth + 1, maxDepth, rawHttpMessages + 1)
-          : body;
+      const sanitizedBody = isRawHttp
+        ? sanitizeRawHttpBody(body, depth, maxDepth, rawHttpMessages)
+        : body;
       if (headers !== rawHeaders || sanitizedBody !== rawBody) {
         return `${headers}${separator}${sanitizedBody}`;
       }
@@ -900,6 +911,21 @@ function sanitizeJsonString(
     }
   }
   return str;
+}
+
+function sanitizeRawHttpBody(
+  body: string,
+  depth: number,
+  maxDepth: number,
+  rawHttpMessages: number,
+): string {
+  if (depth >= maxDepth) {
+    return body;
+  }
+  if (rawHttpMessages >= MAX_RAW_HTTP_MESSAGES) {
+    return REDACTED;
+  }
+  return sanitizeJsonString(body, depth + 1, maxDepth, rawHttpMessages + 1);
 }
 
 // `key=value` where the key is a typical form-data identifier (allow brackets
@@ -1072,7 +1098,11 @@ function sanitizePlainObject(
   parentKey = '',
 ): any {
   const sanitized: any = {};
-  const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
+  const isSecretKey = isEnvMap
+    ? isSecretEnvVarName
+    : parentKey === 'headers'
+      ? isSecretHeaderField
+      : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
     if (
       (isSecretKey(key) && (key !== 'auth' || !value || typeof value !== 'object')) ||

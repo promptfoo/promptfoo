@@ -1130,6 +1130,30 @@ describe('adaptive chunk retry', () => {
     vi.clearAllMocks();
   });
 
+  it('sanitizes in-memory result headers before sharing', async () => {
+    const results = [
+      {
+        id: '1',
+        response: { metadata: { headers: { Authorization: 'Bearer result-secret' } } },
+      },
+    ] as unknown as EvalResult[];
+    mockEval = {
+      ...buildMockEval(),
+      results,
+      getTotalResultRowCount: vi.fn().mockResolvedValue(1),
+      fetchResultsBatched: vi.fn().mockImplementation(async function* () {
+        yield results;
+      }),
+    };
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: 'mock-eval-id' }) })
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+
+    await createShareableUrl(mockEval as Eval);
+
+    expect(mockFetch.mock.calls[1][1].body).not.toContain('result-secret');
+  });
+
   it('splits chunk on 413 Payload Too Large and retries', async () => {
     // Create an eval with 4 results
     const results = [{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }] as EvalResult[];
