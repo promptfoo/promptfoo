@@ -1180,10 +1180,7 @@ function evidenceFromToolUseRawItem(
     const group = providerRawItemLocation(index, toolName, locationPrefix);
     const input = toolInputPayload(itemObject);
     const filePath = filePathFromReadToolInput(itemObject, false);
-    const filePaths = [
-      ...(filePath ? [filePath] : []),
-      ...patchFilePaths(input),
-    ];
+    const filePaths = [...(filePath ? [filePath] : []), ...patchFilePaths(input)];
     return [
       ...filePaths.flatMap((filePath) =>
         targetEvidenceFromItem(
