@@ -1,6 +1,9 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
-import { preserveResponseHeadersObserverError } from '../scheduler/responseHeadersObserver';
+import {
+  isResponseHeadersObserverError,
+  preserveResponseHeadersObserverError,
+} from '../scheduler/responseHeadersObserver';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
@@ -287,7 +290,10 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       }
       throwIfAborted(callApiOptions?.abortSignal);
     } catch (err) {
-      if (isCallerAbortError(err, callApiOptions?.abortSignal)) {
+      if (
+        !isResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err) &&
+        isCallerAbortError(err, callApiOptions?.abortSignal)
+      ) {
         throwIfAborted(callApiOptions?.abortSignal);
       }
       logger.error(`API call error: ${String(err)}`);

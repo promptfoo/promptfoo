@@ -1,6 +1,9 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
-import { preserveResponseHeadersObserverError } from '../scheduler/responseHeadersObserver';
+import {
+  isResponseHeadersObserverError,
+  preserveResponseHeadersObserverError,
+} from '../scheduler/responseHeadersObserver';
 import { normalizeFinishReason } from '../util/finishReason';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import {
@@ -177,7 +180,10 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       }
       throwIfAborted(callApiOptions?.abortSignal);
     } catch (err) {
-      if (isCallerAbortError(err, callApiOptions?.abortSignal)) {
+      if (
+        !isResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err) &&
+        isCallerAbortError(err, callApiOptions?.abortSignal)
+      ) {
         throwIfAborted(callApiOptions?.abortSignal);
       }
       logger.error(`[Snowflake Cortex] API call error: ${String(err)}`);

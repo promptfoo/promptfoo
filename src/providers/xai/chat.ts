@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { preserveResponseHeadersObserverErrorResponse } from '../../scheduler/responseHeadersObserver';
 import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from '../openai/chat';
@@ -812,10 +813,10 @@ class XAIProvider extends OpenAiChatCompletionProvider {
             response.error.includes('authentication error'))
         ) {
           // Provide a more helpful error message for x.ai specific issues
-          return {
+          return preserveResponseHeadersObserverErrorResponse(response, {
             ...response,
             error: `x.ai API error: ${response.error}\n\nTip: Ensure your XAI_API_KEY environment variable is set correctly. You can get an API key from https://x.ai/`,
-          };
+          });
         }
         return response;
       }

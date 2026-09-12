@@ -216,13 +216,13 @@ export class ProviderRateLimitState extends EventEmitter {
             'isRefusal' in result &&
             result.isRefusal === true;
           const headers = options.getHeaders?.(result);
-          isRateLimited =
-            !isResponseHeadersObserverErrorResponse(result) &&
-            (options.isRateLimited?.(result, undefined) ?? false);
+          const isObserverError = isResponseHeadersObserverErrorResponse(result);
+          isRateLimited = !isObserverError && (options.isRateLimited?.(result, undefined) ?? false);
           retryAfterMs = options.getRetryAfter?.(result, undefined);
 
-          // Learn quota before releasing capacity to another queued caller.
-          if (headers && (headers !== observedHeaders || isRateLimited)) {
+          // Observer diagnostics may carry another service's headers. Keep the
+          // actual wire quota already learned by onResponseHeaders instead.
+          if (!isObserverError && headers && (headers !== observedHeaders || isRateLimited)) {
             this.updateFromHeaders(headers, isRateLimited);
           }
           if (isRateLimited) {

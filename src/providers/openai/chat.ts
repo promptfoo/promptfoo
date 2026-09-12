@@ -1,7 +1,10 @@
 import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { preserveResponseHeadersObserverError } from '../../scheduler/responseHeadersObserver';
+import {
+  isResponseHeadersObserverError,
+  preserveResponseHeadersObserverError,
+} from '../../scheduler/responseHeadersObserver';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../../util/fetch/errors';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import {
@@ -626,7 +629,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       }
     } catch (err) {
       const signal = callApiOptions?.abortSignal;
-      if (isCallerAbortError(err, signal)) {
+      if (
+        !isResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err) &&
+        isCallerAbortError(err, signal)
+      ) {
         // Publication can still be pending after a complete refusal. Preserve
         // that provider diagnostic while its owned cache write settles later.
         if (completedRefusal) {
