@@ -1153,6 +1153,10 @@ export function disableCache() {
  */
 export async function clearCache() {
   inflightFetchResponses.clear();
+  for (const response of sharedAbortableInflightFetchResponses.values()) {
+    response.controller.abort();
+  }
+  sharedAbortableInflightFetchResponses.clear();
   namespacedCacheInstances.clear();
   const result = await getCacheInstance().clear();
   claimedCacheKeys.clear();

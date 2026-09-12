@@ -1008,6 +1008,35 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
+    it('should abort and forget shared requests when clearing the cache', async () => {
+      let sharedSignal: AbortSignal | undefined;
+      mockFetchWithRetries.mockImplementation((_requestUrl, requestOptions) => {
+        sharedSignal = requestOptions?.signal ?? undefined;
+        return new Promise<Response>((_resolve, reject) => {
+          sharedSignal?.addEventListener(
+            'abort',
+            () => reject(sharedSignal?.reason ?? new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      });
+
+      const request = fetchWithCache(
+        url,
+        {
+          headers: { 'user-agent': 'OpenAI/JS 6.37.0', 'x-stainless-lang': 'js' },
+          signal: new AbortController().signal,
+        },
+        1000,
+      );
+      await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(1));
+
+      await clearCache();
+
+      await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+      expect(sharedSignal?.aborted).toBe(true);
+    });
+
     it('should handle request options in cache key', async () => {
       const options = { method: 'POST', body: JSON.stringify({ test: true }) };
       const mockResponse = mockFetchWithRetriesResponse(true, response);

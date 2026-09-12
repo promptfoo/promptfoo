@@ -325,14 +325,19 @@ export class ChatKitBrowserPool {
 
     // Create new page if under limit
     if (this.pages.length + this.pendingPageCreations < this.config.maxConcurrency) {
-      const pooledPage = await this.createReservedPooledPage(templateKey);
-      pooledPage.inUse = true;
-      this.pages.push(pooledPage);
-      logger.debug('[ChatKitPool] Created new page', {
-        templateKey,
-        poolSize: this.pages.length,
-      });
-      return pooledPage;
+      try {
+        const pooledPage = await this.createReservedPooledPage(templateKey);
+        pooledPage.inUse = true;
+        this.pages.push(pooledPage);
+        logger.debug('[ChatKitPool] Created new page', {
+          templateKey,
+          poolSize: this.pages.length,
+        });
+        return pooledPage;
+      } catch (error) {
+        await this.tryServeWaiters();
+        throw error;
+      }
     }
 
     // Wait for a page with matching template to become available

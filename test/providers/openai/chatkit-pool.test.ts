@@ -627,6 +627,26 @@ describe('ChatKitBrowserPool', () => {
       expect(instance.getStats().total).toBeLessThanOrEqual(1);
     });
 
+    it('serves a queued caller after a reserved page creation fails', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
+      let rejectCreation!: (error: Error) => void;
+      mockBrowser.newContext.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectCreation = reject;
+          }),
+      );
+
+      const failed = instance.acquirePage(TEST_TEMPLATE_KEY);
+      await vi.waitFor(() => expect(mockBrowser.newContext).toHaveBeenCalledTimes(1));
+      const queued = instance.acquirePage(TEST_TEMPLATE_KEY);
+      rejectCreation(new Error('creation failed'));
+
+      await expect(failed).rejects.toThrow('creation failed');
+      await expect(queued).resolves.toMatchObject({ templateKey: TEST_TEMPLATE_KEY });
+    });
+
     it('should not reuse pages across different templates', async () => {
       const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 4 });
       const key1 = 'wf_workflow1:default:default';
