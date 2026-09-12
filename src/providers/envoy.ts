@@ -1,3 +1,4 @@
+import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvOverrides } from '../types/env';
@@ -41,10 +42,15 @@ export function createEnvoyProvider(
   }
 
   // Filter out basePath from config to avoid passing it to the API
-  const { basePath: _, ...configWithoutBasePath } = options.config?.config || {};
+  const {
+    basePath: _,
+    apiBaseUrl: configuredBaseUrl,
+    ...configWithoutBasePath
+  } = options.config?.config || {};
 
   // Get the gateway URL from config or environment
-  const apiBaseUrl = configWithoutBasePath.apiBaseUrl || process.env.ENVOY_API_BASE_URL;
+  const apiBaseUrl =
+    configuredBaseUrl || (options.env?.ENVOY_API_BASE_URL ?? getEnvString('ENVOY_API_BASE_URL'));
 
   if (!apiBaseUrl) {
     throw new Error(
@@ -53,17 +59,26 @@ export function createEnvoyProvider(
   }
 
   // Ensure the URL ends with the correct path if not already specified
-  const normalizedBaseUrl = apiBaseUrl.endsWith('/v1')
-    ? apiBaseUrl
-    : `${apiBaseUrl.replace(/\/$/, '')}/v1`;
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(apiBaseUrl);
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      throw new Error('Unsupported gateway protocol');
+    }
+  } catch {
+    throw new Error(
+      'Envoy provider requires a valid gateway URL. Check ENVOY_API_BASE_URL or config.apiBaseUrl.',
+    );
+  }
+  const basePath = parsedUrl.pathname.replace(/\/+$/, '');
+  parsedUrl.pathname = basePath.endsWith('/v1') ? basePath : `${basePath}/v1`;
+  const normalizedBaseUrl = parsedUrl.toString();
 
   const envoyConfig = {
     ...options,
     config: {
-      apiBaseUrl: normalizedBaseUrl,
-      // Authentication is optional and depends on gateway configuration
-      // Users can specify apiKey, headers, or other auth in their config
       ...configWithoutBasePath,
+      apiBaseUrl: configuredBaseUrl ?? normalizedBaseUrl,
     },
   };
 

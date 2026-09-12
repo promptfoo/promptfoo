@@ -46,6 +46,17 @@ providers:
   - id: envoy:my-model
 ```
 
+Set a provider-specific URL in `env`:
+
+```yaml
+providers:
+  - id: envoy:my-model
+    env:
+      ENVOY_API_BASE_URL: 'https://your-envoy-gateway.com'
+```
+
+A non-empty provider value overrides suite and process environment values. Omit `config.apiBaseUrl` to use an environment URL; promptfoo adds `/v1` when needed. Explicit `config.apiBaseUrl` values keep the API path you supply, so include `/v1` or your gateway's custom path.
+
 ### Authenticating via header
 
 Envoy authentication is usually done with an `x-api-key` header. Here's an example of how to configure that:
