@@ -4438,6 +4438,48 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     });
   });
 
+  it('rolls back only the failed cell when rating saves overlap', async () => {
+    const table = createMockTableWithHumanAssertion();
+    table.body.push({
+      ...table.body[0],
+      outputs: [{ ...table.body[0].outputs[0], id: 'test-output-2' }],
+    });
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 2,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+    let rejectFirst: ((error: Error) => void) | undefined;
+    mockCallApi
+      .mockReturnValueOnce(
+        new Promise((_, reject) => {
+          rejectFirst = reject;
+        }),
+      )
+      .mockResolvedValueOnce({ ok: true });
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    const { default: Cell } = await import('./EvalOutputCell');
+    const [first, second] = vi
+      .mocked(Cell)
+      .mock.calls.slice(-2)
+      .map(([props]) => props);
+    const firstSave = first.onRating(true, 1, 'first');
+    await second.onRating(true, 1, 'second');
+    rejectFirst?.(new Error('first failed'));
+    await expect(firstSave).rejects.toThrow('first failed');
+
+    const finalTable = mockSetTable.mock.calls[mockSetTable.mock.calls.length - 1][0];
+    expect(finalTable.body[0].outputs[0].gradingResult.comment).not.toBe('first');
+    expect(finalTable.body[1].outputs[0].gradingResult.comment).toBe('second');
+  });
+
   it('should remove human assertion and recalculate pass/score when isPass is null', () => {
     const mockTable = createMockTableWithHumanAssertion();
 

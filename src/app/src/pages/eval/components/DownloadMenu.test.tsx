@@ -197,6 +197,27 @@ describe('DownloadMenu', () => {
     });
   });
 
+  it('does not finish a config download after unmount', async () => {
+    let resolveConfig: ((value: { config: typeof mockConfig }) => void) | undefined;
+    fetchEvalConfigMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveConfig = resolve;
+      }),
+    );
+
+    const { unmount } = renderDownloadDialog();
+    await userEvent.click(screen.getByText('Download YAML Config'));
+    unmount();
+    resolveConfig?.({ config: mockConfig });
+    await Promise.resolve();
+
+    expect(downloadBlobMock).not.toHaveBeenCalled();
+    expect(showToastMock).not.toHaveBeenCalledWith(
+      'Configuration downloaded successfully',
+      'success',
+    );
+  });
+
   it('downloads CSV when clicking the button', async () => {
     renderDownloadDialog();
     // Hook options should be set after component renders

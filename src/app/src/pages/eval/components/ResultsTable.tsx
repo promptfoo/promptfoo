@@ -1906,6 +1906,9 @@ function ResultsTable({
   const locationHash = useEvalDetailsHash();
 
   invariant(table, 'Table should be defined');
+  const ratingTableRef = React.useRef(table);
+  ratingTableRef.current = table;
+  const ratingRevisionRef = React.useRef(new Map<string, number>());
   const { head, body } = table;
 
   const isRedteam = React.useMemo(() => {
@@ -1954,7 +1957,10 @@ function ResultsTable({
       score?: number,
       comment?: string,
     ) => {
-      const existingOutput = body[rowIndex].outputs[promptIndex];
+      const currentTable = ratingTableRef.current;
+      const existingOutput = currentTable.body[rowIndex].outputs[promptIndex];
+      const revision = (ratingRevisionRef.current.get(resultId) ?? 0) + 1;
+      ratingRevisionRef.current.set(resultId, revision);
       const ratingUpdate = getManualRatingUpdate({
         existingOutput,
         isPass,
@@ -1969,14 +1975,15 @@ function ResultsTable({
         comment,
       });
       const newTable = buildRatingTableUpdate({
-        head,
-        body,
+        head: currentTable.head,
+        body: currentTable.body,
         rowIndex,
         promptIndex,
         ratingUpdate,
         gradingResult,
       });
 
+      ratingTableRef.current = newTable;
       setTable(newTable);
       if (evalId) {
         clearEvalApiResponseCache(evalId);
@@ -1996,7 +2003,20 @@ function ResultsTable({
             clearEvalApiResponseCache(evalId);
           }
         } catch (error) {
-          setTable({ ...table, head, body });
+          if (ratingRevisionRef.current.get(resultId) === revision) {
+            const latestTable = ratingTableRef.current;
+            const currentOutput = latestTable.body[rowIndex]?.outputs[promptIndex];
+            if (currentOutput?.id === resultId) {
+              const updatedBody = [...latestTable.body];
+              const updatedRow = { ...updatedBody[rowIndex] };
+              const updatedOutputs = [...updatedRow.outputs];
+              updatedOutputs[promptIndex] = existingOutput;
+              updatedRow.outputs = updatedOutputs;
+              updatedBody[rowIndex] = updatedRow;
+              ratingTableRef.current = { ...latestTable, body: updatedBody };
+              setTable(ratingTableRef.current);
+            }
+          }
           console.error('Failed to update table:', error);
           showToast('Failed to save rating', 'error');
           throw error;

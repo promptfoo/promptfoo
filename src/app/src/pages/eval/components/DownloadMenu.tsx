@@ -379,18 +379,27 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
       showToast('No evaluation ID or configuration available', 'error');
       return;
     }
+    const revision = exportRevisionRef.current;
+    const isCurrent = () => revision === exportRevisionRef.current;
     setIsDownloadingConfig(true);
     try {
       const { config: fullConfig } = await fetchEvalConfig(evalId);
+      if (!isCurrent()) {
+        return;
+      }
       const fileName = getFilename('config.yaml');
       downloadYamlConfig(fullConfig, fileName, 'Configuration downloaded successfully');
     } catch (error) {
-      showToast(
-        `Failed to download configuration: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'error',
-      );
+      if (isCurrent()) {
+        showToast(
+          `Failed to download configuration: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          'error',
+        );
+      }
     } finally {
-      setIsDownloadingConfig(false);
+      if (isCurrent()) {
+        setIsDownloadingConfig(false);
+      }
     }
   };
 
