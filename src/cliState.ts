@@ -68,6 +68,9 @@ interface CliState {
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
   /** The innermost environment scope, or the last config's env outside a scope. */
   readonly env?: EnvOverrides;
+  readonly envFileOverrides?: EnvOverrides;
+  /** File values act as process defaults beneath each nested suite environment. */
+  withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T;
   /** Replaces the outer env for this call and its async work; undefined masks config env. */
   withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T;
   withRequestTracingConfig<T>(
@@ -84,7 +87,10 @@ const globalConfigState: ConfigState = {};
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
 const basePathContext = new AsyncLocalStorage<{ basePath: string | undefined }>();
 let globalBasePath: string | undefined;
-const envContext = new AsyncLocalStorage<{ env: EnvOverrides | undefined }>();
+const envContext = new AsyncLocalStorage<{
+  env: EnvOverrides | undefined;
+  envFileOverrides?: EnvOverrides;
+}>();
 const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();
@@ -148,8 +154,14 @@ const state: CliState = {
     const store = envContext.getStore();
     return store ? store.env : state.config?.env;
   },
+  get envFileOverrides() {
+    return envContext.getStore()?.envFileOverrides;
+  },
+  withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T {
+    return envContext.run({ env: undefined, envFileOverrides: env }, fn);
+  },
   withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T {
-    return envContext.run({ env }, fn);
+    return envContext.run({ env, envFileOverrides: state.envFileOverrides }, fn);
   },
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;
@@ -170,6 +182,6 @@ const state: CliState = {
   },
 };
 
-setEnvOverridesProvider(() => state.env);
+setEnvOverridesProvider((layer) => (layer === 'file' ? state.envFileOverrides : state.env));
 
 export default state;

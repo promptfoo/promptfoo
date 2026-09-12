@@ -1,3 +1,4 @@
+import cliState from '../cliState';
 import { isTemplateProcessEnvDisabled } from '../envars';
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { getOutputFileFormat } from '../util/outputFormats';
@@ -27,7 +28,9 @@ export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
     }
 
     const processEnvironmentDisabled = isTemplateProcessEnvDisabled();
-    const processEnvironment = processEnvironmentDisabled ? {} : process.env;
+    const processEnvironment = processEnvironmentDisabled
+      ? {}
+      : { ...process.env, ...cliState.envFileOverrides };
     let renderedEnv = testSuite.env;
     if (renderedEnv) {
       const maxPasses = Object.keys(renderedEnv).length;

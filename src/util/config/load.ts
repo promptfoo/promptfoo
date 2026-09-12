@@ -317,9 +317,11 @@ export function renderConfigEnvTemplates<T extends { env?: Record<string, string
 function renderConfigEnvTemplatesInScope<T extends { env?: Record<string, string> }>(config: T): T {
   // Respect PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS - use empty object if disabled
   const processEnvDisabled = isTemplateProcessEnvDisabled();
-  const baseEnvForFirstPass = processEnvDisabled ? {} : process.env;
+  const baseEnvForFirstPass = processEnvDisabled
+    ? {}
+    : { ...process.env, ...cliState.envFileOverrides };
 
-  // First pass: render config.env values using only process.env (replaceBase=true)
+  // First pass: render config.env from process/file defaults (replaceBase=true)
   // This avoids pulling stale cliState.config?.env in watch/reload scenarios
   const rawConfigEnv = config.env;
   const renderedConfigEnv = rawConfigEnv

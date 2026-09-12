@@ -492,8 +492,7 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
     }
   }
 
-  // Fallback to process.env
-  const value = process.env[key as string];
+  const value = getEnvOverrides('file')?.[key as string] ?? process.env[key as string];
   if (value === undefined) {
     return defaultValue;
   }
@@ -525,7 +524,11 @@ export function parseEnvBool(input: string | undefined, defaultValue?: boolean):
 export function isTemplateProcessEnvDisabled(): boolean {
   const disabled = (env: Record<string, string | undefined>) =>
     parseEnvBool(env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS, parseEnvBool(env.PROMPTFOO_SELF_HOSTED));
-  return disabled(process.env) || disabled(getEnvOverrides() ?? {});
+  return (
+    disabled(process.env) ||
+    disabled(getEnvOverrides('file') ?? {}) ||
+    disabled(getEnvOverrides() ?? {})
+  );
 }
 
 /**

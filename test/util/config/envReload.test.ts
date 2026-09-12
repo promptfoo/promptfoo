@@ -135,6 +135,70 @@ describe('suite environment loading', () => {
     return configPath;
   }
 
+  it('keeps file defaults below suite overrides without adding them to config.env', async () => {
+    const configPath = writeConfig('file-defaults', {
+      env: { OPENAI_API_KEY: '{{env.OPENAI_API_KEY}}' },
+    });
+    await cliState.withEnvFileOverrides({ OPENAI_API_KEY: 'file-key' }, async () => {
+      const config = await readConfig(configPath);
+      expect(config.env?.OPENAI_API_KEY).toBe('file-key');
+      expect(cliState.env).toBeUndefined();
+      for (const env of [undefined, {}, { OPENAI_API_KEY: undefined }]) {
+        cliState.withEnv(env, () => {
+          expect(getEnvString('OPENAI_API_KEY')).toBe('file-key');
+          expect(getNunjucksEngine().renderString('{{env.OPENAI_API_KEY}}', {})).toBe('file-key');
+        });
+      }
+      cliState.withEnv({ OPENAI_API_KEY: '' }, () => {
+        expect(getEnvString('OPENAI_API_KEY')).toBe('');
+        expect(getNunjucksEngine().renderString('{{env.OPENAI_API_KEY}}', {})).toBe('');
+      });
+    });
+    expect(cliState.envFileOverrides).toBeUndefined();
+    expect(process.env.OPENAI_API_KEY).toBe('process-key');
+  });
+
+  it.each(['process', 'file', 'suite'] as const)(
+    'honors %s restrictions when templating file defaults',
+    async (source) => {
+      const restore = mockProcessEnv({
+        PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: source === 'process' ? 'true' : 'false',
+      });
+      try {
+        await cliState.withEnvFileOverrides(
+          {
+            OPENAI_API_KEY: 'file-key',
+            PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: source === 'file' ? 'true' : 'false',
+          },
+          () =>
+            cliState.withEnv(
+              { PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: source === 'suite' ? 'true' : 'false' },
+              async () => {
+                expect(getEnvString('OPENAI_API_KEY')).toBe('file-key');
+                expect(getNunjucksEngine().renderString('{{env.OPENAI_API_KEY}}', {})).toBe('');
+                expect(
+                  getNunjucksEngine().renderString(
+                    '{% for key, value in env %}{{value}}{% endfor %}',
+                    {},
+                  ),
+                ).not.toContain('file-key');
+                if (source !== 'suite') {
+                  const config = await readConfig(
+                    writeConfig('blocked-file-defaults', {
+                      env: { OPENAI_API_KEY: '{{env.OPENAI_API_KEY}}' },
+                    }),
+                  );
+                  expect(config.env?.OPENAI_API_KEY).toBe('{{env.OPENAI_API_KEY}}');
+                }
+              },
+            ),
+        );
+      } finally {
+        restore();
+      }
+    },
+  );
+
   async function expectRequest(provider: unknown, name: string) {
     if (!isApiProvider(provider)) {
       throw new Error('Expected an instantiated provider');

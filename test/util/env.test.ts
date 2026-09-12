@@ -1,3 +1,5 @@
+import os from 'node:os';
+import path from 'node:path';
 import * as fs from 'fs';
 
 import dotenv from 'dotenv';
@@ -53,6 +55,53 @@ describe('setupEnv', () => {
 
     expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
     expect(dotenvConfigSpy).toHaveBeenCalledWith({ quiet: true });
+  });
+
+  it.each([undefined, [], ' , '])(
+    'keeps host precedence for implicit .env loading (%j)',
+    (envPath) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-setup-env-'));
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_REVIEW_ENV_PROBE: 'host',
+        PROMPTFOO_REVIEW_ENV_MISSING: undefined,
+      });
+      fs.writeFileSync(
+        path.join(directory, '.env'),
+        'PROMPTFOO_REVIEW_ENV_PROBE=file\nPROMPTFOO_REVIEW_ENV_MISSING=default\n',
+      );
+      const cwd = vi.spyOn(process, 'cwd').mockReturnValue(directory);
+      dotenvConfigSpy.mockRestore();
+      try {
+        const env: NodeJS.ProcessEnv = {};
+        setupEnv(envPath, { processEnv: env });
+        expect(env).toEqual({ PROMPTFOO_REVIEW_ENV_MISSING: 'default' });
+        expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+        expect(process.env.PROMPTFOO_REVIEW_ENV_MISSING).toBeUndefined();
+      } finally {
+        cwd.mockRestore();
+        restoreEnv();
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('applies ordered explicit files to an isolated destination, including empty values', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-setup-env-'));
+    const first = path.join(directory, 'first.env');
+    const second = path.join(directory, 'second.env');
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+    fs.writeFileSync(first, 'PROMPTFOO_REVIEW_ENV_PROBE=first\n');
+    fs.writeFileSync(second, 'PROMPTFOO_REVIEW_ENV_PROBE=\n');
+    dotenvConfigSpy.mockRestore();
+    try {
+      const env: NodeJS.ProcessEnv = {};
+      setupEnv([` ${first}, ${second} `], { processEnv: env });
+      expect(env).toEqual({ PROMPTFOO_REVIEW_ENV_PROBE: '' });
+      expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+    } finally {
+      restoreEnv();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('should call dotenv.config with path, override=true, and quiet=true when envPath is specified', () => {
