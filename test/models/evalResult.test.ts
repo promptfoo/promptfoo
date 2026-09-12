@@ -405,6 +405,23 @@ describe('EvalResult', () => {
     });
   });
 
+  it('sanitizes id-less provider options inside provider maps', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        options: {
+          provider: {
+            'openai:chat:model': { config: { apiKey: 'sk-map-secret' } },
+          },
+        },
+      } as AtomicTestCase,
+    });
+
+    expect(result.testCase.options?.provider).toEqual({
+      'openai:chat:model': { config: { apiKey: '[REDACTED]' } },
+    });
+  });
+
   it('preserves falsy declarative provider config values', () => {
     const result = sanitizeResultForJsonlArtifact({
       testCase: {

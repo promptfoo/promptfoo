@@ -124,7 +124,18 @@ export function sanitizeProvider(
 // Test and assertion provider slots also accept string ids and provider maps.
 // Preserve those public shapes while projecting concrete provider objects before
 // generic serialization can invoke an untrusted toJSON hook.
-function sanitizeProviderReference(provider: unknown): unknown {
+const PROVIDER_OPTION_KEYS = new Set([
+  'id',
+  'label',
+  'config',
+  'prompts',
+  'transform',
+  'delay',
+  'env',
+  'inputs',
+]);
+
+function sanitizeProviderReference(provider: unknown, allowIdlessOptions = false): unknown {
   if (typeof provider === 'string') {
     return provider;
   }
@@ -132,7 +143,7 @@ function sanitizeProviderReference(provider: unknown): unknown {
     return provider;
   }
   if (Array.isArray(provider)) {
-    return provider.map(sanitizeProviderReference);
+    return provider.map((item) => sanitizeProviderReference(item, true));
   }
   if (typeof (provider as { id?: unknown }).id === 'function') {
     return sanitizeProvider(provider as ApiProvider | ProviderOptions);
@@ -147,13 +158,26 @@ function sanitizeProviderReference(provider: unknown): unknown {
       ...(config !== undefined && { config: sanitizeProviderConfig(config) }),
     };
   }
+  const keys = Object.keys(provider);
+  if (allowIdlessOptions && keys.every((key) => PROVIDER_OPTION_KEYS.has(key))) {
+    const { label, config, ...options } = provider as ProviderOptions;
+    const sanitizedOptions = sanitizeForDbWithSecrets(options);
+    return {
+      ...(sanitizedOptions && typeof sanitizedOptions === 'object' ? sanitizedOptions : {}),
+      ...(label !== undefined && { label }),
+      ...(config !== undefined && { config: sanitizeProviderConfig(config) }),
+    };
+  }
   if ('env' in provider) {
     return sanitizeForDbWithSecrets(provider);
   }
   return Object.fromEntries(
     Object.entries(Object.getOwnPropertyDescriptors(provider))
       .filter(([, descriptor]) => 'value' in descriptor)
-      .map(([key, descriptor]) => [key, sanitizeProviderReference(descriptor.value)]),
+      .map(([key, descriptor]) => [
+        key,
+        sanitizeProviderReference(descriptor.value, !PROVIDER_OPTION_KEYS.has(key)),
+      ]),
   );
 }
 
