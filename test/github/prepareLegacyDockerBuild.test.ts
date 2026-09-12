@@ -143,6 +143,9 @@ describe('legacy Docker backfill patch (embedded in docker.yml)', () => {
     expect(result.dockerfile).not.toContain('npm link promptfoo');
     expect(result.dockerfile).toContain('ln -s /app/dist/src/main.js /usr/local/bin/promptfoo');
     expect(result.dockerfile).toContain('ln -s /app/dist/src/main.js /usr/local/bin/pf');
+    expect(result.dockerfile).toContain(
+      ['ln -s /app/dist/src/main.js /usr/local/bin/pf && \\', '    mkdir -p'].join('\n'),
+    );
     // The runtime dir must survive the rewrite so the container can still boot.
     expect(result.dockerfile).toContain('mkdir -p /home/promptfoo/.promptfoo');
     // Exactly one CLI-link RUN chain: the old one is replaced, not appended.

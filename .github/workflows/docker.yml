@@ -607,6 +607,25 @@ jobs:
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
         run: |
+          if [[ "$LEGACY_BACKFILL" == 'true' ]]; then
+            token="$(curl -fsS "https://${REGISTRY}/token?scope=repository:${IMAGE_NAME}:pull&service=${REGISTRY}" | jq -r '.token // empty')"
+            http_code="$(curl -sS -o /dev/null -w '%{http_code}' \
+              -H "Authorization: Bearer $token" \
+              -H 'Accept: application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json' \
+              "https://${REGISTRY}/v2/${IMAGE_NAME}/manifests/${RELEASE_TAG}")"
+            case "$http_code" in
+              404) ;;
+              200)
+                echo "::error::${REGISTRY}/${IMAGE_NAME}:${RELEASE_TAG} was published after validation; refusing to repoint it."
+                exit 1
+                ;;
+              *)
+                echo "::error::Unexpected HTTP ${http_code} while rechecking ${RELEASE_TAG}"
+                exit 1
+                ;;
+            esac
+          fi
+
           # shellcheck disable=SC2046,SC2091
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
