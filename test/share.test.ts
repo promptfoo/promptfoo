@@ -824,6 +824,14 @@ describe('createShareableUrl', () => {
 
     it('redacts Azure Blob SAS tokens from the shared eval config', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      mockEval.prompts = [
+        {
+          provider: 'openai:gpt-4',
+          raw: 'prompt1',
+          label: 'prompt1',
+          config: { apiKey: 'prompt-secret' },
+        },
+      ];
       mockEval.config = {
         tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
         providers: [
@@ -852,10 +860,10 @@ describe('createShareableUrl', () => {
       );
       expect(mockFetch.mock.calls[0][1].body).not.toContain('azure-secret');
       expect(requestBody.config.providers[0].config.apiKey).toBe('[REDACTED]');
-      expect(requestBody.config.providers[0].config.mcp.servers).toEqual([
-        { url: 'http://local/' },
-      ]);
+      expect(requestBody.config.providers[0].config.mcp.servers).toEqual([{ url: 'http://local' }]);
       expect(mockFetch.mock.calls[0][1].body).not.toContain('provider-secret');
+      expect(requestBody.prompts[0].config.apiKey).toBe('[REDACTED]');
+      expect(mockFetch.mock.calls[0][1].body).not.toContain('prompt-secret');
     });
 
     it.each([false, true])(

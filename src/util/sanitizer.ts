@@ -210,7 +210,9 @@ function isSecretHeaderField(fieldName: string): boolean {
   const normalized = normalizeFieldName(fieldName);
   return (
     isSecretField(fieldName) ||
-    /(?:apikey|authtoken|accesstoken|sessiontoken|clientsecret)$/.test(normalized)
+    /(?:apikey|authtoken|accesstoken|sessiontoken|clientsecret|token|authorization)$/.test(
+      normalized,
+    )
   );
 }
 
@@ -961,10 +963,26 @@ const URL_ENCODED_PAIR_RE = /(^|[&;])([^=&;]+)=([^&;]*)/g;
 // Redact values of credential-named multipart fields while preserving the
 // boundary and non-secret parts byte-for-byte.
 function sanitizeMultipartSecretFields(value: string): string {
+  if (!/\r?\n--/.test(value)) {
+    return value;
+  }
   return value.replace(
     /(content-disposition:\s*form-data;[^\r\n]*\bname="([^"]+)"[^\r\n]*\r?\n(?:[^\r\n]+\r?\n)*\r?\n)([\s\S]*?)(?=\r?\n--)/gi,
     (part, headers, name) => (isSecretField(name) ? `${headers}${REDACTED}` : part),
   );
+}
+
+function sanitizeUrlValue(value: string, force = false): string {
+  const urlIndex = value.search(/(?:https?|wss?):\/\//i);
+  if (urlIndex < 0) {
+    const sanitized = force ? sanitizeUrl(value) : value;
+    return sanitized === REDACTED ? sanitized : value;
+  }
+  const url = value.slice(urlIndex);
+  const sanitized = sanitizeUrl(url);
+  return sanitized.includes('REDACTED') || sanitized.includes('***')
+    ? value.slice(0, urlIndex) + sanitized
+    : value;
 }
 
 function decodeFormComponent(component: string): string | undefined {
@@ -1112,9 +1130,9 @@ function sanitizePlainObject(
       sanitized[key] = REDACTED;
     } else if (
       typeof value === 'string' &&
-      (key === 'url' || /^(?:https?|wss?):\/\//i.test(value))
+      (key === 'url' || /(?:https?|wss?):\/\//i.test(value))
     ) {
-      sanitized[key] = sanitizeUrl(value);
+      sanitized[key] = sanitizeUrlValue(value, key === 'url');
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact values that look like secrets (API keys, tokens, etc.)
       sanitized[key] = REDACTED;

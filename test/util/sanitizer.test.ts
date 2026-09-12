@@ -388,6 +388,15 @@ describe('sanitizeObject', () => {
         websocketUrl: 'wss://gateway.example/ws?token=%5BREDACTED%5D',
       });
       expect(
+        sanitizeObject({
+          endpoint: 'webhook:https://hooks.example.test/hook?token=tiny',
+          value: 'https://example.test',
+        }),
+      ).toEqual({
+        endpoint: 'webhook:https://hooks.example.test/hook?token=%5BREDACTED%5D',
+        value: 'https://example.test',
+      });
+      expect(
         sanitizeObject(
           'POST /v1 HTTP/1.1\nX-Client-Secret: header-secret\n\n{"apiKey":"body-secret"}',
         ),
@@ -404,6 +413,9 @@ describe('sanitizeObject', () => {
       expect(sanitizeObject('ordinary text\n\n'.repeat(1000))).toBe(
         'ordinary text\n\n'.repeat(1000),
       );
+      expect(
+        sanitizeObject('Content-Disposition: form-data; name="api_key"\n\n'.repeat(1000)),
+      ).toBe('Content-Disposition: form-data; name="api_key"\n\n'.repeat(1000));
     });
 
     it('should redact SAS tokens embedded in Azure Blob test URIs', () => {
@@ -848,6 +860,17 @@ describe('sanitizeObject', () => {
 
       it('should redact x-auth', () => {
         expect(sanitizeObject({ 'x-auth': 'token123' })).toEqual({ 'x-auth': '[REDACTED]' });
+      });
+
+      it('should redact generic credential header suffixes in header maps', () => {
+        expect(
+          sanitizeObject({ headers: { 'X-Vendor-Token': 'tiny', 'Proxy-Authorization': 'tiny' } }),
+        ).toEqual({
+          headers: {
+            'X-Vendor-Token': '[REDACTED]',
+            'Proxy-Authorization': '[REDACTED]',
+          },
+        });
       });
 
       it('should redact cookie', () => {
