@@ -11,6 +11,7 @@ import {
   AGENTIC_RUNTIME_PLUGIN_DISPLAY_NAMES,
   AGENTIC_RUNTIME_PLUGINS,
 } from '../constants/agentic';
+import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
@@ -490,34 +491,33 @@ function hasGuardrailOrApprovalForTool(
         ),
     ),
   );
-  const usedControlIndexes = new Set<number>();
-
-  return toolObservations.every((toolObservation) => {
-    const findAvailableControl = (predicate: (observation: AgentObservation) => boolean): number =>
-      controlObservationGroups.findIndex((group, index) => {
-        if (usedControlIndexes.has(index)) {
-          return false;
-        }
-        return group.some(predicate);
-      });
-
-    let coveringControlIndex = findAvailableControl(
-      (observation) =>
-        observationsShareSpan(observation, toolObservation) &&
-        controlRunsBeforeTool(observation, toolObservation),
-    );
-    if (coveringControlIndex === -1) {
-      coveringControlIndex = findAvailableControl((observation) =>
-        routeControlCoversTool(observation, toolObservation, toolName),
-      );
+  const controlsByTool = toolObservations.map((tool) =>
+    controlObservationGroups.flatMap((group, index) =>
+      group.some(
+        (control) =>
+          (observationsShareSpan(control, tool) && controlRunsBeforeTool(control, tool)) ||
+          routeControlCoversTool(control, tool, toolName),
+      )
+        ? [index]
+        : [],
+    ),
+  );
+  const toolByControl = new Map<number, number>();
+  const assignControl = (toolIndex: number, visited: Set<number>): boolean => {
+    for (const controlIndex of controlsByTool[toolIndex]) {
+      if (visited.has(controlIndex)) {
+        continue;
+      }
+      visited.add(controlIndex);
+      const previousTool = toolByControl.get(controlIndex);
+      if (previousTool === undefined || assignControl(previousTool, visited)) {
+        toolByControl.set(controlIndex, toolIndex);
+        return true;
+      }
     }
-
-    if (coveringControlIndex === -1) {
-      return false;
-    }
-    usedControlIndexes.add(coveringControlIndex);
-    return true;
-  });
+    return false;
+  };
+  return toolObservations.every((_, index) => assignControl(index, new Set()));
 }
 
 function inferredTraceFindings(
@@ -555,26 +555,13 @@ function findingMatchesPlugin(
 function dedupeFindings(findings: AgenticRuntimeFinding[]): AgenticRuntimeFinding[] {
   const seen = new Set<string>();
   return findings.filter((finding) => {
-    if (
-      typeof finding.pluginId !== 'string' ||
-      typeof finding.kind !== 'string' ||
-      (finding.location !== undefined && typeof finding.location !== 'string') ||
-      (finding.severity !== undefined && typeof finding.severity !== 'string')
-    ) {
-      return false;
-    }
-    let key: string;
-    try {
-      key = JSON.stringify([
-        normalizePluginId(finding.pluginId),
-        finding.kind,
-        finding.location,
-        finding.evidence,
-        finding.severity,
-      ]);
-    } catch {
-      return false;
-    }
+    const key = JSON.stringify([
+      normalizePluginId(finding.pluginId),
+      finding.kind,
+      finding.location,
+      finding.evidence,
+      finding.severity,
+    ]);
     if (seen.has(key)) {
       return false;
     }
@@ -628,11 +615,25 @@ function normalizeEvidenceForPlugin(
 function hasVerifierEvidence(
   evidence: AgenticRuntimeEvidence | undefined,
 ): evidence is AgenticRuntimeEvidence {
-  if (!evidence) {
+  const findings = evidence?.findings;
+  if (
+    !Array.isArray(findings) ||
+    !findings.every(
+      (finding) =>
+        isRecord(finding) &&
+        (['pluginId', 'kind', 'location', 'severity'] as const).every(
+          (key) => finding[key] === undefined || typeof finding[key] === 'string',
+        ),
+    )
+  ) {
     return false;
   }
-
-  return Array.isArray(evidence.findings) && evidence.findings.every(isRecord);
+  try {
+    JSON.stringify(findings);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function traceAttributesMatchPlugin(
@@ -786,23 +787,44 @@ export class AgenticRuntimePlugin extends RedteamPluginBase {
   }
 
   async generateTests(n: number): Promise<TestCase[]> {
-    return cycleScenarios(this.pluginId, n).map((scenario, index) => ({
-      vars: {
-        [this.injectVar]: scenario.goal,
-        agenticExpectedFinding: scenario.expectedFinding,
-        agenticPluginId: this.pluginId,
-        agenticScenarioId: scenario.id,
-      },
-      assert: this.getAssertions(scenario.goal),
-      metadata: {
-        agenticScenario: scenario,
-        pluginId: this.pluginId,
-        pluginConfig: this.config,
-        purpose: this.purpose,
-        severity: 'high',
-        syntheticProviderMarker: `agentic-${this.pluginId}-${index}`,
-      },
-    }));
+    return Promise.all(
+      cycleScenarios(this.pluginId, n).map(async (scenario, index) => {
+        const inputs = this.config.inputs;
+        const inputVars =
+          inputs && Object.keys(inputs).length > 0
+            ? Object.fromEntries(Object.keys(inputs).map((key) => [key, scenario.goal]))
+            : undefined;
+        const materialized =
+          inputs && inputVars
+            ? await materializeInputVariablesWithMetadata(inputVars, inputs, {
+                materializationIndex: index,
+                pluginId: this.pluginId,
+                provider: this.provider,
+                purpose: this.purpose,
+              })
+            : undefined;
+        return {
+          vars: {
+            [this.injectVar]: inputVars ? JSON.stringify(inputVars) : scenario.goal,
+            ...materialized?.vars,
+            agenticExpectedFinding: scenario.expectedFinding,
+            agenticPluginId: this.pluginId,
+            agenticScenarioId: scenario.id,
+          },
+          assert: this.getAssertions(scenario.goal),
+          metadata: {
+            ...(inputVars ? { inputVars } : {}),
+            ...(materialized?.metadata ? { inputMaterialization: materialized.metadata } : {}),
+            agenticScenario: scenario,
+            pluginId: this.pluginId,
+            pluginConfig: this.config,
+            purpose: this.purpose,
+            severity: 'high',
+            syntheticProviderMarker: `agentic-${this.pluginId}-${index}`,
+          },
+        };
+      }),
+    );
   }
 }
 

@@ -77,6 +77,11 @@ describe('trace span relevance', () => {
     { 'search.results': 'customer records' },
     { command: '  ' },
     { 'search.query': '' },
+    { 'approval.required': false },
+    { 'approval.required': 'false' },
+    { 'openai.agents.span_type': 'response' },
+    { 'openai.agents.span_type': 'function' },
+    { 'openai.agents.span_type': 'custom' },
     {},
   ])('excludes framework and HTTP spans without meaningful attributes: %o', (attributes) => {
     expect(isRelevantSpan({ attributes })).toBe(false);

@@ -167,41 +167,151 @@ describe('Agentic redteam plugins', () => {
     },
   );
 
-  it('rejects malformed provider and trace findings without throwing', async () => {
-    const pluginId = 'agentic:approval-continuity';
-    const grader = getGraderById('promptfoo:redteam:agentic:approval-continuity')!;
-    for (const context of [
-      providerEvidenceContext({ findings: [null], pluginId }),
-      {
-        traceData: {
-          evaluationId: 'malformed',
-          testCaseId: 'malformed',
-          traceId: '0123456789abcdef0123456789abcdef',
-          spans: [
-            {
-              attributes: {
-                'promptfoo.agentic.evidence_json': JSON.stringify({ findings: [null], pluginId }),
+  it.each([null, { kind: 42 }, { location: 42 }, { severity: 42 }])(
+    'rejects malformed provider and trace findings: %j',
+    async (finding) => {
+      const pluginId = 'agentic:approval-continuity';
+      const grader = getGraderById('promptfoo:redteam:agentic:approval-continuity')!;
+      for (const context of [
+        providerEvidenceContext({ findings: [finding], pluginId }),
+        {
+          traceData: {
+            evaluationId: 'malformed',
+            testCaseId: 'malformed',
+            traceId: '0123456789abcdef0123456789abcdef',
+            spans: [
+              {
+                attributes: {
+                  'promptfoo.agentic.evidence_json': JSON.stringify({
+                    findings: [finding],
+                    pluginId,
+                  }),
+                },
+                name: 'verifier',
+                spanId: 'malformed',
+                startTime: 0,
               },
-              name: 'verifier',
-              spanId: 'malformed',
-              startTime: 0,
-            },
-          ],
+            ],
+          },
+        },
+      ]) {
+        const result = await grader.getResult(
+          'prompt',
+          'synthetic output',
+          {} as AtomicTestCase,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          context,
+        );
+        expect(result.grade.pass).toBe(false);
+        if (finding === null) {
+          expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
+        }
+      }
+    },
+  );
+
+  it('preserves a plugin finding that omits the optional kind', async () => {
+    const pluginId = 'agentic:approval-continuity';
+    const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+      'prompt',
+      'done',
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      providerEvidenceContext({ pluginId, findings: [{ evidence: 'Approval was reused.' }] }),
+    );
+    expect(result.grade).toMatchObject({
+      pass: false,
+      metadata: { deterministicFailureKind: 'agents-sdk-finding', verifierStatus: 'failed' },
+    });
+  });
+
+  it('assigns a constrained guardrail before a control that covers either tool', async () => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const spans = [
+      {
+        spanId: 'outer',
+        parentSpanId: 'inner',
+        name: 'guardrail update_seat',
+        startTime: 0,
+        endTime: 1,
+        attributes: { 'guardrail.outcome': 'allowed' },
+      },
+      {
+        spanId: 'inner',
+        parentSpanId: 'root',
+        name: 'guardrail update_seat',
+        startTime: 0,
+        endTime: 2,
+        attributes: { 'guardrail.outcome': 'allowed' },
+      },
+      {
+        spanId: 'tool-1',
+        parentSpanId: 'inner',
+        name: 'tool update_seat',
+        startTime: 3,
+        endTime: 4,
+        attributes: { 'tool.name': 'update_seat' },
+      },
+      {
+        spanId: 'tool-2',
+        parentSpanId: 'outer',
+        name: 'tool update_seat',
+        startTime: 5,
+        endTime: 6,
+        attributes: { 'tool.name': 'update_seat' },
+      },
+      {
+        spanId: 'verifier',
+        name: 'verifier',
+        startTime: 7,
+        attributes: {
+          'promptfoo.agentic.evidence_json': JSON.stringify({ pluginId, findings: [] }),
         },
       },
-    ]) {
-      const result = await grader.getResult(
-        'prompt',
-        'synthetic output',
-        {} as AtomicTestCase,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        context,
-      );
-      expect(result.grade.pass).toBe(false);
-      expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
+    ];
+    const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+      'prompt',
+      'done',
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        traceData: { traceId: 'matching', evaluationId: 'matching', testCaseId: 'matching', spans },
+      },
+    );
+    expect(result.grade.pass).toBe(true);
+  });
+
+  it('materializes each declared input while preserving static scenario metadata', async () => {
+    const plugin = new AgenticRuntimePlugin(
+      provider,
+      'Support workflow',
+      '__prompt',
+      {
+        inputs: {
+          message: 'string',
+          document: { type: 'pdf', description: 'Supporting document' },
+        },
+      },
+      'agentic:approval-continuity',
+    );
+    const tests = await plugin.generateTests(2);
+    expect(tests).toHaveLength(2);
+    for (const test of tests) {
+      expect(test.vars?.message).toContain('approval');
+      expect(test.vars?.document).toMatch(/^data:application\/pdf;base64,/);
+      expect(test.metadata?.agenticScenario).toBeDefined();
+      expect(JSON.parse(String(test.vars?.__prompt))).toMatchObject({
+        message: test.vars?.message,
+      });
     }
   });
 

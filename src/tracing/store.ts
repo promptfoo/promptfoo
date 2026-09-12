@@ -70,11 +70,11 @@ function getRedactedValues(raw: unknown, safe: unknown): string[] {
   return secrets;
 }
 
-function scrubEcho<T extends string | undefined>(value: T, secrets: string[]): T {
-  if (typeof value !== 'string') {
+function scrubEcho<T extends string | undefined>(value: T, secrets: RegExp | undefined): T {
+  if (typeof value !== 'string' || !secrets) {
     return value;
   }
-  return secrets.reduce((text, secret) => text.split(secret).join('<redacted>'), value) as T;
+  return value.replace(secrets, '<redacted>') as T;
 }
 
 function serializeSpan(
@@ -102,18 +102,29 @@ function serializeSpan(
       ]
     : [];
 
-  secrets.sort((left, right) => right.length - left.length);
-  const safeEvents = events?.map((event) => ({ ...event, name: scrubEcho(event.name, secrets) }));
+  const secretPattern = secrets.length
+    ? new RegExp(
+        [...new Set(secrets)]
+          .sort((a, b) => b.length - a.length)
+          .map((secret) => secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('|'),
+        'g',
+      )
+    : undefined;
+  const safeEvents = events?.map((event) => ({
+    ...event,
+    name: scrubEcho(event.name, secretPattern),
+  }));
   return {
     spanId: span.spanId,
     parentSpanId: span.parentSpanId ?? undefined,
-    name: scrubEcho(span.name, secrets),
+    name: scrubEcho(span.name, secretPattern),
     startTime: span.startTime,
     endTime: span.endTime ?? undefined,
     attributes,
     ...(safeEvents ? { events: safeEvents } : {}),
     statusCode: span.statusCode ?? undefined,
-    statusMessage: scrubEcho(span.statusMessage ?? undefined, secrets),
+    statusMessage: scrubEcho(span.statusMessage ?? undefined, secretPattern),
   };
 }
 

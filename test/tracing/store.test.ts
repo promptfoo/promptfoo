@@ -732,6 +732,37 @@ describe('TraceStore', () => {
       },
     );
 
+    it('replaces repeated short secrets without expanding redaction markers', async () => {
+      mockDb.select
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockResolvedValue([{ traceId: 'duplicate-secrets' }]),
+        })
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockResolvedValue([
+            {
+              spanId: 'span',
+              name: 'e',
+              startTime: 0,
+              statusMessage: 'e',
+              attributes: Object.fromEntries(
+                Array.from({ length: 12 }, (_, i) => [`token${i}`, 'e']),
+              ),
+              events: [{ name: 'e', timestamp: 0, attributes: { token: 'e' } }],
+            },
+          ]),
+        });
+      const result = await traceStore.getTrace('duplicate-secrets');
+      expect(result?.spans[0].name).toHaveLength('<redacted>'.length);
+      expect(result?.spans[0]).toMatchObject({
+        name: '<redacted>',
+        statusMessage: '<redacted>',
+        events: [{ name: '<redacted>' }],
+      });
+    });
+
     it('should allow callers to retrieve raw span attributes for a single trace', async () => {
       const mockTrace = {
         id: '1',
