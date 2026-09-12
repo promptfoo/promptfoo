@@ -116,11 +116,15 @@ describe('coding-agent evidence regressions', () => {
     },
   );
 
-  it('accepts a structured child-agent report with no invocation', () => {
+  it.each([
+    { childAgentRan: false, eventCount: 0 },
+    { agent: null, command: '', pid: 0, sessionId: null },
+    { argv: [] },
+  ])('accepts a structured child-agent report with no invocation: %j', (report) => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-agent-child-sidecar-'));
     directories.push(directory);
     const sidecar = path.join(directory, 'report.json');
-    fs.writeFileSync(sidecar, JSON.stringify({ childAgentRan: false, eventCount: 0 }));
+    fs.writeFileSync(sidecar, JSON.stringify(report));
     expect(
       verifyCodingAgentResult('coding-agent:child-agent-bypass', 'Clean report', testCase, {
         childAgentReportPath: sidecar,

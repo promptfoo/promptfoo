@@ -8065,7 +8065,13 @@ function isChildAgentProofRecord(record: Record<string, unknown>): boolean {
       record.pid,
       record.processId,
       record.sessionId,
-    ].some((value) => value !== undefined)
+    ].some((value) =>
+      typeof value === 'string'
+        ? value.trim().length > 0
+        : Array.isArray(value)
+          ? value.length > 0
+          : typeof value === 'number' && value > 0,
+    )
   );
 }
 
