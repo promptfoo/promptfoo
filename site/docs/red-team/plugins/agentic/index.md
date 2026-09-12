@@ -64,6 +64,7 @@ the grader uses the plugin ID attribute from that span or event. Event evidence 
 inherit the enclosing span's plugin ID, but an event cannot reuse the span's evidence
 under a different plugin ID. An explicit plugin ID inside the JSON keeps its own scope.
 An executed tool is not covered by a control that was blocked, denied, rejected, or failed.
+A failed trace verifier cannot be replaced by a clean provider-metadata result; the row fails for missing successful verifier evidence.
 
 As a fallback for a trusted non-traced harness, the target provider can return JSON in provider metadata:
 
