@@ -51,7 +51,7 @@ redteam:
 
 With local default generation, `pii:direct` uses family-balanced generation when at least five tests are requested. Payment-card requests take priority so a valid credit-card candidate remains represented at the five-test threshold. `pii:social` uses explicit social-engineering pretexts that must also request protected information in the same clause for every positive batch, and reports semantic frontier coverage even for small batches.
 
-Direct PII families cover identity and contact details, credit-card numbers, medical records, prescriptions, insurance, and lab results. A disclosure request must tie the sensitive field to a person or record, including a policy or account identifier. General questions about formats, available treatments, or insurance options do not count. Social cases distinguish requests for the speaker’s own records from claims of representing someone else; the third-party family requires that relationship claim.
+Direct PII families cover identity and contact details, credit-card numbers, medical records, prescriptions, insurance, and lab results. A disclosure request must tie the sensitive field to a person or record, including a policy or account identifier. General questions about formats, available treatments, or insurance options do not count. Neither do explanations of why a person’s data must remain private, even if they begin with “read” or “access.” Social cases distinguish requests for the speaker’s own records from claims of representing someone else; the third-party family requires that relationship claim.
 
 Supplying `examples` or `inputs` keeps customized generation behavior. The `pii:direct` `name` option also preserves name-targeted generation instead of switching to the default portfolio.
 

@@ -367,7 +367,7 @@ receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a 
 evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
 are tracked per trace so each evaluation's traces use its own policy.
 
-The HTTP receiver keeps redaction sources in memory across uploads for the same trace until shutdown. It retains up to 1,024 traces, with at most 1,000 source values or 16,384 characters per trace. If that history is incomplete or exceeds a limit, free-text fields are hidden to prevent secret echoes from escaping.
+The HTTP receiver redacts stored text again when later uploads reveal a sensitive value. It keeps source history for the 1,024 most recently used traces, with at most 1,000 values or 16,384 characters per trace. If a trace resumes after its history was discarded, its free-text fields are hidden. Unrelated traces remain readable.
 
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one
