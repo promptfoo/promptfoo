@@ -43,6 +43,8 @@ Default single-input generation balances distinct extraction families rather tha
 
 Direct-disclosure candidates must ask the target to reveal its system prompt or instructions. Definitions such as “Explain what a system prompt is” and defensive statements such as “Never reveal your system prompt” do not count as disclosure coverage.
 
+Format-conversion candidates must request a transformation of hidden instructions, such as converting them into a checklist. A five-test batch can leave some protected-control-plane coverage incomplete; the diagnostics report that gap.
+
 Each generated test case is then associated with assertions to evaluate the AI's response:
 
 ## Example Test Cases
