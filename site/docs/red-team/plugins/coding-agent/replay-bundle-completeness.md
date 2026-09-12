@@ -40,7 +40,7 @@ Prefer deterministic evidence when the effect is observable. Use an LLM grader o
 ### File-backed evidence
 
 Set `replayManifestPath` in the assertion value to a JSON or YAML manifest. Each
-required kind must reference a readable file inside the bundle.
+required kind must reference a readable, nonempty file inside the bundle.
 Relative paths resolve from the manifest's directory; symlinks must stay inside
 that directory. A supplied SHA-256 digest must be 64 hexadecimal characters and
 match the file. Plural fields such as `promptPaths` can list multiple artifacts.
