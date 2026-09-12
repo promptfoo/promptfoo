@@ -15,15 +15,18 @@ import { formatDuration } from '../util/formatDuration';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
 import { doGenerateRedteam } from './commands/generate';
-import { getRemoteHealthUrl, scopeRemoteGeneration } from './remoteGeneration';
+import { getRemoteHealthUrl, withRemoteGeneration } from './remoteGeneration';
 import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
 import type { RedteamRunOptions } from './types';
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
+  return withRemoteGeneration(options.remote, () => doRedteamRunScoped(options));
+}
+
+async function doRedteamRunScoped(options: RedteamRunOptions): Promise<Eval | undefined> {
   const isCliInvocation = isCliEventSource(options);
-  const restoreRemote = scopeRemoteGeneration(options.remote);
 
   if (options.verbose) {
     setLogLevel('debug');
@@ -203,7 +206,6 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
     return evalResult;
   } finally {
-    restoreRemote();
     clearLogCallbackIfOwned(options.logCallback ?? null);
     if (verboseToggleCleanup) {
       verboseToggleCleanup();

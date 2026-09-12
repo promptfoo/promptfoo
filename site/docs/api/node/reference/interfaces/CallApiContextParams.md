@@ -67,17 +67,13 @@ Nunjucks filters available while rendering related prompt content.
 
 ### getCache?
 
-> `optional` **getCache?**: () => `any`
+> `optional` **getCache?**: `any`
 
 Defined in: [src/types/providers.ts:196](https://github.com/promptfoo/promptfoo/blob/main/src/types/providers.ts#L196)
 
 Accessor for the active cache instance. Treat the return value as opaque
 and prefer the documented `cache.*` helpers from the package over calling
 it directly.
-
-#### Returns
-
-`any`
 
 ---
 

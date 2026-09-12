@@ -201,7 +201,7 @@ Pass if the output matches the classification with a score greater than or equal
 ### matchesClosedQa
 
 <!-- prettier-ignore -->
-> **matchesClosedQa**: (`input`, `expected`, `output`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
+> **matchesClosedQa**: (`input`, `expected`, `output`, `grading`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Grade whether an answer satisfies a closed-QA criterion.
 
@@ -773,7 +773,7 @@ Conversation-relevance grading result without the surrounding assertion payload.
 ### matchesFactuality
 
 <!-- prettier-ignore -->
-> **matchesFactuality**: (`input`, `expected`, `output`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
+> **matchesFactuality**: (`input`, `expected`, `output`, `grading`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Grade whether an answer is factually consistent with a reference answer.
 
@@ -870,7 +870,7 @@ Factuality grading result without the surrounding assertion payload.
 ### matchesLlmRubric
 
 <!-- prettier-ignore -->
-> **matchesLlmRubric**: (`rubric`, `llmOutput`, `grading?`, `vars?`, `assertion?`, `options?`, `providerCallContext?`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)\>
+> **matchesLlmRubric**: (`rubric`, `llmOutput`, `grading`, `vars?`, `assertion?`, `options?`, `providerCallContext?`) => `Promise`\<[`GradingResult`](../interfaces/GradingResult.md)\>
 
 Grade an output against a free-form LLM rubric.
 
@@ -888,7 +888,7 @@ Rubric text or structured rubric payload.
 
 Model output to grade.
 
-##### grading?
+##### grading
 
 Provider and rubric-prompt overrides for the grader.
 

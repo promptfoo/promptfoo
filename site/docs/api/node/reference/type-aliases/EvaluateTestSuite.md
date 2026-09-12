@@ -13,14 +13,14 @@ import type { EvaluateTestSuite } from 'promptfoo';
 <!-- prettier-ignore -->
 > **EvaluateTestSuite** = `object` & `Omit`\<[`TestSuiteConfig`](TestSuiteConfig.md), `"prompts"` \| `"providers"`\>
 
-Defined in: [src/types/index.ts:1943](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1943)
+Defined in: [src/types/index.ts:1949](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1949)
 
 Test-suite shape accepted by the Node.js `evaluate()` API.
 
 In addition to the Node-specific `prompts`, `providers`, `author`, and
 `writeLatestResults` fields listed below, this type accepts the same shared
 suite fields as the YAML config model, including `tests`, `defaultTest`,
-`env`, and scenarios.
+`env`, `outputPath`, `sharing`, and scenarios.
 
 ## Type Declaration
 

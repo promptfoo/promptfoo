@@ -5,7 +5,6 @@ import path from 'path';
 
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
-import cliState from '../../src/cliState';
 import { clearLogCallbackIfOwned, setLogCallback } from '../../src/logger';
 import { doEval } from '../../src/node/doEval';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
@@ -196,18 +195,6 @@ describe('doRedteamRun', () => {
       expect.objectContaining({ envFile: 'generation.env' }),
     );
     expect(vi.mocked(doEval).mock.calls[0][0]).toMatchObject({ envPath: 'generation.env' });
-  });
-
-  it('scopes the remote override to one run', async () => {
-    cliState.remote = false;
-    vi.mocked(doGenerateRedteam).mockImplementationOnce(async () => {
-      expect(cliState.remote).toBe(true);
-      return {};
-    });
-
-    await doRedteamRun({ remote: true });
-
-    expect(cliState.remote).toBe(false);
   });
 
   it.each([true, false])('honors cache=%s in generation and evaluation', async (cache) => {

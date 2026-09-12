@@ -133,7 +133,7 @@ Each result contains the service's `model` and a `results` array with `flagged`,
 under `results[i].payload.pii`.
 
 `adaptive()` accepts an `AdaptiveRequest` with `prompt` and optional `policies`
-(string identifiers). It returns `Promise<AdaptiveResult>` with `model`,
+(policy instruction text). It returns `Promise<AdaptiveResult>` with `model`,
 `adaptedPrompt`, and `modifications`. Import these types from `promptfoo` when
 annotating application code. Service or network failures reject the promise.
 

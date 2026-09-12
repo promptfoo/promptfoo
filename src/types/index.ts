@@ -1875,6 +1875,12 @@ export const TestSuiteConfigSchema = z.object({
     .optional(),
 });
 
+/**
+ * Shared suite fields accepted by YAML config and Node evaluate input,
+ * including tests, defaultTest, env, outputPath, sharing, and scenarios.
+ *
+ * @public
+ */
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;
 
 export const UnifiedConfigSchema = TestSuiteConfigSchema.extend({
@@ -1927,7 +1933,7 @@ export interface EvalWithMetadata {
  * In addition to the Node-specific `prompts`, `providers`, `author`, and
  * `writeLatestResults` fields listed below, this type accepts the same shared
  * suite fields as the YAML config model, including `tests`, `defaultTest`,
- * `env`, and scenarios.
+ * `env`, `outputPath`, `sharing`, and scenarios.
  *
  * @example
  * ```ts

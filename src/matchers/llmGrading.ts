@@ -66,7 +66,7 @@ function getFactualityScoreLookup(grading: GradingConfig): Record<string, number
 function buildFactualityResult(
   option: string,
   reason: string,
-  grading: GradingConfig,
+  grading: GradingConfig = {},
   resp: ProviderResponse,
 ): Omit<GradingResult, 'assertion'> {
   const scoreLookup = getFactualityScoreLookup(grading);
@@ -193,7 +193,7 @@ function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['au
 export async function matchesLlmRubric(
   rubric: string | object,
   llmOutput: string,
-  grading?: GradingConfig,
+  grading: GradingConfig,
   vars?: Record<string, VarValue>,
   assertion?: Assertion,
   options?: {
@@ -205,12 +205,6 @@ export async function matchesLlmRubric(
   },
   providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
-  if (!grading) {
-    throw new Error(
-      'Cannot grade output without grading config. Specify --grader option or grading config.',
-    );
-  }
-
   // Use remote grading when no provider is explicitly configured, or when a
   // caller injected an implicit default provider but still prefers remote.
   const shouldPreferRemote =
@@ -349,16 +343,10 @@ export async function matchesFactuality(
   input: string,
   expected: string,
   output: string,
-  grading?: GradingConfig,
+  grading: GradingConfig = {},
   vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  if (!grading) {
-    throw new Error(
-      'Cannot grade output without grading config. Specify --grader option or grading config.',
-    );
-  }
-
   const parsedOutput = tryParse(output);
   const templateVars = { ...(vars || {}), input, ideal: expected, completion: parsedOutput };
 
@@ -419,16 +407,10 @@ export async function matchesClosedQa(
   input: string,
   expected: string,
   output: string,
-  grading?: GradingConfig,
+  grading: GradingConfig = {},
   vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  if (!grading) {
-    throw new Error(
-      'Cannot grade output without grading config. Specify --grader option or grading config.',
-    );
-  }
-
   const parsedOutput = tryParse(output);
   const templateVars = { ...(vars || {}), input, criteria: expected, completion: parsedOutput };
 

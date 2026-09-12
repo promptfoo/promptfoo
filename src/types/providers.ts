@@ -193,7 +193,7 @@ export interface CallApiContextParams {
    * it directly.
    */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  getCache?: () => any;
+  getCache?: any;
   /** Logger configured for the current eval. */
   logger?: winston.Logger;
   /** Original provider when this call is being graded or wrapped. */
