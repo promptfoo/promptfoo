@@ -25,7 +25,7 @@ import {
   shouldBustProviderCache,
   withResponseCacheMetadata,
 } from '../shared';
-import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { GoogleGenericProvider, type GoogleProviderOptions, getCallbackErrorOutput } from './base';
 import { getGeminiTokenUsage, parseGeminiContent, prepareGeminiRequest } from './gemini';
 import { getVertexApiHostForRegion } from './shared';
 import {
@@ -531,7 +531,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       } catch (error) {
         return {
           ...response,
-          ...(options?.abortSignal?.aborted ? {} : { output: undefined }),
+          output: getCallbackErrorOutput(error, response.output, options?.abortSignal?.aborted),
           error: String(error),
         };
       }

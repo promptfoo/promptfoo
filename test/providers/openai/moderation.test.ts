@@ -495,7 +495,10 @@ describe('OpenAiModerationProvider', () => {
       if (method === 'get') {
         await expect(pending).rejects.toThrow('cancelled moderation cache get');
       } else {
-        expect((await pending).error).toContain('cancelled moderation cache set');
+        await expect(pending).resolves.toMatchObject({
+          flags: [],
+          error: expect.stringContaining('cancelled moderation cache set'),
+        });
       }
     });
 

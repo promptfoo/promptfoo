@@ -194,6 +194,27 @@ describe('matchesAnswerRelevance', () => {
     expect(result.tokensUsed?.completionDetails).toBeDefined();
   });
 
+  it('retains completed usage when a later candidate embedding fails', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
+      .mockResolvedValueOnce({
+        embedding: [1, 0, 0],
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      })
+      .mockResolvedValueOnce({
+        embedding: [1, 0, 0],
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      })
+      .mockRejectedValueOnce(new Error('cancelled later embedding'));
+
+    const result = await matchesAnswerRelevance('Input text', 'Sample output', 0.5);
+
+    expect(result).toMatchObject({
+      pass: false,
+      reason: 'cancelled later embedding',
+      tokensUsed: { total: 40, prompt: 19, completion: 21 },
+    });
+  });
+
   it('should return metadata with generated questions and similarities', async () => {
     const input = 'What is the capital of France?';
     const output = 'The capital of France is Paris.';
