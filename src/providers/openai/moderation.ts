@@ -296,6 +296,7 @@ export class OpenAiModerationProvider
       ...this.getOpenAiRequestHeaders(),
     };
 
+    let completedResponse: ProviderModerationResponse | undefined;
     try {
       const { data, status, statusText } = await fetchOpenAIModerationWithDedupe(
         getScopedCacheKey(cacheKey),
@@ -326,6 +327,7 @@ export class OpenAiModerationProvider
       logger.debug(`\tOpenAI moderation API response: ${JSON.stringify(data)}`);
 
       const response = parseOpenAIModerationResponse(data);
+      completedResponse = response;
 
       if (useCache) {
         options?.abortSignal?.throwIfAborted();
@@ -339,7 +341,7 @@ export class OpenAiModerationProvider
       options?.abortSignal?.throwIfAborted();
       return response;
     } catch (err) {
-      return handleApiError(err);
+      return { ...completedResponse, ...handleApiError(err) };
     }
   }
 }

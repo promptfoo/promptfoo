@@ -21,7 +21,7 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { awaitProviderOperation, getRequestSignal, getRequestTimeoutMs } from '../shared';
-import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { GoogleGenericProvider, type GoogleProviderOptions, getCallbackErrorOutput } from './base';
 import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCostFromUsage,
@@ -759,7 +759,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       } catch (error) {
         return {
           ...response,
-          ...(options?.abortSignal?.aborted ? {} : { output: undefined }),
+          output: getCallbackErrorOutput(error, response.output, options?.abortSignal?.aborted),
           error: String(error),
         };
       }
