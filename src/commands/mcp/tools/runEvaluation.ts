@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { z } from 'zod';
+import cliState from '../../../cliState';
 import { createTestCaseSelection, getTestCasesForSelection } from '../../../evaluator';
 import logger from '../../../logger';
 import { doEval } from '../../../node/doEval';
@@ -512,59 +513,65 @@ export function registerRunEvaluationTool(server: McpServer) {
         logger.debug(`Running evaluation with config: ${configPath || 'promptfooconfig.yaml'}`);
 
         const startTime = Date.now();
-        const evalResult = await doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, {
-          beforeFilterTestSuite: (testSuite, _config, { selectedProviderConfigs } = {}) => {
-            const unfilteredProviders = [...testSuite.providers];
-            const filteredSuite = applyMcpEvaluationFilters(testSuite, {
-              testCaseIndices,
-              promptFilter,
-              providerFilter,
-            });
-            if (hasStringFilters(providerFilter)) {
-              try {
-                evaluateOptionOverrides.providerSelection = createProviderSelection(
-                  unfilteredProviders,
-                  Array.isArray(selectedProviderConfigs) ? selectedProviderConfigs : undefined,
-                  testSuite.providers,
-                );
-              } catch (error) {
-                throw new McpEvaluationFilterError(
-                  error instanceof Error
-                    ? error.message
-                    : 'Failed to preserve selected provider identities',
+        const evalResult = await cliState.withMaxConcurrency(maxConcurrency, () =>
+          doEval(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, {
+            beforeFilterTestSuite: (testSuite, _config, { selectedProviderConfigs } = {}) => {
+              const unfilteredProviders = [...testSuite.providers];
+              const filteredSuite = applyMcpEvaluationFilters(testSuite, {
+                testCaseIndices,
+                promptFilter,
+                providerFilter,
+              });
+              if (hasStringFilters(providerFilter)) {
+                try {
+                  evaluateOptionOverrides.providerSelection = createProviderSelection(
+                    unfilteredProviders,
+                    Array.isArray(selectedProviderConfigs) ? selectedProviderConfigs : undefined,
+                    testSuite.providers,
+                  );
+                } catch (error) {
+                  throw new McpEvaluationFilterError(
+                    error instanceof Error
+                      ? error.message
+                      : 'Failed to preserve selected provider identities',
+                  );
+                }
+              }
+              suiteSummary = filteredSuite.suiteSummary;
+              selectedTestCaseIndices = filteredSuite.selectedTestCaseIndices;
+              setSelectedTestCaseIndices(
+                evaluateOptionOverrides,
+                testSuite,
+                selectedTestCaseIndices,
+              );
+              if (hasFilters) {
+                logger.debug(
+                  `Running filtered eval with ${suiteSummary.testCases.filtered} test cases, ${suiteSummary.prompts.filtered} prompts, ${suiteSummary.providers.filtered} providers`,
                 );
               }
-            }
-            suiteSummary = filteredSuite.suiteSummary;
-            selectedTestCaseIndices = filteredSuite.selectedTestCaseIndices;
-            setSelectedTestCaseIndices(evaluateOptionOverrides, testSuite, selectedTestCaseIndices);
-            if (hasFilters) {
-              logger.debug(
-                `Running filtered eval with ${suiteSummary.testCases.filtered} test cases, ${suiteSummary.prompts.filtered} prompts, ${suiteSummary.providers.filtered} providers`,
+            },
+            afterFilterTestSuite: (testSuite, _config, { deferredFilterRange }) => {
+              if (!suiteSummary) {
+                return;
+              }
+              suiteSummary = summarizeFilteredSuite(
+                testSuite,
+                {
+                  testCases: suiteSummary.testCases.total,
+                  prompts: suiteSummary.prompts.total,
+                  providers: suiteSummary.providers.total,
+                },
+                deferredFilterRange,
+                selectedTestCaseIndices?.length,
               );
-            }
-          },
-          afterFilterTestSuite: (testSuite, _config, { deferredFilterRange }) => {
-            if (!suiteSummary) {
-              return;
-            }
-            suiteSummary = summarizeFilteredSuite(
-              testSuite,
-              {
-                testCases: suiteSummary.testCases.total,
-                prompts: suiteSummary.prompts.total,
-                providers: suiteSummary.providers.total,
-              },
-              deferredFilterRange,
-              selectedTestCaseIndices?.length,
-            );
-          },
-          evaluateOptionOverrides,
-          allowConfigFilterRange: testCaseIndices === undefined,
-          allowConfigFilterSample: testCaseIndices === undefined,
-          disablePromptSuggestions: hasFilters,
-          skipRedteamEmailPreflight: hasFilters,
-        });
+            },
+            evaluateOptionOverrides,
+            allowConfigFilterRange: testCaseIndices === undefined,
+            allowConfigFilterSample: testCaseIndices === undefined,
+            disablePromptSuggestions: hasFilters,
+            skipRedteamEmailPreflight: hasFilters,
+          }),
+        );
         const endTime = Date.now();
         if (!suiteSummary) {
           return createToolResponse(

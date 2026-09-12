@@ -3,13 +3,36 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
-import { createTestCaseSelection, evaluate } from '../../src/evaluator';
+import { createTestCaseSelection, evaluate, getTestCasesForSelection } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, type TestSuite } from '../../src/types/index';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator scenarios and conversations', () => {
+  it('keeps repeated selection and evaluation from appending scenarios to the caller suite', async () => {
+    const provider: ApiProvider = {
+      id: () => 'echo',
+      callApi: vi.fn(async (prompt) => ({ output: prompt })),
+    };
+    const tests = [{ vars: { value: 'explicit' } }];
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{value}}')],
+      tests,
+      scenarios: [{ config: [{ vars: { value: 'scenario' } }], tests: [{}] }],
+    };
+    expect(getTestCasesForSelection(suite)).toHaveLength(2);
+    expect(getTestCasesForSelection(suite)).toHaveLength(2);
+    expect(tests).toHaveLength(1);
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, {});
+    const summary = await record.toEvaluateSummary();
+    expect(summary.results.map((row) => row.vars.value)).toEqual(['explicit', 'scenario']);
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
+    expect(tests).toHaveLength(1);
+  });
+
   it('filters scenario-generated test cases by flattened index', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),

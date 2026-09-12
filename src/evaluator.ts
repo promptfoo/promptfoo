@@ -2409,7 +2409,7 @@ function buildTestsFromSuite(
   testSuite: TestSuite,
   options: { includeDefaultTest?: boolean } = {},
 ): AtomicTestCase[] {
-  const tests = getInitialTests(testSuite);
+  const tests = [...getInitialTests(testSuite)];
   if (!testSuite.scenarios?.length) {
     return tests;
   }

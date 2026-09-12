@@ -113,6 +113,70 @@ describe('runEvaluation tool', () => {
   });
 
   describe('shared execution path', () => {
+    it.each([false, true])(
+      'isolates overlapping evaluation concurrency (peer fails=%s)',
+      async (peerFails) => {
+        const { doEval } = await import('../../../../src/node/doEval');
+        const { registerRunEvaluationTool } = await import(
+          '../../../../src/commands/mcp/tools/runEvaluation'
+        );
+        let toolHandler: any;
+        registerRunEvaluationTool({
+          tool: vi.fn((_name, _schema, handler) => {
+            toolHandler = handler;
+          }),
+        } as any);
+        const original = cliState.maxConcurrency;
+        let entered!: () => void;
+        let release!: () => void;
+        const firstEntered = new Promise<void>((resolve) => {
+          entered = resolve;
+        });
+        const firstReleased = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let observed: number | undefined;
+        vi.mocked(doEval).mockImplementation(async (...args) => {
+          const concurrency = args[3].maxConcurrency;
+          cliState.maxConcurrency = concurrency;
+          try {
+            if (concurrency === 1) {
+              entered();
+              await firstReleased;
+              observed = cliState.maxConcurrency;
+            } else if (peerFails) {
+              throw new Error('Peer failed');
+            }
+            return (await defaultDoEvalImplementation(...args)) as any;
+          } finally {
+            cliState.maxConcurrency = undefined;
+          }
+        });
+        try {
+          cliState.maxConcurrency = 9;
+          const first = toolHandler({
+            configPath: 'first.yaml',
+            testCaseIndices: 0,
+            maxConcurrency: 1,
+          });
+          await firstEntered;
+          const peer = await toolHandler({
+            configPath: 'peer.yaml',
+            testCaseIndices: 0,
+            maxConcurrency: 7,
+          });
+          release();
+          expect((await first).isError).toBe(false);
+          expect(peer.isError).toBe(peerFails);
+          expect(observed).toBe(1);
+          expect(cliState.maxConcurrency).toBe(9);
+        } finally {
+          release();
+          cliState.maxConcurrency = original;
+        }
+      },
+    );
+
     it('should route filtered evals through doEval with the requested runtime options', async () => {
       const { doEval } = await import('../../../../src/node/doEval');
       const { registerRunEvaluationTool } = await import(
