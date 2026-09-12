@@ -79,7 +79,9 @@ import { MedicalPrioritizationErrorPluginGrader } from './plugins/medical/medica
 import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophancy';
 import { ModelIdentificationGrader } from './plugins/modelIdentification';
 import { OffTopicPluginGrader } from './plugins/offTopic';
+import { OrchestratorTrustInjectionGrader } from './plugins/orchestratorTrustInjection';
 import { OverrelianceGrader } from './plugins/overreliance';
+import { PersonaInjectionGrader } from './plugins/personaInjection';
 import { PharmacyControlledSubstanceCompliancePluginGrader } from './plugins/pharmacy/controlledSubstanceCompliance';
 import { PharmacyDosageCalculationPluginGrader } from './plugins/pharmacy/dosageCalculation';
 import { PharmacyDrugInteractionPluginGrader } from './plugins/pharmacy/drugInteraction';
@@ -205,6 +207,8 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:harmful:weapons:ied': new HarmfulGrader(),
   'promptfoo:redteam:hijacking': new HijackingGrader(),
   'promptfoo:redteam:imitation': new ImitationGrader(),
+  'promptfoo:redteam:orchestrator-trust-injection': new OrchestratorTrustInjectionGrader(),
+  'promptfoo:redteam:persona-injection': new PersonaInjectionGrader(),
   'promptfoo:redteam:indirect-prompt-injection': new IndirectPromptInjectionGrader(),
   'promptfoo:redteam:insurance:coverage-discrimination':
     new InsuranceCoverageDiscriminationPluginGrader(),
