@@ -824,6 +824,73 @@ describe('createShareableUrl', () => {
     });
 
     it.each([false, true])(
+      'strips response media before blob handling (cloud: %s)',
+      async (cloud) => {
+        vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloud);
+        vi.mocked(envars.getEnvBool).mockImplementation((_key, defaultValue) =>
+          Boolean(defaultValue),
+        );
+        const outputUri = `promptfoo://blob/${'b'.repeat(64)}`;
+        const inputUri = `promptfoo://blob/${'c'.repeat(64)}`;
+        const row = {
+          id: 'media-row',
+          testCase: { vars: { input: inputUri } },
+          metadata: { audio: { data: outputUri }, blobUris: [outputUri], note: 'keep metadata' },
+          response: {
+            output: outputUri,
+            providerTransformedOutput: outputUri,
+            audio: { data: outputUri },
+            video: { url: outputUri },
+            images: [{ url: outputUri }],
+            metadata: {
+              blobUris: [outputUri],
+              audio: { data: outputUri },
+              note: 'keep metadata',
+            },
+          },
+        };
+        mockEval.config = { env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' } };
+        mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+          yield [row];
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const scans = cloud
+          ? vi.mocked(uploadBlobRefsForShare).mock.calls
+          : vi.mocked(inlineBlobRefsForShare).mock.calls;
+        expect(scans.length).toBeGreaterThan(0);
+        for (const [value] of scans) {
+          expect(JSON.stringify(value)).not.toContain(outputUri);
+          expect(JSON.stringify(value)).toContain(inputUri);
+        }
+        const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
+        expect(uploaded.response).toEqual({
+          output: '[output stripped]',
+          metadata: { note: 'keep metadata' },
+        });
+        expect(uploaded.metadata).toEqual({ note: 'keep metadata' });
+        expect(row.response.metadata.blobUris).toEqual([outputUri]);
+      },
+    );
+
+    it('omits the duplicate legacy results from the initial share payload', async () => {
+      const oldResults = { results: [{ response: { output: 'private-legacy-output' } }] };
+      Object.assign(mockEval, { oldResults });
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await createShareableUrl(mockEval as Eval);
+
+      expect(JSON.parse(mockFetch.mock.calls[0][1].body)).not.toHaveProperty('oldResults');
+      expect(mockEval.oldResults).toBe(oldResults);
+    });
+
+    it.each([false, true])(
       'omits runtime provider paths from uploads (strip data: %s)',
       async (stripData) => {
         vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
@@ -840,7 +907,12 @@ describe('createShareableUrl', () => {
           id: 'source-row',
           provider: {
             id: 'file:///home/alice/project/target.js',
-            config: { basePath: '/home/alice/project', temperature: 0 },
+            config: {
+              basePath: '/home/alice/project',
+              temperature: 0,
+              tools: 'file:///home/alice/project/tools.json',
+              nested: [{ schema: 'file://C:\\Users\\alice\\project\\schema.json' }],
+            },
           },
           prompt: {
             raw: 'public',
@@ -909,7 +981,11 @@ describe('createShareableUrl', () => {
           expect(options.body).not.toContain('Users');
         }
         expect(uploaded.provider.id).toBe('file://target.js');
-        expect(uploaded.provider.config).toEqual({ temperature: 0 });
+        expect(uploaded.provider.config).toEqual({
+          temperature: 0,
+          tools: 'file://tools.json',
+          nested: [{ schema: 'file://schema.json' }],
+        });
         expect(uploaded.testCase.options.provider.text.config).toEqual({ temperature: 0 });
         expect(uploaded.testCase.options.provider.classification).toBe('file://classifier.js');
         expect(row.provider.config.basePath).toBe('/home/alice/project');

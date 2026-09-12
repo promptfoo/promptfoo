@@ -42,6 +42,14 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   }) as ProviderConfig;
 }
 
+function projectOutputMetadata<T>(metadata: T, stripOutput: boolean): T {
+  if (!stripOutput || !metadata || typeof metadata !== 'object') {
+    return metadata;
+  }
+  const { blobUris: _blobUris, audio: _audio, ...rest } = metadata as Record<string, unknown>;
+  return rest as T;
+}
+
 function projectProviderResponse(
   response: ProviderResponse | undefined,
   options: { stripMetadata: boolean; stripOutput: boolean },
@@ -54,13 +62,18 @@ function projectProviderResponse(
     return response;
   }
 
-  const projectedResponse = options.stripMetadata
+  const projectedResponse: ProviderResponse = options.stripMetadata
     ? (({ metadata: _metadata, ...rest }) => rest)(response)
     : { ...response };
 
   if (options.stripOutput) {
     projectedResponse.output = '[output stripped]';
     delete projectedResponse.raw;
+    delete projectedResponse.providerTransformedOutput;
+    delete projectedResponse.audio;
+    delete projectedResponse.video;
+    delete projectedResponse.images;
+    projectedResponse.metadata = projectOutputMetadata(projectedResponse.metadata, true);
   }
 
   return projectedResponse;
@@ -71,6 +84,7 @@ export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: bool
     ? {
         ...prompt,
         raw: '[prompt stripped]',
+        template: undefined,
       }
     : prompt;
 }
@@ -686,7 +700,9 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
     response,
     gradingResult: shouldStripGradingResult ? null : redacted.gradingResult,
     namedScores: sanitizeForDb(artifactResult.namedScores),
-    metadata: shouldStripMetadata ? {} : redacted.metadata,
+    metadata: shouldStripMetadata
+      ? {}
+      : projectOutputMetadata(redacted.metadata, shouldStripResponseOutput),
   } as T;
 }
 
@@ -1102,7 +1118,9 @@ export default class EvalResult {
       testIdx: this.testIdx,
       tokenUsage,
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
-      metadata: shouldStripMetadata ? {} : this.metadata,
+      metadata: shouldStripMetadata
+        ? {}
+        : projectOutputMetadata(this.metadata, shouldStripResponseOutput),
       failureReason: this.failureReason,
     };
   }

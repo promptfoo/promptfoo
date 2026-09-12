@@ -71,6 +71,21 @@ describe('looksLikeSecret', () => {
 });
 
 describe('sanitizeConfigForOutput', () => {
+  it.each([
+    { prompts: 'private literal' },
+    { prompts: ['private literal'] },
+    { prompts: [{ raw: 'private literal', label: 'public label' }] },
+    { prompts: { 'private literal': 'public label' } },
+  ])('omits config prompt sources when prompt stripping is enabled: $prompts', (config) => {
+    expect(
+      sanitizeConfigForOutput(config, { shouldStripPromptText: true }).prompts,
+    ).toBeUndefined();
+    expect(sanitizeConfigForOutput(config, { shouldStripPromptText: false }).prompts).toEqual(
+      config.prompts,
+    );
+    expect(JSON.stringify(config)).toContain('private literal');
+  });
+
   it('preserves the local replay directory even when it resembles an opaque token', () => {
     const basePath = `/home/${'nested/'.repeat(15)}project`;
     expect(sanitizeConfigForOutput({ basePath }).basePath).toBe(basePath);

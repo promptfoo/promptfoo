@@ -307,10 +307,10 @@ describe('writeOutput', () => {
           ],
         },
       ]);
-      const eval_ = new Eval({ env: flags, tests: [testCase] });
+      const eval_ = new Eval({ env: flags, tests: [testCase], prompts: ['private-config-prompt'] });
       await eval_.addResult(
         createEvaluateResult({
-          prompt: { raw: 'private-prompt', label: 'label' },
+          prompt: { raw: 'private-prompt', template: 'private-template', label: 'label' },
           testCase,
           response: { output: 'private-output', raw: 'private-raw-output' },
           metadata: { note: 'private-note' },
@@ -318,7 +318,14 @@ describe('writeOutput', () => {
         }),
       );
       try {
-        eval_.prompts = [{ raw: 'private-prompt', label: 'public', provider: 'echo' }];
+        eval_.prompts = [
+          {
+            raw: 'private-prompt',
+            template: 'private-template',
+            label: 'public',
+            provider: 'echo',
+          },
+        ];
         const resultsFile = await eval_.toResultsFile();
         expect(resultsFile.prompts?.[0].raw).toBe(strip ? '[prompt stripped]' : 'private-prompt');
         expect(JSON.stringify(resultsFile).includes('private-')).toBe(!strip);
@@ -350,6 +357,8 @@ describe('writeOutput', () => {
         }
 
         expect(eval_.config.tests).toEqual([testCase]);
+        expect(eval_.config.prompts).toEqual(['private-config-prompt']);
+        expect(eval_.prompts[0].template).toBe('private-template');
         expect(eval_.results[0].response?.output).toBe('private-output');
       } finally {
         traceSpy.mockRestore();

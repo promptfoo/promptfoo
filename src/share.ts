@@ -172,7 +172,7 @@ function stripProviderPaths<T>(provider: T): T {
     }
     if (projected.config && typeof projected.config === 'object') {
       const { basePath: _basePath, ...config } = projected.config as Record<string, unknown>;
-      projected.config = config;
+      projected.config = stripFilePaths(config);
     }
   } else {
     return Object.fromEntries(
@@ -263,8 +263,9 @@ async function sendEvalRecord(
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.
+  const { oldResults: _oldResults, ...evalFields } = evalRecord;
   let evalData: Record<string, unknown> = {
-    ...evalRecord,
+    ...evalFields,
     config: redactedConfig,
     prompts: evalRecord.prompts.map((prompt) =>
       stripPromptPaths(projectPrompt(prompt, stripFlags.shouldStripPromptText)),
@@ -565,6 +566,7 @@ async function sendChunkedResults(
     cloudConfig.isEnabled() && !inlineBlobs ? createRemoteBlobUploadCache() : null;
 
   let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
+  sampleResults = sampleResults.map((row) => sanitizeResultForJsonlArtifact(row, stripFlags));
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
     return null;

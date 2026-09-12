@@ -674,6 +674,7 @@ export function sanitizeTracingConfigForPersistence(
 export function sanitizeConfigForOutput(
   config: Partial<UnifiedConfig>,
   options: {
+    shouldStripPromptText?: boolean;
     shouldStripTestVars?: boolean;
     shouldStripMetadata?: boolean;
     shouldStripResponseOutput?: boolean;
@@ -689,6 +690,9 @@ export function sanitizeConfigForOutput(
   }) as Partial<UnifiedConfig>;
   if (basePath !== undefined) {
     sanitized.basePath = basePath;
+  }
+  if (options.shouldStripPromptText) {
+    delete sanitized.prompts;
   }
   const {
     shouldStripTestVars: stripVars,
