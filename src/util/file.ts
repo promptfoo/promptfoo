@@ -53,7 +53,9 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
   // Add environment variables as template globals
   env.addGlobal('env', {
     ...(isTemplateProcessEnvDisabled() ? {} : getProcessEnv()),
-    ...getEnvOverrides(),
+    ...Object.fromEntries(
+      Object.entries(getEnvOverrides() ?? {}).filter(([, value]) => value !== undefined),
+    ),
   });
 
   return env;

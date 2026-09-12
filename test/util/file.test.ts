@@ -371,9 +371,14 @@ describe('file utilities', () => {
       mockProcessEnv({ TEST_ROOT_PATH: undefined });
     });
 
-    it.each([false, true])(
-      'uses scoped env-file paths with template restriction %s',
-      (disabled) => {
+    it.each([
+      { disabled: false, suiteValue: undefined, expected: 'file' },
+      { disabled: false, suiteValue: '', expected: '' },
+      { disabled: false, suiteValue: 'suite', expected: 'suite' },
+      { disabled: true, suiteValue: undefined, expected: '' },
+    ])(
+      'uses scoped env-file paths with restriction $disabled and suite value $suiteValue',
+      ({ disabled, suiteValue, expected }) => {
         const restoreEnv = mockProcessEnv({
           TEST_ROOT_PATH: 'host',
           PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: String(disabled),
@@ -382,11 +387,11 @@ describe('file utilities', () => {
           const rendered = cliState.withEnvFileOverrides(
             { TEST_ROOT_PATH: 'file', PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'false' },
             () =>
-              cliState.withEnv({}, () =>
+              cliState.withEnv({ TEST_ROOT_PATH: suiteValue }, () =>
                 getNunjucksEngineForFilePath().renderString('{{ env.TEST_ROOT_PATH }}', {}),
               ),
           );
-          expect(rendered).toBe(disabled ? '' : 'file');
+          expect(rendered).toBe(expected);
           expect(process.env.TEST_ROOT_PATH).toBe('host');
         } finally {
           restoreEnv();
