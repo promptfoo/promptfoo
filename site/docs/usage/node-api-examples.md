@@ -202,6 +202,8 @@ const result = await assertions.runAssertions({
 console.log(result.pass, result.score);
 ```
 
+For semantic similarity scoring, add a `similar` assertion with a `threshold` and configure an embedding provider.
+
 ## Track progress
 
 <LegacyHeadingAnchors page="examples" section="Track progress" />

@@ -16,8 +16,8 @@ Defined in: [src/types/providers.ts:89](https://github.com/promptfoo/promptfoo/b
 
 Provider input accepted by `evaluate()` and `loadApiProviders()`.
 
-Pass one provider id, provider function, provider object, or an array that
-mixes the supported provider config forms.
+Pass one provider id, provider function, instantiated ApiProvider, or an array
+that mixes the supported provider config forms.
 
 ## Example
 

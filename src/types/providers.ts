@@ -73,8 +73,8 @@ export type ProviderConfig =
 /**
  * Provider input accepted by `evaluate()` and `loadApiProviders()`.
  *
- * Pass one provider id, provider function, provider object, or an array that
- * mixes the supported provider config forms.
+ * Pass one provider id, provider function, instantiated ApiProvider, or an array
+ * that mixes the supported provider config forms.
  *
  * @example
  * ```ts

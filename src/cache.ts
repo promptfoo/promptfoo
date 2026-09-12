@@ -85,6 +85,10 @@ export function getCacheTtlMs(): number {
  * @public
  */
 export function getCache() {
+  if (!getEffectiveCacheEnabled()) {
+    return createCache({ stores: [], ttl: getCacheTtlMs(), refreshThreshold: 0 });
+  }
+
   const namespace = cacheNamespaceStorage.getStore()?.namespace;
   if (namespace) {
     return getNamespacedCache(namespace);

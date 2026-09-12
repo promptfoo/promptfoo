@@ -201,7 +201,7 @@ Pass if the output matches the classification with a score greater than or equal
 ### matchesClosedQa
 
 <!-- prettier-ignore -->
-> **matchesClosedQa**: (`input`, `expected`, `output`, `grading`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
+> **matchesClosedQa**: (`input`, `expected`, `output`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Grade whether an answer satisfies a closed-QA criterion.
 
@@ -773,7 +773,7 @@ Conversation-relevance grading result without the surrounding assertion payload.
 ### matchesFactuality
 
 <!-- prettier-ignore -->
-> **matchesFactuality**: (`input`, `expected`, `output`, `grading`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
+> **matchesFactuality**: (`input`, `expected`, `output`, `grading?`, `vars?`, `providerCallContext?`) => `Promise`\<`Omit`\<[`GradingResult`](../interfaces/GradingResult.md), `"assertion"`\>\>
 
 Grade whether an answer is factually consistent with a reference answer.
 

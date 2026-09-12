@@ -343,10 +343,11 @@ export async function matchesFactuality(
   input: string,
   expected: string,
   output: string,
-  grading: GradingConfig = {},
+  grading?: GradingConfig,
   vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
+  grading ??= {};
   const parsedOutput = tryParse(output);
   const templateVars = { ...(vars || {}), input, ideal: expected, completion: parsedOutput };
 
@@ -407,10 +408,11 @@ export async function matchesClosedQa(
   input: string,
   expected: string,
   output: string,
-  grading: GradingConfig = {},
+  grading?: GradingConfig,
   vars?: Record<string, VarValue>,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
+  grading ??= {};
   const parsedOutput = tryParse(output);
   const templateVars = { ...(vars || {}), input, criteria: expected, completion: parsedOutput };
 
