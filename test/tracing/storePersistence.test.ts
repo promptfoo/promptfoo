@@ -68,6 +68,33 @@ describe('TraceStore span persistence', () => {
     expect(spans.map((span) => span.spanId)).toEqual(['first']);
   });
 
+  it('enforces cumulative payload limits without a redactor', async () => {
+    const traceId = 'unredacted-size';
+    const store = await createTrace(traceId);
+    const attributes = { payload: 'x'.repeat(6 * 1024 * 1024) };
+    await store.addSpans(traceId, [{ spanId: 'first', name: 'first', startTime: 1, attributes }]);
+    await expect(
+      store.addSpans(traceId, [{ spanId: 'second', name: 'second', startTime: 2, attributes }]),
+    ).rejects.toThrow('Trace redaction limit exceeded');
+    expect(await store.getSpans(traceId)).toHaveLength(1);
+  });
+
+  it('rejects oversized span batches without a redactor', async () => {
+    const traceId = 'unredacted-count';
+    const store = await createTrace(traceId);
+    await expect(
+      store.addSpans(
+        traceId,
+        Array.from({ length: 10_001 }, (_, index) => ({
+          spanId: String(index),
+          name: 'span',
+          startTime: 1,
+        })),
+      ),
+    ).rejects.toThrow('Trace redaction limit exceeded');
+    expect(await store.getSpans(traceId)).toHaveLength(0);
+  });
+
   it.each([false, true])(
     'accepts retries at the unique span cap (upsert: %s)',
     async (updateExisting) => {
