@@ -367,6 +367,8 @@ receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a 
 evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
 are tracked per trace so each evaluation's traces use its own policy.
 
+The HTTP receiver keeps redaction sources in memory across uploads for the same trace until shutdown. It retains up to 1,024 traces, with at most 1,000 source values or 16,384 characters per trace. If that history is incomplete or exceeds a limit, free-text fields are hidden to prevent secret echoes from escaping.
+
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one
 another's results — each trace is redacted with its own policy, not the active receiver's.
@@ -918,7 +920,7 @@ otherwise leave out.
 SQL injection grading requires `redteam.tracing.enabled: true` and honors `includeInGrading`. Root tracing alone does not send query evidence to the grader. Its trace summary includes tool names,
 status codes, query text, and explicit authorization and row-count outcomes when available. SQL operations take priority within the 24-step summary limit. It omits
 free-form status messages, bound parameter values, and returned rows. Explicit `sql` tool arguments
-and `read_query` calls count as database evidence; ordinary search queries do not. Query text honors `tracing.otlp.http.redactAttributes`, including values echoed in other spans' names. For example, a `query` pattern removes query text from the grading summary. When nested attributes exceed the redaction limit or a redacted attribute contains serialized JSON, the summary hides all span names.
+and `read_query` calls with string or object arguments count as database evidence; ordinary search queries do not. Query text honors `tracing.otlp.http.redactAttributes`, including values echoed in other spans' names. For example, a `query` pattern removes query text from the grading summary. When nested attributes exceed the redaction limit or a redacted attribute contains serialized JSON, the summary hides all span names.
 
 ### Strategy-Specific Configuration
 
