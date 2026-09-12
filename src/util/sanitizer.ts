@@ -38,6 +38,10 @@ function hasUrlUserinfoPassword(url: string): boolean {
   return atIndex !== -1 && authority.slice(0, atIndex).includes(':');
 }
 
+function isSecretParameterName(name: string): boolean {
+  return isSecretField(name) || normalizeFieldName(name).endsWith('apikey');
+}
+
 /**
  * Whether any `key=value` segment carries a credential — by a secret-looking
  * value or a secret-named key. Splits on every URL pair delimiter (`? & ; #`),
@@ -65,7 +69,7 @@ function hasSecretFormSegment(text: string): boolean {
     const rawKey = segment.slice(0, equalsIndex);
     const key = decodeFormComponent(rawKey) ?? rawKey;
     const keyParts = key.split(/[._\-\[\]]+/).filter(Boolean);
-    if (isSecretField(key) || keyParts.some(isSecretField)) {
+    if (isSecretParameterName(key) || keyParts.some(isSecretParameterName)) {
       return true;
     }
   }
@@ -970,7 +974,7 @@ export function sanitizeUrlEncodedString(value: string): string {
     // Split nested-key syntax (`user[password]`, `a.b.password`) into parts so we
     // can match the leaf name against SECRET_FIELD_NAMES.
     const keyParts = decodedKey === undefined ? [] : decodedKey.split(/[.\[\]]+/).filter(Boolean);
-    const keyIsSecret = keyParts.some(isSecretField);
+    const keyIsSecret = keyParts.some(isSecretParameterName);
 
     // A secret-named key redacts its ENTIRE value before any template skip or
     // nested-JSON recursion, so a partial-template value (`password=abc{{x}}def`)
@@ -1225,8 +1229,8 @@ export function sanitizeUrl(url: string): string {
     try {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
         if (
-          isSecretField(key) ||
-          key.split(/[._-]/).some(isSecretField) ||
+          isSecretParameterName(key) ||
+          key.split(/[._-]/).some(isSecretParameterName) ||
           rawSecretParamKeys.has(key) ||
           looksLikeSecret(value) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential
