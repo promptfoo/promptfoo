@@ -117,3 +117,50 @@ describe.each(providers)('%s callback cancellation', (_name, Provider, model) =>
     }
   });
 });
+
+it('retains completed Azure callback output when a later callback is cancelled', async () => {
+  const waiting = createDeferred<string>();
+  const started = createDeferred<void>();
+  const controller = new AbortController();
+  vi.mocked(fetchWithCache).mockResolvedValue({
+    data: {
+      choices: [
+        {
+          message: {
+            content: null,
+            tool_calls: [
+              { id: 'call_1', type: 'function', function: { name: 'done', arguments: '{}' } },
+              { id: 'call_2', type: 'function', function: { name: 'wait', arguments: '{}' } },
+            ],
+          },
+          finish_reason: 'tool_calls',
+        },
+      ],
+      usage: { prompt_tokens: 7, completion_tokens: 4, total_tokens: 11 },
+    },
+    cached: false,
+    status: 200,
+    statusText: 'OK',
+  });
+  const provider = new AzureChatCompletionProvider('gpt-4o', {
+    config: {
+      apiKey: 'fixture-key',
+      apiHost: 'fixture.invalid',
+      functionToolCallbacks: {
+        done: async () => 'done result',
+        wait: () => {
+          started.resolve();
+          return waiting.promise;
+        },
+      },
+    },
+  });
+  const pending = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+  await started.promise;
+  controller.abort(new Error('cancelled later callback'));
+  const result = await pending;
+  waiting.resolve('late result');
+
+  expect(result.output).toContain('done result');
+  expect(result.error).toContain('cancelled later callback');
+});

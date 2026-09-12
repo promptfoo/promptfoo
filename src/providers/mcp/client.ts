@@ -707,7 +707,10 @@ export class MCPClient {
     await Promise.all([...this.pendingConnections].map((close) => close()));
     await Promise.allSettled([...this.tokenRefreshLocks.values()].map(({ promise }) => promise));
     for (const [serverKey, client] of this.clients.entries()) {
-      await this.closeConnection(client, this.transports.get(serverKey));
+      await awaitProviderOperation(
+        this.closeConnection(client, this.transports.get(serverKey)),
+        this.lifecycleController.signal,
+      ).catch(() => {});
     }
     this.clients.clear();
     this.transports.clear();

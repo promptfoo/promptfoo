@@ -144,6 +144,33 @@ describe('ResponsesProcessor', () => {
       );
     });
 
+    it('retains earlier callback output when a later item is cancelled', async () => {
+      const controller = new AbortController();
+      mockFunctionCallbackHandler.processCalls
+        .mockResolvedValueOnce('first result')
+        .mockImplementationOnce(() => {
+          controller.abort(new Error('cancelled later callback'));
+          throw controller.signal.reason;
+        });
+
+      const result = await processor.processResponseOutput(
+        {
+          output: [
+            { type: 'function_call', name: 'first', arguments: '{"id":1}' },
+            { type: 'function_call', name: 'second', arguments: '{"id":2}' },
+          ],
+        },
+        {},
+        false,
+        { abortSignal: controller.signal },
+      );
+
+      expect(result).toMatchObject({
+        output: 'first result',
+        error: 'cancelled later callback',
+      });
+    });
+
     it('should handle empty function arguments correctly', async () => {
       const mockData = {
         output: [
