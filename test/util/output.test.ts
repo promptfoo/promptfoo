@@ -312,12 +312,16 @@ describe('writeOutput', () => {
         createEvaluateResult({
           prompt: { raw: 'private-prompt', label: 'label' },
           testCase,
-          response: { output: 'private-output' },
+          response: { output: 'private-output', raw: 'private-raw-output' },
           metadata: { note: 'private-note' },
           gradingResult: { pass: true, score: 1, reason: 'private-grade' },
         }),
       );
       try {
+        eval_.prompts = [{ raw: 'private-prompt', label: 'public', provider: 'echo' }];
+        const resultsFile = await eval_.toResultsFile();
+        expect(resultsFile.prompts?.[0].raw).toBe(strip ? '[prompt stripped]' : 'private-prompt');
+        expect(JSON.stringify(resultsFile).includes('private-')).toBe(!strip);
         const output = await createOutputData(eval_, null);
         expect(JSON.stringify(output).includes('private-')).toBe(!strip);
         expect(output.results.results[0]).toMatchObject({ success: true, score: 1 });
@@ -325,7 +329,7 @@ describe('writeOutput', () => {
           expect(output.results.results[0]).toMatchObject({
             prompt: { raw: 'private-prompt' },
             testCase,
-            response: { output: 'private-output' },
+            response: { output: 'private-output', raw: 'private-raw-output' },
             metadata: { note: 'private-note' },
             gradingResult: { reason: 'private-grade' },
           });

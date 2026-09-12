@@ -18,7 +18,7 @@ import {
   getStripFlags,
   sanitizeResultForJsonlArtifact,
 } from '../models/evalResult';
-import { PromptfooAttributes } from '../tracing/genaiTracer';
+import { projectTracesForOutput } from '../tracing/output';
 import {
   type CsvRow,
   type ExportedBlobAsset,
@@ -341,69 +341,6 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
         : '',
   };
 };
-
-export function projectTracesForOutput(
-  traces: NonNullable<OutputFile['traces']>,
-  {
-    shouldStripMetadata,
-    shouldStripPromptText,
-    shouldStripResponseOutput,
-    shouldStripTestVars,
-  }: ReturnType<typeof getStripFlags>,
-) {
-  if (
-    !shouldStripMetadata &&
-    !shouldStripPromptText &&
-    !shouldStripResponseOutput &&
-    !shouldStripTestVars
-  ) {
-    return traces;
-  }
-
-  return traces.map((trace) => {
-    let projectedTrace = trace;
-    if (shouldStripMetadata) {
-      const { metadata: _metadata, ...traceWithoutMetadata } = trace;
-      projectedTrace = traceWithoutMetadata;
-    } else if (shouldStripTestVars && trace.metadata && 'vars' in trace.metadata) {
-      const { metadata: traceMetadata, ...traceWithoutMetadata } = trace;
-      const { vars: _vars, ...metadata } = traceMetadata;
-      projectedTrace = {
-        ...traceWithoutMetadata,
-        ...(Object.keys(metadata).length > 0 && { metadata }),
-      };
-    }
-
-    if (!shouldStripPromptText && !shouldStripResponseOutput) {
-      return projectedTrace;
-    }
-
-    return {
-      ...projectedTrace,
-      spans: projectedTrace.spans.map((span) => {
-        if (!span.attributes) {
-          return span;
-        }
-
-        const projectedAttributes = { ...span.attributes };
-        if (shouldStripPromptText) {
-          delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
-        }
-        if (shouldStripResponseOutput) {
-          delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
-        }
-
-        const { attributes: _attributes, ...projectedSpan } = span;
-        return {
-          ...projectedSpan,
-          ...(Object.keys(projectedAttributes).length > 0 && {
-            attributes: projectedAttributes,
-          }),
-        };
-      }),
-    };
-  });
-}
 
 function resultsForMediaExportScan(
   results: OutputFile['results'],

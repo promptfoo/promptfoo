@@ -58,12 +58,13 @@ function projectProviderResponse(
 
   if (options.stripOutput) {
     projectedResponse.output = '[output stripped]';
+    delete projectedResponse.raw;
   }
 
   return projectedResponse;
 }
 
-function projectPrompt(prompt: Prompt, stripPromptText: boolean): Prompt {
+export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: boolean): T {
   return stripPromptText
     ? {
         ...prompt,

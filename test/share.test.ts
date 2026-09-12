@@ -947,6 +947,7 @@ describe('createShareableUrl', () => {
           ],
         },
       ]);
+      mockEval.prompts = [{ raw: 'private-prompt', label: 'public', provider: 'echo' }];
       mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
         yield [{ id: 'row', testCase }];
       });

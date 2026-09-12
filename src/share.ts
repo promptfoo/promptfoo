@@ -10,7 +10,8 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { getStripFlags, sanitizeResultForJsonlArtifact } from './models/evalResult';
+import { getStripFlags, projectPrompt, sanitizeResultForJsonlArtifact } from './models/evalResult';
+import { projectTracesForOutput } from './tracing/output';
 import {
   checkCloudPermissions,
   getOrgContext,
@@ -18,7 +19,6 @@ import {
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { projectTracesForOutput } from './util/output';
 import { sanitizeConfigForOutput } from './util/sanitizer';
 
 import type Eval from './models/eval';
@@ -217,6 +217,9 @@ async function sendEvalRecord(
   let evalData: Record<string, unknown> = {
     ...evalRecord,
     config: redactedConfig,
+    prompts: evalRecord.prompts.map((prompt) =>
+      projectPrompt(prompt, stripFlags.shouldStripPromptText),
+    ),
     results: [],
     traces: projectTracesForOutput(traces, stripFlags),
   };
