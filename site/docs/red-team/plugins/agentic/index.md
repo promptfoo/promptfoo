@@ -11,6 +11,8 @@ Agentic runtime plugins test whether an agentic application preserves runtime bo
 
 Use these plugins with a provider that runs the real agentic application under test with Promptfoo tracing enabled. The plugins generate adversarial agent-runtime goals. The graders deterministically fail when OTEL spans or provider-returned structured evidence report a matching finding.
 
+For multi-input targets, each declared input receives the scenario goal. Document inputs use the configured document format, and the generated case retains its scenario ID and verifier metadata. A matching finding can omit its optional `kind`; it still fails the check. Malformed evidence never counts as a clean verifier result.
+
 :::info
 
 These plugins are verifier-backed. They are intentionally stricter than generic LLM rubrics because most SDK failures are visible in run state, interruptions, tool metadata, handoff history, session contents, or trace data rather than in the final assistant message alone.

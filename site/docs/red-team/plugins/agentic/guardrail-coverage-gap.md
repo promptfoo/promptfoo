@@ -47,6 +47,8 @@ Emit evidence from guardrail evaluation and tool execution order. Useful fields 
 Tool-name, input, and output attributes sharing a span and call ID describe one
 invocation. A failed, denied, or skipped control does not cover a tool that still
 executes, whether the control is on the same span or an earlier step on its route.
+Each execution needs its own control. When several route controls could cover the
+same execution, the grader checks for a complete one-to-one assignment.
 
 Minimum failing OTEL attributes:
 
