@@ -9,7 +9,7 @@ import {
 } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
-import { getRequestTimeoutMs } from '../providers/shared';
+import { getAbortError, getRequestTimeoutMs } from '../providers/shared';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { safeJsonStringify } from '../util/json';
 import { ellipsize } from '../util/text';
@@ -84,16 +84,9 @@ function isAbortError(error: unknown): boolean {
 }
 
 function throwIfAborted(signal?: AbortSignal) {
-  if (!signal?.aborted) {
-    return;
+  if (signal?.aborted) {
+    throw getAbortError(signal);
   }
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    throw reason;
-  }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-  error.name = 'AbortError';
-  throw error;
 }
 
 function awaitPrediction<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {

@@ -677,6 +677,97 @@ describe('OpenAiModerationProvider', () => {
     });
   });
 
+  describe('Cancellation', () => {
+    it('forwards the abort signal to the moderation request', async () => {
+      const provider = createProvider();
+      const abortSignal = new AbortController().signal;
+
+      await provider.callModerationApi('user', 'assistant', undefined, { abortSignal });
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ signal: abortSignal }),
+        expect.any(Number),
+        'json',
+        true,
+        undefined,
+      );
+    });
+
+    it('rethrows aborts instead of reporting them as moderation errors', async () => {
+      const provider = createProvider();
+      const controller = new AbortController();
+      const abortError = new Error('Evaluation timed out');
+      abortError.name = 'AbortError';
+      vi.mocked(fetchWithCache).mockImplementationOnce(async () => {
+        controller.abort(abortError);
+        throw abortError;
+      });
+
+      await expect(
+        provider.callModerationApi('user', 'assistant', undefined, {
+          abortSignal: controller.signal,
+        }),
+      ).rejects.toBe(abortError);
+    });
+
+    it('skips the request when the signal is already aborted', async () => {
+      const provider = createProvider();
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        provider.callModerationApi('user', 'assistant', undefined, {
+          abortSignal: controller.signal,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('does not share an in-flight request across abort signals', async () => {
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(getCache).mockImplementation(function () {
+        return { get: vi.fn().mockResolvedValue(null), set: vi.fn() } as any;
+      });
+      const provider = createProvider();
+      const resolvers: Array<(value: any) => void> = [];
+      vi.mocked(fetchWithCache).mockImplementation(
+        () =>
+          new Promise<any>((resolve) => {
+            resolvers.push(resolve);
+          }) as ReturnType<typeof fetchWithCache>,
+      );
+
+      const first = provider.callModerationApi('user', 'same text', undefined, {
+        abortSignal: new AbortController().signal,
+      });
+      const second = provider.callModerationApi('user', 'same text', undefined, {
+        abortSignal: new AbortController().signal,
+      });
+
+      await vi.waitFor(() => {
+        expect(fetchWithCache).toHaveBeenCalledTimes(2);
+      });
+
+      for (const resolveFetch of resolvers) {
+        resolveFetch({
+          data: {
+            id: 'modr-123',
+            model: 'text-moderation-latest',
+            results: [{ flagged: false, categories: {}, category_scores: {} }],
+          },
+          status: 200,
+          statusText: 'OK',
+          cached: false,
+        });
+      }
+
+      await expect(Promise.all([first, second])).resolves.toEqual([{ flags: [] }, { flags: [] }]);
+    });
+  });
+
   describe('Multi-modal support', () => {
     it('should format inputs correctly for omni-moderation models', async () => {
       const provider = createProvider('omni-moderation-latest');

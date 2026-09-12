@@ -16,6 +16,71 @@ export function getRequestTimeoutMs(): number {
  */
 export const LONG_RUNNING_MODEL_TIMEOUT_MS = 600_000; // 10 minutes
 
+const abortSignalIds = new WeakMap<AbortSignal, number>();
+let nextAbortSignalId = 0;
+
+/** Normalize cancellation to AbortError while preserving the original reason. */
+export function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const message =
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === 'string' && reason
+        ? reason
+        : 'Request was aborted';
+  // The app's ES2020 lib does not support the ErrorOptions constructor overload.
+  const error = new Error(message) as Error & { cause?: unknown };
+  error.name = 'AbortError';
+  error.cause = reason;
+  return error;
+}
+
+/** Stop waiting on work that cannot itself be cancelled, such as a cache operation. */
+export async function waitWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+
+  let onAbort!: () => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(getAbortError(signal));
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+    }
+  });
+  try {
+    const result = await Promise.race([promise, aborted]);
+    if (signal.aborted) {
+      throw getAbortError(signal);
+    }
+    return result;
+  } catch (error) {
+    throw signal.aborted ? getAbortError(signal) : error;
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+  }
+}
+
+/**
+ * Partition an in-flight request key by abort signal so callers that can be cancelled
+ * independently never share (and therefore never cancel) each other's request.
+ */
+export function getInFlightCacheKey(cacheKey: string, signal?: AbortSignal): string {
+  if (!signal) {
+    return cacheKey;
+  }
+  let signalId = abortSignalIds.get(signal);
+  if (signalId === undefined) {
+    signalId = ++nextAbortSignalId;
+    abortSignalIds.set(signal, signalId);
+  }
+  return `${cacheKey}:signal:${signalId}`;
+}
+
 interface ModelCost {
   input: number;
   output: number;

@@ -8,7 +8,7 @@ import {
 } from '../../util/fetch/errors';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
-import { getRequestTimeoutMs } from '../shared';
+import { getAbortError, getInFlightCacheKey, getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
 import {
   appendOpenAiApiPath,
@@ -29,8 +29,6 @@ import type { OpenAiSharedOptions } from './types';
 const VALID_RESPONSE_FORMATS = new Set(['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm']);
 const MAX_INPUT_CHARACTERS = 4096;
 const inFlightRequests = new Map<string, Promise<ProviderResponse>>();
-const abortSignalIds = new WeakMap<AbortSignal, number>();
-let nextAbortSignalId = 0;
 
 function isSensitiveCacheHeader(key: string): boolean {
   return (
@@ -69,16 +67,6 @@ function canonicalizeCacheValue(value: unknown): unknown {
     );
   }
   return value;
-}
-
-function getAbortError(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error && reason.name === 'AbortError') {
-    return reason;
-  }
-  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
-  error.name = 'AbortError';
-  return error;
 }
 
 export type OpenAiTtsOptions = OpenAiSharedOptions & {
@@ -182,19 +170,6 @@ async function coalesceRequest(
   } finally {
     inFlightRequests.delete(cacheKey);
   }
-}
-
-function getInFlightCacheKey(cacheKey: string, signal?: AbortSignal): string {
-  if (!signal) {
-    return cacheKey;
-  }
-
-  let signalId = abortSignalIds.get(signal);
-  if (signalId === undefined) {
-    signalId = ++nextAbortSignalId;
-    abortSignalIds.set(signal, signalId);
-  }
-  return `${cacheKey}:signal:${signalId}`;
 }
 
 export class OpenAiTtsProvider extends OpenAiGenericProvider {
