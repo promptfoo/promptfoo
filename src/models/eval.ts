@@ -18,7 +18,6 @@ import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
-import { projectTracesForOutput } from '../tracing/output';
 import { getTraceStore } from '../tracing/store';
 import {
   type CompletedPrompt,
@@ -68,6 +67,7 @@ import EvalResult, {
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
   projectPrompt,
+  projectTracesForOutput,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 

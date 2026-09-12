@@ -16,9 +16,9 @@ import {
   asEvaluateResult,
   getResultIndexKey,
   getStripFlags,
+  projectTracesForOutput,
   sanitizeResultForJsonlArtifact,
 } from '../models/evalResult';
-import { projectTracesForOutput } from '../tracing/output';
 import {
   type CsvRow,
   type ExportedBlobAsset,

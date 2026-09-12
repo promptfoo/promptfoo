@@ -8,6 +8,7 @@ import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { ProviderConfig } from '../providers/shared';
+import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
   type ApiProvider,
   type AtomicTestCase,
@@ -19,6 +20,7 @@ import {
   type ProviderOptions,
   type ProviderResponse,
   ResultFailureReason,
+  type TraceData,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
@@ -71,6 +73,69 @@ export function projectPrompt<T extends Prompt>(prompt: T, stripPromptText: bool
         raw: '[prompt stripped]',
       }
     : prompt;
+}
+
+export function projectTracesForOutput(
+  traces: TraceData[],
+  {
+    shouldStripMetadata,
+    shouldStripPromptText,
+    shouldStripResponseOutput,
+    shouldStripTestVars,
+  }: ReturnType<typeof getStripFlags>,
+) {
+  if (
+    !shouldStripMetadata &&
+    !shouldStripPromptText &&
+    !shouldStripResponseOutput &&
+    !shouldStripTestVars
+  ) {
+    return traces;
+  }
+
+  return traces.map((trace) => {
+    let projectedTrace = trace;
+    if (shouldStripMetadata) {
+      const { metadata: _metadata, ...traceWithoutMetadata } = trace;
+      projectedTrace = traceWithoutMetadata;
+    } else if (shouldStripTestVars && trace.metadata && 'vars' in trace.metadata) {
+      const { metadata: traceMetadata, ...traceWithoutMetadata } = trace;
+      const { vars: _vars, ...metadata } = traceMetadata;
+      projectedTrace = {
+        ...traceWithoutMetadata,
+        ...(Object.keys(metadata).length > 0 && { metadata }),
+      };
+    }
+
+    if (!shouldStripPromptText && !shouldStripResponseOutput) {
+      return projectedTrace;
+    }
+
+    return {
+      ...projectedTrace,
+      spans: projectedTrace.spans.map((span) => {
+        if (!span.attributes) {
+          return span;
+        }
+
+        const projectedAttributes = { ...span.attributes };
+        if (shouldStripPromptText) {
+          delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
+        }
+        if (shouldStripResponseOutput) {
+          delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
+        }
+
+        const { attributes: _attributes, ...projectedSpan } = span;
+        return {
+          ...projectedSpan,
+          ...(Object.keys(projectedAttributes).length > 0 && {
+            attributes: projectedAttributes,
+          }),
+        };
+      }),
+    };
+  });
 }
 
 function projectTestCase(

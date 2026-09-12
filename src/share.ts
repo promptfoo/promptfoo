@@ -10,8 +10,12 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
-import { getStripFlags, projectPrompt, sanitizeResultForJsonlArtifact } from './models/evalResult';
-import { projectTracesForOutput } from './tracing/output';
+import {
+  getStripFlags,
+  projectPrompt,
+  projectTracesForOutput,
+  sanitizeResultForJsonlArtifact,
+} from './models/evalResult';
 import {
   checkCloudPermissions,
   getOrgContext,
