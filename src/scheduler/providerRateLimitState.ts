@@ -143,6 +143,10 @@ export class ProviderRateLimitState extends EventEmitter {
     this.totalRequests++;
     let attempt = 0;
     let lastError: Error | undefined;
+    const throwCancellation = (error: unknown): never => {
+      this.failedRequests++;
+      throw error;
+    };
     const retryPolicy =
       options.maxRetriesOverride === undefined
         ? this.retryPolicy
@@ -157,7 +161,6 @@ export class ProviderRateLimitState extends EventEmitter {
         ownsSlot = true;
         if (options.abortSignal?.aborted) {
           this.slotQueue.release();
-          ownsSlot = false;
           throw abortError(options.abortSignal.reason);
         }
       } catch (acquireError) {
@@ -248,8 +251,7 @@ export class ProviderRateLimitState extends EventEmitter {
           error instanceof Error &&
           (error.name === 'AbortError' || error.name === 'AbortException')
         ) {
-          this.failedRequests++;
-          throw error;
+          throwCancellation(error);
         }
 
         // Check if rate limited (from error, not result)
@@ -274,7 +276,7 @@ export class ProviderRateLimitState extends EventEmitter {
             reason: isRateLimited ? 'ratelimit' : 'error',
           });
 
-          await this.sleep(delay, options.abortSignal);
+          await this.sleep(delay, options.abortSignal).catch(throwCancellation);
           continue;
         }
 

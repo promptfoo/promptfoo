@@ -26,7 +26,7 @@ export function abortError(reason: unknown): Error {
   }
   const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
   error.name = 'AbortError';
-  error.cause = reason;
+  (error as Error & { cause?: unknown }).cause = reason;
   return error;
 }
 

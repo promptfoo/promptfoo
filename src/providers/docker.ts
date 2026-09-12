@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { OpenAiChatCompletionProvider } from './openai/chat';
+import { OpenAiChatCompletionProvider, throwIfAborted } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
@@ -128,6 +128,7 @@ export class DMRChatCompletionProvider extends OpenAiChatCompletionProvider {
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    throwIfAborted(callApiOptions?.abortSignal);
     if (!(await hasLocalModel(this.modelName, this.getApiUrl()))) {
       logger.warn(
         `Model '${this.modelName}' not found. Run 'docker model pull ${this.modelName}'.`,
