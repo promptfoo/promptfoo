@@ -540,9 +540,10 @@ export function getExternalModuleName(specifier: string): string | undefined {
 /** The npm package name a specifier imports, or undefined for relative imports and Node builtins. */
 export function getPackageName(specifier: string): string | undefined {
   const moduleName = getExternalModuleName(specifier);
-  return moduleName &&
-    (!BUILTIN_MODULES.has(moduleName) ||
-      (!specifier.startsWith('node:') && PREFIX_ONLY_BUILTINS.has(moduleName)))
+  if (specifier.startsWith('node:')) {
+    return undefined;
+  }
+  return moduleName && (!BUILTIN_MODULES.has(moduleName) || PREFIX_ONLY_BUILTINS.has(moduleName))
     ? moduleName
     : undefined;
 }
@@ -550,9 +551,10 @@ export function getPackageName(specifier: string): string | undefined {
 /** The normalized Node builtin name a specifier imports, or undefined for npm/internal imports. */
 export function getNodeBuiltinName(specifier: string): string | undefined {
   const moduleName = getExternalModuleName(specifier);
-  return moduleName &&
-    BUILTIN_MODULES.has(moduleName) &&
-    (specifier.startsWith('node:') || !PREFIX_ONLY_BUILTINS.has(moduleName))
+  if (specifier.startsWith('node:')) {
+    return moduleName;
+  }
+  return moduleName && BUILTIN_MODULES.has(moduleName) && !PREFIX_ONLY_BUILTINS.has(moduleName)
     ? moduleName
     : undefined;
 }
