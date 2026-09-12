@@ -184,6 +184,7 @@ vi.mock('../../src/evaluatorHelpers', async () => {
 
 vi.mock('../../src/cliState', () => ({
   __esModule: true,
+  trackGradingProvider: vi.fn(),
   default: {
     resume: false,
     basePath: '',

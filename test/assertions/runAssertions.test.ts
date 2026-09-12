@@ -76,6 +76,7 @@ vi.mock('path', async () => {
 });
 
 vi.mock('../../src/cliState', () => ({
+  trackGradingProvider: vi.fn(),
   default: {
     basePath: '/base/path',
   },
