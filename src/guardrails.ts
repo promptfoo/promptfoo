@@ -88,7 +88,7 @@ export interface GuardResult {
 export interface AdaptiveRequest {
   /** Prompt text to inspect and optionally rewrite. */
   prompt: string;
-  /** Policy identifiers that should guide the adaptive rewrite. */
+  /** Policy instructions that should guide the adaptive rewrite. */
   policies?: string[];
 }
 

@@ -24,7 +24,10 @@ import { doRedteamRun } from './redteam/shared';
 import { Strategies } from './redteam/strategies/index';
 
 import type Eval from './models/eval';
-import type { RedteamGenerateOptions, RedteamRunOptions } from './redteam/types';
+import type {
+  RedteamRunOptions as InternalRedteamRunOptions,
+  RedteamGenerateOptions,
+} from './redteam/types';
 import type { UnifiedConfig } from './types/index';
 
 export { PromptSuggestionsRejectedError } from './evaluator';
@@ -67,7 +70,6 @@ export type {
   PluginConfig,
   PluginGraderExample,
   RedteamGenerateOptions,
-  RedteamRunOptions,
   StrategyConfig,
 } from './redteam/types';
 export type { EnvOverrides } from './types/env';
@@ -127,9 +129,9 @@ export type {
 } from './types/shared';
 export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
-type LibraryRedteamRunOptions = Omit<RedteamRunOptions, 'eventSource' | 'target'>;
+export type RedteamRunOptions = Omit<InternalRedteamRunOptions, 'eventSource' | 'target'>;
 
-async function runRedteam(options: LibraryRedteamRunOptions = {}) {
+async function runRedteam(options: RedteamRunOptions = {}) {
   if ('target' in options && options.target !== undefined) {
     throw new Error(
       'redteam.run() does not support target selection. Define providers in the configuration file.',
@@ -183,7 +185,7 @@ export interface RedteamApi {
   /** Generate a red team config programmatically. */
   generate(options: RedteamGenerateOptions): Promise<RedteamGenerateResult>;
   /** Run a red team eval programmatically with library-owned event attribution. */
-  run(options?: LibraryRedteamRunOptions): Promise<RedteamRunResult>;
+  run(options?: RedteamRunOptions): Promise<RedteamRunResult>;
 }
 
 /** Implementation of {@link RedteamApi}. @beta */
