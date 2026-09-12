@@ -49,12 +49,28 @@ export interface AddSpansOptions {
   redactSpans?: (spans: SpanData[]) => SpanData[];
 }
 
-function spanPayloadBytes(span: SpanData): number {
-  return (
-    Buffer.byteLength(span.name) +
-    Buffer.byteLength(JSON.stringify(span.attributes) ?? '') +
-    Buffer.byteLength(span.statusMessage ?? '')
-  );
+function validateTracePayloadSize(
+  spans: SpanData[],
+  updateExisting: boolean,
+  storedSizes: { spanId: string; bytes: number }[] = [],
+): void {
+  const sizes = new Map(storedSizes.map((span) => [span.spanId, span.bytes]));
+  for (const span of spans) {
+    if (updateExisting || !sizes.has(span.spanId)) {
+      sizes.set(
+        span.spanId,
+        Buffer.byteLength(span.name) +
+          Buffer.byteLength(JSON.stringify(span.attributes) ?? '') +
+          Buffer.byteLength(span.statusMessage ?? ''),
+      );
+    }
+  }
+  if (
+    sizes.size > 10_000 ||
+    [...sizes.values()].reduce((total, bytes) => total + bytes, 0) > 10 * 1024 * 1024
+  ) {
+    throw new Error('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
+  }
 }
 
 function serializeSpan(
@@ -293,19 +309,7 @@ export class TraceStore {
             .select({ spanId: spansTable.spanId, bytes: payloadBytes })
             .from(spansTable)
             .where(eq(spansTable.traceId, traceId));
-          const projectedSizes = new Map(storedSizes.map((span) => [span.spanId, span.bytes]));
-          for (const span of spans) {
-            if (options?.updateExisting || !projectedSizes.has(span.spanId)) {
-              projectedSizes.set(span.spanId, spanPayloadBytes(span));
-            }
-          }
-          if (
-            projectedSizes.size > 10_000 ||
-            [...projectedSizes.values()].reduce((total, bytes) => total + bytes, 0) >
-              10 * 1024 * 1024
-          ) {
-            throw new Error('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
-          }
+          validateTracePayloadSize(spans, options?.updateExisting ?? false, storedSizes);
           const stored = await tx.select().from(spansTable).where(eq(spansTable.traceId, traceId));
           const existing = stored.map((span) => serializeSpan(span, false));
           const sanitized = redact([...existing, ...spans]);
@@ -320,18 +324,7 @@ export class TraceStore {
             }
           }
           // Redaction history markers can also increase the stored payload.
-          projectedSizes.clear();
-          for (const span of sanitized) {
-            if (options?.updateExisting || !projectedSizes.has(span.spanId)) {
-              projectedSizes.set(span.spanId, spanPayloadBytes(span));
-            }
-          }
-          if (
-            [...projectedSizes.values()].reduce((total, bytes) => total + bytes, 0) >
-            10 * 1024 * 1024
-          ) {
-            throw new Error('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
-          }
+          validateTracePayloadSize(sanitized, options?.updateExisting ?? false);
           for (const [index, previous] of existing.entries()) {
             const span = sanitized[index];
             if (JSON.stringify(previous) === JSON.stringify(span)) {
