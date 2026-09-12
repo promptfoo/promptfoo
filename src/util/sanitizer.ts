@@ -1064,7 +1064,10 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
         key === 'server_url' ||
         (isEnvMap && key.toUpperCase().endsWith('_URL')))
     ) {
-      sanitized[key] = key === 'url' ? sanitizeUrl(value) : sanitizeUrlForLogging(value);
+      sanitized[key] =
+        key === 'url' || (isEnvMap && key.toUpperCase().endsWith('_URL'))
+          ? sanitizeUrl(value)
+          : sanitizeUrlForLogging(value);
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact values that look like secrets (API keys, tokens, etc.)
       sanitized[key] = REDACTED;

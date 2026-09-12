@@ -12,7 +12,7 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { sanitizeUrl } from '../sanitizer';
+import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import {
   extractRateLimitErrorCode,
   HttpRateLimitError,
@@ -592,7 +592,7 @@ export type { FetchOptions } from './types';
  */
 function urlForLog(url: RequestInfo): string {
   const raw = typeof url === 'string' ? url : url.url;
-  return sanitizeUrl(raw);
+  return sanitizeUrlForLogging(raw);
 }
 
 async function handleRateLimitedResponse(

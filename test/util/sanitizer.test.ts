@@ -1349,6 +1349,13 @@ describe('sanitizeObject', () => {
       expect(sanitizeObject({ apiHost })).toEqual({ apiHost });
     });
 
+    it('preserves opaque resource IDs in environment URLs', () => {
+      const url = 'https://example.com/items/123e4567-e89b-12d3-a456-426614174000';
+      expect(sanitizeObject({ env: { CALLBACK_URL: url } })).toEqual({
+        env: { CALLBACK_URL: url },
+      });
+    });
+
     it.each(['apiBaseUrl', 'server_url', 'apiHost'])('redacts a credential path in %s', (key) => {
       const endpoint = `${key === 'apiHost' ? '' : 'https://'}gateway.example/auth-supersecretvalue123`;
       expect(JSON.stringify(sanitizeObject({ [key]: endpoint }))).not.toContain(
