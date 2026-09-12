@@ -260,9 +260,37 @@ export class TraceStore {
       const redact = options?.redactSpans;
       if (redact) {
         await db.transaction(async (tx) => {
+          const [size] = await tx
+            .select({
+              count: sql<number>`count(*)`,
+              bytes: sql<number>`coalesce(sum(
+                length(cast(${spansTable.name} as blob))
+                + coalesce(length(cast(${spansTable.attributes} as blob)), 0)
+                + coalesce(length(cast(${spansTable.events} as blob)), 0)
+                + coalesce(length(cast(${spansTable.statusMessage} as blob)), 0)
+              ), 0)`,
+            })
+            .from(spansTable)
+            .where(eq(spansTable.traceId, traceId));
+          if (
+            size.count + spans.length > 10_000 ||
+            size.bytes + Buffer.byteLength(JSON.stringify(spans)) > 10 * 1024 * 1024
+          ) {
+            throw new Error('Trace redaction limit exceeded (10,000 spans or 10 MiB per trace)');
+          }
           const stored = await tx.select().from(spansTable).where(eq(spansTable.traceId, traceId));
           const existing = stored.map((span) => serializeSpan(span, false));
           const sanitized = redact([...existing, ...spans]);
+          const redactedSpanIds = new Set(
+            sanitized
+              .filter((span) => /\[(?:REDACTED|TRUNCATED)\]/.test(JSON.stringify(span)))
+              .map((span) => span.spanId),
+          );
+          for (const span of sanitized) {
+            if (redactedSpanIds.has(span.spanId)) {
+              span.attributes = { ...span.attributes, 'promptfoo.redaction.history': '[REDACTED]' };
+            }
+          }
           for (const [index, previous] of existing.entries()) {
             const span = sanitized[index];
             if (JSON.stringify(previous) === JSON.stringify(span)) {

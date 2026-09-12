@@ -912,7 +912,8 @@ export class OTLPReceiver {
       return value.stringValue;
     }
     if (value.intValue !== undefined) {
-      return typeof value.intValue === 'number' ? value.intValue : Number(value.intValue);
+      const number = Number(value.intValue);
+      return Number.isSafeInteger(number) ? number : String(value.intValue);
     }
     if (value.doubleValue !== undefined) {
       return value.doubleValue;
@@ -958,7 +959,8 @@ export class OTLPReceiver {
       return value.stringValue;
     }
     if (value.intValue !== undefined) {
-      return Number(value.intValue);
+      const number = Number(value.intValue);
+      return Number.isSafeInteger(number) ? number : String(value.intValue);
     }
     if (value.doubleValue !== undefined) {
       return value.doubleValue;

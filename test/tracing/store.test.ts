@@ -147,6 +147,70 @@ describe('TraceStore', () => {
   });
 
   describe('addSpans', () => {
+    it('rejects a cumulative span overflow before loading stored payloads', async () => {
+      const where = vi.fn().mockResolvedValue([{ count: 10_000, bytes: 1 }]);
+      mockDb.select.mockReturnValue({ from: vi.fn().mockReturnThis(), where });
+      const redactSpans = vi.fn((spans) => spans);
+      await expect(
+        traceStore.addSpans('full-trace', [{ spanId: 'extra', name: 'extra', startTime: 1 }], {
+          skipTraceCheck: true,
+          redactSpans,
+        }),
+      ).rejects.toThrow('Trace redaction limit exceeded');
+      expect(mockDb.select).toHaveBeenCalledTimes(1);
+      expect(redactSpans).not.toHaveBeenCalled();
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])(
+      'persists redaction history before dropping duplicate spans (stored=%s)',
+      async (stored) => {
+        const original = { spanId: 'same', name: 'ordinary', startTime: 1, attributes: {} };
+        const update = {
+          set: vi.fn().mockReturnThis(),
+          where: vi.fn().mockReturnThis(),
+          run: vi.fn(),
+        };
+        mockDb.update = vi.fn(() => update);
+        mockDb.select.mockImplementation((selection: unknown) => ({
+          from: vi.fn().mockReturnThis(),
+          where: vi
+            .fn()
+            .mockResolvedValue(
+              selection
+                ? [{ count: stored ? 1 : 0, bytes: 0 }]
+                : stored
+                  ? [{ id: 'stored', ...original }]
+                  : [],
+            ),
+        }));
+        await traceStore.addSpans(
+          'trace',
+          [
+            ...(stored ? [] : [original]),
+            { ...original, attributes: { authorization: 'private-value' } },
+          ],
+          {
+            skipTraceCheck: true,
+            redactSpans: (spans) =>
+              spans.map((span) => ({
+                ...span,
+                attributes: span.attributes?.authorization
+                  ? { authorization: '[REDACTED]' }
+                  : span.attributes,
+              })),
+          },
+        );
+        const persisted = stored
+          ? update.set.mock.calls[0]?.[0]
+          : mockDb.insert().values.mock.calls[0]?.[0][0];
+        expect(persisted?.attributes).toMatchObject({
+          'promptfoo.redaction.history': '[REDACTED]',
+        });
+        expect(JSON.stringify(persisted)).not.toContain('private-value');
+      },
+    );
+
     it('ignores existing and repeated spans through the database uniqueness constraint', async () => {
       await traceStore.addSpans(
         'test-trace-id',
