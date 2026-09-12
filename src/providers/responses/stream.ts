@@ -1057,6 +1057,11 @@ export async function readResponsesStream(
   const creditedStreamPayloadBytesByKind = new Map<string, number>();
   let streamedAnnotationCount = 0;
   let streamedAnnotationChars = 0;
+  let streamedContentPartSlots = 0;
+
+  const isInvalidOutputTextItemId = (itemId: unknown): boolean =>
+    itemId !== undefined &&
+    (typeof itemId !== 'string' || itemId.length > MAX_STREAM_FUNCTION_METADATA_CHARS);
 
   const appendOutputText = (text: string): void => {
     if (text.length > MAX_STREAM_OUTPUT_CHARS - outputText.length) {
@@ -1135,17 +1140,13 @@ export async function readResponsesStream(
     ) {
       return;
     }
-    if (
-      key &&
-      typeof event.item_id === 'string' &&
-      event.item_id.length > MAX_STREAM_FUNCTION_METADATA_CHARS
-    ) {
+    if (key && isInvalidOutputTextItemId(event.item_id)) {
       return;
     }
     if (
       key &&
-      typeof event.item_id === 'string' &&
       outputTextItemIds.has(key) &&
+      event.item_id !== undefined &&
       outputTextItemIds.get(key) !== event.item_id
     ) {
       return;
@@ -1213,7 +1214,7 @@ export async function readResponsesStream(
     }
 
     const key = getOutputTextKey(event);
-    const itemId = event.item_id ?? event.item?.id;
+    const itemId = event.item_id === undefined ? event.item?.id : event.item_id;
     const invalidKey =
       !key && (event.output_index !== undefined || event.content_index !== undefined)
         ? getInvalidOutputTextKey(event)
@@ -1222,6 +1223,17 @@ export async function readResponsesStream(
       (key && finalizedOutputTextKeys.has(key)) ||
       (invalidKey && finalizedInvalidOutputTextKeys.has(invalidKey)) ||
       (!key && !invalidKey && finalizedUnindexedOutputText)
+    ) {
+      return;
+    }
+    if (key && isInvalidOutputTextItemId(itemId)) {
+      return;
+    }
+    if (
+      key &&
+      outputTextItemIds.has(key) &&
+      itemId !== undefined &&
+      outputTextItemIds.get(key) !== itemId
     ) {
       return;
     }
@@ -1398,7 +1410,7 @@ export async function readResponsesStream(
     }
 
     if (
-      event.type === 'response.output_item.added' ||
+      (event.type === 'response.output_item.added' && event.item?.type === 'message') ||
       (event.type === 'response.content_part.added' && event.part?.type === 'output_text')
     ) {
       finalizedUnindexedOutputText = false;
@@ -1635,6 +1647,13 @@ export async function readResponsesStream(
         event.content_index <= MAX_STREAM_CONTENT_INDEX
           ? event.content_index
           : content.length;
+      const newSlots = Math.max(0, contentIndex + 1 - content.length);
+      if (newSlots > MAX_STREAM_ANNOTATION_COUNT - streamedContentPartSlots) {
+        throw new Error(
+          `${providerName} streaming response exceeded ${MAX_STREAM_ANNOTATION_COUNT} content slots`,
+        );
+      }
+      streamedContentPartSlots += newSlots;
       while (content.length <= contentIndex) {
         content.push({ type: 'output_text', text: '' });
       }

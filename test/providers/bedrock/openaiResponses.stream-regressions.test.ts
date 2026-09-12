@@ -6217,6 +6217,98 @@ describe('Responses stream regressions', () => {
       expect(JSON.stringify(parsed)).toContain('SAFE TERMINAL');
     });
 
+    it('drops finalized text carrying an oversized item identifier', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'x'.repeat(4097),
+            text: 'SECRET DRAFT',
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE TERMINAL' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(JSON.stringify(parsed)).not.toContain('SECRET DRAFT');
+      expect(JSON.stringify(parsed)).toContain('SAFE TERMINAL');
+    });
+
+    it('drops text with non-string item identifiers', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 1,
+            delta: 'SECRET',
+          },
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: {},
+            text: 'SECRET',
+          },
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+    });
+
+    it('does not reopen finalized anonymous text for function items', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          { type: 'response.output_text.done', text: 'SAFE' },
+          {
+            type: 'response.output_item.added',
+            output_index: 1,
+            item: { type: 'function_call', id: 'f_1' },
+          },
+          { type: 'response.output_text.delta', delta: 'LATE SECRET' },
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+
+      expect(JSON.stringify(parsed)).not.toContain('LATE SECRET');
+    });
+
+    it('bounds sparse content-part slots across outputs', async () => {
+      const events = Array.from({ length: 9 }, (_, output_index) => ({
+        type: 'response.content_part.done',
+        output_index,
+        content_index: 1024,
+        item_id: `m_${output_index}`,
+        part: { type: 'output_text', text: '', extra: true },
+      }));
+
+      await expect(
+        readResponsesStream(createSseResponse(events), 'test', { debug: vi.fn() }),
+      ).rejects.toThrow('content slots');
+    });
+
     it('accepts a valid nine-mebibyte output-text snapshot with empty annotations', async () => {
       const text = 'A'.repeat(9 * 1024 * 1024);
       const parsed = await readResponsesStream(
