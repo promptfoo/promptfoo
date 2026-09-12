@@ -653,14 +653,18 @@ export function mergeComparisonTables(
       const testIdx = row.testIdx;
       const comparedOutputs = comparisonData.flatMap(({ evalId, table }) =>
         (table.body.find((compRow) => compRow.testIdx === testIdx)?.outputs ?? []).map(
-          (output) => ({ ...output, sourceEvalId: evalId }),
+          (output, sourcePromptIndex) => ({ ...output, sourceEvalId: evalId, sourcePromptIndex }),
         ),
       );
 
       return {
         ...row,
         outputs: [
-          ...row.outputs.map((output) => ({ ...output, sourceEvalId: mainEvalId })),
+          ...row.outputs.map((output, sourcePromptIndex) => ({
+            ...output,
+            sourceEvalId: mainEvalId,
+            sourcePromptIndex,
+          })),
           ...comparedOutputs,
         ],
       };

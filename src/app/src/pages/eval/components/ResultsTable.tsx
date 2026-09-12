@@ -1822,7 +1822,7 @@ function ResultsTable({
               ...output,
               originalRowIndex: rowIndex,
               originalRowPositionIndex: rowPositionOffset + rowIndex,
-              originalPromptIndex: promptIndex,
+              originalPromptIndex: output.sourcePromptIndex ?? promptIndex,
             },
       ),
     })) as ExtendedEvaluateTableRow[];

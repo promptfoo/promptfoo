@@ -48,6 +48,7 @@ describe('evalTableUtils', () => {
       'comparison-eval',
       'comparison-eval',
     ]);
+    expect(merged.body[0].outputs.map((output) => output.sourcePromptIndex)).toEqual([0, 1, 0, 1]);
     expect(mockTable.body[0].outputs[0].sourceEvalId).toBe('unrelated-eval');
   });
 

@@ -1983,8 +1983,7 @@ describe('createShareableUrl', () => {
 
       const initialBody = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(initialBody.traces[0].metadata.media).toBe(blobUri);
-      // Result blobs are planned with strong row provenance but not uploaded unless a raw trace
-      // URI needs them. The shared cache lets the upload executor prefer the recorded 4/3 tuple.
+      // The mock leaves the raw URI unresolved, so it must fall back to an out-of-band upload.
       expect(inlineBlobRefsForShare).toHaveBeenCalled();
       expect(recordResultBlobRefsForShare).toHaveBeenCalledWith(resultRow, expect.any(Map), {
         localEvalId: mockEvalWithTraces.id,
@@ -1992,7 +1991,7 @@ describe('createShareableUrl', () => {
         remoteEvalId: 'mock-eval-id',
         testIdx: 3,
       });
-      expect(uploadRecordedResultBlobRefsForShare).not.toHaveBeenCalled();
+      expect(uploadRecordedResultBlobRefsForShare).toHaveBeenCalledWith(expect.any(Map), undefined);
       expect(uploadTraceBlobRefsForShare).toHaveBeenCalledTimes(1);
       expect(uploadTraceBlobRefsForShare).toHaveBeenCalledWith(
         traces[0],

@@ -631,14 +631,14 @@ async function prepareChunkForShare(
     : remappedChunk;
 
   if (remoteBlobUploadCache) {
-    for (const result of remappedChunk) {
+    for (const [index, result] of remappedChunk.entries()) {
       const context = {
         localEvalId,
         remoteEvalId,
         promptIdx: result.promptIdx,
         testIdx: result.testIdx,
       };
-      recordResultBlobRefsForShare(result, remoteBlobUploadCache, context);
+      recordResultBlobRefsForShare(chunkToSend[index], remoteBlobUploadCache, context);
     }
   }
 
@@ -1011,7 +1011,7 @@ async function sendChunkedResults(
       // Defer every out-of-band blob write until after the last fatal result/trace operation. A
       // rollback can therefore never strand newly uploaded bytes. Result rows are uploaded first
       // so shared result/trace hashes retain the stronger prompt/test provenance.
-      if (remoteBlobUploadCache && !inlineCache) {
+      if (remoteBlobUploadCache) {
         await uploadRecordedResultBlobRefsForShare(remoteBlobUploadCache, blobUploadTarget);
       }
       await uploadTraceBlobRefsForShare(

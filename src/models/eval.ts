@@ -1668,12 +1668,19 @@ export default class Eval {
           .run();
       }
 
-      const blobRefs = await tx
-        .select()
-        .from(blobReferencesTable)
-        .where(eq(blobReferencesTable.evalId, this.id))
-        .all();
-      if (blobRefs.length > 0) {
+      const BATCH_SIZE = 1000;
+      let offset = 0;
+      while (true) {
+        const blobRefs = await tx
+          .select()
+          .from(blobReferencesTable)
+          .where(eq(blobReferencesTable.evalId, this.id))
+          .limit(BATCH_SIZE)
+          .offset(offset)
+          .all();
+        if (blobRefs.length === 0) {
+          break;
+        }
         await tx
           .insert(blobReferencesTable)
           .values(
@@ -1684,11 +1691,11 @@ export default class Eval {
             })),
           )
           .run();
+        offset += BATCH_SIZE;
       }
 
       // Copy results in batches to avoid memory exhaustion
-      const BATCH_SIZE = 1000;
-      let offset = 0;
+      offset = 0;
 
       while (true) {
         // Fetch batch from source eval
