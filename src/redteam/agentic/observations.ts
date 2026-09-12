@@ -150,7 +150,7 @@ type ProviderResponseLike = {
   raw?: unknown;
 };
 
-const TOOL_NAME_ATTRIBUTE_KEYS = [
+export const TOOL_NAME_ATTRIBUTE_KEYS = [
   'tool.name',
   'tool_name',
   'tool',
@@ -381,6 +381,7 @@ function controlObservationFromSpan(
   ) {
     return {
       kind: 'guardrail',
+      callId: getString(getAttribute(attributes, TOOL_CALL_ID_ATTRIBUTES)),
       endTimestamp: span.endTime,
       tool: getToolNameFromAttributes(attributes),
       location,
@@ -409,6 +410,7 @@ function controlObservationFromSpan(
   ) {
     return {
       kind: 'approval',
+      callId: getString(getAttribute(attributes, TOOL_CALL_ID_ATTRIBUTES)),
       endTimestamp: span.endTime,
       tool: getToolNameFromAttributes(attributes),
       location,

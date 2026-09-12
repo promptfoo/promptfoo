@@ -82,12 +82,16 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
       } else {
         pending.push(nested);
       }
-    } else if (typeof next === 'string' && next.trim()) {
+    } else if (typeof next === 'string') {
+      if (next.length > MAX_JSON_LENGTH) {
+        return [];
+      }
+      if (!next.trim()) {
+        continue;
+      }
       try {
-        if (next.length <= MAX_JSON_LENGTH) {
-          pending.push(JSON.parse(next));
-          continue;
-        }
+        pending.push(JSON.parse(next));
+        continue;
       } catch {
         // Fall through to bounded extraction for mixed prose and JSON.
       }

@@ -53,7 +53,6 @@ interface TempoTraceResponse {
   }>;
 }
 
-const MAX_SPANS = 10_000;
 const SPAN_KIND_NAMES = ['unspecified', 'internal', 'server', 'client', 'producer', 'consumer'];
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
@@ -335,10 +334,6 @@ export class TempoProvider implements TraceProvider {
           continue;
         }
         for (const span of scopeSpan.spans) {
-          if (spans.length >= MAX_SPANS) {
-            return spans;
-          }
-
           try {
             const normalizedSpan = transformSpan(
               span,

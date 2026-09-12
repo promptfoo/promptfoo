@@ -20,7 +20,10 @@ vi.mock('../../src/tracing/store', async (importOriginal) => ({
 }));
 
 import { TraceProviderError } from '../../src/tracing/providers/types';
-import { sanitizeTraceAttributes } from '../../src/tracing/sanitizeAttributes';
+import {
+  getTraceTextRedactionState,
+  sanitizeTraceAttributes,
+} from '../../src/tracing/sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from '../../src/tracing/spanFilter';
 import { extractTraceIdFromTraceparent, fetchTraceContext } from '../../src/tracing/traceContext';
 
@@ -36,6 +39,17 @@ function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
 }
 
 describe('fetchTraceContext', () => {
+  it('distinguishes raw redaction text from persisted redaction history', () => {
+    expect(
+      getTraceTextRedactionState({}, 'raw', [{ attributes: { note: '[REDACTED]' } }]).incomplete,
+    ).toBe(false);
+    expect(
+      getTraceTextRedactionState({}, 'stored', [
+        { attributes: { 'promptfoo.redaction.history': '[REDACTED]' } },
+      ]).incomplete,
+    ).toBe(true);
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
     storedSpans.length = 0;
@@ -511,7 +525,10 @@ describe('fetchTraceContext', () => {
         spanId: 'old',
         name: field === 'span-name' ? '[REDACTED]' : 'source',
         startTime: 1,
-        attributes: field === 'attribute' ? { authorization: '[REDACTED]' } : {},
+        attributes: {
+          ...(field === 'attribute' ? { authorization: '[REDACTED]' } : {}),
+          'promptfoo.redaction.history': '[REDACTED]',
+        },
       });
       mockExternalTrace([
         {
@@ -531,7 +548,7 @@ describe('fetchTraceContext', () => {
     },
   );
 
-  it('redacts each database batch using the complete external snapshot', async () => {
+  it('redacts the complete external snapshot before storage', async () => {
     const secret = 'PRIVATE_EXTERNAL_LATER_BATCH';
     mockExternalTrace([
       ...Array.from({ length: 500 }, (_, index) => ({
@@ -558,7 +575,7 @@ describe('fetchTraceContext', () => {
     expect(storedSpans).toHaveLength(501);
   });
 
-  it('stores large traces in database-safe batches', async () => {
+  it('submits the complete external snapshot atomically', async () => {
     const spans = Array.from({ length: 501 }, (_, index) => ({
       spanId: String(index),
       name: 'target.call',
@@ -568,9 +585,8 @@ describe('fetchTraceContext', () => {
 
     await fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 0 });
 
-    expect(mocks.addSpans).toHaveBeenCalledTimes(2);
-    expect(mocks.addSpans.mock.calls[0][1]).toHaveLength(500);
-    expect(mocks.addSpans.mock.calls[1][1]).toHaveLength(1);
+    expect(mocks.addSpans).toHaveBeenCalledOnce();
+    expect(mocks.addSpans.mock.calls[0][1]).toHaveLength(501);
   });
 
   it('waits before the initial request and retries missing traces', async () => {

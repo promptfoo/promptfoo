@@ -69,7 +69,6 @@ export interface FetchTraceContextOptions
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 500;
 const DEFAULT_QUERY_DELAY_MS = 3000;
-const EXTERNAL_SPAN_BATCH_SIZE = 500;
 const inFlightExternalFetches = new WeakMap<
   TraceProviderConfig,
   Map<string, Promise<TraceContextData | null>>
@@ -298,20 +297,13 @@ async function storeExternalSpans(
 ): Promise<boolean> {
   try {
     const traceStore = getTraceStore();
-    for (let index = 0; index < spans.length; index += EXTERNAL_SPAN_BATCH_SIZE) {
-      const result = await traceStore.addSpans(
-        traceId,
-        spans.slice(index, index + EXTERNAL_SPAN_BATCH_SIZE),
-        {
-          warnIfMissingTrace: false,
-          updateExisting: true,
-          ...(redactSpans && { redactSpans }),
-          ...(index > 0 && { skipTraceCheck: true }),
-        },
-      );
-      if (!result.stored) {
-        return false;
-      }
+    const result = await traceStore.addSpans(traceId, spans, {
+      warnIfMissingTrace: false,
+      updateExisting: true,
+      ...(redactSpans && { redactSpans }),
+    });
+    if (!result.stored) {
+      return false;
     }
     logger.debug(`[TraceContext] Stored ${spans.length} spans from external provider`);
     return true;
@@ -436,13 +428,12 @@ async function fetchFromExternalProvider(
 
       let redactSpans: AddSpansOptions['redactSpans'];
       if (redactAttributes?.length) {
-        // Later batches may contain secrets echoed by the first batch.
         redactSpans = (spans) =>
           redactExternalSpans(
-            [...spans, ...validSpans],
+            spans,
             redactAttributes,
             getTraceTextRedactionState(getTraceStore(), traceId, spans),
-          ).slice(0, spans.length);
+          );
       }
 
       if (!(await storeExternalSpans(traceId, validSpans, redactSpans))) {

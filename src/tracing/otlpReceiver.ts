@@ -21,7 +21,13 @@ import {
   getTraceTextRedactionState,
   getTraceTextRedactor,
 } from './sanitizeAttributes';
-import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
+import {
+  getTraceStore,
+  type ParsedTrace,
+  type SpanData,
+  TraceLimitError,
+  type TraceStore,
+} from './store';
 
 interface OTLPAttribute {
   key: string;
@@ -488,10 +494,12 @@ export class OTLPReceiver {
       try {
         const traces = await this.parseIncomingRequest(format, req.body);
         logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
-        await this.persistTraces(this.groupTraces(traces));
-
-        // OTLP success response
-        res.status(200).json({ partialSuccess: {} });
+        const rejectedSpans = await this.persistTraces(this.groupTraces(traces));
+        res.status(200).json({
+          partialSuccess: rejectedSpans
+            ? { rejectedSpans, errorMessage: 'Per-trace limit exceeded' }
+            : {},
+        });
         logger.debug('[OtlpReceiver] Successfully processed traces');
       } catch (error) {
         this.handleProcessingError(error, res);
@@ -506,10 +514,14 @@ export class OTLPReceiver {
       try {
         const traces = this.parseOTLPLogsJSONRequest(req.body as OTLPLogsRequest);
         logger.debug(`[OtlpReceiver] Parsed ${traces.length} logs into span records`);
-        if (traces.length > 0) {
-          await this.persistTraces(this.groupTraces(traces));
-        }
-        res.status(200).json({ partialSuccess: {} });
+        const rejectedLogRecords = traces.length
+          ? await this.persistTraces(this.groupTraces(traces))
+          : 0;
+        res.status(200).json({
+          partialSuccess: rejectedLogRecords
+            ? { rejectedLogRecords, errorMessage: 'Per-trace limit exceeded' }
+            : {},
+        });
       } catch (error) {
         this.handleProcessingError(error, res);
       }
@@ -600,9 +612,9 @@ export class OTLPReceiver {
     traceInfoById.set(trace.traceId, info);
   }
 
-  private async persistTraces({ spansByTrace, traceInfoById }: GroupedTraces): Promise<void> {
+  private async persistTraces({ spansByTrace, traceInfoById }: GroupedTraces): Promise<number> {
     await this.createTraceRecords(traceInfoById);
-    await this.storeSpans(spansByTrace, traceInfoById);
+    return this.storeSpans(spansByTrace, traceInfoById);
   }
 
   private async createTraceRecords(traceInfoById: Map<string, TraceInfo>): Promise<void> {
@@ -647,22 +659,31 @@ export class OTLPReceiver {
   private async storeSpans(
     spansByTrace: Map<string, SpanData[]>,
     traceInfoById: Map<string, TraceInfo>,
-  ): Promise<void> {
+  ): Promise<number> {
+    let rejected = 0;
     for (const [traceId, spans] of spansByTrace) {
       logger.debug(`[OtlpReceiver] Storing ${spans.length} spans for trace ${traceId}`);
       const redactAttributePatterns = await this.getRedactAttributePatterns(
         traceId,
         traceInfoById.get(traceId),
       );
-      await this.traceStore.addSpans(traceId, spans, {
-        skipTraceCheck: false,
-        warnIfMissingTrace: false,
-        ...(redactAttributePatterns.length > 0 && {
-          redactSpans: (allSpans: SpanData[]) =>
-            this.redactSpans(allSpans, redactAttributePatterns, traceId),
-        }),
-      });
+      try {
+        await this.traceStore.addSpans(traceId, spans, {
+          skipTraceCheck: false,
+          warnIfMissingTrace: false,
+          ...(redactAttributePatterns.length > 0 && {
+            redactSpans: (allSpans: SpanData[]) =>
+              this.redactSpans(allSpans, redactAttributePatterns, traceId),
+          }),
+        });
+      } catch (error) {
+        if (!(error instanceof TraceLimitError)) {
+          throw error;
+        }
+        rejected += spans.length;
+      }
     }
+    return rejected;
   }
 
   private async getRedactAttributePatterns(traceId: string, info?: TraceInfo): Promise<string[]> {
@@ -911,6 +932,7 @@ export class OTLPReceiver {
               traceId,
               parentSpanId,
               timeNano,
+              log.observedTimeUnixNano,
               scopeLog.scope,
               log.severityNumber,
               log.severityText,

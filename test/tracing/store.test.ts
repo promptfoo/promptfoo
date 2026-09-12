@@ -66,6 +66,11 @@ describe('TraceStore', () => {
           : mockSelectChain,
       ),
       delete: vi.fn(() => mockDeleteChain),
+      update: vi.fn(() => ({
+        set: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        run: vi.fn(),
+      })),
       transaction: vi.fn(async (callback) => callback(mockDb)),
     };
 
@@ -156,6 +161,55 @@ describe('TraceStore', () => {
   });
 
   describe('addSpans', () => {
+    it.each(['spanId', 'parentSpanId'] as const)(
+      'counts persisted %s bytes toward the cumulative limit',
+      async (field) => {
+        const where = vi
+          .fn()
+          .mockResolvedValueOnce([{ count: 1, bytes: 10 * 1024 * 1024 - 64 }])
+          .mockResolvedValueOnce([{ spanId: 'prior', bytes: 10 * 1024 * 1024 - 64 }]);
+        mockDb.select.mockReturnValue({ from: vi.fn().mockReturnThis(), where });
+        await expect(
+          traceStore.addSpans(
+            'trace',
+            [{ spanId: 'new', name: '', startTime: 1, [field]: 'x'.repeat(65) }],
+            { skipTraceCheck: true },
+          ),
+        ).rejects.toThrow('Trace redaction limit exceeded');
+        expect(mockDb.insert).not.toHaveBeenCalled();
+        expect(mockDb.update).toHaveBeenCalledOnce();
+      },
+    );
+
+    it('does not persist caller-supplied redaction history', async () => {
+      await traceStore.addSpans(
+        'trace',
+        [
+          {
+            spanId: 'raw',
+            name: 'execute',
+            startTime: 1,
+            attributes: { 'promptfoo.redaction.history': '[REDACTED]', note: '[REDACTED]' },
+          },
+        ],
+        { skipTraceCheck: true },
+      );
+      expect(mockDb.insert().values.mock.calls[0][0][0].attributes).toEqual({ note: '[REDACTED]' });
+    });
+
+    it('inserts a complete snapshot in bounded statements inside one transaction', async () => {
+      const spans = Array.from({ length: 501 }, (_, i) => ({
+        spanId: String(i),
+        name: 'tool',
+        startTime: 1,
+      }));
+      await traceStore.addSpans('trace', spans, { skipTraceCheck: true });
+      expect(mockDb.transaction).toHaveBeenCalledOnce();
+      expect(mockDb.insert().values.mock.calls.map((call: unknown[][]) => call[0].length)).toEqual([
+        500, 1,
+      ]);
+    });
+
     it('rejects a cumulative span overflow before loading stored payloads', async () => {
       const where = vi
         .fn()

@@ -243,9 +243,11 @@ describe('LocalSpanExporter', () => {
       );
     });
 
-    it('retains nanosecond ordering for epoch-scale local events', async () => {
+    it('retains nanosecond ordering for epoch-scale local spans and events', async () => {
       await exportSpans([
         createMockSpan({
+          startTime: [1789000000, 100],
+          endTime: [1789000000, 400],
           events: [
             { name: 'guardrail update_seat', time: [1789000000, 200], droppedAttributesCount: 0 },
             { name: 'tool update_seat', time: [1789000000, 300], droppedAttributesCount: 0 },
@@ -257,6 +259,10 @@ describe('LocalSpanExporter', () => {
           (event: { timestampNanos?: string }) => event.timestampNanos,
         ),
       ).toEqual(['1789000000000000200', '1789000000000000300']);
+      expect(mockAddSpans.mock.calls[0][1][0].attributes).toMatchObject({
+        'otel.span.start_time_unix_nano': '1789000000000000100',
+        'otel.span.end_time_unix_nano': '1789000000000000400',
+      });
     });
 
     it('should include parent span ID when present', async () => {
@@ -298,6 +304,8 @@ describe('LocalSpanExporter', () => {
               'gen_ai.system': 'openai',
               'gen_ai.request.model': 'gpt-4',
               'gen_ai.usage.input_tokens': 100,
+              'otel.span.start_time_unix_nano': '1000500000000',
+              'otel.span.end_time_unix_nano': '1001200000000',
             },
           }),
         ],

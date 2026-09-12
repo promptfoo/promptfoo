@@ -193,11 +193,42 @@ describe('OTLPReceiver', () => {
     expect(result.grade.pass).toBe(offset <= 0);
   });
 
-  it('keeps retried OTLP log identities while retaining distinct tool calls', async () => {
+  it.each(['traces', 'logs'] as const)(
+    'isolates capped traces in mixed OTLP %s batches',
+    async (endpoint) => {
+      const record = (traceId: string) => ({
+        traceId,
+        spanId: 'b'.repeat(16),
+        name: 'tool update_seat',
+        startTimeUnixNano: '1700000000000000000',
+        timeUnixNano: '1700000000000000000',
+        body: { stringValue: 'tool update_seat' },
+      });
+      mockTraceStore.addSpans.mockRejectedValueOnce(new mockedTraceStore.TraceLimitError());
+      const records = [record('a'.repeat(32)), record('c'.repeat(32))];
+      const response = await request(receiver.getApp())
+        .post('/v1/' + endpoint)
+        .send(
+          endpoint === 'traces'
+            ? { resourceSpans: [{ scopeSpans: [{ spans: records }] }] }
+            : { resourceLogs: [{ scopeLogs: [{ logRecords: records }] }] },
+        )
+        .expect(200);
+      expect(mockTraceStore.addSpans).toHaveBeenCalledTimes(2);
+      expect(persistSpans.mock.calls.at(-1)?.[0]).toBe('c'.repeat(32));
+      expect(response.body.partialSuccess).toEqual({
+        [endpoint === 'traces' ? 'rejectedSpans' : 'rejectedLogRecords']: 1,
+        errorMessage: 'Per-trace limit exceeded',
+      });
+    },
+  );
+
+  it('keeps retried OTLP log identities while retaining distinct calls and observed times', async () => {
     const log = {
       traceId: 'a'.repeat(32),
       spanId: 'b'.repeat(16),
       timeUnixNano: '1700000000000000000',
+      observedTimeUnixNano: '1700000000000000100',
       body: { stringValue: 'tool update_seat' },
       attributes: [{ key: 'gen_ai.tool.call.id', value: { stringValue: 'call-1' } }],
     };
@@ -212,9 +243,11 @@ describe('OTLPReceiver', () => {
       ...log,
       attributes: [{ key: 'gen_ai.tool.call.id', value: { stringValue: 'call-2' } }],
     });
+    await send({ ...log, observedTimeUnixNano: '1700000000000000200' });
     const ids = persistSpans.mock.calls.map((call) => call[1][0].spanId);
     expect(ids[1]).toBe(ids[0]);
     expect(ids[2]).not.toBe(ids[0]);
+    expect(ids[3]).not.toBe(ids[0]);
   });
 
   it('preserves unrelated trace text after the redaction history reaches capacity', () => {

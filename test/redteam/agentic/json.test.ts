@@ -43,15 +43,20 @@ describe('agentic evidence JSON extraction', () => {
     expect(parseEvidenceCandidates(nested)).toEqual([]);
   });
 
-  it('recovers bounded evidence after malformed text and ignores trailing overflow', () => {
+  it('recovers bounded evidence after malformed text and rejects oversized input', () => {
     const evidence = { findings: [{ kind: 'approval-bypass' }] };
     expect(extractJsonObjects(`log: { unfinished ${JSON.stringify(evidence)}`)).toEqual([evidence]);
     expect(extractJsonObjects(`log: { unfinished { second ${JSON.stringify(evidence)}`)).toEqual([
       evidence,
     ]);
-    expect(parseEvidenceCandidates(`${JSON.stringify(evidence)}${'x'.repeat(100_000)}`)).toEqual([
-      evidence,
-    ]);
+    expect(parseEvidenceCandidates(`${JSON.stringify(evidence)}${'x'.repeat(100_000)}`)).toEqual(
+      [],
+    );
+    expect(
+      parseEvidenceCandidates(
+        `<AgenticEvidence>${JSON.stringify(evidence)}</AgenticEvidence>${'x'.repeat(100_000)}`,
+      ),
+    ).toEqual([]);
     expect(parseEvidenceCandidates(JSON.stringify({ findings: ['x'.repeat(100_000)] }))).toEqual(
       [],
     );
