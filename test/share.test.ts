@@ -839,14 +839,51 @@ describe('createShareableUrl', () => {
         const row = {
           id: 'source-row',
           provider: {
-            id: 'openai:chat:test',
+            id: 'file:///home/alice/project/target.js',
             config: { basePath: '/home/alice/project', temperature: 0 },
           },
+          prompt: {
+            raw: 'public',
+            label: 'public',
+            config: { provider: { id: 'echo', config: { basePath: '/home/alice/project' } } },
+          },
           testCase: {
+            provider: 'file:///home/alice/project/target.js',
+            options: {
+              provider: {
+                text: {
+                  id: 'openai:chat:test',
+                  config: { basePath: '/home/alice/project', temperature: 0 },
+                },
+                embedding: 'file:///home/alice/project/embedding.js',
+                classification: 'file://C:\\Users\\alice\\project\\classifier.js',
+              },
+            },
+            assert: [
+              {
+                type: 'assert-set' as const,
+                assert: [
+                  {
+                    type: 'llm-rubric' as const,
+                    provider: {
+                      id: 'file:///home/alice/project/grader.js',
+                      config: { basePath: '/home/alice/project' },
+                    },
+                  },
+                ],
+              },
+            ],
             vars: { basePath: 'user-variable' },
             metadata: { note: 'private-note' },
             providerOutput: 'private-output',
           },
+        };
+        mockEval.config = {
+          basePath: '/home/alice/project',
+          providers: [row.provider],
+          tests: [row.testCase],
+          defaultTest: row.testCase,
+          scenarios: [{ config: [row.testCase], tests: [row.testCase] }],
         };
         mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
           yield [row];
@@ -858,7 +895,14 @@ describe('createShareableUrl', () => {
         await createShareableUrl(mockEval as Eval);
 
         const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
+        for (const [, options] of mockFetch.mock.calls) {
+          expect(options.body).not.toContain('/home/alice');
+          expect(options.body).not.toContain('Users');
+        }
+        expect(uploaded.provider.id).toBe('file://target.js');
         expect(uploaded.provider.config).toEqual({ temperature: 0 });
+        expect(uploaded.testCase.options.provider.text.config).toEqual({ temperature: 0 });
+        expect(uploaded.testCase.options.provider.classification).toBe('file://classifier.js');
         expect(row.provider.config.basePath).toBe('/home/alice/project');
         if (stripData) {
           expect(JSON.stringify(uploaded)).not.toContain('private-');
@@ -882,12 +926,27 @@ describe('createShareableUrl', () => {
       };
       mockEval.config = {
         env: {
+          PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
           PROMPTFOO_STRIP_TEST_VARS: 'true',
           PROMPTFOO_STRIP_METADATA: 'true',
           PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
         },
         tests: [testCase],
       };
+      mockEval.getTraces = vi.fn().mockResolvedValue([
+        {
+          metadata: { note: 'private-trace-note' },
+          spans: [
+            {
+              attributes: {
+                'promptfoo.request.body': 'private-trace-request',
+                'promptfoo.response.body': 'private-trace-response',
+                operation: 'provider-call',
+              },
+            },
+          ],
+        },
+      ]);
       mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
         yield [{ id: 'row', testCase }];
       });
@@ -900,6 +959,9 @@ describe('createShareableUrl', () => {
         for (const [, options] of mockFetch.mock.calls) {
           expect(options.body).not.toContain('private-');
         }
+        expect(JSON.parse(mockFetch.mock.calls[0][1].body).traces).toEqual([
+          { spans: [{ attributes: { operation: 'provider-call' } }] },
+        ]);
         expect(testCase.vars.input).toBe('private-input');
         expect(getEnvBool('PROMPTFOO_STRIP_TEST_VARS')).toBe(false);
       } finally {

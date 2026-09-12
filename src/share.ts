@@ -18,11 +18,13 @@ import {
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
+import { projectTracesForOutput } from './util/output';
 import { sanitizeConfigForOutput } from './util/sanitizer';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
+import type { TestCase } from './types';
 
 interface ShareDomainResult {
   domain: string;
@@ -134,6 +136,53 @@ function getEffectiveShareTeamId(eval_: Eval): string | undefined {
   return cloudConfig.getCurrentTeamId(currentOrgId);
 }
 
+function stripProviderPaths<T>(provider: T): T {
+  if (typeof provider === 'string') {
+    return provider.replace(/^file:\/\/.*[/\\]([^/\\]+)$/, 'file://$1') as T;
+  }
+  if (!provider || typeof provider !== 'object') {
+    return provider;
+  }
+  if (Array.isArray(provider)) {
+    return provider.map(stripProviderPaths) as T;
+  }
+  const projected = { ...provider } as Record<string, unknown>;
+  if ('id' in projected || 'config' in projected) {
+    if ('id' in projected) {
+      projected.id = stripProviderPaths(projected.id);
+    }
+    if (projected.config && typeof projected.config === 'object') {
+      const { basePath: _basePath, ...config } = projected.config as Record<string, unknown>;
+      projected.config = config;
+    }
+  } else {
+    return Object.fromEntries(
+      Object.entries(projected).map(([key, value]) => [
+        stripProviderPaths(key),
+        stripProviderPaths(value),
+      ]),
+    ) as T;
+  }
+  return projected as T;
+}
+
+// Mutate only the sanitized share copy, leaving user variables and local replay paths intact.
+function stripTestProviderPaths(test: TestCase): void {
+  if (test.provider) {
+    test.provider = stripProviderPaths(test.provider);
+  }
+  if (test.options?.provider) {
+    test.options.provider = stripProviderPaths(test.options.provider);
+  }
+  for (const assertion of test.assert ?? []) {
+    if (assertion.type === 'assert-set') {
+      stripTestProviderPaths({ assert: assertion.assert });
+    } else if (assertion.provider) {
+      assertion.provider = stripProviderPaths(assertion.provider);
+    }
+  }
+}
+
 // This sends the eval record to the remote server
 async function sendEvalRecord(
   evalRecord: Eval,
@@ -147,6 +196,21 @@ async function sendEvalRecord(
     evalRecord.config,
     stripFlags,
   );
+  redactedConfig.providers = stripProviderPaths(redactedConfig.providers);
+  const tests = [
+    ...(Array.isArray(redactedConfig.tests) ? redactedConfig.tests : []),
+    redactedConfig.defaultTest,
+    ...(redactedConfig.scenarios ?? []).flatMap((scenario) =>
+      typeof scenario === 'object'
+        ? [...(scenario.config ?? []), ...(Array.isArray(scenario.tests) ? scenario.tests : [])]
+        : [],
+    ),
+  ];
+  for (const test of tests) {
+    if (test && typeof test === 'object' && !('path' in test)) {
+      stripTestProviderPaths(test);
+    }
+  }
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.
@@ -154,7 +218,7 @@ async function sendEvalRecord(
     ...evalRecord,
     config: redactedConfig,
     results: [],
-    traces,
+    traces: projectTracesForOutput(traces, stripFlags),
   };
   if (cloudConfig.isEnabled()) {
     const effectiveTeamId = getEffectiveShareTeamId(evalRecord);
@@ -399,9 +463,12 @@ async function prepareChunkForShare(
 ): Promise<EvalResult[]> {
   const sharedResults = chunk.map((row) => {
     const result = sanitizeResultForJsonlArtifact(row, stripFlags);
-    if (result.provider?.config) {
-      const { basePath: _basePath, ...config } = result.provider.config;
-      result.provider = { ...result.provider, config };
+    result.provider = stripProviderPaths(result.provider);
+    if (result.testCase) {
+      stripTestProviderPaths(result.testCase);
+    }
+    if (result.prompt?.config?.provider) {
+      result.prompt.config.provider = stripProviderPaths(result.prompt.config.provider);
     }
     return result;
   });

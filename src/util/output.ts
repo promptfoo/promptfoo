@@ -342,7 +342,7 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
   };
 };
 
-function projectTracesForOutput(
+export function projectTracesForOutput(
   traces: NonNullable<OutputFile['traces']>,
   {
     shouldStripMetadata,
