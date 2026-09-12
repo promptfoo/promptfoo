@@ -281,7 +281,7 @@ export const AddTracesRequestSchema = z
     z
       .object({
         traceId: z.string().min(1).max(MAX_TRACE_IDENTIFIER_LENGTH),
-        evaluationId: z.string().min(1).max(128),
+        evaluationId: z.string().min(1),
         // Empty legacy test-case IDs have historically been storable and must remain shareable.
         testCaseId: z.string().max(MAX_TRACE_IDENTIFIER_LENGTH),
         metadata: z.record(z.string(), z.unknown()).optional(),

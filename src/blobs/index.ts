@@ -5,6 +5,7 @@ import { getDb } from '../database';
 import { blobAssetsTable, blobReferencesTable } from '../database/tables';
 import logger from '../logger';
 import { FilesystemBlobStorageProvider } from './filesystemProvider';
+import { BLOB_MIME_TYPE_FALLBACK, sanitizeBlobMimeType } from './mimeTypes';
 
 import type { BlobStorageProvider, BlobStoreResult, StoredBlob } from './types';
 
@@ -16,24 +17,8 @@ export {
   type StoredBlob,
 } from './types';
 
-// MIME types retained by portable imports and allowed for inline blob responses.
-const SAFE_INLINE_BLOB_MIME_TYPES = new Set([
-  'image/avif',
-  'image/gif',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'video/mp4',
-  'video/ogg',
-  'video/webm',
-]);
-const SAFE_INLINE_AUDIO_MIME_TYPE_REGEX = /^audio\/[a-z0-9_+-]+$/i;
-
 export function isSafeInlineBlobMimeType(mimeType: string): boolean {
-  return (
-    SAFE_INLINE_BLOB_MIME_TYPES.has(mimeType.toLowerCase()) ||
-    SAFE_INLINE_AUDIO_MIME_TYPE_REGEX.test(mimeType)
-  );
+  return sanitizeBlobMimeType(mimeType) !== BLOB_MIME_TYPE_FALLBACK;
 }
 
 let defaultProvider: BlobStorageProvider | null = null;

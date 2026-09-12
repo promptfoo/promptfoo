@@ -105,4 +105,17 @@ describe('Eval API schemas', () => {
 
     expect(result.success).toBe(false);
   });
+
+  it('accepts traces for evaluation IDs accepted by the route', () => {
+    const result = EvalSchemas.AddTraces.Request.safeParse([
+      {
+        traceId: 'trace-1',
+        evaluationId: 'e'.repeat(129),
+        testCaseId: 'test-1',
+        spans: [],
+      },
+    ]);
+
+    expect(result.success).toBe(true);
+  });
 });

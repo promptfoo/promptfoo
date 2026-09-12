@@ -497,6 +497,20 @@ describe('Blobs Routes', () => {
       expect(response.header['accept-ranges']).toBe('none');
     });
 
+    it('should serve retained passive media inline', async () => {
+      setupDbWithAssetAndReference(
+        { hash: validHash, mimeType: 'image/bmp', sizeBytes: 1024, provider: 'local' },
+        { evalId: 'eval-bmp' },
+      );
+      mockedGetBlobByHash.mockResolvedValue(createBlobResponse('image/bmp', 1024));
+
+      const response = await api.get(`/api/blobs/${validHash}?evalId=eval-123`);
+
+      expect(response.status).toBe(200);
+      expect(response.header['content-type']).toBe('image/bmp');
+      expect(response.header['content-disposition']).toBeUndefined();
+    });
+
     it('should not redirect legacy active content around the MIME boundary', async () => {
       setupDbWithAssetAndReference(
         { hash: validHash, mimeType: 'image/svg+xml', sizeBytes: 2048, provider: 's3' },
