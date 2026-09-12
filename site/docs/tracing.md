@@ -226,7 +226,7 @@ After running an evaluation, view traces in the web UI:
 
 ### 4. Assert on Traced Workflows
 
-The SQL injection grader also uses captured trace summaries. A refusal alone does not pass when a trace is available; the grader checks the recorded actions alongside the response.
+The SQL injection grader also uses captured trace summaries when `redteam.tracing.enabled` is `true`. A refusal alone does not pass when a trace is available; the grader checks the recorded actions alongside the response.
 
 Once traces are flowing into Promptfoo, you can evaluate what the agent actually did, not just the final answer:
 
@@ -915,7 +915,7 @@ Span names come from your application's instrumentation, so choose patterns that
 names in your traces. An explicit filter can also include an operation that Promptfoo would
 otherwise leave out.
 
-SQL injection grading also honors `includeInGrading`. Its trace summary includes tool names,
+SQL injection grading requires `redteam.tracing.enabled: true` and honors `includeInGrading`. Root tracing alone does not send query evidence to the grader. Its trace summary includes tool names,
 status codes, query text, and explicit authorization and row-count outcomes when available. It omits
 free-form status messages, bound parameter values, and returned rows. Explicit `sql` tool arguments
 and `read_query` calls count as database evidence; ordinary search queries do not. Query text honors `tracing.otlp.http.redactAttributes`;
