@@ -233,6 +233,7 @@ describe('LocalSpanExporter', () => {
               {
                 name: 'guardrail decision',
                 timestamp: 102250,
+                timestampNanos: '102250000000',
                 attributes: { 'guardrails.decision': 'blocked' },
               },
             ],
@@ -240,6 +241,22 @@ describe('LocalSpanExporter', () => {
         ],
         expect.any(Object),
       );
+    });
+
+    it('retains nanosecond ordering for epoch-scale local events', async () => {
+      await exportSpans([
+        createMockSpan({
+          events: [
+            { name: 'guardrail update_seat', time: [1789000000, 200], droppedAttributesCount: 0 },
+            { name: 'tool update_seat', time: [1789000000, 300], droppedAttributesCount: 0 },
+          ],
+        }),
+      ]);
+      expect(
+        mockAddSpans.mock.calls[0][1][0].events.map(
+          (event: { timestampNanos?: string }) => event.timestampNanos,
+        ),
+      ).toEqual(['1789000000000000200', '1789000000000000300']);
     });
 
     it('should include parent span ID when present', async () => {

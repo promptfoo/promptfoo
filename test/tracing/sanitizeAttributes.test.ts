@@ -21,6 +21,25 @@ it('preserves text around existing redaction markers on repeated sanitization', 
   expect(redact('token [REDACTED] [REDACTED]')).toBe('token <redacted> <redacted>');
 });
 
+it('retains source values and incomplete history across redaction batches', () => {
+  const state = { secrets: new Set<string>(), length: 0, incomplete: false };
+  getTraceTextRedactor(
+    [{ original: 'PRIVATE_BATCH_VALUE', sanitized: '[REDACTED]' }],
+    '[REDACTED]',
+    state,
+  );
+  expect(getTraceTextRedactor([], '[REDACTED]', state)('echo PRIVATE_BATCH_VALUE')).toBe(
+    'echo [REDACTED]',
+  );
+  getTraceTextRedactor(
+    [{ original: 'x'.repeat(16_385), sanitized: '[REDACTED]' }],
+    '[REDACTED]',
+    state,
+  );
+  expect(state.secrets.size).toBe(0);
+  expect(getTraceTextRedactor([], '[REDACTED]', state)('a later echo')).toBe('[REDACTED]');
+});
+
 describe('sanitizeTraceAttributes', () => {
   it('preserves safe token metrics and redacts normalized credential names recursively', () => {
     expect(

@@ -671,13 +671,29 @@ export function observationsFromTraceData(
   traceData.spans.forEach((span, spanIndex) => {
     const traceSpan = span as TraceLikeSpan;
     const spanLocation = `trace span ${spanIndex + 1}`;
-    const controlObservation = controlObservationFromSpan(traceSpan, spanLocation, source);
-    if (controlObservation) {
-      observations.push(controlObservation);
-    }
-
+    const logTimestamp = traceSpan.attributes?.['otel.log.time_unix_nano'];
+    const isLog = Object.keys(traceSpan.attributes ?? {}).some((key) =>
+      key.startsWith('otel.log.'),
+    );
+    const spanSource = isLog ? 'trace-event' : source;
+    const controlObservation = controlObservationFromSpan(traceSpan, spanLocation, spanSource);
+    const spanObservations = [
+      ...(controlObservation ? [controlObservation] : []),
+      ...observationsFromTraceAttributes(traceSpan.attributes, spanLocation, spanSource, traceSpan),
+    ];
     observations.push(
-      ...observationsFromTraceAttributes(traceSpan.attributes, spanLocation, source, traceSpan),
+      ...spanObservations.map((observation) =>
+        isLog
+          ? {
+              ...observation,
+              eventId: spanLocation,
+              timestampNanos:
+                typeof logTimestamp === 'string' && /^\d{1,20}$/.test(logTimestamp)
+                  ? logTimestamp
+                  : undefined,
+            }
+          : observation,
+      ),
     );
 
     traceSpan.events?.forEach((event, eventIndex) => {

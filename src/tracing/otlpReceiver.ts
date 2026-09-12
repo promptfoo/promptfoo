@@ -16,7 +16,7 @@ import {
   PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from './resourceAttributes';
-import { getTraceTextRedactor } from './sanitizeAttributes';
+import { getTraceTextRedactor, type TraceTextRedactionState } from './sanitizeAttributes';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
 interface OTLPAttribute {
@@ -290,6 +290,8 @@ export class OTLPReceiver {
   private commandToolNames?: string[];
   private redactAttributePatterns: string[] = [];
   private tracePoliciesByEvaluationId = new Map<string, RegisteredTracePolicy>();
+  private textRedactionByTrace = new Map<string, TraceTextRedactionState>();
+  private textRedactionHistoryFull = false;
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
@@ -368,7 +370,28 @@ export class OTLPReceiver {
     return redacted;
   }
 
-  private redactSpans(spans: SpanData[], redactAttributePatterns: string[]): SpanData[] {
+  private getTextRedactionState(traceId?: string): TraceTextRedactionState {
+    const existing = traceId ? this.textRedactionByTrace.get(traceId) : undefined;
+    if (existing) {
+      return existing;
+    }
+    this.textRedactionHistoryFull ||= this.textRedactionByTrace.size >= 1_024;
+    const state = {
+      secrets: new Set<string>(),
+      length: 0,
+      incomplete: this.textRedactionHistoryFull,
+    };
+    if (traceId && !this.textRedactionHistoryFull) {
+      this.textRedactionByTrace.set(traceId, state);
+    }
+    return state;
+  }
+
+  private redactSpans(
+    spans: SpanData[],
+    redactAttributePatterns: string[],
+    traceId?: string,
+  ): SpanData[] {
     if (redactAttributePatterns.length === 0) {
       return spans;
     }
@@ -388,6 +411,8 @@ export class OTLPReceiver {
           sanitized: sanitized[index].events?.[eventIndex].attributes,
         })),
       ]),
+      '[REDACTED]',
+      this.getTextRedactionState(traceId),
     );
     return sanitized.map((span) => ({
       ...span,
@@ -650,7 +675,7 @@ export class OTLPReceiver {
       );
       const sanitized =
         redactAttributePatterns.length > 0
-          ? this.redactSpans(spans, redactAttributePatterns)
+          ? this.redactSpans(spans, redactAttributePatterns, traceId)
           : spans;
       await this.traceStore.addSpans(traceId, sanitized, {
         skipTraceCheck: false,
@@ -867,6 +892,14 @@ export class OTLPReceiver {
     }
 
     const timeNano = log.timeUnixNano ?? log.observedTimeUnixNano;
+    if (
+      typeof timeNano === 'string' &&
+      /^\d{1,20}$/.test(timeNano) &&
+      BigInt(timeNano) > 0n &&
+      BigInt(timeNano) <= 0xffffffffffffffffn
+    ) {
+      attributes['otel.log.time_unix_nano'] = timeNano;
+    }
     const startTime = timeNano ? Number(timeNano) / 1_000_000 : Date.now();
     const endTime = startTime + LOG_SPAN_DURATION_MS;
 
@@ -1143,6 +1176,8 @@ export class OTLPReceiver {
 
   stop(): Promise<void> {
     logger.debug('[OtlpReceiver] Stopping receiver');
+    this.textRedactionByTrace.clear();
+    this.textRedactionHistoryFull = false;
     return new Promise((resolve) => {
       if (this.server) {
         this.server.close(() => {

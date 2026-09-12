@@ -141,6 +141,7 @@ export class LocalSpanExporter implements SpanExporter {
       events: span.events.map((event) => ({
         name: event.name,
         timestamp: event.time[0] * 1e3 + event.time[1] / 1e6,
+        timestampNanos: (BigInt(event.time[0]) * 1_000_000_000n + BigInt(event.time[1])).toString(),
         attributes: this.convertAttributes(event.attributes ?? {}),
       })),
       statusCode: span.status.code,
