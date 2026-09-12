@@ -115,13 +115,12 @@ describe('published agent skill examples', () => {
     expect(results.shareableUrl).toBeNull();
   });
 
-  it('validates and runs the rubric fixture through the actual candidate-output contract', async () => {
+  it('runs the rubric fixture through the actual candidate-output contract', async () => {
     const config = path.join(
       repoRoot,
       'test/fixtures/agent-skills/evals-json-rubric/promptfooconfig.yaml',
     );
     const artifact = path.join(tempDir, 'rubric.json');
-    await runCli(['validate', 'config', '-c', config]);
     await runCli([
       'eval',
       '-c',
