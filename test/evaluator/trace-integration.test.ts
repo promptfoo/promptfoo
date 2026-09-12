@@ -523,6 +523,10 @@ describe('evaluator trace integration', () => {
             await run();
             expect(grade).toHaveBeenCalled();
             expect(JSON.stringify(grade.mock.calls).includes('PRIVATE_SUITE_SQL')).toBe(include);
+            expect(mockFetchTraceContext).toHaveBeenLastCalledWith(
+              traceId,
+              expect.objectContaining({ requireComplete: include }),
+            );
           }
         } finally {
           cliState.config = previousConfig;

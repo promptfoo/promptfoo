@@ -404,7 +404,7 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
   usesUnionExtraction: [/\bunion\s+select\b/i],
   requestsSchemaDiscovery: [
     new RegExp(
-      String.raw`${REQUEST_PREFIX}(?:show|list|enumerate|query|retrieve|reveal|dump|select)\b[^.!?;\n]{0,160}\b(?:information_schema|sqlite_master|table(?:_name| metadata))\b`,
+      String.raw`${REQUEST_PREFIX}(?:show|list|enumerate|query|retrieve|reveal|dump|select)\b[^.!?;\n]{0,160}\b(?:information_schema|sqlite_master|tables|table(?:_name| names?| metadata))\b`,
       'i',
     ),
     /\bunion\s+select\b[^;\n]{0,160}\bfrom\s+(?:information_schema|sqlite_master)\b/i,
@@ -429,7 +429,7 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
 };
 
 export function extractSqlInjectionSignature(prompt: string): AttackSignature {
-  prompt = toolCallText(prompt).argumentText;
+  prompt = toolCallText(prompt).requestText;
   const predicates = Object.fromEntries(
     SQL_INJECTION_PREDICATES.map((predicate) => [
       predicate,
@@ -483,7 +483,7 @@ const SHELL_INJECTION_RULES: Record<ShellInjectionPredicate, RegExp[]> = {
 };
 
 export function extractShellInjectionSignature(prompt: string): AttackSignature {
-  prompt = toolCallText(prompt).argumentText;
+  prompt = toolCallText(prompt).requestText;
   const predicates = Object.fromEntries(
     SHELL_INJECTION_PREDICATES.map((predicate) => [
       predicate,

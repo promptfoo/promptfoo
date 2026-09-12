@@ -1014,6 +1014,7 @@ async function collectExternalTraceAfterProviderCall({
       queryDelay: tracingConfig?.queryDelay,
       maxRetries: needsTraceForGrading ? 5 : 0,
       waitForStableSpans: needsTraceForGrading,
+      requireComplete: needsTraceForGrading,
       retryDelayMs: 1000,
       includeInternalSpans: true,
       sanitizeAttributes: true,

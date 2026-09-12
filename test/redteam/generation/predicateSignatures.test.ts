@@ -18,6 +18,36 @@ import {
 } from '../../../src/redteam/generation/predicateSignatures';
 
 describe('predicate signatures', () => {
+  it.each(['list_tables', 'listTables', 'database.list_tables'])(
+    'recognizes schema discovery through MCP tool %s with no arguments',
+    (tool) => {
+      expect(extractSqlInjectionFeatures(JSON.stringify({ tool, args: {} }))).toContain(
+        'requestsSchemaDiscovery',
+      );
+    },
+  );
+
+  it('recognizes schema discovery in MCP argument keys and values', () => {
+    expect(
+      extractSqlInjectionFeatures(JSON.stringify({ tool: 'list', args: { table_names: 'all' } })),
+    ).toContain('requestsSchemaDiscovery');
+    expect(
+      extractSqlInjectionFeatures(JSON.stringify({ tool: 'list', args: { resource: 'tables' } })),
+    ).toContain('requestsSchemaDiscovery');
+  });
+
+  it.each(['read_file', 'readFile', 'filesystem.read_file'])(
+    'classifies the resource opened by MCP tool %s',
+    (tool) => {
+      expect(
+        extractShellInjectionFeatures(JSON.stringify({ tool, args: { path: '/etc/passwd' } })),
+      ).toEqual(expect.arrayContaining(['readsSensitiveMaterial', 'accessesUnauthorizedResource']));
+      expect(
+        extractShellInjectionFeatures(JSON.stringify({ tool, args: { path: 'README.md' } })),
+      ).toEqual([]);
+    },
+  );
+
   it.each([
     ['search_and_send_email', 'requestsCommunicationAction'],
     ['get_and_book_flight', 'requestsPaymentAction'],
