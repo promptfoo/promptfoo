@@ -841,9 +841,9 @@ export default class GoatProvider implements ApiProvider {
           }
         }
       } catch (error) {
-        // Re-throw abort errors to properly cancel the operation
-        if (error instanceof Error && error.name === 'AbortError') {
-          logger.debug('[GOAT] Operation aborted');
+        // Stop the strategy when cancelled or when trace evidence is incomplete
+        if (error instanceof Error && ['AbortError', 'TraceLimitError'].includes(error.name)) {
+          logger.debug('[GOAT] Operation stopped');
           throw error;
         }
         if (isRemoteMaterializationUpgradeError(error)) {

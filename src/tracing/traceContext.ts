@@ -15,6 +15,7 @@ import {
   type AddSpansOptions,
   getTraceStore,
   type SpanData,
+  TraceLimitError,
   type TraceSpanQueryOptions,
 } from './store';
 import { getToolNameFromAttributes } from './toolAttributes';
@@ -308,6 +309,9 @@ async function storeExternalSpans(
     logger.debug(`[TraceContext] Stored ${spans.length} spans from external provider`);
     return true;
   } catch (error) {
+    if (error instanceof TraceLimitError) {
+      throw error;
+    }
     logger.warn(`[TraceContext] Failed to store external spans: ${error}`);
     return false;
   }
@@ -409,6 +413,9 @@ async function fetchFromExternalProvider(
       throw createTraceAbortError(abortSignal);
     }
     try {
+      if ((await getTraceStore().getTraceMetadata(traceId))?.promptfooTraceIncomplete) {
+        throw new TraceLimitError();
+      }
       const result = await provider.fetchTrace(traceId, providerFetchOptions);
       const validSpans = result ? discardCyclicExternalSpans(result.spans) : [];
 
@@ -459,6 +466,9 @@ async function fetchFromExternalProvider(
         fetchedAt: result.fetchedAt,
       };
     } catch (error) {
+      if (error instanceof TraceLimitError) {
+        throw error;
+      }
       if (abortSignal?.aborted) {
         throw createTraceAbortError(abortSignal);
       }
@@ -524,6 +534,9 @@ async function fetchFromLocalStore(
     }
     try {
       const spans = await traceStore.getSpans(traceId, spanOptions);
+      if ((await traceStore.getTraceMetadata(traceId))?.promptfooTraceIncomplete) {
+        throw new TraceLimitError();
+      }
 
       if (spans.length === 0) {
         if (attempt === maxRetries) {
@@ -557,6 +570,9 @@ async function fetchFromLocalStore(
 
       return context;
     } catch (error) {
+      if (error instanceof TraceLimitError) {
+        throw error;
+      }
       if (abortSignal?.aborted) {
         throw createTraceAbortError(abortSignal);
       }
