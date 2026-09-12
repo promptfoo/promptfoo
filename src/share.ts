@@ -15,7 +15,7 @@ import {
   getOrgContext,
   makeRequest as makeCloudRequest,
 } from './util/cloud';
-import { buildProviderShareConfig } from './util/eval/providerSelection';
+import { buildProviderShareConfig, omitFunctionsForShare } from './util/eval/providerSelection';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
 import {
@@ -166,7 +166,9 @@ async function sendEvalRecord(
     ...evalRecord,
     prompts: evalRecord.prompts.map((prompt) => ({
       ...prompt,
-      ...(prompt.config ? { config: redactSecretLeaves(prompt.config) } : {}),
+      ...(prompt.config
+        ? { config: redactSecretLeaves(omitFunctionsForShare(prompt.config)) }
+        : {}),
     })),
     config: redactedConfig,
     results: [],
@@ -242,11 +244,16 @@ async function sendChunkOfResults(
   const stringifiedChunk = JSON.stringify(
     chunk.map((result) => ({
       ...result,
-      provider: redactSecretLeaves(result.provider),
-      testCase: redactSecretLeaves(result.testCase),
-      ...('vars' in result ? { vars: redactSecretLeaves(result.vars) } : {}),
+      provider: redactSecretLeaves(omitFunctionsForShare(result.provider)),
+      testCase: redactSecretLeaves(omitFunctionsForShare(result.testCase)),
+      ...('vars' in result ? { vars: redactSecretLeaves(omitFunctionsForShare(result.vars)) } : {}),
       ...(result.prompt?.config
-        ? { prompt: { ...result.prompt, config: redactSecretLeaves(result.prompt.config) } }
+        ? {
+            prompt: {
+              ...result.prompt,
+              config: redactSecretLeaves(omitFunctionsForShare(result.prompt.config)),
+            },
+          }
         : {}),
     })),
   );

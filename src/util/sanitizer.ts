@@ -1175,6 +1175,10 @@ function normalizeReplayFieldName(fieldName: string): string {
  */
 export function isReplaySecretField(fieldName: string): boolean {
   const normalized = normalizeReplayFieldName(fieldName);
+  // This names the credential source; its resolved value is redacted separately.
+  if (normalized === 'apikeyenvar') {
+    return false;
+  }
   return (
     isSecretField(fieldName) ||
     normalized.endsWith('apikey') ||

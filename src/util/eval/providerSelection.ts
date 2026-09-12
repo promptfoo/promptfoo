@@ -462,11 +462,11 @@ export function buildProviderPermissionConfig(
   };
 }
 
-function omitFunctionsForShare(value: unknown, seen = new WeakSet<object>()): unknown {
+export function omitFunctionsForShare(value: unknown, seen = new WeakSet<object>()): unknown {
   if (typeof value === 'function') {
     return undefined;
   }
-  if (!value || typeof value !== 'object') {
+  if (!value || typeof value !== 'object' || value instanceof Date) {
     return value;
   }
   if (seen.has(value)) {

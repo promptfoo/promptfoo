@@ -273,6 +273,22 @@ describe('provider selection', () => {
     );
   });
 
+  it('rejects an API key environment selector change while allowing value rotation', () => {
+    const source = { id: 'http', config: { apiKeyEnvar: 'ACCOUNT_A_KEY', apiKey: 'old-value' } };
+    const original = provider('http', 'target', source.config);
+    const selection = createProviderSelection([original], [source], [original]);
+    const rotatedSource = { ...source, config: { ...source.config, apiKey: 'new-value' } };
+    const rotated = provider('http', 'target', rotatedSource.config);
+    expect(applyProviderSelection([rotated], [rotatedSource], selection).providers).toEqual([
+      rotated,
+    ]);
+    const changedSource = { ...source, config: { ...source.config, apiKeyEnvar: 'ACCOUNT_B_KEY' } };
+    const changed = provider('http', 'target', changedSource.config);
+    expect(() => applyProviderSelection([changed], [changedSource], selection)).toThrow(
+      'no longer matches provider at index 0',
+    );
+  });
+
   it('allows credential rotation when provider execution semantics are unchanged', () => {
     const original = provider('http', 'target', {
       apiKey: 'old-secret',

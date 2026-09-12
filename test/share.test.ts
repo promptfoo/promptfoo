@@ -774,9 +774,13 @@ describe('createShareableUrl', () => {
     it.each([true, false])(
       'redacts credentials in persisted=%s result batches',
       async (persisted) => {
+        const transform = () => 'PRIVATE_SHARED_FUNCTION_SOURCE';
         const provider = {
           id: 'openai:grader',
-          config: { headers: { 'X-Client-Token': 'abc123', 'Content-Type': 'application/json' } },
+          config: {
+            headers: { 'X-Client-Token': 'abc123', 'Content-Type': 'application/json' },
+            transform,
+          },
         };
         const result = new EvalResult({
           id: 'result-with-grader',
@@ -786,7 +790,11 @@ describe('createShareableUrl', () => {
           gradingResult: null,
           failureReason: 0,
           provider,
-          testCase: { vars: { input: 'Hello', apiKey: 'abc123' }, options: { provider } },
+          testCase: {
+            vars: { input: 'Hello', apiKey: 'abc123' },
+            options: { provider, transform },
+            assert: [{ type: 'javascript', value: transform }],
+          },
           prompt: { raw: 'Hello', label: 'Hello', config: { provider } },
           response: { output: 'Unchanged response' },
           score: 1,
@@ -805,6 +813,11 @@ describe('createShareableUrl', () => {
 
         const body = mockFetch.mock.calls[1][1].body;
         expect(body).not.toContain('abc123');
+        expect(JSON.stringify(mockFetch.mock.calls)).not.toContain(
+          'PRIVATE_SHARED_FUNCTION_SOURCE',
+        );
+        expect(JSON.parse(body)[0].testCase.options).not.toHaveProperty('transform');
+        expect(result.testCase.options?.transform).toBe(transform);
         expect(JSON.parse(body)[0]).toMatchObject({
           testCase: { vars: { input: 'Hello' } },
           response: { output: 'Unchanged response' },
