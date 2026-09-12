@@ -832,10 +832,17 @@ describe('createShareableUrl', () => {
         );
         const outputUri = `promptfoo://blob/${'b'.repeat(64)}`;
         const inputUri = `promptfoo://blob/${'c'.repeat(64)}`;
+        const dataUrl = 'data:image/png;base64,cHJpdmF0ZSBvdXRwdXQ=';
+        const preview = { samples: [outputUri, dataUrl], caption: 'keep caption' };
         const row = {
           id: 'media-row',
           testCase: { vars: { input: inputUri } },
-          metadata: { audio: { data: outputUri }, blobUris: [outputUri], note: 'keep metadata' },
+          metadata: {
+            audio: { data: outputUri },
+            blobUris: [outputUri],
+            preview,
+            note: 'keep metadata',
+          },
           response: {
             output: outputUri,
             providerTransformedOutput: outputUri,
@@ -845,6 +852,7 @@ describe('createShareableUrl', () => {
             metadata: {
               blobUris: [outputUri],
               audio: { data: outputUri },
+              preview,
               note: 'keep metadata',
             },
           },
@@ -865,15 +873,58 @@ describe('createShareableUrl', () => {
         expect(scans.length).toBeGreaterThan(0);
         for (const [value] of scans) {
           expect(JSON.stringify(value)).not.toContain(outputUri);
+          expect(JSON.stringify(value)).not.toContain(dataUrl);
           expect(JSON.stringify(value)).toContain(inputUri);
         }
         const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
         expect(uploaded.response).toEqual({
           output: '[output stripped]',
-          metadata: { note: 'keep metadata' },
+          metadata: {
+            note: 'keep metadata',
+            preview: {
+              samples: ['[output stripped]', '[output stripped]'],
+              caption: 'keep caption',
+            },
+          },
         });
-        expect(uploaded.metadata).toEqual({ note: 'keep metadata' });
+        expect(uploaded.metadata).toEqual(uploaded.response.metadata);
         expect(row.response.metadata.blobUris).toEqual([outputUri]);
+      },
+    );
+
+    it.each([false, true])(
+      'preserves test metadata when stripping response output (override: %s)',
+      async (override) => {
+        const testMetadata = {
+          audio: { language: 'English' },
+          blobUris: ['ordinary user value'],
+          preview: 'data:image/png;base64,dXNlciBpbnB1dA==',
+        };
+        const responseMetadata = override ? { audio: { data: 'private audio bytes' } } : undefined;
+        const row = {
+          id: 'metadata-row',
+          testCase: { metadata: testMetadata },
+          metadata: { ...testMetadata, ...responseMetadata },
+          response: { output: 'private-output', metadata: responseMetadata },
+        };
+        mockEval.config = { env: { PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' } };
+        mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+          yield [row];
+        });
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+        await createShareableUrl(mockEval as Eval);
+
+        const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
+        expect(uploaded.testCase.metadata).toEqual(testMetadata);
+        expect(uploaded.metadata).toEqual({
+          ...testMetadata,
+          ...(override && { audio: undefined }),
+        });
+        expect(uploaded.response.output).toBe('[output stripped]');
+        expect(row.metadata.audio).toEqual(responseMetadata?.audio ?? testMetadata.audio);
       },
     );
 

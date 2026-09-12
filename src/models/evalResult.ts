@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
 
 import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
+import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -42,12 +43,46 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   }) as ProviderConfig;
 }
 
-function projectOutputMetadata<T>(metadata: T, stripOutput: boolean): T {
-  if (!stripOutput || !metadata || typeof metadata !== 'object') {
+function stripMediaReferences(value: unknown): unknown {
+  if (
+    extractBlobHashesFromValue(value).length > 0 ||
+    (typeof value === 'string' && /^data:[^;,]+;base64,/i.test(value))
+  ) {
+    return '[output stripped]';
+  }
+  if (Array.isArray(value)) {
+    return value.map(stripMediaReferences);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, stripMediaReferences(item)]),
+    );
+  }
+  return value;
+}
+
+function projectOutputMetadata<T>(
+  metadata: T,
+  stripOutput: boolean,
+  responseMetadata: ProviderResponse['metadata'],
+  testMetadata?: AtomicTestCase['metadata'],
+): T {
+  if (!stripOutput || !metadata || !responseMetadata || typeof metadata !== 'object') {
     return metadata;
   }
-  const { blobUris: _blobUris, audio: _audio, ...rest } = metadata as Record<string, unknown>;
-  return rest as T;
+  return Object.fromEntries(
+    Object.entries(metadata).flatMap(([key, value]) => {
+      if (
+        !Object.prototype.hasOwnProperty.call(responseMetadata, key) ||
+        (testMetadata && isDeepStrictEqual(value, testMetadata[key]))
+      ) {
+        return [[key, value]];
+      }
+      return key === 'audio' || key === 'blobUris'
+        ? []
+        : [[key, stripMediaReferences(sanitizeForDb(value))]];
+    }),
+  ) as T;
 }
 
 function projectProviderResponse(
@@ -73,7 +108,13 @@ function projectProviderResponse(
     delete projectedResponse.audio;
     delete projectedResponse.video;
     delete projectedResponse.images;
-    projectedResponse.metadata = projectOutputMetadata(projectedResponse.metadata, true);
+    if (projectedResponse.metadata) {
+      projectedResponse.metadata = projectOutputMetadata(
+        projectedResponse.metadata,
+        true,
+        projectedResponse.metadata,
+      );
+    }
   }
 
   return projectedResponse;
@@ -702,7 +743,12 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
     namedScores: sanitizeForDb(artifactResult.namedScores),
     metadata: shouldStripMetadata
       ? {}
-      : projectOutputMetadata(redacted.metadata, shouldStripResponseOutput),
+      : projectOutputMetadata(
+          redacted.metadata,
+          shouldStripResponseOutput,
+          redacted.response?.metadata,
+          (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
+        ),
   } as T;
 }
 
@@ -1120,7 +1166,12 @@ export default class EvalResult {
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
       metadata: shouldStripMetadata
         ? {}
-        : projectOutputMetadata(this.metadata, shouldStripResponseOutput),
+        : projectOutputMetadata(
+            this.metadata,
+            shouldStripResponseOutput,
+            this.response?.metadata,
+            this.testCase.metadata,
+          ),
       failureReason: this.failureReason,
     };
   }
