@@ -44,9 +44,11 @@ Eval exports and sharing omit these tests' forensic traces; the local trace stor
 
 The privacy gate applies to every assertion in the test, including inverse assertions and assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests.
 
-Image pixels cannot be verified by these text checks. Image-bearing responses produce a grading error, and their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
+Image pixels and audio cannot be verified by these text checks. Responses containing either produce a grading error, and their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
 
 Adaptive providers bypass target-response blob storage for artifact-redaction tests.
+
+Configured receipt files must be readable regular files under the working directory or system temporary directory, containing 16 bytes to 64 KiB of text. A missing, unreadable, out-of-root, or invalid receipt fails verification. Use `rawReceiptPath` and `redactedArtifactPath` to check a protected value against an exported file before semantic grading.
 
 ## Evidence To Collect
 
