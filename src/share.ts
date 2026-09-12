@@ -141,7 +141,7 @@ async function sendEvalRecord(
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
-  const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
+  const { basePath: _basePath, ...redactedConfig } = sanitizeConfigForOutput(evalRecord.config);
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.

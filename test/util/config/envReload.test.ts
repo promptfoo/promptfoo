@@ -607,6 +607,31 @@ describe('suite environment loading', () => {
     expect(result.description).toBe(reference);
   });
 
+  it.each(['defaultTest', 'scenarios'] as const)(
+    'keeps %s file paths literal when templating is disabled',
+    async (field) => {
+      const reference = 'file://{{ env.SOURCE }}.yaml';
+      const configPath = writeConfig('literal-paths', {
+        env: { SOURCE: 'rendered', PROMPTFOO_DISABLE_TEMPLATING: 'true' },
+        [field]: field === 'scenarios' ? [reference] : reference,
+      });
+      for (const [file, value] of [
+        ['{{ env.SOURCE }}.yaml', 'literal'],
+        ['rendered.yaml', 'wrong'],
+      ]) {
+        const test = { vars: { source: value } };
+        fs.writeFileSync(
+          path.join(path.dirname(configPath), file),
+          JSON.stringify(field === 'scenarios' ? [{ config: [{}], tests: [test] }] : test),
+        );
+      }
+      const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+      const test =
+        field === 'scenarios' ? testSuite.scenarios?.[0].tests?.[0] : testSuite.defaultTest;
+      expect(test).toMatchObject({ vars: { source: 'literal' } });
+    },
+  );
+
   it('uses defaultConfig.env when resolving a saved or programmatic config', async () => {
     const { testSuite } = await resolveConfigs(
       {},

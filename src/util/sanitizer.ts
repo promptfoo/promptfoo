@@ -45,6 +45,17 @@ function isSecretParameterName(name: string): boolean {
   );
 }
 
+function isSecretParameter(name: string, value: string | undefined): boolean {
+  // Boolean controls such as includeCredentials are settings, not credential values.
+  if (
+    /^(?:true|false)$/i.test(value ?? '') &&
+    /(?:^|[.\[])(?:include|require|use|with|enable|disable)(?:[A-Z]|[_-])[^.\[\]]*\]?$/.test(name)
+  ) {
+    return false;
+  }
+  return isSecretParameterName(name) || name.split(/[._\-\[\]]+/).some(isSecretParameterName);
+}
+
 /**
  * Whether any `key=value` segment carries a credential — by a secret-looking
  * value or a secret-named key. Splits on every URL pair delimiter (`? & ; #`),
@@ -71,8 +82,7 @@ function hasSecretFormSegment(text: string): boolean {
     }
     const rawKey = segment.slice(0, equalsIndex);
     const key = decodeFormComponent(rawKey) ?? rawKey;
-    const keyParts = key.split(/[._\-\[\]]+/).filter(Boolean);
-    if (isSecretParameterName(key) || keyParts.some(isSecretParameterName)) {
+    if (isSecretParameter(key, decodedValue)) {
       return true;
     }
   }
@@ -1018,10 +1028,8 @@ export function sanitizeUrlEncodedString(value: string): string {
     // match — the value-pattern checks below must still run, otherwise a malformed
     // key smuggles its secret value past redaction (e.g. `api%ZZkey=AKIA...`).
     const decodedKey = decodeFormComponent(rawKey);
-    // Split nested-key syntax (`user[password]`, `a.b.password`) into parts so we
-    // can match the leaf name against SECRET_FIELD_NAMES.
-    const keyParts = decodedKey === undefined ? [] : decodedKey.split(/[.\[\]]+/).filter(Boolean);
-    const keyIsSecret = keyParts.some(isSecretParameterName);
+    const decodedValue = decodeFormComponent(rawValue);
+    const keyIsSecret = decodedKey !== undefined && isSecretParameter(decodedKey, decodedValue);
 
     // A secret-named key redacts its ENTIRE value before any template skip or
     // nested-JSON recursion, so a partial-template value (`password=abc{{x}}def`)
@@ -1032,8 +1040,6 @@ export function sanitizeUrlEncodedString(value: string): string {
       // body; debug consumers that decode it see `[REDACTED]`.
       return `${separator}${rawKey}=${encodeURIComponent(REDACTED)}`;
     }
-
-    const decodedValue = decodeFormComponent(rawValue);
 
     // Recurse into JSON-shaped values so credentials buried in a
     // form-encoded JSON payload (e.g. `data=%7B%22password%22%3A...%7D`) get
@@ -1277,8 +1283,7 @@ export function sanitizeUrl(url: string): string {
     try {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
         if (
-          isSecretParameterName(key) ||
-          key.split(/[._\-\[\]]+/).some(isSecretParameterName) ||
+          isSecretParameter(key, value) ||
           rawSecretParamKeys.has(key) ||
           looksLikeSecret(value) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential

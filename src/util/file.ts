@@ -92,7 +92,9 @@ export function maybeLoadFromExternalFile(
   }
 
   // Render the file path using Nunjucks
-  const renderedFilePath = getNunjucksEngineForFilePath().renderString(filePath, {});
+  const renderedFilePath = getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')
+    ? filePath
+    : getNunjucksEngineForFilePath().renderString(filePath, {});
 
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)

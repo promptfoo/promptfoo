@@ -1915,6 +1915,25 @@ describe('sanitizeUrl', () => {
     expect(sanitizeUrl(url)).toBe(url);
   });
 
+  it('preserves boolean request controls while redacting credential values', () => {
+    const controls = 'includeCredentials=false&requireAuthorization=true&with_credentials=false';
+    for (const base of ['https://example.com/?', '/api?', '{{ base }}/api?', 'invalid url?']) {
+      expect(sanitizeUrl(base + controls)).toBe(base + controls);
+    }
+    expect(sanitizeUrl('https://example.com/#' + controls)).toBe(
+      'https://example.com/#' + controls,
+    );
+    expect(sanitizeUrl('https://example.com/?includeCredentials=short-private-value')).toContain(
+      'includeCredentials=%5BREDACTED%5D',
+    );
+    expect(sanitizeUrl('https://example.com/?authorization=false')).toContain(
+      'authorization=%5BREDACTED%5D',
+    );
+    expect(sanitizeUrl('https://example.com/?includeCredentials[password]=false')).toContain(
+      'includeCredentials%5Bpassword%5D=%5BREDACTED%5D',
+    );
+  });
+
   describe('invalid inputs', () => {
     it('should handle non-string inputs', () => {
       expect(sanitizeUrl(null as any)).toBeNull();

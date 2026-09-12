@@ -826,6 +826,7 @@ describe('createShareableUrl', () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       const gateway = 'https://gateway.example/v1?tenantClientSecret=short-private-value';
       mockEval.config = {
+        basePath: '/home/alice/private-project',
         providers: [{ id: 'openai:chat:test', config: { apiBaseUrl: gateway } }],
         metadata: { documentationUrl: 'HTTPS://Docs.Example?version=2' },
       };
@@ -837,6 +838,8 @@ describe('createShareableUrl', () => {
       expect(JSON.stringify(request.config)).not.toContain('short-private-value');
       expect(request.config.providers[0].config.apiBaseUrl).toContain('%5BREDACTED%5D');
       expect(request.config.metadata.documentationUrl).toBe('HTTPS://Docs.Example?version=2');
+      expect(request.config).not.toHaveProperty('basePath');
+      expect(mockEval.config.basePath).toBe('/home/alice/private-project');
       expect(JSON.stringify(mockEval.config)).toContain(gateway);
     });
 
