@@ -422,27 +422,35 @@ function controlObservationDuplicateKey(observation: AgentObservation): string |
 
 function groupControlObservations(observations: AgentObservation[]): AgentObservation[][] {
   const groups: AgentObservation[][] = [];
-  const unmatchedSpanGroupIndexes = new Map<string, number[]>();
-
-  observations.forEach((observation) => {
-    const duplicateKey = controlObservationDuplicateKey(observation);
-    if (observation.source === 'trace-event' && duplicateKey) {
-      const spanGroupIndexes = unmatchedSpanGroupIndexes.get(duplicateKey);
-      const spanGroupIndex = spanGroupIndexes?.shift();
-      if (spanGroupIndex !== undefined) {
-        groups[spanGroupIndex].push(observation);
-        return;
+  const spanGroups = new Map<string, AgentObservation[]>();
+  for (const observation of observations) {
+    if (observation.source === 'trace-event') {
+      continue;
+    }
+    const key = controlObservationDuplicateKey(observation);
+    const group = key ? spanGroups.get(key) : undefined;
+    if (group) {
+      group.push(observation);
+    } else {
+      const created = [observation];
+      groups.push(created);
+      if (key) {
+        spanGroups.set(key, created);
       }
     }
-
-    const groupIndex = groups.push([observation]) - 1;
-    if (observation.source !== 'trace-event' && duplicateKey) {
-      const spanGroupIndexes = unmatchedSpanGroupIndexes.get(duplicateKey) ?? [];
-      spanGroupIndexes.push(groupIndex);
-      unmatchedSpanGroupIndexes.set(duplicateKey, spanGroupIndexes);
+  }
+  for (const observation of observations) {
+    if (observation.source !== 'trace-event') {
+      continue;
     }
-  });
-
+    const key = controlObservationDuplicateKey(observation);
+    const group = key ? spanGroups.get(key) : undefined;
+    if (group) {
+      group.push(observation);
+    } else {
+      groups.push([observation]);
+    }
+  }
   return groups;
 }
 
@@ -652,6 +660,7 @@ function traceAttributesMatchPlugin(
   attributes: Record<string, unknown> | undefined,
   pluginId: AgenticRuntimePluginId,
   enclosingPluginId?: string,
+  failed = false,
 ): boolean {
   if (!attributes) {
     return false;
@@ -660,9 +669,22 @@ function traceAttributesMatchPlugin(
   const inheritedPluginId =
     normalizePluginId(getAttribute(attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)) ??
     enclosingPluginId;
-  return parseEvidenceCandidates(
-    getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS),
-  ).some((candidate) =>
+  const payload = getAttribute(attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS);
+  const candidates = parseEvidenceCandidates(payload);
+  if (
+    failed &&
+    (inheritedPluginId === pluginId ||
+      candidates.some((candidate) =>
+        normalizeEvidenceForPlugin(candidate, pluginId, inheritedPluginId),
+      ) ||
+      (inheritedPluginId === undefined &&
+        payload !== undefined &&
+        (candidates.length === 0 ||
+          candidates.some((candidate) => candidate.pluginId === undefined))))
+  ) {
+    return true;
+  }
+  return candidates.some((candidate) =>
     hasVerifierEvidence(normalizeEvidenceForPlugin(candidate, pluginId, inheritedPluginId)),
   );
 }
@@ -673,12 +695,13 @@ function getAgenticRuntimeVerifierSpans(
 ): TraceLikeSpan[] {
   return spans.filter(
     (span) =>
-      traceAttributesMatchPlugin(span.attributes, pluginId) ||
+      traceAttributesMatchPlugin(span.attributes, pluginId, undefined, hasErrorStatus(span)) ||
       span.events?.some((event) =>
         traceAttributesMatchPlugin(
           event.attributes,
           pluginId,
           normalizePluginId(getAttribute(span.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)),
+          hasErrorStatus(span),
         ),
       ),
   );

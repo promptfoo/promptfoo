@@ -69,6 +69,7 @@ export type AgentRunFinding = {
 };
 
 const PLUGIN_PREFIX = 'promptfoo:redteam:';
+const TOOL_CALL_ID_ATTRIBUTES = ['gen_ai.tool.call.id', 'tool.call.id', 'tool_call_id'];
 
 const AGENTIC_RUNTIME_PLUGIN_ID_ATTRS = [
   'promptfoo.agentic.plugin_id',
@@ -523,9 +524,7 @@ function normalizedToolObservationsFromAttributes(
   span?: TraceLikeSpan,
 ): AgentObservation[] {
   const tool = getToolNameFromAttributes(attributes);
-  const callId = getString(
-    getAttribute(attributes, ['gen_ai.tool.call.id', 'tool.call.id', 'tool_call_id']),
-  );
+  const callId = getString(getAttribute(attributes, TOOL_CALL_ID_ATTRIBUTES));
   return tool
     ? [
         {
@@ -560,9 +559,7 @@ function observationFromMappedTraceAttribute(
   span?: TraceLikeSpan,
 ): AgentObservation {
   const baseObservation = {
-    callId: getString(
-      getAttribute(span?.attributes, ['gen_ai.tool.call.id', 'tool.call.id', 'tool_call_id']),
-    ),
+    callId: getString(getAttribute(span?.attributes, TOOL_CALL_ID_ATTRIBUTES)),
     fieldLocations: { [mapped.field]: location },
     location,
     parentSpanId: span?.parentSpanId,
@@ -641,9 +638,7 @@ function observationsFromTraceAttributes(
   const spanTool = inferredToolFromSpanName(span?.name);
   if (spanTool) {
     observations.push({
-      callId: getString(
-        getAttribute(attributes, ['gen_ai.tool.call.id', 'tool.call.id', 'tool_call_id']),
-      ),
+      callId: getString(getAttribute(attributes, TOOL_CALL_ID_ATTRIBUTES)),
       fieldLocations: { tool: baseLocation },
       kind: 'tool_call',
       location: baseLocation,
@@ -703,8 +698,12 @@ export function observationsFromTraceData(
           : undefined;
       const eventLocation = `${spanLocation} event ${eventIndex + 1}`;
       const inheritedPluginId = getAttribute(traceSpan.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS);
+      const callId =
+        getAttribute(event.attributes, TOOL_CALL_ID_ATTRIBUTES) ??
+        getAttribute(traceSpan.attributes, TOOL_CALL_ID_ATTRIBUTES);
       const eventSpan = {
         attributes: {
+          ...(callId === undefined ? {} : { 'gen_ai.tool.call.id': callId }),
           ...(inheritedPluginId === undefined
             ? {}
             : { 'promptfoo.agentic.plugin_id': inheritedPluginId }),

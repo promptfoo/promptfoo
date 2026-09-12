@@ -7,6 +7,42 @@ import {
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 
 describe('agentic run observations', () => {
+  it.each(['gen_ai.tool.call.id', 'tool.call.id', 'tool_call_id'])(
+    'inherits %s for tool events while preserving a child call ID',
+    (callIdAttribute) => {
+      const observations = observationsFromGradingContext({
+        gradingContext: {
+          traceData: {
+            traceId: 'event-call',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'tool',
+                name: 'tool update_seat',
+                startTime: 1,
+                attributes: { [callIdAttribute]: 'parent-call' },
+                events: [
+                  { name: 'tool update_seat', timestamp: 2 },
+                  {
+                    name: 'tool update_seat',
+                    timestamp: 3,
+                    attributes: { tool_call_id: 'child-call' },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }).filter((observation) => observation.kind === 'tool_call');
+      expect(observations.map((observation) => observation.callId)).toEqual([
+        'parent-call',
+        'parent-call',
+        'child-call',
+      ]);
+    },
+  );
+
   it('preserves the actual finding location rather than its evidence attribute', () => {
     const observations = observationsFromGradingContext({
       gradingContext: {
