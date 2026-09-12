@@ -200,7 +200,7 @@ A model should recognize the compositional harm despite each input appearing ben
 }
 ```
 
-## Related Concepts
+## Related Concepts {#see-also}
 
 - [Red Team Plugins Overview](../plugins/index.md)
 - [VLGuard Plugin](./vlguard.md) - Alternative multimodal safety dataset

@@ -807,6 +807,15 @@ describe('redteam validators', () => {
 });
 
 describe('layer strategy deduplication', () => {
+  it('should reject duplicate indirect-web-pwn steps', () => {
+    expect(
+      RedteamStrategySchema.safeParse({
+        id: 'layer',
+        config: { steps: ['jailbreak:hydra', 'indirect-web-pwn', 'indirect-web-pwn'] },
+      }).success,
+    ).toBe(false);
+  });
+
   it('should keep multiple layer strategies with different labels', () => {
     const config = {
       plugins: ['default'],

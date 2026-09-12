@@ -83,7 +83,7 @@ Key limitations:
 - `mischievous-user` and `simba` do not support per-turn transforms.
 - Audio and image transforms require a target and prompt that accept the resulting payload. Use one multimodal output transform at the end of the layer.
 - `indirect-web-pwn` requires Promptfoo Cloud and a target that can fetch public URLs.
-- Crescendo and Custom do not transform unblocking prompts. If `PROMPTFOO_ENABLE_UNBLOCKING=true`, an audio- or image-only target can still receive a text turn.
+- Crescendo and Custom pass unblocking prompts through the same runtime transforms as other turns.
 
 ### Valid Patterns
 
@@ -107,12 +107,12 @@ steps: [jailbreak:hydra]
 steps: [jailbreak:hydra, audio]
 ```
 
-### Invalid Patterns
-
 ```yaml
-# Transforms the initial goal, not each turn
+# Transform the initial goal before an agentic strategy
 steps: [base64, jailbreak:hydra]
 ```
+
+### Invalid Patterns
 
 ```yaml
 # Transforms the generated audio payload instead of its transcript

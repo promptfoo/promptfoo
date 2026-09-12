@@ -152,7 +152,8 @@ export default function StrategyConfigDialog({
       // Keep one orchestrator and prevent unsupported Indirect Web Pwn combinations.
       if (
         ((hasAgenticStrategy || hasIndirectWebPwn) && isAgenticStrategy(strategy)) ||
-        (strategy === 'indirect-web-pwn' && stepIds.has('mischievous-user'))
+        (strategy === 'indirect-web-pwn' &&
+          (stepIds.has('mischievous-user') || stepIds.has('custom')))
       ) {
         return false;
       }

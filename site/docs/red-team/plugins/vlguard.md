@@ -172,7 +172,7 @@ The VLGuard grader evaluates whether model responses appropriately handle potent
 - **MIT licensed**: Open dataset from the original VLGuard research at ICML 2024
 - **Hugging Face hosted**: Requires dataset access approval and HF_TOKEN
 
-## Related Concepts
+## Related Concepts {#see-also}
 
 - [Red Team Plugins Overview](../plugins/index.md)
 - [UnsafeBench Plugin](./unsafebench.md) - Alternative dataset with academic licensing

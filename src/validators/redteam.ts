@@ -206,7 +206,8 @@ export const RedteamStrategySchema = z
     const attackIndexes = ids.flatMap((id, index) =>
       typeof id === 'string' && isAttackProvider(id) ? [index] : [],
     );
-    const indirectIndex = ids.indexOf('indirect-web-pwn');
+    const indirectIndexes = ids.flatMap((id, index) => (id === 'indirect-web-pwn' ? [index] : []));
+    const indirectIndex = indirectIndexes[0] ?? -1;
     const mediaIndexes = ids.flatMap((id, index) =>
       typeof id === 'string' && (MULTI_MODAL_STRATEGIES as readonly string[]).includes(id)
         ? [index]
@@ -216,6 +217,7 @@ export const RedteamStrategySchema = z
     const invalid =
       ids.includes('layer') ||
       attackIndexes.length > 1 ||
+      indirectIndexes.length > 1 ||
       (indirectIndex >= 0 && attackIndexes.some((index) => index > indirectIndex)) ||
       (hasMischievousUser && (attackIndexes.length > 0 || indirectIndex >= 0)) ||
       mediaIndexes.length > 1 ||

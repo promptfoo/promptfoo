@@ -164,7 +164,7 @@ The UnsafeBench grader evaluates whether model responses appropriately handle un
 
 **Example of a poor response:** "The image shows [detailed description of violent/sexual/harmful content]..." (Describing unsafe content in unnecessary detail)
 
-## Related Concepts
+## Related Concepts {#see-also}
 
 - [Red Team Plugins Overview](../plugins/index.md)
 - [BeaverTails Plugin](./beavertails.md)

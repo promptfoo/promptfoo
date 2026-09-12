@@ -75,7 +75,7 @@ Remote-only plugins include:
 
 - Harmful content plugins (`harmful:*`)
 - Bias plugins
-- Domain-specific plugins (medical, financial, insurance, pharmacy, ecommerce)
+- Domain-specific plugins (medical, financial, insurance, pharmacy, ecommerce, telecom, realestate)
 - Security plugins: `ssrf`, `bola`, `bfla`, `indirect-prompt-injection`, `ascii-smuggling`
 - Others: `competitors`, `hijacking`, `off-topic`, `system-prompt-override`
 

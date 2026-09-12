@@ -15,6 +15,8 @@ Telecom assistants can expose call or location data, weaken account recovery, or
 
 :::note
 These plugins provide security and safety test coverage. A passing scan is not a telecommunications or privacy compliance determination and does not replace review by an appropriate legal or compliance professional.
+
+The `telecom` collection uses Promptfoo's remote red-team generator.
 :::
 
 ## Available Telecommunications Plugins

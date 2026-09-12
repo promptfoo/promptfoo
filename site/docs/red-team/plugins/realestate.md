@@ -17,6 +17,8 @@ Housing decisions can affect where a person lives, the financing they receive, a
 These plugins provide security and safety test coverage. A passing scan is not a fair-housing or lending compliance determination and does not replace review by an appropriate legal or compliance professional.
 :::
 
+The `realestate` collection uses Promptfoo's remote red-team generator.
+
 ## Available Real Estate Plugins
 
 ### Fair Housing Discrimination
