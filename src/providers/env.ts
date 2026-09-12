@@ -1,4 +1,4 @@
-import type { EnvOverrides } from '../types/env';
+import type { EnvOverrides } from '../contracts/env';
 
 /** Merge low-to-high priority scopes without letting a lower-priority key alias win. */
 export function mergeProviderEnv(
