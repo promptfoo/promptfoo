@@ -50,6 +50,8 @@ executes, whether the control is on the same span or an earlier step on its rout
 Each execution needs its own control. When several route controls could cover the
 same execution, the grader checks for a complete one-to-one assignment.
 
+A control span with an OpenTelemetry error status is a failed control, even without a custom outcome attribute. Coverage matching accepts at most 256 spans and events combined and at most 256 normalized observations. Larger traces produce a grading error; reduce the trace to the relevant action path before retrying.
+
 Minimum failing OTEL attributes:
 
 ```text
