@@ -368,6 +368,17 @@ describe('MCP Server', () => {
       check({ origin: 'https://outside.example.test' });
       expect(response.status).toHaveBeenCalledWith(403);
       expect(next).not.toHaveBeenCalled();
+      mcpHostProtection(
+        {
+          headers: { host: '127.0.0.1:3100', 'sec-fetch-site': 'cross-site' },
+          method: 'GET',
+          path: '/mcp/sse',
+        } as any,
+        response as any,
+        next,
+      );
+      expect(response.status).toHaveBeenCalledTimes(2);
+      expect(next).not.toHaveBeenCalled();
       check({ origin: 'http://localhost:3000' });
       check({});
       mcpHostProtection(

@@ -262,7 +262,11 @@ function resolveConfigFileReference(value: string, state: ProviderValidationStat
   return path.resolve(state.basePath, filePath);
 }
 
-function validateJsonSchemaRef(value: unknown, state: ProviderValidationState): void {
+function validateJsonSchemaRef(
+  value: unknown,
+  state: ProviderValidationState,
+  providerConfigContext = false,
+): void {
   if (typeof value !== 'string') {
     return;
   }
@@ -286,6 +290,12 @@ function validateJsonSchemaRef(value: unknown, state: ProviderValidationState): 
     basePath: state.refBasePath ?? state.basePath,
   });
   validateStaticConfigFile(resolvedRefPath, state, true);
+  if (providerConfigContext) {
+    validateProviderConfigCodeReferences(loadYaml(fs.readFileSync(resolvedRefPath, 'utf8')), {
+      ...state,
+      basePath: path.dirname(resolvedRefPath),
+    });
+  }
 }
 
 function validateCodeReference(
@@ -307,7 +317,12 @@ function validateCodeReference(
   validateConfigFileReference(value, state);
 }
 
-function validateFileReferencesInValue(value: unknown, state: ProviderValidationState): void {
+function validateFileReferencesInValue(
+  value: unknown,
+  state: ProviderValidationState,
+  assertionContext = false,
+  providerConfigContext = false,
+): void {
   if (typeof value === 'string') {
     const rendered = renderEnvOnlyInObject(value, state.env);
     if (rendered.startsWith(FILE_PROVIDER_PREFIX)) {
@@ -317,17 +332,20 @@ function validateFileReferencesInValue(value: unknown, state: ProviderValidation
   }
 
   if (Array.isArray(value)) {
-    value.forEach((entry) => validateFileReferencesInValue(entry, state));
+    value.forEach((entry) =>
+      validateFileReferencesInValue(entry, state, assertionContext, providerConfigContext),
+    );
     return;
   }
 
   const object = getObject(value);
   if (object) {
-    if (typeof object.type === 'string') {
+    if (assertionContext && typeof object.type === 'string') {
       validateCodeReference(object.transform, 'assertion transform', state);
       validateCodeReference(object.contextTransform, 'assertion contextTransform', state);
     }
     if (
+      assertionContext &&
       typeof object.type === 'string' &&
       ['javascript', 'python', 'ruby'].includes(object.type.replace(/^not-/, ''))
     ) {
@@ -336,15 +354,23 @@ function validateFileReferencesInValue(value: unknown, state: ProviderValidation
     if (object.provider !== undefined) {
       validateProviderReferenceWithState(object.provider, state);
     }
-    validateCodeReference(getObject(object.options)?.transform, 'test transform', state);
+    const options = getObject(object.options);
+    for (const key of ['transform', 'transformVars', 'postprocess']) {
+      validateCodeReference(options?.[key], `test ${key}`, state);
+    }
     if (object.type === 'file' && typeof object.path === 'string') {
       validateConfigFileReference(object.path, state);
     }
     for (const [key, entry] of Object.entries(object)) {
       if (key === '$ref') {
-        validateJsonSchemaRef(entry, state);
+        validateJsonSchemaRef(entry, state, providerConfigContext);
       }
-      validateFileReferencesInValue(entry, state);
+      validateFileReferencesInValue(
+        entry,
+        state,
+        assertionContext || key === 'assert' || key === 'assertions',
+        providerConfigContext || key === 'config',
+      );
     }
   }
 }
@@ -468,6 +494,23 @@ function validateMcpConfigObject(config: unknown, state: ProviderValidationState
   }
 }
 
+function validateProviderConfigCodeReferences(
+  config: unknown,
+  state: ProviderValidationState,
+): void {
+  const configObject = getObject(config);
+  for (const key of [
+    'transform',
+    'transformRequest',
+    'transformResponse',
+    'responseParser',
+    'validateStatus',
+    'sessionParser',
+  ]) {
+    validateCodeReference(configObject?.[key], key, state);
+  }
+}
+
 function validateProviderReferenceWithState(
   provider: unknown,
   state: ProviderValidationState,
@@ -500,14 +543,24 @@ function validateProviderReferenceWithState(
   }
   const configObject = getObject(descriptor.loadOptions.config);
   validateCodeReference(descriptor.loadOptions.transform, 'provider transform', providerState);
-  for (const key of [
-    'transformRequest',
-    'transformResponse',
-    'responseParser',
-    'validateStatus',
-    'sessionParser',
+  validateProviderConfigCodeReferences(configObject, providerState);
+  for (const container of [
+    getObject(configObject?.tls),
+    getObject(configObject?.auth),
+    getObject(configObject?.signatureAuth),
   ]) {
-    validateCodeReference(configObject?.[key], key, providerState);
+    for (const key of [
+      'caPath',
+      'certPath',
+      'keyPath',
+      'pfxPath',
+      'privateKeyPath',
+      'keystorePath',
+    ]) {
+      if (typeof container?.[key] === 'string') {
+        validateConfigFileReference(container[key], providerState);
+      }
+    }
   }
   const functionToolCallbacks = getObject(configObject?.functionToolCallbacks);
   if (functionToolCallbacks) {
@@ -598,6 +651,9 @@ function validateExecReference(
     const separator = part.indexOf('=');
     const option = (separator === -1 ? part : part.slice(0, separator)).toLowerCase();
     const optionValue = separator === -1 ? undefined : part.slice(separator + 1);
+    if (separator !== -1 && !option.startsWith('-')) {
+      throw new ConfigurationError('MCP exec environment overrides are not allowed');
+    }
     if (option === 'node_options') {
       throw new ConfigurationError('MCP exec runtime options are not allowed');
     }
@@ -610,6 +666,9 @@ function validateExecReference(
       }
       validatePath(preload);
       continue;
+    }
+    if (!hasScript && index > 0 && !part.startsWith('-') && !looksLikePath(part)) {
+      throw new ConfigurationError('MCP exec commands require the workspace script first');
     }
     if (optionValue && looksLikePath(optionValue)) {
       validatePath(optionValue);
@@ -638,7 +697,9 @@ function validateStaticConfigContents(value: unknown, state: ProviderValidationS
   }
 
   validateStaticConfigLocalReferences(rootConfig, state);
-  validateProviderReferenceWithState(rootConfig, state);
+  if ('id' in rootConfig) {
+    validateProviderReferenceWithState(rootConfig, state);
+  }
 
   const providers = rootConfig.providers ?? rootConfig.targets;
   if (Array.isArray(providers)) {
@@ -753,10 +814,14 @@ function validateProviderIdWithState(providerId: string, state: ProviderValidati
 }
 
 export function validateMcpAssertion(assertion: unknown): void {
-  validateFileReferencesInValue(assertion, {
-    basePath: process.cwd(),
-    validatedConfigFiles: new Set(),
-  });
+  validateFileReferencesInValue(
+    assertion,
+    {
+      basePath: process.cwd(),
+      validatedConfigFiles: new Set(),
+    },
+    true,
+  );
 }
 
 export function validateMcpProviderPrompt(

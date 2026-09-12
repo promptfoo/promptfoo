@@ -62,6 +62,9 @@ describe('MCP Security', () => {
       expect(() => validateProviderReference({ id: 'echo', transform: 'process.cwd()' })).toThrow(
         ConfigurationError,
       );
+      expect(() =>
+        validateProviderReference({ id: 'sagemaker:model', config: { transform: 'evil()' } }),
+      ).toThrow(ConfigurationError);
     });
 
     it('rejects inline context transforms and runtime preload env', () => {
@@ -74,6 +77,23 @@ describe('MCP Security', () => {
       expect(() => validateMcpConfigFile('config.json')).toThrow(ConfigurationError);
       expect(() =>
         validateProviderId('exec:env NODE_OPTIONS=--require=/tmp/evil.js node ./script.js'),
+      ).toThrow(ConfigurationError);
+      expect(() => validateProviderId('exec:env PYTHONPATH=/tmp/evil python ./script.py')).toThrow(
+        ConfigurationError,
+      );
+    });
+
+    it('rejects executable test options and HTTP certificate paths outside the workspace', () => {
+      fs.writeFileSync(
+        path.join(workspace, 'config.json'),
+        JSON.stringify({ tests: [{ options: { transformVars: 'evil()' } }] }),
+      );
+      expect(() => validateMcpConfigFile('config.json')).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderReference({
+          id: 'http://localhost:8080',
+          config: { tls: { certPath: path.join(root, 'outside.pem') } },
+        }),
       ).toThrow(ConfigurationError);
     });
 
@@ -106,6 +126,11 @@ describe('MCP Security', () => {
         JSON.stringify([{ vars: { transform: 'uppercase this' } }]),
       );
       expect(() => validateMcpConfigFile('tests.json')).not.toThrow();
+      fs.writeFileSync(
+        path.join(workspace, 'metadata.json'),
+        JSON.stringify({ metadata: { type: 'record', transform: 'literal value' } }),
+      );
+      expect(() => validateMcpConfigFile('metadata.json')).not.toThrow();
     });
 
     it('keeps the runtime provider base when following a nested schema reference', () => {
@@ -113,6 +138,18 @@ describe('MCP Security', () => {
       fs.writeFileSync(
         path.join(workspace, 'config.yaml'),
         'prompts: [hello]\nproviders:\n  - $ref: ./sub/provider.yaml\n',
+      );
+      expect(() => validateMcpConfigFile('config.yaml')).toThrow(ConfigurationError);
+    });
+
+    it('keeps provider config context when following a schema reference', () => {
+      fs.writeFileSync(
+        path.join(workspace, 'sub', 'provider-config.yaml'),
+        'transformResponse: evil()\n',
+      );
+      fs.writeFileSync(
+        path.join(workspace, 'config.yaml'),
+        'prompts: [hello]\nproviders:\n  - id: http://localhost:8080\n    config:\n      $ref: ./sub/provider-config.yaml\n',
       );
       expect(() => validateMcpConfigFile('config.yaml')).toThrow(ConfigurationError);
     });
@@ -153,6 +190,9 @@ describe('MCP Security', () => {
     it('requires an existing workspace script rather than a path-shaped argument', () => {
       expect(() => validateProviderId('exec:node missing.js')).toThrow(ConfigurationError);
       expect(() => validateProviderId('exec:node ./script.js')).not.toThrow();
+      expect(() =>
+        validateProviderId('exec:awk \'BEGIN { system("id") }\' ./package.json'),
+      ).toThrow(ConfigurationError);
     });
 
     it('does not treat ordinary variable text as a provider reference', () => {

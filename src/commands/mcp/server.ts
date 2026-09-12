@@ -52,11 +52,10 @@ export function mcpHostProtection(req: Request, res: Response, next: NextFunctio
       // Invalid browser origins cannot authorize a local MCP request.
     }
   }
-  const safeMethod = req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS';
   if (
     hostname &&
     ALLOWED_MCP_HTTP_HOSTS.has(hostname) &&
-    (safeMethod || (origin ? localOrigin : req.headers['sec-fetch-site'] !== 'cross-site'))
+    (origin ? localOrigin : req.headers['sec-fetch-site'] !== 'cross-site')
   ) {
     next();
     return;
