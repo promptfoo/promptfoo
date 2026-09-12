@@ -11,7 +11,11 @@ import {
   type MockApiProvider,
 } from '../../../factories/provider';
 
-import type { CallApiContextParams, GradingResult } from '../../../../src/types/index';
+import type {
+  AtomicTestCase,
+  CallApiContextParams,
+  GradingResult,
+} from '../../../../src/types/index';
 
 // Import HydraProvider dynamically after mocks are set up
 let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index').HydraProvider;
@@ -182,6 +186,7 @@ describe('HydraProvider', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('constructor', () => {
@@ -1389,6 +1394,30 @@ describe('HydraProvider', () => {
         ...graderResult,
         assertion: { type: 'harmful:test', value: testRubric },
       });
+    });
+
+    it('does not store target images during a redaction run', async () => {
+      const blobs = await import('../../../../src/blobs/extractor');
+      vi.spyOn(blobs, 'isBlobStorageEnabled').mockReturnValue(true);
+      const extract = vi
+        .spyOn(blobs, 'extractAndStoreBinaryData')
+        .mockImplementation(async (response) => response);
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        images: [{ data: 'data:image/png;base64,' + 'A'.repeat(2048), mimeType: 'image/png' }],
+      });
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1 });
+      await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
+          metadata: { goal: 'test goal', pluginId: 'coding-agent:trace-redaction' },
+        } as AtomicTestCase,
+      });
+      expect(extract).not.toHaveBeenCalled();
     });
 
     it('passes target response evidence and image outputs into the grader', async () => {

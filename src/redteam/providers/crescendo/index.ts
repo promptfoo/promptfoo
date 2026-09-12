@@ -1214,11 +1214,7 @@ export class CrescendoProvider implements ApiProvider {
       targetContext,
       options,
     );
-    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-      evalId: context?.evaluationId,
-      testIdx: context?.testIdx,
-      promptIdx: context?.promptIdx,
-    });
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
     logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
 
     invariant(

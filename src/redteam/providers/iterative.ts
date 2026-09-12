@@ -456,11 +456,7 @@ export async function runRedteamConversation({
       options,
     );
     // Externalize blobs before they hit history/prompts
-    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-      evalId: context?.evaluationId,
-      testIdx: context?.testIdx,
-      promptIdx: context?.promptIdx,
-    });
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });

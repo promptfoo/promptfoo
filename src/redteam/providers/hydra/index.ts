@@ -780,11 +780,7 @@ export class HydraProvider implements ApiProvider {
       // Externalize blobs to avoid token bloat in Hydra/meta prompts
       if (isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()) {
         const beforeOutput = targetResponse.output;
-        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-          evalId: context?.evaluationId,
-          testIdx: context?.testIdx,
-          promptIdx: context?.promptIdx,
-        });
+        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
         if (targetResponse.output !== beforeOutput) {
           logger.debug(`${this.logPrefix} Externalized binary output`, {
             turn,

@@ -388,11 +388,7 @@ async function runRedteamConversation({
         targetContext,
         options,
       );
-      targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-        evalId: context?.evaluationId,
-        testIdx: context?.testIdx,
-        promptIdx: context?.promptIdx,
-      });
+      targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
       lastResponse = targetResponse;
       // Count the target request even when the target returns an error.
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);

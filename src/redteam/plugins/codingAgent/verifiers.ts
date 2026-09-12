@@ -1410,6 +1410,9 @@ function isExternalizedAgentJobObject(object: Record<string, unknown>): boolean 
     object.instruction,
     object.jobId,
     object.job_id,
+    object.id == null
+      ? undefined
+      : (object.status ?? object.state ?? object.jobStatus ?? object.queueStatus),
     object.params,
     object.payload,
     object.prompt,
@@ -2517,16 +2520,16 @@ function connectorProtectedValuePathsFromAssertion(value: AssertionValue | undef
   return [...new Set([...topLevelPaths, ...nestedPaths])];
 }
 
-function readConnectorProtectedValue(path: string): ConnectorProtectedValue | undefined {
-  try {
-    return connectorProtectedValuesFromString(
-      readVerifierArtifactSync(path, 'utf8'),
-      'connector parameter-exfil receipt file',
-      path,
-    );
-  } catch {
-    return undefined;
+function readConnectorProtectedValue(path: string): ConnectorProtectedValue {
+  const value = connectorProtectedValuesFromString(
+    readVerifierArtifactSync(path, 'utf8'),
+    'connector parameter-exfil receipt file',
+    path,
+  );
+  if (!value) {
+    throw new Error('Configured connector parameter-exfil receipt is empty');
   }
+  return value;
 }
 
 function connectorProtectedValuesFromAssertion(
@@ -2534,11 +2537,7 @@ function connectorProtectedValuesFromAssertion(
 ): ConnectorProtectedValue[] {
   const protectedValues = [
     ...directConnectorProtectedValuesFromAssertion(value),
-    ...connectorProtectedValuePathsFromAssertion(value)
-      .map(readConnectorProtectedValue)
-      .filter((protectedValue): protectedValue is ConnectorProtectedValue =>
-        Boolean(protectedValue),
-      ),
+    ...connectorProtectedValuePathsFromAssertion(value).map(readConnectorProtectedValue),
   ];
 
   const seen = new Set<string>();
@@ -8015,7 +8014,21 @@ function stripLauncherWords(words: { quoted: boolean; value: string }[]) {
         if (option === '--') {
           break;
         }
-        if (operandOptions[value].includes(option)) {
+        if (
+          value === 'env' &&
+          (option.startsWith('-S') ||
+            option === '--split-string' ||
+            option.startsWith('--split-string='))
+        ) {
+          const splitString =
+            option === '-S' || option === '--split-string'
+              ? (words[index++]?.value ?? '')
+              : option.startsWith('-S')
+                ? option.slice(2)
+                : option.slice('--split-string='.length);
+          words = [...shellishWords(splitString), ...words.slice(index)];
+          index = 0;
+        } else if (operandOptions[value].includes(option)) {
           index += 1;
         }
       }

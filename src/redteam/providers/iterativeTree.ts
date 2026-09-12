@@ -835,11 +835,7 @@ async function runRedteamConversation({
           iterationContext,
           options,
         );
-        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-          evalId: context?.evaluationId,
-          testIdx: context?.testIdx,
-          promptIdx: context?.promptIdx,
-        });
+        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
         // Count the target request even when the target returns an error.
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
         // Do not throw on error. Record and continue so we can surface mapped output while marking error later.

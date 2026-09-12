@@ -938,11 +938,7 @@ export class CustomProvider implements ApiProvider {
     logger.debug(finalTargetPrompt);
 
     let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
-    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-      evalId: context?.evaluationId,
-      testIdx: context?.testIdx,
-      promptIdx: context?.promptIdx,
-    });
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
     logger.debug('[Custom] Target response', { response: targetResponse });
 
     invariant(

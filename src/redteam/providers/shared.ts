@@ -35,6 +35,7 @@ import {
   accumulateGradingResponseTokenUsage,
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../util/traceRedaction';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -902,12 +903,19 @@ export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max tur
  */
 export async function externalizeResponseForRedteamHistory<T extends ProviderResponse>(
   response: T,
-  context?: { evalId?: string; testIdx?: number; promptIdx?: number },
+  context?: Pick<CallApiContextParams, 'evaluationId' | 'testIdx' | 'promptIdx' | 'test'>,
 ): Promise<T> {
-  if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
+  if (
+    requiresTraceRedaction((context?.test as AtomicTestCase | undefined)?.assert) ||
+    (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload())
+  ) {
     return response;
   }
-  const blobbed = await extractAndStoreBinaryData(response, context);
+  const blobbed = await extractAndStoreBinaryData(response, {
+    evalId: context?.evaluationId,
+    testIdx: context?.testIdx,
+    promptIdx: context?.promptIdx,
+  });
   return (blobbed as T) || response;
 }
 

@@ -14,6 +14,7 @@ import {
   callGradingProvider,
   callTargetProvider,
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   formatRedteamHistoryAsTranscript,
   getGraderAssertionValue,
   getTargetResponse,
@@ -37,6 +38,7 @@ import type {
   ApiProvider,
   Assertion,
   AssertionSet,
+  AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
   Prompt,
@@ -1852,5 +1854,44 @@ describe('shared redteam provider utilities', () => {
       });
       expect(iterationContext?.vars).toEqual({ goal: 'test' });
     });
+  });
+});
+
+describe('redteam history blob storage', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each([
+    'promptfoo:redteam:coding-agent:trace-redaction',
+    'promptfoo:redteam:harness:artifact-redaction',
+  ])('keeps %s responses out of blob storage', async (type) => {
+    const blobs = await import('../../../src/blobs/extractor');
+    vi.spyOn(blobs, 'isBlobStorageEnabled').mockReturnValue(true);
+    const store = vi.spyOn(blobs, 'extractAndStoreBinaryData').mockResolvedValue(undefined);
+    const response = {
+      output: 'image',
+      images: [{ data: 'private-image', mimeType: 'image/png' }],
+    };
+    expect(
+      await externalizeResponseForRedteamHistory(response, {
+        test: { assert: [{ type }] } as AtomicTestCase,
+      }),
+    ).toBe(response);
+    expect(store).not.toHaveBeenCalled();
+  });
+
+  it('preserves eval-scoped blob storage for ordinary responses', async () => {
+    const blobs = await import('../../../src/blobs/extractor');
+    vi.spyOn(blobs, 'isBlobStorageEnabled').mockReturnValue(true);
+    const stored = { output: 'blob://stored-image' };
+    const store = vi.spyOn(blobs, 'extractAndStoreBinaryData').mockResolvedValue(stored);
+    const response = { output: 'original image' };
+    expect(
+      await externalizeResponseForRedteamHistory(response, {
+        evaluationId: 'eval',
+        testIdx: 2,
+        promptIdx: 3,
+      }),
+    ).toBe(stored);
+    expect(store).toHaveBeenCalledWith(response, { evalId: 'eval', testIdx: 2, promptIdx: 3 });
   });
 });

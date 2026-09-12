@@ -506,11 +506,7 @@ export async function runMetaAgentRedteam({
     );
     const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
       initialTargetResponse,
-      {
-        evalId: context?.evaluationId,
-        testIdx: context?.testIdx,
-        promptIdx: context?.promptIdx,
-      },
+      context,
     );
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
