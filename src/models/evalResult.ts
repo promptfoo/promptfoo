@@ -240,7 +240,17 @@ function projectGradingResult<T>(gradingResult: T, stripMetadata: boolean): T {
   if (!stripMetadata || !record) {
     return gradingResult;
   }
-  const { metadata: _metadata, ...projected } = record;
+  const { metadata, ...projected } = record;
+  const tokensUsed = record.tokensUsed as GradingResult['tokensUsed'];
+  if (asRecord(metadata)?.cachedResponse === true && !tokensUsed?.incurredTokenUsage) {
+    const usage = createEmptyTokenUsage();
+    accumulateGradingTokenUsage(usage, tokensUsed, { cached: true });
+    projected.tokensUsed = {
+      ...tokensUsed,
+      ...usage.assertions,
+      incurredTokenUsage: usage.incurredTokenUsage?.assertions,
+    };
+  }
   if (Array.isArray(record.componentResults)) {
     projected.componentResults = record.componentResults.map((component) =>
       projectGradingResult(component, stripMetadata),

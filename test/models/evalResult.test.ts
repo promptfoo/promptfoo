@@ -1,6 +1,13 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+import { Command } from 'commander';
+import { sql } from 'drizzle-orm';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { importCommand } from '../../src/commands/import';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
+import Eval from '../../src/models/eval';
 import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
@@ -12,16 +19,18 @@ import {
   type ProviderOptions,
   ResultFailureReason,
 } from '../../src/types/index';
+import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
+import { writeOutput } from '../../src/util/output';
 import { sanitizeObject } from '../../src/util/sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
-import { createEvaluateResult } from '../factories/eval';
+import { createCompletedPrompt, createEvaluateResult } from '../factories/eval';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
-import { mockProcessEnv } from '../util/utils';
+import { createTempDir, mockProcessEnv, removeTempDir } from '../util/utils';
 
 describe('EvalResult', () => {
   beforeAll(async () => {
@@ -54,6 +63,108 @@ describe('EvalResult', () => {
     id: 'test-id',
     promptId: hashPrompt(mockPrompt),
     response: undefined,
+  });
+
+  describe('cached grading export accounting', () => {
+    it.each(['isolated', 'response marker', 'group marker'] as const)(
+      'preserves legacy incurred usage through V3 export/import with %s',
+      async (marker) => {
+        const dir = createTempDir('cached-grading-roundtrip-');
+        const restore = mockProcessEnv({
+          PROMPTFOO_STRIP_METADATA: 'true',
+          PROMPTFOO_STRIP_GRADING_RESULT: 'false',
+          PROMPTFOO_STRIP_PROMPT_TEXT: 'false',
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'false',
+          PROMPTFOO_STRIP_TEST_VARS: 'false',
+        });
+        const previousExitCode = process.exitCode;
+        let imported: Eval | undefined;
+        const prompt = createCompletedPrompt('cached grading input');
+        const source = new Eval(
+          {},
+          {
+            id: `eval-cached-grading-${marker.replaceAll(' ', '-')}`,
+            prompts: [prompt],
+          },
+        );
+        const legacyUsage = { total: 23, prompt: 15, completion: 8, cached: 23, numRequests: 1 };
+        const incurredResponse = {
+          output: 'completed answer',
+          tokenUsage: {
+            total: 5,
+            prompt: 3,
+            completion: 2,
+            cached: 0,
+            numRequests: 1,
+            incurredTokenUsage: { total: 5, prompt: 3, completion: 2, cached: 0, numRequests: 1 },
+          },
+        };
+        const row = createEvaluateResult({
+          prompt,
+          promptId: hashPrompt(prompt),
+          response: marker === 'response marker' ? incurredResponse : undefined,
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'legacy cached grading',
+            metadata: { cachedResponse: true },
+            tokensUsed: legacyUsage,
+          },
+        });
+        const original = structuredClone(row);
+        try {
+          await source.addResult(row);
+          if (marker === 'group marker') {
+            await source.addResult(
+              createEvaluateResult({
+                prompt,
+                promptId: hashPrompt(prompt),
+                testIdx: 1,
+                response: incurredResponse,
+                gradingResult: null,
+              }),
+            );
+          }
+          const before = source.results[0].toEvaluateResult();
+          const file = path.join(dir, 'export.json');
+          await writeOutput(file, source, null);
+          const exported = JSON.parse(fs.readFileSync(file, 'utf8'));
+          expect(exported.results.version).toBe(3);
+          const program = new Command();
+          importCommand(program);
+          await program.parseAsync(['node', 'test', 'import', file]);
+          expect(process.exitCode).toBe(previousExitCode);
+          imported = await Eval.findById(source.id);
+          expect(imported).toBeDefined();
+          const stored = await EvalResult.findManyByEvalId(source.id);
+          const reopened = stored.find((result) => result.testIdx === 0)!;
+          const after = reopened.toEvaluateResult();
+          const metrics = await calculateFilteredMetrics({
+            evalId: source.id,
+            numPrompts: 1,
+            whereSql: sql`eval_id = ${source.id}`,
+          });
+          const zero = { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 };
+          expect.soft(after.tokenUsage?.assertions).toMatchObject(legacyUsage);
+          expect.soft(after.tokenUsage?.incurredTokenUsage?.assertions).toMatchObject(zero);
+          expect.soft(after.tokenUsage).toEqual(before.tokenUsage);
+          expect.soft(metrics[0].tokenUsage.assertions).toMatchObject(legacyUsage);
+          expect.soft(metrics[0].tokenUsage.incurredTokenUsage?.assertions).toMatchObject(zero);
+          expect
+            .soft(exported.results.results[0].gradingResult.tokensUsed.incurredTokenUsage)
+            .toMatchObject(zero);
+          expect(reopened.gradingResult).not.toHaveProperty('metadata');
+          expect(reopened.gradingResult?.tokensUsed).toMatchObject(legacyUsage);
+          expect(row).toEqual(original);
+        } finally {
+          imported ??= await Eval.findById(source.id);
+          await imported?.delete();
+          process.exitCode = previousExitCode;
+          restore();
+          removeTempDir(dir);
+        }
+      },
+    );
   });
 
   describe('sanitizeProvider', () => {

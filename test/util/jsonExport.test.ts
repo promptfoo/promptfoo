@@ -23,7 +23,7 @@ import {
 import { createTempDir, mockProcessEnv, removeTempDir } from './utils';
 
 import type { TreeSearchOutput } from '../../src/redteam/providers/iterativeTree';
-import type { EvaluateSummaryV2 } from '../../src/types';
+import type { EvaluateSummaryV2, GradingResult } from '../../src/types';
 
 // Mock dependencies
 vi.mock('../../src/database', () => ({
@@ -86,6 +86,170 @@ describe('JSON export with improved error handling', () => {
           failures: 0,
           tokenUsage: { total: 100, prompt: 50, completion: 50 },
         },
+      });
+    });
+
+    describe('cached grading export accounting', () => {
+      const legacy = { total: 23, prompt: 15, completion: 8, cached: 23, numRequests: 1 };
+      const zero = { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 };
+      const mixed = {
+        total: 60,
+        prompt: 40,
+        completion: 20,
+        cached: 37,
+        numRequests: 2,
+        incurredTokenUsage: { total: 23, prompt: 15, completion: 8, cached: 0, numRequests: 1 },
+      };
+      it.each<{
+        name: string;
+        cached: boolean | undefined;
+        usage: GradingResult['tokensUsed'];
+        expected: NonNullable<GradingResult['tokensUsed']>;
+        strip?: boolean;
+      }>([
+        {
+          name: 'legacy cached response',
+          cached: true,
+          usage: legacy,
+          expected: { ...legacy, incurredTokenUsage: zero },
+        },
+        {
+          name: 'cached-only legacy usage',
+          cached: true,
+          usage: { cached: 23 },
+          expected: { ...zero, total: 23, cached: 23, numRequests: 1, incurredTokenUsage: zero },
+        },
+        {
+          name: 'missing cached usage',
+          cached: true,
+          usage: undefined,
+          expected: { ...zero, numRequests: 1, incurredTokenUsage: zero },
+        },
+        { name: 'fresh usage', cached: false, usage: legacy, expected: legacy },
+        { name: 'explicit mixed incurred usage', cached: false, usage: mixed, expected: mixed },
+        {
+          name: 'explicit zero incurred usage',
+          cached: true,
+          usage: { ...legacy, incurredTokenUsage: zero },
+          expected: { ...legacy, incurredTokenUsage: zero },
+        },
+        { name: 'deterministic zero usage', cached: false, usage: zero, expected: zero },
+        {
+          name: 'unmarked cache heuristic',
+          cached: undefined,
+          usage: { total: 97, cached: 97, numRequests: 0 },
+          expected: { total: 97, cached: 97, numRequests: 0 },
+        },
+        { name: 'unmarked positive requests', cached: undefined, usage: legacy, expected: legacy },
+        { name: 'metadata retained', cached: true, usage: legacy, expected: legacy, strip: false },
+      ])(
+        'preserves $name at the plain artifact boundary',
+        ({ cached, usage, expected, strip = true }) => {
+          const restore = mockProcessEnv({
+            PROMPTFOO_STRIP_METADATA: String(strip),
+            PROMPTFOO_STRIP_GRADING_RESULT: 'false',
+          });
+          const row = createEvaluateResult({
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'accounting control',
+              ...(cached !== undefined && { metadata: { cachedResponse: cached } }),
+              tokensUsed: usage,
+            },
+          });
+          const original = structuredClone(row);
+          try {
+            const projected = sanitizeResultForJsonlArtifact(row);
+            expect(projected.gradingResult?.tokensUsed).toMatchObject(expected);
+            if (!('incurredTokenUsage' in expected)) {
+              expect(projected.gradingResult?.tokensUsed).not.toHaveProperty('incurredTokenUsage');
+            }
+            expect(projected.gradingResult?.metadata).toEqual(
+              strip ? undefined : row.gradingResult?.metadata,
+            );
+            expect(sanitizeResultForJsonlArtifact(projected)).toEqual(projected);
+            expect(row).toEqual(original);
+          } finally {
+            restore();
+          }
+        },
+      );
+
+      it('normalizes nested cached components without double counting the parent', () => {
+        const restore = mockProcessEnv({
+          PROMPTFOO_STRIP_METADATA: 'true',
+          PROMPTFOO_STRIP_GRADING_RESULT: 'false',
+        });
+        const row = createEvaluateResult({
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'mixed parent',
+            metadata: { cachedResponse: false },
+            tokensUsed: mixed,
+            componentResults: [
+              {
+                pass: true,
+                score: 1,
+                reason: 'cached component',
+                metadata: { cachedResponse: true },
+                tokensUsed: { ...legacy, completionDetails: { reasoning: 2 } },
+                componentResults: [
+                  {
+                    pass: true,
+                    score: 1,
+                    reason: 'fresh nested component',
+                    metadata: { cachedResponse: false },
+                    tokensUsed: { total: 10, numRequests: 1 },
+                  },
+                ],
+              },
+            ],
+          },
+        });
+        const original = structuredClone(row);
+        try {
+          const projected = sanitizeResultForJsonlArtifact(row);
+          const grading = projected.gradingResult!;
+          expect(grading.tokensUsed).toEqual(mixed);
+          const component = grading.componentResults![0];
+          expect(component.tokensUsed).toMatchObject({
+            ...legacy,
+            completionDetails: { reasoning: 2 },
+            incurredTokenUsage: zero,
+          });
+          expect(component.componentResults![0].tokensUsed).toEqual({ total: 10, numRequests: 1 });
+          for (const result of [grading, component, component.componentResults![0]]) {
+            expect(result).not.toHaveProperty('metadata');
+          }
+          expect(row).toEqual(original);
+        } finally {
+          restore();
+        }
+      });
+
+      it('keeps grading stripping independent of cached accounting preservation', () => {
+        const restore = mockProcessEnv({
+          PROMPTFOO_STRIP_METADATA: 'true',
+          PROMPTFOO_STRIP_GRADING_RESULT: 'true',
+        });
+        const row = createEvaluateResult({
+          gradingResult: {
+            pass: true,
+            score: 1,
+            reason: 'cached control',
+            metadata: { cachedResponse: true },
+            tokensUsed: legacy,
+          },
+        });
+        const original = structuredClone(row);
+        try {
+          expect(sanitizeResultForJsonlArtifact(row).gradingResult).toBeNull();
+          expect(row).toEqual(original);
+        } finally {
+          restore();
+        }
       });
     });
 
