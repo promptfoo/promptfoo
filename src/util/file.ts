@@ -3,7 +3,7 @@ import { access } from 'fs/promises';
 import * as path from 'path';
 
 import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
-import { globSync, hasMagic } from 'glob';
+import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import { getEnvBool, isTemplateProcessEnvDisabled } from '../envars';
@@ -133,9 +133,14 @@ export function maybeLoadFromExternalFile(
   const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
   // Check if the path contains glob patterns
-  if (hasMagic(pathToUse, { windowsPathsNoEscape: true })) {
+  if (!fs.existsSync(resolvedPath) && hasMagic(pathToUse, { windowsPathsNoEscape: true })) {
     // Use globSync to expand the pattern
-    const matchedFiles = globSync(resolvedPath, {
+    const basePath = path.resolve(cliState.basePath || '');
+    const pattern = path.resolve(
+      escapeGlob(basePath, { windowsPathsNoEscape: true }),
+      path.relative(basePath, resolvedPath),
+    );
+    const matchedFiles = globSync(pattern, {
       windowsPathsNoEscape: true,
     });
 

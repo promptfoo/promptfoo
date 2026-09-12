@@ -553,7 +553,13 @@ async function readTestSources(
   const read = loadProviders ? readTests : readTestConfigs;
   const tests: TestCase[] = [];
   for (const source of sources) {
-    tests.push(...(await read(source.tests, source.basePath, env)));
+    try {
+      tests.push(...(await read(source.tests, source.basePath, env)));
+    } catch (error) {
+      throw new ConfigResolutionError(
+        `Failed to load tests from ${source.basePath || process.cwd()}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
   return tests;
 }
@@ -795,9 +801,7 @@ async function prepareCombinedConfig(
       const loaded =
         typeof source === 'string' && source.startsWith('file://')
           ? await cliState.withBasePath(basePath, () =>
-              cliState.withEnv(combinedEnv, () =>
-                maybeLoadFromExternalFile(resolveConfigPath(basePath, source)),
-              ),
+              cliState.withEnv(combinedEnv, () => maybeLoadFromExternalFile(source)),
             )
           : source;
       for (const scenario of [loaded].flat()) {
@@ -1127,16 +1131,18 @@ async function resolveLoadedConfig(
     env: config.env,
     basePath,
   });
-  const testConfigs = testSources?.length
-    ? await readTestSources(testSources, config.env, false)
-    : await readTestConfigs(
-        config.tests || [],
-        cmdObj.tests || cmdObj.vars ? '' : basePath,
-        config.env,
-      );
-  config.tests = testConfigs;
+  const testConfigs = await readTestSources(
+    testSources?.length
+      ? testSources
+      : [{ tests: config.tests || [], basePath: cmdObj.tests || cmdObj.vars ? '' : basePath }],
+    config.env,
+    false,
+  );
+  config.tests = testConfigs.map((test) =>
+    clone(isApiProvider(test.provider) ? { ...test, provider: undefined } : test),
+  );
   const parsedTests = await Promise.all(
-    clone(testConfigs).map((test) => readTest(test, basePath, false, config.env)),
+    testConfigs.map((test) => readTest(test, basePath, false, config.env)),
   );
 
   let parsedScenarios = config.scenarios;
@@ -1162,7 +1168,11 @@ async function resolveLoadedConfig(
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
       if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
-        scenario.tests = await readTestConfigs(scenario.tests, basePath, config.env);
+        scenario.tests = await readTestSources(
+          [{ tests: scenario.tests, basePath }],
+          config.env,
+          false,
+        );
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
       config.scenarios[scenarioIndex] = clone(scenario);

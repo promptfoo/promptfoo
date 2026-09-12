@@ -25,10 +25,6 @@ import {
 } from '../../src/util/fileExtensions';
 import { mockProcessEnv } from './utils';
 
-const hasGlobMagic = (candidatePath: string) => {
-  return /[*?[\]{}()!+@]/.test(candidatePath) || candidatePath.includes('\\');
-};
-
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({
     isMockProxyAgent: true,
@@ -58,9 +54,9 @@ vi.mock('fs/promises', async () => {
   };
 });
 
-vi.mock('glob', () => ({
+vi.mock('glob', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('glob')>()),
   globSync: vi.fn(),
-  hasMagic: vi.fn((candidatePath: string) => hasGlobMagic(candidatePath)),
 }));
 
 vi.mock('../../src/esm', () => ({
@@ -156,12 +152,10 @@ describe('file utilities', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.existsSync).mockImplementation(
+        (file) => !hasMagic(String(file), { windowsPathsNoEscape: true }),
+      );
       vi.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-      vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
-        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-        return hasGlobMagic(p);
-      });
       cliState.basePath = '/mock/base/path';
     });
 
@@ -241,9 +235,7 @@ describe('file utilities', () => {
       expect(result).toEqual([mockData1, mockData2]);
     });
 
-    it('expands Windows glob paths using real glob detection', async () => {
-      const glob = await vi.importActual<typeof import('glob')>('glob');
-      vi.mocked(hasMagic).mockImplementation(glob.hasMagic);
+    it('expands Windows glob paths using real glob detection', () => {
       vi.mocked(globSync).mockReturnValue(['C:/suite/scenario.yaml']);
       vi.mocked(fs.readFileSync).mockReturnValue('description: scenario');
 
@@ -785,10 +777,6 @@ describe('file utilities', () => {
       vi.resetAllMocks();
       (fs.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true);
       (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('file content');
-      vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
-        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-        return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
-      });
       cliState.basePath = '/test';
     });
 

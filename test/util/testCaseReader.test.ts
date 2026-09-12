@@ -913,7 +913,7 @@ describe('readTest', () => {
     const input: any = 123;
 
     await expect(readTest(input)).rejects.toThrow(
-      'Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, description, threshold.\n\nInstead got:\n{}',
+      'Test case must contain assert, vars, options, metadata, provider, providerOutput, threshold, or only a description.\n\nInstead got:\n{}',
     );
   });
 
@@ -1074,9 +1074,7 @@ describe('readTest', () => {
       someInvalidProperty: 'invalid',
     } as any; // Cast to any to bypass type checking for invalid input
 
-    await expect(readTest(invalidTestInput, '', false)).rejects.toThrow(
-      'Test case must contain one of the following properties',
-    );
+    await expect(readTest(invalidTestInput, '', false)).rejects.toThrow('Test case must contain');
   });
 
   it('should read test from file', async () => {
@@ -1842,8 +1840,12 @@ describe('loadTestsFromGlob', () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     vi.mocked(globSync).mockReturnValue([]);
     const basePath = path.resolve('fixture-config');
-    await expect(loadTestsFromGlob('missing-*.yaml', basePath)).rejects.toThrow(
-      path.resolve(basePath, 'missing-*.yaml'),
+    await expect(loadTestsFromGlob('missing.yaml', basePath)).rejects.toThrow(
+      path.resolve(basePath, 'missing.yaml'),
+    );
+    await expect(loadTestsFromGlob('missing-*.yaml', basePath)).resolves.toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      `No test files found for path: ${path.resolve(basePath, 'missing-*.yaml')}`,
     );
   });
 

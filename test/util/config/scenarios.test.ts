@@ -57,4 +57,34 @@ describe('Scenario loading with glob patterns', () => {
       expect(testSuite.scenarios?.[0]).toEqual(scenario('inline'));
     }
   });
+
+  it.each(['config directory', 'explicit basePath'])(
+    'loads scenario globs under a bracketed %s',
+    async (mode) => {
+      const root = path.join(directory, 'proj[ab]');
+      fs.mkdirSync(root);
+      fs.cpSync(path.join(directory, 'scenarios'), path.join(root, 'scenarios'), {
+        recursive: true,
+      });
+      fs.writeFileSync(path.join(root, 'default.yaml'), 'vars: { common: default }');
+      const configPath = path.join(mode === 'config directory' ? root : directory, 'config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          prompts: ['hello'],
+          providers: ['echo'],
+          ...(mode === 'explicit basePath' && { basePath: root }),
+          scenarios: ['file://scenarios/*.yaml'],
+          defaultTest: 'file://default.yaml',
+        }),
+      );
+      const configGlob =
+        mode === 'config directory' ? path.join(directory, '*', 'config.json') : configPath;
+      const { testSuite } = await cliState.withConfig(undefined, () =>
+        cliState.withBasePath(undefined, () => resolveConfigs({ config: [configGlob] }, {})),
+      );
+      expect(testSuite.scenarios).toHaveLength(2);
+      expect(testSuite.defaultTest).toMatchObject({ vars: { common: 'default' } });
+    },
+  );
 });

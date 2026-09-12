@@ -18,6 +18,7 @@ import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
 import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
+import { isApiProvider } from '../types/providers';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
@@ -295,7 +296,7 @@ function getStandaloneTestsFileMetadata(
 }
 
 function containsFunction(value: unknown, seen = new Set<object>()): boolean {
-  if (typeof value === 'function') {
+  if (typeof value === 'function' || isApiProvider(value)) {
     return true;
   }
   if (!value || typeof value !== 'object' || seen.has(value)) {
@@ -575,7 +576,7 @@ function validateTestCase(testCase: TestCase): void {
     typeof testCase.threshold !== 'number'
   ) {
     throw new Error(
-      `Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, description, threshold.\n\nInstead got:\n${JSON.stringify(
+      `Test case must contain assert, vars, options, metadata, provider, providerOutput, threshold, or only a description.\n\nInstead got:\n${JSON.stringify(
         testCase,
         null,
         2,
@@ -589,7 +590,7 @@ function validateTestCase(testCase: TestCase): void {
  * @param loadTestsGlob - The glob pattern or URL to load tests from
  * @param basePath - Base path for resolving relative paths
  * @returns Promise resolving to an array of TestCase objects
- * @throws Error when a local path or glob matches no test files.
+ * @throws Error when a literal local path does not exist.
  */
 export async function loadTestsFromGlob(
   loadTestsGlob: string,
@@ -653,7 +654,12 @@ async function loadTestsFromGlobWithEnv(
 
   const ret: TestCase[] = [];
   if (testFiles.length < 1) {
-    throw new Error(`No test files found for path: ${resolvedPath}`);
+    const message = `No test files found for path: ${resolvedPath}`;
+    if (!hasGlobMagic(path.relative(path.resolve(basePath), resolvedPath))) {
+      throw new Error(message);
+    }
+    logger.warn(message);
+    return ret;
   }
   for (const testFile of testFiles) {
     let testCases: TestCase[] | undefined;

@@ -3,7 +3,6 @@ import fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { Command } from 'commander';
-import { globSync } from 'glob';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
 import cliState from '../../src/cliState';
@@ -88,10 +87,6 @@ vi.mock('../../src/util/cloud', async () => ({
   getEvalConfigFromCloud: vi.fn(),
 }));
 vi.mock('fs');
-vi.mock('glob', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('glob')>()),
-  globSync: vi.fn(),
-}));
 vi.mock('path', async () => {
   const actualPath = await vi.importActual('path');
   return {
@@ -192,7 +187,6 @@ describe('evalCommand', () => {
         return chokidarMocks.watcher;
       });
     chokidarMocks.watch.mockReset().mockReturnValue(chokidarMocks.watcher);
-    vi.mocked(globSync).mockReset().mockReturnValue([]);
     vi.mocked(readFileSync).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReset();
     vi.mocked(cloudConfig.getSharing).mockReturnValue(undefined);

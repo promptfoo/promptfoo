@@ -9,6 +9,7 @@ import { fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { getEnvString } from '../../../src/envars';
 import { evaluate as evaluateResolved } from '../../../src/evaluator';
+import logger from '../../../src/logger';
 import { getGradingProvider, getRemoteGradingContext } from '../../../src/matchers/providers';
 import { renderLlmRubricPrompt } from '../../../src/matchers/rubric';
 import Eval from '../../../src/models/eval';
@@ -18,7 +19,12 @@ import { loadApiProvider, loadApiProviders, resolveProvider } from '../../../src
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { isApiProvider } from '../../../src/types/providers';
 import { readAzureBlobText } from '../../../src/util/azureBlob';
-import { combineConfigs, readConfig, resolveConfigs } from '../../../src/util/config/load';
+import {
+  ConfigResolutionError,
+  combineConfigs,
+  readConfig,
+  resolveConfigs,
+} from '../../../src/util/config/load';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import { sanitizeConfigForOutput } from '../../../src/util/sanitizer';
 import { getNunjucksEngine } from '../../../src/util/templates';
@@ -399,17 +405,16 @@ describe('suite environment loading', () => {
     },
   );
 
-  it('rejects an empty source glob when replaying an older saved config', async () => {
-    await expect(
-      resolveConfigs(
-        {},
-        {
-          prompts: ['hello'],
-          providers: ['echo'],
-          tests: [`file://${tempDir}/missing/*.yaml`],
-        },
-      ),
-    ).rejects.toThrow('No test files found');
+  it('keeps loading other sources when a test glob matches no files', async () => {
+    const configPath = writeConfig('optional-source', {
+      tests: ['good/*.yaml', 'optional/*.yaml'],
+    });
+    const dir = path.dirname(configPath);
+    fs.mkdirSync(path.join(dir, 'good'));
+    fs.mkdirSync(path.join(dir, 'optional'));
+    fs.writeFileSync(path.join(dir, 'good/one.yaml'), '- vars: { source: present }');
+    const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+    expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['present']);
   });
 
   it('persists dataset rows independently of their source path', async () => {
@@ -461,6 +466,36 @@ describe('suite environment loading', () => {
       expect(rows.map((row) => row.testCase.vars?.source).sort()).toEqual(['scenario', 'top']);
       expect(rows.every((row) => row.success)).toBe(true);
       expect(JSON.stringify(config)).not.toContain('private-runtime-value');
+    }
+  });
+
+  it('keeps a generator provider instance live without saving its runtime state', async () => {
+    const configPath = writeConfig('instance-generator', { tests: 'file://tests.cjs' });
+    fs.writeFileSync(
+      path.join(path.dirname(configPath), 'tests.cjs'),
+      `
+      class Target {
+        constructor() { this.self = this; this.privateState = 'private-runtime-value'; }
+        id() { return 'generated-target'; }
+        async callApi() { return { output: 'FROM-CLASS-INSTANCE' }; }
+      }
+      module.exports = () => [{ provider: new Target(), vars: { source: 'generated' } }];
+    `,
+    );
+    const warning = vi.spyOn(logger, 'warn');
+    try {
+      const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
+      expect(isApiProvider(testSuite.tests?.[0].provider)).toBe(true);
+      const result = await evaluateResolved(testSuite, new Eval(config), {});
+      const [row] = await result.getResults();
+      expect(row.response?.output).toBe('FROM-CLASS-INSTANCE');
+      expect(row.success).toBe(true);
+      expect(JSON.stringify(config)).not.toContain('private-runtime-value');
+      expect(warning).toHaveBeenCalledWith(
+        expect.stringContaining('cannot be saved for resume/retry'),
+      );
+    } finally {
+      warning.mockRestore();
     }
   });
 
@@ -899,35 +934,47 @@ describe('suite environment loading', () => {
     },
   );
 
-  it('reports a missing literal scenario source instead of running zero tests', async () => {
-    const configPath = writeConfig('missing-scenario', {
-      scenarios: [{ config: [{}], tests: ['file://missing.yaml'] as unknown as TestCase[] }],
-    });
-    await expect(resolveConfigs({ config: [configPath] }, {})).rejects.toThrow(
-      'No test files found',
-    );
-  });
+  it.each(['top-level', 'scenario'])(
+    'reports a missing literal %s source as a config error',
+    async (location) => {
+      const configPath = writeConfig('missing-scenario', {
+        ...(location === 'scenario'
+          ? {
+              scenarios: [
+                { config: [{}], tests: ['file://missing.yaml'] as unknown as TestCase[] },
+              ],
+            }
+          : { tests: ['file://missing.yaml'] }),
+      });
+      const result = resolveConfigs({ config: [configPath] }, {});
+      await expect(result).rejects.toBeInstanceOf(ConfigResolutionError);
+      await expect(result).rejects.toThrow(path.join(path.dirname(configPath), 'missing.yaml'));
+    },
+  );
 
-  it('resolves an explicit CLI tests path from the working directory', async () => {
-    const configPath = writeConfig('cli-path', {});
-    for (const [directory, source] of [
-      [tempDir, 'working-directory'],
-      [path.dirname(configPath), 'wrong-config-shadow'],
-    ]) {
-      fs.mkdirSync(path.join(directory, 'tests'));
-      fs.writeFileSync(path.join(directory, 'tests/cases.yaml'), `- vars: { source: ${source} }`);
-    }
-    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
-    try {
-      const { testSuite } = await resolveConfigs(
-        { config: [configPath], tests: 'tests/cases.yaml' },
-        {},
-      );
-      expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['working-directory']);
-    } finally {
-      cwd.mockRestore();
-    }
-  });
+  it.each(['tests', 'vars'] as const)(
+    'resolves an explicit CLI %s path from the working directory',
+    async (flag) => {
+      const configPath = writeConfig('cli-path', {});
+      for (const [directory, source] of [
+        [tempDir, 'working-directory'],
+        [path.dirname(configPath), 'wrong-config-shadow'],
+      ]) {
+        fs.mkdirSync(path.join(directory, 'tests'));
+        fs.writeFileSync(path.join(directory, 'tests/cases.yaml'), `- vars: { source: ${source} }`);
+      }
+      const cwd = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
+      try {
+        const { testSuite } = await resolveConfigs(
+          { config: [configPath], [flag]: 'tests/cases.yaml' },
+          {},
+        );
+        expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['working-directory']);
+      } finally {
+        cwd.mockRestore();
+      }
+    },
+  );
 
   it('uses config-relative references inside a nested defaultTest file', async () => {
     const configPath = writeConfig('default-root', { defaultTest: 'file://defaults/default.yaml' });
