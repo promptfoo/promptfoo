@@ -49,6 +49,18 @@ describe('ColumnSelector', () => {
     expect(buttonText).not.toContain('/6');
   });
 
+  it('counts only columns that exist in the current eval', () => {
+    renderWithProviders(
+      <ColumnSelector
+        columnData={sampleColumns}
+        selectedColumns={['col1', 'col2', 'stale-column-from-another-eval']}
+        onChange={mockOnChange}
+      />,
+    );
+
+    expect(screen.getByText(/2\/6/)).toBeInTheDocument();
+  });
+
   it('opens dialog when button is clicked', async () => {
     const user = userEvent.setup();
     renderWithProviders(
