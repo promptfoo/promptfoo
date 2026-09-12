@@ -72,7 +72,6 @@ const NON_SECRET_CREDENTIAL_NAME_PATTERNS = [
   /(?:^|_)api_bearer_token_envar$/,
   /(?:^|_)api_key_envar$/,
   /(?:^|_)api_key_required$/,
-  /^use_default_api_key$/,
   /(?:^|_)azure_token_scope$/,
   /(?:^|_)langfuse_public_key$/,
   /(?:^|_)key_alias$/,
@@ -603,6 +602,11 @@ const walkValue = (
 
     return Object.fromEntries(
       Object.entries(record).flatMap(([key, nestedValue]) => {
+        // This credential selector is safe to persist only as a literal boolean.
+        // Imported YAML can contain strings or nested values despite the TS type.
+        if (normalizeCredentialName(key) === 'use_default_api_key') {
+          return typeof nestedValue === 'boolean' ? [[key, nestedValue]] : [];
+        }
         const credential = isHeaders
           ? looksLikeHeaderCredential(key, nestedValue)
           : isQueryParams

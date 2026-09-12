@@ -1,6 +1,8 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
+import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -39,6 +41,32 @@ vi.mock('@app/utils/api', () => ({
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
+
+// These gates are unrelated to target import/export; the Run Now component and
+// both configuration stores below remain real.
+const reviewRunGates = vi.hoisted(() => ({
+  setJob: vi.fn(),
+  clearJob: vi.fn(),
+  signalEvalCompleted: vi.fn(),
+  checkEmailStatus: vi.fn(),
+}));
+vi.mock('@app/hooks/useApiHealth', () => ({
+  useApiHealth: () => ({ data: { status: 'connected' }, isLoading: false }),
+}));
+vi.mock('@app/hooks/useEmailVerification', () => ({
+  useEmailVerification: () => ({ checkEmailStatus: reviewRunGates.checkEmailStatus }),
+}));
+vi.mock('@app/hooks/useEvalHistoryRefresh', () => ({
+  useEvalHistoryRefresh: () => ({ signalEvalCompleted: reviewRunGates.signalEvalCompleted }),
+}));
+vi.mock('@app/stores/redteamJobStore', () => ({
+  useRedteamJobStore: () => ({
+    jobId: null,
+    _hasHydrated: true,
+    setJob: reviewRunGates.setJob,
+    clearJob: reviewRunGates.clearJob,
+  }),
 }));
 
 // Mock child components to isolate the page component
@@ -367,6 +395,50 @@ redteam:
       });
     });
 
+    it.each([
+      ['vllm', 'http://localhost:8000/v1'],
+      ['llamafile', 'http://localhost:8080/v1'],
+      ['text-generation-webui', 'http://localhost:5000/v1'],
+    ])('normalizes uploaded %s YAML before any target editor event', async (type, apiBaseUrl) => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter initialEntries={['/redteam/setup']}>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: /Load Config/i }));
+      const file = new File(
+        [
+          `
+ description: Direct local import
+ targets:
+   - id: openai:chat:gpt-4o
+     label: Imported local target
+     config:
+       type: ${type}
+ prompts: ['{{prompt}}']
+ redteam:
+   purpose: Offline normalization control
+   plugins: [shell-injection]
+   strategies: [basic]
+`,
+        ],
+        'local.yaml',
+        { type: 'text/yaml' },
+      );
+      await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+      await waitFor(() => {
+        expect(useRedTeamConfig.getState().config.target).toEqual({
+          id: 'openai:chat:gpt-4o',
+          label: 'Imported local target',
+          config: { type, apiBaseUrl, apiKeyRequired: false, useDefaultApiKey: false },
+        });
+      });
+      const exported = getUnifiedConfig(useRedTeamConfig.getState().config);
+      expect(exported.targets).toEqual([useRedTeamConfig.getState().config.target]);
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+    });
+
     it('should handle YAML config without redteam.provider gracefully', async () => {
       const user = userEvent.setup();
 
@@ -490,5 +562,133 @@ redteam:
         });
       },
     );
+  });
+
+  describe('real Review Run Now after direct target import', () => {
+    beforeEach(() => {
+      reviewRunGates.checkEmailStatus.mockReset();
+      reviewRunGates.checkEmailStatus.mockResolvedValue({ canProceed: true });
+      reviewRunGates.setJob.mockReset();
+      reviewRunGates.clearJob.mockReset();
+      reviewRunGates.signalEvalCompleted.mockReset();
+      mockedCallApi.mockReset();
+      mockedCallApi.mockImplementation(async (url) => {
+        if (url === '/redteam/status') {
+          return { ok: true, json: async () => ({ hasRunningJob: false }) } as Response;
+        }
+        if (url === '/redteam/run') {
+          return { ok: true, json: async () => ({ id: 'imported-target-job' }) } as Response;
+        }
+        throw new Error(`Unexpected Review request: ${url}`);
+      });
+    });
+
+    const mountActualReview = async () => {
+      const { default: ActualReview } =
+        await vi.importActual<typeof import('./components/Review')>('./components/Review');
+      return render(
+        <MemoryRouter>
+          <TooltipProvider>
+            <ActualReview
+              navigateToPlugins={vi.fn()}
+              navigateToStrategies={vi.fn()}
+              navigateToPurpose={vi.fn()}
+            />
+          </TooltipProvider>
+        </MemoryRouter>,
+      );
+    };
+
+    it.each([
+      { type: 'vllm', apiBaseUrl: 'http://localhost:8000/v1' },
+      { type: 'llamafile', apiBaseUrl: 'http://localhost:8080/v1' },
+      { type: 'text-generation-webui', apiBaseUrl: 'http://localhost:5000/v1' },
+    ])('sends normalized $type defaults without an editor event', async ({ type, apiBaseUrl }) => {
+      const user = userEvent.setup();
+      const target = { id: 'openai:chat:served-custom-model', config: { type } };
+      act(() => {
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target,
+        });
+      });
+      const view = await mountActualReview();
+      await user.click(screen.getByRole('button', { name: 'Run Now' }));
+      await waitFor(() =>
+        expect(reviewRunGates.setJob).toHaveBeenCalledWith('imported-target-job'),
+      );
+      const requests = mockedCallApi.mock.calls.filter(([url]) => url === '/redteam/run');
+      expect(requests).toHaveLength(1);
+      expect(requests[0][1]?.method).toBe('POST');
+      const body = JSON.parse(String(requests[0][1]?.body));
+      expect(body.config.targets).toEqual([
+        {
+          id: target.id,
+          config: { type, apiBaseUrl, apiKeyRequired: false, useDefaultApiKey: false },
+        },
+      ]);
+      expect(target.config).toEqual({ type });
+      view.unmount();
+    });
+
+    it.each([false, true])(
+      'keeps explicit credentials and selector %s in the run request',
+      async (selector) => {
+        const user = userEvent.setup();
+        const target = {
+          id: 'openai:chat:served-custom-model',
+          config: {
+            type: 'vllm',
+            apiHost: 'preferred.example.test/tenant',
+            apiBaseUrl: 'https://custom.example.test/v1',
+            apiKey: 'synthetic-inline-key',
+            apiKeyEnvar: 'LOCAL_MODEL_KEY',
+            apiKeyRequired: selector,
+            useDefaultApiKey: selector,
+            model: 'explicit-served-model',
+            stop: ['<end>'],
+            passthrough: { temperature: 0.25 },
+          },
+        };
+        act(() => {
+          useRedTeamConfig.getState().setFullConfig({
+            ...useRedTeamConfig.getState().config,
+            target,
+          });
+        });
+        const view = await mountActualReview();
+        await user.click(screen.getByRole('button', { name: 'Run Now' }));
+        await waitFor(() =>
+          expect(reviewRunGates.setJob).toHaveBeenCalledWith('imported-target-job'),
+        );
+        const requests = mockedCallApi.mock.calls.filter(([url]) => url === '/redteam/run');
+        expect(requests).toHaveLength(1);
+        expect(JSON.parse(String(requests[0][1]?.body)).config.targets).toEqual([target]);
+        view.unmount();
+      },
+    );
+
+    it('blocks an imported non-object target before the run transport', async () => {
+      const user = userEvent.setup();
+      act(() => {
+        const config = useRedTeamConfig.getState().config;
+        useRedTeamConfig.getState().setFullConfig({
+          ...config,
+          target: {
+            id: 'openai:chat:served-custom-model',
+            config: [] as unknown as typeof config.target.config,
+          },
+        });
+      });
+      const view = await mountActualReview();
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+        'Configuration must be a JSON object',
+      );
+      const run = screen.getByRole('button', { name: 'Run Now' });
+      expect(run).toBeDisabled();
+      await user.click(run);
+      expect(mockedCallApi.mock.calls.filter(([url]) => url === '/redteam/run')).toHaveLength(0);
+      view.unmount();
+    });
   });
 });

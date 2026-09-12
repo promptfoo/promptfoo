@@ -8,6 +8,73 @@ describe('evalConfig store', () => {
     useStore.getState().reset();
   });
 
+  describe('default API key selector persistence', () => {
+    const names = ['useDefaultApiKey', 'use_default_api_key', 'use-default-api-key'];
+    const malformed = [
+      'short-local-secret',
+      '{{vars.short_local_secret}}',
+      1,
+      null,
+      { value: 'short-local-secret' },
+      ['short-local-secret'],
+    ];
+
+    it.each(names.flatMap((name) => [false, true].map((value) => ({ name, value }))))(
+      'preserves the literal $value selector $name through persistence and rehydration',
+      async ({ name, value }) => {
+        const provider = { id: 'openai:chat:gpt-4o', config: { [name]: value, temperature: 0.2 } };
+        useStore.getState().setConfig({ providers: [provider] });
+        const saved = localStorage.getItem('promptfoo')!;
+        expect(JSON.parse(saved).state.config.providers).toEqual([provider]);
+        useStore.setState({ config: {} });
+        localStorage.setItem('promptfoo', saved);
+        await useStore.persist.rehydrate();
+        expect(useStore.getState().config.providers).toEqual([provider]);
+      },
+    );
+
+    it.each(names.flatMap((name) => malformed.map((value) => ({ name, value }))))(
+      'drops malformed $name=$value from persistence without changing the live config',
+      ({ name, value }) => {
+        const provider = { id: 'openai:chat:gpt-4o', config: { [name]: value, temperature: 0.2 } };
+        useStore.getState().updateConfig({ providers: [provider] });
+        expect(useStore.getState().config.providers).toEqual([provider]);
+        const saved = localStorage.getItem('promptfoo')!;
+        expect(JSON.parse(saved).state.config.providers[0].config).toEqual({ temperature: 0.2 });
+        expect(saved).not.toContain('short-local-secret');
+        expect(saved).not.toContain('short_local_secret');
+      },
+    );
+
+    it.each(names.flatMap((name) => malformed.map((value) => ({ name, value }))))(
+      'removes historical malformed $name=$value on rehydrate and rewrites storage',
+      async ({ name, value }) => {
+        localStorage.setItem(
+          'promptfoo',
+          JSON.stringify({
+            state: {
+              config: {
+                providers: [
+                  {
+                    id: 'openai:chat:gpt-4o',
+                    config: { [name]: value, temperature: 0.2 },
+                  },
+                ],
+              },
+            },
+            version: 0,
+          }),
+        );
+        await useStore.persist.rehydrate();
+        const expected = [{ id: 'openai:chat:gpt-4o', config: { temperature: 0.2 } }];
+        expect(useStore.getState().config.providers).toEqual(expected);
+        expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(
+          expected,
+        );
+      },
+    );
+  });
+
   describe('config management', () => {
     it('should initialize with default config', () => {
       const { config } = useStore.getState();

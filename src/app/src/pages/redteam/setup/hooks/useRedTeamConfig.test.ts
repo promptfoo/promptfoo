@@ -5518,6 +5518,96 @@ describe('useRedTeamConfig', () => {
   });
 
   describe('setFullConfig', () => {
+    const localTypes = [
+      { type: 'vllm', apiBaseUrl: 'http://localhost:8000/v1' },
+      { type: 'llamafile', apiBaseUrl: 'http://localhost:8080/v1' },
+      { type: 'text-generation-webui', apiBaseUrl: 'http://localhost:5000/v1' },
+    ];
+
+    it.each(localTypes)(
+      'normalizes an incomplete $type import before persistence, without editor events',
+      async ({ type, apiBaseUrl }) => {
+        const imported = {
+          ...useRedTeamConfig.getState().config,
+          target: { id: 'openai:chat:gpt-4o', label: 'Imported local target', config: { type } },
+        };
+        useRedTeamConfig.getState().setFullConfig(imported);
+        const target = {
+          ...imported.target,
+          config: { type, apiBaseUrl, apiKeyRequired: false, useDefaultApiKey: false },
+        };
+        expect(useRedTeamConfig.getState().config.target).toEqual(target);
+        expect(useRedTeamConfig.getState().providerType).toBe(type);
+        expect(imported.target.config).toEqual({ type });
+        expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+        const saved = window.localStorage.getItem('redTeamConfig')!;
+        expect(JSON.parse(saved).state.config.target).toEqual(target);
+        useRedTeamConfig.setState(useRedTeamConfig.getInitialState());
+        window.localStorage.setItem('redTeamConfig', saved);
+        await useRedTeamConfig.persist.rehydrate();
+        expect(useRedTeamConfig.getState().config.target).toEqual(target);
+      },
+    );
+
+    it.each(
+      localTypes.flatMap(({ type }) =>
+        [false, true].map((useDefaultApiKey) => ({
+          type,
+          useDefaultApiKey,
+        })),
+      ),
+    )(
+      'preserves explicit $type settings and selector $useDefaultApiKey',
+      ({ type, useDefaultApiKey }) => {
+        const target = {
+          id: 'openai:chat:tenant/private-model:Q4_K_M',
+          label: 'Explicit local target',
+          config: {
+            type,
+            apiBaseUrl: 'https://custom.example.test/tenant/v1',
+            apiHost: 'preferred.example.test',
+            apiKey: 'synthetic-inline-key',
+            apiKeyEnvar: 'LOCAL_MODEL_KEY',
+            apiKeyRequired: true,
+            useDefaultApiKey,
+            model: 'explicit-served-model',
+            stop: ['<end>'],
+            passthrough: { chat_template_kwargs: { enable_thinking: false } },
+          },
+        };
+        useRedTeamConfig
+          .getState()
+          .setFullConfig({ ...useRedTeamConfig.getState().config, target });
+        expect(useRedTeamConfig.getState().config.target).toEqual(target);
+      },
+    );
+
+    it.each([
+      { id: 'openai:chat:gpt-4o', config: {} },
+      { id: 'openai:chat:gpt-4o', config: { apiBaseUrl: 'https://untyped.example.test/v1' } },
+      { id: 'ollama:served-model', config: { type: 'vllm' } },
+    ])('leaves nonlocal/untyped import $id unchanged', (target) => {
+      useRedTeamConfig.getState().setFullConfig({ ...useRedTeamConfig.getState().config, target });
+      expect(useRedTeamConfig.getState().config.target).toEqual(target);
+    });
+
+    it.each([{ config: null }, { config: [] }, { config: 'invalid-config' }])(
+      'does not turn malformed OpenAI config $config into a valid local target',
+      ({ config }) => {
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getState().config,
+          target: {
+            id: 'openai:chat:gpt-4o',
+            config: config as unknown as Config['target']['config'],
+          },
+        });
+        expect(useRedTeamConfig.getState().config.target.config).toEqual(config);
+        expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBe(
+          'Configuration must be a JSON object',
+        );
+      },
+    );
+
     it('should set providerType to the result of getProviderType when called with a config that has a target with an id', () => {
       const newConfig: Config = {
         description: 'Test config with an OpenAI target',

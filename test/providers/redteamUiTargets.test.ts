@@ -27,6 +27,7 @@ type Target = { id: string; config: Record<string, unknown> };
 let initialConfigs: Record<string, Target>;
 let persistedTargets: Record<string, Target>;
 let destinationTargets: Record<string, Target>;
+let directlyImportedTargets: Record<string, Target>;
 
 beforeAll(() => {
   // The app owns this browser-only module in a separate TypeScript project. Read its
@@ -57,6 +58,11 @@ beforeAll(() => {
     import.meta.url,
   );
   const storeUrl = new URL('../../src/app/src/stores/evalConfig.ts', import.meta.url);
+  const redteamStoreUrl = new URL(
+    '../../src/app/src/pages/redteam/setup/hooks/useRedTeamConfig.ts',
+    import.meta.url,
+  );
+  const exportUrl = new URL('../../src/redteam/sharedFrontend.ts', import.meta.url);
   const script = `
     const { getProviderInitialConfig } = await import(${JSON.stringify(helperUrl.href)});
     const { withLocalProviderType } = await import(${JSON.stringify(editorHelperUrl.href)});
@@ -69,7 +75,17 @@ beforeAll(() => {
       setItem: (key, value) => storage.set(key, value),
       removeItem: key => storage.delete(key),
     };
-    globalThis.window = { localStorage: globalThis.localStorage };
+    const session = new Map();
+    globalThis.window = Object.assign(new EventTarget(), {
+      localStorage: globalThis.localStorage,
+      sessionStorage: {
+        getItem: key => session.get(key) ?? null,
+        setItem: (key, value) => session.set(key, value),
+        removeItem: key => session.delete(key),
+      },
+    });
+    // This single-context fixture does not simulate cross-tab BroadcastChannel delivery.
+    globalThis.BroadcastChannel = undefined;
     const { useStore } = await import(${JSON.stringify(storeUrl.href)});
     const persistedTargets = {};
     const destinationTargets = {};
@@ -122,12 +138,46 @@ beforeAll(() => {
         destinationTargets[type + ':' + endpoint] = useStore.getState().config.providers[0];
       }
     }
-    console.log(JSON.stringify({ initialConfigs, persistedTargets, destinationTargets }));
+    const { useRedTeamConfig } = await import(${JSON.stringify(redteamStoreUrl.href)});
+    const { getUnifiedConfig } = await import(${JSON.stringify(exportUrl.href)});
+    const directlyImportedTargets = {};
+    for (const type of ['llamafile', 'vllm', 'text-generation-webui']) {
+      for (const [omission, config] of Object.entries({
+        all: {},
+        endpoint: { apiKeyRequired: false, useDefaultApiKey: false },
+        defaultKey: { apiBaseUrl: 'https://custom.example.test/v1', apiKeyRequired: false },
+        requiredKey: { apiBaseUrl: 'https://custom.example.test/v1', useDefaultApiKey: false },
+        inline: { apiKey: 'synthetic-inline-key' },
+        named: { apiKeyEnvar: 'LOCAL_MODEL_KEY' },
+        optIn: { useDefaultApiKey: true },
+        missingNamed: { apiKeyEnvar: 'MISSING_LOCAL_KEY', useDefaultApiKey: true },
+        requiredMissingNamed: { apiKeyEnvar: 'MISSING_LOCAL_KEY', apiKeyRequired: true },
+        host: { apiHost: 'preferred.example.test/tenant', apiBaseUrl: 'https://other.example.test/v1' },
+      })) {
+        // Import a plain incomplete target directly: no selection, format, or helper call.
+        useRedTeamConfig.getState().setFullConfig({
+          ...useRedTeamConfig.getInitialState().config,
+          target: { id: 'openai:chat:gpt-4o', label: 'Imported local target', config: {
+            type, ...config, stop: ['<end>'],
+          } },
+        });
+        directlyImportedTargets[type + ':' + omission] = JSON.parse(JSON.stringify(
+          getUnifiedConfig(useRedTeamConfig.getState().config).targets[0]
+        ));
+      }
+    }
+    console.log(JSON.stringify({ initialConfigs, persistedTargets, destinationTargets, directlyImportedTargets }));
   `;
-  ({ initialConfigs, persistedTargets, destinationTargets } = JSON.parse(
+  ({ initialConfigs, persistedTargets, destinationTargets, directlyImportedTargets } = JSON.parse(
     execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
       cwd: fileURLToPath(new URL('../../', import.meta.url)),
       encoding: 'utf8',
+      env: {
+        ...process.env,
+        TSX_TSCONFIG_PATH: fileURLToPath(
+          new URL('../../src/app/tsconfig.app.json', import.meta.url),
+        ),
+      },
     }),
   ));
 });
@@ -159,6 +209,10 @@ beforeEach(() => {
   subscribe.mockReset();
   restoreEnv = mockProcessEnv({
     OPENAI_API_KEY: 'unrelated-openai-key',
+    OPENAI_API_HOST: undefined,
+    OPENAI_API_BASE_URL: undefined,
+    OPENAI_BASE_URL: undefined,
+    MISSING_LOCAL_KEY: undefined,
     LOCAL_MODEL_KEY: 'selected-local-key',
     LLAMA_BASE_URL: 'http://127.0.0.1:8099',
     HF_TOKEN: 'test-hf-token',
@@ -236,6 +290,68 @@ describe('redteam UI initial target runtime contracts', () => {
       if (type === 'deepseek') {
         expect(JSON.parse(request!.body as string).thinking).toEqual({ type: 'disabled' });
       }
+    },
+  );
+
+  it.each(
+    ['llamafile', 'vllm', 'text-generation-webui'].flatMap((type) =>
+      [
+        'all',
+        'endpoint',
+        'defaultKey',
+        'requiredKey',
+        'inline',
+        'named',
+        'optIn',
+        'missingNamed',
+        'requiredMissingNamed',
+        'host',
+      ].map((omission) => ({ type, omission })),
+    ),
+  )(
+    'dispatches the directly imported $type/$omission export offline',
+    async ({ type, omission }) => {
+      const target = directlyImportedTargets[`${type}:${omission}`];
+      expect(target.id).toBe('openai:chat:gpt-4o');
+      const provider = await loadApiProvider(target.id, { options: target });
+      if (omission === 'requiredMissingNamed') {
+        await expect(provider.callApi('Offline direct import')).rejects.toThrow(
+          'API key is not set. Set the MISSING_LOCAL_KEY environment variable or add `apiKey` to the provider config.',
+        );
+        expect(fetchWithCache).not.toHaveBeenCalled();
+        return;
+      }
+      const result = await provider.callApi('Offline direct import');
+      expect(result.output).toBe('Hello from the fixture');
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      const expectedBase =
+        omission === 'host'
+          ? 'https://preferred.example.test/tenant/v1'
+          : ['defaultKey', 'requiredKey'].includes(omission)
+            ? 'https://custom.example.test/v1'
+            : initialConfigs[type].config.apiBaseUrl;
+      expect(url).toBe(`${expectedBase}/chat/completions`);
+      const expectedKey =
+        omission === 'inline'
+          ? 'synthetic-inline-key'
+          : omission === 'named'
+            ? 'selected-local-key'
+            : omission === 'optIn'
+              ? 'unrelated-openai-key'
+              : undefined;
+      if (expectedKey) {
+        expect(request!.headers).toMatchObject({ Authorization: `Bearer ${expectedKey}` });
+      } else {
+        expect(request!.headers).not.toHaveProperty('Authorization');
+      }
+      const body = JSON.parse(request!.body as string);
+      expect(body).toMatchObject({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: 'Offline direct import' }],
+        stop: ['<end>'],
+      });
+      expect(body).not.toHaveProperty('type');
     },
   );
 
