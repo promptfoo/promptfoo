@@ -1,6 +1,6 @@
 import dedent from 'dedent';
 import { escapeRegExp } from '../../../util/text';
-import { TRACE_REDACTION_ASSERTIONS } from '../../../util/traceRedaction';
+import { hasRedactionMedia, TRACE_REDACTION_ASSERTIONS } from '../../../util/traceRedaction';
 import { getAgenticAttackProfile } from '../../agenticProfile';
 import {
   CODING_AGENT_PLUGIN_DESCRIPTIONS,
@@ -556,9 +556,10 @@ export function findDeterministicLeak(
   if (
     TRACE_REDACTION_ASSERTIONS.has(`promptfoo:redteam:${pluginId}`) &&
     (gradingContext?.imageOutputs?.length ||
-      gradingContext?.providerResponse?.images?.length ||
-      gradingContext?.providerResponse?.audio?.data ||
-      gradingContext?.providerResponse?.metadata?.redactionMediaOmitted === true)
+      hasRedactionMedia({
+        ...gradingContext?.providerResponse,
+        output: [llmOutput, gradingContext?.providerResponse?.output],
+      }))
   ) {
     throw new Error(
       'Image and audio redaction cannot be verified. Media responses are omitted from saved results; provide a text-only report.',

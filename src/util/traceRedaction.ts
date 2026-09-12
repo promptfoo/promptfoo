@@ -15,7 +15,51 @@ export function requiresTraceRedaction(assertions: AssertionOrSet[] | undefined)
   );
 }
 
-/** Keep unverified media and their response echoes out of public result copies. */
+export function hasRedactionMedia(response: ProviderResponse | null | undefined): boolean {
+  const pending: unknown[] = [response];
+  const seen = new Set<object>();
+  let inspected = 0;
+  while (pending.length) {
+    if (++inspected > 10000) {
+      return true;
+    }
+    const value = pending.pop();
+    if (typeof value === 'string') {
+      if (/data:(?:audio|image)\/|blob:\/\/[a-f0-9]{64}\b|<svg(?:\s|\/?>)/i.test(value)) {
+        return true;
+      }
+      if (/^\s*[{[]/.test(value)) {
+        try {
+          pending.push(JSON.parse(value));
+        } catch {
+          // Plain text is checked by the text verifier.
+        }
+      }
+    } else if (value && typeof value === 'object' && !seen.has(value)) {
+      seen.add(value);
+      const record = value as Record<string, unknown>;
+      const audio = record.audio as ProviderResponse['audio'];
+      if (
+        record.redactionMediaOmitted === true ||
+        record.isBase64 === true ||
+        (typeof record.b64_json === 'string' && record.b64_json.length > 0) ||
+        (Array.isArray(record.images) && record.images.length > 0) ||
+        audio?.data ||
+        audio?.blobRef
+      ) {
+        return true;
+      }
+      for (const [key, child] of Object.entries(record)) {
+        if (value !== response || key !== 'raw') {
+          pending.push(child);
+        }
+      }
+    }
+  }
+  return false;
+}
+
+/** Keep raw provider data, unverified media, and response echoes out of public copies. */
 export function sanitizeRedactionResult<T extends object>(input: T): T {
   const result = input as T & {
     testCase?: AtomicTestCase;
@@ -23,15 +67,13 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     metadata?: Record<string, unknown>;
   };
   const response = result.response;
-  if (
-    !(
-      response?.images?.length ||
-      response?.audio?.data ||
-      response?.metadata?.redactionMediaOmitted === true
-    ) ||
-    !requiresTraceRedaction(result.testCase?.assert)
-  ) {
+  if (!response || !requiresTraceRedaction(result.testCase?.assert)) {
     return input;
+  }
+  if (!hasRedactionMedia(response)) {
+    return response.raw === undefined
+      ? input
+      : { ...input, response: { ...response, raw: undefined } };
   }
   const metadata = { ...result.metadata };
   for (const key of Object.keys(response.metadata ?? {})) {

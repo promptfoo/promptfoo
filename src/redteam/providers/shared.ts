@@ -908,12 +908,12 @@ export async function externalizeResponseForRedteamHistory<T extends ProviderRes
   const testCase = context?.test as AtomicTestCase | undefined;
   if (requiresTraceRedaction(testCase?.assert)) {
     const sanitized = sanitizeRedactionResult({ response, testCase }).response;
-    return sanitized === response
-      ? response
-      : {
+    return sanitized.metadata?.redactionMediaOmitted === true
+      ? {
           ...sanitized,
           error: 'Image and audio redaction cannot be verified; provide a text-only report.',
-        };
+        }
+      : sanitized;
   }
   if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
     return response;

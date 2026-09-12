@@ -129,6 +129,69 @@ describe('EvalResult', () => {
     },
   );
 
+  it.each([
+    'output-image',
+    'output-audio',
+    'metadata-audio',
+    'turn-audio',
+    'nested-image',
+    'image-json',
+    'blob-output',
+    'svg-output',
+  ] as const)('omits private media in supported response shapes: %s', async (mode) => {
+    const secret = 'PRIVATE_EMBEDDED_MEDIA_8964';
+    const data = Buffer.from(secret).toString('base64');
+    const image = `data:image/png;base64,${data}`;
+    const media = {
+      'output-image': { output: image },
+      'output-audio': { output: `data:audio/wav;base64,${data}` },
+      'metadata-audio': { metadata: { audio: { data, format: 'wav' } } },
+      'turn-audio': { turns: [{ audio: { data, format: 'wav' } }] },
+      'nested-image': { metadata: { content: [{ image_url: { url: image } }] } },
+      'image-json': { output: JSON.stringify({ data: [{ b64_json: data }] }) },
+      'blob-output': { output: `blob://${'a'.repeat(64)}` },
+      'svg-output': {
+        output: `<svg xmlns="http://www.w3.org/2000/svg"><text>${secret}</text></svg>`,
+      },
+    }[mode];
+    const row = createEvaluateResult({
+      ...mockEvaluateResult,
+      response: { output: 'Clean report', ...media, cost: 0.01 },
+      testCase: { assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }] },
+    });
+    const artifact = sanitizeResultForJsonlArtifact(row);
+    expect(artifact.response).toMatchObject({
+      cost: 0.01,
+      metadata: { redactionMediaOmitted: true },
+    });
+    expect(JSON.stringify(artifact)).not.toContain(data);
+    expect(JSON.stringify(artifact)).not.toContain(secret);
+    const saved = await EvalResult.createFromEvaluateResult('embedded-media-copy', row, {
+      persist: false,
+    });
+    expect(saved.response).toMatchObject({ metadata: { redactionMediaOmitted: true } });
+    expect(row.response).toMatchObject(media);
+  });
+
+  it('omits private raw provider data without changing ordinary raw responses', async () => {
+    const raw = { privateReceipt: 'PRIVATE_RAW_PROVIDER_8964' };
+    const row = createEvaluateResult({
+      ...mockEvaluateResult,
+      response: { output: 'Clean report', raw },
+      testCase: { assert: [{ type: 'promptfoo:redteam:harness:artifact-redaction' }] },
+    });
+    const artifact = sanitizeResultForJsonlArtifact(row);
+    expect(artifact.response?.raw).toBeUndefined();
+    expect(artifact.response?.output).toBe('Clean report');
+    const saved = await EvalResult.createFromEvaluateResult('private-raw-copy', row, {
+      persist: false,
+    });
+    expect(saved.response?.raw).toBeUndefined();
+    expect(row.response?.raw).toEqual(raw);
+    row.testCase.assert = [{ type: 'equals', value: 'Clean report' }];
+    expect(sanitizeResultForJsonlArtifact(row).response?.raw).toEqual(raw);
+  });
+
   it('preserves audio responses for ordinary assertions', () => {
     const response = { output: 'audio', audio: { data: 'private-audio', format: 'wav' } };
     expect(

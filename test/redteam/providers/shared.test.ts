@@ -1907,6 +1907,19 @@ describe('redteam history blob storage', () => {
     },
   );
 
+  it('omits raw private evidence from text histories without a media error', async () => {
+    const response = { output: 'Clean report', raw: { secret: 'PRIVATE_RAW_HISTORY_8964' } };
+    const history = await externalizeResponseForRedteamHistory(response, {
+      test: {
+        assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
+      } as AtomicTestCase,
+    });
+    expect(history.raw).toBeUndefined();
+    expect(history.output).toBe('Clean report');
+    expect(history).not.toHaveProperty('error');
+    expect(response.raw.secret).toBe('PRIVATE_RAW_HISTORY_8964');
+  });
+
   it('preserves eval-scoped blob storage for ordinary responses', async () => {
     const blobs = await import('../../../src/blobs/extractor');
     vi.spyOn(blobs, 'isBlobStorageEnabled').mockReturnValue(true);
