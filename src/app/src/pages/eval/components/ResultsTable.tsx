@@ -518,8 +518,7 @@ function renderVariableCell({
     return (
       <div className="cell space-y-2">
         <div className="flex gap-3 text-sm">
-          {!pdf.storageKey &&
-            typeof attachment === 'string' &&
+          {typeof attachment === 'string' &&
             attachment.startsWith('data:application/pdf;base64,') && (
               <a href={attachment} download="attack.pdf" className="text-primary underline">
                 Download PDF

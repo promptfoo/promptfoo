@@ -672,6 +672,10 @@ describe('ResultsTable Metrics Display', () => {
           screen.getByRole('link', { name: storageKey ? 'Open PDF' : 'Download PDF' }),
         ).toHaveAttribute('href', expect.stringContaining(expectedUrl));
         if (storageKey) {
+          expect(screen.getByRole('link', { name: 'Download PDF' })).toHaveAttribute(
+            'href',
+            'data:application/pdf;base64,do-not-display',
+          );
           expect(screen.getByRole('link', { name: 'Clean template' })).toHaveAttribute(
             'href',
             expect.stringContaining('/api/media/document/123456abcdef.pdf'),

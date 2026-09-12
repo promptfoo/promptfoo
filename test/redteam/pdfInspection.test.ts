@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { inspectPdf } from '../../src/redteam/pdf';
+import { inspectPdf, scanPdf } from '../../src/redteam/pdf';
 
 vi.mock('node:child_process', () => ({ spawn: vi.fn() }));
 
@@ -29,8 +29,11 @@ describe('PDF inspection process lifecycle', () => {
     vi.resetAllMocks();
   });
 
-  it('kills a parser that never responds and reports a bounded timeout', async () => {
-    const result = inspectPdf(Buffer.from('%PDF-1.7'));
+  it.each([
+    { name: 'inspection', operation: inspectPdf },
+    { name: 'scanning', operation: scanPdf },
+  ])('kills $name when the process never responds', async ({ operation }) => {
+    const result = operation(Buffer.from('%PDF-1.7'));
     const assertion = expect(result).rejects.toThrow('15-second limit');
     await vi.advanceTimersByTimeAsync(15_000);
     await assertion;

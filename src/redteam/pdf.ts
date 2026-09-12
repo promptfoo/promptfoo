@@ -102,10 +102,19 @@ export async function createPdf(text: string, template?: Uint8Array): Promise<Bu
   return bytes;
 }
 
-export async function inspectPdf(bytes: Uint8Array): Promise<{ text: string; pageCount: number }> {
+async function processPdf<T>(bytes: Uint8Array, operation: 'inspect' | 'scan'): Promise<T> {
   validatePdfBytes(bytes);
   const require = createRequire(path.join(getDirectory(), 'package.json'));
-  // Isolate compressed PDF parsing from the CLI's heap and event loop. A process
+  let parserPath: string;
+  try {
+    parserPath = require.resolve('pdf-parse');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND') {
+      throw new Error('PDF strategy requires pdf-parse. Install it with: npm install pdf-parse');
+    }
+    throw error;
+  }
+  // Isolate PDF parsing and rendering from the CLI's heap and event loop. A process
   // also lets us override inherited Node memory flags, unlike worker resourceLimits.
   // Fixed source and dependency paths avoid a separate asset in bundled builds.
   const child = spawn(
@@ -115,7 +124,7 @@ export async function inspectPdf(bytes: Uint8Array): Promise<{ text: string; pag
       '--max-semi-space-size=16',
       '--input-type=commonjs',
       '--eval',
-      `async function inspect() {
+      `async function processPdf() {
       const chunks = [];
       for await (const chunk of process.stdin) chunks.push(chunk);
       const bytes = Buffer.concat(chunks);
@@ -136,6 +145,29 @@ export async function inspectPdf(bytes: Uint8Array): Promise<{ text: string; pag
       const { PDFParse } = require(process.argv[2]);
       const parser = new PDFParse({ data: new Uint8Array(bytes), isEvalSupported: false });
       try {
+        if (process.argv[3] === 'scan') {
+          const scanned = await PDFDocument.create();
+          scanned.setCreationDate(new Date(0));
+          scanned.setModificationDate(new Date(0));
+          for (let index = 0; index < pages.length; index++) {
+            const page = pages[index];
+            const crop = page.getCropBox();
+            const rotated = page.getRotation().angle % 180 !== 0;
+            const width = rotated ? crop.height : crop.width;
+            const height = rotated ? crop.width : crop.height;
+            const screenshot = await parser.getScreenshot({
+              partial: [index + 1], scale: Math.min(1200 / width, 1600 / height),
+              imageDataUrl: false, imageBuffer: true,
+            });
+            const image = await scanned.embedPng(screenshot.pages[0].data);
+            scanned.addPage([width, height]).drawImage(image, { x: 0, y: 0, width, height });
+          }
+          const output = Buffer.from(await scanned.save());
+          if (output.length > ${MAX_PDF_BYTES}) {
+            throw new Error('Scanned PDF exceeds the 5 MiB limit; use a smaller template or text mode');
+          }
+          return output.toString('base64');
+        }
         const result = await parser.getText();
         const text = result.pages.map((page) => page.text).join('\\n\\n');
         if (text.length > 50000) {
@@ -146,12 +178,13 @@ export async function inspectPdf(bytes: Uint8Array): Promise<{ text: string; pag
         await parser.destroy();
       }
     }
-    inspect().then(
+    processPdf().then(
       (result) => process.send({ result }),
       (error) => process.send({ error: error.message }),
     );`,
       require.resolve('pdf-lib'),
-      require.resolve('pdf-parse'),
+      parserPath,
+      operation,
     ],
     {
       env: { ...process.env, NODE_OPTIONS: '' },
@@ -162,26 +195,23 @@ export async function inspectPdf(bytes: Uint8Array): Promise<{ text: string; pag
   const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
   let timer: NodeJS.Timeout | undefined;
   try {
-    return await new Promise<{ text: string; pageCount: number }>((resolve, reject) => {
+    return await new Promise<T>((resolve, reject) => {
       timer = setTimeout(
-        () => reject(new Error('PDF inspection exceeded the 15-second limit')),
+        () => reject(new Error('PDF processing exceeded the 15-second limit')),
         15_000,
       );
-      child.once(
-        'message',
-        (message: { error?: string; result: { text: string; pageCount: number } }) => {
-          if (message.error) {
-            reject(new Error(message.error));
-          } else {
-            resolve(message.result);
-          }
-        },
-      );
+      child.once('message', (message: { error?: string; result: T }) => {
+        if (message.error) {
+          reject(new Error(message.error));
+        } else {
+          resolve(message.result);
+        }
+      });
       child.once('error', reject);
       child.once('exit', (code, signal) =>
         reject(
           new Error(
-            `PDF inspection process exited (${signal ?? code}); document may exceed parser memory limits`,
+            `PDF subprocess exited (${signal ?? code}); document may exceed parser memory limits`,
           ),
         ),
       );
@@ -195,36 +225,11 @@ export async function inspectPdf(bytes: Uint8Array): Promise<{ text: string; pag
   }
 }
 
+export async function inspectPdf(bytes: Uint8Array): Promise<{ text: string; pageCount: number }> {
+  return processPdf(bytes, 'inspect');
+}
+
 /** Rasterize every page, including the template, so no extractable text remains. */
 export async function scanPdf(bytes: Uint8Array): Promise<Buffer> {
-  const source = await loadPdf(bytes);
-  const { PDFParse } = await import('pdf-parse');
-  const parser = new PDFParse({ data: new Uint8Array(bytes), isEvalSupported: false });
-  const document = await PDFDocument.create();
-  document.setCreationDate(new Date(0));
-  document.setModificationDate(new Date(0));
-  try {
-    for (let index = 0; index < source.getPageCount(); index++) {
-      const sourcePage = source.getPage(index);
-      const crop = sourcePage.getCropBox();
-      const rotated = sourcePage.getRotation().angle % 180 !== 0;
-      const width = rotated ? crop.height : crop.width;
-      const height = rotated ? crop.width : crop.height;
-      const screenshot = await parser.getScreenshot({
-        partial: [index + 1],
-        scale: Math.min(1200 / width, 1600 / height),
-        imageDataUrl: false,
-        imageBuffer: true,
-      });
-      const image = await document.embedPng(screenshot.pages[0].data);
-      document.addPage([width, height]).drawImage(image, { x: 0, y: 0, width, height });
-    }
-  } finally {
-    await parser.destroy();
-  }
-  const result = Buffer.from(await document.save());
-  if (result.length > MAX_PDF_BYTES) {
-    throw new Error('Scanned PDF exceeds the 5 MiB limit; use a smaller template or text mode');
-  }
-  return result;
+  return Buffer.from(await processPdf<string>(bytes, 'scan'), 'base64');
 }

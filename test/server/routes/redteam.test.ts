@@ -62,6 +62,19 @@ describe('Redteam Routes', () => {
       mockedExtractGeneratedPrompt.mockReturnValue('generated test prompt');
     });
 
+    it('rejects a PDF preview before generation', async () => {
+      const response = await request(app)
+        .post('/api/redteam/generate-test')
+        .send({
+          plugin: { id: 'policy', config: {} },
+          strategy: { id: 'pdf', config: {} },
+          config: { applicationDefinition: { purpose: 'Invoice review' } },
+        });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Run a red team eval to test PDF uploads');
+      expect(mockedRedteamProviderManager.getProviderSelection).not.toHaveBeenCalled();
+    });
+
     describe('excluded plugins logic', () => {
       it('should NOT exclude dataset-exempt plugins without multi-input config', async () => {
         // 'aegis' is a DATASET_EXEMPT_PLUGIN but should work without multi-input
