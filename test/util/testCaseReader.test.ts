@@ -39,7 +39,8 @@ vi.mock('../../src/util/fetch/index', () => ({
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
-vi.mock('glob', () => ({
+vi.mock('glob', async (importOriginal) => ({
+  escape: (await importOriginal<typeof import('glob')>()).escape,
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
@@ -899,7 +900,7 @@ describe('readTest', () => {
     const input: any = 123;
 
     await expect(readTest(input)).rejects.toThrow(
-      'Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, threshold.\n\nInstead got:\n{}',
+      'Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, description, threshold.\n\nInstead got:\n{}',
     );
   });
 

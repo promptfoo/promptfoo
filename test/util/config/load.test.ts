@@ -68,7 +68,8 @@ vi.mock('path', async () => {
   };
 });
 
-vi.mock('glob', () => ({
+vi.mock('glob', async (importOriginal) => ({
+  escape: (await importOriginal<typeof import('glob')>()).escape,
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
@@ -140,7 +141,10 @@ vi.mock('../../../src/util/file', async () => {
   };
 });
 
-vi.mock('../../../src/util/testCaseReader', () => ({
+vi.mock('../../../src/util/testCaseReader', async (importOriginal) => ({
+  isRemoteTestsReference: (
+    await importOriginal<typeof import('../../../src/util/testCaseReader')>()
+  ).isRemoteTestsReference,
   readTest: vi.fn().mockImplementation(async (test) => test),
   readTests: vi.fn(async (tests) => {
     if (!tests) {
@@ -1079,7 +1083,7 @@ describe('combineConfigs', () => {
     expect(result.sharing).toBeUndefined();
   });
 
-  it('preserves an absolute defaultTest file reference without loading it', async () => {
+  it('resolves a relative defaultTest file reference without loading it', async () => {
     const externalDefaultTest = {
       assert: [{ type: 'equals', value: 'test' }],
       vars: { foo: 'bar' },
@@ -1633,9 +1637,9 @@ describe('resolveConfigs', () => {
       }),
     );
 
-    vi.mocked(maybeLoadFromExternalFile)
-      .mockResolvedValueOnce(scenarios)
-      .mockResolvedValueOnce(externalTests);
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) =>
+      typeof value === 'string' ? scenarios : value,
+    );
 
     vi.mocked(readTests).mockResolvedValue(externalTests);
 
@@ -1659,10 +1663,14 @@ describe('resolveConfigs', () => {
 
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith([
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
       `file://${path.resolve('/mock/cwd/scenarios.yaml')}`,
-    ]);
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://tests.yaml');
+    );
+    expect(readTests).toHaveBeenCalledWith(
+      [`file://${path.resolve('/mock/cwd/tests.yaml')}`],
+      '.',
+      {},
+    );
 
     expect(testSuite).toMatchObject({
       prompts: [

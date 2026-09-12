@@ -51,7 +51,7 @@ import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
-import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
+import type { ApiProvider, EnvOverrides, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 vi.mock('../../src/cache');
 vi.mock('../../src/evaluator');
@@ -661,6 +661,50 @@ describe('evalCommand', () => {
       // test bails early. A leftover "missing API keys" value fails the run before it
       // reaches the watcher, which file order hides and CI's shuffled order does not.
       vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+    });
+
+    it('removes deleted environment flags on the next watch run', async () => {
+      const flags: boolean[] = [];
+      const config = {
+        prompts: ['hello'],
+        providers: ['echo'],
+        outputPath: 'results.json',
+      } as UnifiedConfig;
+      vi.mocked(resolveConfigs)
+        .mockReset()
+        .mockResolvedValueOnce({
+          config,
+          basePath: watchBase,
+          testSuite: {
+            prompts: [],
+            providers: [],
+            env: { PROMPTFOO_STRIP_PROMPT_TEXT: 'true' } as EnvOverrides,
+          },
+        })
+        .mockResolvedValueOnce({
+          config,
+          basePath: watchBase,
+          testSuite: { prompts: [], providers: [] },
+        });
+      vi.mocked(evaluate).mockImplementation(async (_suite, record) => record as Eval);
+      vi.mocked(writeMultipleOutputs).mockImplementation(async () => {
+        flags.push(getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT'));
+      });
+      try {
+        await doEval(
+          { watch: true, write: false, table: false, share: false },
+          config,
+          defaultConfigPath,
+          {},
+        );
+        await chokidarMocks.handlers.get('change')!(defaultConfigPath);
+        expect(flags).toEqual([true, false]);
+        expect(resolveConfigs).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.mocked(resolveConfigs).mockReset();
+        vi.mocked(evaluate).mockReset();
+        vi.mocked(writeMultipleOutputs).mockReset();
+      }
     });
 
     async function watchedPathsFor(

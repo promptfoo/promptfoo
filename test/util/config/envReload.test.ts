@@ -4,6 +4,7 @@ import * as path from 'node:path';
 
 import nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AssertValidationError } from '../../../src/assertions/validateAssertions';
 import { fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { getEnvString } from '../../../src/envars';
@@ -15,13 +16,13 @@ import { nodeEvaluatorRuntime } from '../../../src/node/evaluatorRuntime';
 import { loadApiProvider, loadApiProviders, resolveProvider } from '../../../src/providers/index';
 import { isApiProvider } from '../../../src/types/providers';
 import { readAzureBlobText } from '../../../src/util/azureBlob';
-import { combineConfigs, resolveConfigs } from '../../../src/util/config/load';
+import { combineConfigs, readConfig, resolveConfigs } from '../../../src/util/config/load';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import { getNunjucksEngine } from '../../../src/util/templates';
 import { loadTestsFromGlob, readTest, readTests } from '../../../src/util/testCaseReader';
 import { mockProcessEnv } from '../utils';
 
-import type { UnifiedConfig } from '../../../src/types/index';
+import type { TestCase, UnifiedConfig } from '../../../src/types/index';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/cache')>()),
@@ -320,6 +321,325 @@ describe('suite environment loading', () => {
     );
   });
 
+  it('does not interpret a remote row path as a local generator, including replay', async () => {
+    const generator = path.join(tempDir, 'must-not-run.cjs');
+    const marker = path.join(tempDir, 'executed');
+    fs.writeFileSync(
+      generator,
+      `module.exports = () => { require('fs').writeFileSync(${JSON.stringify(marker)}, 'executed'); return [{ vars: { source: 'local' } }]; };`,
+    );
+    vi.mocked(readAzureBlobText).mockResolvedValue(JSON.stringify([{ path: generator }]));
+    const first = await resolveConfigs(
+      { config: [writeConfig('remote-path', { tests: 'az://account/container/rows.yaml' })] },
+      {},
+    );
+    const result = await evaluate(
+      { prompts: ['hello'], providers: ['echo'], tests: first.testSuite.tests },
+      { cache: false },
+    );
+    expect(await result.getResults()).toHaveLength(1);
+    expect(fs.existsSync(marker)).toBe(false);
+    await resolveConfigs({}, JSON.parse(JSON.stringify(first.config)));
+    expect(readAzureBlobText).toHaveBeenCalledTimes(2);
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  it('keeps the SDK environment active while reading prompts and exporting results', async () => {
+    const content = path.join(tempDir, 'selected.json');
+    fs.writeFileSync(content, JSON.stringify('suite content'));
+    fs.writeFileSync(path.join(tempDir, 'prompt.yaml'), 'content: file://{{ env.OPENAI_API_KEY }}');
+    const outputPath = path.join(tempDir, 'sdk-results.json');
+    const result = await evaluate(
+      {
+        basePath: tempDir,
+        outputPath,
+        env: { OPENAI_API_KEY: content, PROMPTFOO_STRIP_PROMPT_TEXT: 'true' },
+        prompts: ['file://prompt.yaml'],
+        providers: ['echo'],
+        tests: [{ vars: {} }],
+      },
+      { cache: false },
+    );
+    const [row] = await result.getResults();
+    expect(JSON.parse(row.response!.output as string)).toEqual({ content: 'suite content' });
+    const exported = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+    expect(exported.results.prompts.map((prompt: { raw: string }) => prompt.raw)).toEqual([
+      '[prompt stripped]',
+    ]);
+  });
+
+  it('isolates direct config reads from the previous ref-parser and template flags', async () => {
+    cliState.config = {
+      env: { PROMPTFOO_DISABLE_REF_PARSER: 'true', PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'true' },
+    };
+    const configPath = writeConfig('ref-parser', {
+      metadata: { $ref: '#/definitions/meta' },
+      description: '{{ env.OPENAI_API_KEY }}',
+    });
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    config.definitions = { meta: { source: 'current' } };
+    fs.writeFileSync(configPath, JSON.stringify(config));
+    for (const result of [
+      await readConfig(configPath),
+      await combineConfigs([configPath]),
+      (await resolveConfigs({ config: [configPath] }, {})).config,
+    ]) {
+      expect(result.metadata).toEqual({ source: 'current' });
+      expect(result.description).toBe('process-key');
+    }
+  });
+
+  it('honors a config-local templating opt-out during config loading', async () => {
+    const reference = '{{ env.OPENAI_API_KEY }}';
+    const result = await readConfig(
+      writeConfig('templating-off', {
+        env: { OPENAI_API_KEY: 'suite-key', PROMPTFOO_DISABLE_TEMPLATING: 'true' },
+        description: reference,
+      }),
+    );
+    expect(result.description).toBe(reference);
+  });
+
+  it('uses defaultConfig.env when resolving a saved or programmatic config', async () => {
+    const { testSuite } = await resolveConfigs(
+      {},
+      {
+        prompts: ['hello'],
+        providers: ['openai:chat:test-model'],
+        env: { OPENAI_API_KEY: 'saved-key', OPENAI_API_BASE_URL: 'https://saved.example/v1' },
+      },
+    );
+    await expectRequest(testSuite.providers[0], 'saved');
+  });
+
+  it.each([
+    null,
+    7,
+    { type: 'assert-set' },
+    { type: 'assert-set', assert: null },
+    { type: 'assert-set', assert: {} },
+  ])('reports malformed assertion %j through assertion validation', async (assertion) => {
+    const configPath = writeConfig('invalid-assertion', { tests: 'tests.json' });
+    fs.writeFileSync(
+      path.join(path.dirname(configPath), 'tests.json'),
+      JSON.stringify([{ assert: [assertion] }]),
+    );
+    await expect(resolveConfigs({ config: [configPath] }, {})).rejects.toBeInstanceOf(
+      AssertValidationError,
+    );
+  });
+
+  it('accepts a description-only generator row', async () => {
+    fs.writeFileSync(
+      path.join(tempDir, 'description.cjs'),
+      "module.exports = () => [{ description: 'only a description' }];",
+    );
+    const result = await evaluate(
+      {
+        basePath: tempDir,
+        prompts: ['hello'],
+        providers: ['echo'],
+        tests: { path: 'description.cjs' },
+      },
+      { cache: false },
+    );
+    expect((await result.getResults())[0]).toMatchObject({
+      success: true,
+      response: { output: 'hello' },
+    });
+  });
+
+  it.each(['string', 'array'] as const)('preserves a %s remote scenario source', async (form) => {
+    const uri = 'az://account/container/tests.yaml';
+    vi.mocked(readAzureBlobText).mockResolvedValue('- vars: { source: remote }');
+    const configPath = writeConfig('remote-scenario', {
+      scenarios: [
+        { config: [{}], tests: (form === 'string' ? uri : [uri]) as unknown as TestCase[] },
+      ],
+    });
+    const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+    expect(testSuite.scenarios?.[0].tests?.map((test) => test.vars?.source)).toEqual(['remote']);
+    expect(readAzureBlobText).toHaveBeenCalledExactlyOnceWith(uri);
+  });
+
+  it.each(['top', 'scenario'] as const)(
+    'loads %s test sources beside a glob-matched config in a literal bracket directory',
+    async (location) => {
+      const configPath = writeConfig(
+        '[slug]',
+        location === 'top'
+          ? { tests: ['cases.yaml'] }
+          : { scenarios: [{ config: [{}], tests: ['cases.yaml'] as unknown as TestCase[] }] },
+      );
+      fs.writeFileSync(
+        path.join(path.dirname(configPath), 'cases.yaml'),
+        '- vars: { source: selected }',
+      );
+      const { testSuite } = await resolveConfigs(
+        { config: [path.join(tempDir, '*', 'config.json')] },
+        {},
+      );
+      const tests = location === 'top' ? testSuite.tests : testSuite.scenarios?.[0].tests;
+      expect(tests?.map((test) => test.vars?.source)).toEqual(['selected']);
+    },
+  );
+
+  it.each(['top', 'scenario', 'external-scenario'] as const)(
+    'retains a later config source and generator inputs during %s replay',
+    async (location) => {
+      const configs = ['first', 'second'].map((name) => {
+        const source = { path: 'tests.cjs', config: { value: 'file://value.json' } };
+        const configPath = writeConfig(
+          name,
+          location === 'top'
+            ? { tests: source }
+            : {
+                scenarios:
+                  location === 'scenario'
+                    ? [{ config: [{}], tests: [source] as unknown as TestCase[] }]
+                    : ['file://scenario.yaml'],
+              },
+        );
+        const dir = path.dirname(configPath);
+        fs.writeFileSync(path.join(dir, 'value.json'), JSON.stringify(name));
+        fs.writeFileSync(
+          path.join(dir, 'tests.cjs'),
+          'module.exports = (config) => [{ vars: { source: config.value } }];',
+        );
+        fs.writeFileSync(
+          path.join(dir, 'scenario.yaml'),
+          JSON.stringify([{ config: [{}], tests: [source] }]),
+        );
+        return configPath;
+      });
+      const first = await resolveConfigs({ config: configs }, {});
+      const replay = await resolveConfigs({}, JSON.parse(JSON.stringify(first.config)));
+      for (const { testSuite } of [first, replay]) {
+        const tests =
+          location === 'top'
+            ? testSuite.tests
+            : testSuite.scenarios?.flatMap((scenario) => scenario.tests ?? []);
+        expect(tests?.map((test) => test.vars?.source)).toEqual(['first', 'second']);
+      }
+    },
+  );
+
+  it.each(['default', 'scenario', 'scenario-tests'] as const)(
+    'renders %s file references using the combined env before making paths absolute',
+    async (location) => {
+      const shared = path.join(tempDir, 'shared');
+      fs.mkdirSync(shared);
+      fs.writeFileSync(path.join(shared, 'default.yaml'), 'vars: { source: shared }');
+      fs.writeFileSync(
+        path.join(shared, 'scenarios.yaml'),
+        '- config: [{}]\n  tests: [{ vars: { source: shared } }]',
+      );
+      fs.writeFileSync(path.join(shared, 'tests.yaml'), '- vars: { source: shared }');
+      const first = writeConfig(
+        'template-first',
+        location === 'default'
+          ? { defaultTest: 'file://{{ env.SHARED_DIR }}/default.yaml' }
+          : {
+              scenarios:
+                location === 'scenario'
+                  ? ['file://{{ env.SHARED_DIR }}/scenarios.yaml']
+                  : [
+                      {
+                        config: [{}],
+                        tests: ['file://{{ env.SHARED_DIR }}/tests.yaml'] as unknown as TestCase[],
+                      },
+                    ],
+            },
+      );
+      const second = writeConfig('template-second', {
+        env: { SHARED_DIR: shared, PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'true' },
+      });
+      const { testSuite } = await resolveConfigs({ config: [first, second] }, {});
+      const test =
+        location === 'default' ? testSuite.defaultTest : testSuite.scenarios?.[0].tests?.[0];
+      expect(test).toMatchObject({ vars: { source: 'shared' } });
+    },
+  );
+
+  it('reports a missing literal scenario source instead of running zero tests', async () => {
+    const configPath = writeConfig('missing-scenario', {
+      scenarios: [{ config: [{}], tests: ['file://missing.yaml'] as unknown as TestCase[] }],
+    });
+    await expect(resolveConfigs({ config: [configPath] }, {})).rejects.toThrow(
+      'No test files found',
+    );
+  });
+
+  it('resolves an explicit CLI tests path from the working directory', async () => {
+    const configPath = writeConfig('cli-path', {});
+    for (const [directory, source] of [
+      [tempDir, 'working-directory'],
+      [path.dirname(configPath), 'wrong-config-shadow'],
+    ]) {
+      fs.mkdirSync(path.join(directory, 'tests'));
+      fs.writeFileSync(path.join(directory, 'tests/cases.yaml'), `- vars: { source: ${source} }`);
+    }
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
+    try {
+      const { testSuite } = await resolveConfigs(
+        { config: [configPath], tests: 'tests/cases.yaml' },
+        {},
+      );
+      expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['working-directory']);
+    } finally {
+      cwd.mockRestore();
+    }
+  });
+
+  it('uses config-relative references inside a nested defaultTest file', async () => {
+    const configPath = writeConfig('default-root', { defaultTest: 'file://defaults/default.yaml' });
+    const dir = path.dirname(configPath);
+    fs.mkdirSync(path.join(dir, 'defaults'));
+    fs.writeFileSync(
+      path.join(dir, 'defaults/default.yaml'),
+      'vars: vars.yaml\nprovider: file://provider.yaml',
+    );
+    fs.writeFileSync(path.join(dir, 'vars.yaml'), 'source: config-root');
+    fs.writeFileSync(path.join(dir, 'provider.yaml'), 'id: echo\nlabel: root');
+    fs.writeFileSync(path.join(dir, 'defaults/provider.yaml'), 'id: echo\nlabel: wrong-shadow');
+    const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+    expect(testSuite.defaultTest).toMatchObject({
+      vars: { source: 'config-root' },
+      provider: { label: 'root' },
+    });
+  });
+
+  it('retains each suite directory for deferred graders after another config loads', async () => {
+    const suites = [];
+    for (const name of ['fixture-first-unique', 'fixture-second-unique']) {
+      const configPath = writeConfig(name, {
+        prompts: [name],
+        tests: [
+          { assert: [{ type: 'llm-rubric', value: 'correct', provider: 'file://grader.cjs' }] },
+        ],
+      });
+      fs.writeFileSync(
+        path.join(path.dirname(configPath), 'grader.cjs'),
+        `module.exports = class {
+        id() { return ${JSON.stringify(name)}; }
+        async callApi(prompt) { const pass = prompt.includes(${JSON.stringify(name)}); return { output: JSON.stringify({ pass, score: pass ? 1 : 0, reason: ${JSON.stringify(name)} }) }; }
+      }`,
+      );
+      suites.push(await resolveConfigs({ config: [configPath] }, {}));
+    }
+    const results = await Promise.all(
+      suites.map(async ({ config, testSuite }) => {
+        const result = await evaluateResolved(testSuite, new Eval(config), {});
+        return (await result.getResults())[0];
+      }),
+    );
+    expect(results.map((result) => result.success)).toEqual([true, true]);
+    expect(results.map((result) => result.gradingResult?.componentResults?.[0]?.reason)).toEqual([
+      'fixture-first-unique',
+      'fixture-second-unique',
+    ]);
+  });
+
   it('uses process settings after removing the previous suite environment', async () => {
     const first = await resolveConfigs(
       {
@@ -408,7 +728,11 @@ describe('suite environment loading', () => {
 
   it('resolves prompts and external tests relative to every expanded config path', async () => {
     for (const name of ['first', 'second']) {
-      const configPath = externalConfig(name);
+      const configPath = writeConfig(name, { tests: 'tests.yaml' });
+      fs.writeFileSync(
+        path.join(path.dirname(configPath), 'tests.yaml'),
+        `- vars: { source: ${name} }\n`,
+      );
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
       config.prompts = ['file://prompt.txt'];
       fs.writeFileSync(configPath, JSON.stringify(config));
@@ -420,7 +744,18 @@ describe('suite environment loading', () => {
         ['first', 'second'].map((name) => `file://${path.join(tempDir, name, 'prompt.txt')}`),
       ),
     );
-    expect(config.tests).toHaveLength(2);
+    expect((config.tests as TestCase[]).map((test) => test.vars?.source).sort()).toEqual([
+      'first',
+      'second',
+    ]);
+    const { testSources } = await resolveConfigs(
+      { config: [path.join(tempDir, '*', 'config.json')] },
+      {},
+    );
+    expect(testSources?.map((source) => source.basePath).sort()).toEqual(
+      ['first', 'second'].map((name) => path.join(tempDir, name)),
+    );
+    expect(testSources?.map((source) => source.tests)).toEqual(['tests.yaml', 'tests.yaml']);
   });
 
   it.each([{}, { OPENAI_API_KEY: 'replacement-key' }])(

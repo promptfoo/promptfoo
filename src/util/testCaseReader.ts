@@ -6,7 +6,7 @@ import { parse as parsePath } from 'path';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import { globSync } from 'glob';
+import { escape as escapeGlob, globSync } from 'glob';
 import cliState from '../cliState';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
@@ -44,7 +44,8 @@ type AzureBlobTestFileExtension = 'csv' | 'json' | 'jsonl' | 'yaml' | 'yml';
 
 const SHA256_BLOB_SUFFIX = /\.[a-f0-9]{64}$/i;
 
-// Config resolution and the programmatic API can read the same rows more than once.
+// Identity-only: preserve fetched rows during in-process rereads.
+// Replay reloads saved source references; arbitrary clones do not retain this marker.
 const remoteTestCases = new WeakSet<TestCase>();
 
 function preserveRemoteTests(tests: TestCase[]): TestCase[] {
@@ -270,8 +271,7 @@ function getStandaloneTestsFileMetadata(
     throw new Error(`Too many colons. Invalid test file script path: ${varsPath}`);
   }
 
-  const pathWithoutFunction =
-    lastColonIndex > 1 ? resolvedVarsPath.slice(0, lastColonIndex) : resolvedVarsPath;
+  const pathWithoutFunction = stripFunctionSuffix(resolvedVarsPath);
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
   // Sheet specifiers apply only to xlsx/xls basenames. Inspecting the basename preserves `#`
@@ -497,7 +497,7 @@ async function readTestWithEnv(
     // Validate the shape of the test case
     // We skip validation when loading the default test case, since it may not have all the properties
     throw new Error(
-      `Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, threshold.\n\nInstead got:\n${JSON.stringify(
+      `Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, description, threshold.\n\nInstead got:\n${JSON.stringify(
         testCase,
         null,
         2,
@@ -539,14 +539,20 @@ async function loadTestsFromGlobWithEnv(
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
 
-  const testFiles: Array<string> = globSync(resolvedPath, {
-    windowsPathsNoEscape: true,
-  });
+  const testFiles: string[] = fs.existsSync(resolvedPath)
+    ? [resolvedPath]
+    : globSync(
+        path.resolve(
+          escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
+          path.relative(path.resolve(basePath), resolvedPath),
+        ),
+        {
+          windowsPathsNoEscape: true,
+        },
+      );
 
   // Check for possible function names in the path (Windows-aware)
-  const lastColonIndex = resolvedPath.lastIndexOf(':');
-  const pathWithoutFunction: string =
-    lastColonIndex > 1 ? resolvedPath.slice(0, lastColonIndex) : resolvedPath;
+  const pathWithoutFunction = stripFunctionSuffix(resolvedPath);
   // Only add the file if it's not already included by glob and it's a special file type
   if (
     (isJavascriptFile(pathWithoutFunction) || pathWithoutFunction.endsWith('.py')) &&
@@ -566,6 +572,9 @@ async function loadTestsFromGlobWithEnv(
 
   const ret: TestCase[] = [];
   if (testFiles.length < 1) {
+    if (!hasGlobMagic(path.relative(path.resolve(basePath), resolvedPath))) {
+      throw new Error(`No test files found for path: ${loadTestsGlob}`);
+    }
     logger.error(`No test files found for path: ${loadTestsGlob}`);
     return ret;
   }
@@ -573,9 +582,7 @@ async function loadTestsFromGlobWithEnv(
     let testCases: TestCase[] | undefined;
     const testBasePath = path.dirname(testFile);
     // Extract path without function name (Windows-aware)
-    const lastColonIndex = testFile.lastIndexOf(':');
-    const pathWithoutFunction: string =
-      lastColonIndex > 1 ? testFile.slice(0, lastColonIndex) : testFile;
+    const pathWithoutFunction = stripFunctionSuffix(testFile);
 
     // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
     const fileWithoutSheet = testFile.split('#')[0];
@@ -638,7 +645,7 @@ async function readTestsWithEnv(
 ): Promise<TestCase[]> {
   const loadStandalone = async (source: string, config?: Record<string, any>) => {
     const tests = await readStandaloneTestsFile(source, basePath, config);
-    if (source.includes('://') && !source.startsWith('file://')) {
+    if (isRemoteTestsReference(source)) {
       // Resolve local provider and vars references only for local sources.
       return tests;
     }
@@ -682,18 +689,16 @@ async function readTestsWithEnv(
     if (typeof globOrTest === 'string') {
       // Extract path without function name (Windows-aware)
       const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
-      const lastColonIndex = pathWithoutScheme.lastIndexOf(':');
-      const pathWithoutFunction: string =
-        lastColonIndex > 1 ? pathWithoutScheme.slice(0, lastColonIndex) : pathWithoutScheme;
+      const pathWithoutFunction = stripFunctionSuffix(pathWithoutScheme);
       // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
       const pathWithoutSheet = globOrTest.split('#')[0];
-      // For Python, JS, xlsx/xls files, or files with potential function names, use readStandaloneTestsFile
+      // Read standalone sources, then resolve provider and vars references for local rows.
       if (
         isJavascriptFile(pathWithoutFunction) ||
         pathWithoutFunction.endsWith('.py') ||
         pathWithoutSheet.endsWith('.xlsx') ||
         pathWithoutSheet.endsWith('.xls') ||
-        lastColonIndex > 1
+        pathWithoutFunction !== pathWithoutScheme
       ) {
         ret.push(...(await loadStandalone(globOrTest)));
       } else {
@@ -768,14 +773,8 @@ function stripSheetSelector(resolvedPath: string): string {
 }
 
 /** References the loader fetches over the network rather than reading from disk. */
-function isRemoteTestsReference(reference: string): boolean {
-  return (
-    reference.startsWith('http://') ||
-    reference.startsWith('https://') ||
-    reference.startsWith('az://') ||
-    reference.startsWith('huggingface://') ||
-    reference.startsWith('hf://')
-  );
+export function isRemoteTestsReference(reference: string): boolean {
+  return reference.includes('://') && !reference.startsWith('file://');
 }
 
 function hasGlobMagic(reference: string): boolean {

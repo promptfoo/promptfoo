@@ -230,9 +230,12 @@ async function createRuntimeTestSuite(
     defaultTest: defaultTest as TestSuite['defaultTest'],
     scenarios: testSuiteConfig.scenarios as Scenario[],
     providers: loadedProviders,
-    tests: await readTests(testSuiteConfig.tests, '', testSuiteConfig.env),
-    nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
-    prompts: await processPrompts(testSuiteConfig.prompts),
+    tests: await readTests(testSuiteConfig.tests, testSuiteConfig.basePath, testSuiteConfig.env),
+    nunjucksFilters: await readFilters(
+      testSuiteConfig.nunjucksFilters || {},
+      testSuiteConfig.basePath,
+    ),
+    prompts: await processPrompts(testSuiteConfig.prompts, testSuiteConfig.basePath),
   };
 }
 
