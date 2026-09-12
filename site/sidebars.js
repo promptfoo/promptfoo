@@ -356,6 +356,7 @@ const sidebars = {
       collapsed: false,
       items: [
         { type: 'doc', id: 'getting-started' },
+        { type: 'doc', id: 'canaries' },
         {
           type: 'category',
           label: 'Configuration',
