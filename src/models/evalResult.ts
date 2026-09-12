@@ -8,9 +8,11 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { ProviderConfig } from '../providers/shared';
+import { PromptfooAttributes } from '../tracing/genaiTracer';
 import {
   type ApiProvider,
   type AtomicTestCase,
+  type EnvOverrides,
   type EvaluateResult,
   type EvaluateTable,
   type EvaluateTableOutput,
@@ -20,6 +22,7 @@ import {
   type ProviderOptions,
   type ProviderResponse,
   ResultFailureReason,
+  type TraceData,
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
@@ -771,14 +774,86 @@ function redactSensitiveResultFieldsForDb<
 
 // Read the `PROMPTFOO_STRIP_*` output-projection flags. Shared by the JSONL-artifact
 // sanitizer and the EvalResult -> EvaluateResult projection so both honor the same env.
-function getStripFlags() {
-  return {
-    shouldStripPromptText: getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
-    shouldStripResponseOutput: getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false),
-    shouldStripTestVars: getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false),
-    shouldStripGradingResult: getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false),
-    shouldStripMetadata: getEnvBool('PROMPTFOO_STRIP_METADATA', false),
+export function getStripFlags(env?: EnvOverrides) {
+  const readFlag = (name: string) => {
+    const value = env?.[name];
+    return value === undefined
+      ? getEnvBool(name, false)
+      : ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
   };
+  return {
+    shouldStripPromptText: readFlag('PROMPTFOO_STRIP_PROMPT_TEXT'),
+    shouldStripResponseOutput: readFlag('PROMPTFOO_STRIP_RESPONSE_OUTPUT'),
+    shouldStripTestVars: readFlag('PROMPTFOO_STRIP_TEST_VARS'),
+    shouldStripGradingResult: readFlag('PROMPTFOO_STRIP_GRADING_RESULT'),
+    shouldStripMetadata: readFlag('PROMPTFOO_STRIP_METADATA'),
+  };
+}
+
+export type OutputStripFlags = ReturnType<typeof getStripFlags>;
+
+export function projectTracesForOutput(traces: TraceData[], stripFlags = getStripFlags()) {
+  const {
+    shouldStripMetadata,
+    shouldStripPromptText,
+    shouldStripResponseOutput,
+    shouldStripTestVars,
+  } = stripFlags;
+
+  if (
+    !shouldStripMetadata &&
+    !shouldStripPromptText &&
+    !shouldStripResponseOutput &&
+    !shouldStripTestVars
+  ) {
+    return traces;
+  }
+
+  return traces.map((trace) => {
+    let projectedTrace = trace;
+    if (shouldStripMetadata) {
+      const { metadata: _metadata, ...traceWithoutMetadata } = trace;
+      projectedTrace = traceWithoutMetadata;
+    } else if (shouldStripTestVars && trace.metadata && 'vars' in trace.metadata) {
+      const { metadata: traceMetadata, ...traceWithoutMetadata } = trace;
+      const { vars: _vars, ...metadata } = traceMetadata;
+      projectedTrace = {
+        ...traceWithoutMetadata,
+        ...(Object.keys(metadata).length > 0 && { metadata }),
+      };
+    }
+
+    if (!shouldStripPromptText && !shouldStripResponseOutput) {
+      return projectedTrace;
+    }
+
+    return {
+      ...projectedTrace,
+      spans: projectedTrace.spans.map((span) => {
+        if (!span.attributes) {
+          return span;
+        }
+
+        const projectedAttributes = { ...span.attributes };
+        if (shouldStripPromptText) {
+          delete projectedAttributes[PromptfooAttributes.REQUEST_BODY];
+          delete projectedAttributes[PromptfooAttributes.PROMPT_LABEL];
+        }
+        if (shouldStripResponseOutput) {
+          delete projectedAttributes[PromptfooAttributes.RESPONSE_BODY];
+          delete projectedAttributes['codex.reasoning.summary'];
+        }
+
+        const { attributes: _attributes, ...projectedSpan } = span;
+        return {
+          ...projectedSpan,
+          ...(Object.keys(projectedAttributes).length > 0 && {
+            attributes: projectedAttributes,
+          }),
+        };
+      }),
+    };
+  });
 }
 
 /**
@@ -789,14 +864,20 @@ function getStripFlags() {
  * grading result, metadata). In-memory rows keep their real values for hooks; only the
  * on-disk copy is sanitized.
  */
-export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
+export function sanitizeResultForJsonlArtifact<T extends object>(
+  result: T,
+  stripFlags = getStripFlags(),
+): T {
+  if (!asRecord(result)) {
+    return result;
+  }
   const {
     shouldStripPromptText,
     shouldStripResponseOutput,
     shouldStripTestVars,
     shouldStripGradingResult,
     shouldStripMetadata,
-  } = getStripFlags();
+  } = stripFlags;
 
   const artifactResult = result as T & Record<string, unknown>;
   const redacted = redactSensitiveResultFieldsForDb({
@@ -867,7 +948,10 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
  * `PROMPTFOO_STRIP_*` projections as `summary.results`. Non-mutating: returns a projected copy,
  * leaving in-memory rows real for hooks.
  */
-export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
+export function sanitizeTableForArtifact(
+  table: EvaluateTable,
+  stripFlags = getStripFlags(),
+): EvaluateTable {
   if (!asRecord(table)) {
     return table;
   }
@@ -888,7 +972,7 @@ export function sanitizeTableForArtifact(table: EvaluateTable): EvaluateTable {
     shouldStripGradingResult,
     shouldStripMetadata,
     shouldStripTestVars,
-  } = getStripFlags();
+  } = stripFlags;
 
   const sanitizeTestCase = (testCase: AtomicTestCase | undefined) =>
     testCase
@@ -1363,14 +1447,14 @@ export default class EvalResult {
     invalidateEvaluationCache(this.evalId);
   }
 
-  toEvaluateResult(): EvaluateResult {
+  toEvaluateResult(stripFlags = getStripFlags()): EvaluateResult {
     const {
       shouldStripPromptText,
       shouldStripResponseOutput,
       shouldStripTestVars,
       shouldStripGradingResult,
       shouldStripMetadata,
-    } = getStripFlags();
+    } = stripFlags;
 
     const response = projectProviderResponse(this.response, {
       stripMetadata: shouldStripMetadata,
@@ -1440,8 +1524,11 @@ export default class EvalResult {
 }
 
 /** Normalize an `EvalResult` model instance or a plain `EvaluateResult` to `EvaluateResult`. */
-export function asEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
-  return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
+export function asEvaluateResult(
+  result: EvalResult | EvaluateResult,
+  stripFlags = getStripFlags(),
+): EvaluateResult {
+  return 'toEvaluateResult' in result ? result.toEvaluateResult(stripFlags) : result;
 }
 
 /** Canonical `testIdx:promptIdx` key used to dedupe/look up a result across the streaming,

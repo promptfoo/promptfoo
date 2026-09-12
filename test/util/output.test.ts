@@ -281,7 +281,7 @@ describe('writeOutput', () => {
 
   describe.each(['csv', 'sheets'] as const)('artifact boundary %s', (format) => {
     it.each(['none', 'prompt', 'output', 'vars', 'grading', 'metadata', 'all'])(
-      'honors independent %s flags while preserving table accounting',
+      'honors independent scoped %s flags over ambient flags while preserving table accounting',
       async (flag) => {
         const strips = (category: string) => flag === 'all' || flag === category;
         const prompt = createCompletedPrompt('table header canary', {
@@ -330,13 +330,18 @@ describe('writeOutput', () => {
           rows: eval_.results.map((r) => r.testCase),
           table: eval_.oldResults?.table,
         });
-        const restore = mockProcessEnv({
+        eval_.config.env = {
           PROMPTFOO_STRIP_PROMPT_TEXT: String(strips('prompt')),
           PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strips('output')),
           PROMPTFOO_STRIP_TEST_VARS: String(strips('vars')),
           PROMPTFOO_STRIP_GRADING_RESULT: String(strips('grading')),
           PROMPTFOO_STRIP_METADATA: String(strips('metadata')),
-        });
+        };
+        const restore = mockProcessEnv(
+          Object.fromEntries(
+            Object.entries(eval_.config.env).map(([key, value]) => [key, String(value !== 'true')]),
+          ),
+        );
         try {
           await writeOutput(
             format === 'csv' ? 'boundary.csv' : 'https://docs.google.com/spreadsheets/d/fixture',
@@ -381,6 +386,174 @@ describe('writeOutput', () => {
           }).toEqual(before);
         } finally {
           restore();
+        }
+      },
+    );
+  });
+
+  describe.each([2, 3])('scoped V%s writer projection', (version) => {
+    it.each(['none', 'prompt', 'output', 'vars', 'grading', 'metadata', 'all'])(
+      'uses one %s projection for rows, config and traces',
+      async (mode) => {
+        const strips = (category: string) => mode === 'all' || mode === category;
+        const env = {
+          PROMPTFOO_STRIP_PROMPT_TEXT: String(strips('prompt')),
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strips('output')),
+          PROMPTFOO_STRIP_TEST_VARS: String(strips('vars')),
+          PROMPTFOO_STRIP_GRADING_RESULT: String(strips('grading')),
+          PROMPTFOO_STRIP_METADATA: String(strips('metadata')),
+        };
+        const restoreEnv = mockProcessEnv(
+          Object.fromEntries(Object.keys(env).map((key) => [key, 'false'])),
+        );
+        const prompt = createCompletedPrompt('writer-prompt', { label: 'writer-label' });
+        const evaluation = new Eval(
+          {
+            prompts: ['writer-prompt'],
+            tests: [{ vars: { subject: 'writer-var' } }],
+            defaultTest: { options: { prefix: 'writer-prefix', suffix: 'writer-suffix' } },
+          },
+          { prompts: [prompt], vars: ['subject'] },
+        );
+        const attributes = {
+          'promptfoo.request.body': 'writer-prompt',
+          'promptfoo.prompt.label': 'writer-label',
+          'promptfoo.response.body': 'writer-output',
+          'codex.reasoning.summary': 'writer-reasoning',
+          'codex.reasoning.summary.count': 2,
+        };
+        const trace = {
+          traceId: 'writer-trace',
+          evaluationId: evaluation.id,
+          testCaseId: 'writer-case',
+          metadata: { note: 'writer-trace-note', vars: { subject: 'writer-var' } },
+          spans: [
+            { spanId: 'writer-span', name: 'provider', startTime: 1, endTime: 2, attributes },
+          ],
+        };
+        const traceSpy = vi
+          .spyOn(getTraceStore(), 'getTracesByEvaluation')
+          .mockResolvedValue([trace]);
+        try {
+          await evaluation.addResult(
+            createEvaluateResult({
+              prompt,
+              testCase: { vars: { subject: 'writer-var' } },
+              response: {
+                output: 'writer-output',
+                tokenUsage: { total: 5, prompt: 2, completion: 3 },
+              },
+              gradingResult: createGradingResult({ reason: 'writer-grade' }),
+              metadata: { note: 'writer-metadata' },
+              score: 0.75,
+            }),
+          );
+          if (version === 2) {
+            const summary = await evaluation.toEvaluateSummary();
+            evaluation.oldResults = {
+              version: 2,
+              timestamp: summary.timestamp,
+              stats: summary.stats,
+              results: summary.results,
+              table: await evaluation.getTable(),
+            };
+          }
+          evaluation.config.env = env;
+          const before = structuredClone({
+            config: evaluation.config,
+            rows: evaluation.results,
+            legacy: evaluation.oldResults,
+            trace,
+          });
+          Object.assign(
+            process.env,
+            Object.fromEntries(
+              Object.entries(env).map(([key, value]) => [key, String(value !== 'true')]),
+            ),
+          );
+          await writeOutput('scoped-writer.json', evaluation, null);
+          const text = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+          const exported = JSON.parse(text) as OutputFile;
+          const row = exported.results.results[0];
+          expect(exported.results.version).toBe(version);
+          expect(exported.results.results).toHaveLength(1);
+          expect(row.prompt.raw).toBe(strips('prompt') ? '[prompt stripped]' : 'writer-prompt');
+          expect(row.prompt.label).toBe(strips('prompt') ? '[prompt stripped]' : 'writer-label');
+          expect(row.response?.output).toBe(
+            strips('output') ? '[output stripped]' : 'writer-output',
+          );
+          expect(row.vars).toEqual(strips('vars') ? {} : { subject: 'writer-var' });
+          expect(row.gradingResult?.reason).toBe(strips('grading') ? undefined : 'writer-grade');
+          expect(row.metadata).toEqual(strips('metadata') ? {} : { note: 'writer-metadata' });
+          expect(row.score).toBe(0.75);
+          expect(row.response?.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
+          expect(exported.config.prompts).toEqual([
+            strips('prompt') ? '[prompt stripped]' : 'writer-prompt',
+          ]);
+          expect((exported.config.tests as { vars?: unknown }[])[0].vars).toEqual(
+            strips('vars') ? undefined : { subject: 'writer-var' },
+          );
+          const defaultTest = exported.config.defaultTest;
+          if (!defaultTest || typeof defaultTest === 'string') {
+            throw new Error('Expected exported default test object');
+          }
+          expect(defaultTest.options?.prefix).toBe(strips('prompt') ? undefined : 'writer-prefix');
+          expect(defaultTest.options?.suffix).toBe(strips('prompt') ? undefined : 'writer-suffix');
+          expect(exported.traces![0].spans[0].attributes).toEqual({
+            ...(!strips('prompt') && {
+              'promptfoo.request.body': 'writer-prompt',
+              'promptfoo.prompt.label': 'writer-label',
+            }),
+            ...(!strips('output') && {
+              'promptfoo.response.body': 'writer-output',
+              'codex.reasoning.summary': 'writer-reasoning',
+            }),
+            'codex.reasoning.summary.count': 2,
+          });
+          if ('table' in exported.results) {
+            expect(exported.results.table.head.prompts[0].label).toBe(
+              strips('prompt') ? '[prompt stripped]' : 'writer-label',
+            );
+            expect(exported.results.table.body[0].outputs[0].text).toBe(
+              strips('output') ? '[output stripped]' : 'writer-output',
+            );
+          } else {
+            expect(exported.results.prompts[0].label).toBe(
+              strips('prompt') ? '[prompt stripped]' : 'writer-label',
+            );
+          }
+          expect(exported.traces![0].metadata).toEqual(
+            strips('metadata')
+              ? undefined
+              : {
+                  note: 'writer-trace-note',
+                  ...(!strips('vars') && { vars: { subject: 'writer-var' } }),
+                },
+          );
+          expect(exported.traces![0]).toMatchObject({
+            traceId: 'writer-trace',
+            evaluationId: evaluation.id,
+            testCaseId: 'writer-case',
+            spans: [{ spanId: 'writer-span', startTime: 1, endTime: 2 }],
+          });
+          if (version === 3) {
+            await writeOutput('scoped-writer.jsonl', evaluation, null);
+            const jsonl = vi
+              .mocked(fsPromises.appendFile)
+              .mock.calls.map(([, data]) => String(data))
+              .join('');
+            expect(jsonl.trim().split(/\r?\n/)).toHaveLength(1);
+            expect(JSON.parse(jsonl)).toEqual(row);
+          }
+          expect({
+            config: evaluation.config,
+            rows: evaluation.results,
+            legacy: evaluation.oldResults,
+            trace,
+          }).toEqual(before);
+        } finally {
+          traceSpy.mockRestore();
+          restoreEnv();
         }
       },
     );
@@ -1646,51 +1819,75 @@ describe('writeOutput', () => {
     }
   });
 
-  it.each([false, true])(
-    'omits stripped prompt and response bodies from trace span attributes: %s',
-    async (strip) => {
-      const restoreEnv = mockProcessEnv({
-        PROMPTFOO_STRIP_PROMPT_TEXT: String(strip),
-        PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(strip),
+  it.each([
+    { prompt: false, output: false },
+    { prompt: true, output: false },
+    { prompt: false, output: true },
+    { prompt: true, output: true },
+  ])('projects trace content independently: %j', async ({ prompt, output }) => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_STRIP_PROMPT_TEXT: String(prompt),
+      PROMPTFOO_STRIP_RESPONSE_OUTPUT: String(output),
+      PROMPTFOO_STRIP_TEST_VARS: 'false',
+      PROMPTFOO_STRIP_METADATA: 'false',
+    });
+    const attributes = {
+      'promptfoo.request.body': 'trace-prompt-secret',
+      'promptfoo.prompt.label': 'trace-label-canary',
+      'promptfoo.response.body': 'trace-response-secret',
+      'codex.reasoning.summary': 'trace-reasoning-secret',
+      'codex.reasoning.summary.count': 2,
+      operation: 'provider-call',
+    };
+    const trace = {
+      traceId: 'trace-strip-bodies',
+      evaluationId: 'eval-strip-bodies',
+      testCaseId: 'case-strip-bodies',
+      spans: [
+        {
+          spanId: 'span-strip-bodies',
+          name: 'provider',
+          startTime: 1,
+          endTime: 3,
+          attributes,
+        },
+      ],
+    };
+    const before = structuredClone(trace);
+    const traceSpy = vi.spyOn(getTraceStore(), 'getTracesByEvaluation').mockResolvedValue([trace]);
+    try {
+      await writeOutput('output.json', new Eval({}), null);
+      const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
+      const parsed = JSON.parse(written);
+      expect(parsed.traces[0]).toMatchObject({
+        traceId: trace.traceId,
+        evaluationId: trace.evaluationId,
+        testCaseId: trace.testCaseId,
+        spans: [{ spanId: 'span-strip-bodies', name: 'provider', startTime: 1, endTime: 3 }],
       });
-      const attributes = {
-        'promptfoo.request.body': 'trace-prompt-secret',
-        'promptfoo.prompt.label': 'trace-label-canary',
-        'promptfoo.response.body': 'trace-response-secret',
+      expect(parsed.traces[0].spans[0].attributes).toEqual({
+        ...(!prompt && {
+          'promptfoo.request.body': 'trace-prompt-secret',
+          'promptfoo.prompt.label': 'trace-label-canary',
+        }),
+        ...(!output && {
+          'promptfoo.response.body': 'trace-response-secret',
+          'codex.reasoning.summary': 'trace-reasoning-secret',
+        }),
+        'codex.reasoning.summary.count': 2,
         operation: 'provider-call',
-      };
-      const trace = {
-        traceId: 'trace-strip-bodies',
-        evaluationId: 'eval-strip-bodies',
-        testCaseId: 'case-strip-bodies',
-        spans: [{ spanId: 'span-strip-bodies', name: 'provider', startTime: 1, attributes }],
-      };
-      const before = structuredClone(trace);
-      const traceSpy = vi
-        .spyOn(getTraceStore(), 'getTracesByEvaluation')
-        .mockResolvedValue([trace]);
-      try {
-        await writeOutput('output.json', new Eval({}), null);
-        const written = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-        const parsed = JSON.parse(written);
-        expect(parsed.traces[0].spans[0].attributes).toEqual(
-          strip ? { operation: 'provider-call' } : attributes,
-        );
-        for (const value of [
-          'trace-prompt-secret',
-          'trace-label-canary',
-          'trace-response-secret',
-        ]) {
-          expect(written.includes(value)).toBe(!strip);
-        }
-        expect(trace).toEqual(before);
-        expect(trace.spans[0].attributes).toBe(attributes);
-      } finally {
-        traceSpy.mockRestore();
-        restoreEnv();
-      }
-    },
-  );
+      });
+      expect(written.includes('trace-prompt-secret')).toBe(!prompt);
+      expect(written.includes('trace-label-canary')).toBe(!prompt);
+      expect(written.includes('trace-response-secret')).toBe(!output);
+      expect(written.includes('trace-reasoning-secret')).toBe(!output);
+      expect(trace).toEqual(before);
+      expect(trace.spans[0].attributes).toBe(attributes);
+    } finally {
+      traceSpy.mockRestore();
+      restoreEnv();
+    }
+  });
 
   it('preserves deep non-secret config fields in JSON output', async () => {
     const outputPath = 'output.json';
