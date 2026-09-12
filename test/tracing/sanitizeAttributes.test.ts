@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeTraceAttributes } from '../../src/tracing/sanitizeAttributes';
+import {
+  getTraceTextRedactor,
+  sanitizeTraceAttributes,
+} from '../../src/tracing/sanitizeAttributes';
+
+it.each([
+  JSON.stringify({ rows: [{ value: 'PRIVATE_JSON_LEAF' }] }),
+  JSON.stringify(['PRIVATE_JSON_LEAF']),
+  JSON.stringify('PRIVATE_JSON_LEAF'),
+])('redacts decoded echoes of serialized private attributes: %s', (original) => {
+  const redact = getTraceTextRedactor([{ original, sanitized: '[REDACTED]' }]);
+  expect(redact('query returned PRIVATE_JSON_LEAF')).not.toContain('PRIVATE_JSON_LEAF');
+});
+
+it('preserves text around existing redaction markers on repeated sanitization', () => {
+  const redact = getTraceTextRedactor(
+    [{ original: '[REDACTED]', sanitized: '<redacted>' }],
+    '<redacted>',
+  );
+  expect(redact('token [REDACTED] [REDACTED]')).toBe('token <redacted> <redacted>');
+});
 
 describe('sanitizeTraceAttributes', () => {
   it('preserves safe token metrics and redacts normalized credential names recursively', () => {

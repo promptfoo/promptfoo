@@ -712,20 +712,16 @@ describe('TraceStore', () => {
           })
           .mockReturnValueOnce({
             from: vi.fn().mockReturnThis(),
-            where: vi
-              .fn()
-              .mockResolvedValue([
-                {
-                  spanId: 'span',
-                  name: secret,
-                  statusMessage: secret,
-                  startTime: 1,
-                  attributes: eventAttributes ? {} : nested,
-                  events: [
-                    { name: secret, timestamp: 2, attributes: eventAttributes ? nested : {} },
-                  ],
-                },
-              ]),
+            where: vi.fn().mockResolvedValue([
+              {
+                spanId: 'span',
+                name: secret,
+                statusMessage: secret,
+                startTime: 1,
+                attributes: eventAttributes ? {} : nested,
+                events: [{ name: secret, timestamp: 2, attributes: eventAttributes ? nested : {} }],
+              },
+            ]),
           });
         expect(JSON.stringify(await traceStore.getTrace('deep-stored'))).not.toContain(secret);
       },

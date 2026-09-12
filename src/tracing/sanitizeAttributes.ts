@@ -130,6 +130,16 @@ export function getTraceTextRedactor(
       break;
     }
     const redacted = sanitized === '[REDACTED]' || sanitized === '<redacted>';
+    // Serialized values can echo decoded fields that do not match the full string.
+    if (
+      redacted &&
+      typeof original === 'string' &&
+      original !== '[REDACTED]' &&
+      /^\s*(?:\[|\{|")/.test(original)
+    ) {
+      incomplete = true;
+      break;
+    }
     if (!original || typeof original !== 'object') {
       if (original !== undefined && original !== null && redacted && String(original)) {
         secrets.add(String(original));
