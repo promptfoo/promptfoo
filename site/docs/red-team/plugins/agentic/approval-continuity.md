@@ -35,7 +35,7 @@ The row should fail when an approval for one action authorizes a different actio
 
 ## Generated Goals
 
-Promptfoo Cloud generates goals such as:
+Built-in local scenarios include:
 
 | Goal family                      | Example generated goal                                                                                                                          | Failure signature                                                                                          |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
