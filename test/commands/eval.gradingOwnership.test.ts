@@ -445,6 +445,122 @@ describe('watch evaluation ownership of supplied grading providers', () => {
   );
 
   it.each(['success', 'rejection'])(
+    'reuses Q cleanup registered while P cleanup awaits its %s',
+    async (outcome) => {
+      const pStarted = deferred();
+      const finishP = deferred();
+      const qStarted = deferred();
+      const finishQ = deferred();
+      const configuredC = deferred();
+      const events: string[] = [];
+      const p = {
+        id: () => 'sequential-cleanup-P',
+        callApi: vi.fn(async () => ({ output: 'target-A' })),
+        cleanup: vi.fn(async () => {
+          pStarted.resolve();
+          await finishP.promise;
+          events.push('P:cleanup:end');
+        }),
+      } satisfies ApiProvider;
+      let qCleanups = 0;
+      const q = {
+        id: () => 'sequential-cleanup-Q',
+        callApi: vi.fn(async function (this: ApiProvider, prompt: string) {
+          expect(this).toBe(q);
+          events.push(`Q:call:${prompt}`);
+          return {
+            output: prompt.includes('GRADE_A')
+              ? '{"pass":true,"score":1,"reason":"Q graded A"}'
+              : prompt,
+          };
+        }),
+        cleanup: vi.fn(async () => {
+          if (++qCleanups === 1) {
+            events.push('Q:cleanup:start');
+            qStarted.resolve();
+            await finishQ.promise;
+            events.push('Q:cleanup:settled');
+            if (outcome === 'rejection') {
+              throw new Error('Synthetic Q cleanup rejection');
+            }
+          }
+        }),
+      } satisfies ApiProvider;
+      const suites: TestSuite[] = [
+        {
+          providers: [p],
+          prompts: [{ raw: 'A', label: 'A' }],
+          tests: [{ assert: [{ type: 'llm-rubric', value: 'GRADE_A', provider: q }] }],
+        },
+        { providers: [q], prompts: [{ raw: 'B', label: 'B' }], tests: [{}] },
+        { providers: [q], prompts: [{ raw: 'C', label: 'C' }], tests: [{}] },
+      ];
+      vi.mocked(resolveConfigs).mockImplementation(async () => {
+        const testSuite = suites.shift();
+        if (!testSuite) {
+          throw new Error('Unexpected evaluation');
+        }
+        if (testSuite.prompts[0].raw === 'C') {
+          configuredC.resolve();
+        }
+        const config = { outputPath: ['sequential-cleanup.json'] };
+        cliState.config = config;
+        return { config, testSuite, basePath: '' };
+      });
+      const pending: ReturnType<typeof doEval>[] = [];
+      const run = () => {
+        const result = doEval(
+          { write: false, table: false, share: false, cache: false },
+          {},
+          'sequential-cleanup.mjs',
+          { maxConcurrency: 1, showProgressBar: false },
+        );
+        pending.push(result);
+        void result.catch(() => {});
+        return result;
+      };
+      try {
+        const runA = run();
+        await Promise.race([
+          pStarted.promise,
+          runA.then(() => {
+            throw new Error('A completed without entering P cleanup');
+          }),
+        ]);
+        const runB = run();
+        await Promise.race([
+          qStarted.promise,
+          runB.then(() => {
+            throw new Error('B completed without entering Q cleanup');
+          }),
+        ]);
+        finishP.resolve();
+        // Drain the already-released P continuation while the first Q cleanup is held.
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(q.cleanup).toHaveBeenCalledTimes(1);
+        run();
+        await configuredC.promise;
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(events).not.toContain('Q:call:C');
+        finishQ.resolve();
+        const results = await Promise.all(pending);
+        expect(events.indexOf('Q:cleanup:settled')).toBeLessThan(events.indexOf('Q:call:C'));
+        expect(p.cleanup).toHaveBeenCalledTimes(1);
+        expect(q.cleanup).toHaveBeenCalledTimes(2);
+        expect(writeMultipleOutputs).toHaveBeenCalledTimes(3);
+        for (const result of results) {
+          const summary = await result.toEvaluateSummary();
+          expect(summary.stats).toMatchObject({ successes: 1, failures: 0, errors: 0 });
+        }
+      } finally {
+        finishP.resolve();
+        finishQ.resolve();
+        await Promise.allSettled(pending);
+      }
+    },
+  );
+
+  it.each(['success', 'rejection'])(
     'waits for pending cleanup before reusing a provider after cleanup %s',
     async (outcome) => {
       const cleanupStarted = deferred();

@@ -1,4 +1,3 @@
-import { stat } from 'node:fs/promises';
 import { Agent as HttpAgent } from 'node:http';
 import crypto from 'crypto';
 
@@ -249,7 +248,6 @@ type CredentialScope = Pick<
   region: string;
   environment: Record<string, string | undefined>;
   helperEndpointPolicy?: string;
-  profileFingerprint?: string;
 };
 
 function sameCredentialScope(left: CredentialScope, right: CredentialScope): boolean {
@@ -260,29 +258,8 @@ function sameCredentialScope(left: CredentialScope, right: CredentialScope): boo
     left.secretAccessKey === right.secretAccessKey &&
     left.sessionToken === right.sessionToken &&
     left.helperEndpointPolicy === right.helperEndpointPolicy &&
-    left.profileFingerprint === right.profileFingerprint &&
     Object.keys(left.environment).length === Object.keys(right.environment).length &&
     Object.entries(left.environment).every(([name, value]) => right.environment[name] === value)
-  );
-}
-
-async function credentialFileFingerprint(
-  environment: CredentialScope['environment'],
-): Promise<string> {
-  const paths = [environment.AWS_CONFIG_FILE, environment.AWS_SHARED_CREDENTIALS_FILE].filter(
-    (value): value is string => Boolean(value),
-  );
-  return JSON.stringify(
-    await Promise.all(
-      paths.map(async (file) => {
-        try {
-          const { mtimeMs, size } = await stat(file);
-          return [file, mtimeMs, size];
-        } catch {
-          return [file];
-        }
-      }),
-    ),
   );
 }
 
@@ -455,7 +432,6 @@ abstract class SageMakerGenericProvider {
       CREDENTIAL_ENV_VARS.map((name) => [name, process.env[name]]),
     );
     let helperEndpointPolicy: string | undefined;
-    let profileFingerprint: string | undefined;
     const selectedProfile = profile || environment.AWS_PROFILE;
     if (selectedProfile || !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY)) {
       const { booleanSelector, loadConfig, parseKnownFiles, SelectorType } = smithyConfig;
@@ -463,9 +439,6 @@ abstract class SageMakerGenericProvider {
         filepath: environment.AWS_SHARED_CREDENTIALS_FILE || undefined,
         configFilepath: environment.AWS_CONFIG_FILE || undefined,
       });
-      profileFingerprint = selectedProfile
-        ? JSON.stringify([profiles, await credentialFileFingerprint(environment)])
-        : undefined;
       const inputs = profileCredentialInputs(
         profiles,
         selectedProfile || 'default',
@@ -538,7 +511,7 @@ abstract class SageMakerGenericProvider {
         }
       }
     }
-    return { region, profile, environment, helperEndpointPolicy, profileFingerprint };
+    return { region, profile, environment, helperEndpointPolicy };
   }
 
   private async getEndpointPolicy(
@@ -1519,6 +1492,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       );
 
       const output = await this.parseResponse(responseBody, request.responsePath);
+      abortSignal.throwIfAborted();
+      this.assertRuntimeGeneration(generation);
 
       // Handle known errors:
       if (typeof output === 'object' && output !== null && 'code' in output) {
@@ -1559,6 +1534,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       if (isCacheEnabled() && !bustCache && result.output && !result.error) {
         const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
         const resultToCache = JSON.stringify(result);
+        abortSignal.throwIfAborted();
+        this.assertRuntimeGeneration(generation);
 
         try {
           await cache.set(getCacheKey(), resultToCache);

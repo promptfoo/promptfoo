@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import https from 'node:https';
 import { createRequire } from 'node:module';
@@ -25,7 +25,7 @@ vi.mock('../../src/telemetry', () => ({ default: { record: vi.fn() } }));
 // interceptor replaces only token-cache contents and credential_process output.
 const requireFromTest = createRequire(import.meta.url);
 const requireFromSso = createRequire(requireFromTest.resolve('@aws-sdk/credential-provider-sso'));
-const { externalDataInterceptor } = requireFromSso(
+const { externalDataInterceptor, parseKnownFiles } = requireFromSso(
   '@smithy/core/config',
 ) as typeof import('@smithy/core/config');
 const { NodeHttpHandler } = requireFromSso(
@@ -302,6 +302,48 @@ sso_role_name = TestRole
     vi.useRealTimers();
     await rm(directory, { recursive: true, force: true });
   });
+
+  it.each(['comment', 'unrelated profile'])(
+    'retains valid SDK role credentials after a config %s edit',
+    async (edit) => {
+      await configure();
+      ssoReply = async () =>
+        response({
+          roleCredentials: {
+            accessKeyId: 'SSO_RETAINED',
+            secretAccessKey: 'offline-secret',
+            sessionToken: 'offline-session',
+            expiration: startTime.getTime() + hour,
+          },
+        });
+      const files = {
+        profile: 'named',
+        configFilepath: configFile,
+        filepath: path.join(directory, 'credentials'),
+      };
+      const baseline = defaultProvider(files);
+      const firstCredentials = await baseline();
+      const parsedBefore = await parseKnownFiles(files);
+      const provider = createProvider();
+      await expectSignedRow(provider, 'SSO_RETAINED');
+      expect(ssoCalls).toHaveLength(2);
+
+      // Login has expired, but both providers' issued role credentials remain valid.
+      vi.setSystemTime(startTime.getTime() + 120_000);
+      await appendFile(
+        configFile,
+        edit === 'comment'
+          ? '\n# unrelated comment\n'
+          : '\n[profile unrelated]\nregion = ap-south-1\n',
+      );
+      // Observe the real SDK's path-keyed file cache; never invent parser freshness.
+      expect(await parseKnownFiles(files)).toEqual(parsedBefore);
+      expect(await baseline()).toBe(firstCredentials);
+      await expectSignedRow(provider, 'SSO_RETAINED');
+      expect(ssoCalls).toHaveLength(2);
+      expect(sageCalls).toHaveLength(2);
+    },
+  );
 
   it('retains adaptive retry quota and throttle state across sequential rows', async () => {
     await configure('', null);

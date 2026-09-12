@@ -1,7 +1,11 @@
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import crypto from 'crypto';
 
 import { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 
 // Use vi.hoisted to create mock functions that can be used in vi.mock factories
@@ -63,6 +67,91 @@ describe('SageMakerCompletionProvider', () => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
+
+  it.each(['no later request', 'newer same-key result', 'uncanceled result'])(
+    'guards completion caching across an async file transform with %s',
+    async (scenario) => {
+      const directory = await mkdtemp(path.join(tmpdir(), 'sagemaker-response-transform-'));
+      const transformPath = path.join(directory, 'transform.cjs');
+      await writeFile(
+        transformPath,
+        `let entered, release, exited;
+const started = new Promise(resolve => { entered = resolve; });
+const gate = new Promise(resolve => { release = resolve; });
+const finished = new Promise(resolve => { exited = resolve; });
+async function transform(data) {
+  if (data.output === 'A') { entered(); await gate; exited(); }
+  return data.output;
+}
+Object.assign(transform, { started, release, finished });
+module.exports = transform;
+`,
+      );
+      const fixture: { started: Promise<void>; release: () => void; finished: Promise<void> } =
+        await importModule(transformPath);
+      const entries = new Map<string, string>();
+      mockIsCacheEnabled.mockReturnValue(true);
+      mockCacheGet.mockImplementation(async (key: string) => entries.get(key));
+      mockCacheSet.mockImplementation(async (key: string, value: string) => {
+        entries.set(key, value);
+      });
+      mockSend
+        .mockResolvedValueOnce({ Body: new TextEncoder().encode('{"output":"A"}') })
+        .mockResolvedValueOnce({ Body: new TextEncoder().encode('{"output":"B"}') });
+      const provider = new SageMakerCompletionProvider('async-transform', {
+        config: {
+          accessKeyId: 'SYNTHETIC_TRANSFORM',
+          secretAccessKey: 'synthetic-transform-secret',
+          region: 'us-east-1',
+          modelType: 'custom',
+          responseFormat: { path: `file://${transformPath}` },
+        },
+      });
+      const controller = new AbortController();
+      const request = provider.callApi('same request', undefined, {
+        abortSignal: controller.signal,
+      });
+      void request.catch(() => {});
+      try {
+        await Promise.race([
+          fixture.started,
+          request.then(() => {
+            throw new Error('Request completed without entering the file transform');
+          }),
+        ]);
+        if (scenario !== 'uncanceled result') {
+          const reason = new Error('Synthetic response-transform cancellation');
+          controller.abort(reason);
+          await expect(request).rejects.toBe(reason);
+        }
+        if (scenario === 'newer same-key result') {
+          expect(await provider.callApi('same request')).toMatchObject({ output: 'B' });
+          expect(mockCacheSet).toHaveBeenCalledTimes(1);
+        }
+        fixture.release();
+        await fixture.finished;
+        // Drain the actual parse/cache continuation after the file transform returns.
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        if (scenario === 'no later request') {
+          expect(mockCacheSet).not.toHaveBeenCalled();
+          expect(entries.size).toBe(0);
+        } else {
+          const output = scenario === 'newer same-key result' ? 'B' : 'A';
+          if (scenario === 'uncanceled result') {
+            expect(await request).toMatchObject({ output });
+          }
+          expect(mockCacheSet).toHaveBeenCalledTimes(1);
+          expect(await provider.callApi('same request')).toMatchObject({ output, cached: true });
+          expect(mockSend).toHaveBeenCalledTimes(scenario === 'newer same-key result' ? 2 : 1);
+        }
+      } finally {
+        fixture.release();
+        await Promise.allSettled([request]);
+        provider.cleanup();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   describe('cache flag behavior', () => {
     it('should set cached flag when returning cached response from callApi', async () => {

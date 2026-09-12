@@ -1047,13 +1047,16 @@ export async function doEval(
       for (const provider of providersToCleanup) {
         // Another watch run may start while an earlier provider's cleanup awaits.
         if (!activeProviderRuns.has(provider)) {
-          const cleanup = Promise.resolve()
-            .then(() => provider.cleanup?.({ reason: 'evaluation-complete' }))
-            .catch((error) => {
-              logger.warn('Provider cleanup failed after evaluation.', { error });
-            });
-          // Register before calling user cleanup, including synchronous re-entry.
-          pendingProviderCleanups.set(provider, cleanup);
+          let cleanup = pendingProviderCleanups.get(provider);
+          if (!cleanup) {
+            cleanup = Promise.resolve()
+              .then(() => provider.cleanup?.({ reason: 'evaluation-complete' }))
+              .catch((error) => {
+                logger.warn('Provider cleanup failed after evaluation.', { error });
+              });
+            // Register before calling user cleanup, including synchronous re-entry.
+            pendingProviderCleanups.set(provider, cleanup);
+          }
           try {
             await cleanup;
           } finally {
