@@ -7,6 +7,7 @@ import {
   getHumanRating,
   getNamedMetricTotal,
   getNamedMetricTotals,
+  getPromptEvalId,
   hasHumanRating,
   hashVarSchema,
   parseEvalOutputPromptHash,
@@ -45,6 +46,21 @@ describe('eval output prompt hashes', () => {
     expect(parseEvalOutputPromptHash('#details-row-0-prompt-1')).toBeNull();
     expect(parseEvalOutputPromptHash('#details-row-1-prompt-0')).toBeNull();
     expect(parseEvalOutputPromptHash('#other-fragment')).toBeNull();
+  });
+});
+
+describe('comparison prompt ownership', () => {
+  it('uses header ownership when filtered tables have no output rows', () => {
+    expect(
+      getPromptEvalId(
+        {
+          head: { prompts: [{ evalId: 'comparison-eval' } as any], vars: [] },
+          body: [],
+        },
+        0,
+        'base-eval',
+      ),
+    ).toBe('comparison-eval');
   });
 });
 

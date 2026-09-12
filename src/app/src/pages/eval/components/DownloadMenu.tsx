@@ -17,6 +17,7 @@ import {
   prefetchEvalConfig,
 } from '../../../utils/api';
 import { useTableStore as useResultsViewStore } from './store';
+import { getPromptEvalId } from './utils';
 
 type ResultsViewState = ReturnType<typeof useResultsViewStore.getState>;
 type ResultsTable = NonNullable<ResultsViewState['table']>;
@@ -371,12 +372,14 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
         );
       }
     } catch (error) {
-      showToast(
-        `Failed to export ${exportName.replace('-', ' ')}: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`,
-        'error',
-      );
+      if (isCurrent()) {
+        showToast(
+          `Failed to export ${exportName.replace('-', ' ')}: ${
+            error instanceof Error ? error.message : 'Unknown error'
+          }`,
+          'error',
+        );
+      }
     } finally {
       if (isCurrent()) {
         setAdvancedExportInProgress(null);
@@ -484,15 +487,24 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
     await runAdvancedExport('dpo', async (isCurrent) => {
       setExportProgressTotal(table.body.reduce((total, row) => total + row.outputs.length, 0));
-      const { config: fullConfig } = await fetchEvalConfig(evalId);
-      const fullConfigPrompts = Array.isArray(fullConfig.prompts)
-        ? fullConfig.prompts
-        : typeof fullConfig.prompts === 'string'
-          ? [fullConfig.prompts]
-          : fullConfig.prompts
-            ? Object.values(fullConfig.prompts)
-            : [];
+      const promptEvalIds = table.head.prompts.map((_, idx) => getPromptEvalId(table, idx, evalId));
+      const configs = new Map<string, UnifiedConfig>(
+        await Promise.all(
+          [...new Set(promptEvalIds)].map(
+            async (ownerEvalId) =>
+              [ownerEvalId, (await fetchEvalConfig(ownerEvalId)).config as UnifiedConfig] as const,
+          ),
+        ),
+      );
       const prompts = table.head.prompts.map((prompt, idx) => {
+        const fullConfig = configs.get(promptEvalIds[idx]);
+        const fullConfigPrompts = Array.isArray(fullConfig?.prompts)
+          ? fullConfig.prompts
+          : typeof fullConfig?.prompts === 'string'
+            ? [fullConfig.prompts]
+            : fullConfig?.prompts
+              ? Object.values(fullConfig.prompts)
+              : [];
         const leanValue = prompt.label || prompt.display || prompt.raw;
         const matchingPrompt = fullConfigPrompts.find(
           (candidate) =>

@@ -458,6 +458,33 @@ describe('ResultsTable Metrics Display', () => {
     expect(await screen.findByText('full shared prompt')).toBeInTheDocument();
   });
 
+  it('hydrates a comparison prompt header from its owning evaluation', async () => {
+    vi.mocked(fetchEvalConfig).mockResolvedValue({
+      config: { prompts: ['comparison prompt'] },
+    } as any);
+    const store = vi.mocked(useTableStore)();
+    vi.mocked(useTableStore).mockReturnValue({
+      ...store,
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [{ ...mockTable.head.prompts[0], raw: '[content omitted: 120000 characters]' }],
+        },
+        body: mockTable.body.map((row) => ({
+          ...row,
+          outputs: row.outputs.map((output: any) => ({ ...output, evalId: 'comparison-eval' })),
+        })),
+      },
+    });
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await userEvent.click(screen.getByText('[content omitted: 120000 characters]'));
+
+    expect(await screen.findByText('comparison prompt')).toBeInTheDocument();
+    expect(fetchEvalConfig).toHaveBeenCalledWith('comparison-eval');
+  });
+
   it('keeps the header/body boundary border visible with sticky headers', () => {
     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
       inComparisonMode: false,

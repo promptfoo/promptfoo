@@ -637,12 +637,14 @@ export function mergeComparisonTables(
         // Main eval prompts with eval ID prefix
         ...mainTable.head.prompts.map((prompt) => ({
           ...prompt,
+          evalId: mainEvalId,
           label: `[${mainEvalId}] ${prompt.label || ''}`,
         })),
         // Comparison eval prompts with their eval ID prefixes
         ...comparisonData.flatMap(({ evalId, table }) =>
           table.head.prompts.map((prompt) => ({
             ...prompt,
+            evalId,
             label: `[${evalId}] ${prompt.label || ''}`,
           })),
         ),

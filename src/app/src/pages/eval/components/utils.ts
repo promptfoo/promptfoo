@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
-import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
+import type { EvaluateTable, EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
 
 const EVAL_OUTPUT_PROMPT_HASH_PATTERN = /^#details-row-(\d+)-prompt-(\d+)$/;
 
@@ -14,6 +14,21 @@ export interface EvalUrlParts {
   pathname: string;
   search: string;
   hash: string;
+}
+
+// Comparison columns retain their source evaluation on each output. Use that
+// provenance when a trimmed prompt needs its original config.
+export function getPromptEvalId(
+  table: Pick<EvaluateTable, 'head' | 'body'>,
+  promptIndex: number,
+  fallbackEvalId: string,
+): string {
+  const promptEvalId = (table.head.prompts[promptIndex] as { evalId?: string } | undefined)?.evalId;
+  return (
+    promptEvalId ??
+    table.body.find((row) => row.outputs[promptIndex]?.evalId)?.outputs[promptIndex]?.evalId ??
+    fallbackEvalId
+  );
 }
 
 /**

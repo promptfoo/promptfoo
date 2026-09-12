@@ -368,6 +368,64 @@ describe('DownloadMenu', () => {
     expect(JSON.parse(await blob.text())[0].prompts).toEqual(['full prompt', 'full prompt']);
   });
 
+  it('hydrates comparison DPO prompts from their owning evaluations', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: {
+          vars: [],
+          prompts: [
+            { provider: 'base', raw: '[content omitted: 120000 characters]' },
+            { provider: 'comparison', raw: '[content omitted: 120000 characters]' },
+          ],
+        },
+        body: [
+          {
+            test: {},
+            vars: [],
+            outputs: [
+              { evalId: mockEvalId, pass: true, text: 'base' },
+              { evalId: 'eval-2', pass: true, text: 'comparison' },
+            ],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalConfigMock
+      .mockResolvedValueOnce({ config: { ...mockConfig, prompts: ['base prompt'] } })
+      .mockResolvedValueOnce({ config: { ...mockConfig, prompts: ['comparison prompt'] } });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+    await waitFor(() => expect(downloadBlobMock).toHaveBeenCalled());
+
+    expect(fetchEvalConfigMock).toHaveBeenCalledWith(mockEvalId);
+    expect(fetchEvalConfigMock).toHaveBeenCalledWith('eval-2');
+    const blob = downloadBlobMock.mock.calls[0][0] as Blob;
+    expect(JSON.parse(await blob.text())[0].prompts).toEqual(['base prompt', 'comparison prompt']);
+  });
+
+  it('does not toast a stale advanced export rejection after unmount', async () => {
+    let rejectConfig: ((error: Error) => void) | undefined;
+    fetchEvalConfigMock.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectConfig = reject;
+      }),
+    );
+
+    const { unmount } = renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+    unmount();
+    rejectConfig?.(new Error('stale config'));
+    await Promise.resolve();
+
+    expect(showToastMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('Failed to export dpo'),
+      'error',
+    );
+  });
+
   it('limits in-flight detail requests across all columns of a wide row', async () => {
     const outputs = Array.from({ length: 24 }, (_, index) => ({
       id: `output-${index}`,

@@ -77,6 +77,7 @@ import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import {
   getNamedMetricTotals,
+  getPromptEvalId,
   parseEvalOutputPromptHash,
   setEvalDetailsHash,
   useEvalDetailsHash,
@@ -1320,6 +1321,7 @@ function PromptColumnHeader({
   headPromptCount,
   maxTextLength,
   evalId,
+  promptEvalId,
   onFailureFilterToggle,
   setFilterMode,
   setCustomMetricsDialogOpen,
@@ -1341,6 +1343,7 @@ function PromptColumnHeader({
   headPromptCount: number;
   maxTextLength: number;
   evalId: string | null;
+  promptEvalId: string | null;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   setFilterMode: (mode: EvalResultsFilterMode) => void;
   setCustomMetricsDialogOpen: (open: boolean) => void;
@@ -1413,7 +1416,7 @@ function PromptColumnHeader({
         loadExpandedText={
           isOmittedText(prompt.raw) && evalId
             ? async () => {
-                const { config } = await fetchEvalConfig(evalId);
+                const { config } = await fetchEvalConfig(promptEvalId ?? evalId);
                 const prompts = Array.isArray(config.prompts)
                   ? config.prompts
                   : typeof config.prompts === 'string'
@@ -2482,6 +2485,7 @@ function ResultsTable({
                 headPromptCount={head.prompts.length}
                 maxTextLength={maxTextLength}
                 evalId={evalId}
+                promptEvalId={evalId ? getPromptEvalId({ head, body }, idx, evalId) : null}
                 onFailureFilterToggle={onFailureFilterToggle}
                 setFilterMode={setFilterMode}
                 setCustomMetricsDialogOpen={setCustomMetricsDialogOpen}
