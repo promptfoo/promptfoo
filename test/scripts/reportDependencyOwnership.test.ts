@@ -724,11 +724,26 @@ describe('dependency ownership report', () => {
     ]);
   });
 
+  it('bounds braced Closure types before prose', () => {
+    write(
+      'src/index.js',
+      "/** @type {?import('schema').Node} Example: import('prose') */\nexport {};",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'schema' }),
+    ]);
+  });
+
   it('scans package-root dotfiles', () => {
     write('.releaserc.cjs', "require('release-tool');");
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
       expect.objectContaining({ dependency: 'release-tool' }),
     ]);
+  });
+
+  it('does not scan hidden generated source directories', () => {
+    write('src/.cache/generated.js', "require('generated-only');");
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
   });
 
   it.each([true, false])('reports unresolved src packages with declared=%s', (declared) => {
@@ -942,6 +957,25 @@ describe('dependency ownership report', () => {
   it('ignores require calls shadowed by a function parameter', () => {
     write('src/index.js', "export function load(require) { return require('local-only'); }");
     expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
+  });
+
+  it('keeps require shadowing within its binding scope', () => {
+    write(
+      'src/index.js',
+      "export function load({ require }) { require('local'); }\nfor (let require = () => {}; false;) require('loop');\nrequire('external');",
+    );
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'external' }),
+    ]);
+  });
+
+  it('classifies test declarations as tests', () => {
+    write('src/component.test.d.ts', "import 'test-only';");
+    expect(
+      reportDependencyOwnership(root, config).undeclaredUsages.find(
+        (entry) => entry.dependency === 'test-only',
+      )?.references,
+    ).toEqual([expect.objectContaining({ scope: 'test' })]);
   });
 
   it('ignores require calls shadowed in nested lexical scopes', () => {

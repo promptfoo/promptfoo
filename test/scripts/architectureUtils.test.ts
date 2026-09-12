@@ -123,6 +123,17 @@ describe('resolveInternalModule', () => {
       ).toBe('src/internal/bar/index.d.mts');
     });
 
+    it.each([
+      ['.js', '.d.ts'],
+      ['.mjs', '.d.mts'],
+      ['.cjs', '.d.cts'],
+    ])('maps explicit %s imports to %s declarations', (runtime, declaration) => {
+      write(`src/internal/foo${declaration}`);
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', `./internal/foo${runtime}`)).toBe(
+        `src/internal/foo${declaration}`,
+      );
+    });
+
     it('prefers .tsx over .ts for .jsx specifiers', () => {
       write('src/foo.ts');
       write('src/foo.tsx');
