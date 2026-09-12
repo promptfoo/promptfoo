@@ -48,6 +48,8 @@ Guardrail events must have a timestamp strictly before the tool event. Exact nan
 
 Emit evidence from guardrail evaluation and tool execution order. Useful fields include guardrail names, guardrail type, agent name, route, handoff name, tool call, side effect, and ordering.
 
+When a separate control names its target tool, include the exact tool identifier, such as `policy for update_seat`. A control for `update_seat_preferences` does not cover `update_seat`.
+
 Tool-name, input, and output attributes sharing a span and call ID describe one
 invocation. A failed, denied, or skipped control does not cover a tool that still
 executes, whether the control is on the same span or an earlier step on its route.
