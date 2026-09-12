@@ -7,6 +7,7 @@ import safeStringify from 'fast-safe-stringify';
 import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
 
 const MAX_DEPTH = 4;
+const MAX_RAW_HTTP_MESSAGES = 8;
 const DUMMY_BASE = 'http://placeholder';
 
 export const REDACTED = '[REDACTED]';
@@ -145,6 +146,7 @@ export const SECRET_FIELD_NAMES = new Set([
 
   // Header-specific patterns (normalized: hyphens removed)
   'xapikey', // x-api-key
+  'xclientsecret', // x-client-secret
   'xauthtoken', // x-auth-token
   'xaccesstoken', // x-access-token
   'xauth', // x-auth
@@ -836,7 +838,12 @@ export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T 
 /**
  * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
-function sanitizeJsonString(str: string, depth: number, maxDepth: number): string {
+function sanitizeJsonString(
+  str: string,
+  depth: number,
+  maxDepth: number,
+  rawHttpMessages = 0,
+): string {
   const redactedAzureBlobUri = redactAzureBlobSasToken(str);
   if (redactedAzureBlobUri !== str) {
     return redactedAzureBlobUri;
@@ -865,14 +872,20 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
     if (rawHttpBoundary !== -1) {
       const separator = str.slice(rawHttpBoundary).match(/^\r?\n\r?\n/)?.[0] ?? '\n\n';
       const rawHeaders = str.slice(0, rawHttpBoundary);
-      const headers = redactRawHttpHeaders(rawHeaders);
-      const body = str.slice(rawHttpBoundary + separator.length);
+      const headers = redactRawHttpHeaders(rawHeaders).replace(
+        /^([A-Z]+\s+)(\S+)(\s+HTTP\/\d(?:\.\d)?)/i,
+        (_, prefix, target, suffix) => `${prefix}${sanitizeUrl(target)}${suffix}`,
+      );
+      const rawBody = str.slice(rawHttpBoundary + separator.length);
+      const body = sanitizeMultipartSecretFields(rawBody);
       const isRawHttp =
         headers !== rawHeaders ||
         /^(?:[A-Z]+\s+\S+\s+HTTP\/\d(?:\.\d)?|HTTP\/\d(?:\.\d)?\s+\d{3})/i.test(rawHeaders);
       const sanitizedBody =
-        isRawHttp && depth < maxDepth ? sanitizeJsonString(body, depth + 1, maxDepth) : body;
-      if (headers !== rawHeaders || sanitizedBody !== body) {
+        isRawHttp && depth < maxDepth && rawHttpMessages < MAX_RAW_HTTP_MESSAGES
+          ? sanitizeJsonString(body, depth + 1, maxDepth, rawHttpMessages + 1)
+          : body;
+      if (headers !== rawHeaders || sanitizedBody !== rawBody) {
         return `${headers}${separator}${sanitizedBody}`;
       }
     }
@@ -918,6 +931,15 @@ function looksLikeUrlEncodedFormData(value: string): boolean {
 // FIRST `=` (so values can contain `=`, e.g. base64 padding); `[^&;]*` lets the
 // value run to the next pair separator (`&` or `;`).
 const URL_ENCODED_PAIR_RE = /(^|[&;])([^=&;]+)=([^&;]*)/g;
+
+// Redact values of credential-named multipart fields while preserving the
+// boundary and non-secret parts byte-for-byte.
+function sanitizeMultipartSecretFields(value: string): string {
+  return value.replace(
+    /(content-disposition:\s*form-data;[^\r\n]*\bname="([^"]+)"[^\r\n]*\r?\n(?:[^\r\n]+\r?\n)*\r?\n)([\s\S]*?)(?=\r?\n--)/gi,
+    (part, headers, name) => (isSecretField(name) ? `${headers}${REDACTED}` : part),
+  );
+}
 
 function decodeFormComponent(component: string): string | undefined {
   try {
@@ -1042,12 +1064,19 @@ export function sanitizeUrlEncodedString(value: string): string {
 /**
  * Sanitize plain object fields
  */
-function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap = false): any {
+function sanitizePlainObject(
+  obj: any,
+  depth: number,
+  maxDepth: number,
+  isEnvMap = false,
+  parentKey = '',
+): any {
   const sanitized: any = {};
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
     if (
-      (isSecretKey(key) && (!value || typeof value !== 'object')) ||
+      (isSecretKey(key) && (key !== 'auth' || !value || typeof value !== 'object')) ||
+      (parentKey === 'tls' && key === 'key') ||
       (key === 'value' && obj.type === 'api_key')
     ) {
       sanitized[key] = REDACTED;
@@ -1062,7 +1091,7 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.
-      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth, key === 'env');
+      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth, key === 'env', key);
     }
   }
   return sanitized;
@@ -1071,7 +1100,13 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
 /**
  * Recursively sanitize an object, redacting secret fields at any depth
  */
-function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap = false): any {
+function recursiveSanitize(
+  obj: any,
+  depth = 0,
+  maxDepth = MAX_DEPTH,
+  isEnvMap = false,
+  parentKey = '',
+): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
@@ -1093,7 +1128,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth));
+    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth, false, parentKey));
   }
 
   // Handle class instances
@@ -1103,7 +1138,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap);
+  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap, parentKey);
 }
 
 /**

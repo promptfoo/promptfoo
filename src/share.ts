@@ -146,7 +146,9 @@ async function sendEvalRecord(
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
   const redactedConfig = redactAzureBlobSasTokens(
-    sanitizeObject(sanitizeTracingConfigForPersistence(evalRecord.config)),
+    sanitizeObject(sanitizeTracingConfigForPersistence(evalRecord.config), {
+      maxDepth: Number.POSITIVE_INFINITY,
+    }),
   );
 
   // Preserve the verified runtime team on server-issued unified configs. For

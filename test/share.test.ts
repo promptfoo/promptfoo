@@ -826,7 +826,12 @@ describe('createShareableUrl', () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       mockEval.config = {
         tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
-        providers: [{ id: 'openai:gpt-4', config: { apiKey: 'provider-secret' } }],
+        providers: [
+          {
+            id: 'openai:gpt-4',
+            config: { apiKey: 'provider-secret', mcp: { servers: [{ url: 'http://local' }] } },
+          },
+        ],
       };
 
       mockFetch
@@ -847,6 +852,9 @@ describe('createShareableUrl', () => {
       );
       expect(mockFetch.mock.calls[0][1].body).not.toContain('azure-secret');
       expect(requestBody.config.providers[0].config.apiKey).toBe('[REDACTED]');
+      expect(requestBody.config.providers[0].config.mcp.servers).toEqual([
+        { url: 'http://local/' },
+      ]);
       expect(mockFetch.mock.calls[0][1].body).not.toContain('provider-secret');
     });
 

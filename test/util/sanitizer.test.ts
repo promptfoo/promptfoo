@@ -393,6 +393,14 @@ describe('sanitizeObject', () => {
         ),
       ).toBe('POST /v1 HTTP/1.1\nX-Client-Secret: [REDACTED]\n\n{"apiKey":"[REDACTED]"}');
       expect(sanitizeObject('X-Session-Token: header-secret')).toBe('X-Session-Token: [REDACTED]');
+      expect(sanitizeObject('POST /v1?api_key=tiny HTTP/1.1\n\nbody')).toBe(
+        'POST /v1?api_key=%5BREDACTED%5D HTTP/1.1\n\nbody',
+      );
+      expect(
+        sanitizeObject(
+          'POST /v1 HTTP/1.1\nContent-Type: multipart/form-data; boundary=x\n\n--x\nContent-Disposition: form-data; name="api_key"\n\ntiny\n--x--',
+        ),
+      ).toContain('name="api_key"\n\n[REDACTED]\n--x--');
       expect(sanitizeObject('ordinary text\n\n'.repeat(1000))).toBe(
         'ordinary text\n\n'.repeat(1000),
       );
@@ -1067,6 +1075,27 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject(input, { maxDepth: Number.POSITIVE_INFINITY });
       expect(result.l1.l2.l3.l4.l5.l6.data).toBe('reachable');
       expect(result.l1.l2.l3.l4.l5.l6.token).toBe('[REDACTED]');
+    });
+
+    it('keeps infinite-depth sanitization bounded for nested raw HTTP', () => {
+      const raw = 'GET / HTTP/1.1\n\n'.repeat(100);
+      expect(() => sanitizeObject(raw, { maxDepth: Number.POSITIVE_INFINITY })).not.toThrow();
+    });
+
+    it('redacts structured credential maps without hiding ordinary keys', () => {
+      expect(
+        sanitizeObject({
+          apiKey: { raw: 'tiny' },
+          headers: { 'X-Client-Secret': 'tiny' },
+          tls: { key: '-----BEGIN PRIVATE KEY-----\ntiny', cert: 'public' },
+          key: 'public',
+        }),
+      ).toEqual({
+        apiKey: '[REDACTED]',
+        headers: { 'X-Client-Secret': '[REDACTED]' },
+        tls: { key: '[REDACTED]', cert: 'public' },
+        key: 'public',
+      });
     });
 
     it('should sanitize at all depth levels within limit', () => {
