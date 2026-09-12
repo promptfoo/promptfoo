@@ -135,7 +135,7 @@ function formatSingleResult(
       (cr) => cr.metadata?.fallbackIntermediate !== true,
     );
     assertions = {
-      totalAssertions: result.testCase.assert?.length || 0,
+      totalAssertions: scoringComponentResults.length,
       passedAssertions: scoringComponentResults.filter((r) => r.pass).length,
       failedAssertions: scoringComponentResults.filter((r) => !r.pass).length,
       componentResults: scoringComponentResults.slice(0, assertionLimit).map((cr, idx) => ({

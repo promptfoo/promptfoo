@@ -419,12 +419,16 @@ export async function matchesContextFaithfulness(
   let finalAnswer = 'Final verdict for each statement in order:';
   finalAnswer = finalAnswer.toLowerCase();
   let verdicts = resp.output.toLowerCase().trim();
+  let parsedVerdictCount = 0;
   let score = 0;
   if (statements.length > 0) {
     if (verdicts.includes(finalAnswer)) {
       verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
-      const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
+      const parsedVerdicts = verdicts
+        .split('.')
+        .filter((answer) => answer.includes('yes') || answer.includes('no'));
       if (parsedVerdicts.length > 0) {
+        parsedVerdictCount = parsedVerdicts.length;
         const unsupportedVerdicts = parsedVerdicts.filter(
           (answer) => !answer.includes('yes'),
         ).length;
@@ -435,11 +439,16 @@ export async function matchesContextFaithfulness(
       const noVerdictCount = verdicts.split('verdict: no').length - 1;
       const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
       if (noVerdictCount + yesVerdictCount > 0) {
+        parsedVerdictCount = noVerdictCount + yesVerdictCount;
         const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
         score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
       }
     }
   }
+  if (statements.length > 0 && parsedVerdictCount === 0) {
+    return graderFail('Context faithfulness grader produced no verdicts', tokensUsed);
+  }
+
   score = Math.min(1, Math.max(0, score));
   const pass = score >= threshold - Number.EPSILON;
   return {

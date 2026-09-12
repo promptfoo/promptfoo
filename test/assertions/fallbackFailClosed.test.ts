@@ -64,6 +64,19 @@ describe('Fallback grading contracts', () => {
     expect(result.componentResults?.[0].metadata?.graderError).toBe(true);
   });
 
+  it('stops when function-call validation is unavailable', async () => {
+    const result = await runAssertions({
+      test: createTestCase([
+        { type: 'is-valid-function-call', fallback: 'next' },
+        { type: 'contains', value: 'test' },
+      ]),
+      providerResponse: mockProviderResponse,
+    });
+    expect(result.pass).toBe(false);
+    expect(result.componentResults).toHaveLength(1);
+    expect(result.componentResults?.[0].metadata?.assertionError).toBe(true);
+  });
+
   it.each([false, true])(
     'preserves detailed fallback usage with a cached primary: %s',
     async (primaryCached) => {

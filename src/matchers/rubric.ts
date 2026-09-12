@@ -924,7 +924,12 @@ export async function runJsonGradingPrompt({
       ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
       : {};
   }
-  const { cachedResponse: _untrustedCachedResponse, ...trustedResponseMetadata } = responseMetadata;
+  const {
+    cachedResponse: _untrustedCachedResponse,
+    assertionError: _untrustedAssertionError,
+    graderError: _untrustedGraderError,
+    ...trustedResponseMetadata
+  } = responseMetadata;
 
   return {
     assertion,

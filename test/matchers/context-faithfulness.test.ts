@@ -215,8 +215,9 @@ describe('matchesContextFaithfulness', () => {
 
     await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
       pass: false,
-      reason: 'Faithfulness 0.00 is < 0.5',
+      reason: 'Context faithfulness grader produced no verdicts',
       score: 0,
+      metadata: { graderError: true },
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),

@@ -73,6 +73,7 @@ describe('resultFormatter fallback diagnostics', () => {
     // The diagnostic fallbackIntermediate component is excluded from the
     // scoring projection.
     expect(assertions?.componentResults).toHaveLength(1);
+    expect(assertions?.totalAssertions).toBe(1);
     expect(assertions?.passedAssertions).toBe(1);
     expect(assertions?.failedAssertions).toBe(0);
 
