@@ -807,6 +807,8 @@ export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema
 export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
 
 export interface AssertionValueFunctionContext {
+  /** Invocation-local environment; excluded from serialized assertion context. */
+  env?: Record<string, string | undefined>;
   prompt: string | undefined;
   vars: Record<string, VarValue>;
   test: AtomicTestCase;

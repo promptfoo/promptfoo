@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import logger from '../logger';
 
 /**
@@ -12,11 +14,12 @@ interface CleanupProvider {
  * Ensures no zombie Python processes are left running.
  */
 class ProviderRegistry {
-  private providers: Set<CleanupProvider> = new Set();
+  private providers = new Map<CleanupProvider, object | undefined>();
+  private scope = new AsyncLocalStorage<object>();
   private shutdownRegistered: boolean = false;
 
   register(provider: CleanupProvider): void {
-    this.providers.add(provider);
+    this.providers.set(provider, this.scope.getStore());
 
     if (!this.shutdownRegistered) {
       this.registerShutdownHandlers();
@@ -40,7 +43,7 @@ class ProviderRegistry {
       logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
 
       await Promise.all(
-        Array.from(this.providers).map((p) =>
+        Array.from(this.providers.keys()).map((p) =>
           p.shutdown().catch((err) => {
             logger.error(`Error shutting down provider: ${err}`);
           }),
@@ -56,8 +59,22 @@ class ProviderRegistry {
     process.once('beforeExit', () => void shutdown('beforeExit'));
   }
 
+  async withScope<T>(callback: () => Promise<T>): Promise<T> {
+    return this.scope.run({}, async () => {
+      try {
+        return await callback();
+      } finally {
+        await this.shutdownAll();
+      }
+    });
+  }
+
   async shutdownAll(): Promise<void> {
-    const results = await Promise.allSettled(Array.from(this.providers).map((p) => p.shutdown()));
+    const scope = this.scope.getStore();
+    const providers = [...this.providers]
+      .filter(([, owner]) => owner === scope)
+      .map(([provider]) => provider);
+    const results = await Promise.allSettled(providers.map((provider) => provider.shutdown()));
 
     // Log any failures but don't throw - cleanup should be defensive
     for (const result of results) {
@@ -66,7 +83,9 @@ class ProviderRegistry {
       }
     }
 
-    this.providers.clear();
+    for (const provider of providers) {
+      this.providers.delete(provider);
+    }
   }
 }
 

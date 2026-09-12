@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvString } from '../../src/envars';
-import { getProcessEnv } from '../../src/envOverrides';
+import { getProcessEnv, withRuntimeEnv } from '../../src/envOverrides';
 import { doEval } from '../../src/node/doEval';
 import { getEvalConfigFromCloud } from '../../src/util/cloud';
 import { readConfig } from '../../src/util/config/load';
@@ -37,6 +37,111 @@ describe('doEval environment files', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it.each(['file', 'inline'] as const)(
+    'exposes isolated env to %s JS callbacks without serializing it',
+    async (mode) => {
+      const hookPath = path.join(tempDir, 'hooks.cjs');
+      const promptPath = path.join(tempDir, 'prompt.cjs');
+      const assertPath = path.join(tempDir, 'assertion.cjs');
+      const callsPath = path.join(tempDir, 'hooks.jsonl');
+      fs.writeFileSync(
+        hookPath,
+        `const fs = require('node:fs'); module.exports.runHook = (name, context) => {
+      if (Object.keys(context).includes('env') || JSON.stringify({ ...context, suite: undefined, test: undefined, result: undefined }).includes(context.env.FILE_ONLY_SECRET)) throw Error('Environment serialized');
+      fs.appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify({name, env:context.env.PROMPTFOO_REVIEW_ENV_PROBE, host:process.env.PROMPTFOO_REVIEW_ENV_PROBE})+'\\n');
+    };`,
+      );
+      fs.writeFileSync(
+        promptPath,
+        `module.exports = context => context.env.PROMPTFOO_REVIEW_ENV_PROBE;`,
+      );
+      fs.writeFileSync(
+        assertPath,
+        `module.exports = (output, context) => output === context.env.PROMPTFOO_REVIEW_ENV_PROBE && !Object.keys(context).includes('env');`,
+      );
+      let arrived = 0;
+      let release!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const runs = await Promise.all(
+        ['first', 'second'].map(async (value) => {
+          const envPath = path.join(tempDir, value + '.env');
+          fs.writeFileSync(
+            envPath,
+            `PROMPTFOO_REVIEW_ENV_PROBE=${value}\nFILE_ONLY_SECRET=private-${value}\n`,
+          );
+          const evaluation = await doEval(
+            {
+              envPath: [envPath],
+              write: false,
+              share: false,
+              table: false,
+              progressBar: false,
+              cache: false,
+            },
+            {
+              prompts:
+                mode === 'file'
+                  ? ['file://' + promptPath]
+                  : [
+                      {
+                        raw: 'inline-env',
+                        label: 'inline-env',
+                        function: async (context) => context.env!.PROMPTFOO_REVIEW_ENV_PROBE,
+                      },
+                    ],
+              providers: [
+                async (prompt, context) => {
+                  if (++arrived === 2) {
+                    release();
+                  }
+                  await ready;
+                  expect(context?.env?.PROMPTFOO_REVIEW_ENV_PROBE).toBe(value);
+                  expect(prompt).toBe(value);
+                  expect(Object.keys(context!)).not.toContain('env');
+                  expect(
+                    JSON.stringify({
+                      ...context,
+                      logger: undefined,
+                      getCache: undefined,
+                      originalProvider: undefined,
+                    }),
+                  ).not.toContain('private-' + value);
+                  expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+                  return { output: value };
+                },
+              ],
+              tests: [{ assert: [{ type: 'javascript', value: 'file://' + assertPath }] }],
+              extensions: ['file://' + hookPath + ':runHook'],
+            },
+            undefined,
+            { eventSource: 'mcp', showProgressBar: false },
+          );
+          const exported = await evaluation.toResultsFile();
+          expect(JSON.stringify(exported)).not.toContain('private-' + value);
+          expect(exported.results.results[0].success).toBe(true);
+          return value;
+        }),
+      );
+      expect(runs).toEqual(['first', 'second']);
+      const hooks = fs
+        .readFileSync(callsPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      for (const value of runs) {
+        expect(
+          hooks
+            .filter((hook) => hook.env === value)
+            .map((hook) => hook.name)
+            .sort(),
+        ).toEqual(['afterAll', 'afterEach', 'beforeAll', 'beforeEach']);
+      }
+      expect(hooks.every((hook) => hook.host === 'host')).toBe(true);
+    },
+  );
+
   it('keeps file defaults below suite values without saving them as config overrides', async () => {
     const configPath = path.join(tempDir, 'config.json');
     fs.writeFileSync(
@@ -62,6 +167,7 @@ describe('doEval environment files', () => {
         ] as const) {
           cliState.withEnv(env, () => {
             expect(getEnvString('PROMPTFOO_REVIEW_ENV_PROBE')).toBe(expected);
+            expect(withRuntimeEnv({}).env.PROMPTFOO_REVIEW_ENV_PROBE).toBe(expected);
             expect(
               getNunjucksEngineForFilePath().renderString('{{env.PROMPTFOO_REVIEW_ENV_PROBE}}', {}),
             ).toBe(expected);

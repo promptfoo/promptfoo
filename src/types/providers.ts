@@ -80,6 +80,8 @@ export interface ProviderOptions {
 }
 
 export interface CallApiContextParams {
+  /** Invocation-local environment, available during evaluation and omitted from serialization. */
+  env?: Record<string, string | undefined>;
   filters?: NunjucksFilterMap;
   getCache?: any;
   logger?: winston.Logger;

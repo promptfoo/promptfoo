@@ -4,6 +4,7 @@ import path from 'path';
 import async from 'async';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
+import { withRuntimeEnv } from '../envOverrides';
 import { handleConversationRelevance } from '../external/assertions/deepeval';
 import { matchesConversationRelevance } from '../external/matchers/deepeval';
 import logger from '../logger';
@@ -430,7 +431,7 @@ async function runAssertionInternal({
     });
   }
 
-  const context: AssertionValueFunctionContext = {
+  const context: AssertionValueFunctionContext = withRuntimeEnv({
     prompt,
     vars: resolvedVars,
     test,
@@ -439,7 +440,7 @@ async function runAssertionInternal({
     providerResponse,
     ...(assertion.config ? { config: structuredClone(assertion.config) } : {}),
     ...(providerResponse?.metadata && { metadata: providerResponse.metadata }),
-  };
+  });
 
   // Add trace data if traceId is available
   if (traceId && assertionMayNeedTraceContext(assertion)) {

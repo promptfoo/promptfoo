@@ -44,3 +44,15 @@ export function getProcessEnv(): NodeJS.ProcessEnv {
       }
     : process.env;
 }
+
+/** Expose invocation-local env to JS callbacks without serializing it with their context. */
+export function withRuntimeEnv<T extends object>(context: T): T & { env: NodeJS.ProcessEnv } {
+  return Object.defineProperty({ ...context }, 'env', {
+    value: {
+      ...getProcessEnv(),
+      ...Object.fromEntries(
+        Object.entries(getEnvOverrides() ?? {}).filter(([, value]) => value !== undefined),
+      ),
+    },
+  }) as T & { env: NodeJS.ProcessEnv };
+}

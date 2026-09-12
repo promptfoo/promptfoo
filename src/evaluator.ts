@@ -19,6 +19,7 @@ import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import { withRuntimeEnv } from './envOverrides';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -1102,9 +1103,14 @@ async function callActiveProvider({
               evalId: callApiContext.evaluationId,
               testIndex,
             },
-            async (context) => activeProvider.callApi(renderedPrompt, context, callApiOptions),
+            async (context) =>
+              activeProvider.callApi(
+                renderedPrompt,
+                withRuntimeEnv(context ?? callApiContext),
+                callApiOptions,
+              ),
           )
-        : activeProvider.callApi(renderedPrompt, callApiContext, callApiOptions);
+        : activeProvider.callApi(renderedPrompt, withRuntimeEnv(callApiContext), callApiOptions);
     return testSuite?.tracing
       ? cliState.withRequestTracingConfig(testSuite.tracing, invoke)
       : invoke();

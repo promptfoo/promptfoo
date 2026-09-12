@@ -29,6 +29,7 @@ import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers/index';
+import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
@@ -411,7 +412,9 @@ export async function doEval(
   const envFileOverrides = isCliEventSource(evaluateOptions) ? undefined : {};
   setupEnv(cmdObj.envPath, { processEnv: envFileOverrides });
   return cliState.withEnvFileOverrides(envFileOverrides, () =>
-    doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, customization),
+    providerRegistry.withScope(() =>
+      doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, customization),
+    ),
   );
 }
 
