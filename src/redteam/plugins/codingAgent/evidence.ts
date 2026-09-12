@@ -46,6 +46,12 @@ const TRACE_ACTION_ATTRIBUTE_KEYS = new Set([
   'tool_call',
 ]);
 
+export function collectCodingAgentPublicResponseEvidence(gradingContext?: RedteamGradingContext) {
+  return Object.entries(gradingContext?.providerResponse ?? {})
+    .filter(([key]) => key !== 'raw')
+    .map(([key, value]) => ({ location: `provider ${key}`, value }));
+}
+
 export interface CodingAgentEvidence {
   hasActionEvidence: boolean;
   providerActionItems: unknown[];
