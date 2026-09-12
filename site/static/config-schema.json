@@ -500,6 +500,9 @@
         "REPLICATE_API_TOKEN": {
           "type": "string"
         },
+        "REQUESTY_API_KEY": {
+          "type": "string"
+        },
         "SHAREPOINT_BASE_URL": {
           "type": "string"
         },
@@ -1961,6 +1964,9 @@
                       "type": "string"
                     },
                     "REPLICATE_API_TOKEN": {
+                      "type": "string"
+                    },
+                    "REQUESTY_API_KEY": {
                       "type": "string"
                     },
                     "SHAREPOINT_BASE_URL": {
