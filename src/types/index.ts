@@ -796,6 +796,8 @@ export interface AssertionParams {
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
+  /** Active suite red-team config for request-scoped trace grading. */
+  redteamConfig?: RedteamFileConfig;
   renderedValue?: AssertionValue;
   test: AtomicTestCase;
   valueFromScript?: string | boolean | number | GradingResult | object;

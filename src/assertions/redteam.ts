@@ -51,15 +51,16 @@ function createInitialGradingContext({
   assertionValueContext,
   providerResponse,
   test,
+  redteamConfig,
 }: Pick<
   AssertionParams,
-  'assertionValueContext' | 'providerResponse' | 'test'
+  'assertionValueContext' | 'providerResponse' | 'test' | 'redteamConfig'
 >): RedteamGradingContext {
   const gradingContext: RedteamGradingContext = {
     providerResponse,
   };
 
-  const tracing = resolveTestTracingOptions(test);
+  const tracing = resolveTestTracingOptions(test, redteamConfig);
   if (assertionValueContext.trace && tracing.enabled && tracing.includeInGrading) {
     gradingContext.traceData = assertionValueContext.trace;
     gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace);
@@ -82,6 +83,7 @@ export const handleRedteam = async ({
   renderedValue,
   providerResponse,
   assertionValueContext,
+  redteamConfig,
 }: AssertionParams): Promise<GradingResult> => {
   // Skip grading if stored result exists from strategy execution for this specific assertion
   if (
@@ -125,6 +127,7 @@ export const handleRedteam = async ({
     assertionValueContext,
     providerResponse,
     test,
+    redteamConfig,
   });
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||

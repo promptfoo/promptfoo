@@ -20,6 +20,7 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { resolveTestTracingOptions } from '../redteam/providers/tracingOptions';
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
@@ -158,16 +159,22 @@ export function assertionUsesTrace(assertion: AssertionOrSet): boolean {
   return TRACE_AWARE_ASSERTION_TYPES.has(getAssertionBaseType(assertion));
 }
 
-function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
+function assertionMayNeedTraceContext(
+  assertion: AssertionOrSet,
+  includeRedteamTrace = false,
+): boolean {
   if (assertionUsesTrace(assertion)) {
     return true;
   }
 
   if (assertion.type === 'assert-set') {
-    return assertion.assert.some(assertionMayNeedTraceContext);
+    return assertion.assert.some((item) => assertionMayNeedTraceContext(item, includeRedteamTrace));
   }
 
-  if (assertion.type.startsWith('promptfoo:redteam:coding-agent:')) {
+  if (
+    assertion.type.startsWith('promptfoo:redteam:coding-agent:') ||
+    (includeRedteamTrace && assertion.type.startsWith('promptfoo:redteam:'))
+  ) {
     return true;
   }
 
@@ -177,7 +184,7 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
 }
 
 export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
-  return Boolean(assertions?.some(assertionMayNeedTraceContext));
+  return Boolean(assertions?.some((assertion) => assertionMayNeedTraceContext(assertion)));
 }
 
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
@@ -416,6 +423,7 @@ async function runAssertionInternal({
   providerResponse,
   traceId,
   traceData,
+  redteamConfig,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -427,6 +435,7 @@ async function runAssertionInternal({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
+  redteamConfig?: import('../types/index').RedteamFileConfig;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -456,7 +465,7 @@ async function runAssertionInternal({
   };
 
   // Add trace data if traceId is available
-  if (traceId && assertionMayNeedTraceContext(assertion)) {
+  if (traceId && (traceData !== undefined || assertionMayNeedTraceContext(assertion))) {
     try {
       const resolvedTraceData = traceData === undefined ? await loadTraceData(traceId) : traceData;
       if (resolvedTraceData) {
@@ -641,6 +650,7 @@ async function runAssertionInternal({
     prompt,
     provider,
     providerResponse,
+    redteamConfig,
     renderedValue,
     test: finalTest,
     valueFromScript,
@@ -758,6 +768,7 @@ export async function runAssertions({
   test,
   vars,
   traceId,
+  redteamConfig,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -767,6 +778,7 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
+  redteamConfig?: import('../types/index').RedteamFileConfig;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -806,8 +818,11 @@ export async function runAssertions({
     })
     .flat();
 
+  const tracing = redteamConfig && resolveTestTracingOptions(test, redteamConfig);
+  const includeRedteamTrace = Boolean(tracing?.enabled && tracing.includeInGrading);
   const shouldPreloadTrace =
-    !!traceId && hasTraceAwareAssertions(asserts.map(({ assertion }) => assertion));
+    !!traceId &&
+    asserts.some(({ assertion }) => assertionMayNeedTraceContext(assertion, includeRedteamTrace));
   let preloadedTraceData: TraceData | null | undefined;
   if (shouldPreloadTrace && traceId) {
     try {
@@ -841,6 +856,7 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
+      redteamConfig,
     });
 
     assertResult.addResult({

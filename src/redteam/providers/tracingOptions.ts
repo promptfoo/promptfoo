@@ -1,7 +1,7 @@
 import cliState from '../../cliState';
 import { getAttackProviderFullId } from '../shared/attackProviders';
 
-import type { AtomicTestCase, UnifiedConfig } from '../../types/index';
+import type { AtomicTestCase, RedteamFileConfig, UnifiedConfig } from '../../types/index';
 
 type TraceProviderConfig = NonNullable<NonNullable<UnifiedConfig['tracing']>['provider']>;
 
@@ -97,10 +97,12 @@ export function resolveTracingOptions({
   strategyId,
   test,
   config,
+  redteamConfig,
 }: {
   strategyId: string;
   test?: AtomicTestCase;
   config?: Record<string, unknown>;
+  redteamConfig?: RedteamFileConfig;
 }): RedteamTracingOptions {
   const strategyAlias: Record<string, string> = {
     iterative: 'jailbreak',
@@ -118,8 +120,8 @@ export function resolveTracingOptions({
     strategyAlias[strategyId],
   ].filter((id): id is string => Boolean(id));
   // Read redteam-specific tracing config
-  const redteamConfig = cliState.config?.redteam as Record<string, unknown> | undefined;
-  const globalConfig = (redteamConfig?.tracing as RawTracingConfig | undefined) ?? undefined;
+  const activeRedteamConfig = redteamConfig ?? cliState.config?.redteam;
+  const globalConfig = (activeRedteamConfig?.tracing as RawTracingConfig | undefined) ?? undefined;
   const testConfig = (test?.metadata?.tracing as RawTracingConfig | undefined) ?? undefined;
   const metadataStrategyConfig = (
     test?.metadata?.strategyConfig as Record<string, unknown> | undefined
@@ -156,12 +158,16 @@ export function resolveTracingOptions({
   return normalizeTracingOptions(merged, rootTracingConfig);
 }
 
-export function resolveTestTracingOptions(test: AtomicTestCase): RedteamTracingOptions {
+export function resolveTestTracingOptions(
+  test: AtomicTestCase,
+  redteamConfig?: RedteamFileConfig,
+): RedteamTracingOptions {
   return resolveTracingOptions({
     strategyId: getAttackProviderFullId(test.metadata?.strategyId ?? '').replace(
       'promptfoo:redteam:',
       '',
     ),
     test,
+    redteamConfig,
   });
 }

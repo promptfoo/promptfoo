@@ -452,6 +452,10 @@ function redactTraceEvidence(text: string): string {
         : match,
     )
     .replace(
+      /\b(curl\b[^;&|\r\n]*?\s--pass(?:\s+|=))(?:"[^"]*"|'[^']*'|[^\s"'\`;]+)/gi,
+      '$1[REDACTED]',
+    )
+    .replace(
       /\b([\w-]+)(\s*:\s*)[^"'\\;&|\r\n]*?(?=;|&&|\|\||\r?\n|\s+-[A-Za-z]|$)/gi,
       (match, key, separator) =>
         isSecretField(key) || /^(?:authorization|(?:set-)?cookie)$/i.test(key)
@@ -490,6 +494,24 @@ function redactTraceEvidence(text: string): string {
       (match, key, separator) =>
         isSecretField(key) || isSecretEnvVarName(key) ? `${key}${separator}[REDACTED]` : match,
     );
+}
+
+function redactTraceUrlQuery(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  try {
+    const url = new URL(value);
+    if (!url.search) {
+      return value;
+    }
+    for (const key of url.searchParams.keys()) {
+      url.searchParams.set(key, '[REDACTED]');
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
 }
 
 function truncateTraceEvidence(text: string, limit: number): string {
@@ -556,7 +578,7 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
       }
     }
     const command = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
-    const url = attributes['url.full'] ?? attributes['http.url'];
+    const url = redactTraceUrlQuery(attributes['url.full'] ?? attributes['http.url']);
     const filePath = attributes['file.path'];
     const toolName = getToolNameFromAttributes(attributes);
     if (

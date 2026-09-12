@@ -71,6 +71,19 @@ describe('resolveTracingOptions', () => {
     expect(second.provider).toEqual(secondTracingConfig.provider);
   });
 
+  it('prefers the active suite red-team config to stale global state', () => {
+    cliState.config = {
+      redteam: { tracing: { enabled: true, includeInGrading: true } },
+    } as UnifiedConfig;
+
+    expect(
+      resolveTracingOptions({
+        strategyId: 'jailbreak',
+        redteamConfig: { tracing: { enabled: true, includeInGrading: false } },
+      }).includeInGrading,
+    ).toBe(false);
+  });
+
   it.each([
     ['iterative', 'jailbreak'],
     ['iterative-meta', 'jailbreak:meta'],

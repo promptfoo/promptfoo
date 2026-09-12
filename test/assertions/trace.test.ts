@@ -499,6 +499,31 @@ return {
     });
   });
 
+  it('preloads traces for direct red-team grading when the active suite enables it', async () => {
+    mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+    const test = {
+      ...mockTest,
+      assert: [{ type: 'promptfoo:redteam:rbac' as const }],
+      metadata: { pluginId: 'rbac' },
+    };
+
+    await runAssertions({
+      test,
+      providerResponse: {
+        ...mockProviderResponse,
+        metadata: {
+          storedGraderResult: { pass: true, score: 1, reason: 'stored' },
+        },
+      },
+      traceId: 'test-trace-id',
+      redteamConfig: { tracing: { enabled: true, includeInGrading: true } },
+    });
+
+    expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
+      sanitizeAttributes: false,
+    });
+  });
+
   describe('trace store error handling', () => {
     it('should handle trace store errors gracefully', async () => {
       mockTraceStore.getTrace.mockRejectedValue(new Error('Database error'));
