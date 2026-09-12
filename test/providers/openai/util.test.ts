@@ -167,6 +167,29 @@ describe('getTokenUsage', () => {
     });
   });
 
+  it('should read cached tokens from usage.prompt_cache_hit_tokens (e.g. DeepSeek)', () => {
+    const data = {
+      usage: {
+        total_tokens: 100,
+        prompt_tokens: 40,
+        completion_tokens: 60,
+        prompt_cache_hit_tokens: 32,
+        prompt_cache_miss_tokens: 8,
+      },
+    };
+
+    const result = getTokenUsage(data, false);
+    expect(result).toEqual({
+      total: 100,
+      prompt: 40,
+      completion: 60,
+      numRequests: 1,
+      completionDetails: {
+        cacheReadInputTokens: 32,
+      },
+    });
+  });
+
   it('should prefer prompt_tokens_details.cached_tokens over the top-level field', () => {
     const data = {
       usage: {
