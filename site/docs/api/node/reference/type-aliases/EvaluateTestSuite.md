@@ -11,7 +11,7 @@ import type { EvaluateTestSuite } from 'promptfoo';
 ```
 
 <!-- prettier-ignore -->
-> **EvaluateTestSuite** = `object` & `Omit`\<`TestSuiteConfig`, `"prompts"` \| `"providers"`\>
+> **EvaluateTestSuite** = `object` & `Omit`\<[`TestSuiteConfig`](TestSuiteConfig.md), `"prompts"` \| `"providers"`\>
 
 Defined in: [src/types/index.ts:1943](https://github.com/promptfoo/promptfoo/blob/main/src/types/index.ts#L1943)
 

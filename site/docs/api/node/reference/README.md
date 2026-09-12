@@ -90,6 +90,7 @@ not every internal compatibility type that exists in the runtime build.
 - [ProviderFunction](type-aliases/ProviderFunction.md)
 - [ProvidersConfig](type-aliases/ProvidersConfig.md)
 - [ScoringFunction](type-aliases/ScoringFunction.md)
+- [TestSuiteConfig](type-aliases/TestSuiteConfig.md)
 - [TransformFunction](type-aliases/TransformFunction.md)
 
 ## Variables

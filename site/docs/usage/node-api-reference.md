@@ -175,6 +175,14 @@ The `redteam` namespace also exposes `Plugins`, `Strategies`, `Graders`,
 `Extractors`, and `Base.Plugin` / `Base.Grader` for advanced integrations. These
 extension points are beta and may change between releases.
 
+## Troubleshooting
+
+<LegacyHeadingAnchors page="reference" section="Troubleshooting" />
+
+Use `cache: false` while debugging to avoid replaying an earlier result. Import
+public types from `promptfoo` rather than a deep `src/` or `dist/` path. Set
+`LOG_LEVEL=debug` when you need verbose library logs.
+
 ## Related docs
 
 <LegacyHeadingAnchors page="reference" section="Related docs" />

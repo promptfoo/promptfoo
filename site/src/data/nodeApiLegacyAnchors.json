@@ -95,8 +95,7 @@
       "api-stability",
       "stable-apis-safe-for-production",
       "experimental-apis-may-change",
-      "internal-apis-dont-use-directly",
-      "troubleshooting"
+      "internal-apis-dont-use-directly"
     ],
     "Guardrails": [
       "guardrails-api",
@@ -115,6 +114,7 @@
       "redteambaseplugin",
       "redteambasegrader"
     ],
+    "Troubleshooting": ["troubleshooting"],
     "Related docs": ["examples-repository", "see-also"]
   },
   "package": {

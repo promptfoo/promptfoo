@@ -74,6 +74,7 @@ export type {
   TestCase,
   TestCaseMetadata,
   TestCaseOptions,
+  TestSuiteConfig,
   TokenUsage,
   TransformContext,
   TransformFunction,
