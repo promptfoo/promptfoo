@@ -336,6 +336,9 @@ describe('assertion registry injection', () => {
     'runs a typed %s with rendered values and an injected registry',
     async (type) => {
       type CustomType = 'custom-check' | 'not-custom-check';
+      expectTypeOf<
+        AssertionParams<'not-custom-check'>['baseType']
+      >().toEqualTypeOf<'custom-check'>();
       const registry = new AssertionRegistry<
         AssertionParams<CustomType>,
         GradingResult<CustomType>
