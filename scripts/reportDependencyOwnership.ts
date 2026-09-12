@@ -116,9 +116,9 @@ function takeJSDocType(source: string): string {
 
 function getShadowRanges(
   program: ReturnType<typeof parseSync>['program'],
-  name: string,
-): Array<[number, number]> {
-  const ranges: Array<[number, number]> = [];
+  names: readonly string[],
+): Map<string, Array<[number, number]>> {
+  const ranges = new Map(names.map((name) => [name, [] as Array<[number, number]>]));
   const lexicalScopes: Array<[number, number]> = [[0, Number.POSITIVE_INFINITY]];
   const functionScopes: Array<[number, number]> = [[0, Number.POSITIVE_INFINITY]];
   const addFunctionScope = (node: { body: { start: number; end: number } | null }) => {
@@ -158,7 +158,7 @@ function getShadowRanges(
     scopes
       .filter(([start, end]) => offset >= start && offset <= end)
       .sort(([left], [right]) => right - left)[0];
-  const bindsName = (node: unknown): boolean => {
+  const bindsName = (node: unknown, name: string): boolean => {
     if (!node || typeof node !== 'object') {
       return false;
     }
@@ -167,39 +167,45 @@ function getShadowRanges(
       return record.name === name;
     }
     if (record.type === 'AssignmentPattern') {
-      return bindsName(record.left);
+      return bindsName(record.left, name);
     }
     if (record.type === 'RestElement') {
-      return bindsName(record.argument);
+      return bindsName(record.argument, name);
     }
     if (record.type === 'Property') {
-      return bindsName(record.value);
+      return bindsName(record.value, name);
     }
     if (record.type === 'ObjectPattern') {
-      return (record.properties as unknown[]).some(bindsName);
+      return (record.properties as unknown[]).some((property) => bindsName(property, name));
     }
     if (record.type === 'ArrayPattern') {
-      return (record.elements as unknown[]).some(bindsName);
+      return (record.elements as unknown[]).some((element) => bindsName(element, name));
     }
     return false;
   };
+  const add = (name: string, range: [number, number]) => ranges.get(name)!.push(range);
   const addParams = (node: { body: { start: number; end: number } | null; params: unknown[] }) => {
-    if (node.body && node.params.some(bindsName)) {
-      ranges.push([node.body.start, node.body.end]);
+    if (!node.body) {
+      return;
+    }
+    for (const name of names) {
+      if (node.params.some((param) => bindsName(param, name))) {
+        add(name, [node.body.start, node.body.end]);
+      }
     }
   };
   new Visitor({
     FunctionDeclaration(node) {
-      if (node.id?.name === name) {
-        ranges.push(scopeFor(node.start, lexicalScopes));
+      if (node.id && ranges.has(node.id.name)) {
+        add(node.id.name, scopeFor(node.start, lexicalScopes));
       }
       if (node.body) {
         addParams(node);
       }
     },
     FunctionExpression(node) {
-      if (node.id?.name === name && node.body) {
-        ranges.push([node.body.start, node.body.end]);
+      if (node.id && node.body && ranges.has(node.id.name)) {
+        add(node.id.name, [node.body.start, node.body.end]);
       }
       addParams(node);
     },
@@ -207,13 +213,17 @@ function getShadowRanges(
       addParams(node);
     },
     VariableDeclaration(node) {
-      if (node.declarations.some((declaration) => bindsName(declaration.id))) {
-        ranges.push(scopeFor(node.start, node.kind === 'var' ? functionScopes : lexicalScopes));
+      for (const name of names) {
+        if (node.declarations.some((declaration) => bindsName(declaration.id, name))) {
+          add(name, scopeFor(node.start, node.kind === 'var' ? functionScopes : lexicalScopes));
+        }
       }
     },
     ImportDeclaration(node) {
-      if (node.specifiers.some((specifier) => specifier.local.name === name)) {
-        ranges.push([0, Number.POSITIVE_INFINITY]);
+      for (const name of names) {
+        if (node.specifiers.some((specifier) => specifier.local.name === name)) {
+          add(name, [0, Number.POSITIVE_INFINITY]);
+        }
       }
     },
   }).visit(program);
@@ -705,8 +715,9 @@ export function reportDependencyOwnership(
           node.type === 'TSImportEqualsDeclaration' &&
           node.moduleReference.type === 'TSExternalModuleReference',
       );
-    const requireShadowRanges = getShadowRanges(result.program, 'require');
-    const moduleShadowRanges = getShadowRanges(result.program, 'module');
+    const shadowRanges = getShadowRanges(result.program, ['require', 'module']);
+    const requireShadowRanges = shadowRanges.get('require')!;
+    const moduleShadowRanges = shadowRanges.get('module')!;
     const isRequireShadowed = (offset: number) =>
       requireShadowRanges.some(([start, end]) => offset >= start && offset <= end);
     const isModuleShadowed = (offset: number) =>
