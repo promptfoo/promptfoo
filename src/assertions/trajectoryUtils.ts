@@ -540,7 +540,7 @@ function truncateJudgeTrajectorySteps(
 }
 
 function getSqlExecutionDetails(
-  step: TrajectoryStep,
+  step: Pick<TrajectoryStep, 'attributes' | 'spanId' | 'spanName' | 'startTime'>,
   redactText: (value: string) => string,
   redactAttributes?: string[],
 ): JudgeTrajectoryStep['sql'] {
@@ -555,6 +555,9 @@ function getSqlExecutionDetails(
   const argumentObject = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
   const argumentSql = getFirstStringAttribute(argumentObject, ['sql']);
   const toolName = getToolNameFromAttributes(attributes) ?? step.spanName;
+  if (/\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(redactText(toolName))) {
+    throw new Error('SQL trace evidence was redacted and cannot be graded.');
+  }
   const isQueryTool =
     /(^|[\s.:/-])(?:(?:read|run|execute)_query|(?:run|execute)_sql|query)($|[\s.:/-])/i.test(
       toolName,
@@ -603,6 +606,9 @@ function getSqlExecutionDetails(
     { redactAttributes, truncateValues: false },
   ) as NonNullable<JudgeTrajectoryStep['sql']>;
   const redactedQuery = redactText(sql.query);
+  if (redactedQuery !== query || /\[REDACTED\]|<redacted>|\[TRUNCATED\]/i.test(redactedQuery)) {
+    throw new Error('SQL trace evidence was redacted and cannot be graded.');
+  }
   const omission = ' … [truncated] … ';
   const retainedLength = 400 - omission.length;
   sql.query =
@@ -633,11 +639,29 @@ export function summarizeTrajectoryForJudge(
     ...trace,
     spans: spans.map((span) => ({ ...span, name: redactText(span.name) })),
   };
+  const sqlBySpanId = new Map(
+    options.includeSql
+      ? trace.spans.map(
+          (span) =>
+            [
+              span.spanId,
+              getSqlExecutionDetails(
+                {
+                  attributes: span.attributes ?? {},
+                  spanId: span.spanId,
+                  spanName: span.name,
+                  startTime: span.startTime,
+                },
+                redactText,
+                options.redactAttributes,
+              ),
+            ] as const,
+        )
+      : [],
+  );
   const rawSteps = extractTrajectorySteps(sanitizedTrace).map((step, index) => {
     const status = getTrajectoryStepStatus(step);
-    const sql = options.includeSql
-      ? getSqlExecutionDetails(step, redactText, options.redactAttributes)
-      : undefined;
+    const sql = sqlBySpanId.get(step.spanId);
     return {
       index: index + 1,
       type: step.type,

@@ -17,7 +17,7 @@ It focuses on whether the system:
 
 With `redteam.tracing.enabled: true`, the grader considers captured SQL execution alongside the response. A refusal does not automatically pass if execution evidence is present. SQL trace summaries identify database operations by database attributes or SQL tool names, then include object query arguments or scalar arguments from recognized query tools or SQL-shaped text and explicit `authorized` and `rowCount` fields, including normalized Langfuse and Vercel tool results. They omit bound parameter values and returned rows, and honor configured attribute redaction. Root `tracing.enabled` alone does not enable this grading context. Set `redteam.tracing.includeInGrading: false` to exclude trace evidence from the SQL grader. The current eval supplies this policy, including for concurrent library calls; per-test overrides still apply.
 
-Long summaries prioritize queries with `authorized: false`, then retain early and late SQL steps within the 24-step budget. Omission counts identify gaps when the trace is larger than the summary. Each query keeps its beginning and end within 400 characters, after redacting protected values echoed from other trace attributes.
+Long summaries prioritize queries with `authorized: false`, then retain early and late SQL steps within the 24-step budget. Omission counts identify gaps when the trace is larger than the summary. Readable queries keep their beginning and end within 400 characters. If redaction hides a query or tool identity, the evaluation reports a grading error; it cannot infer a safe SQL outcome from missing execution evidence.
 
 ## Configuration
 

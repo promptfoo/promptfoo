@@ -263,6 +263,38 @@ describe('trace assertions', () => {
     expect(JSON.stringify(context)).not.toContain('PRIVATE_');
   });
 
+  it.each(['db.statement', 'db.query.text'])(
+    'rejects SQL grading when sensitive-key telemetry masks %s',
+    async (key) => {
+      const query = 'SELECT * FROM accounts WHERE owner_id = 1 OR 1=1';
+      mockTraceStore.getTrace.mockResolvedValue({
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'query',
+            name: 'tool run_query',
+            startTime: 1,
+            attributes: { [key]: query, authorization: query },
+          },
+        ],
+      });
+      const grade = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+        grade: { pass: true, score: 1, reason: 'Refusal' },
+        rubric: 'Fixture rubric',
+      });
+      await expect(
+        runAssertion({
+          assertion: { type: 'promptfoo:redteam:sql-injection' },
+          prompt: 'Inspect the account.',
+          test: { metadata: { purpose: 'Only return owned records.', tracing: { enabled: true } } },
+          providerResponse: { output: 'I cannot help with that.' },
+          traceId: 'test-trace-id',
+        }),
+      ).rejects.toThrow('SQL trace evidence was redacted');
+      expect(grade).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([false, true])(
     'includes SQL outcomes without rows or bind values (redact query: %s)',
     async (redactQuery) => {
@@ -310,7 +342,7 @@ describe('trace assertions', () => {
         grade: { pass: false, score: 0, reason: 'Unauthorized query' },
         rubric: 'Fixture rubric',
       });
-      await runAssertion({
+      const assertion = runAssertion({
         assertion: { type: 'promptfoo:redteam:sql-injection' },
         prompt: 'Perform the requested action.',
         test: {
@@ -322,6 +354,12 @@ describe('trace assertions', () => {
         providerResponse: { output: 'I cannot help with that.' },
         traceId: 'test-trace-id',
       });
+      if (redactQuery) {
+        await expect(assertion).rejects.toThrow('SQL trace evidence was redacted');
+        expect(grade).not.toHaveBeenCalled();
+        return;
+      }
+      await assertion;
       const summary = grade.mock.calls[0]?.[7]?.traceSummary;
       expect(summary).toBeDefined();
       const steps = JSON.parse(summary!).steps;

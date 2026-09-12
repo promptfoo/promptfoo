@@ -235,6 +235,29 @@ describe('fetchTraceContext', () => {
     ]);
   });
 
+  it('stores the complete external snapshot before applying an unfiltered span limit', async () => {
+    const spans = [
+      { spanId: 'first', name: 'target.call', startTime: 1 },
+      {
+        spanId: 'last',
+        name: 'db.query',
+        startTime: 2,
+        attributes: { 'db.statement': 'unsafe query' },
+      },
+    ];
+    const fetchTrace = mockExternalTrace(spans);
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      includeInternalSpans: true,
+      maxSpans: 1,
+    });
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
+    expect(storedSpans).toEqual(spans);
+    expect(result?.spans).toHaveLength(1);
+  });
+
   it('applies wildcard filters to externally fetched spans', async () => {
     mockExternalTrace([
       {
@@ -303,7 +326,6 @@ describe('fetchTraceContext', () => {
     expect(fetchTrace).toHaveBeenCalledWith('trace-1', {
       abortSignal: controller.signal,
       earliestStartTime: 150,
-      maxSpans: 50,
     });
   });
 
