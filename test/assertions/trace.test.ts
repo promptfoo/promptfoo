@@ -516,7 +516,32 @@ return {
         },
       },
       traceId: 'test-trace-id',
-      redteamConfig: { tracing: { enabled: true, includeInGrading: true } },
+      includeRedteamTrace: true,
+    });
+
+    expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {
+      sanitizeAttributes: false,
+    });
+  });
+
+  it('honors test tracing when the active suite has no red-team block', async () => {
+    mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
+
+    await runAssertions({
+      test: {
+        ...mockTest,
+        assert: [{ type: 'promptfoo:redteam:rbac' as const }],
+        metadata: {
+          pluginId: 'rbac',
+          tracing: { enabled: true, includeInGrading: true },
+        },
+      },
+      providerResponse: {
+        ...mockProviderResponse,
+        metadata: { storedGraderResult: { pass: true, score: 1, reason: 'stored' } },
+      },
+      traceId: 'test-trace-id',
+      includeRedteamTrace: true,
     });
 
     expect(mockTraceStore.getTrace).toHaveBeenCalledWith('test-trace-id', {

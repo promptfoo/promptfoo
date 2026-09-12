@@ -7,7 +7,12 @@ import invariant from '../util/invariant';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
-import type { AssertionParams, AtomicTestCase, GradingResult } from '../types/index';
+import type {
+  AssertionParams,
+  AtomicTestCase,
+  GradingResult,
+  RedteamFileConfig,
+} from '../types/index';
 
 /**
  * Analyzes grader errors in the redteam history.
@@ -50,23 +55,29 @@ function getRedteamPrompt(prompt: string | undefined, test: AtomicTestCase): str
 function createInitialGradingContext({
   assertionValueContext,
   providerResponse,
-  test,
-  redteamConfig,
+  includeRedteamTrace,
 }: Pick<
   AssertionParams,
-  'assertionValueContext' | 'providerResponse' | 'test' | 'redteamConfig'
+  'assertionValueContext' | 'providerResponse' | 'includeRedteamTrace'
 >): RedteamGradingContext {
   const gradingContext: RedteamGradingContext = {
     providerResponse,
   };
 
-  const tracing = resolveTestTracingOptions(test, redteamConfig);
-  if (assertionValueContext.trace && tracing.enabled && tracing.includeInGrading) {
+  if (assertionValueContext.trace && includeRedteamTrace) {
     gradingContext.traceData = assertionValueContext.trace;
     gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace);
   }
 
   return gradingContext;
+}
+
+export function shouldIncludeRedteamTrace(
+  test: AtomicTestCase,
+  redteamConfig?: RedteamFileConfig,
+): boolean {
+  const tracing = resolveTestTracingOptions(test, redteamConfig);
+  return tracing.enabled && tracing.includeInGrading;
 }
 
 /**
@@ -83,7 +94,7 @@ export const handleRedteam = async ({
   renderedValue,
   providerResponse,
   assertionValueContext,
-  redteamConfig,
+  includeRedteamTrace,
 }: AssertionParams): Promise<GradingResult> => {
   // Skip grading if stored result exists from strategy execution for this specific assertion
   if (
@@ -126,8 +137,7 @@ export const handleRedteam = async ({
   let gradingContext = createInitialGradingContext({
     assertionValueContext,
     providerResponse,
-    test,
-    redteamConfig,
+    includeRedteamTrace: includeRedteamTrace ?? shouldIncludeRedteamTrace(test),
   });
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||

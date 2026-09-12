@@ -399,29 +399,50 @@ function redactTraceValue(
     return '[REDACTED]';
   }
   if (Array.isArray(value)) {
-    return value.map((entry, index) => {
+    const redacted: unknown[] = [];
+    for (let index = 0; index < value.length; index++) {
+      if (budget.remaining <= 0) {
+        redacted.push('[TRUNCATED]');
+        break;
+      }
+      const entry = value[index];
       const previous = value[index - 1];
       const option = typeof previous === 'string' ? previous.replace(/^--?/, '') : '';
-      return typeof entry === 'string' &&
-        typeof previous === 'string' &&
-        (option === 'u' || option === 'user' || option === 'proxy-user' || isSecretField(option))
-        ? '[REDACTED]'
-        : redactTraceValue(entry, '', depth + 1, budget);
-    });
+      redacted.push(
+        typeof entry === 'string' &&
+          typeof previous === 'string' &&
+          (option === 'u' ||
+            option === 'user' ||
+            option === 'proxy-user' ||
+            option === 'pass' ||
+            option === 'proxy-pass' ||
+            isSecretField(option))
+          ? '[REDACTED]'
+          : redactTraceValue(entry, '', depth + 1, budget),
+      );
+    }
+    return redacted;
   }
   if (value && typeof value === 'object') {
     const record = value as Record<string, unknown>;
     const headerName = typeof record.name === 'string' ? record.name : undefined;
-    return Object.fromEntries(
-      Object.entries(record).map(([entryKey, entryValue]) => [
-        entryKey,
+    const redacted: Record<string, unknown> = {};
+    for (const entryKey in record) {
+      if (!Object.prototype.hasOwnProperty.call(record, entryKey)) {
+        continue;
+      }
+      if (budget.remaining <= 0) {
+        redacted['[TRUNCATED]'] = '[TRUNCATED]';
+        break;
+      }
+      redacted[entryKey] =
         entryKey === 'value' &&
         headerName &&
         (isSecretField(headerName) || isSecretEnvVarName(headerName))
           ? '[REDACTED]'
-          : redactTraceValue(entryValue, entryKey, depth + 1, budget),
-      ]),
-    );
+          : redactTraceValue(record[entryKey], entryKey, depth + 1, budget);
+    }
+    return redacted;
   }
   return typeof value === 'string' ? redactTraceEvidence(value) : value;
 }
@@ -438,7 +459,7 @@ function redactTraceEvidence(text: string): string {
     .replace(/\b(AccountKey\s*=\s*)[^;\s\"'\\]+/gi, '$1[REDACTED]')
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/@\s"'`\\]+)@/gi, '$1[REDACTED]@')
     .replace(/\bhttps?:\/\/[^\s"'`\\]+/gi, (url) => {
-      const sanitized = sanitizeUrl(url);
+      const sanitized = redactTraceUrl(url);
       if (/^https?:\/\/hooks\.slack\.com\//i.test(sanitized)) {
         return sanitized.replace(/(\/services\/[^/?#\s]+\/[^/?#\s]+\/)[^/?#\s]+/i, '$1[REDACTED]');
       }
@@ -450,10 +471,6 @@ function redactTraceEvidence(text: string): string {
       isSecretField(key) || /^(?:authorization|(?:set-)?cookie)$/i.test(key)
         ? quote + key + separator + '[REDACTED]' + quote
         : match,
-    )
-    .replace(
-      /\b(curl\b[^;&|\r\n]*?\s--pass(?:\s+|=))(?:"[^"]*"|'[^']*'|[^\s"'\`;]+)/gi,
-      '$1[REDACTED]',
     )
     .replace(
       /\b([\w-]+)(\s*:\s*)[^"'\\;&|\r\n]*?(?=;|&&|\|\||\r?\n|\s+-[A-Za-z]|$)/gi,
@@ -482,7 +499,7 @@ function redactTraceEvidence(text: string): string {
     )
     .replace(/\b(authorization\s*:\s*)[^"'`\s\\;]+/gi, '$1[REDACTED]')
     .replace(
-      /(^|\s)((?:--?(?:api[-_]?key|password|proxy-user|secret|token|user)|-u)(?:\s+|=))(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
+      /(^|\s)((?:--?(?:api[-_]?key|pass|password|proxy-pass|proxy-user|secret|token|user)|-u)(?:\s+|=))(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
       '$1$2[REDACTED]',
     )
     .replace(
@@ -496,21 +513,17 @@ function redactTraceEvidence(text: string): string {
     );
 }
 
-function redactTraceUrlQuery(value: unknown): unknown {
-  if (typeof value !== 'string') {
-    return value;
-  }
+function redactTraceUrl(value: string): string {
+  const sanitized = sanitizeUrl(value);
   try {
-    const url = new URL(value);
+    const url = new URL(sanitized);
     if (!url.search) {
-      return value;
+      return sanitized;
     }
-    for (const key of url.searchParams.keys()) {
-      url.searchParams.set(key, '[REDACTED]');
-    }
+    url.search = '[REDACTED]';
     return url.toString();
   } catch {
-    return value;
+    return sanitized;
   }
 }
 
@@ -578,7 +591,8 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
       }
     }
     const command = getFirstStringAttribute(attributes, COMMAND_ATTRIBUTE_KEYS);
-    const url = redactTraceUrlQuery(attributes['url.full'] ?? attributes['http.url']);
+    const rawUrl = attributes['url.full'] ?? attributes['http.url'];
+    const url = typeof rawUrl === 'string' ? redactTraceUrl(rawUrl) : rawUrl;
     const filePath = attributes['file.path'];
     const toolName = getToolNameFromAttributes(attributes);
     if (

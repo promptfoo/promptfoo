@@ -84,6 +84,16 @@ describe('resolveTracingOptions', () => {
     ).toBe(false);
   });
 
+  it('does not inherit stale red-team tracing for an active suite without red-team config', () => {
+    cliState.config = {
+      redteam: { tracing: { enabled: true, includeInGrading: true } },
+    } as UnifiedConfig;
+
+    expect(resolveTracingOptions({ strategyId: 'jailbreak', redteamConfig: {} }).enabled).toBe(
+      false,
+    );
+  });
+
   it.each([
     ['iterative', 'jailbreak'],
     ['iterative-meta', 'jailbreak:meta'],

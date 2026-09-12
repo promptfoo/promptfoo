@@ -20,7 +20,6 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import { resolveTestTracingOptions } from '../redteam/providers/tracingOptions';
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
@@ -81,6 +80,9 @@ import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
+
+export { shouldIncludeRedteamTrace } from './redteam';
+
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
@@ -183,8 +185,13 @@ function assertionMayNeedTraceContext(
     : false;
 }
 
-export function hasTraceAwareAssertions(assertions?: AssertionOrSet[]): boolean {
-  return Boolean(assertions?.some((assertion) => assertionMayNeedTraceContext(assertion)));
+export function hasTraceAwareAssertions(
+  assertions?: AssertionOrSet[],
+  includeRedteamTrace = false,
+): boolean {
+  return Boolean(
+    assertions?.some((assertion) => assertionMayNeedTraceContext(assertion, includeRedteamTrace)),
+  );
 }
 
 async function loadTraceData(traceId: string): Promise<TraceData | null> {
@@ -423,7 +430,7 @@ async function runAssertionInternal({
   providerResponse,
   traceId,
   traceData,
-  redteamConfig,
+  includeRedteamTrace,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -435,7 +442,7 @@ async function runAssertionInternal({
   assertIndex?: number;
   traceId?: string;
   traceData?: TraceData | null;
-  redteamConfig?: import('../types/index').RedteamFileConfig;
+  includeRedteamTrace?: boolean;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -650,7 +657,7 @@ async function runAssertionInternal({
     prompt,
     provider,
     providerResponse,
-    redteamConfig,
+    includeRedteamTrace,
     renderedValue,
     test: finalTest,
     valueFromScript,
@@ -768,7 +775,7 @@ export async function runAssertions({
   test,
   vars,
   traceId,
-  redteamConfig,
+  includeRedteamTrace = false,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -778,7 +785,7 @@ export async function runAssertions({
   test: AtomicTestCase;
   vars?: Record<string, VarValue>;
   traceId?: string;
-  redteamConfig?: import('../types/index').RedteamFileConfig;
+  includeRedteamTrace?: boolean;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -818,8 +825,6 @@ export async function runAssertions({
     })
     .flat();
 
-  const tracing = redteamConfig && resolveTestTracingOptions(test, redteamConfig);
-  const includeRedteamTrace = Boolean(tracing?.enabled && tracing.includeInGrading);
   const shouldPreloadTrace =
     !!traceId &&
     asserts.some(({ assertion }) => assertionMayNeedTraceContext(assertion, includeRedteamTrace));
@@ -856,7 +861,7 @@ export async function runAssertions({
       assertIndex: index,
       traceId,
       traceData: preloadedTraceData,
-      redteamConfig,
+      includeRedteamTrace,
     });
 
     assertResult.addResult({

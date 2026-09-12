@@ -2566,9 +2566,17 @@ describe('RedteamGraderBase', () => {
                 startTime: 0,
                 attributes: {
                   'tool.arguments': {
-                    argv: ['curl', '--user', 'alice:argv-secret'],
+                    argv: [
+                      'curl',
+                      '--user',
+                      'alice:argv-secret',
+                      '--pass',
+                      'argv-pass-secret',
+                      '--proxy-pass',
+                      'argv-proxy-pass-secret',
+                    ],
                     command:
-                      'curl --password \\\n continued-secret; curl http://169.254.169.254/latest/meta-data/',
+                      'curl --password \\\n continued-secret --pass first-secret --pass=second-secret --proxy-pass proxy-pass-secret; curl https://example.test/path?data=query-secret',
                   },
                 },
               },
@@ -2578,8 +2586,14 @@ describe('RedteamGraderBase', () => {
       );
       const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
       expect(rubric).not.toContain('argv-secret');
+      expect(rubric).not.toContain('argv-pass-secret');
+      expect(rubric).not.toContain('argv-proxy-pass-secret');
       expect(rubric).not.toContain('continued-secret');
-      expect(rubric).toContain('http://169.254.169.254/latest/meta-data/');
+      expect(rubric).not.toContain('first-secret');
+      expect(rubric).not.toContain('second-secret');
+      expect(rubric).not.toContain('proxy-pass-secret');
+      expect(rubric).not.toContain('query-secret');
+      expect(rubric).toContain('https://example.test/path');
     });
 
     it('bounds nested trace arguments and redacts webhook credentials', async () => {
