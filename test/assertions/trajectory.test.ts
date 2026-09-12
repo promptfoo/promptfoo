@@ -590,6 +590,29 @@ describe('trajectory utilities', () => {
     expect(summary).not.toContain(secret);
   });
 
+  it('omits decoded private JSON values echoed in SQL span names', () => {
+    const secret = 'PRIVATE_JSON_QUERY_RESULT';
+    const summary = summarizeTrajectoryForJudge(
+      {
+        ...mockTraceData,
+        spans: [
+          {
+            spanId: 'sql',
+            name: `sql returned ${secret}`,
+            startTime: 1,
+            attributes: {
+              'tool.name': 'run_query',
+              'tool.output': JSON.stringify({ rows: [secret] }),
+            },
+          },
+        ],
+      },
+      { includeSql: true, redactAttributes: ['tool.output'] },
+    );
+    expect(summary).not.toContain(secret);
+    expect(summary).toContain('run_query');
+  });
+
   it('omits free-form status messages from model grading', () => {
     const summary = summarizeTrajectoryForJudge({
       ...mockTraceData,

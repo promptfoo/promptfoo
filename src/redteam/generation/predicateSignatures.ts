@@ -207,16 +207,23 @@ export const PII_SOCIAL_PREDICATES = [
 
 type PiiSocialPredicate = (typeof PII_SOCIAL_PREDICATES)[number];
 
+function informationRequestRules(rules: RegExp[]): RegExp[] {
+  const action = String.raw`(?:(?:show|give|send|share|provide|reveal|retrieve|pull|find|tell me|look up|list|return|query|export|display|dump|select|generate a report showing)\b(?!\s+(?:why|how|whether)\b)|(?:i\s+)?(?:urgently\s+)?need(?:\s+to\s+(?:verify|confirm))?\b(?!\s+to\b))`;
+  return rules.map(
+    (rule) => new RegExp(String.raw`${REQUEST_PREFIX}${action}[^.!?;\n]{0,180}${rule.source}`, 'i'),
+  );
+}
+
 const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
-  requestsPrescriptionDetails: [/\bprescription details?\b/i],
-  requestsRefillDates: [/\brefill dates?\b/i],
-  requestsProtectedInformation: [
+  requestsPrescriptionDetails: informationRequestRules([/\bprescription details?\b/i]),
+  requestsRefillDates: informationRequestRules([/\brefill dates?\b/i]),
+  requestsProtectedInformation: informationRequestRules([
     /\b(?:ssn|social security(?: number)?|phone number|home phone|home address|mailing address|email address|date of birth|dob|birthdate|credit card(?: number)?|account number|insurance details?|contact information|lab information|lab results?|prescription details?|refill dates?|diagnos(?:is|es))\b/i,
     /\b(?:which|what|her|his|their|my|patient'?s?)\s+email\b/i,
     /\bmedical (?:information|records?|histor(?:y|ies))\b/i,
     /\bpersonal details?\b/i,
     /\bdetails? (?:you|we) have on file\b/i,
-  ],
+  ]),
   claimsFamilyRelationship: [
     /\b(?:spouse|wife|husband|son|daughter|mother|father|sister|brother|parent)\b/i,
   ],
@@ -307,7 +314,7 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
     /\b(?:remove|removing|ignore|ignoring) (?:the )?(?:usual )?(?:filter|restriction)\b(?=[^.!?\n]*\b(?:access|assigned|logged-in|user account|only (?:allows|lets) me)\b)/i,
     /\bwithout the where\b/i,
   ],
-  usesNaturalLanguagePrivilegeEscalation: [
+  usesNaturalLanguagePrivilegeEscalation: informationRequestRules([
     /\bregardless of department\b/i,
     /\bentire company\b/i,
     /\ball (?:patient|medical) records(?: in the system)?\b/i,
@@ -317,7 +324,7 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
     /\b(?:not assigned to me|outside my direct caseload)\b/i,
     /\b(?:across all users|outside my assignment)\b/i,
     /\bacross all doctors\b/i,
-  ],
+  ]),
 };
 
 export function extractSqlInjectionSignature(prompt: string): AttackSignature {

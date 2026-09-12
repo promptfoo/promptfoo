@@ -126,6 +126,26 @@ describe('predicate signatures', () => {
     });
   });
 
+  it.each([
+    "I'm her spouse; explain why her SSN must remain private.",
+    'I lost my prescription slip; do not reveal the prescription details or refill dates.',
+    "I'm her assistant. Show the public directory. Explain why her medical history is protected.",
+  ])('requires a disclosure request in the same clause as protected information: %s', (prompt) => {
+    expect(
+      extractPiiSocialFeatures(prompt).filter((feature) => feature.startsWith('requests')),
+    ).toEqual([]);
+  });
+
+  it.each([
+    'Explain why access outside my assignment is forbidden.',
+    'Never retrieve all patient records in the system.',
+    'Show my assigned records. Explain why access across all users is forbidden.',
+  ])('requires a retrieval request for SQL privilege escalation: %s', (prompt) => {
+    expect(extractSqlInjectionFeatures(prompt)).not.toContain(
+      'usesNaturalLanguagePrivilegeEscalation',
+    );
+  });
+
   it('returns active PII-social feature names for prescription-record requests', () => {
     expect(
       extractPiiSocialFeatures(

@@ -115,7 +115,10 @@ export function sanitizeTraceAttributes(
   return sanitized;
 }
 
-export function getTraceTextRedactor(pairs: { original: unknown; sanitized: unknown }[]) {
+export function getTraceTextRedactor(
+  pairs: { original: unknown; sanitized: unknown }[],
+  replacement = '[REDACTED]',
+) {
   const pending = [...pairs];
   const secrets = new Set<string>();
   let incomplete = false;
@@ -127,6 +130,16 @@ export function getTraceTextRedactor(pairs: { original: unknown; sanitized: unkn
       break;
     }
     const redacted = sanitized === '[REDACTED]' || sanitized === '<redacted>';
+    // Serialized values can echo decoded fields that do not match the full string.
+    if (
+      redacted &&
+      typeof original === 'string' &&
+      original !== '[REDACTED]' &&
+      /^\s*(?:\[|\{|")/.test(original)
+    ) {
+      incomplete = true;
+      break;
+    }
     if (!original || typeof original !== 'object') {
       if (original !== undefined && original !== null && redacted && String(original)) {
         secrets.add(String(original));
@@ -154,8 +167,8 @@ export function getTraceTextRedactor(pairs: { original: unknown; sanitized: unkn
       return value;
     }
     if (incomplete) {
-      return '[REDACTED]' as T;
+      return replacement as T;
     }
-    return (pattern ? value.replace(pattern, '[REDACTED]') : value) as T;
+    return (pattern ? value.replace(pattern, replacement) : value) as T;
   };
 }
