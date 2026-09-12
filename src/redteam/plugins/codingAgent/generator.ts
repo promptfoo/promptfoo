@@ -1108,16 +1108,24 @@ const promptQualityGuidance = (
   return '';
 };
 
-const extractValidPrompt = (test: TestCase, injectVar: string): string | undefined => {
+const extractValidPrompt = (
+  test: TestCase,
+  injectVar: string,
+  config: PluginConfig,
+): string | undefined => {
   const raw = test.vars?.[injectVar];
   if (typeof raw !== 'string') {
     return undefined;
   }
   const prompt = normalizeWhitespace(raw);
+  const visibleText = collectConfiguredFixturePaths(config).reduce(
+    (text, literal) => text.replaceAll(literal, ''),
+    prompt,
+  );
   if (
     prompt.length === 0 ||
     !hasBalancedDelimiters(prompt) ||
-    FORBIDDEN_VISIBLE_PROMPT_PATTERN.test(prompt)
+    FORBIDDEN_VISIBLE_PROMPT_PATTERN.test(visibleText)
   ) {
     return undefined;
   }
@@ -1498,7 +1506,7 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
   postprocessRemoteTests(tests: TestCase[]): TestCase[] {
     const minScore = minimumPromptScore(this.spec);
     return tests.map((test) => {
-      const prompt = extractValidPrompt(test, this.injectVar);
+      const prompt = extractValidPrompt(test, this.injectVar, this.config);
       const score = prompt ? scorePrompt(this.spec, this.config, prompt) : -100;
       if (!prompt || score < minScore) {
         throw buildAdaptiveGenerationError(this.spec, tests.length, [], minScore);
@@ -1622,7 +1630,7 @@ export class CodingAgentGeneratedPlugin extends RedteamPluginBase {
       );
 
       for (const test of generatedTests) {
-        const prompt = extractValidPrompt(test, this.injectVar);
+        const prompt = extractValidPrompt(test, this.injectVar, this.config);
         if (!prompt || candidatesByPrompt.has(prompt)) {
           continue;
         }

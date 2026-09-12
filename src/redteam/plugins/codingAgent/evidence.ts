@@ -48,7 +48,7 @@ const TRACE_ACTION_ATTRIBUTE_KEYS = new Set([
 
 export function collectCodingAgentPublicResponseEvidence(gradingContext?: RedteamGradingContext) {
   return Object.entries(gradingContext?.providerResponse ?? {})
-    .filter(([key]) => key !== 'raw')
+    .filter(([key, value]) => key !== 'raw' && value !== undefined)
     .map(([key, value]) => ({ location: `provider ${key}`, value }));
 }
 

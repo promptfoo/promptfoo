@@ -11,6 +11,75 @@ const DUMMY_BASE = 'http://placeholder';
 
 export const REDACTED = '[REDACTED]';
 
+const PRIVATE_VERIFIER_FIELD =
+  /(?:canar(?:y|ies)|receipts?$|^(?:forbidden|sensitive|secret(?:env|file)?|syntheticsecret)(?:values?|s)?$|^secretmarkers?$|^expected(?:file|original)?content$)/i;
+
+/** Redact inline verifier inputs from saved configs and result copies, preserving file references. */
+export function sanitizeCodingAgentVerifierInputs<T>(input: T): T {
+  const seen = [new WeakMap<object, unknown>(), new WeakMap<object, unknown>()];
+  const isCodingAgentId = (id: unknown) =>
+    typeof id === 'string' && /^(?:promptfoo:redteam:)?(?:coding-agent|harness):/.test(id);
+  const visit = (value: unknown, verifier = false): unknown => {
+    if (!value || typeof value !== 'object' || (!Array.isArray(value) && isClassInstance(value))) {
+      return value;
+    }
+    const object = value as Record<string, unknown>;
+    verifier ||= [
+      object.id,
+      object.type,
+      object.pluginId,
+      (object.metadata as Record<string, unknown> | undefined)?.pluginId,
+    ].some(isCodingAgentId);
+    const cache = seen[Number(verifier)];
+    if (cache.has(value)) {
+      return cache.get(value);
+    }
+    if (Array.isArray(value)) {
+      const result: unknown[] = [];
+      cache.set(value, result);
+      for (const item of value) {
+        result.push(visit(item, verifier));
+      }
+      return result;
+    }
+    const entries: [string, unknown][] = [];
+    const result: Record<string, unknown> = {};
+    cache.set(value, result);
+    let redacted = object.privateVerifierInputsRedacted === true;
+    for (const [key, child] of Object.entries(object)) {
+      const normalizedKey = key.replace(/[_-]/g, '');
+      if (
+        verifier &&
+        PRIVATE_VERIFIER_FIELD.test(normalizedKey) &&
+        !/(?:paths?|hash|sha256|bytes?|length)$/i.test(normalizedKey) &&
+        child !== undefined
+      ) {
+        entries.push([key, REDACTED]);
+        redacted = true;
+      } else {
+        const sanitized = visit(child, verifier);
+        entries.push([key, sanitized]);
+        if (verifier && sanitized && typeof sanitized === 'object') {
+          const children = Array.isArray(sanitized) ? sanitized : [sanitized];
+          redacted ||= children.some((item) => item?.privateVerifierInputsRedacted === true);
+        }
+      }
+    }
+    Object.defineProperties(result, Object.getOwnPropertyDescriptors(Object.fromEntries(entries)));
+    if (redacted) {
+      result.privateVerifierInputsRedacted = true;
+    }
+    return result;
+  };
+  return visit(input) as T;
+}
+
+export function sanitizeConfigForPersistence(
+  config: Partial<UnifiedConfig>,
+): Partial<UnifiedConfig> {
+  return sanitizeCodingAgentVerifierInputs(sanitizeTracingConfigForPersistence(config));
+}
+
 // Query-parameter names that imply a credential value. Shared by sanitizeUrl's
 // per-param redaction and the fail-closed decision for unparseable URLs.
 const SENSITIVE_URL_PARAM_NAMES =

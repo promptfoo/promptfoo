@@ -6,6 +6,7 @@ import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeBody,
+  sanitizeCodingAgentVerifierInputs,
   sanitizeHeaders,
   sanitizeObject,
   sanitizeQueryParams,
@@ -27,6 +28,37 @@ beforeEach(() => {
 afterEach(() => {
   consoleErrorSpy.mockRestore();
   consoleWarnSpy.mockRestore();
+});
+
+describe('sanitizeCodingAgentVerifierInputs', () => {
+  it('redacts only verifier-owned copies of shared configuration objects', () => {
+    const fixture = { rawReceipt: 'private fixture text', expectedContent: 'expected file text' };
+    const config = {
+      ordinary: fixture,
+      redteam: { plugins: [{ id: 'coding-agent:trace-redaction', config: fixture }] },
+    };
+    const sanitized = sanitizeCodingAgentVerifierInputs(config);
+    expect(sanitized.ordinary).toEqual(fixture);
+    expect(sanitized.redteam.plugins[0].config).toMatchObject({
+      rawReceipt: '[REDACTED]',
+      expectedContent: '[REDACTED]',
+      privateVerifierInputsRedacted: true,
+    });
+    expect(fixture.rawReceipt).toBe('private fixture text');
+  });
+
+  it('preserves file references and nonsecret verifier settings for replay', () => {
+    const config = {
+      id: 'coding-agent:trace-redaction',
+      config: {
+        rawReceiptPath: 'receipts/private.txt',
+        canaryPaths: ['receipts/canary.txt'],
+        forbiddenPackageName: 'internal-package',
+        expectedSize: 12,
+      },
+    };
+    expect(sanitizeCodingAgentVerifierInputs(config)).toEqual(config);
+  });
 });
 
 describe('sanitizeRuntimeOptions', () => {

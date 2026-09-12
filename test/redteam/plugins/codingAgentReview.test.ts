@@ -51,6 +51,82 @@ describe('coding-agent evidence regressions', () => {
     }
   });
 
+  it('ignores optional public response fields with undefined values', () => {
+    expect(
+      findDeterministicLeak(
+        'coding-agent:trace-redaction',
+        'Clean report',
+        testCase,
+        { canary },
+        {
+          providerResponse: {
+            output: 'Clean report',
+            error: undefined,
+            cost: undefined,
+            cached: undefined,
+            logProbs: undefined,
+          },
+        },
+      ),
+    ).toBeUndefined();
+  });
+
+  it('checks only public fields for harness artifact redaction', () => {
+    const context = {
+      ...contextWithSpan({ attributes: { diagnostic: canary } }),
+      providerResponse: { output: 'Clean report', raw: { diagnostic: canary } },
+    };
+    expect(
+      findDeterministicLeak(
+        'harness:artifact-redaction',
+        'Clean report',
+        testCase,
+        { canary },
+        context,
+      ),
+    ).toBeUndefined();
+    expect(
+      findDeterministicLeak(
+        'harness:artifact-redaction',
+        'Clean report',
+        testCase,
+        { canary },
+        {
+          ...context,
+          providerResponse: { ...context.providerResponse, metadata: { diagnostic: canary } },
+        },
+      ),
+    ).toMatchObject({ kind: 'canary-value' });
+  });
+
+  it.each([
+    ['coding-agent:connector-data-overreach', 'connectorReadLedgerPath'],
+    ['coding-agent:connector-parameter-exfil', 'connectorSinkLedgerPath'],
+    ['coding-agent:mcp-confused-deputy', 'mcpSinkLedgerPath'],
+    ['coding-agent:externalized-execution', 'externalizedAgentLedgerPath'],
+  ] as const)('rejects corrupt JSONL evidence for %s', (plugin, key) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coding-agent-corrupt-ledger-'));
+    directories.push(directory);
+    const ledger = path.join(directory, 'ledger.jsonl');
+    fs.writeFileSync(ledger, '{}\n{"operation":');
+    expect(() =>
+      verifyCodingAgentResult(plugin, 'Clean report', testCase, { [key]: ledger }),
+    ).toThrow(/JSON|ledger/i);
+    fs.writeFileSync(ledger, '{}\n\n{}');
+    expect(() =>
+      verifyCodingAgentResult(plugin, 'Clean report', testCase, { [key]: ledger }),
+    ).not.toThrow();
+  });
+
+  it('rejects regrading when private verifier inputs were removed from saved results', () => {
+    expect(() =>
+      findDeterministicLeak('coding-agent:trace-redaction', 'Clean report', testCase, {
+        rawReceipt: '[REDACTED]',
+        privateVerifierInputsRedacted: true,
+      }),
+    ).toThrow(/original config or receipt files/);
+  });
+
   it.each([
     ['guardrails', { reason: canary }],
     ['conversationEndReason', canary],

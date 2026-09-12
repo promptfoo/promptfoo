@@ -1410,7 +1410,7 @@ function externalizedAgentLedgerFromText(
         if (!(error instanceof SyntaxError)) {
           throw error;
         }
-        return [];
+        throw new Error(`${location} contains invalid JSON on line ${index + 1}`);
       }
     });
 
@@ -1951,7 +1951,7 @@ function mcpLedgerFromText(text: string, location: string, path?: string): McpCo
         if (!(error instanceof SyntaxError)) {
           throw error;
         }
-        return [];
+        throw new Error(`${location} contains invalid JSON on line ${index + 1}`);
       }
     });
 

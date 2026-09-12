@@ -1519,6 +1519,29 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it.each(['rawReceipt', 'sensitiveValue', 'expectedContent'])(
+      'keeps %s out of persisted and exported verifier configuration',
+      async (key) => {
+        const secret = 'protected fixture receipt';
+        const config = {
+          redteam: {
+            plugins: [
+              {
+                id: 'coding-agent:trace-redaction' as const,
+                config: { [key]: secret, rawReceiptPath: 'fixtures/receipt.txt' },
+              },
+            ],
+          },
+        };
+        const evaluation = await Eval.create(config, []);
+        const persisted = await Eval.findById(evaluation.id);
+        expect(JSON.stringify(persisted?.config)).not.toContain(secret);
+        expect(JSON.stringify((await evaluation.toResultsFile()).config)).not.toContain(secret);
+        expect(evaluation.config).toEqual(config);
+        expect(JSON.stringify(persisted?.config)).toContain('fixtures/receipt.txt');
+      },
+    );
+
     it('drops malformed trace-provider headers when exporting older evaluations', async () => {
       const evaluation = new Eval({
         tracing: {

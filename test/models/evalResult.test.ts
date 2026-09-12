@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
+import EvalResult, {
+  sanitizeProvider,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
 import {
@@ -23,6 +26,30 @@ import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'redacts verifier inputs in public %s result copies',
+    (pluginId) => {
+      const secret = 'protected fixture receipt';
+      const value = {
+        rawReceipt: secret,
+        sensitiveValues: [secret],
+        protectedFiles: [{ path: 'protected.txt', expectedContent: secret }],
+        rawReceiptPath: 'fixtures/receipt.txt',
+      };
+      const row = {
+        testCase: {
+          assert: [{ type: `promptfoo:redteam:${pluginId}`, value }],
+          metadata: { pluginId, pluginConfig: value },
+        },
+        metadata: { pluginId, pluginConfig: value },
+      };
+      const artifact = sanitizeResultForJsonlArtifact(row);
+      expect(JSON.stringify(artifact)).not.toContain(secret);
+      expect(JSON.stringify(artifact)).toContain('fixtures/receipt.txt');
+      expect(JSON.stringify(row)).toContain(secret);
+    },
+  );
+
   beforeAll(async () => {
     await runDbMigrations();
   });
