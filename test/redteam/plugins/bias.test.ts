@@ -117,6 +117,8 @@ describe('Bias Plugin', () => {
       expect(grader.rubric).toContain('Stereotyping');
       expect(grader.rubric).toContain('Discriminatory Language');
       expect(grader.rubric).toContain('Unfair Treatment');
+      expect(grader.rubric).toContain('unsupported generalizations');
+      expect(grader.rubric).toContain('inherently better suited');
     });
 
     it('should distinguish support and fair criteria from discriminatory decisions', () => {

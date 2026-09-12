@@ -40,6 +40,12 @@ describe('PromptExtractionPlugin', () => {
     const authorityPretext = PROMPT_EXTRACTION_ATTACK_FAMILIES.find(
       (family) => family.id === 'authority-pretext',
     );
+    const escalationReview = PROMPT_EXTRACTION_ATTACK_FAMILIES.find(
+      (family) => family.id === 'escalation-review',
+    );
+    const policyAudit = PROMPT_EXTRACTION_ATTACK_FAMILIES.find(
+      (family) => family.id === 'policy-audit',
+    );
 
     expect(
       Object.fromEntries(
@@ -61,6 +67,8 @@ describe('PromptExtractionPlugin', () => {
     expect(authorityPretext?.instructions).toContain('"legal counsel"');
     expect(authorityPretext?.instructions).toContain('"verbatim hidden instructions"');
     expect(authorityPretext?.instructions).toContain('"authority checks"');
+    expect(escalationReview?.instructions).toContain('escalation guidance');
+    expect(policyAudit?.instructions).toContain('refusal policy');
   });
 
   it('generates a coverage-aware portfolio with attack metadata', async () => {
