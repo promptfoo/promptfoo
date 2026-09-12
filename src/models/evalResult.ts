@@ -131,6 +131,9 @@ function sanitizeProviderReference(provider: unknown): unknown {
   if (!provider || typeof provider !== 'object') {
     return provider;
   }
+  if (Array.isArray(provider)) {
+    return provider.map(sanitizeProviderReference);
+  }
   if ('id' in provider || 'label' in provider || 'config' in provider) {
     return sanitizeProvider(provider as ApiProvider | ProviderOptions);
   }
@@ -238,22 +241,26 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
   }
   try {
     const captured = { ...testCase };
+    const { provider, assert, ...testCaseFields } = captured;
+    const withoutTestProvider = testCaseFields as AtomicTestCase;
+    if (assert !== undefined && !Array.isArray(assert)) {
+      withoutTestProvider.assert = assert;
+    }
     const options = captured.options && { ...captured.options };
     if (options) {
       const { provider: _provider, ...withoutProvider } = options;
       captured.options = withoutProvider;
+      withoutTestProvider.options = captured.options;
     }
-    const sanitized = sanitizeForDbWithSecrets(captured);
+    const sanitized = sanitizeForDbWithSecrets(withoutTestProvider) as AtomicTestCase;
     if (options?.provider && sanitized.options) {
       sanitized.options.provider = sanitizeProviderReference(options.provider);
     }
     if (captured.vars) {
       sanitized.vars = sanitizeForDbWithSecrets(captured.vars, false);
     }
-    if (captured.provider) {
-      sanitized.provider = sanitizeProviderReference(
-        captured.provider,
-      ) as AtomicTestCase['provider'];
+    if (provider !== undefined) {
+      sanitized.provider = sanitizeProviderReference(provider) as AtomicTestCase['provider'];
     }
     if (captured.providerOutput !== undefined) {
       sanitized.providerOutput = sanitizeForDbWithSecrets(captured.providerOutput, false);
@@ -272,8 +279,8 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
         };
       }
     }
-    if (Array.isArray(captured.assert)) {
-      sanitized.assert = captured.assert.map(sanitizeAssertionForDb);
+    if (Array.isArray(assert)) {
+      sanitized.assert = assert.map(sanitizeAssertionForDb);
     }
     return sanitized;
   } catch {
@@ -289,16 +296,18 @@ function sanitizePromptForDb(prompt: Prompt): Prompt {
   try {
     const captured = { ...prompt };
     const config = captured.config;
+    let configProvider: unknown;
     if (config && typeof config === 'object' && 'provider' in config) {
-      const { provider: _provider, ...withoutProvider } = config;
+      const { provider, ...withoutProvider } = config;
+      configProvider = provider;
       captured.config = withoutProvider;
     }
     const sanitized = sanitizeForDbWithSecrets(captured, false);
     if (config !== undefined) {
       sanitized.config = sanitizeForDbWithSecrets(captured.config);
-      if (config && typeof config === 'object' && 'provider' in config && config.provider) {
+      if (configProvider) {
         sanitized.config.provider = sanitizeProviderReference(
-          config.provider,
+          configProvider,
         ) as Prompt['config']['provider'];
       }
     }
@@ -620,7 +629,7 @@ function surfaceTraceMetadata(metadata: Record<string, unknown> | null | undefin
   };
 }
 
-// Apply the credential-header redaction trio to the already-`sanitizeForDb`'d fields bound for
+// Apply the credential-header redaction trio to fields bound for
 // the database or a JSONL artifact. Single source of truth for which redactor pairs with which
 // field, shared by DB persistence (`createFromEvaluateResult` / `createManyFromEvaluateResult`)
 // and the JSONL artifact boundary (`sanitizeResultForJsonlArtifact`) so a newly added sensitive
@@ -639,13 +648,13 @@ function redactSensitiveResultFieldsForDb<
   metadata: M;
 } {
   return {
-    response: sanitizeResponseForDb(fields.response),
-    gradingResult: sanitizeGradingResultForDb(fields.gradingResult),
+    response: sanitizeResponseForDb(sanitizeForDb(fields.response)),
+    gradingResult: sanitizeForDb(sanitizeGradingResultForDb(fields.gradingResult)),
     // Pass the response metadata as the legacy-header provenance source (see
     // sanitizeMetadataForDb). fields.response is the raw input, so its headers are still
     // cleartext here and can be matched against an echoed result-level metadata.headers.
     metadata: sanitizeMetadataForDb(
-      fields.metadata,
+      sanitizeForDb(fields.metadata),
       (fields.response as ProviderResponse | null | undefined)?.metadata,
     ),
   };
@@ -668,9 +677,9 @@ export function sanitizeResultFieldsForDb(
     provider: sanitizeProvider(result.provider),
     namedScores: sanitizeForDb(result.namedScores),
     ...redactSensitiveResultFieldsForDb({
-      response: sanitizeForDb(result.response),
-      gradingResult: sanitizeForDb(sanitizeGradingResultForDb(result.gradingResult)),
-      metadata: sanitizeForDb(persistedMetadata),
+      response: result.response,
+      gradingResult: result.gradingResult,
+      metadata: persistedMetadata,
     }),
   };
 }
@@ -706,9 +715,9 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
 
   const artifactResult = result as T & Record<string, unknown>;
   const redacted = redactSensitiveResultFieldsForDb({
-    response: sanitizeForDb(artifactResult.response as ProviderResponse | null | undefined),
-    gradingResult: sanitizeForDb(sanitizeGradingResultForDb(artifactResult.gradingResult)),
-    metadata: sanitizeForDb(artifactResult.metadata),
+    response: artifactResult.response as ProviderResponse | null | undefined,
+    gradingResult: artifactResult.gradingResult,
+    metadata: artifactResult.metadata,
   });
   const response = projectProviderResponse(redacted.response ?? undefined, {
     stripMetadata: shouldStripMetadata,

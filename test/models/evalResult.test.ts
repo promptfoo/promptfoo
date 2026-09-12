@@ -217,10 +217,13 @@ describe('EvalResult', () => {
       prompt: { raw: 'prompt', label: 'prompt', config: { provider } as any },
       testCase: {
         vars: {},
-        provider: 'openai:chat:gpt-4.1',
+        description: 'kept despite provider serializer',
+        provider,
+        assert: [{ type: 'llm-rubric', value: 'ok', provider }],
         options: {
           provider: {
             'openai:chat:gpt-4.1': { env: { OPENAI_API_KEY: 'sk-env-secret' } },
+            grader: { prompts: ['judge'] },
           },
         },
       } as AtomicTestCase,
@@ -244,9 +247,18 @@ describe('EvalResult', () => {
       id: 'openai:chat:gpt-4.1',
       config: { apiKey: '[REDACTED]', model: 'gpt-4.1' },
     });
-    expect(result.testCase.provider).toBe('openai:chat:gpt-4.1');
+    expect(result.testCase.description).toBe('kept despite provider serializer');
+    expect(result.testCase.provider).toEqual({
+      id: 'openai:chat:gpt-4.1',
+      config: { apiKey: '[REDACTED]', model: 'gpt-4.1' },
+    });
     expect(result.testCase.options?.provider).toEqual({
       'openai:chat:gpt-4.1': { env: { OPENAI_API_KEY: '[REDACTED]' } },
+      grader: { prompts: ['judge'] },
+    });
+    expect((result.testCase.assert?.[0] as any).provider).toEqual({
+      id: 'openai:chat:gpt-4.1',
+      config: { apiKey: '[REDACTED]', model: 'gpt-4.1' },
     });
     expect(result.gradingResult.componentResults[0].assertion.provider).toEqual({
       id: 'openai:chat:gpt-4.1',
