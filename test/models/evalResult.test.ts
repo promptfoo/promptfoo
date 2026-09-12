@@ -202,6 +202,27 @@ describe('EvalResult', () => {
     expect(result.prompt.config).toBe('[REDACTED]');
   });
 
+  it('reads response metadata once while redacting echoed headers', () => {
+    let reads = 0;
+    const response = {
+      get metadata() {
+        reads++;
+        if (reads > 1) {
+          throw new Error('metadata reread');
+        }
+        return { headers: { authorization: 'Bearer secret' } };
+      },
+    };
+
+    const result = sanitizeResultForJsonlArtifact({
+      response: response as any,
+      metadata: { headers: { authorization: 'Bearer secret' } },
+    });
+
+    expect(reads).toBe(1);
+    expect(result.metadata?.headers).toEqual({ authorization: '[REDACTED]' });
+  });
+
   it('projects provider slots before generic result serialization', () => {
     let providerSerializations = 0;
     const provider = {
@@ -405,13 +426,15 @@ describe('EvalResult', () => {
     });
   });
 
-  it('sanitizes id-less provider options inside provider maps', () => {
+  it('sanitizes id-less provider options without classifying map keys', () => {
     const result = sanitizeResultForJsonlArtifact({
       testCase: {
         vars: {},
+        provider: { config: { apiKey: 'sk-direct-secret' } },
         options: {
           provider: {
             'openai:chat:model': { config: { apiKey: 'sk-map-secret' } },
+            config: { config: { apiKey: 'sk-reserved-secret' } },
           },
         },
       } as AtomicTestCase,
@@ -419,7 +442,9 @@ describe('EvalResult', () => {
 
     expect(result.testCase.options?.provider).toEqual({
       'openai:chat:model': { config: { apiKey: '[REDACTED]' } },
+      config: { config: { apiKey: '[REDACTED]' } },
     });
+    expect(result.testCase.provider).toEqual({ config: { apiKey: '[REDACTED]' } });
   });
 
   it('preserves falsy declarative provider config values', () => {

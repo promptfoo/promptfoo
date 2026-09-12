@@ -855,13 +855,9 @@ function sanitizeJsonString(
     return redactedAzureBlobUri;
   }
 
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(str);
-    if (parsed && typeof parsed === 'object') {
-      const sanitized = recursiveSanitize(parsed, depth, maxDepth, false, redactStringValues);
-      const serialized = JSON.stringify(sanitized);
-      return serialized === JSON.stringify(parsed) ? str : serialized;
-    }
+    parsed = JSON.parse(str);
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {
       const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
@@ -874,8 +870,33 @@ function sanitizeJsonString(
     if (redactStringValues && looksLikeSecret(str)) {
       return REDACTED;
     }
+    return str;
+  }
+
+  if (parsed && typeof parsed === 'object') {
+    try {
+      const sanitized = recursiveSanitize(parsed, depth, maxDepth, false, redactStringValues);
+      const serialized = JSON.stringify(sanitized);
+      const parsedSerialized = JSON.stringify(parsed);
+      // JSON.parse keeps only final duplicate keys. Preserve benign formatting,
+      // but canonicalize credential-shaped documents so discarded values cannot
+      // survive in the raw text.
+      return serialized === parsedSerialized && !hasSecretJsonKey(str) ? str : serialized;
+    } catch {
+      return REDACTED;
+    }
   }
   return str;
+}
+
+function hasSecretJsonKey(value: string): boolean {
+  return [...value.matchAll(/"(?:\\.|[^"\\])*"\s*:/g)].some((match) => {
+    try {
+      return isSecretField(JSON.parse(match[0].slice(0, match[0].lastIndexOf(':')).trim()));
+    } catch {
+      return false;
+    }
+  });
 }
 
 // `key=value` where the key is a typical form-data identifier (allow brackets
@@ -1209,7 +1230,7 @@ export function sanitizeObject(
                   name: redactErrorMessages ? REDACTED : originalValue.name,
                   message: redactErrorMessages ? REDACTED : originalValue.message,
                 }
-              : originalValue !== val && hasUnsafeJsonSerializer(originalValue)
+              : hasUnsafeJsonSerializer(originalValue)
                 ? REDACTED
                 : val;
         if (typeof value === 'bigint') {

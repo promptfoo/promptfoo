@@ -360,6 +360,27 @@ describe('sanitizeObject', () => {
       expect(sanitizeObject(invalidJson)).toBe(invalidJson);
     });
 
+    it('does not preserve hidden duplicate credential JSON keys', () => {
+      expect(sanitizeObject('{"apiKey":"sk-hidden-secret","apiKey":"[REDACTED]"}')).toBe(
+        '{"apiKey":"[REDACTED]"}',
+      );
+      expect(sanitizeObject('{"config":{"apiKey":"sk-hidden-secret"},"config":{}}')).toBe(
+        '{"config":{}}',
+      );
+      expect(sanitizeObject('{"api\\u004bey":"sk-hidden-secret","apiKey":"[REDACTED]"}')).toBe(
+        '{"apiKey":"[REDACTED]"}',
+      );
+    });
+
+    it('fails closed when sanitizing parsed JSON exceeds the call stack', () => {
+      let nested = '{"apiKey":"sk-hidden-secret"}';
+      for (let index = 0; index < 10000; index++) {
+        nested = `{"value":${nested}}`;
+      }
+
+      expect(sanitizeObject(nested, { maxDepth: Number.POSITIVE_INFINITY })).toBe('[REDACTED]');
+    });
+
     it('should redact SAS tokens embedded in Azure Blob test URIs', () => {
       const result = sanitizeObject({
         tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
@@ -1134,6 +1155,19 @@ describe('sanitizeObject', () => {
       };
 
       expect(JSON.stringify(sanitizeObject(input))).not.toContain('short-fixture');
+    });
+
+    it('does not trust a self-returning custom JSON serializer', () => {
+      const credential = {
+        apiKey: 'short-fixture',
+        toJSON() {
+          this.message = this.apiKey;
+          delete this.apiKey;
+          return this;
+        },
+      } as { apiKey?: string; message?: string; toJSON(): unknown };
+
+      expect(sanitizeObject({ credential })).toEqual({ credential: '[REDACTED]' });
     });
 
     it('does not let custom JSON rename inherited credentials', () => {

@@ -124,18 +124,7 @@ export function sanitizeProvider(
 // Test and assertion provider slots also accept string ids and provider maps.
 // Preserve those public shapes while projecting concrete provider objects before
 // generic serialization can invoke an untrusted toJSON hook.
-const PROVIDER_OPTION_KEYS = new Set([
-  'id',
-  'label',
-  'config',
-  'prompts',
-  'transform',
-  'delay',
-  'env',
-  'inputs',
-]);
-
-function sanitizeProviderReference(provider: unknown, allowIdlessOptions = false): unknown {
+function sanitizeProviderReference(provider: unknown): unknown {
   if (typeof provider === 'string') {
     return provider;
   }
@@ -143,7 +132,7 @@ function sanitizeProviderReference(provider: unknown, allowIdlessOptions = false
     return provider;
   }
   if (Array.isArray(provider)) {
-    return provider.map((item) => sanitizeProviderReference(item, true));
+    return provider.map(sanitizeProviderReference);
   }
   if (typeof (provider as { id?: unknown }).id === 'function') {
     return sanitizeProvider(provider as ApiProvider | ProviderOptions);
@@ -158,26 +147,15 @@ function sanitizeProviderReference(provider: unknown, allowIdlessOptions = false
       ...(config !== undefined && { config: sanitizeProviderConfig(config) }),
     };
   }
-  const keys = Object.keys(provider);
-  if (allowIdlessOptions && keys.every((key) => PROVIDER_OPTION_KEYS.has(key))) {
-    const { label, config, ...options } = provider as ProviderOptions;
-    const sanitizedOptions = sanitizeForDbWithSecrets(options);
-    return {
-      ...(sanitizedOptions && typeof sanitizedOptions === 'object' ? sanitizedOptions : {}),
-      ...(label !== undefined && { label }),
-      ...(config !== undefined && { config: sanitizeProviderConfig(config) }),
-    };
-  }
   if ('env' in provider) {
     return sanitizeForDbWithSecrets(provider);
   }
-  return Object.fromEntries(
-    Object.entries(Object.getOwnPropertyDescriptors(provider))
-      .filter(([, descriptor]) => 'value' in descriptor)
-      .map(([key, descriptor]) => [
-        key,
-        sanitizeProviderReference(descriptor.value, !PROVIDER_OPTION_KEYS.has(key)),
-      ]),
+  return sanitizeForDbWithSecrets(
+    Object.fromEntries(
+      Object.entries(Object.getOwnPropertyDescriptors(provider))
+        .filter(([, descriptor]) => 'value' in descriptor)
+        .map(([key, descriptor]) => [key, sanitizeProviderReference(descriptor.value)]),
+    ),
   );
 }
 
@@ -668,15 +646,16 @@ function redactSensitiveResultFieldsForDb<
   gradingResult: G;
   metadata: M;
 } {
+  const plainResponse = sanitizeForDb(fields.response);
   return {
-    response: sanitizeResponseForDb(sanitizeForDb(fields.response)),
+    response: sanitizeResponseForDb(plainResponse),
     gradingResult: sanitizeForDb(sanitizeGradingResultForDb(fields.gradingResult)),
     // Pass the response metadata as the legacy-header provenance source (see
     // sanitizeMetadataForDb). fields.response is the raw input, so its headers are still
     // cleartext here and can be matched against an echoed result-level metadata.headers.
     metadata: sanitizeMetadataForDb(
       sanitizeForDb(fields.metadata),
-      (fields.response as ProviderResponse | null | undefined)?.metadata,
+      (plainResponse as ProviderResponse | null | undefined)?.metadata,
     ),
   };
 }
