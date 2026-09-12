@@ -2200,4 +2200,29 @@ describe('hoisted mock provenance', () => {
       beforeEach(() => [first, second].forEach((mock) => mock.mockReset()));`;
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
   });
+
+  it('binds static mocks on hoisted class declarations', () => {
+    const source = `const Holder = vi.hoisted(() => {
+      class Inner { static mock = vi.fn().mockReturnValue('x') }
+      return Inner;
+    }); beforeEach(() => Holder.mock.mockReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('skips sparse holes in known array forEach callbacks', () => {
+    const source = `const mock = vi.hoisted(() => {
+      [,].forEach((entry) => entry.mockReturnValue('x'));
+      return vi.fn().mockReturnValue('y');
+    }); beforeEach(() => mock.mockReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('tracks setters in awaited promise callbacks', () => {
+    const source = `const mock = vi.hoisted(async () => {
+      const request = vi.fn();
+      await Promise.resolve().then(() => request.mockReturnValue('x'));
+      return request;
+    });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
 });

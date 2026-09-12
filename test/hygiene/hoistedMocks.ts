@@ -1283,6 +1283,9 @@ export function findHoistedPersistentMockWithoutReset(
         args[0]?.kind === 'function'
       ) {
         for (const [index, element] of receiver.elements.entries()) {
+          if (element.value === MISSING) {
+            continue;
+          }
           invoke(args[0], [element.value, literal(index), receiver], context, node, {
             tail: false,
           });
@@ -1712,10 +1715,28 @@ export function findHoistedPersistentMockWithoutReset(
           ),
         );
       case 'AwaitExpression':
-        return node.argument.type === 'CallExpression' &&
+        if (
+          node.argument.type === 'CallExpression' &&
           staticApi(node.argument.callee, context)?.name === 'vi.hoisted'
-          ? evaluate(node.argument, context, tail)
-          : evaluateChildren(node, context);
+        ) {
+          return evaluate(node.argument, context, tail);
+        }
+        if (
+          node.argument.type === 'CallExpression' &&
+          node.argument.callee.type === 'MemberExpression' &&
+          propertyName(node.argument.callee.property, node.argument.callee.computed) === 'then'
+        ) {
+          evaluate(node.argument.callee.object, context);
+          const callback = node.argument.arguments[0];
+          if (callback) {
+            const value = evaluate(callback, context);
+            if (members(value).every((part) => part.kind === 'function')) {
+              invoke(value, [], context, node, { tail: false });
+            }
+          }
+          return UNKNOWN;
+        }
+        return evaluateChildren(node, context);
       case 'MemberExpression': {
         const object = evaluate(node.object, context);
         return optionalTarget(object, node, context, (target, nested) =>
@@ -2417,7 +2438,11 @@ export function findHoistedPersistentMockWithoutReset(
         return execute(node.body, nested);
       }
       case 'ClassDeclaration':
-        executeClass(node, context);
+        if (node.id) {
+          bind(node.id, executeClass(node, context), context);
+        } else {
+          executeClass(node, context);
+        }
         break;
       case 'ExportNamedDeclaration':
       case 'ExportDefaultDeclaration':

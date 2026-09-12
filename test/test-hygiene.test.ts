@@ -742,12 +742,14 @@ type RootPolicyResults = FilePolicyResults & {
 
 const hoistedSetterPattern =
   /\b(?:vi|vitest\.vi)\.hoisted\s*\([\s\S]*?\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?\s*\(/;
+const globalBeforeEachResetPattern =
+  /\bbeforeEach\s*\(\s*(?:(?:vi|vitest\.vi)\.resetAllMocks\s*\)|(?:(?:\(\)|[\w$]+)\s*=>\s*)(?:\{[^}]*?)?(?:vi|vitest\.vi)\.resetAllMocks\s*\()/;
 const mockResetPattern = /(?:\.mockReset\s*\(|\b(?:vi|vitest\.vi)\.resetAllMocks\s*\()/;
 const individualTestSetterPattern =
-  /\b(?:it|test)\s*\(\s*['"`][^'"`]*['"`]\s*,\s*(?:async\s*)?(?:\([^)]*\)|[\w$]+)\s*=>\s*(?:\{[^}]*?\b)?([\w$]+)\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?\s*\(/g;
+  /\b(?:it|test)\s*\(\s*['"`][^'"`]*['"`]\s*,\s*(?:async\s*)?(?:(?:\([^)]*\)|[\w$]+)\s*=>|function\s*\([^)]*\))\s*(?:\{[^}]*?\b)?([\w$]+)\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?\s*\(/g;
 
 function hasUnresetNamedSetter(source: string): boolean {
-  if (/\b(?:vi|vitest\.vi)\.resetAllMocks\s*\(/.test(source)) {
+  if (globalBeforeEachResetPattern.test(source)) {
     return false;
   }
   const resetNames = new Set(
@@ -759,7 +761,7 @@ function hasUnresetNamedSetter(source: string): boolean {
     }
     const name = match[1].replace(/[\\$]/g, '\\$&');
     return new RegExp(
-      `\\b(?:it|test)\\s*\\(\\s*['"]\\S+['"]\\s*,\\s*(?:async\\s*)?(?:\\([^)]*\\)|[\\w$]+)\\s*=>\\s*${name}\\s*\\(`,
+      `\\b(?:it|test)\\s*\\(\\s*['"]\\S+['"]\\s*,\\s*(?:async\\s*)?(?:(?:\\([^)]*\\)|[\\w$]+)\\s*=>|function\\s*\\([^)]*\\))\\s*(?:\\{[^}]*?\\b)?${name}\\s*\\(`,
     ).test(source.slice(match.index + match[0].length));
   });
 }
@@ -1082,6 +1084,24 @@ describe('root test hygiene', () => {
         source.replace('safe.mockReset()', 'unsafe.mockReset()'),
       ),
     ).toBe(false);
+  });
+
+  it('does not treat afterAll resetAllMocks as before-test isolation', () => {
+    const source = `const unsafe = vi.hoisted(() => vi.fn());
+      const safe = vi.hoisted(() => vi.fn());
+      afterAll(() => vi.resetAllMocks());
+      it('first', () => unsafe.mockReturnValue('x'));
+      it('later', () => unsafe());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it('detects individual-test setters in function expressions', () => {
+    const source = `const safe = vi.hoisted(() => vi.fn());
+      const unsafe = vi.hoisted(() => vi.fn());
+      beforeEach(() => safe.mockReset());
+      it('first', function () { unsafe.mockReturnValue('x'); });
+      it('later', function () { unsafe(); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
   });
 
   it('does not let an unrelated reset hide a block-bodied individual-test setter', () => {
