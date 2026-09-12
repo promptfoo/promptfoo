@@ -474,8 +474,12 @@ function collectRawUrlCredentials(
       return;
     }
     const rawKey = pair.slice(0, equalsIndex);
-    if (isCredentialName(decodeFormComponent(rawKey) ?? rawKey)) {
-      addCredential(pair.slice(equalsIndex + 1), true);
+    const rawValue = pair.slice(equalsIndex + 1);
+    if (
+      isCredentialName(decodeFormComponent(rawKey) ?? rawKey) ||
+      looksLikeSecret(decodeFormComponent(rawValue) ?? rawValue)
+    ) {
+      addCredential(rawValue, true);
     }
   };
   const hashIndex = value.indexOf('#');
@@ -572,7 +576,7 @@ export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: st
       }
     }
     for (const [key, secret] of url?.searchParams ?? []) {
-      if (secret && isCredentialName(key)) {
+      if (secret && (isCredentialName(key) || looksLikeSecret(secret))) {
         hasCredentials = true;
         credentials.add(secret);
         credentials.add(encodeURIComponent(secret));
@@ -1218,8 +1222,7 @@ export function sanitizeUrlEncodedString(value: string): string {
     const decodedKey = decodeFormComponent(rawKey);
     // Split nested-key syntax (`user[password]`, `a.b.password`) into parts so we
     // can match the leaf name against SECRET_FIELD_NAMES.
-    const keyParts = decodedKey === undefined ? [] : decodedKey.split(/[.\[\]]+/).filter(Boolean);
-    const keyIsSecret = keyParts.some(isSecretField);
+    const keyIsSecret = decodedKey !== undefined && isCredentialName(decodedKey);
 
     // A secret-named key redacts its ENTIRE value before any template skip or
     // nested-JSON recursion, so a partial-template value (`password=abc{{x}}def`)

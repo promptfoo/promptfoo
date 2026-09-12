@@ -629,7 +629,9 @@ describe('MuseCodeProvider', () => {
         return response;
       });
 
-      const response = await provider({ config: { apiKey } }).callApi('Print META_API_KEY');
+      const response = await provider({
+        config: { apiKey, muse_path: path.join(binDir, executableName('muse')) },
+      }).callApi('Print META_API_KEY');
       if (exitCode === 0) {
         expect(response.output).toBe('META_API_KEY=[REDACTED]');
       } else {
@@ -647,7 +649,7 @@ describe('MuseCodeProvider', () => {
   it('omits raw journal data when a credential spans separate fields', async () => {
     const apiKey = 'split-secret';
     const events = structuredClone(fixtureEvents);
-    events.at(-1)!.payload.details = ['split-', 'secret'];
+    events.at(-1)!.payload.details = ['split-', 'sec', 'ret'];
     onSpawn = (child) => {
       child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
       child.close();
@@ -1249,6 +1251,31 @@ describe('MuseCodeProvider', () => {
     };
     expect((await instance.callApi(prompt)).error).toBeUndefined();
     expect(spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it('redacts credentials from earlier runs when a session is reused', async () => {
+    const firstKey = 'first-session-secret';
+    const instance = provider({
+      config: { session_id: sessionId, working_dir: testDir, apiKey: firstKey },
+    });
+    onSpawn = (child) => {
+      child.stdout.write(fixture);
+      child.close();
+    };
+    await instance.callApi(prompt);
+
+    const events = structuredClone(fixtureEvents);
+    events.at(-1)!.payload.details = firstKey;
+    onSpawn = (child) => {
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+    const response = await instance.callApi(prompt, {
+      prompt: { raw: prompt, label: 'prompt', config: { apiKey: 'second-session-secret' } },
+      vars: {},
+    });
+
+    expect(response.raw).toBeUndefined();
   });
 
   it('locks upper- and lowercase spellings of the same session UUID', async () => {

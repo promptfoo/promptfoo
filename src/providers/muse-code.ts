@@ -312,12 +312,24 @@ function redactCredentials(response: ProviderResponse, credentials: string[]): P
         .map((event) => event?.payload?.text)
         .filter((value): value is string => typeof value === 'string')
     : [];
-  const containsAdjacentCredential = (values: string[], credential: string) =>
-    values.some((value, index) => index > 0 && (values[index - 1] + value).includes(credential));
+  const containsSplitCredential = (values: string[], credential: string) =>
+    values.some((_, start) => {
+      let joined = '';
+      for (let end = start; end < values.length && joined.length < credential.length; end++) {
+        if (values[end].includes(credential)) {
+          return false;
+        }
+        joined += values[end];
+        if (end > start && joined.includes(credential)) {
+          return true;
+        }
+      }
+      return false;
+    });
   const hasSplitCredential = credentials.some(
     (credential) =>
-      containsAdjacentCredential(rawStrings, credential) ||
-      containsAdjacentCredential(eventTexts, credential),
+      containsSplitCredential(rawStrings, credential) ||
+      containsSplitCredential(eventTexts, credential),
   );
   const sanitizedResponse =
     shouldStripRaw || hasSplitCredential ? { ...response, raw: undefined } : response;
@@ -348,6 +360,7 @@ export class MuseCodeProvider implements ApiProvider {
   private readonly env: ProviderOptions['env'];
   private readonly calls = new Map<AbortController, Promise<ProviderResponse>>();
   private readonly activeSessions = new Set<string>();
+  private readonly sessionCredentials = new Map<string, Set<string>>();
 
   constructor(options: ProviderOptions = {}) {
     this.config = MuseCodeInputSchema.parse(options.config ?? {});
@@ -514,7 +527,13 @@ export class MuseCodeProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     let tempDir: string | undefined;
     const env = this.buildEnv(config);
-    const credentials = collectEnvCredentials(env, config.base_url);
+    const currentCredentials = collectEnvCredentials(env, config.base_url);
+    const credentials = config.session_id
+      ? [...(this.sessionCredentials.get(config.session_id) ?? new Set()), ...currentCredentials]
+      : currentCredentials;
+    if (config.session_id) {
+      this.sessionCredentials.set(config.session_id, new Set(credentials));
+    }
     try {
       signal.throwIfAborted();
       const basePath = config.basePath ?? cliState.basePath;
@@ -696,6 +715,7 @@ export class MuseCodeProvider implements ApiProvider {
     try {
       await this.cleanup();
     } finally {
+      this.sessionCredentials.clear();
       providerRegistry.unregister(this);
     }
   }

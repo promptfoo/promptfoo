@@ -270,6 +270,7 @@ describe('sanitizeObject', () => {
   it.each([
     ['base_url', 'https://user:password@example.test/v1'],
     ['base_url', 'https://example.test/v1?api_key=short-secret'],
+    ['base_url', 'https://example.test/v1?cursor=sk-abcdefghijklmnopqrstuvwxyz'],
     ['baseUrl', 'https://example.test/v1?github_pat=short-secret'],
     ['base_url', 'https://{{ env.HOST }}/v1?github_pat=short-secret'],
     ['base_url', 'https://example.test/v1#api_key=short-secret'],
@@ -1726,11 +1727,13 @@ describe('sanitizeObject', () => {
     });
 
     it('should redact PHP/qs-style bracket keys', () => {
-      const body = 'user[password]=hunter2&user[name]=alice';
+      const body = 'user[password]=hunter2&user[name]=alice&github_pat=short-secret';
       const result = sanitizeUrlEncodedString(body);
       expect(result).toContain('user[password]=%5BREDACTED%5D');
       expect(result).toContain('user[name]=alice');
+      expect(result).toContain('github_pat=%5BREDACTED%5D');
       expect(result).not.toContain('hunter2');
+      expect(result).not.toContain('short-secret');
     });
 
     it('should still redact a secret value when the key has malformed percent-encoding', () => {
