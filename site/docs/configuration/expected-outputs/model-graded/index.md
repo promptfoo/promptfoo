@@ -260,6 +260,54 @@ override the grader. There are several ways to do this, depending on your prefer
            provider: openai:gpt-5.6
    ```
 
+:::caution `defaultTest.provider` also sets the grader for output-based assertions
+
+`defaultTest.provider` is the field that pins the **target model** for every test in a suite.
+For output-based model-graded assertions (`llm-rubric`, `factuality`, `g-eval`,
+`model-graded-closedqa`, `answer-relevance`, etc.) it is also consulted as a grader fallback when
+no explicit grader is configured — **after** `--grader`, `assertion.provider`, and
+`test.options.provider` / `defaultTest.options.provider` have all been checked and found absent.
+
+In practice this means the following config generates responses **and** grades them with `gpt-4.1`:
+
+```yaml
+defaultTest:
+  provider: openai:gpt-4.1 # ← also becomes the judge when no grader is set
+tests:
+  - assert:
+      - type: llm-rubric
+        value: Answers the question accurately
+```
+
+To use a dedicated judge while still pinning the target, set `defaultTest.options.provider`
+(option 2 above) or pass `--grader` on the CLI:
+
+```yaml
+defaultTest:
+  provider: openai:gpt-4.1 # target model
+  options:
+    provider: openai:gpt-5.6 # explicit judge — takes precedence over the fallback
+```
+
+**Notes:**
+
+- This fallback applies to the output-based assertions listed above. `agent-rubric` and
+  `search-rubric` use capability-specific provider selection and are not affected.
+  **Red-team runs (`promptfoo redteam run`):** `RedteamProviderManager` selects `defaultTest.provider`
+  _before_ `defaultTest.options.provider`, so setting `defaultTest.options.provider` alone does not
+  override the judge. The reliable pattern is to move the target to the top-level `providers` list
+  and reserve `defaultTest.options.provider` for the judge:
+
+```yaml
+providers:
+  - openai:gpt-4.1 # target — no longer in defaultTest.provider
+defaultTest:
+  options:
+    provider: openai:gpt-5.6 # judge — now effective in both standard and red-team grading
+```
+
+:::
+
 Use the `provider.config` field to set custom parameters such as `temperature`, `max_tokens`, or API host:
 
 ```yaml
