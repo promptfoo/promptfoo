@@ -16,6 +16,8 @@ import {
   HttpProvider,
 } from '../../../src/providers/http';
 import { getRequestTimeoutMs } from '../../../src/providers/shared';
+import { wrapProviderWithRateLimiting } from '../../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 
 describe('determineRequestBody', () => {
   it('should merge parsed prompt object with config body when content type is JSON', () => {
@@ -603,6 +605,52 @@ describe('response handling', () => {
     // Verify the result is correctly structured
     expect(result.output).toBe('transformed result');
   });
+
+  it('should preserve an error returned by transformResponse', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ blocked: true }),
+      status: 200,
+      headers: {},
+      statusText: 'OK',
+      cached: false,
+    });
+
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        method: 'GET',
+        transformResponse: () => ({ error: 'Provider guardrail blocked the response' }),
+      },
+    });
+
+    const result = await provider.callApi('test');
+
+    expect(result.error).toBe('Provider guardrail blocked the response');
+    expect(result).not.toHaveProperty('output');
+  });
+
+  it.each(['', false, 0])(
+    'should preserve a falsey output returned by transformResponse: %j',
+    async (output) => {
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ output }),
+        status: 200,
+        headers: {},
+        statusText: 'OK',
+        cached: false,
+      });
+
+      const provider = new HttpProvider('http://example.com/api', {
+        config: {
+          method: 'GET',
+          transformResponse: () => ({ output }),
+        },
+      });
+
+      const result = await provider.callApi('test');
+
+      expect(result.output).toBe(output);
+    },
+  );
 
   it('should handle non-JSON responses with debug mode and transform without output property', async () => {
     const mockUrl = 'http://example.com/api';
@@ -2125,6 +2173,62 @@ describe('Token Estimation', () => {
       const result = estimateTokenCount(text);
       expect(result).toBe(Math.ceil(2 * 1.3)); // Default multiplier is 1.3
     });
+  });
+});
+
+describe('HttpProvider scheduler response envelopes', () => {
+  it.each([
+    { raw: false, response: { error: 'Completed transform diagnostic' } },
+    { raw: true, response: { output: 0 } },
+  ])('preserves completed response metadata and usage, raw=$raw', async ({ raw, response }) => {
+    const tokenUsage = { prompt: 2, completion: 3, total: 5, numRequests: 1 };
+    const headers = { 'x-request-id': 'completed-transform' };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      data: JSON.stringify({ message: 'Wire response' }),
+      status: 200,
+      statusText: 'OK',
+      headers,
+      cached: false,
+    });
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        ...(raw ? { request: 'GET /api HTTP/1.1\nHost: example.com\n\n' } : { method: 'GET' }),
+        debug: true,
+        transformResponse: () => ({ ...response, tokenUsage }),
+      },
+    });
+    const registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    const controller = new AbortController();
+    try {
+      const result = await wrapProviderWithRateLimiting(provider, registry).callApi(
+        'Completed transport',
+        undefined,
+        { abortSignal: controller.signal },
+      );
+      expect(result).toMatchObject(response);
+      if ('error' in response) {
+        expect(result).not.toHaveProperty('output');
+      } else {
+        expect(result.output).toBe(0);
+      }
+      expect(result.tokenUsage).toEqual(tokenUsage);
+      expect(result.metadata?.http).toMatchObject({ status: 200, headers });
+      expect(fetchWithCache).toHaveBeenCalledOnce();
+      expect(vi.mocked(fetchWithCache).mock.calls[0][1]?.signal).toBe(controller.signal);
+      expect(Object.values(registry.getMetrics())).toMatchObject([
+        {
+          totalRequests: 1,
+          completedRequests: 1,
+          failedRequests: 0,
+          retriedRequests: 0,
+          rateLimitHits: 0,
+          activeRequests: 0,
+          queueDepth: 0,
+        },
+      ]);
+    } finally {
+      registry.dispose();
+    }
   });
 });
 

@@ -15,6 +15,8 @@ import {
   FS_READONLY_ALLOWED_TOOLS,
 } from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
+import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import * as genaiTracer from '../../src/tracing/genaiTracer';
 import * as traceStore from '../../src/tracing/store';
 import { checkProviderApiKeys } from '../../src/util/provider';
@@ -307,8 +309,174 @@ describe('ClaudeCodeSDKProvider', () => {
 
   afterEach(async () => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     cliState.setActiveOtlpReceiver();
     await clearCache();
+  });
+
+  it('reports installation guidance for an asynchronously rejected SDK import', async () => {
+    vi.mocked(importModule).mockRejectedValueOnce(new Error('module initialization failed'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+    const result = await provider.callApi('Import failure');
+    expect(result.error).toContain('Failed to load @anthropic-ai/claude-agent-sdk');
+    expect(result.error).toContain('npm install @anthropic-ai/claude-agent-sdk');
+  });
+
+  it.each(['', null])(
+    'honors empty system prompts while defaulting null (%j)',
+    async (systemPrompt) => {
+      mockQuery.mockReturnValue(createMockResponse('Response'));
+      const provider = new ClaudeCodeSDKProvider({
+        config: { apiKey: 'test-key', custom_system_prompt: systemPrompt as unknown as string },
+      });
+      await provider.callApi('Empty system prompt');
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            systemPrompt:
+              systemPrompt === null ? expect.objectContaining({ preset: 'claude_code' }) : '',
+          }),
+        }),
+      );
+    },
+  );
+
+  it('uses prompt API keys without reusing responses across credentials', async () => {
+    vi.stubEnv('ANTHROPIC_API_KEY', undefined);
+    enableCache();
+    const provider = new ClaudeCodeSDKProvider();
+    for (const key of ['prompt-key-one', 'prompt-key-two']) {
+      mockQuery.mockReturnValue(createMockResponse(key));
+      const result = await provider.callApi('Same prompt', {
+        vars: {},
+        prompt: { raw: 'Same prompt', label: 'test', config: { apiKey: key } },
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.output).toBe(key);
+      expect(mockQuery).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            env: expect.objectContaining({ ANTHROPIC_API_KEY: key }),
+          }),
+        }),
+      );
+    }
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives the merged prompt API key precedence over the provider key', async () => {
+    mockQuery.mockReturnValue(createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'provider-key' } });
+    await provider.callApi('Override', {
+      vars: {},
+      prompt: { raw: 'Override', label: 'test', config: { apiKey: 'prompt-key' } },
+    });
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          env: expect.objectContaining({ ANTHROPIC_API_KEY: 'prompt-key' }),
+        }),
+      }),
+    );
+  });
+
+  describe('scheduler composition', () => {
+    let registry: RateLimitRegistry;
+
+    beforeEach(() => {
+      registry = new RateLimitRegistry({ maxConcurrency: 1 });
+    });
+
+    afterEach(() => {
+      registry.dispose();
+    });
+
+    it('preserves a pre-aborted caller reason before SDK dispatch', async () => {
+      const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+      const rawCall = vi.spyOn(provider, 'callApi');
+      const wrapped = wrapProviderWithRateLimiting(provider, registry);
+      const controller = new AbortController();
+      const reason = Object.freeze(new Error('caller stopped before dispatch'));
+      controller.abort(reason);
+
+      await expect(
+        wrapped.callApi('No SDK dispatch', undefined, { abortSignal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError', cause: reason });
+      expect(rawCall).not.toHaveBeenCalled();
+      expect(mockQuery).not.toHaveBeenCalled();
+      expect(tempDirSpy).not.toHaveBeenCalled();
+    });
+
+    it('forwards an in-flight caller reason to the SDK controller and cleans up', async () => {
+      let started!: (signal: AbortSignal) => void;
+      const queryStarted = new Promise<AbortSignal>((resolve) => {
+        started = resolve;
+      });
+      mockQuery.mockImplementation(({ options }) => {
+        const signal: AbortSignal = options.abortController.signal;
+        return (async function* () {
+          started(signal);
+          await new Promise<never>((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          });
+        })();
+      });
+      const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+      const wrapped = wrapProviderWithRateLimiting(provider, registry);
+      const controller = new AbortController();
+      const reason = Object.freeze(new Error('caller stopped during SDK query'));
+      const pending = wrapped.callApi('Held SDK query', undefined, {
+        abortSignal: controller.signal,
+      });
+      try {
+        const sdkSignal = await queryStarted;
+        expect(sdkSignal).not.toBe(controller.signal);
+        expect(sdkSignal.aborted).toBe(false);
+        controller.abort(reason);
+        expect(sdkSignal.reason).toBe(reason);
+        const result = await pending;
+        expect(result.error).toBe('Claude Agent SDK call aborted');
+        expect(mockQuery).toHaveBeenCalledOnce();
+        expect(rmSyncSpy).toHaveBeenCalledWith('/tmp/test-temp-dir', {
+          recursive: true,
+          force: true,
+        });
+        expect(Object.values(registry.getMetrics())).toMatchObject([
+          { activeRequests: 0, queueDepth: 0, failedRequests: 1, retriedRequests: 0 },
+        ]);
+      } finally {
+        controller.abort(reason);
+        await pending;
+      }
+    });
+
+    it('forwards prompt credentials without reusing a different key response', async () => {
+      vi.stubEnv('ANTHROPIC_API_KEY', undefined);
+      enableCache();
+      const provider = new ClaudeCodeSDKProvider();
+      const wrapped = wrapProviderWithRateLimiting(provider, registry);
+      for (const key of ['wrapped-key-one', 'wrapped-key-two']) {
+        mockQuery.mockReturnValue(createMockResponse(key));
+        const result = await wrapped.callApi('Same wrapped prompt', {
+          vars: {},
+          prompt: { raw: 'Same wrapped prompt', label: 'test', config: { apiKey: key } },
+        });
+        expect(result.output).toBe(key);
+        expect(result.error).toBeUndefined();
+        expect(result.cached).not.toBe(true);
+        expect(mockQuery).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            options: expect.objectContaining({
+              env: expect.objectContaining({ ANTHROPIC_API_KEY: key }),
+            }),
+          }),
+        );
+      }
+      expect(mockQuery).toHaveBeenCalledTimes(2);
+      expect(Object.values(registry.getMetrics())).toMatchObject([
+        { totalRequests: 2, completedRequests: 2, activeRequests: 0, queueDepth: 0 },
+      ]);
+    });
   });
 
   describe('constructor', () => {
@@ -1654,15 +1822,18 @@ describe('ClaudeCodeSDKProvider', () => {
         mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
       });
 
-      it('should report missing key when no Vertex/Bedrock env is set', () => {
+      it('defers missing-key validation until prompt config is available', async () => {
         mockProcessEnv({ ANTHROPIC_API_KEY: undefined });
         mockProcessEnv({ CLAUDE_CODE_USE_VERTEX: undefined });
         mockProcessEnv({ CLAUDE_CODE_USE_BEDROCK: undefined });
 
         const provider = new ClaudeCodeSDKProvider();
         const result = checkProviderApiKeys([provider]);
-        expect(result.size).toBe(1);
-        expect(result.get('ANTHROPIC_API_KEY')).toEqual(['anthropic:claude-agent-sdk']);
+        expect(result.size).toBe(0);
+        await expect(provider.callApi('Missing credentials')).rejects.toThrow(
+          'Anthropic API key is not set',
+        );
+        expect(mockQuery).not.toHaveBeenCalled();
       });
 
       it('should not report missing key when apiKeyRequired is false', () => {
