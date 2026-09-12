@@ -201,6 +201,59 @@ describe('RedteamGoatProvider', () => {
     }
   });
 
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'keeps %s forensic traces out of the attacker and returned snapshots',
+    async (pluginId) => {
+      const canary = 'PRIVATE_GOAT_FORENSIC_TRACE';
+      const fetchTrace = vi.spyOn(traceContext, 'fetchTraceContext').mockResolvedValue({
+        traceId: 'trace',
+        spans: [
+          {
+            spanId: 'span',
+            name: canary,
+            kind: 'client',
+            startTime: 0,
+            attributes: {},
+            status: { code: 'ok' },
+            depth: 0,
+            events: [],
+          },
+        ],
+        insights: [canary],
+        fetchedAt: 0,
+      });
+      mockGrader.getResult.mockResolvedValue({
+        grade: { pass: true, score: 1 },
+        rubric: 'Public report',
+      });
+      const target = createMockTargetProvider('Public report');
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+        tracing: { enabled: true },
+      });
+      try {
+        const result = await provider.callApi('', {
+          ...createMockContext(
+            target,
+            { goal: 'Inspect report' },
+            {
+              assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+              metadata: { pluginId, purpose: 'Fixture' },
+            },
+          ),
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        });
+        expect(target.callApi).toHaveBeenCalledTimes(2);
+        expect(fetchTrace).toHaveBeenCalledTimes(2);
+        expect(JSON.stringify(mockFetch.mock.calls)).not.toContain(canary);
+        expect(JSON.stringify(result.metadata)).not.toContain(canary);
+      } finally {
+        fetchTrace.mockRestore();
+      }
+    },
+  );
+
   it('should preserve an explicit maxTurns value of 0', async () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',

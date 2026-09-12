@@ -19,6 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { TRACE_REDACTION_ASSERTIONS } from '../../constants/traceRedaction';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -389,6 +390,11 @@ export class CrescendoProvider implements ApiProvider {
     // Fallback: if no assertion matches the pluginId, use the first assertion with a type
     if (!assertToUse) {
       assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    }
+
+    const redactTrace = TRACE_REDACTION_ASSERTIONS.has(assertToUse?.type ?? '');
+    if (redactTrace) {
+      tracingOptions.includeInAttack = false;
     }
 
     const { getGraderById } = await import('../../graders');
@@ -809,7 +815,7 @@ export class CrescendoProvider implements ApiProvider {
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult,
         traceSnapshots:
-          traceSnapshots.length > 0
+          !redactTrace && traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
         ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),

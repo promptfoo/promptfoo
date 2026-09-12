@@ -8,6 +8,7 @@ import { checkServerFeatureSupport } from '../../../../src/util/server';
 import { createMockProvider, type MockApiProvider } from '../../../factories/provider';
 
 import type { Message } from '../../../../src/redteam/providers/shared';
+import type { AtomicTestCase } from '../../../../src/types/index';
 
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -224,6 +225,71 @@ describe('CrescendoProvider', () => {
     expect(provider.config.stateful).toBe(true);
     expect(provider.config.continueAfterSuccess).toBe(false);
   });
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'keeps %s forensic traces out of the attacker and returned snapshots',
+    async (pluginId) => {
+      const canary = 'PRIVATE_CRESCENDO_FORENSIC_TRACE';
+      const test: AtomicTestCase = {
+        assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+        metadata: { pluginId, purpose: 'Fixture' },
+      };
+      const fetchTrace = vi.spyOn(traceContext, 'fetchTraceContext').mockResolvedValue({
+        traceId: 'trace',
+        spans: [
+          {
+            spanId: 'span',
+            name: canary,
+            kind: 'client',
+            startTime: 0,
+            attributes: {},
+            status: { code: 'ok' },
+            depth: 0,
+            events: [],
+          },
+        ],
+        insights: [canary],
+        fetchedAt: 0,
+      });
+      mockGetGraderById.mockReturnValue({
+        getResult: vi
+          .fn()
+          .mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Public report' }),
+      });
+      mockRedTeamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({
+          generatedQuestion: 'Inspect report',
+          rationaleBehindJailbreak: 'Fixture',
+          lastResponseSummary: 'Public report',
+        }),
+      });
+      mockTargetProvider.callApi.mockResolvedValue({ output: 'Public report' });
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+        maxTurns: 2,
+        maxBacktracks: 0,
+        redteamProvider: mockRedTeamProvider,
+        tracing: { enabled: true },
+      });
+      vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+      vi.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+        value: false,
+        metadata: 0,
+        rationale: 'Continue',
+      });
+      const result = await provider.callApi('', {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'Inspect report' },
+        prompt: { raw: '{{objective}}', label: 'test' },
+        test,
+        traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+      });
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(fetchTrace).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(mockRedTeamProvider.callApi.mock.calls)).not.toContain(canary);
+      expect(JSON.stringify(result.metadata)).not.toContain(canary);
+    },
+  );
 
   it('should support backwards compatibility with maxRounds', () => {
     const provider = new CrescendoProvider({

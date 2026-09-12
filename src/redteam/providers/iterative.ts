@@ -20,6 +20,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { TRACE_REDACTION_ASSERTIONS } from '../constants/traceRedaction';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -242,6 +243,12 @@ export async function runRedteamConversation({
     test,
     config: test?.metadata?.strategyConfig,
   });
+  const redactTrace = test?.assert?.some((assertion) =>
+    TRACE_REDACTION_ASSERTIONS.has(assertion.type),
+  );
+  if (redactTrace) {
+    tracingOptions.includeInAttack = false;
+  }
   const shouldFetchTrace =
     tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
   const traceSnapshots: TraceContextData[] = [];
@@ -806,7 +813,7 @@ export async function runRedteamConversation({
       score: currentScore,
       graderPassed: storedGraderResult?.pass,
       guardrails: targetResponse?.guardrails,
-      trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
+      trace: !redactTrace && traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary,
       // Include input vars for multi-input mode (extracted from current prompt)
       inputVars: currentRenderInputVars,
@@ -837,7 +844,7 @@ export async function runRedteamConversation({
       stopReason: stopReason,
       sessionIds,
       traceSnapshots:
-        traceSnapshots.length > 0
+        !redactTrace && traceSnapshots.length > 0
           ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
           : undefined,
     },

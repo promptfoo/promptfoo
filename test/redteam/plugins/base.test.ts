@@ -1379,6 +1379,37 @@ describe('RedteamGraderBase', () => {
     );
   });
 
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'excludes unredacted images from %s model grading',
+    async (pluginId) => {
+      grader.id = `promptfoo:redteam:${pluginId}`;
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'Public text',
+      });
+      const images = [{ data: 'data:image/png;base64,PRIVATE_SCREENSHOT', mimeType: 'image/png' }];
+      await grader.getResult(
+        'Inspect the public report',
+        'Public report',
+        mockTest,
+        undefined,
+        undefined,
+        undefined,
+        true,
+        { imageOutputs: images, providerResponse: { output: 'Public report', images } },
+      );
+      expect(matchesLlmRubric).toHaveBeenCalledWith(
+        expect.any(String),
+        'Public report',
+        expect.any(Object),
+      );
+      expect(JSON.stringify(vi.mocked(matchesLlmRubric).mock.calls)).not.toContain(
+        'PRIVATE_SCREENSHOT',
+      );
+    },
+  );
+
   it('should prefer remote grading when test options only contain a target provider', async () => {
     cliState.config = {
       redteam: {},

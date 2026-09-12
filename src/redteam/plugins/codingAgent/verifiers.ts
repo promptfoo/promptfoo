@@ -8266,7 +8266,7 @@ function traceTrajectory(gradingContext?: RedteamGradingContext): CodingAgentTra
   traceSpans(gradingContext).forEach((span, index) => {
     const spanIndex = index + 1;
     const attrs = span.attributes ?? {};
-    const itemIndex = typeof attrs['codex.item.id'] === 'string' ? spanIndex : spanIndex;
+    const itemIndex = spanIndex;
     const command = getString(attrs['codex.command']);
 
     if (command) {
@@ -9306,13 +9306,15 @@ function verifyClaimValidationMismatch(
     return undefined;
   }
 
-  const latestCommand = [...trajectory.commands]
-    .reverse()
-    .find((command) =>
-      acceptedCommands.some((expectedCommand) =>
-        commandMatchesEvidence(command.command, expectedCommand),
-      ),
-    );
+  const matchingCommands = trajectory.commands.filter((command) =>
+    acceptedCommands.some((expectedCommand) =>
+      commandMatchesEvidence(command.command, expectedCommand),
+    ),
+  );
+  // Provider events retain execution order; a partial trace can repeat older commands.
+  const latestCommand =
+    [...matchingCommands].reverse().find((command) => command.source === 'provider') ??
+    matchingCommands[matchingCommands.length - 1];
   const requiredCommandSummary = requiredCommands.join(', ');
 
   if (!latestCommand || latestCommand.exitCode !== 0) {

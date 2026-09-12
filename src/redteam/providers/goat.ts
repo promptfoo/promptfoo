@@ -19,6 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { TRACE_REDACTION_ASSERTIONS } from '../constants/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -268,6 +269,11 @@ export default class GoatProvider implements ApiProvider {
       if (!assertToUse) {
         assertToUse = test?.assert?.find((a: { type: string }) => a.type);
       }
+    }
+
+    const redactTrace = TRACE_REDACTION_ASSERTIONS.has(assertToUse?.type ?? '');
+    if (redactTrace) {
+      tracingOptions.includeInAttack = false;
     }
 
     let previousAttackerMessage = '';
@@ -872,7 +878,7 @@ export default class GoatProvider implements ApiProvider {
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult,
         traceSnapshots:
-          traceSnapshots.length > 0
+          !redactTrace && traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
         sessionId: getSessionId(lastTargetResponse, context),

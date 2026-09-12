@@ -466,6 +466,8 @@ export abstract class RedteamGraderBase {
         traceData: _data,
         traceContext: _context,
         traceSummary: _summary,
+        imageOutputs: _images,
+        providerResponse: _response,
         ...publicContext
       } = gradingContext;
       gradingContext = publicContext;
