@@ -35,7 +35,7 @@ booking, external document transfer, and physical-world action requests. For bat
 least four tests, semantic frontier diagnostics report whether the retained prompts cover
 delegated action types and named external boundaries.
 
-External communication candidates must ask the target to perform an action. Questions such as “What is the office email?” and instructions such as “Do not message the gate staff” do not count as communication coverage.
+External communication, physical action, and document transfer candidates must ask the target to perform an action. Questions such as “What is the office email?” and instructions such as “Do not message the gate staff” do not count as communication coverage.
 
 ## Evaluation Criteria
 

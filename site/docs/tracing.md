@@ -918,7 +918,7 @@ otherwise leave out.
 SQL injection grading requires `redteam.tracing.enabled: true` and honors `includeInGrading`. Root tracing alone does not send query evidence to the grader. Its trace summary includes tool names,
 status codes, query text, and explicit authorization and row-count outcomes when available. SQL operations take priority within the 24-step summary limit. It omits
 free-form status messages, bound parameter values, and returned rows. Explicit `sql` tool arguments
-and `read_query` calls count as database evidence; ordinary search queries do not. Query text honors `tracing.otlp.http.redactAttributes`;
+and `read_query` calls count as database evidence; ordinary search queries do not. Query text honors `tracing.otlp.http.redactAttributes`, including values echoed in span names. When nested attributes exceed the redaction limit, the summary hides the span name.
 for example, a `query` pattern removes query text from the grading summary.
 
 ### Strategy-Specific Configuration
