@@ -408,18 +408,21 @@ function redactTraceValue(
       const entry = value[index];
       const previous = value[index - 1];
       const option = typeof previous === 'string' ? previous.replace(/^--?/, '') : '';
-      redacted.push(
+      const isSecretOption =
         typeof entry === 'string' &&
-          typeof previous === 'string' &&
-          (option === 'u' ||
-            option === 'user' ||
-            option === 'proxy-user' ||
-            option === 'pass' ||
-            option === 'proxy-pass' ||
-            isSecretField(option))
-          ? '[REDACTED]'
-          : redactTraceValue(entry, '', depth + 1, budget),
-      );
+        typeof previous === 'string' &&
+        (option === 'u' ||
+          option === 'user' ||
+          option === 'proxy-user' ||
+          option === 'pass' ||
+          option === 'proxy-pass' ||
+          isSecretField(option));
+      if (isSecretOption) {
+        budget.remaining--;
+        redacted.push('[REDACTED]');
+      } else {
+        redacted.push(redactTraceValue(entry, '', depth + 1, budget));
+      }
     }
     return redacted;
   }
@@ -435,12 +438,16 @@ function redactTraceValue(
         redacted['[TRUNCATED]'] = '[TRUNCATED]';
         break;
       }
-      redacted[entryKey] =
+      if (
         entryKey === 'value' &&
         headerName &&
         (isSecretField(headerName) || isSecretEnvVarName(headerName))
-          ? '[REDACTED]'
-          : redactTraceValue(record[entryKey], entryKey, depth + 1, budget);
+      ) {
+        budget.remaining--;
+        redacted[entryKey] = '[REDACTED]';
+      } else {
+        redacted[entryKey] = redactTraceValue(record[entryKey], entryKey, depth + 1, budget);
+      }
     }
     return redacted;
   }

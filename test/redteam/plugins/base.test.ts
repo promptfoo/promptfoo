@@ -2623,7 +2623,9 @@ describe('RedteamGraderBase', () => {
                 attributes: {
                   'tool.arguments': {
                     nested,
-                    wide: Array.from({ length: 300 }, (_, i) => `value-${i}`),
+                    wide: Array.from({ length: 300 }, (_, i) =>
+                      i % 2 === 0 ? '--token' : `secret-${i}`,
+                    ),
                     serialized: JSON.stringify(Array.from({ length: 10_000 }, (_, i) => i)),
                     'request.headers.authorization': 'flat-secret',
                     command:
@@ -2640,6 +2642,7 @@ describe('RedteamGraderBase', () => {
       expect(rubric).not.toContain('fixture-secret');
       expect(rubric).not.toContain('flat-secret');
       expect(rubric).not.toContain('azure-secret');
+      expect(rubric).not.toContain('secret-');
       expect(rubric).toContain('[TRUNCATED]');
       expect(rubric.length).toBeLessThan(25_000);
     });
