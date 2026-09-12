@@ -462,7 +462,7 @@ Use environment variables for tokens, passwords, and authentication headers. Pro
 
 Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. The URL cannot contain credentials, query parameters, or fragments because Promptfoo appends its trace lookup path to that address. Put credentials under `auth` and tenant settings in `headers` instead.
 
-Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in span names or error messages. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
+Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in any span name or error message in the fetched trace. When a redacted value contains serialized JSON, those names and messages are hidden before storage. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
 
 #### Braintrust
 
@@ -918,7 +918,7 @@ otherwise leave out.
 SQL injection grading requires `redteam.tracing.enabled: true` and honors `includeInGrading`. Root tracing alone does not send query evidence to the grader. Its trace summary includes tool names,
 status codes, query text, and explicit authorization and row-count outcomes when available. SQL operations take priority within the 24-step summary limit. It omits
 free-form status messages, bound parameter values, and returned rows. Explicit `sql` tool arguments
-and `read_query` calls count as database evidence; ordinary search queries do not. Query text honors `tracing.otlp.http.redactAttributes`, including values echoed in span names. For example, a `query` pattern removes query text from the grading summary. When nested attributes exceed the redaction limit or a redacted attribute contains serialized JSON, the summary hides the span name.
+and `read_query` calls count as database evidence; ordinary search queries do not. Query text honors `tracing.otlp.http.redactAttributes`, including values echoed in other spans' names. For example, a `query` pattern removes query text from the grading summary. When nested attributes exceed the redaction limit or a redacted attribute contains serialized JSON, the summary hides all span names.
 
 ### Strategy-Specific Configuration
 
