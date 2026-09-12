@@ -45,13 +45,13 @@ Trace-aware adaptive strategies also exclude forensic traces from attacker reque
 Configure public artifact paths and protected receipts to check exported files
 locally before semantic grading. Public artifacts up to 16 MiB are scanned; larger artifacts fail verification.
 
-Eval exports and sharing omit these tests' forensic traces; the local trace store retains them for verification.
+Eval exports and sharing omit these tests' raw provider data and forensic traces; the local trace store retains traces for verification.
 
 The privacy gate applies to every assertion in the test, including inverse assertions and assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests, and adaptive providers bypass blob storage for their target responses.
 
-Image pixels and audio cannot be verified by these text checks. Responses containing either produce a grading error, and their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
+Image pixels and audio cannot be verified by these text checks. Responses containing either, including media embedded in output or metadata, produce a grading error. Their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
 
-Configured receipt files must be readable regular files under the working directory or system temporary directory, containing 16 bytes to 64 KiB of text. A missing, unreadable, out-of-root, or invalid receipt fails verification. The verifier checks receipt files before evaluating public artifacts.
+Configured receipt files must be readable regular files under the working directory or system temporary directory, containing 16 bytes to 64 KiB of text. A missing, unreadable, out-of-root, or invalid receipt fails verification. Configured public artifacts must also be readable; missing exports cannot pass verification.
 
 ## Evidence To Collect
 
