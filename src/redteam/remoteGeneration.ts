@@ -14,6 +14,16 @@ interface ShouldGenerateRemoteOptions {
   requireEmbeddingProvider?: boolean;
 }
 
+export function scopeRemoteGeneration(remote: boolean | undefined): () => void {
+  const previous = cliState.remote;
+  if (remote !== undefined) {
+    cliState.remote = remote;
+  }
+  return () => {
+    cliState.remote = previous;
+  };
+}
+
 // Provider implementations already depend on this module. Re-exporting the leaf helper here
 // avoids introducing a providers -> redteam context dependency solely for payload construction.
 export function providerRemoteGenerationContextPayload(contextOrCloudTargetId?: unknown): {

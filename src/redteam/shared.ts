@@ -5,7 +5,6 @@ import * as path from 'path';
 
 import chalk from 'chalk';
 import * as yaml from 'js-yaml';
-import cliState from '../cliState';
 import logger, { clearLogCallbackIfOwned, setLogCallback, setLogLevel } from '../logger';
 import { doEval } from '../node/doEval';
 import { isCliEventSource } from '../types/eventSource';
@@ -13,11 +12,10 @@ import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
 import { pathExists } from '../util/file';
 import { formatDuration } from '../util/formatDuration';
-import { setupEnv } from '../util/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { initVerboseToggle } from '../util/verboseToggle';
 import { doGenerateRedteam } from './commands/generate';
-import { getRemoteHealthUrl } from './remoteGeneration';
+import { getRemoteHealthUrl, scopeRemoteGeneration } from './remoteGeneration';
 import { PartialGenerationError } from './types';
 
 import type Eval from '../models/eval';
@@ -25,13 +23,7 @@ import type { RedteamRunOptions } from './types';
 
 export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
   const isCliInvocation = isCliEventSource(options);
-  if (!isCliInvocation) {
-    setupEnv(options.envPath);
-  }
-  const previousRemote = cliState.remote;
-  if (options.remote !== undefined) {
-    cliState.remote = options.remote;
-  }
+  const restoreRemote = scopeRemoteGeneration(options.remote);
 
   if (options.verbose) {
     setLogLevel('debug');
@@ -211,7 +203,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
     return evalResult;
   } finally {
-    cliState.remote = previousRemote;
+    restoreRemote();
     clearLogCallbackIfOwned(options.logCallback ?? null);
     if (verboseToggleCleanup) {
       verboseToggleCleanup();

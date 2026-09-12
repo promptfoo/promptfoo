@@ -11,7 +11,6 @@ import { doEval } from '../../src/node/doEval';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { PartialGenerationError } from '../../src/redteam/types';
-import { setupEnv } from '../../src/util';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { loadDefaultConfig } from '../../src/util/config/default';
 import { initVerboseToggle } from '../../src/util/verboseToggle';
@@ -193,7 +192,6 @@ describe('doRedteamRun', () => {
 
   it('passes the run environment file to generation', async () => {
     await doRedteamRun({ envPath: 'generation.env' });
-    expect(setupEnv).toHaveBeenCalledWith('generation.env');
     expect(doGenerateRedteam).toHaveBeenCalledWith(
       expect.objectContaining({ envFile: 'generation.env' }),
     );
