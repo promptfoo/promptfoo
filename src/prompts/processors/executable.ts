@@ -5,7 +5,7 @@ import { access, stat as fsStat, readFile } from 'fs/promises';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import logger from '../../logger';
+import { getProcessEnv } from '../../envOverrides';
 import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
@@ -22,12 +22,13 @@ async function getExecutableSourceHash(parts: string[], basePath?: string): Prom
   const cwd = path.resolve(basePath || '.');
   const command = parts[0];
   const searchPath = command && !/[\\/]/.test(command);
+  const processEnv = getProcessEnv();
   const suffixes =
     process.platform === 'win32'
-      ? ['', ...(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';')]
+      ? ['', ...(processEnv.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';')]
       : [''];
   const candidates = searchPath
-    ? (process.env.PATH || '')
+    ? (processEnv.PATH || '')
         .split(path.delimiter)
         .flatMap((directory) =>
           suffixes.map((suffix) => path.resolve(cwd, directory, command + suffix)),
@@ -120,7 +121,6 @@ export const executablePromptFunction = async (
     cachedResult = await cache.get(cacheKey);
 
     if (cachedResult) {
-      logger.debug(`Returning cached result for executable prompt ${scriptPath}`);
       return cachedResult as string;
     }
   }
@@ -134,14 +134,12 @@ export const executablePromptFunction = async (
 
     const options = {
       cwd: context.config?.basePath,
+      env: getProcessEnv(),
       timeout: context.config?.timeout || 60000, // Default 60 second timeout
     };
 
-    logger.debug(`Executing prompt script: ${command} ${scriptArgs.join(' ')}`);
-
     execFile(command, scriptArgs, options, async (error, stdout, stderr) => {
       if (error) {
-        logger.error(`Error running executable prompt ${scriptPath}: ${error.message}`);
         reject(error);
         return;
       }
@@ -149,15 +147,10 @@ export const executablePromptFunction = async (
       const standardOutput = stripText(Buffer.from(stdout).toString('utf8').trim());
       const errorOutput = stripText(Buffer.from(stderr).toString('utf8').trim());
 
-      if (errorOutput) {
-        logger.debug(`Error output from executable prompt ${scriptPath}: ${errorOutput}`);
-        if (!standardOutput) {
-          reject(new Error(errorOutput));
-          return;
-        }
+      if (errorOutput && !standardOutput) {
+        reject(new Error(errorOutput));
+        return;
       }
-
-      logger.debug(`Output from executable prompt ${scriptPath}: ${standardOutput}`);
 
       if (fileHashes.length > 0 && isCacheEnabled()) {
         const cache = getCache();

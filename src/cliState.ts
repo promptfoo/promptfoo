@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { setEnvOverridesProvider } from './envOverrides';
 
-import type { TestSuite, UnifiedConfig } from './types/index';
+import type { EnvOverrides, TestSuite, UnifiedConfig } from './types/index';
 
 export interface ActiveOtlpReceiver {
   host: string;
@@ -67,6 +67,13 @@ interface CliState {
   readonly activeOtlpReceiver?: ActiveOtlpReceiver;
 
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T>;
+  /** The innermost environment scope, or the last config's env outside a scope. */
+  readonly env?: EnvOverrides;
+  readonly envFileOverrides?: EnvOverrides;
+  /** File values act as process defaults beneath each nested suite environment. */
+  withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T;
+  /** Replaces the outer env for this call and its async work; undefined masks config env. */
+  withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T;
   withRequestTracingConfig<T>(
     tracingConfig: NonNullable<TestSuite['tracing']>,
     fn: () => Promise<T>,
@@ -75,6 +82,10 @@ interface CliState {
 }
 
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
+const envContext = new AsyncLocalStorage<{
+  env: EnvOverrides | undefined;
+  envFileOverrides?: EnvOverrides;
+}>();
 const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
 }>();
@@ -100,6 +111,19 @@ const state: CliState = {
   withMaxConcurrency<T>(maxConcurrency: number, fn: () => Promise<T>): Promise<T> {
     return maxConcurrencyContext.run({ maxConcurrency }, fn);
   },
+  get env() {
+    const store = envContext.getStore();
+    return store ? store.env : state.config?.env;
+  },
+  get envFileOverrides() {
+    return envContext.getStore()?.envFileOverrides;
+  },
+  withEnvFileOverrides<T>(env: EnvOverrides | undefined, fn: () => T): T {
+    return envContext.run({ env: undefined, envFileOverrides: env }, fn);
+  },
+  withEnv<T>(env: EnvOverrides | undefined, fn: () => T): T {
+    return envContext.run({ env, envFileOverrides: state.envFileOverrides }, fn);
+  },
   get requestTracingConfig() {
     return requestTracingConfigContext.getStore()?.tracingConfig;
   },
@@ -119,6 +143,6 @@ const state: CliState = {
   },
 };
 
-setEnvOverridesProvider(() => state.config?.env);
+setEnvOverridesProvider((layer) => (layer === 'file' ? state.envFileOverrides : state.env));
 
 export default state;

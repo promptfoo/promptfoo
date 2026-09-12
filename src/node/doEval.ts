@@ -88,6 +88,7 @@ import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   CommandLineOptions,
   EvalPromptSelection,
@@ -176,7 +177,7 @@ async function resolveReplayConfigs(
   options: { allowConfigFilterSample?: boolean; loadEnvFiles?: boolean } = {},
 ): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
   if (options.loadEnvFiles && evalRecord.runtimeOptions?.configEnvPaths) {
-    setupEnv(evalRecord.runtimeOptions.configEnvPaths);
+    setupEnv(evalRecord.runtimeOptions.configEnvPaths, { processEnv: cliState.envFileOverrides });
   }
   const loadResolvedConfigEnv =
     options.loadEnvFiles && evalRecord.runtimeOptions?.configEnvSource !== 'cli';
@@ -407,8 +408,20 @@ export async function doEval(
   evaluateOptions: InternalEvaluateOptions,
   customization: EvalRunCustomization = {},
 ): Promise<Eval> {
-  // Phase 1: Load environment from CLI args (preserves existing behavior)
-  setupEnv(cmdObj.envPath);
+  const envFileOverrides = isCliEventSource(evaluateOptions) ? undefined : {};
+  setupEnv(cmdObj.envPath, { processEnv: envFileOverrides });
+  return cliState.withEnvFileOverrides(envFileOverrides, () =>
+    doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, customization),
+  );
+}
+
+async function doEvalWithEnv(
+  cmdObj: Partial<CommandLineOptions & Command>,
+  defaultConfig: Partial<UnifiedConfig>,
+  defaultConfigPath: string | undefined,
+  evaluateOptions: InternalEvaluateOptions,
+  customization: EvalRunCustomization = {},
+): Promise<Eval> {
   const cliEnvPaths = resolveEnvPathsForPersistence(cmdObj.envPath);
   const isCliInvocation = isCliEventSource(evaluateOptions);
   const shouldLoadConfigEnv = cliEnvPaths === undefined;
@@ -457,7 +470,7 @@ export async function doEval(
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
 
-  const runEvaluation = async (initialization?: boolean) => {
+  const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
     const startTime = Date.now();
     let validatedPromptSelection: EvalPromptSelection | undefined;
     let validatedProviderSelection: EvalProviderSelection | undefined;
@@ -653,6 +666,8 @@ export async function doEval(
         loadEnvFiles: shouldLoadConfigEnv,
       }));
     }
+
+    Object.assign(runEnv, testSuite.env);
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
       isRetryErrors ? 'retrying errors for' : 'resuming';
@@ -1592,6 +1607,11 @@ export async function doEval(
     }
 
     return ret;
+  };
+
+  const runEvaluation = (initialization?: boolean) => {
+    const runEnv: EnvOverrides = {};
+    return cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization));
   };
 
   const result = await runEvaluation(true /* initialization */);

@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import { generateIdFromPrompt } from '../../../src/models/prompt';
 import { processExecutableFile } from '../../../src/prompts/processors/executable';
 import {
@@ -43,6 +44,53 @@ describe('processExecutableFile', () => {
   const describeUnix = process.platform === 'win32' ? describe.skip : describe;
 
   // Cross-platform tests
+  it('passes each isolated env file to its executable prompt', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-prompt-env-'));
+    const script = path.join(dir, 'prompt.cjs');
+    fs.writeFileSync(script, 'process.stdout.write(process.env.PROMPTFOO_REVIEW_ENV_PROBE || "");');
+    vi.stubEnv('PROMPTFOO_REVIEW_ENV_PROBE', 'host');
+    try {
+      const [prompt] = await processExecutableFile(
+        `${JSON.stringify(process.execPath)} ${JSON.stringify(script)}`,
+        {},
+      );
+      const outputs = await Promise.all(
+        ['first', 'second'].map((value) =>
+          cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: value }, () =>
+            prompt.function!({ vars: {}, provider: mockProvider }),
+          ),
+        ),
+      );
+      expect(outputs).toEqual(['first', 'second']);
+      expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fingerprints the executable selected by an isolated file PATH', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-prompt-env-path-'));
+    const tool = process.platform === 'win32' ? 'fixture-tool.exe' : 'fixture-tool';
+    try {
+      const prompts: Awaited<ReturnType<typeof processExecutableFile>>[] = [];
+      for (const name of ['first', 'second']) {
+        const executableDir = path.join(dir, name);
+        fs.mkdirSync(executableDir);
+        fs.writeFileSync(path.join(executableDir, tool), name, { mode: 0o755 });
+        prompts.push(
+          await cliState.withEnvFileOverrides({ PATH: executableDir }, () =>
+            processExecutableFile(tool, {}),
+          ),
+        );
+      }
+      expect(() => applyPromptSelection(prompts[1], createPromptSelection(prompts[0]))).toThrow(
+        'no longer exists',
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('should process a script with exec: prefix', async () => {
     const scriptPath =
       process.platform === 'win32' ? 'cmd.exe /c echo "test"' : '/usr/bin/echo "test"';

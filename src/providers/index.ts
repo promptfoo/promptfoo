@@ -84,6 +84,14 @@ export async function loadApiProvider(
   providerPath: string,
   context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
+  const env = context.env ?? cliState.env;
+  return cliState.withEnv(env, () => createApiProvider(providerPath, { ...context, env }));
+}
+
+async function createApiProvider(
+  providerPath: string,
+  context: LoadApiProviderContext,
+): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
 
   // Merge environment overrides: context.env (test suite level) is base,
@@ -199,7 +207,9 @@ export async function loadApiProvider(
 
   for (const factory of await getProviderFactories(renderedProviderPath)) {
     if (factory.test(renderedProviderPath)) {
-      const ret = await factory.create(renderedProviderPath, providerOptions, context);
+      const ret = await cliState.withEnv(mergedEnv, () =>
+        factory.create(renderedProviderPath, providerOptions, { ...context, env: mergedEnv }),
+      );
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;
@@ -374,13 +384,15 @@ export async function loadApiProviders(
     env?: EnvOverrides;
   } = {},
 ): Promise<ApiProvider[]> {
-  const { basePath } = options;
+  const env = options.env ?? cliState.env;
+  return cliState.withEnv(env, () => loadApiProvidersWithEnv(providerPaths, options.basePath, env));
+}
 
-  const env = {
-    ...cliState.config?.env,
-    ...options.env,
-  };
-
+async function loadApiProvidersWithEnv(
+  providerPaths: ProvidersConfig,
+  basePath: string | undefined,
+  env: EnvOverrides | undefined,
+): Promise<ApiProvider[]> {
   if (typeof providerPaths === 'string') {
     // Check if the string path points to a file
     if (isProviderConfigFileReference(providerPaths)) {

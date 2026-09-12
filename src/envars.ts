@@ -492,8 +492,7 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
     }
   }
 
-  // Fallback to process.env
-  const value = process.env[key as string];
+  const value = getEnvOverrides('file')?.[key as string] ?? process.env[key as string];
   if (value === undefined) {
     return defaultValue;
   }
@@ -507,7 +506,11 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
  * @returns The boolean value of the environment variable, or the default value if provided.
  */
 export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
-  const value = getEnvString(key) || defaultValue;
+  return parseEnvBool(getEnvString(key), defaultValue);
+}
+
+export function parseEnvBool(input: string | undefined, defaultValue?: boolean): boolean {
+  const value = input || defaultValue;
   if (typeof value === 'boolean') {
     return value;
   }
@@ -515,6 +518,17 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
     return ['1', 'true', 'yes', 'yup', 'yeppers'].includes(value.toLowerCase());
   }
   return Boolean(defaultValue);
+}
+
+/** Suite flags can restrict template access to process.env, but cannot lift operator restrictions. */
+export function isTemplateProcessEnvDisabled(): boolean {
+  const disabled = (env: Record<string, string | undefined>) =>
+    parseEnvBool(env.PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS, parseEnvBool(env.PROMPTFOO_SELF_HOSTED));
+  return (
+    disabled(process.env) ||
+    disabled(getEnvOverrides('file') ?? {}) ||
+    disabled(getEnvOverrides() ?? {})
+  );
 }
 
 /**

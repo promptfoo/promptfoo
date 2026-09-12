@@ -6,6 +6,7 @@ import * as yaml from 'js-yaml';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { enableCache, isCacheEnabled } from '../../../src/cache';
 import cliState from '../../../src/cliState';
+import { getEnvString } from '../../../src/envars';
 import * as evaluatorModule from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
@@ -471,6 +472,12 @@ describe('evaluateOptions behavior', () => {
 
     it('should load config env before hydrating scenarios in reusable prefilter hooks', async () => {
       const restoreEnv = mockProcessEnv({ PR9208_SCENARIOS_PATH: undefined });
+      const observedEnv: (string | undefined)[] = [];
+      const originalEvaluate = evaluateMock.getMockImplementation();
+      evaluateMock.mockImplementation(async (_suite, record) => {
+        observedEnv.push(getEnvString('PR9208_SCENARIOS_PATH'));
+        return record;
+      });
       const scenariosPath = path.join(tmpDir, 'env-scenarios.yaml');
       fs.writeFileSync(
         scenariosPath,
@@ -527,18 +534,26 @@ describe('evaluateOptions behavior', () => {
           await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {
             eventSource: 'mcp',
           });
-          expect(process.env.PR9208_SCENARIOS_PATH).toBe(scenariosPath);
+          expect(observedEnv).toEqual([scenariosPath, scenariosPath]);
+          expect(process.env.PR9208_SCENARIOS_PATH).toBeUndefined();
         } finally {
           findByIdSpy.mockRestore();
           restoreClearedEnv();
         }
       } finally {
+        evaluateMock.mockImplementation(originalEvaluate!);
         restoreEnv();
       }
     });
 
     it('should persist absolute CLI env paths for resume and let a new CLI env override them', async () => {
       const restoreEnv = mockProcessEnv({ PR9208_CLI_ENV: undefined });
+      const observedEnv: (string | undefined)[] = [];
+      const originalEvaluate = evaluateMock.getMockImplementation();
+      evaluateMock.mockImplementation(async (_suite, record) => {
+        observedEnv.push(getEnvString('PR9208_CLI_ENV'));
+        return record;
+      });
       const originalEnvPath = path.join(tmpDir, 'cli-original.env');
       const overrideEnvPath = path.join(tmpDir, 'cli-override.env');
       const configEnvPath = path.join(tmpDir, 'cli-config.env');
@@ -568,7 +583,8 @@ describe('evaluateOptions behavior', () => {
         const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
         expect(initialEval.runtimeOptions?.configEnvPaths).toBe(originalEnvPath);
         expect(initialEval.runtimeOptions?.configEnvSource).toBe('cli');
-        expect(process.env.PR9208_CLI_ENV).toBe('original');
+        expect(observedEnv.at(-1)).toBe('original');
+        expect(process.env.PR9208_CLI_ENV).toBeUndefined();
 
         const resumeEval = new Eval(initialEval.config, {
           id: 'eval-resume-cli-env',
@@ -582,7 +598,8 @@ describe('evaluateOptions behavior', () => {
             await doEval({ table: false, resume: resumeEval.id } as any, {}, undefined, {
               eventSource: 'mcp',
             });
-            expect(process.env.PR9208_CLI_ENV).toBe('original');
+            expect(observedEnv.at(-1)).toBe('original');
+            expect(process.env.PR9208_CLI_ENV).toBeUndefined();
           } finally {
             restoreClearedEnv();
           }
@@ -597,11 +614,13 @@ describe('evaluateOptions behavior', () => {
             undefined,
             { eventSource: 'mcp' },
           );
-          expect(process.env.PR9208_CLI_ENV).toBe('override');
+          expect(observedEnv).toEqual(['original', 'original', 'override']);
+          expect(process.env.PR9208_CLI_ENV).toBeUndefined();
         } finally {
           findByIdSpy.mockRestore();
         }
       } finally {
+        evaluateMock.mockImplementation(originalEvaluate!);
         restoreEnv();
       }
     });

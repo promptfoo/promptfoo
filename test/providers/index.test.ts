@@ -1478,7 +1478,7 @@ describe('loadApiProvider', () => {
         },
       })) as AbliterationProvider;
 
-      expect(provider.env?.ABLIT_API_BASE_URL).toBeUndefined();
+      expect(provider.env?.ABLIT_API_BASE_URL).toBe('https://cli-state.example.com/v1');
       expect(provider.config.apiBaseUrl).toBe('https://cli-state.example.com/v1');
       expect(provider.getApiKey()).toBe('provider-key');
     } finally {
