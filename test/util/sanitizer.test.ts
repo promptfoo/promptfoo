@@ -262,6 +262,58 @@ describe('isSecretEnvVarName', () => {
 
 describe('sanitizeObject', () => {
   describe('environment variable maps', () => {
+    it.each([
+      'url',
+      'apiBaseUrl',
+      'gatewayUrl',
+      'baseUrl',
+      'endpoint',
+      'apiHost',
+      'HTTPS_PROXY',
+      'MONGODB_URI',
+    ])('redacts URL credentials in %s', (key) => {
+      for (const value of [
+        'https://user:short-password@host/v1?token=short-token',
+        '/api?token=short-token',
+      ]) {
+        const input = { [key]: value };
+        const result = sanitizeObject(input);
+        const envResult = sanitizeObject({ env: input });
+        expect(JSON.stringify([result, envResult])).not.toContain('short-password');
+        expect(JSON.stringify([result, envResult])).not.toContain('short-token');
+        expect(input[key]).toBe(value);
+      }
+    });
+
+    it.each([
+      'http://localhost:1975',
+      'HTTPS://GW.Example.COM/v1',
+      'https://gw.example/v1?design=blue&assignment=a1',
+      '127.0.0.1:11434',
+      'my-resource.openai.azure.com/openai',
+      '{{ env.GATEWAY_URL }}',
+    ])('preserves non-secret URL field %s without warnings', (value) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const input = { apiBaseUrl: value, env: { OLLAMA_BASE_URL: value } };
+        expect(sanitizeObject(input)).toEqual(input);
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it.each([
+      { api_key: 'short-secret' },
+      { baseUrl: 'https://gw.example/v1', api_key: 'short-secret' },
+    ])('redacts JSON-shaped URL values %j', (data) => {
+      const value = JSON.stringify(data);
+      const result = sanitizeObject({ url: value, apiBaseUrl: value, env: { GATEWAY_URL: value } });
+      for (const sanitized of [result.url, result.apiBaseUrl, result.env.GATEWAY_URL]) {
+        expect(JSON.parse(sanitized)).toEqual({ ...data, api_key: '[REDACTED]' });
+      }
+    });
+
     it('redacts credentials in gateway URLs without changing the runtime config', () => {
       const url = 'https://gateway-user:gateway-password@gateway.example/v1?token=short-secret';
       const config = {
@@ -1917,7 +1969,7 @@ describe('sanitizeUrl', () => {
     it('should handle empty username/password', () => {
       const url = 'https://:@example.com/api';
       const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api');
+      expect(result).toBe(url);
     });
 
     it('should preserve URL without auth', () => {
@@ -2235,11 +2287,10 @@ describe('sanitizeUrl', () => {
       );
     });
 
-    it('should sanitize parameters containing sensitive words', () => {
+    it('redacts credential words without matching plural non-secret fields', () => {
       const url = 'https://example.com/api?tokens_available=100&secret_santa=john';
       const result = sanitizeUrl(url);
-      // The regex in sanitizeUrl is broad and matches substrings, so these will be redacted
-      expect(result).toContain('tokens_available=%5BREDACTED%5D');
+      expect(result).toContain('tokens_available=100');
       expect(result).toContain('secret_santa=%5BREDACTED%5D');
     });
   });
@@ -2296,15 +2347,7 @@ describe('sanitizeUrl', () => {
       const result = sanitizeUrl(invalidUrl);
       // No credential indicators, so the original is preserved for debuggability.
       expect(result).toBe(invalidUrl);
-      expect(consoleWarnSpy).toHaveBeenCalled();
-    });
-
-    it('should log warning on URL parsing failure', () => {
-      const invalidUrl = 'totally-invalid-url';
-      sanitizeUrl(invalidUrl);
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to sanitize URL'),
-      );
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
     });
   });
 });

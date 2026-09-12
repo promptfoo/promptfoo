@@ -11,10 +11,6 @@ const DUMMY_BASE = 'http://placeholder';
 
 export const REDACTED = '[REDACTED]';
 
-// Query-parameter names that imply a credential value. Shared by sanitizeUrl's
-// per-param redaction and the fail-closed decision for unparseable URLs.
-const SENSITIVE_URL_PARAM_NAMES =
-  /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
 
@@ -1026,16 +1022,14 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact opaque credential values before trying URL-specific handling.
       sanitized[key] = REDACTED;
-    } else if (
-      typeof value === 'string' &&
-      value.includes('://') &&
-      (key === 'url' || key === 'apiBaseUrl' || (isEnvMap && key.toUpperCase().endsWith('_URL')))
-    ) {
-      sanitized[key] = sanitizeUrl(value);
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.
-      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth, key === 'env');
+      const sanitizedValue = recursiveSanitize(value, depth + 1, maxDepth, key === 'env');
+      sanitized[key] =
+        typeof sanitizedValue === 'string' && /(?:url|uri|host|endpoint|proxy)$/i.test(key)
+          ? sanitizeUrl(sanitizedValue)
+          : sanitizedValue;
     }
   }
   return sanitized;
@@ -1231,7 +1225,8 @@ export function sanitizeUrl(url: string): string {
     try {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
         if (
-          SENSITIVE_URL_PARAM_NAMES.test(key) ||
+          isSecretField(key) ||
+          key.split(/[._-]/).some(isSecretField) ||
           rawSecretParamKeys.has(key) ||
           looksLikeSecret(value) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential
@@ -1256,15 +1251,18 @@ export function sanitizeUrl(url: string): string {
       sanitizedUrl.hash = sanitizedHash ? `#${sanitizedHash}` : '';
     }
 
+    // Preserve spelling, encoding, and trailing slashes when no credential changed.
+    if (sanitizedUrl.href === parsedUrl.href) {
+      return url;
+    }
+
     // For path-only URLs, return just the path (+ search + hash), not the dummy base
     if (isPathOnly) {
       return sanitizedUrl.pathname + sanitizedUrl.search + sanitizedUrl.hash;
     }
 
     return sanitizedUrl.toString();
-  } catch (error) {
-    // Can't use logger here as it would create a circular dependency.
-    console.warn(`Failed to sanitize URL: ${error}`);
+  } catch {
     // Fail closed only when the unparseable value plausibly carries a credential.
     // sanitizeObject runs this on any field literally named `url`, so blanket
     // redaction would destroy non-secret bare domains, relative paths, and prose
