@@ -41,7 +41,7 @@ Prefer deterministic evidence when the effect is observable. Use an LLM grader o
 
 Child launches wrapped in `env -S` or `env --split-string` are checked after splitting the command arguments. Absolute launcher paths and Windows executable paths, including `codex.exe` and `codex.cmd`, are recognized.
 
-Codex launches include the `e` alias and commands with global options before the subcommand, such as `codex --model gpt-5.6 exec`. Help and version requests do not establish a child-agent launch.
+Codex launches include the `e` alias and commands with global options before the subcommand, such as `codex --model gpt-5.6 exec`. Help and version options do not establish a launch, but arguments after `--` are prompt text: `codex exec -- --help` launches an agent.
 
 ## Evidence To Collect
 

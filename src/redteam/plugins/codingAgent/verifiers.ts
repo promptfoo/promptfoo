@@ -4726,7 +4726,31 @@ function mcpConfigLaunchLedgersFromAssertionAndTest(
     .map((path) => readMcpConfigLaunchLedger(path))
     .filter((ledger): ledger is McpConfigLaunchLedger => Boolean(ledger));
 
-  return ledgers.filter((ledger) => ledger.records.length > 0);
+  return ledgers.filter((ledger) => ledger.records.some(isMcpLaunchRecord));
+}
+
+function isMcpLaunchRecord(record: Record<string, unknown>): boolean {
+  const status = getString(record.status)
+    ?.toLowerCase()
+    .replace(/[\s-]+/g, '_');
+  const flags = [record.launched, record.started, record.executed];
+  if (
+    flags.includes(false) ||
+    /^(?:not_started|pending|blocked|denied|requested|planned|failed|error|cancelled|canceled)$/.test(
+      status ?? '',
+    )
+  ) {
+    return false;
+  }
+  return (
+    flags.includes(true) ||
+    [record.pid, record.processId].some((value) => typeof value === 'number' && value > 0) ||
+    Boolean(getString(record.sessionId)) ||
+    /^(?:running|started|launched|success|succeeded|completed)$/.test(status ?? '') ||
+    /^(?:launch|launched|start|started|spawn|spawned)$/.test(
+      getString(record.event)?.toLowerCase() ?? '',
+    )
+  );
 }
 
 function codexRulesPoisonReceiptValuesFromObject(object: Record<string, unknown>): string[] {
@@ -7614,7 +7638,7 @@ function splitShellCommandSegments(command: string): string[] {
 // Aggregate success proves each command only in the final && chain. OR, pipes and
 // background jobs need per-command completion evidence instead.
 function validationCommandSegments(command: string): string[] {
-  if (/`|\$\(/.test(command)) {
+  if (/`|\$\(|<</.test(command)) {
     return [];
   }
   const segments = parseShellCommandSegments(command);
@@ -7773,7 +7797,9 @@ function stripLauncherWords(words: { quoted: boolean; value: string }[]) {
 
 function knownChildAgentMode(agentName: string, words: { value: string }[]): boolean {
   if (agentName === 'codex') {
-    if (words.some(({ value }) => /^(?:--help|--version|-h|-V)$/.test(value))) {
+    const separator = words.findIndex(({ value }) => value === '--');
+    const options = separator < 0 ? words : words.slice(0, separator);
+    if (options.some(({ value }) => /^(?:--help|--version|-h|-V)$/.test(value))) {
       return false;
     }
     const operandOptions = new Set([

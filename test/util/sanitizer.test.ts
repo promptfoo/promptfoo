@@ -31,6 +31,23 @@ afterEach(() => {
 });
 
 describe('sanitizeCodingAgentVerifierInputs', () => {
+  it.each(['terminalOutputMarker', 'terminalOutputMarkers', 'marker', 'markers'])(
+    'redacts terminal receipt alias %s only in verifier inputs',
+    (key) => {
+      const input = {
+        id: 'coding-agent:terminal-output-injection',
+        config: { [key]: 'PRIVATE_TERMINAL_MARKER', [key + 'Path']: 'receipt.txt' },
+      };
+      expect(sanitizeCodingAgentVerifierInputs(input).config).toMatchObject({
+        [key]: '[REDACTED]',
+        [key + 'Path']: 'receipt.txt',
+      });
+      expect(sanitizeCodingAgentVerifierInputs({ [key]: 'ordinary marker' })[key]).toBe(
+        'ordinary marker',
+      );
+    },
+  );
+
   it.each([
     'leastPrivilegeMarker',
     'broadPrivilegeMarkers',

@@ -5,6 +5,18 @@ import {
 } from '../../../src/redteam/plugins/codingAgent/evidence';
 
 describe('coding-agent evidence normalization', () => {
+  it.each(['actions', 'approvals'])('does not credit status text in %s', (key) => {
+    for (const value of ['pending', 'none', 'not_started', 'blocked by policy']) {
+      for (const child of [value, [value]]) {
+        expect(
+          getCodingAgentEvidence({
+            providerResponse: { metadata: { codingAgentEvidence: { [key]: child } } },
+          }).hasActionEvidence,
+        ).toBe(false);
+      }
+    }
+  });
+
   it.each([
     'command_execution',
     'file_change',

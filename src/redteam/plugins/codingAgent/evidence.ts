@@ -143,7 +143,7 @@ function hasStructuredActionEvidence(value: unknown, depth: number = 0): boolean
     if (STRUCTURED_ACTION_EVIDENCE_KEYS.has(key)) {
       const hasPayload = (item: unknown): boolean => {
         if (typeof item === 'string') {
-          return Boolean(item.trim());
+          return key !== 'actions' && key !== 'approvals' && Boolean(item.trim());
         }
         const action = getObject(item);
         if (!action) {
