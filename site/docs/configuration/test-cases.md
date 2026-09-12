@@ -573,7 +573,7 @@ tests:
 
 ### Path Resolution
 
-`file://` paths are resolved relative to your **config file's directory**, not the current working directory. This ensures consistent behavior regardless of where you run `promptfoo` from:
+`file://` paths resolve from your **config file's directory** by default. Set `basePath` to use another directory; a relative `basePath` resolves from the config file's directory. For example:
 
 ```yaml title="src/tests/promptfooconfig.yaml"
 tests:
@@ -588,7 +588,9 @@ tests:
       shared: file://../shared/context.json
 ```
 
-Nested `file://` references inside test and vars files keep the config directory as their base. With multiple configs, each config's tests load from its directory; configured providers and deferred grader references use the first config's directory.
+Nested `file://` references inside test and vars files keep the owning config's base directory. With multiple configs, each config's tests use its base directory; configured providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
+
+Saved evaluations retain parsed test rows and an absolute base directory. Resume and retry reuse those rows, including generated and remote datasets. Run a new evaluation to pick up changed test sources. A test-source glob that matches no files reports an error.
 
 Without the `file://` prefix, values are passed as plain strings to your provider.
 

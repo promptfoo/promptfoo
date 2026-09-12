@@ -44,7 +44,7 @@ The evaluate function takes the following parameters:
 
 The evaluate function returns an `Eval` record. Call `toEvaluateSummary()` on that record to get an [`EvaluateSummary` object](/docs/configuration/reference#evaluatesummary).
 
-Each `evaluate()` call uses its own `env` overrides; an omitted or empty `env` uses process settings without inheriting a previous evaluation. Set `testSuite.basePath` to resolve local references from a directory other than the working directory.
+Each `evaluate()` call uses its own `env` overrides; an omitted or empty `env` uses process settings without inheriting a previous evaluation. Set `testSuite.basePath` to resolve local references from another directory. Relative values resolve from the working directory; saved config retains the absolute directory.
 
 ### Provider functions
 
