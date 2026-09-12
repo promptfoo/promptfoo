@@ -58,6 +58,26 @@ const summary = await evalRecord.toEvaluateSummary();
 console.log(summary.stats);
 ```
 
+## Run tests concurrently
+
+<LegacyHeadingAnchors page="examples" section="Run tests concurrently" />
+
+Set `maxConcurrency` to limit simultaneous provider calls. Set `cache: false` to
+request fresh responses for this eval.
+
+```ts
+import { evaluate } from 'promptfoo';
+
+await evaluate(
+  {
+    prompts: ['Summarize: {{article}}'],
+    providers: ['openai:chat:gpt-5.5'],
+    tests: [{ vars: { article: 'First article...' } }, { vars: { article: 'Second article...' } }],
+  },
+  { maxConcurrency: 2, cache: false },
+);
+```
+
 ## Build providers before an eval
 
 <LegacyHeadingAnchors page="examples" section="Build providers before an eval" />

@@ -6,10 +6,8 @@
       "example-2-multiple-providers",
       "example-13-llm-evaluation-with-claude"
     ],
-    "Build providers before an eval": [
-      "example-6-batch-provider-testing",
-      "example-15-parallel-test-execution"
-    ],
+    "Build providers before an eval": ["example-6-batch-provider-testing"],
+    "Run tests concurrently": ["example-15-parallel-test-execution"],
     "Use an inline provider": ["advanced-examples", "integration-patterns"],
     "Generate prompts from code": [
       "example-3-dynamic-test-generation",
