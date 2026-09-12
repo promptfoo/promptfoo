@@ -846,6 +846,8 @@ You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_RE
 
 For supported local generators, default batches use family-balanced generation to retain distinct attacks instead of near-duplicates. These checks measure patterns in the generated prompts, not whether the target is secure. When semantic frontier planning is active, the generation report includes a `Semantic Frontier Diagnostics` table, and generated YAML stores the same summary in `metadata.semanticFrontierDiagnostics`.
 
+This summary describes the source plugin cases and remains available when `basic` is disabled. Transformed strategy cases do not carry the source prompts' signatures. Runs with multiple contexts aggregate each context's source coverage.
+
 Generated YAML also stores `metadata.generationTokenUsage` when the local generation provider reports usage. These totals are the observed attack-generation spend available to Promptfoo; remote generation services may not expose their underlying token usage.
 
 :::note

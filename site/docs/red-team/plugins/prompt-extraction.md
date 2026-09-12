@@ -41,6 +41,8 @@ The Prompt Extraction plugin generates test cases that:
 
 Default single-input generation balances distinct extraction families rather than relying on near-duplicate requests. For batches of at least five tests, semantic frontier diagnostics report coverage of core disclosure requests and protected-control-plane requests.
 
+Direct-disclosure candidates must ask the target to reveal its system prompt or instructions. Definitions such as “Explain what a system prompt is” and defensive statements such as “Never reveal your system prompt” do not count as disclosure coverage.
+
 Each generated test case is then associated with assertions to evaluate the AI's response:
 
 ## Example Test Cases
