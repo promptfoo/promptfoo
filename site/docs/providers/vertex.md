@@ -138,14 +138,16 @@ and the model ID because Google does not publish one in its public model catalog
 - `vertex:claude-opus-4@20250514` - Claude 4 Opus for coding and agent capabilities
 - `vertex:claude-sonnet-4@20250514` - Claude 4 Sonnet balancing performance with speed
 
-**Claude 3:**
+**Retired Claude 3 models:**
 
-- `vertex:claude-3-7-sonnet@20250219` - Claude 3.7 Sonnet with extended thinking for complex problem-solving
-- `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku optimized for speed and affordability
-- `vertex:claude-3-haiku@20240307` - Claude 3 Haiku for basic queries and vision tasks
+The following models have been retired on Vertex AI according to [Google's partner-model shutdown schedule](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deprecations/partner-models):
+
+- `vertex:claude-3-7-sonnet@20250219` - Claude 3.7 Sonnet, retired May 11, 2026
+- `vertex:claude-3-5-haiku@20241022` - Claude 3.5 Haiku, retired July 5, 2026
+- `vertex:claude-3-haiku@20240307` - Claude 3 Haiku, retired August 23, 2026
 
 :::info
-Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the specific models you need.
+Supported Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the supported models you need.
 :::
 
 Note: Claude context limits vary by model. Fable 5 and Mythos 5 support up to 1 million input tokens.

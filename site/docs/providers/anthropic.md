@@ -98,39 +98,15 @@ Anthropic does not publish `-latest` aliases — `claude-sonnet-4-5-latest` retu
 parentheses above: `claude-sonnet-4-5` resolves to `claude-sonnet-4-5-20250929`.
 Claude 4.6 and newer are already unversioned IDs, so there is nothing to shorten.
 
-Rows without a parenthetical have no alias. Availability differs by platform — see
-[Retired on the Anthropic API](#retired-on-the-anthropic-api) for the IDs that only work
-through Bedrock, Vertex, and gateways.
+Rows without a parenthetical have no alias.
+[Retired on the Anthropic API](#retired-on-the-anthropic-api) lists retirements from the
+direct Anthropic API. Check the platform guides below for availability through other providers.
 
 :::
 
 ### Cross-Platform Model Availability
 
-Claude models are available across multiple platforms. Here's how the model names map across different providers:
-
-| Model             | Anthropic API                                  | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
-| ----------------- | ---------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
-| Claude Fable 5.1  | claude-fable-5-1                               | claude-fable-5-1                                                      | anthropic.claude-fable-5-1                        | claude-fable-5-1                               |
-| Claude Mythos 5.1 | claude-mythos-5-1                              | claude-mythos-5-1 (limited)                                           | anthropic.claude-mythos-5-1 (limited)             | claude-mythos-5-1 (limited)                    |
-| Claude Fable 5    | claude-fable-5                                 | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
-| Claude Mythos 5   | claude-mythos-5                                | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
-| Claude Opus 5     | claude-opus-5                                  | claude-opus-5                                                         | anthropic.claude-opus-5                           | claude-opus-5                                  |
-| Claude 4.8 Opus   | claude-opus-4-8                                | claude-opus-4-8                                                       | anthropic.claude-opus-4-8                         | claude-opus-4-8                                |
-| Claude 4.7 Opus   | claude-opus-4-7                                | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |
-| Claude Sonnet 5   | claude-sonnet-5                                | claude-sonnet-5                                                       | anthropic.claude-sonnet-5                         | claude-sonnet-5                                |
-| Claude 4.6 Sonnet | claude-sonnet-4-6                              | claude-sonnet-4-6                                                     | anthropic.claude-sonnet-4-6                       | claude-sonnet-4-6                              |
-| Claude 4.6 Opus   | claude-opus-4-6                                | claude-opus-4-6-20260205                                              | anthropic.claude-opus-4-6-v1                      | claude-opus-4-6                                |
-| Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5)     | claude-opus-4-5-20251101                                              | anthropic.claude-opus-4-5-20251101-v1:0           | claude-opus-4-5@20251101                       |
-| Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5) | claude-sonnet-4-5-20250929                                            | anthropic.claude-sonnet-4-5-20250929-v1:0         | claude-sonnet-4-5@20250929                     |
-| Claude 4.5 Haiku  | claude-haiku-4-5-20251001 (claude-haiku-4-5)   | claude-haiku-4-5-20251001                                             | anthropic.claude-haiku-4-5-20251001-v1:0          | claude-haiku-4-5@20251001                      |
-| Claude 4.1 Opus   | Retired on the direct API                      | claude-opus-4-1-20250805                                              | anthropic.claude-opus-4-1-20250805-v1:0           | claude-opus-4-1@20250805                       |
-| Claude 4 Opus     | Retired on the direct API                      | claude-opus-4-20250514                                                | anthropic.claude-opus-4-20250514-v1:0             | claude-opus-4@20250514                         |
-| Claude 4 Sonnet   | Retired on the direct API                      | claude-sonnet-4-20250514                                              | anthropic.claude-sonnet-4-20250514-v1:0           | claude-sonnet-4@20250514                       |
-| Claude 3.7 Sonnet | Retired on the direct API                      | claude-3-7-sonnet-20250219                                            | anthropic.claude-3-7-sonnet-20250219-v1:0         | claude-3-7-sonnet@20250219                     |
-| Claude 3.5 Sonnet | Retired on the direct API                      | claude-3-5-sonnet-20241022                                            | anthropic.claude-3-5-sonnet-20241022-v2:0         | claude-3-5-sonnet-v2@20241022                  |
-| Claude 3.5 Haiku  | Retired on the direct API                      | claude-3-5-haiku-20241022                                             | anthropic.claude-3-5-haiku-20241022-v1:0          | claude-3-5-haiku@20241022                      |
-| Claude 3 Opus     | Retired on the direct API                      | claude-3-opus-20240229                                                | anthropic.claude-3-opus-20240229-v1:0             | claude-3-opus@20240229                         |
-| Claude 3 Haiku    | Retired on the direct API                      | claude-3-haiku-20240307                                               | anthropic.claude-3-haiku-20240307-v1:0            | claude-3-haiku@20240307                        |
+Model IDs, provider namespaces, and retirement dates differ across platforms. See [Azure AI Foundry](/docs/providers/azure/#using-claude-models), [AWS Bedrock](/docs/providers/aws-bedrock), and [Vertex AI](/docs/providers/vertex) for platform-specific availability and configuration. On Azure, configure the deployment name rather than assuming it matches the model ID.
 
 ### Supported Parameters
 
