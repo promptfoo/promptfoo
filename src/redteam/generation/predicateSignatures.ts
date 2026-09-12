@@ -35,7 +35,7 @@ function toolCallText(prompt: string): {
     } else if (value && typeof value === 'object') {
       for (const [key, child] of Object.entries(value).reverse()) {
         invocation.push(words(key));
-        if (typeof child === 'string' || typeof child === 'number') {
+        if (typeof child === 'string' || typeof child === 'number' || child === true) {
           request.push(`${words(key)} ${child}`);
         }
         pending.push(child);

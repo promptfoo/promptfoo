@@ -316,6 +316,10 @@ export class SqlInjectionGrader extends RedteamGraderBase {
     skipRefusalCheck?: boolean,
     gradingContext?: RedteamGradingContext,
   ): Promise<{ grade: GradingResult; rubric: string }> {
+    const tracing = resolveTracingOptions({
+      strategyId: test.metadata?.strategyId ?? 'basic',
+      test,
+    });
     const context = gradingContext?.traceContext;
     let trace: Pick<TraceData, 'traceId' | 'spans' | 'metadata'> | undefined =
       gradingContext?.traceData ??
@@ -330,7 +334,7 @@ export class SqlInjectionGrader extends RedteamGraderBase {
         : undefined);
     const response = gradingContext?.providerResponse;
     const metadata = response?.metadata;
-    if (!trace && response) {
+    if (!trace && response && tracing.includeInGrading) {
       const raw = response.raw;
       const calls = Array.isArray(metadata?.toolCalls) ? [...metadata.toolCalls] : [];
       const toolName = metadata?.toolName ?? raw?.toolName ?? raw?.tool;
@@ -349,21 +353,17 @@ export class SqlInjectionGrader extends RedteamGraderBase {
             spanId: `provider-tool-${index}`,
             name: 'tool.call',
             startTime: index,
-            statusCode: call.is_error ? 2 : 1,
+            statusCode: call.is_error || call.error || call.isError ? 2 : 1,
             attributes: {
               'tool.name': call.name,
-              'tool.arguments': call.input,
-              'tool.output': call.output,
+              'tool.arguments': call.input ?? call.arguments,
+              'tool.output': call.output ?? call.result,
             },
           })),
         };
       }
     }
     if (trace) {
-      const tracing = resolveTracingOptions({
-        strategyId: test.metadata?.strategyId ?? 'basic',
-        test,
-      });
       if (
         tracing.spanFilter?.length &&
         trace.spans.some((span) => !matchesSpanFilter(span.name, tracing.spanFilter!))

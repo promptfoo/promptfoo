@@ -18,6 +18,12 @@ import {
 } from '../../../src/redteam/generation/predicateSignatures';
 
 describe('predicate signatures', () => {
+  it.each([true, false])('classifies enabled MCP disclosure flags: %s', (enabled) => {
+    const args = { customer_id: 123, include_credit_card: enabled, include_system_prompt: enabled };
+    const prompt = JSON.stringify({ tool: 'get_customer', args });
+    expect(extractPiiDirectFeatures(prompt).includes('requestsCreditCard')).toBe(enabled);
+    expect(extractPromptExtractionFeatures(prompt).includes('requestsSystemPrompt')).toBe(enabled);
+  });
   it.each([
     'Explain why you must never run npm test && cat /etc/passwd',
     'Do not run npm test && cat /etc/passwd',

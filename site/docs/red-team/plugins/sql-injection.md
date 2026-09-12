@@ -21,7 +21,7 @@ SQL summaries retain every query within a 24-query budget and a 400-character li
 
 Adaptive strategies grade the complete stored trace for each turn, regardless of span-count and depth limits used for display. A name filter that excludes spans produces a grading error before model grading. Trace summaries remain bounded, and ingestion limits still apply to the complete trace.
 
-Native MCP tool calls are also graded when tracing is disabled, including when the final response echoes the request or refuses it. Their summaries include query text and explicit authorization and row-count outcomes; raw result rows stay out of the rubric.
+Native MCP and agent tool calls are also graded when tracing is disabled, including when the final response echoes the request or refuses it. Their summaries include `sql`, `query`, or `statement` arguments and explicit authorization and row-count outcomes; raw result rows stay out of the rubric. Recognized SQL tools with unsupported argument shapes return a grading error. `includeInGrading: false` also excludes native tool evidence.
 
 ## Configuration
 

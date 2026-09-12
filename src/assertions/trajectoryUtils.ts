@@ -563,7 +563,9 @@ function getSqlExecutionDetails(
       toolName,
     );
   const argumentQuery =
-    typeof args === 'string' ? args : getFirstStringAttribute(argumentObject, ['sql', 'query']);
+    typeof args === 'string'
+      ? args
+      : getFirstStringAttribute(argumentObject, ['sql', 'query', 'statement']);
   const scalarSql =
     argumentQuery !== undefined &&
     (isQueryTool ||
@@ -574,6 +576,9 @@ function getSqlExecutionDetails(
       : undefined;
   const query = databaseQuery ?? scalarSql;
   if (!query) {
+    if (isQueryTool && args !== undefined) {
+      throw new TraceEvidenceError('SQL query arguments could not be read and cannot be graded.');
+    }
     return undefined;
   }
   const output = normalizeStructuredAttribute(
