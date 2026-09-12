@@ -943,7 +943,10 @@ export async function resolveConfigs(
   cliState.basePath = resolved.basePath;
   cliState.config = resolved.config;
   cliState.selectedProviderConfigs = resolved.selectedProviderConfigs;
-  return { ...resolved, testSources };
+  return {
+    ...resolved,
+    testSources: testSources ?? [{ tests: defaultConfig.tests, basePath: resolved.basePath }],
+  };
 }
 
 async function resolveLoadedConfig(

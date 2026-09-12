@@ -97,6 +97,22 @@ describe('suite environment loading', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it('retains a discovered config test source for watch after parsing its rows', async () => {
+    const testsPath = path.join(tempDir, 'cases.yaml');
+    fs.writeFileSync(testsPath, '- vars: { input: first }');
+    const resolved = await resolveConfigs(
+      {},
+      { basePath: tempDir, prompts: ['{{input}}'], providers: ['echo'], tests: 'cases.yaml' },
+    );
+    expect(resolved.config.tests).toMatchObject([{ vars: { input: 'first' } }]);
+    expect(resolved.testSources).toEqual([{ tests: 'cases.yaml', basePath: tempDir }]);
+    expect(
+      resolved.testSources?.flatMap((source) =>
+        resolveTestsWatchPaths(source.tests, source.basePath),
+      ),
+    ).toContain(testsPath);
+  });
+
   function writeConfig(name: string, config: Partial<UnifiedConfig>) {
     const configPath = path.join(tempDir, name, 'config.json');
     fs.mkdirSync(path.dirname(configPath), { recursive: true });

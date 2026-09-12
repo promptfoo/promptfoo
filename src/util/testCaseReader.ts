@@ -912,7 +912,13 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
 
   const resolved = path.resolve(basePath, withoutScheme);
   if (hasGlobMagic(withoutScheme)) {
-    const matches = globSync(resolved, { windowsPathsNoEscape: true });
+    const matches = globSync(
+      path.resolve(
+        escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
+        path.relative(path.resolve(basePath), resolved),
+      ),
+      { windowsPathsNoEscape: true },
+    );
     if (matches.length > 0) {
       return matches.map((match) => stripSheetSelector(match));
     }

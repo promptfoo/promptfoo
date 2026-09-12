@@ -55,6 +55,14 @@ describe('resolveTestsWatchPaths', () => {
     ]);
   });
 
+  it('expands test globs beneath a directory containing brackets', () => {
+    const root = path.join(base, 'suite[blue]');
+    fs.mkdirSync(root);
+    const testsPath = path.join(root, 'cases.yaml');
+    fs.writeFileSync(testsPath, '- description: case');
+    expect(resolveTestsWatchPaths('file://*.yaml', root)).toEqual([testsPath]);
+  });
+
   it("never watches a glob's parent directory", () => {
     // chokidar watches a directory recursively, and doEval reruns the whole evaluation
     // on any `change` beneath it. Watching the parent would therefore rerun on every

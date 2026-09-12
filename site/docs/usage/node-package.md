@@ -67,7 +67,7 @@ const providerWithOptions = await loadApiProvider('azure:chat:test', {
 });
 ```
 
-During `loadApiProvider` and `loadApiProviders`, an omitted or `undefined` `env` inherits the active environment. An object replaces it, including `{}`. Provider-file settings override suite settings, and explicit provider options override the file. Providers that read environment variables later use the environment active at that call.
+During `loadApiProvider` and `loadApiProviders`, an omitted or `undefined` `env` inherits the active environment. An object replaces it, including `{}`. Environment variables in a provider file override suite environment variables, and explicit provider `env` options override the file. Providers that read environment variables later use the environment active at that call.
 
 ### Assertion functions
 
