@@ -21,7 +21,12 @@ import { readAzureBlobText } from '../../../src/util/azureBlob';
 import { combineConfigs, readConfig, resolveConfigs } from '../../../src/util/config/load';
 import { getNunjucksEngineForFilePath } from '../../../src/util/file';
 import { getNunjucksEngine } from '../../../src/util/templates';
-import { loadTestsFromGlob, readTest, readTests } from '../../../src/util/testCaseReader';
+import {
+  loadTestsFromGlob,
+  readTest,
+  readTests,
+  resolveTestsWatchPaths,
+} from '../../../src/util/testCaseReader';
 import { mockProcessEnv } from '../utils';
 
 import type { TestCase, UnifiedConfig } from '../../../src/types/index';
@@ -290,10 +295,35 @@ describe('suite environment loading', () => {
         path.join(directory, 'cases.cjs'),
         "module.exports = () => [{ vars: { source: 'selected' } }];",
       );
-      const { testSuite } = await resolveConfigs({ config: [first, second] }, {});
+      const { testSuite, testSources } = await resolveConfigs({ config: [first, second] }, {});
       expect(testSuite.tests?.map((test) => test.vars?.source)).toEqual(['selected']);
+      const watched = cliState.withEnv(testSuite.env, () =>
+        testSources?.flatMap((source) => resolveTestsWatchPaths(source.tests, source.basePath)),
+      );
+      expect(watched).toContain(
+        path.join(directory, form === 'generator' || form === 'path' ? 'cases.cjs' : 'cases.yaml'),
+      );
     },
   );
+
+  it('preserves non-plain scenario values when templating is disabled', async () => {
+    const configPath = path.join(tempDir, 'classes.cjs');
+    fs.writeFileSync(
+      configPath,
+      `module.exports = {
+      prompts: ['hello'], providers: ['echo'], env: { PROMPTFOO_DISABLE_TEMPLATING: 'true' },
+      scenarios: [{ config: [{}], tests: [{ vars: {
+        date: new Date('2026-01-01'), url: new URL('https://example.com'), bytes: Buffer.from('value')
+      } }] }]
+    };`,
+    );
+    const config = await combineConfigs([configPath]);
+    const first = config.scenarios?.[0];
+    const vars = first && typeof first === 'object' ? first.tests?.[0].vars : undefined;
+    expect(vars?.date).toBeInstanceOf(Date);
+    expect(vars?.url).toBeInstanceOf(URL);
+    expect(Buffer.isBuffer(vars?.bytes)).toBe(true);
+  });
 
   it('isolates overlapping combined config loads', async () => {
     const configs = await Promise.all(
@@ -1261,6 +1291,26 @@ describe('suite environment loading', () => {
     });
     const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
     await expectRequest(testSuite.providers[0], 'process');
+  });
+
+  it.each([
+    ['inherits config env when omitted', undefined, 'previous-key'],
+    ['replaces config env when empty', {}, 'process-key'],
+  ] as const)('resolved evaluation %s', async (_name, env, expectedKey) => {
+    const result = await evaluateResolved(
+      {
+        ...(env && { env }),
+        prompts: [{ raw: 'Hello', label: 'Hello' }],
+        providers: [
+          { id: () => 'echo', callApi: async () => ({ output: getEnvString('OPENAI_API_KEY') }) },
+        ],
+        tests: [{ assert: [{ type: 'equals', value: expectedKey }] }],
+      },
+      new Eval({}),
+      {},
+    );
+    expect((await result.getResults())[0]).toMatchObject({ success: true, score: 1 });
+    expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
   });
 
   it('keeps resolved CLI suites scoped after another config is loaded', async () => {

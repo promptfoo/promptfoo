@@ -572,6 +572,7 @@ function validateTestCase(testCase: TestCase): void {
  * @param loadTestsGlob - The glob pattern or URL to load tests from
  * @param basePath - Base path for resolving relative paths
  * @returns Promise resolving to an array of TestCase objects
+ * @throws Error when a local path or glob matches no test files.
  */
 export async function loadTestsFromGlob(
   loadTestsGlob: string,
@@ -873,6 +874,7 @@ function hasGlobMagic(reference: string): boolean {
  * unrelated edit beneath it, including the run's own output file.
  */
 function resolveTestsFileReference(reference: string, basePath: string): string[] {
+  reference = renderEnvOnlyInObject(reference);
   const withoutScheme = reference.replace(/^file:\/\//, '');
   if (isRemoteTestsReference(withoutScheme)) {
     return [];

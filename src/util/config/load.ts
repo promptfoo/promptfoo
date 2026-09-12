@@ -675,7 +675,7 @@ async function prepareCombinedConfig(
     if (Array.isArray(value)) {
       return value.map((item) => resolveNestedFileReferences(basePath, item));
     }
-    if (value && typeof value === 'object') {
+    if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
       return Object.fromEntries(
         Object.entries(value).map(([key, item]) => [
           key,
@@ -881,12 +881,6 @@ async function prepareCombinedConfig(
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
-  // Keep source references until resolution, when parsed rows replace them for persistence.
-  combinedConfig.tests = configs.flatMap((config, index) =>
-    [config.tests || []]
-      .flat()
-      .map((test) => makeTestAbsolute(configBasePaths[index], test) as TestCase),
-  );
   return {
     config: combinedConfig,
     testSources: configs.map((config, index) => ({
