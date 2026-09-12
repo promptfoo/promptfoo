@@ -1229,6 +1229,9 @@ export async function readResponsesStream(
     if (key && isInvalidOutputTextItemId(itemId)) {
       return;
     }
+    if (!key && itemId !== undefined) {
+      return;
+    }
     if (
       key &&
       outputTextItemIds.has(key) &&
@@ -1511,6 +1514,9 @@ export async function readResponsesStream(
     ) {
       const outputIndex = getValidOutputIndex(event);
       let item = event.item as any;
+      if (item.type === 'message' && isInvalidOutputTextItemId(item.id)) {
+        return;
+      }
       if (item.type === 'message' && outputIndex !== undefined) {
         item.content.forEach((part: any, contentIndex: number) => {
           if (part?.type !== 'output_audio' || contentIndex > MAX_STREAM_CONTENT_INDEX) {
@@ -1526,18 +1532,17 @@ export async function readResponsesStream(
         });
       }
       if (item.type === 'function_call' && typeof item.call_id === 'string' && !item.id) {
-        for (const [previousKey, previousItem] of finalizedNonMessageItems) {
-          if (
-            previousItem.outputIndex !== outputIndex ||
-            previousItem.item?.type !== 'function_call' ||
-            typeof previousItem.item.id !== 'string' ||
-            previousKey !== getFunctionCallOutputKey(event.output_index, previousItem.item.id) ||
-            previousItem.item.call_id ||
-            (previousItem.item.name && item.name && previousItem.item.name !== item.name)
-          ) {
-            continue;
-          }
-
+        const candidates = Array.from(finalizedNonMessageItems).filter(
+          ([previousKey, previousItem]) =>
+            previousItem.outputIndex === outputIndex &&
+            previousItem.item?.type === 'function_call' &&
+            typeof previousItem.item.id === 'string' &&
+            previousKey === getFunctionCallOutputKey(event.output_index, previousItem.item.id) &&
+            !previousItem.item.call_id &&
+            (!previousItem.item.name || !item.name || previousItem.item.name === item.name),
+        );
+        if (candidates.length === 1) {
+          const [previousKey, previousItem] = candidates[0];
           item = {
             ...previousItem.item,
             ...item,
@@ -1548,7 +1553,6 @@ export async function readResponsesStream(
           };
           finalizedOutputChars -= previousItem.serializedLength;
           finalizedNonMessageItems.delete(previousKey);
-          break;
         }
       }
       const key =
@@ -1571,6 +1575,9 @@ export async function readResponsesStream(
       }
 
       const outputIndex = getValidOutputIndex(event);
+      if (isInvalidOutputTextItemId(event.item_id)) {
+        return;
+      }
       const itemId =
         typeof event.item_id === 'string' &&
         event.item_id.length <= MAX_STREAM_FUNCTION_METADATA_CHARS
@@ -2043,12 +2050,29 @@ export async function readResponsesStream(
     useFinalizedItems ? Array.from(finalizedRefusalItems.values()) : [],
     useFinalizedItems,
   );
+  const mergedOutputWithFinalizedText = mergedStreamOutput.map((item: any, outputIndex: number) =>
+    item?.type === 'message' && Array.isArray(item.content)
+      ? {
+          ...item,
+          content: item.content.map((content: any, contentIndex: number) => {
+            const key = `${outputIndex}:${contentIndex}`;
+            const text = finalizedOutputTextByContent.get(key);
+            const itemId = outputTextItemIds.get(key);
+            return content?.type === 'output_text' &&
+              text !== undefined &&
+              (!itemId || item.id === itemId)
+              ? { ...content, text }
+              : content;
+          }),
+        }
+      : item,
+  );
   const outputWithCompletedAnnotations = isCompletedResponse
     ? mergeCompletedOutputAnnotations(
         mergedStreamOutput,
         Array.from(finalizedNonMessageItems.values()),
       )
-    : mergedStreamOutput;
+    : mergedOutputWithFinalizedText;
   const requiresFinalizedToolCalls = Boolean(latestResponse) && !isCompletedResponse;
   const finalizedStreamOutput = filterIncompleteFunctionCalls(
     requiresFinalizedToolCalls

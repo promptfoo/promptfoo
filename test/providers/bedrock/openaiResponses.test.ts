@@ -3856,5 +3856,67 @@ describe('bedrock openaiResponses helper', () => {
         undefined,
       );
     });
+
+    it.each([
+      {
+        name: 'malformed finalized message id',
+        events: [
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: { type: 'message', id: 1, content: [{ type: 'output_text', text: 'secret' }] },
+          },
+        ],
+      },
+      {
+        name: 'unindexed identified text',
+        events: [{ type: 'response.output_text.done', item_id: 'm_secret', text: 'secret' }],
+      },
+    ])('does not positionally recover $name', async ({ events }) => {
+      const body = [
+        ...events.flatMap((event) => [
+          `event: ${event.type}`,
+          `data: ${JSON.stringify(event)}`,
+          '',
+        ]),
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"message","id":"m_safe","role":"assistant","content":[{"type":"output_text","text":"safe"}]}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output[0].content[0].text).toBe('safe');
+    });
+
+    it('drops annotations with invalid supplied item ids', async () => {
+      const body = [
+        'event: response.output_text.annotation.added',
+        'data: {"type":"response.output_text.annotation.added","output_index":0,"content_index":0,"item_id":1,"annotation":{"type":"url_citation","url":"https://example.com"}}',
+        '',
+        'event: response.incomplete',
+        'data: {"type":"response.incomplete","response":{"status":"incomplete","output":[{"type":"message","id":"m_safe","role":"assistant","content":[{"type":"output_text","text":"safe"}]}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output[0].content[0].annotations).toBeUndefined();
+    });
+
+    it('applies finalized EOF text before nested tool filtering', async () => {
+      const body = [
+        'event: response.output_text.done',
+        'data: {"type":"response.output_text.done","output_index":0,"content_index":1,"item_id":"m_1","text":"final"}',
+        '',
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"type":"message","id":"m_1","role":"assistant","content":[{"type":"function_call","name":"lookup","arguments":"{}"},{"type":"output_text","text":"stale"}]}}',
+        '',
+      ].join('\n');
+
+      const result = await readResponsesStream(new Response(body), 'test', { debug: vi.fn() });
+
+      expect(result.output[0].content).toEqual([{ type: 'output_text', text: 'final' }]);
+    });
   });
 });

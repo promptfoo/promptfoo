@@ -6174,13 +6174,27 @@ describe('Responses stream regressions', () => {
             annotation_index: 0,
             annotation,
           },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE' }],
+                },
+              ],
+            },
+          },
         ]),
         'test',
         { debug: vi.fn() },
       );
 
       expect(JSON.stringify(parsed)).not.toContain(oversizedItemId);
-      expect(parsed.output?.[0]?.content?.[0]?.annotations).toEqual([annotation]);
+      expect(parsed.output?.[0]?.content?.[0]?.annotations).toBeUndefined();
     });
 
     it('drops text carrying an oversized item identifier', async () => {
