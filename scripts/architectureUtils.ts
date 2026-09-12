@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { builtinModules } from 'node:module';
+import { isBuiltin } from 'node:module';
 import path from 'node:path';
 
 import { globSync } from 'glob';
@@ -50,15 +50,15 @@ export interface LayerConfig {
 const DEFAULT_SOURCE_ROOTS = ['src', 'packages'];
 
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
-const DIRECTORY_INDEXES = TYPESCRIPT_EXTENSIONS.map((extension) => `index${extension}`);
+const SOURCE_EXTENSIONS = [...TYPESCRIPT_EXTENSIONS, '.js', '.jsx', '.mjs', '.cjs'];
+const DECLARATION_EXTENSIONS = ['.d.ts', '.d.mts', '.d.cts'];
+const DIRECTORY_INDEXES = SOURCE_EXTENSIONS.map((extension) => `index${extension}`);
 const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
-  '.js': ['.ts', '.tsx'],
-  '.mjs': ['.mts'],
-  '.cjs': ['.cts'],
+  '.js': ['.ts', '.tsx', '.d.ts'],
+  '.jsx': ['.tsx', '.ts', '.d.ts'],
+  '.mjs': ['.mts', '.d.mts'],
+  '.cjs': ['.cts', '.d.cts'],
 };
-const BUILTIN_MODULES = new Set(
-  builtinModules.flatMap((moduleName) => [moduleName, moduleName.replace(/^node:/, '')]),
-);
 
 export function normalizePath(filePath: string): string {
   return filePath.split(path.sep).join('/');
@@ -386,10 +386,12 @@ export function resolveInternalModule(
     SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION[runtimeExtension] ?? []
   ).map((extension) => `${unresolvedPath.slice(0, -runtimeExtension.length)}${extension}`);
   const candidates = [
-    unresolvedPath,
     ...runtimeSourceCandidates,
-    ...TYPESCRIPT_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
+    unresolvedPath,
+    ...SOURCE_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
+    ...DECLARATION_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
     ...DIRECTORY_INDEXES.map((indexFile) => path.join(unresolvedPath, indexFile)),
+    ...DECLARATION_EXTENSIONS.map((extension) => path.join(unresolvedPath, `index${extension}`)),
   ];
 
   for (const candidate of candidates) {
@@ -398,7 +400,8 @@ export function resolveInternalModule(
       if (
         sourceRoots.some((root) => isWithinRoot(relativeCandidate, root)) &&
         !relativeCandidate.split('/').includes('node_modules') &&
-        TYPESCRIPT_EXTENSIONS.includes(path.extname(relativeCandidate))
+        (SOURCE_EXTENSIONS.includes(path.extname(relativeCandidate)) ||
+          DECLARATION_EXTENSIONS.some((extension) => relativeCandidate.endsWith(extension)))
       ) {
         return relativeCandidate;
       }
@@ -430,8 +433,7 @@ export function getExternalModuleName(specifier: string): string | undefined {
 
 /** The npm package name a specifier imports, or undefined for relative imports and Node builtins. */
 export function getPackageName(specifier: string): string | undefined {
-  const moduleName = getExternalModuleName(specifier);
-  return moduleName && !BUILTIN_MODULES.has(moduleName) ? moduleName : undefined;
+  return isBuiltin(specifier) ? undefined : getExternalModuleName(specifier);
 }
 
 export type BoundaryViolationKind = 'facade' | 'layer' | 'leaf' | 'leaf-external' | 'path';
