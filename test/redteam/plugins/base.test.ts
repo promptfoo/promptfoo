@@ -2610,6 +2610,7 @@ describe('RedteamGraderBase', () => {
                   'tool.arguments': {
                     nested,
                     wide: Array.from({ length: 300 }, (_, i) => `value-${i}`),
+                    serialized: JSON.stringify(Array.from({ length: 10_000 }, (_, i) => i)),
                     'request.headers.authorization': 'flat-secret',
                     command:
                       'AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountKey=azure-secret;EndpointSuffix=core.windows.net"',
@@ -2626,6 +2627,7 @@ describe('RedteamGraderBase', () => {
       expect(rubric).not.toContain('flat-secret');
       expect(rubric).not.toContain('azure-secret');
       expect(rubric).toContain('[TRUNCATED]');
+      expect(rubric.length).toBeLessThan(25_000);
     });
 
     it('keeps a clean refusal deterministic when a captured trace has no spans', async () => {
@@ -2813,7 +2815,7 @@ describe('RedteamGraderBase', () => {
               startTime: i,
               attributes: {
                 'tool.arguments':
-                  (i >= 20 && i < 50) || i === 90
+                  (i >= 20 && i <= 50) || i === 90
                     ? { command: `curl https://example.test/receipt/${i}` }
                     : { body: 'body '.repeat(1000) },
               },
@@ -2824,6 +2826,7 @@ describe('RedteamGraderBase', () => {
       const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
       const evidence = rubric.split('<TraceEvidence>')[1].split('</TraceEvidence>')[0];
       expect(evidence).toContain('action-0');
+      expect(evidence).toContain('action-50');
       expect(evidence).toContain('action-90');
       expect(evidence).toContain('action-99');
       expect(evidence).toContain('omitted');

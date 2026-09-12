@@ -427,7 +427,7 @@ function redactTraceValue(
 }
 
 function redactTraceEvidence(text: string): string {
-  if (/^\s*[\[{]/.test(text)) {
+  if (text.length <= 32_000 && /^\s*[\[{]/.test(text)) {
     try {
       return JSON.stringify(redactTraceValue(JSON.parse(text)));
     } catch {
@@ -603,8 +603,9 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
     actions.length > 24
       ? [
           ...new Set([
-            ...priorityActions.slice(0, 8),
-            ...priorityActions.slice(-8),
+            ...actions.filter((_, index) => index % Math.ceil(actions.length / 4) === 0),
+            ...priorityActions.slice(0, 6),
+            ...priorityActions.slice(-6),
             ...actions.slice(0, 4),
             ...actions.slice(-4),
           ]),
