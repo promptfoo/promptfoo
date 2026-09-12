@@ -582,6 +582,9 @@ export function getPackageName(specifier: string): string | undefined {
 /** The normalized Node builtin name a specifier imports, or undefined for npm/internal imports. */
 export function getNodeBuiltinName(specifier: string): string | undefined {
   const withoutNodePrefix = specifier.replace(/^node:/, '');
+  if (specifier.startsWith('node:') && PREFIX_ONLY_BUILTINS.has(withoutNodePrefix)) {
+    return withoutNodePrefix;
+  }
   if (!builtinModules.includes(specifier) && !builtinModules.includes(withoutNodePrefix)) {
     return undefined;
   }
