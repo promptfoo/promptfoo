@@ -14,7 +14,7 @@ import {
   showRedteamProviderLabelMissingWarning as commandShowRedteamProviderLabelMissingWarning,
   evalCommand,
 } from '../../src/commands/eval';
-import { getEnvBool, getEnvString } from '../../src/envars';
+import { getEnvBool } from '../../src/envars';
 import { evaluate, PromptSuggestionsRejectedError } from '../../src/evaluator';
 import {
   checkEmailStatusAndMaybeExit,
@@ -329,7 +329,7 @@ describe('evalCommand', () => {
     );
   });
 
-  it('keeps each run scoped through grader loading and output serialization', async () => {
+  it('keeps concurrent CLI output scoped and the grader declarative', async () => {
     const previousConfig = cliState.config;
     const previousBasePath = cliState.basePath;
     let release!: () => void;
@@ -351,15 +351,9 @@ describe('evalCommand', () => {
         basePath: path.resolve(config.description!),
       };
     });
-    vi.mocked(loadApiProvider).mockImplementation(async (_provider, context) => {
-      const key = getEnvString('OPENAI_API_KEY');
-      expect(context).toEqual({
-        basePath: path.resolve(key!),
-        env: expect.objectContaining({ OPENAI_API_KEY: key }),
-      });
-      return { id: () => 'grader', callApi: async () => ({ output: 'pass' }) };
-    });
     vi.mocked(evaluate).mockImplementation(async (suite, evalRecord) => {
+      expect(cliState.basePath).toBe(path.resolve(evalRecord.config.description!));
+      expect(suite.defaultTest).toMatchObject({ options: { provider: 'file://grader.js' } });
       evalRecord.prompts.push(...suite.prompts.map((prompt) => ({ ...prompt, provider: 'echo' })));
       if (++started === 2) {
         release();
@@ -2369,7 +2363,16 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
 
-    expect(loadApiProvider).toHaveBeenCalledWith('test-grader', expect.objectContaining({}));
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultTest: expect.objectContaining({
+          options: expect.objectContaining({ provider: 'test-grader' }),
+        }),
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(loadApiProvider).not.toHaveBeenCalled();
   });
 
   it('should handle repeat option', async () => {
@@ -2778,7 +2781,7 @@ describe('doEval with external defaultTest', () => {
       expect.objectContaining({
         defaultTest: expect.objectContaining({
           options: expect.objectContaining({
-            provider: mockProvider,
+            provider: 'test-grader',
           }),
         }),
       }),
@@ -2854,7 +2857,7 @@ describe('doEval with external defaultTest', () => {
           assert: [{ type: 'equals', value: 'test' }],
           vars: { existing: 'var', key: 'value' },
           options: expect.objectContaining({
-            provider: mockProvider,
+            provider: 'test-grader',
           }),
         }),
       }),

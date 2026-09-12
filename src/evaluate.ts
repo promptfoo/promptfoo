@@ -318,7 +318,9 @@ export async function evaluateWithSource(
   testSuite: EvaluateTestSuite,
   options: InternalEvaluateOptions = {},
 ) {
-  return cliState.withEnv(testSuite.env ?? {}, () => evaluateWithEnv(testSuite, options));
+  return cliState.withBasePath(testSuite.basePath ?? '', () =>
+    cliState.withEnv(testSuite.env ?? {}, () => evaluateWithEnv(testSuite, options)),
+  );
 }
 
 async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEvaluateOptions) {

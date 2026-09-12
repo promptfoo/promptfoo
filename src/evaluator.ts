@@ -5162,15 +5162,17 @@ export function evaluate<
   options: InternalEvaluateOptions,
   runtime?: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
-  return cliState.withEnv(testSuite.env ?? cliState.env, () => {
-    const resolvedRuntime =
-      runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
-    const runtimeTestSuite =
-      resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
-      nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
-      testSuite;
-    const store = resolvedRuntime.createEvaluationStore(evalRecord);
-    const ev = new Evaluator(runtimeTestSuite, store, options, resolvedRuntime);
-    return ev.evaluate();
-  });
+  return cliState.withBasePath(testSuite.basePath ?? cliState.basePath, () =>
+    cliState.withEnv(testSuite.env ?? cliState.env, () => {
+      const resolvedRuntime =
+        runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>);
+      const runtimeTestSuite =
+        resolvedRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+        nodeEvaluatorRuntime.resolveRuntimeTestSuite?.(testSuite) ??
+        testSuite;
+      const store = resolvedRuntime.createEvaluationStore(evalRecord);
+      const ev = new Evaluator(runtimeTestSuite, store, options, resolvedRuntime);
+      return ev.evaluate();
+    }),
+  );
 }

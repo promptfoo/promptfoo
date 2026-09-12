@@ -21,16 +21,12 @@ import telemetry from '../telemetry';
 import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } from './azureBlob';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
-import { isProviderTypeMap } from './gradingProvider';
-import { renderEnvOnlyInObject } from './render';
 import { parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
 
 import type {
-  AssertionOrSet,
   CsvRow,
   EnvOverrides,
-  GradingConfig,
   ProviderOptions,
   TestCase,
   TestCaseWithVarsFile,
@@ -60,7 +56,7 @@ function preserveRemoteTests(tests: TestCase[]): TestCase[] {
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
-  basePath: string = '',
+  basePath: string = cliState.basePath || '',
 ): Promise<Record<string, string | string[] | object>> {
   if (typeof pathOrGlobs === 'string') {
     pathOrGlobs = [pathOrGlobs];
@@ -76,7 +72,7 @@ export async function readTestFiles(
 
     for (const p of paths) {
       const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
-      const yamlData = maybeLoadConfigFromExternalFile(rawData, undefined, path.dirname(p));
+      const yamlData = maybeLoadConfigFromExternalFile(rawData);
       Object.assign(ret, yamlData);
     }
   }
@@ -106,12 +102,10 @@ export async function readTestFiles(
  */
 export async function readStandaloneTestsFile(
   varsPath: string,
-  basePath: string = '',
+  basePath: string = cliState.basePath || '',
   config?: Record<string, any>,
 ): Promise<TestCase[]> {
-  const finalConfig = config
-    ? maybeLoadConfigFromExternalFile(config, undefined, basePath)
-    : config;
+  const finalConfig = config ? maybeLoadConfigFromExternalFile(config) : config;
 
   if (varsPath.startsWith('huggingface://datasets/')) {
     telemetry.record('feature_used', {
@@ -244,11 +238,7 @@ async function readLocalStandaloneTestsFile(
       feature: 'yaml tests file',
     });
     const rawContent = loadYaml(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
-    const rows = maybeLoadConfigFromExternalFile(
-      rawContent,
-      undefined,
-      path.dirname(resolvedVarsPath),
-    ) as unknown as CsvRow[];
+    const rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as CsvRow[];
     return csvRowsToTestCases(rows);
   }
 
@@ -446,59 +436,9 @@ async function loadTestWithVars(
   return ret;
 }
 
-function resolveGradingProviderPaths(
-  provider: GradingConfig['provider'],
-  basePath: string,
-  env: EnvOverrides | undefined,
-): GradingConfig['provider'] {
-  if (typeof provider === 'string') {
-    if (!provider.startsWith('file://')) {
-      return provider;
-    }
-    const rendered = cliState.withEnv(env, () => renderEnvOnlyInObject(provider));
-    return rendered.includes('{{')
-      ? rendered
-      : 'file://' + path.resolve(basePath, rendered.slice('file://'.length));
-  }
-  if (isProviderTypeMap(provider)) {
-    return Object.fromEntries(
-      Object.entries(provider).map(([type, value]) => [
-        type,
-        resolveGradingProviderPaths(value, basePath, env),
-      ]),
-    );
-  }
-  if (provider && typeof provider === 'object' && typeof provider.id === 'string') {
-    return {
-      ...provider,
-      id: resolveGradingProviderPaths(provider.id, basePath, { ...env, ...provider.env }) as string,
-    };
-  }
-  return provider;
-}
-
-function resolveAssertionProviderPaths<T extends AssertionOrSet>(
-  assertion: T,
-  basePath: string,
-  env: EnvOverrides | undefined,
-): T {
-  if (!assertion || typeof assertion !== 'object') {
-    return assertion;
-  }
-  if (assertion.type === 'assert-set') {
-    return {
-      ...assertion,
-      assert: assertion.assert.map((child) => resolveAssertionProviderPaths(child, basePath, env)),
-    };
-  }
-  return assertion.provider
-    ? { ...assertion, provider: resolveGradingProviderPaths(assertion.provider, basePath, env) }
-    : assertion;
-}
-
 export async function readTest(
   test: string | TestCaseWithVarsFile,
-  basePath: string = '',
+  basePath: string = cliState.basePath || '',
   isDefaultTest: boolean = false,
   env: EnvOverrides | undefined = cliState.env,
 ): Promise<TestCase> {
@@ -521,11 +461,7 @@ async function readTestWithEnv(
     const testFilePath = path.resolve(basePath, test);
     effectiveBasePath = path.dirname(testFilePath);
     const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
-    const rawTestCase = maybeLoadConfigFromExternalFile(
-      rawContent,
-      undefined,
-      effectiveBasePath,
-    ) as TestCaseWithVarsFile;
+    const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
@@ -545,18 +481,6 @@ async function readTestWithEnv(
         env,
       });
     }
-  }
-
-  if (testCase.options?.provider) {
-    testCase.options = {
-      ...testCase.options,
-      provider: resolveGradingProviderPaths(testCase.options.provider, effectiveBasePath, env),
-    };
-  }
-  if (testCase.assert) {
-    testCase.assert = testCase.assert.map((assertion) =>
-      resolveAssertionProviderPaths(assertion, effectiveBasePath, env),
-    );
   }
 
   if (
@@ -592,7 +516,7 @@ async function readTestWithEnv(
  */
 export async function loadTestsFromGlob(
   loadTestsGlob: string,
-  basePath: string = '',
+  basePath: string = cliState.basePath || '',
   env: EnvOverrides | undefined = cliState.env,
 ): Promise<TestCase[]> {
   return cliState.withEnv(env, () => loadTestsFromGlobWithEnv(loadTestsGlob, basePath, env));
@@ -666,16 +590,12 @@ async function loadTestsFromGlobWithEnv(
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
       const rawContent = loadYaml(await fsPromises.readFile(testFile, 'utf-8'));
-      testCases = maybeLoadConfigFromExternalFile(
-        rawContent,
-        undefined,
-        testBasePath,
-      ) as TestCase[];
+      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
       const rawCases = parseJsonlLines(fileContent, testFile);
-      testCases = maybeLoadConfigFromExternalFile(rawCases, undefined, testBasePath) as TestCase[];
+      testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf8');
@@ -683,11 +603,7 @@ async function loadTestsFromGlobWithEnv(
         fileContent,
         `Failed to parse JSON test file ${testFile}`,
       );
-      testCases = maybeLoadConfigFromExternalFile(
-        rawContent,
-        undefined,
-        testBasePath,
-      ) as TestCase[];
+      testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {
       throw new Error(`Unsupported file type for test file: ${testFile}`);
@@ -707,10 +623,12 @@ async function loadTestsFromGlobWithEnv(
 
 export async function readTests(
   tests: TestSuiteConfig['tests'],
-  basePath: string = '',
+  basePath: string = cliState.basePath || '',
   env: EnvOverrides | undefined = cliState.env,
 ): Promise<TestCase[]> {
-  return cliState.withEnv(env, () => readTestsWithEnv(tests, basePath, env));
+  return cliState.withBasePath(basePath, () =>
+    cliState.withEnv(env, () => readTestsWithEnv(tests, basePath, env)),
+  );
 }
 
 async function readTestsWithEnv(
@@ -724,10 +642,7 @@ async function readTestsWithEnv(
       // Resolve local provider and vars references only for local sources.
       return tests;
     }
-    const testBasePath = path.dirname(
-      getStandaloneTestsFileMetadata(source, basePath).pathWithoutFunction,
-    );
-    return Promise.all(tests.map((test) => readTest(test, testBasePath, false, env)));
+    return Promise.all(tests.map((test) => readTest(test, basePath, false, env)));
   };
 
   if (typeof tests === 'string') {
@@ -965,7 +880,7 @@ function collectConfigFileReferences(
  */
 export function resolveTestsWatchPaths(
   tests: TestSuiteConfig['tests'],
-  basePath: string = '',
+  basePath: string = cliState.basePath || '',
 ): string[] {
   if (tests == null) {
     return [];

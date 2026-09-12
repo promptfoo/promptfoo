@@ -1233,6 +1233,8 @@ export const TestSuiteSchema = z.object({
       queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
+  /** Directory for local references, retained when replaying a saved evaluation. */
+  basePath: z.string().optional(),
 });
 
 export type TestSuite = z.infer<typeof TestSuiteSchema>;
@@ -1393,6 +1395,8 @@ export const TestSuiteConfigSchema = z.object({
       queryDelay: TraceQueryDelaySchema.optional(),
     })
     .optional(),
+  /** Directory for local references, retained when replaying a saved evaluation. */
+  basePath: z.string().optional(),
 });
 
 export type TestSuiteConfig = z.infer<typeof TestSuiteConfigSchema>;

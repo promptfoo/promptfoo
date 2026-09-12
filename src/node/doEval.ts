@@ -21,7 +21,6 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import { loadApiProvider } from '../providers/index';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
@@ -522,6 +521,7 @@ export async function doEval(
 
     // Fill the active scope in place; replacing runEnv would leave it empty.
     Object.assign(runEnv, testSuite.env);
+    cliState.basePath = _basePath;
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
       isRetryErrors ? 'retrying errors for' : 'resuming';
@@ -783,10 +783,7 @@ export async function doEval(
       }
       testSuite.defaultTest = testSuite.defaultTest || {};
       testSuite.defaultTest.options = testSuite.defaultTest.options || {};
-      testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
-        basePath: _basePath,
-        env: testSuite.env,
-      });
+      testSuite.defaultTest.options.provider = cmdObj.grader;
       // Also update cliState.config so redteam providers can access the grader
       if (cliState.config) {
         // Normalize string shorthand to object
@@ -1300,7 +1297,9 @@ export async function doEval(
   const runEvaluation = (initialization?: boolean) => {
     // Each watch run starts clean and retains its resolved env through output and cleanup.
     const runEnv: EnvOverrides = {};
-    return cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization));
+    return cliState.withBasePath(undefined, () =>
+      cliState.withEnv(runEnv, () => runEvaluationWithEnv(runEnv, initialization)),
+    );
   };
 
   const result = await runEvaluation(true /* initialization */);

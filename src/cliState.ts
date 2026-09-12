@@ -12,6 +12,7 @@ export interface ActiveOtlpReceiver {
 
 interface CliState {
   basePath?: string;
+  withBasePath<T>(basePath: string | undefined, fn: () => T): T;
   config?: Partial<UnifiedConfig>;
   selectedProviderConfigs?: Partial<UnifiedConfig>['providers'];
 
@@ -72,6 +73,8 @@ interface CliState {
 }
 
 const maxConcurrencyContext = new AsyncLocalStorage<{ maxConcurrency: number | undefined }>();
+const basePathContext = new AsyncLocalStorage<{ basePath: string | undefined }>();
+let globalBasePath: string | undefined;
 const envContext = new AsyncLocalStorage<{ env: EnvOverrides | undefined }>();
 const requestTracingConfigContext = new AsyncLocalStorage<{
   tracingConfig: NonNullable<TestSuite['tracing']>;
@@ -80,6 +83,21 @@ let globalMaxConcurrency: number | undefined;
 let activeOtlpReceiver: ActiveOtlpReceiver | undefined;
 
 const state: CliState = {
+  get basePath() {
+    const store = basePathContext.getStore();
+    return store ? store.basePath : globalBasePath;
+  },
+  set basePath(basePath: string | undefined) {
+    const store = basePathContext.getStore();
+    if (store) {
+      store.basePath = basePath;
+    } else {
+      globalBasePath = basePath;
+    }
+  },
+  withBasePath<T>(basePath: string | undefined, fn: () => T): T {
+    return basePathContext.run({ basePath }, fn);
+  },
   get maxConcurrency() {
     const store = maxConcurrencyContext.getStore();
     if (store) {

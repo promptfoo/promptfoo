@@ -67,7 +67,6 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  * an array of file paths, or any other type of data.
  * @param context - Optional context to control file loading behavior. 'assertion' context
  * preserves Python/JS file references instead of loading their content.
- * @param basePath - Directory for local references; defaults to the active config directory.
  * @returns The loaded content if the input was a file path, otherwise the original input.
  * For JSON and YAML files, the content is parsed into an object.
  * For other file types, the raw file content is returned as a string.
@@ -77,11 +76,10 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
   context?: 'assertion' | 'general' | 'vars',
-  basePath = cliState.basePath || '',
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
-      const content: any = maybeLoadFromExternalFile(path, context, basePath);
+      const content: any = maybeLoadFromExternalFile(path, context);
       return content;
     });
   }
@@ -130,7 +128,7 @@ export function maybeLoadFromExternalFile(
       ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
       : cleanPath;
 
-  const resolvedPath = path.resolve(basePath, pathToUse);
+  const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
 
   // Check if the path contains glob patterns
   if (hasMagic(pathToUse)) {
@@ -256,16 +254,14 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  *
  * @param config - The configuration object to process
  * @param context - Optional context to control file loading behavior
- * @param basePath - Directory for local references; defaults to the active config directory.
  * @returns The configuration with external file references resolved
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
   context?: 'assertion' | 'general' | 'vars',
-  basePath?: string,
 ): any {
   if (Array.isArray(config)) {
-    return config.map((item) => maybeLoadConfigFromExternalFile(item, context, basePath));
+    return config.map((item) => maybeLoadConfigFromExternalFile(item, context));
   }
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
@@ -283,7 +279,7 @@ export function maybeLoadConfigFromExternalFile(
       const isVarsField = key === 'vars';
 
       const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
-      const value = maybeLoadConfigFromExternalFile(config[key], childContext, basePath);
+      const value = maybeLoadConfigFromExternalFile(config[key], childContext);
 
       if (key === '__proto__') {
         Object.defineProperty(result, key, {
@@ -298,7 +294,7 @@ export function maybeLoadConfigFromExternalFile(
     }
     return result;
   }
-  return maybeLoadFromExternalFile(config, context, basePath);
+  return maybeLoadFromExternalFile(config, context);
 }
 
 /**

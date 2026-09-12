@@ -90,7 +90,10 @@ export async function loadApiProvider(
   context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
   const env = context.env ?? cliState.env;
-  return cliState.withEnv(env, () => createApiProvider(providerPath, { ...context, env }));
+  const basePath = context.basePath ?? cliState.basePath;
+  return cliState.withBasePath(basePath, () =>
+    cliState.withEnv(env, () => createApiProvider(providerPath, { ...context, basePath, env })),
+  );
 }
 
 async function createApiProvider(
@@ -373,7 +376,10 @@ export async function loadApiProviders(
   } = {},
 ): Promise<ApiProvider[]> {
   const env = options.env ?? cliState.env;
-  return cliState.withEnv(env, () => loadApiProvidersWithEnv(providerPaths, options.basePath, env));
+  const basePath = options.basePath ?? cliState.basePath;
+  return cliState.withBasePath(basePath, () =>
+    cliState.withEnv(env, () => loadApiProvidersWithEnv(providerPaths, basePath, env)),
+  );
 }
 
 async function loadApiProvidersWithEnv(

@@ -247,6 +247,79 @@ describe('suite environment loading', () => {
     },
   );
 
+  it('keeps default and scenario providers out of saved config and replays tests once', async () => {
+    const configPath = writeConfig('replay', {
+      defaultTest: { provider: 'file://circular.cjs' },
+      tests: [{ vars: { source: 'top' } }],
+      scenarios: [
+        {
+          config: [{}],
+          tests: [{ provider: 'file://circular.cjs', vars: { source: 'scenario' } }],
+        },
+      ],
+    });
+    fs.writeFileSync(
+      path.join(path.dirname(configPath), 'circular.cjs'),
+      `module.exports = class {
+      constructor() { this.self = this; this.runtimeValue = 'private-runtime-value'; }
+      id() { return 'circular'; }
+      async callApi() { return { output: 'ok' }; }
+    }`,
+    );
+    const first = await resolveConfigs({ config: [configPath] }, {});
+    expect(
+      isApiProvider(
+        typeof first.testSuite.defaultTest === 'object' && first.testSuite.defaultTest.provider,
+      ),
+    ).toBe(true);
+    const saved = JSON.stringify(first.config);
+    expect(saved).not.toContain('private-runtime-value');
+    const replay = await resolveConfigs({}, JSON.parse(saved));
+    for (const { config, testSuite } of [first, replay]) {
+      const result = await evaluateResolved(testSuite, new Eval(config), {});
+      const rows = await result.getResults();
+      expect(rows.map((row) => row.testCase.vars?.source).sort()).toEqual(['scenario', 'top']);
+      expect(rows.every((row) => row.success)).toBe(true);
+      expect(JSON.stringify(config)).not.toContain('private-runtime-value');
+    }
+  });
+
+  it('reuses configured file graders across assertion, options, typed, and assertion-set forms', async () => {
+    fs.writeFileSync(
+      path.join(tempDir, 'judge.cjs'),
+      `module.exports = class {
+      constructor(options) { this.config = options.config; }
+      id() { return 'file://judge.cjs'; }
+      async callApi() { const pass = this.config.marker === 'configured'; return {
+        output: JSON.stringify({ pass, score: pass ? 1 : 0, reason: 'configured grader reuse' })
+      }; }
+    }`,
+    );
+    const assertion = { type: 'llm-rubric' as const, value: 'ok', provider: 'file://judge.cjs' };
+    const result = await evaluate(
+      {
+        basePath: tempDir,
+        prompts: ['answer'],
+        providers: [{ id: 'file://judge.cjs', config: { marker: 'configured' } }],
+        tests: [
+          { assert: [assertion] },
+          {
+            options: { provider: 'file://judge.cjs' },
+            assert: [{ type: 'llm-rubric', value: 'ok' }],
+          },
+          { assert: [{ ...assertion, provider: { text: 'file://judge.cjs' } }] },
+          { assert: [{ type: 'assert-set', assert: [assertion] }] },
+        ],
+      },
+      { cache: false },
+    );
+    const rows = await result.getResults();
+    expect(rows).toHaveLength(4);
+    expect(rows.map(({ success, score }) => ({ success, score }))).toEqual(
+      Array(4).fill({ success: true, score: 1 }),
+    );
+  });
+
   it('uses process settings after removing the previous suite environment', async () => {
     const first = await resolveConfigs(
       {
@@ -275,12 +348,14 @@ describe('suite environment loading', () => {
 
   it('leaves the previous config active after a failed resolution', async () => {
     const previous = cliState.config;
+    const basePath = cliState.basePath;
     const configPath = writeConfig('invalid', {
       prompts: ['file://missing-prompt.txt'],
       env: { OPENAI_API_KEY: 'rejected-key' },
     });
     await expect(resolveConfigs({ config: [configPath] }, {})).rejects.toThrow();
     expect(cliState.config).toBe(previous);
+    expect(cliState.basePath).toBe(basePath);
   });
 
   it.each(['tests', 'vars'] as const)(
@@ -680,50 +755,6 @@ describe('suite environment loading', () => {
     expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
   });
 
-  it.each([false, true])(
-    'resolves process-backed grading paths unless disabled (%j)',
-    async (disabled) => {
-      const restore = mockProcessEnv({ GRADER_PATH: 'graders/judge.js' });
-      cliState.config = { env: { GRADER_PATH: 'stale.js' } };
-      try {
-        const reference = 'file://{{ env.GRADER_PATH }}';
-        const test = await cliState.withEnv(
-          { PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: String(disabled) },
-          () =>
-            readTest({ options: { provider: { text: reference } } }, path.join(tempDir, 'tests')),
-        );
-        expect(test.options?.provider).toEqual({
-          text: disabled ? reference : `file://${path.join(tempDir, 'tests/graders/judge.js')}`,
-        });
-      } finally {
-        restore();
-      }
-    },
-  );
-
-  it('resolves nested default-test files from a later config directory', async () => {
-    const first = writeConfig('first', {});
-    const second = writeConfig('second', {
-      defaultTest: 'file://defaults/test.yaml',
-      tests: [{ vars: {} }],
-    });
-    const defaultsDir = path.join(path.dirname(second), 'defaults');
-    fs.mkdirSync(defaultsDir);
-    fs.writeFileSync(
-      path.join(defaultsDir, 'test.yaml'),
-      'vars: vars.yaml\nprovider: file://provider.yaml\n',
-    );
-    fs.writeFileSync(path.join(defaultsDir, 'vars.yaml'), 'source: nested-default\n');
-    fs.writeFileSync(path.join(defaultsDir, 'provider.yaml'), 'id: echo\n');
-    const { testSuite } = await resolveConfigs({ config: [first, second] }, {});
-    expect(typeof testSuite.defaultTest === 'object' && testSuite.defaultTest.vars).toEqual({
-      source: 'nested-default',
-    });
-    expect(
-      typeof testSuite.defaultTest === 'object' && isApiProvider(testSuite.defaultTest.provider),
-    ).toBe(true);
-  });
-
   it('uses suite env while expanding nested prompt files', async () => {
     const previousFile = path.join(tempDir, 'previous.json');
     const suiteFile = path.join(tempDir, 'suite.json');
@@ -780,7 +811,7 @@ describe('suite environment loading', () => {
   });
 
   it.each(['yaml', 'json', 'jsonl'])(
-    'resolves nested provider files from each %s test source',
+    'resolves nested %s test references from their owning config directory',
     async (extension) => {
       cliState.basePath = tempDir;
       fs.writeFileSync(path.join(tempDir, 'grader.yaml'), 'id: echo\nlabel: stale\n');
@@ -788,7 +819,11 @@ describe('suite environment loading', () => {
         const configPath = writeConfig(name, { tests: [`nested/cases.${extension}`] });
         const sourceDir = path.join(path.dirname(configPath), 'nested');
         fs.mkdirSync(sourceDir);
-        fs.writeFileSync(path.join(sourceDir, 'grader.yaml'), `id: echo\nlabel: ${name}\n`);
+        fs.writeFileSync(
+          path.join(path.dirname(configPath), 'grader.yaml'),
+          `id: echo\nlabel: ${name}\n`,
+        );
+        fs.writeFileSync(path.join(sourceDir, 'grader.yaml'), 'id: echo\nlabel: wrong-shadow\n');
         const test = { provider: 'file://grader.yaml', vars: {} };
         fs.writeFileSync(
           path.join(sourceDir, `cases.${extension}`),
@@ -805,11 +840,11 @@ describe('suite environment loading', () => {
     },
   );
 
-  it('expands nested vars references relative to the vars file', async () => {
+  it('expands file references inside vars files relative to the config', async () => {
     cliState.basePath = tempDir;
-    fs.writeFileSync(path.join(tempDir, 'value.json'), JSON.stringify('stale'));
+    fs.writeFileSync(path.join(tempDir, 'value.json'), JSON.stringify('selected'));
     fs.mkdirSync(path.join(tempDir, 'nested'));
-    fs.writeFileSync(path.join(tempDir, 'nested/value.json'), JSON.stringify('selected'));
+    fs.writeFileSync(path.join(tempDir, 'nested/value.json'), JSON.stringify('wrong-shadow'));
     fs.writeFileSync(path.join(tempDir, 'nested/vars.yaml'), 'source: file://value.json\n');
     const test = await readTest({ vars: 'nested/vars.yaml' }, tempDir);
     expect(test.vars).toEqual({ source: 'selected' });
@@ -830,24 +865,6 @@ describe('suite environment loading', () => {
       sourceDir,
     );
     expect(test.vars).toEqual({ source: 'selected' });
-  });
-
-  it('loads nested default test files relative to their own directory', async () => {
-    const firstConfigPath = writeConfig('first-default', {});
-    const configPath = writeConfig('nested-default', {
-      defaultTest: 'file://defaults/test.yaml',
-      tests: [{ vars: { input: 'hello' } }],
-    });
-    const defaultsDir = path.join(path.dirname(configPath), 'defaults');
-    fs.mkdirSync(defaultsDir);
-    fs.writeFileSync(path.join(defaultsDir, 'test.yaml'), 'vars: vars.yaml\n');
-    fs.writeFileSync(path.join(defaultsDir, 'vars.yaml'), 'source: nested\n');
-
-    const { testSuite } = await resolveConfigs({ config: [firstConfigPath, configPath] }, {});
-
-    expect(
-      typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest.vars : undefined,
-    ).toEqual({ source: 'nested' });
   });
 
   it('keeps labeled prompt files from different config directories distinct', async () => {
@@ -900,66 +917,6 @@ describe('suite environment loading', () => {
     },
   );
 
-  it("uses a grading provider's own env when resolving its file path", async () => {
-    const test = await readTest(
-      {
-        options: {
-          provider: { id: 'file://{{ env.GRADER_PATH }}', env: { GRADER_PATH: 'provider.js' } },
-        },
-      },
-      tempDir,
-      false,
-      { GRADER_PATH: 'suite.js' },
-    );
-    expect(test.options?.provider).toMatchObject({
-      id: `file://${path.join(tempDir, 'provider.js')}`,
-    });
-  });
-
-  it('does not inherit a stale grader path with an explicit empty environment', async () => {
-    const restore = mockProcessEnv({ GRADER_PATH: 'process.js' });
-    cliState.config = { env: { GRADER_PATH: 'stale.js' } };
-    try {
-      const test = await readTest(
-        { options: { provider: 'file://{{ env.GRADER_PATH }}' } },
-        tempDir,
-        false,
-        {},
-      );
-      expect(test.options?.provider).toBe(`file://${path.join(tempDir, 'process.js')}`);
-    } finally {
-      restore();
-    }
-  });
-
-  it.each([
-    ['PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', 'true', 'false', false],
-    ['PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS', 'false', 'true', true],
-    ['PROMPTFOO_SELF_HOSTED', 'true', 'false', false],
-    ['PROMPTFOO_DISABLE_TEMPLATING', 'true', 'false', false],
-    ['PROMPTFOO_DISABLE_TEMPLATING', 'false', 'true', true],
-  ] as const)(
-    'uses the explicit %s=%s when resolving grader paths',
-    async (flag, selected, ambient, shouldRender) => {
-      const restore = mockProcessEnv({
-        GRADER_PATH: 'process.js',
-        PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: undefined,
-      });
-      cliState.config = { env: { [flag]: ambient } };
-      try {
-        const provider = 'file://{{ env.GRADER_PATH }}';
-        const test = await readTest({ options: { provider } }, tempDir, false, {
-          [flag]: selected,
-        });
-        expect(test.options?.provider).toBe(
-          shouldRender ? `file://${path.join(tempDir, 'process.js')}` : provider,
-        );
-      } finally {
-        restore();
-      }
-    },
-  );
-
   it.each(['string', 'object'] as const)(
     'resolves standalone %s test providers during evaluation',
     async (form) => {
@@ -990,7 +947,7 @@ describe('suite environment loading', () => {
   );
 
   it.each(['options', 'assertion', 'typed'] as const)(
-    'resolves a standalone %s grader relative to its test file',
+    'resolves a standalone %s grader relative to the suite directory',
     async (location) => {
       const casesDir = path.join(tempDir, 'cases');
       fs.mkdirSync(casesDir);
@@ -999,7 +956,7 @@ describe('suite environment loading', () => {
         location === 'typed'
           ? { text: 'file://grader.yaml', embedding: 'file://unused.yaml' }
           : 'file://grader.yaml';
-      fs.writeFileSync(path.join(casesDir, 'grader.yaml'), 'id: openai:chat:test-model\n');
+      fs.writeFileSync(path.join(tempDir, 'grader.yaml'), 'id: openai:chat:test-model\n');
       fs.writeFileSync(
         testsPath,
         JSON.stringify([
@@ -1034,6 +991,7 @@ describe('suite environment loading', () => {
           providers: ['echo'],
           prompts: ['answer'],
           tests: testsPath,
+          basePath: tempDir,
         },
         { cache: false },
       );
