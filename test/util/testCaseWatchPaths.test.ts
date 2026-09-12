@@ -18,6 +18,7 @@ describe('resolveTestsWatchPaths', () => {
   beforeAll(() => {
     base = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-watch-'));
     fs.mkdirSync(path.join(base, 'tests'));
+    fs.mkdirSync(path.join(base, 'nested'));
     fs.mkdirSync(path.join(base, 'fixtures'));
     for (const rel of [
       'cases.yaml',
@@ -139,16 +140,19 @@ describe('resolveTestsWatchPaths', () => {
   it('watches file references nested inside a tests file', () => {
     // cases.yaml holds a case whose vars point at another file; the loader reads it,
     // so editing it changes the evaluation and has to trigger a rerun.
-    fs.writeFileSync(path.join(base, 'nested.yaml'), '- vars:\n    data: file://vars.csv\n');
-    const watched = resolve('file://nested.yaml' as TestSuiteConfig['tests']);
-    expect(watched).toContain(path.join(base, 'nested.yaml'));
+    fs.writeFileSync(path.join(base, 'nested/cases.yaml'), '- vars:\n    data: file://vars.csv\n');
+    const watched = resolve('file://nested/cases.yaml' as TestSuiteConfig['tests']);
+    expect(watched).toContain(path.join(base, 'nested/cases.yaml'));
     expect(watched).toContain(path.join(base, 'vars.csv'));
   });
 
   it('watches file references nested inside a .jsonl tests file', () => {
-    fs.writeFileSync(path.join(base, 'nested.jsonl'), '{"vars":{"data":"file://vars.csv"}}\n');
-    const watched = resolve('file://nested.jsonl' as TestSuiteConfig['tests']);
-    expect(watched).toContain(path.join(base, 'nested.jsonl'));
+    fs.writeFileSync(
+      path.join(base, 'nested/cases.jsonl'),
+      '{"vars":{"data":"file://vars.csv"}}\n',
+    );
+    const watched = resolve('file://nested/cases.jsonl' as TestSuiteConfig['tests']);
+    expect(watched).toContain(path.join(base, 'nested/cases.jsonl'));
     expect(watched).toContain(path.join(base, 'vars.csv'));
   });
 

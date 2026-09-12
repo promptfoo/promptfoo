@@ -141,21 +141,18 @@ vi.mock('../../../src/util/file', async () => {
   };
 });
 
-vi.mock('../../../src/util/testCaseReader', async (importOriginal) => ({
-  isRemoteTestsReference: (
-    await importOriginal<typeof import('../../../src/util/testCaseReader')>()
-  ).isRemoteTestsReference,
-  readTest: vi.fn().mockImplementation(async (test) => test),
-  readTests: vi.fn(async (tests) => {
-    if (!tests) {
-      return [];
-    }
-    if (Array.isArray(tests)) {
-      return tests;
-    }
-    return [];
-  }),
-}));
+vi.mock('../../../src/util/testCaseReader', async (importOriginal) => {
+  const readRows = vi.fn(async (tests) => (Array.isArray(tests) ? tests : []));
+  return {
+    isRemoteTestsReference: (
+      await importOriginal<typeof import('../../../src/util/testCaseReader')>()
+    ).isRemoteTestsReference,
+    readTest: vi.fn(async (test) => test),
+    readTestConfig: vi.fn(async (test) => test),
+    readTests: readRows,
+    readTestConfigs: readRows,
+  };
+});
 
 vi.mock('../../../src/providers', async () => {
   const actual =

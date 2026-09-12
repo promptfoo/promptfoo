@@ -6,6 +6,7 @@ import $RefParser from '@apidevtools/json-schema-ref-parser';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { globSync } from 'glob';
+import Clone from 'rfdc';
 import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
@@ -44,7 +45,13 @@ import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProv
 import { filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
-import { isRemoteTestsReference, readTest, readTests } from '../testCaseReader';
+import {
+  isRemoteTestsReference,
+  readTest,
+  readTestConfig,
+  readTestConfigs,
+  readTests,
+} from '../testCaseReader';
 import {
   type PromptReferenceSource,
   validateTestPromptReferences,
@@ -52,6 +59,8 @@ import {
 import { validateTestProviderReferences } from '../validateTestProviderReferences';
 import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
+
+const clone = Clone({ circles: true });
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
 
@@ -533,10 +542,15 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 
 type TestSource = { tests: TestSuiteConfig['tests']; basePath: string };
 
-async function readTestSources(sources: TestSource[], env: TestSuite['env']): Promise<TestCase[]> {
+async function readTestSources(
+  sources: TestSource[],
+  env: TestSuite['env'],
+  loadProviders = true,
+): Promise<TestCase[]> {
+  const read = loadProviders ? readTests : readTestConfigs;
   const tests: TestCase[] = [];
   for (const source of sources) {
-    tests.push(...(await readTests(source.tests, source.basePath, env)));
+    tests.push(...(await read(source.tests, source.basePath, env)));
   }
   return tests;
 }
@@ -863,8 +877,7 @@ async function prepareCombinedConfig(
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
 
-  // Persist source references rather than executable tests. Loaded providers can hold
-  // credentials or cycles, and retry must resolve the original sources once.
+  // Keep source references until resolution, when parsed rows replace them for persistence.
   combinedConfig.tests = configs.flatMap((config, index) =>
     [config.tests || []]
       .flat()
@@ -1055,9 +1068,11 @@ async function resolveLoadedConfig(
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
 
-  config.defaultTest = processedDefaultTest;
-  const parsedDefaultTest = processedDefaultTest
-    ? await readTest(processedDefaultTest, basePath, true, config.env)
+  config.defaultTest = processedDefaultTest
+    ? await readTestConfig(processedDefaultTest, basePath, true, config.env)
+    : undefined;
+  const parsedDefaultTest = config.defaultTest
+    ? await readTest(clone(config.defaultTest), basePath, true, config.env)
     : undefined;
 
   // Resolve provider configs: loads file:// references while preserving non-file providers.
@@ -1107,9 +1122,17 @@ async function resolveLoadedConfig(
     env: config.env,
     basePath,
   });
-  const parsedTests = testSources?.length
-    ? await readTestSources(testSources, config.env)
-    : await readTests(config.tests || [], cmdObj.tests || cmdObj.vars ? '' : basePath, config.env);
+  const testConfigs = testSources?.length
+    ? await readTestSources(testSources, config.env, false)
+    : await readTestConfigs(
+        config.tests || [],
+        cmdObj.tests || cmdObj.vars ? '' : basePath,
+        config.env,
+      );
+  config.tests = testConfigs;
+  const parsedTests = await Promise.all(
+    clone(testConfigs).map((test) => readTest(test, basePath, false, config.env)),
+  );
 
   let parsedScenarios = config.scenarios;
   // Parse testCases for each scenario
@@ -1126,6 +1149,7 @@ async function resolveLoadedConfig(
     );
   }
   if (Array.isArray(parsedScenarios)) {
+    config.scenarios = [];
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     for (const [scenarioIndex, scenario] of parsedScenarios.entries()) {
@@ -1133,14 +1157,15 @@ async function resolveLoadedConfig(
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
       if (typeof scenario === 'object' && scenario.tests && Array.isArray(scenario.tests)) {
-        const parsedScenarioTests: TestCase[] = await readTests(
-          scenario.tests,
-          basePath,
-          config.env,
-        );
-        scenario.tests = parsedScenarioTests;
+        scenario.tests = await readTestConfigs(scenario.tests, basePath, config.env);
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
+      config.scenarios[scenarioIndex] = clone(scenario);
+      if (Array.isArray(scenario.tests)) {
+        scenario.tests = await Promise.all(
+          scenario.tests.map((test) => readTest(test, basePath, false, config.env)),
+        );
+      }
       const filteredTests = await filterTests(
         {
           ...(scenario ?? {}),

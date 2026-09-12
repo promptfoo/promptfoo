@@ -249,6 +249,63 @@ describe('suite environment loading', () => {
     },
   );
 
+  it.each(['tests', 'scenarios'] as const)(
+    'replays snapshotted %s after its generator is removed',
+    async (location) => {
+      const configPath = writeConfig(
+        'snapshot',
+        location === 'tests'
+          ? { tests: 'file://tests.cjs' }
+          : { scenarios: [{ config: [{}], tests: ['file://tests.cjs'] as unknown as TestCase[] }] },
+      );
+      const generator = path.join(path.dirname(configPath), 'tests.cjs');
+      fs.writeFileSync(
+        generator,
+        `module.exports = () => [{ vars: { source: 'alpha' } }, { vars: { source: 'beta' } }];`,
+      );
+      const first = await resolveConfigs({ config: [configPath] }, {});
+      const saved = JSON.stringify(first.config);
+      fs.unlinkSync(generator);
+      const replay = await resolveConfigs({}, JSON.parse(saved));
+      const tests =
+        location === 'tests' ? replay.testSuite.tests : replay.testSuite.scenarios?.[0].tests;
+      expect(tests?.map((test) => test.vars?.source)).toEqual(['alpha', 'beta']);
+      const rows =
+        location === 'tests'
+          ? first.config.tests
+          : (first.config.scenarios?.[0] as { tests: TestCase[] })?.tests;
+      expect(rows).toMatchObject([{ vars: { source: 'alpha' } }, { vars: { source: 'beta' } }]);
+    },
+  );
+
+  it('rejects an empty source glob when replaying an older saved config', async () => {
+    await expect(
+      resolveConfigs(
+        {},
+        {
+          prompts: ['hello'],
+          providers: ['echo'],
+          tests: [`file://${tempDir}/missing/*.yaml`],
+        },
+      ),
+    ).rejects.toThrow('No test files found');
+  });
+
+  it('persists dataset rows independently of their source path', async () => {
+    const snapshots = [];
+    for (const name of ['first', 'second']) {
+      const configPath = writeConfig(name, { tests: 'file://tests.csv' });
+      fs.writeFileSync(path.join(path.dirname(configPath), 'tests.csv'), 'source\nalpha\nbeta\n');
+      const { config } = await resolveConfigs({ config: [configPath] }, {});
+      snapshots.push(config.tests);
+    }
+    expect(snapshots[0]).toEqual(snapshots[1]);
+    expect(snapshots[0]).toMatchObject([
+      { vars: { source: 'alpha' } },
+      { vars: { source: 'beta' } },
+    ]);
+  });
+
   it('keeps default and scenario providers out of saved config and replays tests once', async () => {
     const configPath = writeConfig('replay', {
       defaultTest: { provider: 'file://circular.cjs' },
@@ -327,14 +384,14 @@ describe('suite environment loading', () => {
     const marker = path.join(tempDir, 'executed');
     fs.writeFileSync(
       generator,
-      `module.exports = () => { require('fs').writeFileSync(${JSON.stringify(marker)}, 'executed'); return [{ vars: { source: 'local' } }]; };`,
+      `module.exports = () => { require('fs').writeFileSync(require('path').join(__dirname, 'executed'), 'executed'); return [{ vars: { source: 'local' } }]; };`,
     );
     const varsFile = path.join(tempDir, 'local-vars.yaml');
     const providerFile = path.join(tempDir, 'local-provider.cjs');
     fs.writeFileSync(varsFile, 'source: must-not-read');
     fs.writeFileSync(
       providerFile,
-      `require('fs').writeFileSync(${JSON.stringify(marker)}, 'imported'); module.exports = class { id() { return 'local'; } };`,
+      `require('fs').writeFileSync(require('path').join(__dirname, 'executed'), 'imported'); module.exports = class { id() { return 'local'; } };`,
     );
     vi.mocked(readAzureBlobText).mockResolvedValue(
       JSON.stringify([
@@ -359,7 +416,7 @@ describe('suite environment loading', () => {
       expect(tests?.[1].vars).toBe(varsFile);
       expect(tests?.[2].provider).toBe(`file://${providerFile}`);
     }
-    expect(readAzureBlobText).toHaveBeenCalledTimes(2);
+    expect(readAzureBlobText).toHaveBeenCalledTimes(1);
     expect(fs.existsSync(marker)).toBe(false);
   });
 
@@ -1193,7 +1250,12 @@ describe('suite environment loading', () => {
     const configPath = writeConfig('remote', { tests: 'az://account/container/tests.yaml' });
     const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
     expect(testSuite.tests).toEqual([
-      { description: 'Row #1', vars: 'missing-vars.yaml', provider: 'file://missing-provider.js' },
+      {
+        description: 'Row #1',
+        vars: 'missing-vars.yaml',
+        provider: 'file://missing-provider.js',
+        metadata: { __promptfooRemote: true },
+      },
     ]);
     expect(readAzureBlobText).toHaveBeenCalledTimes(1);
     const result = await evaluate(
@@ -1297,6 +1359,38 @@ describe('suite environment loading', () => {
       expect(
         testSuite.tests?.map((test) => isApiProvider(test.provider) && test.provider.label),
       ).toEqual(['first', 'second']);
+    },
+  );
+
+  it('scopes a direct readTest to its supplied directory', async () => {
+    const current = path.join(tempDir, 'current');
+    fs.mkdirSync(current);
+    cliState.basePath = tempDir;
+    fs.writeFileSync(path.join(tempDir, 'value.json'), JSON.stringify('stale'));
+    fs.writeFileSync(path.join(current, 'value.json'), JSON.stringify('current'));
+    fs.writeFileSync(path.join(current, 'vars.yaml'), 'source: file://value.json');
+    const test = await readTest({ vars: 'vars.yaml' }, current);
+    expect(test.vars?.source).toBe('current');
+    expect(cliState.basePath).toBe(tempDir);
+  });
+
+  it.each(['json', 'jsonl', 'yaml'])(
+    'loads bare vars paths in array %s rows from the config directory',
+    async (extension) => {
+      const configPath = writeConfig('array-root', { tests: [`nested/cases.${extension}`] });
+      const base = path.dirname(configPath);
+      fs.mkdirSync(path.join(base, 'nested'));
+      fs.writeFileSync(path.join(base, 'vars.yaml'), 'source: root');
+      fs.writeFileSync(path.join(base, 'nested/vars.yaml'), 'source: wrong-shadow');
+      const test = { vars: 'vars.yaml' };
+      fs.writeFileSync(
+        path.join(base, `nested/cases.${extension}`),
+        extension === 'yaml'
+          ? '- vars: vars.yaml'
+          : JSON.stringify(extension === 'json' ? [test] : test),
+      );
+      const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
+      expect(testSuite.tests?.[0].vars?.source).toBe('root');
     },
   );
 

@@ -414,7 +414,7 @@ not valid json`,
     expect(mockFetchCsvFromGoogleSheet).toHaveBeenCalledWith(
       'https://docs.google.com/spreadsheets/d/example',
     );
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
         description: 'Row #1',
@@ -440,7 +440,7 @@ not valid json`,
     const result = await readStandaloneTestsFile(blobUri);
 
     expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         description: 'Row #1',
         vars: { review_id: 'review-001' },
@@ -457,7 +457,7 @@ not valid json`,
     const result = await readStandaloneTestsFile(blobUri);
 
     expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         description: 'Row #1',
         vars: { review_id: 'review-002' },
@@ -495,7 +495,7 @@ not valid json`,
 
     const result = await readStandaloneTestsFile(blobUri);
 
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         assert: [{ metric: undefined, type: 'equals', value: 'ready' }],
         description: 'Row #1',
@@ -513,7 +513,7 @@ not valid json`,
 
     const result = await readStandaloneTestsFile(blobUri);
 
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         description: 'Row #1',
         vars: { review_id: 'review-005' },
@@ -538,7 +538,7 @@ not valid json`,
 
     const result = await readStandaloneTestsFile(blobUri);
 
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         assert: [{ type: 'equals', value: 'ready' }],
         description: 'Azure YML case',
@@ -561,7 +561,7 @@ not valid json`,
 
       expect(fetchCsvFromSharepoint).toHaveBeenCalledWith(sharepointUrl);
       expect(fs.readFileSync).not.toHaveBeenCalled();
-      expect(result).toEqual([
+      expect(result).toMatchObject([
         {
           assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
           description: 'Row #1',
@@ -1156,7 +1156,7 @@ describe('readTests', () => {
     const result = await readTests(blobUri);
 
     expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         description: 'Row #1',
         vars: { review_id: 'review-001' },
@@ -1178,7 +1178,7 @@ describe('readTests', () => {
     const result = await readTests(blobUri);
 
     expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         assert: [{ type: 'equals', value: 'ready' }],
         description: 'Azure YAML case',
@@ -1200,7 +1200,7 @@ describe('readTests', () => {
 
     const result = await readTests(blobUri);
 
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         assert: [{ type: 'equals', value: 'ready' }],
         description: 'Azure YAML remote data case',
@@ -1438,7 +1438,7 @@ describe('readTests', () => {
     const result = await loadTestsFromGlob('huggingface://datasets/example/dataset');
 
     expect(fetchHuggingFaceDataset).toHaveBeenCalledWith('huggingface://datasets/example/dataset');
-    expect(result).toEqual(mockDataset);
+    expect(result).toMatchObject(mockDataset);
   });
 
   it('should handle JSONL files', async () => {
@@ -1581,10 +1581,7 @@ describe('readTests', () => {
     const result = await readTests(['file://products.yaml']);
 
     expect(result).toEqual(yamlTests);
-    expect(globSync).toHaveBeenCalledWith(
-      expect.stringContaining('products.yaml'),
-      expect.any(Object),
-    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('products.yaml'), 'utf-8');
   });
 
   it('should warn when assert is found in vars', async () => {
@@ -1848,7 +1845,7 @@ describe('loadTestsFromGlob', () => {
     const result = await loadTestsFromGlob('huggingface://datasets/example/dataset');
 
     expect(fetchHuggingFaceDataset).toHaveBeenCalledWith('huggingface://datasets/example/dataset');
-    expect(result).toEqual(mockDataset);
+    expect(result).toMatchObject(mockDataset);
   });
 
   it('should recursively resolve file:// references in YAML test files', async () => {
