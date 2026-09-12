@@ -1060,6 +1060,50 @@ describe('createShareableUrl', () => {
       },
     );
 
+    it.each(
+      [false, true].flatMap((cloudEnabled) =>
+        [false, true].map((selected) => ({ cloudEnabled, selected })),
+      ),
+    )(
+      'removes TLS keys from shares, cloud: $cloudEnabled, provider selection: $selected',
+      async ({ cloudEnabled, selected }) => {
+        vi.mocked(cloudConfig.isEnabled).mockReturnValue(cloudEnabled);
+        vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+        vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+        vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue('team-456');
+        mockEval.config = {
+          defaultTest: {
+            options: {
+              provider: {
+                id: 'https://target.example.com',
+                config: {
+                  tls: { key: ['fixture-private-key'], cert: 'public-cert', ca: 'public-ca' },
+                },
+              },
+            },
+          },
+        };
+        mockEval.runtimeOptions = selected
+          ? {
+              providerSelection: {
+                providers: [{ index: 0, id: 'echo', fingerprint: '0'.repeat(64) }],
+              },
+            }
+          : undefined;
+        mockFetch
+          .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+          .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+        await createShareableUrl(mockEval as Eval);
+        const requestBody = mockFetch.mock.calls[0][1].body;
+        expect(requestBody).not.toContain('fixture-private-key');
+        expect(JSON.parse(requestBody).config.defaultTest.options.provider.config.tls).toEqual({
+          key: '[REDACTED]',
+          cert: 'public-cert',
+          ca: 'public-ca',
+        });
+      },
+    );
+
     it('includes eval tags in the shared config payload', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       mockEval.config = {

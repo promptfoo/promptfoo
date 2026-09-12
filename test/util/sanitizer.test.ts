@@ -32,6 +32,27 @@ afterEach(() => {
 });
 
 describe('redactSecretLeaves', () => {
+  it.each([
+    '-----BEGIN PRIVATE KEY-----\nfixture-secret\n-----END PRIVATE KEY-----',
+    ['fixture-key-one', 'fixture-key-two'],
+  ])('redacts nested TLS keys while preserving public certificates', (key) => {
+    const config = {
+      defaultTest: {
+        options: {
+          provider: {
+            config: { tls: { key, cert: 'public-cert', ca: ['public-ca'] }, key: 'ordinary-key' },
+          },
+        },
+      },
+    };
+    const result = redactSecretLeaves(config);
+    expect(result.defaultTest.options.provider.config).toEqual({
+      tls: { key: '[REDACTED]', cert: 'public-cert', ca: ['public-ca'] },
+      key: 'ordinary-key',
+    });
+    expect(config.defaultTest.options.provider.config.tls.key).toEqual(key);
+  });
+
   it.each(['X-Client-Token', 'X-Client-Secret', 'X-Client-Auth', 'XClientToken', 'Cookie'])(
     'redacts short credentials in custom header %s',
     (name) => {

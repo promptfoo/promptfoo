@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 
 import { getCache, isCacheEnabled } from '../cache';
-import { getProcessEnv } from '../envOverrides';
+import { getRuntimeEnv } from '../envOverrides';
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
@@ -106,7 +106,7 @@ export class ScriptCompletionProvider implements ApiProvider {
       ]);
       const options = {
         ...(this.options?.config.basePath && { cwd: this.options.config.basePath }),
-        env: getProcessEnv(),
+        env: getRuntimeEnv(),
       };
 
       const child = execFile(command, scriptArgs, options, async (error, stdout, stderr) => {

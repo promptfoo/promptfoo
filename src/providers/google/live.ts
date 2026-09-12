@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from 'child_process';
 
 import { getEnvString } from '../../envars';
-import { getProcessEnv } from '../../envOverrides';
+import { getRuntimeEnv } from '../../envOverrides';
 import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -299,7 +299,7 @@ export class GoogleLiveProvider implements ApiProvider {
         );
         logger.debug(`Spawning API with Python executable: ${pythonPath}`);
         statefulApi = spawn(pythonPath, [config.functionToolStatefulApi.file], {
-          env: getProcessEnv(),
+          env: getRuntimeEnv(),
         });
 
         // Add error handling for the Python process

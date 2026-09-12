@@ -4,7 +4,7 @@ import path from 'path';
 import { promisify } from 'util';
 
 import { getEnvString } from '../envars';
-import { getProcessEnv } from '../envOverrides';
+import { getRuntimeEnv } from '../envOverrides';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
@@ -345,7 +345,7 @@ export async function runRuby<T = unknown>(
     const { stdout, stderr } = await execFileAsync(
       rubyPath,
       [wrapperPath, absPath, method, tempJsonPath, outputPath],
-      { env: getProcessEnv() },
+      { env: getRuntimeEnv() },
     );
 
     if (stdout) {

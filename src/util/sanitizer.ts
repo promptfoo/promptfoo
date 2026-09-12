@@ -1262,6 +1262,7 @@ function redactSecretLeavesInner(
       Object.entries(value).map(([childKey, childValue]) => [
         childKey,
         (apiKeyAuth && childKey === 'value') ||
+        (key?.toLowerCase() === 'tls' && childKey.toLowerCase() === 'key') ||
         (key?.toLowerCase() === 'env' && isSecretEnvVarName(childKey)) ||
         (key?.toLowerCase() === 'headers' &&
           isCredentialHeader(childKey, typeof childValue === 'string' ? childValue : ''))

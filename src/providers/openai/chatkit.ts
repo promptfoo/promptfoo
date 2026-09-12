@@ -34,6 +34,7 @@
 import * as http from 'http';
 
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { providerRegistry } from '../providerRegistry';
 import { ChatKitBrowserPool } from './chatkit-pool';
@@ -751,9 +752,10 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   ) {
     super(workflowId, options);
     // Default poolSize to PROMPTFOO_MAX_CONCURRENCY env var if set, otherwise DEFAULT_POOL_SIZE
-    const envPoolSize = process.env.PROMPTFOO_MAX_CONCURRENCY
-      ? parseInt(process.env.PROMPTFOO_MAX_CONCURRENCY, 10)
-      : NaN;
+    const envPoolSize = Number.parseInt(
+      options.env?.PROMPTFOO_MAX_CONCURRENCY ?? getEnvString('PROMPTFOO_MAX_CONCURRENCY') ?? '',
+      10,
+    );
     const defaultPoolSize = Number.isNaN(envPoolSize) ? DEFAULT_POOL_SIZE : envPoolSize;
 
     this.chatKitConfig = {

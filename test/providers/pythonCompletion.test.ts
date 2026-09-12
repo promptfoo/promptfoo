@@ -1029,6 +1029,16 @@ describe('PythonProvider', () => {
       expect((providerRegistry as any).providers.has(provider)).toBe(false);
     });
 
+    it('reinitializes the worker pool when a provider is reused after shutdown', async () => {
+      const provider = new PythonProvider('script.py', { config: { basePath: process.cwd() } });
+      mockPoolInstance.execute.mockResolvedValue({ output: 'worker response' });
+      expect(await provider.callApi('first')).toMatchObject({ output: 'worker response' });
+      await provider.shutdown();
+      expect(await provider.callApi('second')).toMatchObject({ output: 'worker response' });
+      expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(2);
+      await provider.shutdown();
+    });
+
     it('should set isInitialized to false after shutdown', async () => {
       const provider = new PythonProvider('script.py', {
         config: { basePath: process.cwd() },

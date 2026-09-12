@@ -670,7 +670,7 @@ async function doEvalWithEnv(
       }));
     }
 
-    Object.assign(runEnv, testSuite.env);
+    Object.assign(runEnv, config.env, testSuite.env);
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
       isRetryErrors ? 'retrying errors for' : 'resuming';

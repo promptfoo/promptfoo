@@ -147,9 +147,11 @@ async function sendEvalRecord(
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
-  const redactedConfig = redactAzureBlobSasTokens(
-    sanitizeTracingConfigForPersistence(remoteConfig),
-  );
+  const { tracing, ...config } = sanitizeTracingConfigForPersistence(remoteConfig);
+  const redactedConfig = redactAzureBlobSasTokens({
+    ...(redactSecretLeaves(omitFunctionsForShare(config)) as typeof config),
+    ...(tracing && { tracing }),
+  });
 
   // Preserve the verified runtime team on server-issued unified configs. For
   // other configs, use the current CLI team to avoid falling back to default.

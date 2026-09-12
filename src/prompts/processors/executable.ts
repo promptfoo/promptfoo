@@ -5,7 +5,7 @@ import { access, stat as fsStat, readFile } from 'fs/promises';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../cache';
-import { getProcessEnv } from '../../envOverrides';
+import { getRuntimeEnv } from '../../envOverrides';
 import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
@@ -22,7 +22,7 @@ async function getExecutableSourceHash(parts: string[], basePath?: string): Prom
   const cwd = path.resolve(basePath || '.');
   const command = parts[0];
   const searchPath = command && !/[\\/]/.test(command);
-  const processEnv = getProcessEnv();
+  const processEnv = getRuntimeEnv();
   const suffixes =
     process.platform === 'win32'
       ? ['', ...(processEnv.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';')]
@@ -134,7 +134,7 @@ export const executablePromptFunction = async (
 
     const options = {
       cwd: context.config?.basePath,
-      env: getProcessEnv(),
+      env: getRuntimeEnv(),
       timeout: context.config?.timeout || 60000, // Default 60 second timeout
     };
 

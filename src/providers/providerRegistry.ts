@@ -6,7 +6,7 @@ import logger from '../logger';
  * Interface for providers that need cleanup on process exit.
  */
 interface CleanupProvider {
-  shutdown(): Promise<void>;
+  shutdown(): Promise<void> | void;
 }
 
 /**
@@ -14,16 +14,31 @@ interface CleanupProvider {
  * Ensures no zombie Python processes are left running.
  */
 class ProviderRegistry {
-  private providers = new Map<CleanupProvider, object | undefined>();
+  private providers = new Map<CleanupProvider, Set<object | undefined>>();
+  private closing = new Map<CleanupProvider, Promise<void>>();
   private scope = new AsyncLocalStorage<object>();
   private shutdownRegistered: boolean = false;
 
   register(provider: CleanupProvider): void {
-    this.providers.set(provider, this.scope.getStore());
+    const scope = this.scope.getStore();
+    const owners = this.providers.get(provider) ?? new Set<object | undefined>();
+    if (scope) {
+      owners.delete(undefined);
+    }
+    owners.add(scope);
+    this.providers.set(provider, owners);
 
     if (!this.shutdownRegistered) {
       this.registerShutdownHandlers();
       this.shutdownRegistered = true;
+    }
+  }
+
+  async adopt(provider: object): Promise<void> {
+    if ('shutdown' in provider && typeof provider.shutdown === 'function') {
+      const cleanupProvider = provider as CleanupProvider;
+      await this.closing.get(cleanupProvider);
+      this.register(cleanupProvider);
     }
   }
 
@@ -44,9 +59,11 @@ class ProviderRegistry {
 
       await Promise.all(
         Array.from(this.providers.keys()).map((p) =>
-          p.shutdown().catch((err) => {
-            logger.error(`Error shutting down provider: ${err}`);
-          }),
+          Promise.resolve()
+            .then(() => p.shutdown())
+            .catch((err) => {
+              logger.error(`Error shutting down provider: ${err}`);
+            }),
         ),
       );
 
@@ -71,21 +88,20 @@ class ProviderRegistry {
 
   async shutdownAll(): Promise<void> {
     const scope = this.scope.getStore();
-    const providers = [...this.providers]
-      .filter(([, owner]) => owner === scope)
-      .map(([provider]) => provider);
-    const results = await Promise.allSettled(providers.map((provider) => provider.shutdown()));
-
-    // Log any failures but don't throw - cleanup should be defensive
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        logger.warn(`Error shutting down provider: ${result.reason}`);
+    const pending: Promise<void>[] = [];
+    for (const [provider, owners] of this.providers) {
+      if (!owners.delete(scope) || owners.size > 0) {
+        continue;
       }
-    }
-
-    for (const provider of providers) {
       this.providers.delete(provider);
+      const closing = Promise.resolve()
+        .then(() => provider.shutdown())
+        .catch((error) => logger.warn(`Error shutting down provider: ${error}`))
+        .finally(() => this.closing.delete(provider));
+      this.closing.set(provider, closing);
+      pending.push(closing);
     }
+    await Promise.all(pending);
   }
 }
 

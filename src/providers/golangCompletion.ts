@@ -5,7 +5,7 @@ import path from 'path';
 import util from 'util';
 
 import { getCache, isCacheEnabled } from '../cache';
-import { getProcessEnv } from '../envOverrides';
+import { getRuntimeEnv } from '../envOverrides';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
@@ -135,7 +135,7 @@ export class GolangProvider implements ApiProvider {
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);
         const goExecutable = this.config.goExecutable || 'go';
-        const env = getProcessEnv();
+        const env = getRuntimeEnv();
         const { stdout: packageJson } = await execFileAsync(goExecutable, ['list', '-json', '.'], {
           cwd: scriptDir,
           env,

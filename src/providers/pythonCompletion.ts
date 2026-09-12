@@ -429,5 +429,6 @@ export class PythonProvider implements ApiProvider {
     }
     providerRegistry.unregister(this);
     this.isInitialized = false;
+    this.initializationPromise = null;
   }
 }

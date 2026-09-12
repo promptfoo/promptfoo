@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
 import cliState from '../cliState';
+import { getEnvOverrides } from '../envOverrides';
 import logger from '../logger';
 import { isApiProvider } from '../types/providers';
 import {
@@ -19,6 +20,7 @@ import {
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
+import { providerRegistry } from './providerRegistry';
 import { getProviderFactories } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -85,7 +87,11 @@ export async function loadApiProvider(
   context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
   const env = context.env ?? cliState.env;
-  return cliState.withEnv(env, () => createApiProvider(providerPath, { ...context, env }));
+  return cliState.withEnv(env, async () => {
+    const provider = await createApiProvider(providerPath, { ...context, env });
+    await providerRegistry.adopt(provider);
+    return provider;
+  });
 }
 
 async function createApiProvider(
@@ -107,13 +113,21 @@ async function createApiProvider(
     : undefined;
   const renderedId = options.id ? renderEnvOnlyInObject(options.id, mergedEnv) : undefined;
 
+  const fileEnv = getEnvOverrides('file');
   const providerOptions: ProviderOptions = {
     id: renderedId,
     config: {
       ...renderedConfig,
       basePath,
     },
-    env: mergedEnv,
+    env: fileEnv
+      ? {
+          ...fileEnv,
+          ...Object.fromEntries(
+            Object.entries(mergedEnv ?? {}).filter(([, value]) => value !== undefined),
+          ),
+        }
+      : mergedEnv,
   };
 
   // Validate linkedTargetId if present (Promptfoo Cloud feature)
@@ -266,6 +280,7 @@ export async function resolveProvider(
 
   if (typeof provider === 'string') {
     if (resolvedProviders[provider]) {
+      await providerRegistry.adopt(resolvedProviders[provider]);
       return resolvedProviders[provider];
     }
     return await loadApiProvider(provider, loadOptionsFromResolveContext(context));
@@ -385,7 +400,11 @@ export async function loadApiProviders(
   } = {},
 ): Promise<ApiProvider[]> {
   const env = options.env ?? cliState.env;
-  return cliState.withEnv(env, () => loadApiProvidersWithEnv(providerPaths, options.basePath, env));
+  return cliState.withEnv(env, async () => {
+    const providers = await loadApiProvidersWithEnv(providerPaths, options.basePath, env);
+    await Promise.all(providers.map((provider) => providerRegistry.adopt(provider)));
+    return providers;
+  });
 }
 
 async function loadApiProvidersWithEnv(

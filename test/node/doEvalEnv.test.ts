@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvString } from '../../src/envars';
-import { getProcessEnv, withRuntimeEnv } from '../../src/envOverrides';
+import { getProcessEnv, getRuntimeEnv, withRuntimeEnv } from '../../src/envOverrides';
 import { doEval } from '../../src/node/doEval';
 import { getEvalConfigFromCloud } from '../../src/util/cloud';
 import { readConfig } from '../../src/util/config/load';
@@ -21,8 +21,11 @@ vi.mock('../../src/util/cloud', async (importOriginal) => ({
 describe('doEval environment files', () => {
   let tempDir: string;
   let restoreEnv: () => void;
+  let previousConfig: typeof cliState.config;
 
   beforeEach(() => {
+    previousConfig = cliState.config;
+    cliState.config = undefined;
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-do-eval-env-'));
     restoreEnv = mockProcessEnv({
       PROMPTFOO_REVIEW_ENV_PROBE: 'host',
@@ -33,13 +36,18 @@ describe('doEval environment files', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    cliState.config = previousConfig;
     restoreEnv();
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it.each(['file', 'inline'] as const)(
-    'exposes isolated env to %s JS callbacks without serializing it',
-    async (mode) => {
+  it.each(
+    ['file', 'inline'].flatMap((mode) =>
+      [false, true].map((suiteOverride) => ({ mode, suiteOverride })),
+    ),
+  )(
+    'exposes isolated env to $mode JS callbacks with suite override: $suiteOverride',
+    async ({ mode, suiteOverride }) => {
       const hookPath = path.join(tempDir, 'hooks.cjs');
       const promptPath = path.join(tempDir, 'prompt.cjs');
       const assertPath = path.join(tempDir, 'assertion.cjs');
@@ -66,6 +74,7 @@ describe('doEval environment files', () => {
       });
       const runs = await Promise.all(
         ['first', 'second'].map(async (value) => {
+          const expected = suiteOverride ? 'suite-' + value : value;
           const envPath = path.join(tempDir, value + '.env');
           fs.writeFileSync(
             envPath,
@@ -81,6 +90,7 @@ describe('doEval environment files', () => {
               cache: false,
             },
             {
+              ...(suiteOverride && { env: { PROMPTFOO_REVIEW_ENV_PROBE: expected } }),
               prompts:
                 mode === 'file'
                   ? ['file://' + promptPath]
@@ -97,8 +107,8 @@ describe('doEval environment files', () => {
                     release();
                   }
                   await ready;
-                  expect(context?.env?.PROMPTFOO_REVIEW_ENV_PROBE).toBe(value);
-                  expect(prompt).toBe(value);
+                  expect(context?.env?.PROMPTFOO_REVIEW_ENV_PROBE).toBe(expected);
+                  expect(prompt).toBe(expected);
                   expect(Object.keys(context!)).not.toContain('env');
                   expect(
                     JSON.stringify({
@@ -109,7 +119,7 @@ describe('doEval environment files', () => {
                     }),
                   ).not.toContain('private-' + value);
                   expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
-                  return { output: value };
+                  return { output: expected };
                 },
               ],
               tests: [{ assert: [{ type: 'javascript', value: 'file://' + assertPath }] }],
@@ -122,12 +132,12 @@ describe('doEval environment files', () => {
           expect(JSON.stringify(exported)).not.toContain('private-' + value);
           const row = exported.results.results[0];
           expect(row.error).toBeUndefined();
-          expect(row.response?.output).toBe(value);
+          expect(row.response?.output).toBe(expected);
           expect(row.success).toBe(true);
-          return value;
+          return expected;
         }),
       );
-      expect(runs).toEqual(['first', 'second']);
+      expect(runs).toEqual(suiteOverride ? ['suite-first', 'suite-second'] : ['first', 'second']);
       const hooks = fs
         .readFileSync(callsPath, 'utf8')
         .trim()
@@ -170,6 +180,8 @@ describe('doEval environment files', () => {
         ] as const) {
           cliState.withEnv(env, () => {
             expect(getEnvString('PROMPTFOO_REVIEW_ENV_PROBE')).toBe(expected);
+            expect(getRuntimeEnv().PROMPTFOO_REVIEW_ENV_PROBE).toBe(expected);
+            expect(getProcessEnv().PROMPTFOO_REVIEW_ENV_PROBE).toBe('file');
             expect(withRuntimeEnv({}).env.PROMPTFOO_REVIEW_ENV_PROBE).toBe(expected);
             expect(
               getNunjucksEngineForFilePath().renderString('{{env.PROMPTFOO_REVIEW_ENV_PROBE}}', {}),

@@ -9,7 +9,7 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { getProcessEnv } from '../../envOverrides';
+import { getRuntimeEnv } from '../../envOverrides';
 import logger from '../../logger';
 import {
   addActiveSpanRoleAttribute,
@@ -680,7 +680,7 @@ function mergeCodexAppServerConfig(
 
 function getMinimalProcessEnv(): Record<string, string> {
   const env: Record<string, string> = {};
-  const processEnv = getProcessEnv();
+  const processEnv = getRuntimeEnv();
   for (const key of MINIMAL_CLI_ENV_KEYS) {
     const value = processEnv[key];
     if (typeof value === 'string' && value.length > 0) {
@@ -1600,7 +1600,7 @@ export class OpenAICodexAppServerProvider implements ApiProvider {
       Object.entries(config.cli_env ?? {}).map(([key, value]) => [key, String(value)]),
     );
     const env: Record<string, string> = {
-      ...(inheritProcessEnv ? (getProcessEnv() as Record<string, string>) : getMinimalProcessEnv()),
+      ...(inheritProcessEnv ? (getRuntimeEnv() as Record<string, string>) : getMinimalProcessEnv()),
       ...cliEnv,
     };
 
