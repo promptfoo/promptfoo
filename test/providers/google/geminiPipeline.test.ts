@@ -217,6 +217,27 @@ it('keeps facade wire names and loaded-schema compatibility explicit', async () 
   }
 });
 
+it('keeps legacy Vertex generation field order for persistent cache keys', async () => {
+  const { body } = await prepareGeminiRequest(
+    'gemini-2.5-flash',
+    { stopSequences: ['END'], temperature: 0.2, maxOutputTokens: 10, topP: 0.8, topK: 4 },
+    'Hello',
+    undefined,
+    'vertex',
+    true,
+    async () => [],
+  );
+  expect(Object.keys(body.generationConfig)).toEqual([
+    'context',
+    'examples',
+    'stopSequences',
+    'temperature',
+    'maxOutputTokens',
+    'topP',
+    'topK',
+  ]);
+});
+
 it('preserves unknown usage and vendor prompt-cache accounting', () => {
   expect(getGeminiTokenUsage(undefined, false, 'unified')).toMatchObject({
     total: undefined,

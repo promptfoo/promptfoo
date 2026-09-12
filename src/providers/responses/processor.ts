@@ -110,6 +110,17 @@ export class ResponsesProcessor {
       };
 
       const processedOutput = await this.processOutput(data.output, context);
+      if (options.abortSignal?.aborted) {
+        return {
+          ...response,
+          output: processedOutput.result,
+          error:
+            options.abortSignal.reason instanceof Error
+              ? options.abortSignal.reason.message
+              : String(options.abortSignal.reason),
+          metadata: extractMetadata(data, processedOutput),
+        };
+      }
 
       if (processedOutput.isRefusal) {
         return {
@@ -182,7 +193,15 @@ export class ResponsesProcessor {
         continue;
       }
 
-      const processed = await this.processOutputItem(item, context);
+      let processed;
+      try {
+        processed = await this.processOutputItem(item, context);
+      } catch (error) {
+        if (context.abortSignal?.aborted && result) {
+          break;
+        }
+        throw error;
+      }
 
       if (processed.isRefusal) {
         refusal = processed.content || '';

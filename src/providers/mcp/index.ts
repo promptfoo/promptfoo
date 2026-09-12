@@ -139,15 +139,23 @@ export class MCPProvider implements ApiProvider {
         };
       }
 
-      return this.transformToolResult(
-        result,
-        {
-          toolName,
-          toolArgs: finalArgs,
-          originalPayload: toolCallData,
-        },
-        options?.abortSignal,
-      );
+      const transformContext = {
+        toolName,
+        toolArgs: finalArgs,
+        originalPayload: toolCallData,
+      };
+      try {
+        return await this.transformToolResult(result, transformContext, options?.abortSignal);
+      } catch (error) {
+        if (!options?.abortSignal?.aborted) {
+          throw error;
+        }
+        return {
+          error: 'MCP Provider error: ' + (error instanceof Error ? error.message : String(error)),
+          raw: result.raw ?? result,
+          metadata: transformContext,
+        };
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`MCP Provider error: ${errorMessage}`);
