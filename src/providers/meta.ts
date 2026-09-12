@@ -440,7 +440,10 @@ class MetaProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const response = await super.callApi(prompt, context, callApiOptions);
-    if (!response || response.error) {
+    if (
+      !response ||
+      (response.error && (response.metadata?.errorOrigin !== 'tool' || !response.tokenUsage))
+    ) {
       return response;
     }
     return applyMetaCost(response, this.modelName, this.config, context);
@@ -663,9 +666,8 @@ export class MetaMessagesProvider extends AnthropicMessagesProvider {
 
     const response = await super.callApi(prompt, context);
 
-    // Unlike the chat provider, do NOT skip error responses: the base class
-    // deliberately bills errors that carry tokenUsage (e.g. an MCP loop that
-    // exceeded max_tool_calls) so spent tokens don't vanish from cost totals.
+    // The base class bills usage-bearing errors (e.g. an MCP loop that
+    // exceeded max_tool_calls), so preserve that completed work's cost.
     return applyMetaCost(response, this.modelName, this.config as MetaMessagesConfig, context);
   }
 }
