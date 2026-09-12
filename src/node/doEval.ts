@@ -70,9 +70,11 @@ import type { Command } from 'commander';
 
 import type {
   ApiProvider,
+  AssertionOrSet,
   CommandLineOptions,
   EvalRuntimeOptions,
   Scenario,
+  TestCase,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
@@ -227,6 +229,50 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
   });
 }
 
+const activeProviderRuns = new Map<ApiProvider, number>();
+const pendingProviderCleanups = new Map<ApiProvider, Promise<void>>();
+
+function addGradingProviders(
+  assertions: AssertionOrSet[] | undefined,
+  providers: Set<ApiProvider>,
+): void {
+  for (const assertion of assertions ?? []) {
+    if (assertion.type === 'assert-set') {
+      addGradingProviders(assertion.assert, providers);
+    } else if (isApiProvider(assertion.provider)) {
+      providers.add(assertion.provider);
+    }
+  }
+}
+
+function addTestProviders(test: Partial<TestCase> | undefined, providers: Set<ApiProvider>): void {
+  if (!test) {
+    return;
+  }
+  for (const provider of [test.provider, test.options?.provider]) {
+    if (isApiProvider(provider)) {
+      providers.add(provider);
+    }
+  }
+  addGradingProviders(test.assert, providers);
+}
+
+function getRunProviders(testSuite: TestSuite): Set<ApiProvider> {
+  const providers = new Set(testSuite.providers.filter(isApiProvider));
+  if (typeof testSuite.defaultTest === 'object') {
+    addTestProviders(testSuite.defaultTest, providers);
+  }
+  for (const test of testSuite.tests ?? []) {
+    addTestProviders(test, providers);
+  }
+  for (const scenario of testSuite.scenarios ?? []) {
+    for (const test of [...scenario.config, ...scenario.tests]) {
+      addTestProviders(test, providers);
+    }
+  }
+  return providers;
+}
+
 function resolveSuggestionOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
   commandLineOptions: Record<string, any> | undefined,
@@ -301,7 +347,6 @@ export async function doEval(
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
-  const activeProviderRuns = new Map<ApiProvider, number>();
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -941,8 +986,9 @@ export async function doEval(
 
     // Run the evaluation!!!!!!
     let ret;
-    const runProviders = new Set(testSuite.providers.filter(isApiProvider));
+    const runProviders = getRunProviders(testSuite);
     for (const provider of runProviders) {
+      await pendingProviderCleanups.get(provider);
       activeProviderRuns.set(provider, (activeProviderRuns.get(provider) ?? 0) + 1);
     }
     try {
@@ -978,24 +1024,21 @@ export async function doEval(
       }
     } finally {
       cleanupHandler(); // Always cleanup, even if evaluate() throws
-      const providersToCleanup: ApiProvider[] = [];
       for (const provider of runProviders) {
         const remainingRuns = (activeProviderRuns.get(provider) ?? 1) - 1;
         if (remainingRuns > 0) {
           activeProviderRuns.set(provider, remainingRuns);
         } else {
           activeProviderRuns.delete(provider);
-          providersToCleanup.push(provider);
-        }
-      }
-      for (const provider of providersToCleanup) {
-        // Another watch run may start while an earlier provider's cleanup awaits.
-        if (!activeProviderRuns.has(provider)) {
-          try {
-            await provider.cleanup?.({ reason: 'evaluation-complete' });
-          } catch (error) {
-            logger.warn('Provider cleanup failed after evaluation.', { error });
-          }
+          const cleanup = Promise.resolve(provider.cleanup?.({ reason: 'evaluation-complete' }))
+            .catch((error) => logger.warn('Provider cleanup failed after evaluation.', { error }))
+            .finally(() => {
+              if (pendingProviderCleanups.get(provider) === cleanup) {
+                pendingProviderCleanups.delete(provider);
+              }
+            });
+          pendingProviderCleanups.set(provider, cleanup);
+          await cleanup;
         }
       }
     }

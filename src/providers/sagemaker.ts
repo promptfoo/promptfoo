@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises';
 import { Agent as HttpAgent } from 'node:http';
 import crypto from 'crypto';
 
@@ -248,6 +249,7 @@ type CredentialScope = Pick<
   region: string;
   environment: Record<string, string | undefined>;
   helperEndpointPolicy?: string;
+  profileFingerprint?: string;
 };
 
 function sameCredentialScope(left: CredentialScope, right: CredentialScope): boolean {
@@ -258,8 +260,29 @@ function sameCredentialScope(left: CredentialScope, right: CredentialScope): boo
     left.secretAccessKey === right.secretAccessKey &&
     left.sessionToken === right.sessionToken &&
     left.helperEndpointPolicy === right.helperEndpointPolicy &&
+    left.profileFingerprint === right.profileFingerprint &&
     Object.keys(left.environment).length === Object.keys(right.environment).length &&
     Object.entries(left.environment).every(([name, value]) => right.environment[name] === value)
+  );
+}
+
+async function credentialFileFingerprint(
+  environment: CredentialScope['environment'],
+): Promise<string> {
+  const paths = [environment.AWS_CONFIG_FILE, environment.AWS_SHARED_CREDENTIALS_FILE].filter(
+    (value): value is string => Boolean(value),
+  );
+  return JSON.stringify(
+    await Promise.all(
+      paths.map(async (file) => {
+        try {
+          const { mtimeMs, size } = await stat(file);
+          return [file, mtimeMs, size];
+        } catch {
+          return [file];
+        }
+      }),
+    ),
   );
 }
 
@@ -432,6 +455,7 @@ abstract class SageMakerGenericProvider {
       CREDENTIAL_ENV_VARS.map((name) => [name, process.env[name]]),
     );
     let helperEndpointPolicy: string | undefined;
+    let profileFingerprint: string | undefined;
     const selectedProfile = profile || environment.AWS_PROFILE;
     if (selectedProfile || !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY)) {
       const { booleanSelector, loadConfig, parseKnownFiles, SelectorType } = smithyConfig;
@@ -439,6 +463,9 @@ abstract class SageMakerGenericProvider {
         filepath: environment.AWS_SHARED_CREDENTIALS_FILE || undefined,
         configFilepath: environment.AWS_CONFIG_FILE || undefined,
       });
+      profileFingerprint = selectedProfile
+        ? JSON.stringify([profiles, await credentialFileFingerprint(environment)])
+        : undefined;
       const inputs = profileCredentialInputs(
         profiles,
         selectedProfile || 'default',
@@ -511,7 +538,7 @@ abstract class SageMakerGenericProvider {
         }
       }
     }
-    return { region, profile, environment, helperEndpointPolicy };
+    return { region, profile, environment, helperEndpointPolicy, profileFingerprint };
   }
 
   private async getEndpointPolicy(
@@ -1638,8 +1665,8 @@ export class SageMakerEmbeddingProvider
 
     // Check if we should use cache - use the transformed text for cache key
     const bustCache = context?.debug === true; // If debug mode is on, bust the cache
-    if (isCacheEnabled() && !bustCache) {
-      const cacheKey = this.getCacheKey(transformedText);
+    const cacheKey = isCacheEnabled() && !bustCache ? this.getCacheKey(transformedText) : undefined;
+    if (cacheKey) {
       const cache = (await getCache)
         ? await getCache()
         : await import('../cache').then((m) => m.getCache());
@@ -1780,10 +1807,10 @@ export class SageMakerEmbeddingProvider
             // Cache the result if caching is enabled
             await this.cacheEmbeddingResult(
               result,
-              transformedText,
               context,
               isTransformed,
               isTransformed ? text : undefined,
+              cacheKey,
             );
 
             return result;
@@ -1825,10 +1852,10 @@ export class SageMakerEmbeddingProvider
       // Cache the result if caching is enabled
       await this.cacheEmbeddingResult(
         result,
-        transformedText,
         context,
         isTransformed,
         isTransformed ? text : undefined,
+        cacheKey,
       );
 
       return result;
@@ -1845,17 +1872,16 @@ export class SageMakerEmbeddingProvider
    */
   private async cacheEmbeddingResult(
     result: ProviderEmbeddingResponse,
-    text: string, // This is the transformed text
     context?: CallApiContextParams,
     isTransformed: boolean = false,
     originalText?: string,
+    cacheKey?: string,
   ): Promise<void> {
     const { isCacheEnabled, getCache } = await import('../cache');
     const bustCache = context?.debug === true;
 
     // Save result to cache if successful and caching enabled
-    if (isCacheEnabled() && !bustCache && result.embedding && !result.error) {
-      const cacheKey = this.getCacheKey(text);
+    if (cacheKey && isCacheEnabled() && !bustCache && result.embedding && !result.error) {
       const cache = (await getCache)
         ? await getCache()
         : await import('../cache').then((m) => m.getCache());
