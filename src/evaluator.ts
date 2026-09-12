@@ -1530,7 +1530,7 @@ async function transformRunEvalResponse({
   }
 
   invariant(processedResponse.output != null, 'Response output should not be null');
-  if (processedResponse.images?.length && requiresTraceRedaction(test.assert)) {
+  if (requiresTraceRedaction(test.assert)) {
     return { processedResponse, providerTransformedOutput };
   }
   const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {

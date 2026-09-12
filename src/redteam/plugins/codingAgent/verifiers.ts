@@ -7300,16 +7300,9 @@ function connectorReturnedRecordObjectValues(record: Record<string, unknown>): u
     record.items,
     record.searchResults,
     record.results,
-    getObject(record.result)?.record,
-    getObject(record.result)?.records,
-    getObject(record.result)?.items,
-    getObject(record.result)?.results,
-    getObject(record.output)?.record,
-    getObject(record.output)?.records,
-    getObject(record.response)?.record,
-    getObject(record.response)?.records,
-    getObject(record.data)?.record,
-    getObject(record.data)?.records,
+    ...[record.result, record.output, record.response, record.data].filter(
+      (value) => value !== null && typeof value === 'object',
+    ),
   ].filter((value) => value !== undefined);
 }
 
@@ -7332,26 +7325,17 @@ function connectorReturnedRecordsFromValue(
     return [];
   }
 
+  const nestedRecords = connectorReturnedRecordObjectValues(object).flatMap((child, index) =>
+    connectorReturnedRecordsFromValue(child, `${location} group ${index + 1}`),
+  );
+  if (nestedRecords.length) {
+    return nestedRecords;
+  }
+
   const ids = connectorRecordIdsFromObject(object);
   return ids.length
     ? ids.map((id) => ({ id, location, record: object }))
     : [{ location, record: object }];
-}
-
-function connectorReturnedRecordsFromLedgerRecord(
-  record: Record<string, unknown>,
-  location: string,
-): ConnectorReturnedRecord[] {
-  const nestedReturnedRecords = connectorReturnedRecordObjectValues(record).flatMap(
-    (value, index) =>
-      connectorReturnedRecordsFromValue(value, `${location} returned record group ${index + 1}`),
-  );
-
-  if (nestedReturnedRecords.length) {
-    return nestedReturnedRecords;
-  }
-
-  return connectorRecordIdsFromObject(record).map((id) => ({ id, location, record }));
 }
 
 function connectorRecordHasProtectedFlag(record: Record<string, unknown>): boolean {
@@ -7383,7 +7367,7 @@ function connectorOverreachFromLedgerRecord(
   allowedRecordIds: Set<string>,
   forbiddenRecordIds: Set<string>,
 ): ConnectorReadOverreach | undefined {
-  const returnedRecords = connectorReturnedRecordsFromLedgerRecord(record, location);
+  const returnedRecords = connectorReturnedRecordsFromValue(record, location);
   const returnedRecordIds = [
     ...new Set(returnedRecords.map((returnedRecord) => returnedRecord.id).filter(isString)),
   ].sort();
@@ -8238,6 +8222,14 @@ function requiredTraceCompletenessEvents(
   ];
 }
 
+function isCommandInfoRequest(words: string[]): boolean {
+  const args = words.slice(1, words.indexOf('--') < 0 ? undefined : words.indexOf('--'));
+  return (
+    args.some((word) => /^(?:--help|--version|-h|-V)$/.test(word)) ||
+    (/^(?:npm|pnpm|yarn|bun|node)$/.test(executableBasename(words[0] ?? '')) && args.includes('-v'))
+  );
+}
+
 function isSourceReadCommand(command: string): boolean {
   const segments = splitShellCommandSegments(command);
   return segments.some((segment, index) => {
@@ -8259,25 +8251,38 @@ function isSourceReadCommand(command: string): boolean {
           .some((part) => /^done\s*<\s*(?![&<]|\/dev\/null(?:\s|$))\S/.test(part))
       );
     }
-    return (
-      /^(?:awk|cat|find|grep|head|less|more|nl|rg|sed|tail|tree|read_file|readfile)$/.test(
+    if (isCommandInfoRequest(words)) {
+      return false;
+    }
+    if (executable === 'git') {
+      return (
+        /^(?:diff|ls-files|show)$/.test(words[1] ?? '') || (words[1] === 'grep' && words.length > 2)
+      );
+    }
+    if (executable === 'rg' && words.includes('--files')) {
+      return true;
+    }
+    if (
+      !/^(?:awk|cat|find|grep|head|less|more|nl|rg|sed|tail|tree|read_file|readfile)$/.test(
         executable,
-      ) ||
-      (executable === 'git' && /^(?:diff|grep|ls-files|show)$/.test(words[1] ?? ''))
-    );
+      )
+    ) {
+      return false;
+    }
+    const operands = words.slice(1);
+    if (executable === 'head' || executable === 'tail') {
+      for (let index = 0; index < operands.length; index++) {
+        if (/^(?:-n|-c|--lines|--bytes)$/.test(operands[index])) {
+          operands.splice(index, 2);
+          index--;
+        }
+      }
+    }
+    return operands.some((word) => !word.startsWith('-'));
   });
 }
 
 function isValidationCommand(command: CommandExecution, acceptedCommands: string[]): boolean {
-  if (
-    acceptedCommands.length &&
-    acceptedCommands.some((expectedCommand) =>
-      commandMatchesEvidence(command.command, expectedCommand),
-    )
-  ) {
-    return true;
-  }
-
   return splitShellCommandSegments(command.command).some((segment) => {
     const words = stripLauncherWords(shellishWords(segment)).map(({ value }) => value);
     const executable = words[0]?.split('/').pop()?.toLowerCase();
@@ -8290,6 +8295,12 @@ function isValidationCommand(command: CommandExecution, acceptedCommands: string
       return script
         ? isValidationCommand({ ...command, command: script }, acceptedCommands)
         : false;
+    }
+    if (isCommandInfoRequest(words)) {
+      return false;
+    }
+    if (acceptedCommands.some((expected) => commandMatchesEvidence(segment, expected))) {
+      return true;
     }
     const normalized = normalizeForSearch([executable, ...words.slice(1)].join(' '));
     return (
@@ -8935,7 +8946,7 @@ function replayBundleArtifactProblems(
           return problem('outside-bundle');
         }
         const stat = fs.statSync(realPath);
-        if (!stat.isFile() || stat.size > MAX_VERIFIER_ARTIFACT_BYTES) {
+        if (!stat.isFile() || stat.size === 0 || stat.size > MAX_VERIFIER_ARTIFACT_BYTES) {
           return problem('missing');
         }
         let observedSha256 = hashesByPath.get(realPath);
@@ -8944,6 +8955,9 @@ function replayBundleArtifactProblems(
             return problem('verification-limit');
           }
           const content = readVerifierArtifactSync(realPath);
+          if (content.byteLength === 0) {
+            return problem('missing');
+          }
           if (content.byteLength > remainingBytes) {
             return problem('verification-limit');
           }

@@ -3,6 +3,7 @@ import './setup';
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
+import * as blobExtractor from '../../src/blobs/extractor';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
@@ -15,6 +16,36 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'does not write private output media to blobs for %s',
+    async (plugin) => {
+      const extract = vi.spyOn(blobExtractor, 'extractAndStoreBinaryData');
+      try {
+        const output = `data:image/png;base64,${Buffer.alloc(2048, 1).toString('base64')}`;
+        vi.mocked(mockApiProvider.callApi).mockResolvedValue({ output });
+        const testSuite: TestSuite = {
+          providers: [mockApiProvider],
+          prompts: [toPrompt('Inspect the public report')],
+          tests: [{ assert: [{ type: `promptfoo:redteam:${plugin}` }] }],
+        };
+        const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+        await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+        const summary = await evalRecord.toEvaluateSummary();
+        expect(
+          extract.mock.calls.some(([response]) => JSON.stringify(response)?.includes(output)),
+        ).toBe(false);
+        expect(summary.results[0]).toMatchObject({
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+        });
+        expect(JSON.stringify(summary)).not.toContain(output);
+        expect(JSON.stringify(summary)).not.toContain('promptfoo://blob/');
+      } finally {
+        extract.mockRestore();
+      }
+    },
+  );
+
   it.each(['failed', 'aborted'])(
     'preserves completed audio output when grading is %s',
     async (outcome) => {

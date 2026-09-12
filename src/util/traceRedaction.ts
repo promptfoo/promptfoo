@@ -1,3 +1,5 @@
+import { BLOB_SCHEME } from '../blobs/constants';
+
 import type { AssertionOrSet, AtomicTestCase, ProviderResponse } from '../types';
 
 export const TRACE_REDACTION_ASSERTIONS = new Set([
@@ -25,7 +27,7 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
     }
     const value = pending.pop();
     if (typeof value === 'string') {
-      if (/data:(?:audio|image)\/|blob:\/\/[a-f0-9]{64}\b|<svg(?:\s|\/?>)/i.test(value)) {
+      if (value.includes(BLOB_SCHEME) || /data:(?:audio|image)\/|<svg(?:\s|\/?>)/i.test(value)) {
         return true;
       }
       if (/^\s*[{[]/.test(value)) {

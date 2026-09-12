@@ -326,6 +326,29 @@ describe('doGenerateRedteam', () => {
     });
   });
 
+  it.each([false, true])(
+    'forwards option-level target manifests with config precedence: %s',
+    async (configured) => {
+      const optionManifest = { name: 'option target', files: ['README.md'] };
+      const configManifest = { name: 'config target', files: ['src/index.ts'] };
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: { providers: [mockProvider], prompts: [], tests: [] },
+        config: { redteam: configured ? { targetManifest: configManifest } : {} },
+      });
+      await doGenerateRedteam({
+        config: 'config.yaml',
+        targetManifest: optionManifest,
+        defaultConfig: {},
+        write: false,
+        cache: false,
+      });
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({ targetManifest: configured ? configManifest : optionManifest }),
+      );
+    },
+  );
+
   it('should generate redteam tests and write to output file', async () => {
     vi.mocked(configModule.combineConfigs).mockResolvedValue([
       {

@@ -149,7 +149,7 @@ describe('EvalResult', () => {
       'turn-audio': { turns: [{ audio: { data, format: 'wav' } }] },
       'nested-image': { metadata: { content: [{ image_url: { url: image } }] } },
       'image-json': { output: JSON.stringify({ data: [{ b64_json: data }] }) },
-      'blob-output': { output: `blob://${'a'.repeat(64)}` },
+      'blob-output': { output: `promptfoo://blob/${'a'.repeat(64)}` },
       'svg-output': {
         output: `<svg xmlns="http://www.w3.org/2000/svg"><text>${secret}</text></svg>`,
       },
