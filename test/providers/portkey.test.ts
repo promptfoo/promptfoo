@@ -266,6 +266,21 @@ describe('PortkeyChatCompletionProvider', () => {
       ['model catalog slug in the model name', '@bedrock-eu/claude', {}],
       ['model catalog slug in portkeyProvider', 'claude', { portkeyProvider: '@bedrock-eu' }],
       ['legacy virtual key', 'claude', { portkeyVirtualKey: 'bedrock-prod' }],
+      ['bare model name', 'claude-sonnet-4-6', {}],
+      ['slug-shaped model name', 'anthropic-slug/claude-sonnet-4-6', {}],
+      [
+        'model catalog slug in the model name alongside a declared upstream',
+        '@openai-slug/gpt-4o',
+        { portkeyProvider: 'openai' },
+      ],
+      [
+        'virtual key alongside an openai passthrough',
+        'gpt-4o',
+        {
+          portkeyProvider: 'openai',
+          portkeyVirtualKey: 'openai-prod',
+        },
+      ],
     ])(
       'should not leak OPENAI_API_KEY when Portkey holds the credential (%s)',
       (_, model, config) => {
@@ -276,6 +291,51 @@ describe('PortkeyChatCompletionProvider', () => {
         expect(provider.getApiKey()).toBeUndefined();
       },
     );
+
+    it('should not inherit OPENAI_API_KEY for a passthrough to another vendor', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      const provider = new PortkeyChatCompletionProvider('claude-sonnet-4-6', {
+        config: { portkeyApiKey: 'pk-config-key', portkeyProvider: 'anthropic' },
+      });
+      expect(provider.getApiKey()).toBeUndefined();
+    });
+
+    it('should forward an explicit apiKey for a passthrough to another vendor', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      const provider = new PortkeyChatCompletionProvider('claude-sonnet-4-6', {
+        config: { portkeyProvider: 'anthropic', apiKey: 'sk-ant-explicit' },
+      });
+      expect(provider.getApiKey()).toBe('sk-ant-explicit');
+    });
+
+    // Provider names arrive from user YAML, where casing is not enforced.
+    it.each([['openai'], ['OpenAI'], ['OPENAI']])(
+      'should inherit OPENAI_API_KEY for an openai passthrough spelled %s',
+      (portkeyProvider) => {
+        vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+        const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+          config: { portkeyProvider },
+        });
+        expect(provider.getApiKey()).toBe('sk-openai');
+      },
+    );
+
+    it('should not throw when portkeyProvider is not a string', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-openai');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 123 as unknown as string },
+      });
+      expect(provider.getApiKey()).toBeUndefined();
+    });
+
+    it('should prefer the per-provider env override for the openai passthrough bearer', () => {
+      vi.stubEnv('OPENAI_API_KEY', 'sk-process-env');
+      const provider = new PortkeyChatCompletionProvider('gpt-4o', {
+        config: { portkeyProvider: 'openai' },
+        env: { OPENAI_API_KEY: 'sk-override' },
+      });
+      expect(provider.getApiKey()).toBe('sk-override');
+    });
   });
 
   describe('header collisions', () => {

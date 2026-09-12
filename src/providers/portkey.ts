@@ -1,4 +1,5 @@
 import { getEnvString } from '../envars';
+import { resolveProviderApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { hasHeaderOverride } from './openai/index';
 
@@ -119,18 +120,6 @@ function resolvePortkeyApiKey(
   return config.portkeyApiKey || env?.PORTKEY_API_KEY || getEnvString('PORTKEY_API_KEY');
 }
 
-/**
- * True when Portkey itself holds the upstream provider credential — a model catalog slug
- * (`@provider/model`) or a legacy virtual key — so there is no provider key to forward.
- */
-function usesManagedCredentials(modelName: string, config: PortkeyConfig): boolean {
-  return Boolean(
-    config.portkeyVirtualKey ||
-      config.portkeyProvider?.startsWith('@') ||
-      modelName.startsWith('@'),
-  );
-}
-
 export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider {
   declare config: PortkeyConfig;
 
@@ -181,18 +170,39 @@ export class PortkeyChatCompletionProvider extends OpenAiChatCompletionProvider 
 
   /**
    * Resolves the `Authorization` bearer, which Portkey forwards to the upstream provider.
-   * The inherited implementation returned the Portkey key here (leaving Portkey's own header
-   * unset) and otherwise fell back to `OPENAI_API_KEY`, sending an OpenAI key to the gateway
-   * even when Portkey already held the provider credential.
+   *
+   * Only a direct passthrough sends one. A model catalog slug (`@provider/model`, in the model
+   * name or in `portkeyProvider`), a legacy virtual key, and a bare model name all leave the
+   * provider credential with Portkey, so nothing is forwarded there — including an apiKey
+   * inherited from a shared provider config. `OPENAI_API_KEY` names one specific vendor's
+   * credential, so it is inherited only when the config routes to that vendor; otherwise a
+   * `portkey:claude-sonnet-4-6` target would ship the user's OpenAI key to a different
+   * provider. A passthrough to another vendor takes its bearer from `config.apiKey`; in the
+   * managed shapes, where nothing is forwarded, only `config.headers` can still set one.
    */
   getApiKey(): string | undefined {
-    // Portkey owns the upstream credential for catalog slugs and virtual keys, so forward
-    // nothing — including an apiKey inherited from a shared provider config. Callers that
-    // still need a bearer can set one explicitly through `config.headers`.
-    if (usesManagedCredentials(this.modelName, this.config)) {
+    // Provider names come from user YAML, so guard the type and compare case-insensitively:
+    // `portkeyProvider: OpenAI` names the same upstream as `openai`.
+    const upstream =
+      typeof this.config.portkeyProvider === 'string'
+        ? this.config.portkeyProvider.toLowerCase()
+        : '';
+    if (
+      !upstream ||
+      upstream.startsWith('@') ||
+      this.modelName.startsWith('@') ||
+      this.config.portkeyVirtualKey
+    ) {
       return undefined;
     }
-    return this.config.apiKey || this.env?.OPENAI_API_KEY || getEnvString('OPENAI_API_KEY');
+    // Only `apiKey` is passed through: the constructor sets `apiKeyEnvar` to PORTKEY_API_KEY
+    // for the missing-key diagnostics, and honouring it here would put Portkey's own key in
+    // the bearer.
+    return resolveProviderApiKey(
+      { apiKey: this.config.apiKey },
+      this.env,
+      upstream === 'openai' ? ['OPENAI_API_KEY'] : [],
+    );
   }
 
   protected override getMissingApiKeyErrorMessage(): string {
