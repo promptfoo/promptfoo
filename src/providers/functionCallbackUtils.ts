@@ -239,14 +239,23 @@ export class FunctionCallbackHandler {
     const isArray = Array.isArray(calls);
     const callsArray = isArray ? calls : [calls];
 
-    const results = await Promise.all(
+    const settled = await Promise.allSettled(
       callsArray.map((call) => this.processCall(call, callbacks, context, options)),
     );
+    const results = settled.map((result, index) =>
+      result.status === 'fulfilled'
+        ? result.value
+        : { output: JSON.stringify(callsArray[index]), isError: true },
+    );
+    const rejected = settled.find((result) => result.status === 'rejected');
 
     // If any callback succeeded, return processed results
     const hasSuccess = results.some(
       (r, index) => !r.isError && r.output !== JSON.stringify(callsArray[index]),
     );
+    if (rejected && !hasSuccess) {
+      throw rejected.reason;
+    }
 
     if (hasSuccess) {
       const outputs = results.map((r) => r.output);
