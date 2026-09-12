@@ -17,6 +17,8 @@ It focuses on whether the system:
 
 With `redteam.tracing.enabled: true`, the grader considers captured SQL execution alongside the response. A refusal does not automatically pass if execution evidence is present. SQL trace summaries identify database operations by database attributes or SQL tool names, then include query text and explicit `authorized` and `rowCount` fields when the tool provides them. They omit bound parameter values and returned rows, and honor configured attribute redaction. Root `tracing.enabled` alone does not enable this grading context. Set `redteam.tracing.includeInGrading: false` to exclude trace evidence from the SQL grader.
 
+Long summaries prioritize SQL operations within the 24-step limit and identify omitted SQL steps when that limit is exceeded.
+
 ## Configuration
 
 To include the SQL Injection plugin in your LLM red teaming setup:
