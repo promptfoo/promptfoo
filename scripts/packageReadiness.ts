@@ -389,7 +389,7 @@ function resolveArtifactImport(
         packageMain = path.resolve(unresolvedPath, packageJson.main);
       }
     } catch {
-      // Invalid package metadata is reported as a missing runtime import.
+      return { outsidePackage: false };
     }
   }
   const candidates = [
@@ -436,10 +436,46 @@ interface ArtifactClosureState {
   unsupportedPackageImports: Set<string>;
 }
 
+function resolvePackageSelfReference(
+  packageRoot: string,
+  specifier: string,
+  kind: RuntimeModuleReference['kind'],
+): string | undefined | null {
+  const manifestPath = path.join(packageRoot, 'package.json');
+  if (!fs.existsSync(manifestPath)) {
+    return null;
+  }
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
+    name?: string;
+    exports?: Record<string, unknown>;
+  };
+  if (
+    !manifest.name ||
+    (specifier !== manifest.name && !specifier.startsWith(`${manifest.name}/`))
+  ) {
+    return null;
+  }
+  const exportKey = specifier === manifest.name ? '.' : `.${specifier.slice(manifest.name.length)}`;
+  const packageExport = manifest.exports?.[exportKey];
+  const conditional =
+    packageExport && typeof packageExport === 'object'
+      ? (packageExport as Record<string, unknown>)[kind === 'import' ? 'import' : 'require']
+      : packageExport;
+  const target =
+    conditional && typeof conditional === 'object'
+      ? (conditional as Record<string, unknown>).default
+      : conditional;
+  return typeof target === 'string' &&
+    target.startsWith('./') &&
+    !target.slice(2).split('/').includes('..')
+    ? normalizePath(target.slice(2))
+    : undefined;
+}
+
 function addArtifactSpecifier(
   packageRoot: string,
   artifactPath: string,
-  { specifier, kind }: RuntimeModuleReference,
+  { specifier, kind, hasJsonAttribute }: RuntimeModuleReference,
   state: ArtifactClosureState,
 ): void {
   const resolvedArtifact = resolveArtifactImport(packageRoot, artifactPath, specifier, kind);
@@ -448,8 +484,21 @@ function addArtifactSpecifier(
     return;
   }
   if (resolvedArtifact?.relativePath) {
+    if (kind === 'import' && resolvedArtifact.relativePath.endsWith('.json') && !hasJsonAttribute) {
+      state.unsupportedPackageImports.add(`${artifactPath}: ${specifier}`);
+      return;
+    }
     if (!state.files.has(resolvedArtifact.relativePath)) {
       state.pending.push(resolvedArtifact.relativePath);
+    }
+    return;
+  }
+  const selfReference = resolvePackageSelfReference(packageRoot, specifier, kind);
+  if (selfReference !== null) {
+    if (selfReference) {
+      state.pending.push(selfReference);
+    } else {
+      state.unsupportedPackageImports.add(`${artifactPath}: ${specifier}`);
     }
     return;
   }
@@ -515,7 +564,7 @@ export function computePackageArtifactClosure(
     files.add(artifactPath);
     const contents = fs.readFileSync(absolutePath);
     totalBytes += contents.length;
-    if (!/\.(?:c|m)?js$/.test(artifactPath) && path.extname(artifactPath) !== '') {
+    if (!/\.(?:(?:c|m)?(?:js|ts)|jsx)$/.test(artifactPath) && path.extname(artifactPath) !== '') {
       continue;
     }
 
@@ -573,10 +622,12 @@ export function computePackageArtifactReadinessReport(
   ) as {
     dependencies?: Record<string, string>;
     peerDependencies?: Record<string, string>;
+    optionalDependencies?: Record<string, string>;
   };
   const declaredRuntimeDependencies = new Set([
     ...Object.keys(manifest.dependencies ?? {}),
     ...Object.keys(manifest.peerDependencies ?? {}),
+    ...Object.keys(manifest.optionalDependencies ?? {}),
   ]);
   const reports = candidates.flatMap((candidate): PackageArtifactCandidateReport[] => {
     if (!candidate.artifacts) {

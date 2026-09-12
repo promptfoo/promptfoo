@@ -309,6 +309,58 @@ describe('package artifact readiness', () => {
       },
     ]);
     expect(report.violations).toContain('fixture/cjs: undeclared external dependencies: yaml');
+
+    write('package.json', JSON.stringify({ optionalDependencies: { yaml: '^2.0.0' } }));
+    expect(
+      computePackageArtifactReadinessReport(packageRoot, [
+        {
+          name: 'fixture',
+          entrypoint: 'src/index.ts',
+          artifacts: { cjs: 'dist/index.cjs' },
+          allowedExternal: ['yaml'],
+          allowedBuiltins: [],
+          maxSourceFiles: 1,
+          maxArtifactFiles: 2,
+          maxArtifactBytes: 100,
+        },
+      ]).violations,
+    ).not.toContain('fixture/cjs: undeclared external dependencies: yaml');
+  });
+
+  it('fails malformed package metadata and scans supported executable files', () => {
+    write('dist/index.cjs', "require('./broken'); require('./loader.ts'); require('fs/not-real');");
+    write('dist/broken/package.json', '{');
+    write('dist/broken/index.js', 'module.exports = true;');
+    write('dist/loader.ts', "require('yaml');");
+
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.cjs')).toMatchObject({
+      files: ['dist/index.cjs', 'dist/loader.ts'],
+      externalDependencies: ['yaml'],
+      unsupportedPackageImports: ['dist/index.cjs: ./broken', 'dist/index.cjs: fs/not-real'],
+    });
+  });
+
+  it('follows package self-references and rejects JSON imports without attributes', () => {
+    write(
+      'package.json',
+      JSON.stringify({
+        name: 'fixture',
+        exports: { './other': { import: { default: './dist/other.js' } } },
+      }),
+    );
+    write(
+      'dist/index.js',
+      "import 'fixture/other'; void import('./bad.json'); void import('./ok.json', { with: { type: 'json' } });",
+    );
+    write('dist/other.js', "import 'yaml';");
+    write('dist/bad.json', '{}');
+    write('dist/ok.json', '{}');
+
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.js')).toMatchObject({
+      files: ['dist/index.js', 'dist/ok.json', 'dist/other.js'],
+      externalDependencies: ['yaml'],
+      unsupportedPackageImports: ['dist/index.js: ./bad.json'],
+    });
   });
 
   it('rejects format-specific dependency drift', () => {

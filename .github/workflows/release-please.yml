@@ -94,12 +94,6 @@ jobs:
         run: |
           tarball="$(npm run --silent package:pack -- --destination "$RUNNER_TEMP/promptfoo-package")"
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
-      - name: Test package artifact
-        if: needs.release-please.outputs.release_created == 'true'
-        env:
-          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
-          PROMPTFOO_DISABLE_TELEMETRY: 1
-        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
       - name: Upload package artifact
         if: needs.release-please.outputs.release_created == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -108,6 +102,12 @@ jobs:
           path: ${{ steps.package-artifact.outputs.tarball }}
           if-no-files-found: error
           retention-days: 7
+      - name: Test package artifact
+        if: needs.release-please.outputs.release_created == 'true'
+        env:
+          PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
+          PROMPTFOO_DISABLE_TELEMETRY: 1
+        run: npm run test:package-artifact -- --tarball "$PACKAGE_TARBALL"
 
   publish-npm:
     if: >-

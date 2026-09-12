@@ -310,6 +310,28 @@ function isRuntimeLoader(node: Node, aliases: Set<string>): boolean {
 export interface RuntimeModuleReference {
   specifier: string;
   kind: 'import' | 'require';
+  hasJsonAttribute?: boolean;
+}
+
+function hasJsonImportAttribute(options: Node | null | undefined): boolean {
+  if (options?.type !== 'ObjectExpression') {
+    return false;
+  }
+  return options.properties.some(
+    (property) =>
+      property.type === 'Property' &&
+      property.key.type === 'Identifier' &&
+      property.key.name === 'with' &&
+      property.value.type === 'ObjectExpression' &&
+      property.value.properties.some(
+        (attribute) =>
+          attribute.type === 'Property' &&
+          attribute.key.type === 'Identifier' &&
+          attribute.key.name === 'type' &&
+          attribute.value.type === 'Literal' &&
+          attribute.value.value === 'json',
+      ),
+  );
 }
 
 function extractModuleReferences(
@@ -327,7 +349,7 @@ function extractModuleReferences(
   const declarations: Array<{ name: string; init: Node }> = [];
   new Visitor({
     ImportDeclaration(node) {
-      if (getStaticModuleSpecifier(node.source) !== 'node:module') {
+      if (!['node:module', 'module'].includes(getStaticModuleSpecifier(node.source) ?? '')) {
         return;
       }
       for (const specifier of node.specifiers) {
@@ -349,7 +371,7 @@ function extractModuleReferences(
         node.id.type === 'ObjectPattern' &&
         node.init?.type === 'CallExpression' &&
         isRuntimeLoader(node.init.callee, aliases) &&
-        getStaticModuleSpecifier(node.init.arguments[0]) === 'node:module'
+        ['node:module', 'module'].includes(getStaticModuleSpecifier(node.init.arguments[0]) ?? '')
       ) {
         for (const property of node.id.properties) {
           if (
@@ -419,7 +441,14 @@ function extractModuleReferences(
       }
     },
     ImportExpression(node) {
-      add(node.source, 'import');
+      const specifier = getStaticModuleSpecifier(node.source);
+      if (specifier !== undefined) {
+        references.push({
+          specifier,
+          kind: 'import',
+          hasJsonAttribute: hasJsonImportAttribute(node.options),
+        });
+      }
     },
     TSImportEqualsDeclaration(node) {
       if (
@@ -540,16 +569,21 @@ export function getExternalModuleName(specifier: string): string | undefined {
 /** The npm package name a specifier imports, or undefined for relative imports and Node builtins. */
 export function getPackageName(specifier: string): string | undefined {
   const moduleName = getExternalModuleName(specifier);
-  if (specifier.startsWith('node:')) {
+  if (getNodeBuiltinName(specifier)) {
     return undefined;
   }
-  return moduleName && (!BUILTIN_MODULES.has(moduleName) || PREFIX_ONLY_BUILTINS.has(moduleName))
-    ? moduleName
-    : undefined;
+  if (moduleName && BUILTIN_MODULES.has(moduleName) && !PREFIX_ONLY_BUILTINS.has(moduleName)) {
+    return undefined;
+  }
+  return moduleName;
 }
 
 /** The normalized Node builtin name a specifier imports, or undefined for npm/internal imports. */
 export function getNodeBuiltinName(specifier: string): string | undefined {
+  const withoutNodePrefix = specifier.replace(/^node:/, '');
+  if (!builtinModules.includes(specifier) && !builtinModules.includes(withoutNodePrefix)) {
+    return undefined;
+  }
   const moduleName = getExternalModuleName(specifier);
   if (specifier.startsWith('node:')) {
     return moduleName;
