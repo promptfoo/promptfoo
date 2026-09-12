@@ -126,6 +126,13 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
+  const rubySeparator = urlWithoutProtocol.indexOf('.rb:');
+  if (rubySeparator >= 0) {
+    return {
+      filePath: normalizeFilePath(urlWithoutProtocol.slice(0, rubySeparator + 3)),
+      functionName: urlWithoutProtocol.slice(rubySeparator + 4),
+    };
+  }
   const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
 
   if (lastColonIndex > 1) {
