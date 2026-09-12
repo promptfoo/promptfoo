@@ -63,12 +63,16 @@ vi.mock('./EvalOutputCell', () => {
       onRating,
       rowIndex,
       rowPositionIndex,
+      promptIndex,
+      tracePromptIndex,
       searchText,
       evaluationId,
     }: {
       onRating: any;
       rowIndex?: number;
       rowPositionIndex?: number;
+      promptIndex?: number;
+      tracePromptIndex?: number;
       searchText?: string;
       evaluationId?: string;
     }) => {
@@ -77,6 +81,8 @@ vi.mock('./EvalOutputCell', () => {
           data-testid="eval-output-cell"
           data-rowindex={rowIndex}
           data-rowpositionindex={rowPositionIndex}
+          data-promptindex={promptIndex}
+          data-tracepromptindex={tracePromptIndex}
           data-searchtext={searchText}
           data-evaluationid={evaluationId}
         >
@@ -891,6 +897,47 @@ describe('ResultsTable Metrics Display', () => {
         );
       },
     );
+
+    it('keeps merged prompt coordinates separate from comparison trace coordinates', () => {
+      vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+        inComparisonMode: true,
+        comparisonEvalIds: ['comparison-eval'],
+        renderMarkdown: true,
+      });
+      vi.mocked(useTableStore).mockReturnValue({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+        table: {
+          head: { ...mockTable.head, prompts: [{}, {}, {}] },
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [
+                null,
+                null,
+                {
+                  pass: true,
+                  score: 1,
+                  text: 'comparison output',
+                  sourceEvalId: 'comparison-eval',
+                  sourcePromptIndex: 0,
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      const cell = screen.getByTestId('eval-output-cell');
+      expect(cell).toHaveAttribute('data-promptindex', '2');
+      expect(cell).toHaveAttribute('data-tracepromptindex', '0');
+    });
 
     it('remounts a failed blob image and its open lightbox after a table refresh', async () => {
       const user = userEvent.setup();

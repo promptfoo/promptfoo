@@ -1573,6 +1573,7 @@ interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
   originalRowIndex?: number;
   originalRowPositionIndex?: number;
   originalPromptIndex?: number;
+  sourcePromptIndex?: number;
 }
 
 interface ExtendedEvaluateTableRow extends EvaluateTableRow {
@@ -1822,7 +1823,8 @@ function ResultsTable({
               ...output,
               originalRowIndex: rowIndex,
               originalRowPositionIndex: rowPositionOffset + rowIndex,
-              originalPromptIndex: output.sourcePromptIndex ?? promptIndex,
+              originalPromptIndex: promptIndex,
+              sourcePromptIndex: output.sourcePromptIndex,
             },
       ),
     })) as ExtendedEvaluateTableRow[];
@@ -2276,6 +2278,7 @@ function ResultsTable({
                       output.originalRowPositionIndex ?? output.originalRowIndex ?? info.row.index
                     }
                     promptIndex={output.originalPromptIndex ?? idx}
+                    tracePromptIndex={output.sourcePromptIndex}
                     onRating={handleRating.bind(
                       null,
                       output.originalRowIndex ?? info.row.index,

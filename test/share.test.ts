@@ -882,6 +882,36 @@ describe('createShareableUrl', () => {
       });
     });
 
+    it('drops trace metadata that is too deeply nested to sanitize', async () => {
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      const metadata: Record<string, unknown> = {};
+      let nested = metadata;
+      for (let depth = 0; depth < 3000; depth++) {
+        nested.next = {};
+        nested = nested.next as Record<string, unknown>;
+      }
+      mockEval.getTraces = vi.fn().mockResolvedValue([
+        {
+          traceId: 'trace-deep',
+          evaluationId: mockEval.id as string,
+          testCaseId: 'test-case-1',
+          metadata,
+          spans: [],
+        },
+      ]);
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+
+      await expect(createShareableUrl(mockEval as Eval, { silent: true })).resolves.toBe(
+        `https://promptfoo.app/eval/${mockEval.id}`,
+      );
+
+      const traceBody = JSON.parse(mockFetch.mock.calls[2][1].body);
+      expect(traceBody[0].metadata).toBeUndefined();
+    });
+
     it('still rolls back when the trace endpoint reports that the new eval is missing', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
       mockEval.getTraces = vi.fn().mockResolvedValue([

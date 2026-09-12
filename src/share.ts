@@ -581,6 +581,19 @@ function remapTracesForShare(
   localEvalId: string,
   remoteEvalId: string,
 ): EvalTraces {
+  const sanitizeMetadata = (
+    metadata: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined => {
+    if (!metadata) {
+      return undefined;
+    }
+    try {
+      return sanitizeTraceAttributes(metadata, { truncateValues: false });
+    } catch {
+      return undefined;
+    }
+  };
+
   return traces.map((trace) => {
     const remoteTraceId = getRemoteTraceId(traceIds, trace.traceId);
     return {
@@ -588,7 +601,7 @@ function remapTracesForShare(
       traceId: remoteTraceId,
       evaluationId: remoteEvalId,
       metadata: trace.metadata
-        ? sanitizeTraceAttributes(
+        ? sanitizeMetadata(
             remapKnownLinkage(
               trace.metadata,
               ['evaluationId'],
@@ -598,7 +611,6 @@ function remapTracesForShare(
               trace.traceId,
               remoteTraceId,
             ),
-            { truncateValues: false },
           )
         : undefined,
       spans: trace.spans.map((span) => ({

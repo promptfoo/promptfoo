@@ -1087,7 +1087,7 @@ function renderOutputActions({
   output,
   text,
   rowIndex,
-  promptIndex,
+  tracePromptIndex,
   evaluationId,
   testCaseId,
   cloudConfig,
@@ -1115,7 +1115,7 @@ function renderOutputActions({
   output: EvaluateTableOutput;
   text: string;
   rowIndex: number;
-  promptIndex: number;
+  tracePromptIndex: number;
   evaluationId?: string;
   testCaseId?: string;
   cloudConfig: ReturnType<typeof useCloudConfig>['data'];
@@ -1287,7 +1287,7 @@ function renderOutputActions({
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}
-              promptIndex={promptIndex}
+              promptIndex={tracePromptIndex}
               variables={output.metadata?.inputVars || output.testCase?.vars}
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
@@ -1309,6 +1309,7 @@ export interface EvalOutputCellProps {
   rowIndex: number;
   rowPositionIndex?: number;
   promptIndex: number;
+  tracePromptIndex?: number;
   showStats: boolean;
   isRedteam?: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
@@ -1340,6 +1341,7 @@ function EvalOutputCell({
   rowIndex,
   rowPositionIndex = rowIndex,
   promptIndex,
+  tracePromptIndex = promptIndex,
   onRating,
   firstOutput,
   showDiffs,
@@ -1707,7 +1709,7 @@ function EvalOutputCell({
         output,
         text,
         rowIndex,
-        promptIndex,
+        tracePromptIndex,
         evaluationId,
         testCaseId,
         cloudConfig,

@@ -116,4 +116,17 @@ describe('Eval API schemas', () => {
 
     expect(result.success).toBe(true);
   });
+
+  it('accepts persisted long test-case IDs', () => {
+    const result = EvalSchemas.AddTraces.Request.safeParse([
+      {
+        traceId: 'trace-1',
+        evaluationId: 'eval-1',
+        testCaseId: 't'.repeat(513),
+        spans: [],
+      },
+    ]);
+
+    expect(result.success).toBe(true);
+  });
 });
