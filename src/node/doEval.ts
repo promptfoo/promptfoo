@@ -287,7 +287,7 @@ function isDeclarativeConfig(configPath: string): boolean {
 }
 
 export async function doEval(
-  cmdObj: Partial<CommandLineOptions>,
+  cmdObj: Partial<CommandLineOptions> & { id?: string },
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
@@ -866,13 +866,22 @@ export async function doEval(
       };
     }
 
+    if (cmdObj.description !== undefined) {
+      config = { ...config, description: cmdObj.description };
+    }
+
     // Create or load eval record
     const author = getAuthor();
+    const evalRecordOptions = {
+      author,
+      runtimeOptions,
+      ...(cmdObj.id ? { id: cmdObj.id } : {}),
+    };
     const evalRecord = resumeEval
       ? resumeEval
       : cmdObj.write
-        ? await Eval.create(config, testSuite.prompts, { author, runtimeOptions })
-        : new Eval(config, { author, runtimeOptions });
+        ? await Eval.create(config, testSuite.prompts, evalRecordOptions)
+        : new Eval(config, evalRecordOptions);
 
     // Graceful pause support via Ctrl+C (only when writing to database)
     const abortController = new AbortController();

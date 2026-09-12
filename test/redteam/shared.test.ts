@@ -5,11 +5,13 @@ import path from 'path';
 
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { clearLogCallbackIfOwned, setLogCallback } from '../../src/logger';
 import { doEval } from '../../src/node/doEval';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { PartialGenerationError } from '../../src/redteam/types';
+import { setupEnv } from '../../src/util';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { loadDefaultConfig } from '../../src/util/config/default';
 import { initVerboseToggle } from '../../src/util/verboseToggle';
@@ -191,10 +193,23 @@ describe('doRedteamRun', () => {
 
   it('passes the run environment file to generation', async () => {
     await doRedteamRun({ envPath: 'generation.env' });
+    expect(setupEnv).toHaveBeenCalledWith('generation.env');
     expect(doGenerateRedteam).toHaveBeenCalledWith(
       expect.objectContaining({ envFile: 'generation.env' }),
     );
     expect(vi.mocked(doEval).mock.calls[0][0]).toMatchObject({ envPath: 'generation.env' });
+  });
+
+  it('scopes the remote override to one run', async () => {
+    cliState.remote = false;
+    vi.mocked(doGenerateRedteam).mockImplementationOnce(async () => {
+      expect(cliState.remote).toBe(true);
+      return {};
+    });
+
+    await doRedteamRun({ remote: true });
+
+    expect(cliState.remote).toBe(false);
   });
 
   it.each([true, false])('honors cache=%s in generation and evaluation', async (cache) => {

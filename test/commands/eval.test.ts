@@ -242,8 +242,13 @@ describe('evalCommand', () => {
     );
   });
 
-  it('should apply resolved author when --no-write is used', async () => {
-    const cmdObj = { table: false, write: false };
+  it('should apply resolved author and explicit record metadata when --no-write is used', async () => {
+    const cmdObj = {
+      table: false,
+      write: false,
+      id: 'stable-id',
+      description: 'nightly scan',
+    };
     const config = {} as UnifiedConfig;
     let capturedEvalRecord: Eval | undefined;
 
@@ -264,6 +269,8 @@ describe('evalCommand', () => {
     await doEval(cmdObj, config, defaultConfigPath, {});
 
     expect(capturedEvalRecord?.author).toBe('ci-author@example.com');
+    expect(capturedEvalRecord?.id).toBe('stable-id');
+    expect(capturedEvalRecord?.config.description).toBe('nightly scan');
   });
 
   it('should finalize streamed JSONL output after a successful CLI evaluation', async () => {
