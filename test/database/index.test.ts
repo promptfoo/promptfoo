@@ -657,6 +657,47 @@ describe('database', () => {
       await expect(db.all('SELECT id FROM root_call_rollback_test')).resolves.toEqual([{ id: 3 }]);
     });
 
+    it.each(['commit', 'rollback'])(
+      'expires inherited transaction contexts after %s',
+      async (outcome) => {
+        const db = await getDb();
+        await db.run('CREATE TABLE deferred_transaction_test (id INTEGER PRIMARY KEY)');
+        const { promise: released, resolve: release } = Promise.withResolvers<void>();
+        let followup: Promise<void> | undefined;
+
+        const outer = db.transaction(async (tx) => {
+          await tx.run('INSERT INTO deferred_transaction_test VALUES (1)');
+          // This promise retains the callback's async context after the callback settles.
+          followup = (async () => {
+            await released;
+            await db.run('INSERT INTO deferred_transaction_test VALUES (2)');
+            await db.transaction(async (laterTx) => {
+              await laterTx.run('INSERT INTO deferred_transaction_test VALUES (3)');
+            });
+          })();
+          if (outcome === 'rollback') {
+            throw new Error('Rollback requested');
+          }
+        });
+        try {
+          if (outcome === 'rollback') {
+            await expect(outer).rejects.toThrow('Rollback requested');
+          } else {
+            await outer;
+          }
+        } finally {
+          release();
+        }
+
+        await expect(followup).resolves.toBeUndefined();
+        await expect(
+          db.all('SELECT id FROM deferred_transaction_test ORDER BY id'),
+        ).resolves.toEqual(
+          outcome === 'commit' ? [{ id: 1 }, { id: 2 }, { id: 3 }] : [{ id: 2 }, { id: 3 }],
+        );
+      },
+    );
+
     it('should enforce foreign keys inside top-level transactions', async () => {
       const db = await getDb();
       await db.run('CREATE TABLE transaction_fk_parent (id TEXT PRIMARY KEY)');

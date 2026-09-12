@@ -119,7 +119,8 @@ into helpers that need database access. Root `db.run`, `db.all`, query builders,
 and client methods reject inside the callback. Catching that error leaves the
 transaction usable; letting it escape rolls the transaction back. Nested root
 `db.transaction` callbacks reuse the active transaction and do not commit it
-independently.
+independently. The context expires when the callback settles, so asynchronous
+work that runs later queues as a new top-level operation.
 
 Promptfoo serializes top-level operations and configures libSQL with one pooled
 connection so foreign-key, busy-timeout, and WAL settings survive transaction

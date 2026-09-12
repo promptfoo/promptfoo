@@ -288,7 +288,8 @@ function serializeTopLevelOperations(
   type TransactionCallback = Parameters<typeof transaction>[0];
   type TransactionContext = Parameters<TransactionCallback>[0];
 
-  const activeTransaction = new AsyncLocalStorage<TransactionContext>();
+  type TransactionScope = { transaction: TransactionContext | undefined };
+  const activeTransaction = new AsyncLocalStorage<TransactionScope>();
   let operationQueue = Promise.resolve();
 
   const runSerialized = <T>(operation: () => Promise<T>): Promise<T> => {
@@ -307,7 +308,7 @@ function serializeTopLevelOperations(
     return (...args: TArgs) => {
       // A root call cannot borrow the transaction's connection. Queueing would
       // deadlock, and reconnecting after a lock error would abort the transaction.
-      if (activeTransaction.getStore()) {
+      if (activeTransaction.getStore()?.transaction) {
         return Promise.reject(
           new Error('Use the transaction handle (tx) for database operations inside a transaction'),
         );
@@ -324,7 +325,7 @@ function serializeTopLevelOperations(
   client.executeMultiple = serializeClientMethod(client.executeMultiple.bind(client), false);
 
   db.transaction = ((callback, config) => {
-    const currentTransaction = activeTransaction.getStore();
+    const currentTransaction = activeTransaction.getStore()?.transaction;
     if (currentTransaction) {
       // Reuse the transaction already owned by this async call chain. Queueing here
       // would deadlock because the outer callback is waiting for the nested promise.
@@ -333,7 +334,19 @@ function serializeTopLevelOperations(
 
     return runSerialized(() =>
       withLockRecovery(
-        () => transaction((tx) => activeTransaction.run(tx, () => callback(tx)), config),
+        () =>
+          transaction((tx) => {
+            const scope: TransactionScope = { transaction: tx };
+            return activeTransaction.run(scope, async () => {
+              try {
+                return await callback(tx);
+              } finally {
+                // Async resources can outlive the callback. Their root operations
+                // must queue normally instead of reusing a completed transaction.
+                scope.transaction = undefined;
+              }
+            });
+          }, config),
         false,
       ),
     );
