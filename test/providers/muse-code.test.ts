@@ -1308,6 +1308,21 @@ describe('MuseCodeProvider', () => {
     expect(response.raw).toBeUndefined();
   });
 
+  it('omits raw history when a durable session is resumed by a new provider', async () => {
+    const events = structuredClone(fixtureEvents);
+    events.at(-1)!.payload.details = 'first-process-secret';
+    onSpawn = (child) => {
+      child.stdout.write(events.map((event) => JSON.stringify(event)).join('\n'));
+      child.close();
+    };
+
+    const response = await provider({
+      config: { session_id: sessionId, working_dir: testDir, apiKey: 'second-process-secret' },
+    }).callApi(prompt);
+
+    expect(response.raw).toBeUndefined();
+  });
+
   it('locks upper- and lowercase spellings of the same session UUID', async () => {
     const id = 'abcdefab-cdef-4abc-8def-abcdefabcdef';
     onSpawn = (child) => {

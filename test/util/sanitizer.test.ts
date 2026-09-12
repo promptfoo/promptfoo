@@ -249,6 +249,8 @@ describe('isSecretEnvVarName', () => {
     'TURKEY',
     // `AUTH` only counts as the final word: these name a method and a scope.
     'WATSONX_AI_AUTH_TYPE',
+    'AUTH_ENABLED',
+    'AUTH_REQUIRED',
     'OAUTH_SCOPE',
     // Ordinary config fields keep the exact-name behavior.
     'maxTokens',
@@ -260,8 +262,9 @@ describe('isSecretEnvVarName', () => {
   });
 
   it('preserves auth type values in sanitized env maps', () => {
-    expect(sanitizeObject({ env: { WATSONX_AI_AUTH_TYPE: 'iam' } })).toEqual({
-      env: { WATSONX_AI_AUTH_TYPE: 'iam' },
+    const env = { WATSONX_AI_AUTH_TYPE: 'iam', AUTH_ENABLED: 'true', AUTH_REQUIRED: 'false' };
+    expect(sanitizeObject({ env })).toEqual({
+      env,
     });
   });
 });
@@ -271,6 +274,7 @@ describe('sanitizeObject', () => {
     ['base_url', 'https://user:password@example.test/v1'],
     ['base_url', 'https://example.test/v1?api_key=short-secret'],
     ['base_url', 'https://example.test/v1?cursor=sk-abcdefghijklmnopqrstuvwxyz'],
+    ['base_url', 'https://example.test/v1/token-deadbeef1234'],
     ['baseUrl', 'https://example.test/v1?github_pat=short-secret'],
     ['base_url', 'https://{{ env.HOST }}/v1?github_pat=short-secret'],
     ['base_url', 'https://example.test/v1#api_key=short-secret'],

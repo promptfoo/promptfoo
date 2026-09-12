@@ -380,7 +380,7 @@ function getFieldNameWords(name: string): string[] {
 
 function isCredentialName(name: string): boolean {
   const words = getFieldNameWords(name);
-  if (['method', 'mode', 'type'].includes(words[words.length - 1] ?? '')) {
+  if (['enabled', 'method', 'mode', 'required', 'type'].includes(words[words.length - 1] ?? '')) {
     return false;
   }
   return (
@@ -392,6 +392,7 @@ function isCredentialName(name: string): boolean {
 function isCredentialValue(value: string): boolean {
   return (
     /^(?:gh[pousr]_|github_pat_)[a-zA-Z0-9_]+$/.test(value) ||
+    /^(?:key|pat|secret|token)-[a-zA-Z0-9_-]{8,}$/i.test(value) ||
     (/^(?:sk-|key-|AKIA|AIza|Bearer\s|Basic\s)/i.test(value) && looksLikeSecret(value))
   );
 }
@@ -515,6 +516,11 @@ function collectWebhookPathCredentials(
   for (const pathname of [url.pathname, rawPath]) {
     const segments = pathname.split('/').filter(Boolean);
     const prefix = segments.map((part) => decodeFormComponent(part) ?? part);
+    for (const [index, part] of prefix.entries()) {
+      if (isCredentialValue(part) || looksLikeSecret(part)) {
+        addCredential(segments[index]);
+      }
+    }
     let credentialParts: string[] = [];
     // These routes carry bearer credentials. Ordinary path IDs are intentionally preserved.
     // https://api.slack.com/messaging/webhooks

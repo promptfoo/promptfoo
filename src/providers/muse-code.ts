@@ -285,8 +285,10 @@ function redactCredentials(
   response: ProviderResponse,
   credentials: string[],
   historicalCredentials: string[] = [],
+  stripRaw = false,
 ): ProviderResponse {
   const shouldStripRaw =
+    stripRaw ||
     getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false) ||
     getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
   if (!credentials.length) {
@@ -537,6 +539,8 @@ export class MuseCodeProvider implements ApiProvider {
     let tempDir: string | undefined;
     const env = this.buildEnv(config);
     const currentCredentials = collectEnvCredentials(env, config.base_url);
+    const unknownSessionHistory =
+      config.session_id !== undefined && !this.sessionCredentials.has(config.session_id);
     const historicalCredentials = config.session_id
       ? [...(this.sessionCredentials.get(config.session_id) ?? new Set())]
       : [];
@@ -573,7 +577,10 @@ export class MuseCodeProvider implements ApiProvider {
       if (response.sessionId) {
         this.sessionCredentials.set(response.sessionId, new Set(credentials));
       }
-      return redactCredentials(response, credentials, historicalCredentials);
+      if (config.session_id) {
+        this.sessionCredentials.set(config.session_id, new Set(credentials));
+      }
+      return redactCredentials(response, credentials, historicalCredentials, unknownSessionHistory);
     } catch (error) {
       return redactCredentials(
         {
