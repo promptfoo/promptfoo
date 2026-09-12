@@ -592,6 +592,8 @@ Nested `file://` references inside test and vars files keep the owning config's 
 
 Saved evaluations retain parsed test rows and an absolute base directory. Resume and retry reuse those rows, including generated and remote datasets. Run a new evaluation to pick up changed test sources. A test-source glob that matches no files reports an error.
 
+Function values returned by JavaScript or TypeScript test generators work in the current run but cannot be restored from saved evaluations. Promptfoo warns when a generator returns them. Use `file://` references for scoring functions and other executable test fields when you need resume or retry.
+
 Without the `file://` prefix, values are passed as plain strings to your provider.
 
 ### Supported File Types
