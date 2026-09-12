@@ -131,12 +131,16 @@ describe('RedteamGoatProvider', () => {
 
   it.each(
     ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
-      [false, true].map((conversationEnded) => [pluginId, conversationEnded] as const),
+      [false, true].flatMap((conversationEnded) =>
+        [false, true].map((isMedia) => [pluginId, conversationEnded, isMedia] as const),
+      ),
     ),
   )(
-    'keeps output media out of GOAT history for %s ended=%s',
-    async (pluginId, conversationEnded) => {
-      const media = 'data:image/png;base64,PRIVATE_GOAT_OUTPUT_MEDIA';
+    'keeps private GOAT output out of history for %s ended=%s media=%s',
+    async (pluginId, conversationEnded, isMedia) => {
+      const media = isMedia
+        ? 'data:image/png;base64,PRIVATE_GOAT_OUTPUT_MEDIA'
+        : 'PRIVATE_GOAT_OUTPUT_TEXT';
       mockGrader.getResult.mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' });
       const target = createMockTargetProvider(media, {}, { conversationEnded });
       const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
@@ -152,7 +156,11 @@ describe('RedteamGoatProvider', () => {
         ),
       );
       expect(target.callApi).toHaveBeenCalled();
-      expect(result.error).toContain('redaction cannot be verified');
+      if (isMedia) {
+        expect(result.error).toContain('redaction cannot be verified');
+      } else {
+        expect(result.error).toBeUndefined();
+      }
       expect(JSON.stringify(mockFetch.mock.calls)).not.toContain(media);
       expect(JSON.stringify(result)).not.toContain(media);
     },

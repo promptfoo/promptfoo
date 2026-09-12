@@ -12,7 +12,10 @@ import {
   enrichCodingAgentGradingContext,
   findDeterministicLeak,
 } from '../../../src/redteam/plugins/codingAgent/graders';
-import { verifyCodingAgentResult } from '../../../src/redteam/plugins/codingAgent/verifiers';
+import {
+  verifyCodingAgentResult,
+  verifyTraceRedaction,
+} from '../../../src/redteam/plugins/codingAgent/verifiers';
 import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { RedteamPluginSchema } from '../../../src/validators/redteam';
 
@@ -44,6 +47,62 @@ function contextWithSpan(fields: Partial<TraceContextData['spans'][number]>) {
 }
 
 describe('coding-agent evidence regressions', () => {
+  it.each(['PRIVATE_RECEIPT_"TOKEN"', 'PRIVATE_RECEIPT_\\TOKEN', 'PRIVATE_RECEIPT_\nTOKEN'])(
+    'detects escaped receipt %j in public metadata',
+    (receipt) => {
+      expect(
+        verifyTraceRedaction({ rawReceipt: receipt }, 'Clean', {
+          providerResponse: { metadata: { receipt } },
+        })?.kind,
+      ).toBe('redacted-artifact-sensitive-value');
+    },
+  );
+
+  it('rejects a verifier artifact replaced between validation and reading', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-race-'));
+    directories.push(directory);
+    const artifact = path.join(directory, 'report.json');
+    const replacement = path.join(directory, 'replacement.json');
+    fs.writeFileSync(artifact, 'Clean');
+    fs.writeFileSync(replacement, canary);
+    const canonicalArtifact = fs.realpathSync(artifact);
+    const stat = fs.statSync;
+    let replaced = false;
+    let checks = 0;
+    vi.spyOn(fs, 'statSync').mockImplementation((...args) => {
+      const result = stat(...args);
+      if ([artifact, canonicalArtifact].includes(String(args[0])) && ++checks === 2 && !replaced) {
+        replaced = true;
+        fs.unlinkSync(artifact);
+        fs.symlinkSync(replacement, artifact);
+      }
+      return result;
+    });
+    expect(
+      verifyCodingAgentResult('coding-agent:trace-redaction', 'Clean', testCase, {
+        rawReceipt: canary,
+        redactedArtifactPath: artifact,
+      })?.kind,
+    ).toBe('verifier-sidecar-failed');
+    expect(replaced).toBe(true);
+  });
+
+  it('rejects a verifier artifact that grows after opening', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'artifact-growth-'));
+    directories.push(directory);
+    const artifact = path.join(directory, 'report.json');
+    fs.writeFileSync(artifact, 'Clean');
+    const stat = fs.fstatSync;
+    vi.spyOn(fs, 'fstatSync').mockImplementation((...args) => {
+      const result = stat(...args);
+      fs.appendFileSync(artifact, canary);
+      return result;
+    });
+    expect(
+      verifyTraceRedaction({ rawReceipt: canary, redactedArtifactPath: artifact }, 'Clean')?.kind,
+    ).toBe('verifier-sidecar-failed');
+  });
+
   it.each(['abcdefghijklmnop', 'abcdefghijklmnopqrstuvwx'])(
     'retains alphabetic MCP receipts embedded in prose: %s',
     (token) => {
@@ -242,6 +301,7 @@ describe('coding-agent evidence regressions', () => {
 
   const directories: string[] = [];
   afterEach(() => {
+    vi.restoreAllMocks();
     for (const directory of directories.splice(0)) {
       fs.rmSync(directory, { recursive: true, force: true });
     }
@@ -736,7 +796,7 @@ describe('coding-agent evidence regressions', () => {
         );
       }
       const realpath = fs.realpathSync;
-      const readFile = fs.readFileSync;
+      const readFile = fs.openSync;
       const outside =
         mode === 'outside-root'
           ? vi
@@ -749,7 +809,7 @@ describe('coding-agent evidence regressions', () => {
           : undefined;
       const unreadable =
         mode === 'unreadable'
-          ? vi.spyOn(fs, 'readFileSync').mockImplementation((file, options) => {
+          ? vi.spyOn(fs, 'openSync').mockImplementation((file, options) => {
               if (file === realpath(receiptPath)) {
                 throw new Error('EACCES');
               }
@@ -1441,7 +1501,7 @@ describe('coding-agent evidence regressions', () => {
         })),
       }),
     );
-    const reads = vi.spyOn(fs, 'readFileSync');
+    const reads = vi.spyOn(fs, 'openSync');
     try {
       expect(
         verifyCodingAgentResult('coding-agent:replay-bundle-completeness', 'Done', testCase, {

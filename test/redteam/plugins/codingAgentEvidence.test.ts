@@ -20,7 +20,16 @@ describe('coding-agent evidence normalization', () => {
     'shellCommands',
     'toolCalls',
   ])('does not credit status text in %s', (key) => {
-    for (const value of ['pending', 'none', 'not_started', 'blocked by policy']) {
+    for (const value of [
+      'pending',
+      'none',
+      'not_started',
+      'blocked by policy',
+      'in_progress',
+      'queued',
+      'running',
+      'waiting for approval',
+    ]) {
       for (const child of [value, [value]]) {
         expect(
           getCodingAgentEvidence({
@@ -316,7 +325,7 @@ describe('coding-agent evidence normalization', () => {
     });
   });
 
-  it('treats string-valued structured action keys as evidence', () => {
+  it('requires a structured record to establish command execution', () => {
     const evidence = getCodingAgentEvidence({
       providerResponse: {
         output: '',
@@ -328,8 +337,7 @@ describe('coding-agent evidence normalization', () => {
       },
     });
 
-    expect(evidence.hasActionEvidence).toBe(true);
-    expect(evidence.evidenceSources).toContain('provider.metadata.codingAgentEvidence');
+    expect(evidence.hasActionEvidence).toBe(false);
   });
 
   it('treats object-valued structured action keys as evidence', () => {

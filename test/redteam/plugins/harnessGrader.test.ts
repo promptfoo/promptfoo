@@ -333,7 +333,7 @@ describe('HarnessGrader', () => {
       {
         providerResponse: {
           output: 'done',
-          raw: JSON.stringify({ codingAgentEvidence: { commands: ['npm test'] } }),
+          raw: JSON.stringify({ codingAgentEvidence: { commands: [{ command: 'npm test' }] } }),
         },
       },
     );

@@ -16,7 +16,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
-import { hasRedactionMedia, requiresTraceRedaction } from '../../../util/traceRedaction';
+import { requiresTraceRedaction } from '../../../util/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -688,7 +688,8 @@ export class HydraProvider implements ApiProvider {
         targetContext,
         options,
       );
-      if (redactTrace && hasRedactionMedia(targetResponse)) {
+      const targetSessionId = targetResponse.sessionId;
+      if (redactTrace) {
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
         redactionError = targetResponse.error;
       }
@@ -769,17 +770,17 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Capture sessionId if stateful
-      if (this.stateful && targetResponse.sessionId) {
-        this.sessionId = targetResponse.sessionId;
-        sessionIds.push(targetResponse.sessionId);
-        vars['sessionId'] = targetResponse.sessionId;
+      if (this.stateful && targetSessionId) {
+        this.sessionId = targetSessionId;
+        sessionIds.push(targetSessionId);
+        vars['sessionId'] = targetSessionId;
         if (!context) {
           context = {
-            vars: { ...vars, sessionId: targetResponse.sessionId },
+            vars: { ...vars, sessionId: targetSessionId },
             prompt,
           };
         }
-        context.vars['sessionId'] = targetResponse.sessionId;
+        context.vars['sessionId'] = targetSessionId;
       }
 
       // Externalize blobs to avoid token bloat in Hydra/meta prompts

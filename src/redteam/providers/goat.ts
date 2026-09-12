@@ -19,7 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { hasRedactionMedia, requiresTraceRedaction } from '../../util/traceRedaction';
+import { requiresTraceRedaction } from '../../util/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -348,7 +348,7 @@ export default class GoatProvider implements ApiProvider {
               options,
             );
 
-            if (redactTrace && hasRedactionMedia(unblockingResponse)) {
+            if (redactTrace) {
               unblockingResponse = await externalizeResponseForRedteamHistory(
                 unblockingResponse,
                 context,
@@ -630,7 +630,7 @@ export default class GoatProvider implements ApiProvider {
           options,
         )) as GoatProviderResponse;
 
-        if (redactTrace && hasRedactionMedia(targetResponse)) {
+        if (redactTrace) {
           targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
           redactionError = targetResponse.error;
         }

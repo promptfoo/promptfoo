@@ -1396,14 +1396,20 @@ describe('HydraProvider', () => {
       });
     });
 
-    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
-      'keeps inline media out of Hydra history for %s without blob storage',
-      async (pluginId) => {
+    it.each(
+      ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+        [false, true].map((isMedia) => [pluginId, isMedia] as const),
+      ),
+    )(
+      'keeps private Hydra output out of history for %s media=%s without blob storage',
+      async (pluginId, isMedia) => {
         const blobs = await import('../../../../src/blobs/extractor');
         const remote = await import('../../../../src/blobs/remoteUpload');
         vi.spyOn(blobs, 'isBlobStorageEnabled').mockReturnValue(false);
         vi.spyOn(remote, 'shouldAttemptRemoteBlobUpload').mockReturnValue(false);
-        const media = 'data:image/png;base64,PRIVATE_HYDRA_OUTPUT_MEDIA';
+        const media = isMedia
+          ? 'data:image/png;base64,PRIVATE_HYDRA_OUTPUT_MEDIA'
+          : 'PRIVATE_HYDRA_OUTPUT_TEXT';
         mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
         mockTargetProvider.callApi.mockResolvedValue({ output: media });
         const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });

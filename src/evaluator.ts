@@ -110,7 +110,7 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
-import { requiresTraceRedaction } from './util/traceRedaction';
+import { requiresTraceRedaction, sanitizeRedactionResult } from './util/traceRedaction';
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
@@ -1715,17 +1715,18 @@ async function runEvalInternal({
             captureMcpLedgers(providerCall.response.cached);
             const response = normalizeCachedTargetResponse(providerCall.response);
             latencyMs = providerCall.latencyMs;
+            const publicResponse = sanitizeRedactionResult({ response, testCase: test }).response;
 
             updateConversationHistory({
               conversationKey: state.conversationKey,
               conversations,
               renderedJson: rendered.renderedJson,
               renderedPrompt: rendered.renderedPrompt,
-              response,
+              response: publicResponse,
             });
 
             logger.debug('Evaluator response', {
-              responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
+              responsePreview: (safeJsonStringify(publicResponse) ?? '').slice(0, 100),
             });
             logger.debug(
               `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
@@ -1785,7 +1786,7 @@ async function runEvalInternal({
 
             if (test.options?.storeOutputAs && ret.response?.output && registers) {
               // Save the output in a register for later use
-              registers[test.options.storeOutputAs] = ret.response.output;
+              registers[test.options.storeOutputAs] = sanitizeRedactionResult(ret).response?.output;
             }
 
             return [ret];

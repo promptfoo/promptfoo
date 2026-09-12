@@ -17,6 +17,35 @@ import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
   it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'keeps %s output out of later conversation and register state',
+    async (plugin) => {
+      const secret = 'PRIVATE_STATE_RECEIPT';
+      vi.mocked(mockApiProvider.callApi)
+        .mockResolvedValueOnce({ output: secret })
+        .mockResolvedValueOnce({ output: 'Clean' });
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect report. {{ saved }} {{ _conversation[0].response.output }}')],
+        tests: [
+          {
+            options: { storeOutputAs: 'saved' },
+            assert: [{ type: `promptfoo:redteam:${plugin}`, value: { rawReceipt: secret } }],
+          },
+          { assert: [{ type: 'equals', value: 'Clean' }] },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(mockApiProvider.callApi).mock.calls[1][0]).not.toContain(secret);
+      expect(summary.results[0].failureReason).toBe(ResultFailureReason.ASSERT);
+      expect(summary.results[1].success).toBe(true);
+      expect(JSON.stringify(summary)).not.toContain(secret);
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
     'does not write private output media to blobs for %s',
     async (plugin) => {
       const extract = vi.spyOn(blobExtractor, 'extractAndStoreBinaryData');

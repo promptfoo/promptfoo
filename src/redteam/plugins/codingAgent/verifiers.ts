@@ -182,7 +182,37 @@ function readVerifierArtifactSync(
     throw new Error('Verifier artifact must be a bounded regular file');
   }
 
-  return encoding ? fs.readFileSync(realPath, encoding) : fs.readFileSync(realPath);
+  const fd = fs.openSync(
+    realPath,
+    fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+  );
+  try {
+    const opened = fs.fstatSync(fd);
+    if (
+      !opened.isFile() ||
+      opened.dev !== stat.dev ||
+      opened.ino !== stat.ino ||
+      opened.size > maxBytes
+    ) {
+      throw new Error('Verifier artifact changed or is not a bounded regular file');
+    }
+    const content = Buffer.alloc(opened.size + 1);
+    let length = 0;
+    while (length < content.length) {
+      const read = fs.readSync(fd, content, length, content.length - length, null);
+      if (read === 0) {
+        break;
+      }
+      length += read;
+    }
+    if (length > opened.size) {
+      throw new Error('Verifier artifact grew while reading');
+    }
+    const result = content.subarray(0, length);
+    return encoding ? result.toString(encoding) : result;
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 function traceSpans(gradingContext?: RedteamGradingContext) {
@@ -11382,7 +11412,10 @@ export function verifyTraceRedaction(
 
   for (const receipt of receipts) {
     for (const artifact of artifacts) {
-      if (!artifact.text.includes(receipt.value)) {
+      if (
+        !artifact.text.includes(receipt.value) &&
+        !artifact.text.includes(JSON.stringify(receipt.value).slice(1, -1))
+      ) {
         continue;
       }
 

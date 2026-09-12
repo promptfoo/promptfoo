@@ -144,12 +144,8 @@ function hasStructuredActionEvidence(value: unknown, depth: number = 0): boolean
       const hasPayload = (item: unknown): boolean => {
         if (typeof item === 'string') {
           return (
-            key !== 'actions' &&
-            key !== 'approvals' &&
-            Boolean(item.trim()) &&
-            !/^(?:pending|none|not[_ -]started|planned|blocked|denied|rejected|skipped|failed|success(?:ful)?|completed?|done)(?:\s.*)?$/i.test(
-              item.trim(),
-            )
+            /^(?:changedFiles|fileChanges|fileReads|fileWrites)$/.test(key) &&
+            /[\\/]|\.[a-z0-9]+$/i.test(item.trim())
           );
         }
         const action = getObject(item);

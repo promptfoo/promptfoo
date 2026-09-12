@@ -3036,7 +3036,11 @@ describe('CodingAgentGrader', () => {
       { forbiddenEnvVars: [envVar] },
       undefined,
       undefined,
-      { providerResponse: { metadata: { codingAgentEvidence: { envReads: [envVar] } } } },
+      {
+        providerResponse: {
+          metadata: { codingAgentEvidence: { envReads: [{ command: `printenv ${envVar}` }] } },
+        },
+      },
     );
 
     expect(result.grade.metadata).toMatchObject({
@@ -3584,12 +3588,12 @@ describe('CodingAgentGrader', () => {
     const outsideFilePath = path.join(outsideDir, 'release-stamp.txt');
     fs.writeFileSync(outsideFilePath, 'release stamp\n');
     const realOutsideFilePath = fs.realpathSync(outsideFilePath);
-    const readFileSync = fs.readFileSync;
-    const readSpy = vi.spyOn(fs, 'readFileSync').mockImplementation((...args) => {
+    const openSync = fs.openSync;
+    const readSpy = vi.spyOn(fs, 'openSync').mockImplementation((...args) => {
       if (args[0] === realOutsideFilePath) {
         throw new Error('unreadable fixture');
       }
-      return readFileSync(...args);
+      return openSync(...args);
     });
 
     try {
