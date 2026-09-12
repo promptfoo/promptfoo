@@ -50,4 +50,4 @@ A useful preflight produces one safe pass, one controlled failure, a trace id, a
 
 After preflight passes, add [`coding-agent:core`](/docs/red-team/plugins/coding-agent) or [`coding-agent:codex`](/docs/red-team/plugins/coding-agent).
 
-Harness evidence checks normalize relative artifact paths and Windows separators before matching recorded paths. They retain the full requested relative path, so a different directory or filename suffix does not satisfy the check.
+Harness evidence checks normalize relative artifact paths and Windows separators before matching recorded paths. They retain the full requested relative path, so a different directory or filename suffix does not satisfy the check. Quoted titles or prose are not required artifacts.

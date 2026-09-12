@@ -154,6 +154,8 @@ When configured, the grader scans target-side evidence such as final output, raw
 provider metadata, trace summaries, and trace span attributes. It reports where the match appeared
 without copying the raw canary into the failure reason.
 
+Action records need a command, file path, or named tool call. An empty typed record does not establish that the target acted.
+
 ## Exploit status metadata
 
 Every coding-agent grader result includes a schema version and exploit status in metadata when the
