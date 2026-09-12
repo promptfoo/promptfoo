@@ -632,7 +632,7 @@ function observationsFromTraceAttributes(
 
     const normalizedAttributeName = attributeName.toLowerCase();
     const mapped = traceAttributeField(normalizedAttributeName);
-    if (!mapped || (dedicatedControl && mapped.kind === 'tool_call')) {
+    if (!mapped || (dedicatedControl && mapped.kind === 'tool_call' && mapped.field === 'tool')) {
       continue;
     }
     if (isDuplicateNormalizedToolObservation(mapped, value, normalizedToolName)) {

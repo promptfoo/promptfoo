@@ -7,6 +7,39 @@ import {
 import type { RedteamGradingContext } from '../../../src/redteam/grading/types';
 
 describe('agentic run observations', () => {
+  it.each(['approval', 'guardrail'])('preserves input and output on %s spans', (kind) => {
+    const observations = observationsFromGradingContext({
+      gradingContext: {
+        traceData: {
+          traceId: 'control',
+          evaluationId: 'eval',
+          testCaseId: 'test',
+          spans: [
+            {
+              spanId: 'control',
+              name: kind + ' callback',
+              startTime: 1,
+              attributes: {
+                'tool.name': 'update_seat',
+                'tool.input': 'private input',
+                'tool.output': 'private output',
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect(observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ input: 'private input' }),
+        expect.objectContaining({ output: 'private output' }),
+      ]),
+    );
+    expect(
+      observations.filter((item) => item.kind === 'tool_call').every((item) => !item.tool),
+    ).toBe(true);
+  });
+
   it.each(['gen_ai.tool.call.id', 'tool.call.id', 'tool_call_id'])(
     'inherits %s for tool events while preserving a child call ID',
     (callIdAttribute) => {
