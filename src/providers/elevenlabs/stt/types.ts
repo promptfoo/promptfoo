@@ -20,9 +20,9 @@ export interface ElevenLabsSTTConfig extends ElevenLabsBaseConfig {
 }
 
 /**
- * Available STT models
+ * STT model identifiers; scribe_v1 is retained for compatible endpoints.
  */
-export type STTModel = 'scribe_v1';
+export type STTModel = 'scribe_v1' | 'scribe_v2';
 
 /**
  * Supported audio formats
@@ -44,6 +44,17 @@ export type AudioFormat =
  */
 export interface STTResponse {
   text: string;
+  language_code?: string;
+  language_probability?: number;
+  words?: {
+    text: string;
+    type: 'word' | 'spacing' | 'audio_event';
+    // Raw timestamps are in seconds and may be absent or null.
+    start?: number | null;
+    end?: number | null;
+    speaker_id?: string | null;
+    logprob?: number;
+  }[];
   confidence?: number;
   diarization?: DiarizationSegment[];
   language?: string;

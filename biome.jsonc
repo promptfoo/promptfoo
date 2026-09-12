@@ -18,6 +18,8 @@
       "**/*.mjs",
       "**/*.cjs",
       "!!.codex",
+      // Unmodified upstream js-yaml distribution bundled for installed agent skills.
+      "!!plugins/promptfoo/skills/promptfoo-provider-setup/scripts/vendor",
       "!!drizzle",
       "!!src/app/src/polyfills",
       "!!**/node_modules",
