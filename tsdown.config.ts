@@ -101,6 +101,14 @@ export default defineConfig([
   // Library CJS build for compatibility
   {
     ...sharedBuildOptions,
+    // Native require(ESM) returns Chalk's namespace, while the CJS interop wrapper
+    // expects its default function. Bundle this ESM-only dependency so logging works
+    // without changing the require conditions of other dependencies (notably Zod).
+    deps: {
+      ...sharedBuildOptions.deps,
+      neverBundle: /^(?!chalk(?:\/|$))[a-z@][^:]*/,
+      alwaysBundle: ['chalk'],
+    },
     entry: {
       contracts: 'src/contracts.ts',
       index: 'src/index.ts',
