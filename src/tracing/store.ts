@@ -266,7 +266,6 @@ export class TraceStore {
               bytes: sql<number>`coalesce(sum(
                 length(cast(${spansTable.name} as blob))
                 + coalesce(length(cast(${spansTable.attributes} as blob)), 0)
-                + coalesce(length(cast(${spansTable.events} as blob)), 0)
                 + coalesce(length(cast(${spansTable.statusMessage} as blob)), 0)
               ), 0)`,
             })

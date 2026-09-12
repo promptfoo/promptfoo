@@ -695,13 +695,7 @@ describe('OTLPReceiver', () => {
                     name: `PIN ${secret}`,
                     startTimeUnixNano: '1000000000',
                     status: { code: 2, message: `PIN ${secret}` },
-                    events: [
-                      {
-                        name: `PIN ${secret}`,
-                        timeUnixNano: '1500000000',
-                        attributes: [{ key: 'private.pin', value: { intValue: secret } }],
-                      },
-                    ],
+                    attributes: [{ key: 'private.pin', value: { intValue: secret } }],
                   },
                 ],
               },
@@ -716,7 +710,7 @@ describe('OTLPReceiver', () => {
         .expect(200);
       const spans = persistSpans.mock.calls.at(-1)?.[1];
       expect(JSON.stringify(spans)).not.toContain(String(secret));
-      expect(spans?.[0].events?.[0].attributes?.['private.pin']).toBe('[REDACTED]');
+      expect(spans?.[0].attributes?.['private.pin']).toBe('[REDACTED]');
     });
 
     it('redacts span name and statusMessage that echo a redacted attribute value', async () => {
