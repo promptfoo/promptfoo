@@ -590,9 +590,9 @@ tests:
 
 Nested `file://` references inside test and vars files keep the owning config's base directory. With multiple configs, each config's tests use its base directory; configured providers and deferred grader references use the first config's base directory. Explicit `--tests` and `--vars` paths resolve from the working directory.
 
-Saved evaluations retain parsed test rows and an absolute base directory. Resume and retry reuse those rows, including generated and remote datasets. Run a new evaluation to pick up changed test sources. A test-source glob that matches no files reports an error.
+CLI evaluations save parsed test rows, external defaults, and an absolute base directory. Resume and retry reuse those rows, including generated and remote datasets. Run a new evaluation to pick up changed test sources. An unmatched test-source glob warns and adds no rows; a missing literal test file is an error.
 
-Function values returned by JavaScript or TypeScript test generators work in the current run but cannot be restored from saved evaluations. Promptfoo warns when a generator returns them. Use `file://` references for scoring functions and other executable test fields when you need resume or retry.
+Functions and provider instances returned by JavaScript or TypeScript test generators work in the current run but cannot be restored from saved evaluations. Promptfoo warns when a generator returns them. Use `file://` references for scoring functions and other executable test fields when you need resume or retry.
 
 Without the `file://` prefix, values are passed as plain strings to your provider.
 

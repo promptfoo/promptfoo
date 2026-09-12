@@ -54,7 +54,7 @@ Here is the main structure of the promptfoo configuration file:
 
 ### Test Case
 
-A test case represents a single example input that is fed into all prompts and providers.
+A test case represents a single example input that is fed into all prompts and providers. A row containing only a nonempty `description` runs with the configured defaults.
 
 | Property                       | Type                                                              | Required | Description                                                                                                                                                                                                                     |
 | ------------------------------ | ----------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

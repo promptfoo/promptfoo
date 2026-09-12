@@ -44,7 +44,7 @@ The evaluate function takes the following parameters:
 
 The evaluate function returns an `Eval` record. Call `toEvaluateSummary()` on that record to get an [`EvaluateSummary` object](/docs/configuration/reference#evaluatesummary).
 
-Each `evaluate()` call uses its own `env` overrides; an omitted or empty `env` uses process settings without inheriting a previous evaluation. Set `testSuite.basePath` to resolve local references from another directory. Relative values resolve from the working directory; saved config retains the absolute directory.
+Each `evaluate()` call uses its own `env` overrides; an omitted or empty `env` uses process settings without inheriting a previous evaluation. Set `testSuite.basePath` to resolve local references from another directory. Relative values resolve from the working directory; saved config retains the absolute directory. SDK test-file and generator inputs remain source references in saved configs, so replay requires those sources.
 
 ### Provider functions
 
@@ -67,7 +67,7 @@ const providerWithOptions = await loadApiProvider('azure:chat:test', {
 });
 ```
 
-For `loadApiProvider` and `loadApiProviders`, an omitted or `undefined` `env` inherits the active environment. An object replaces it, including `{}`. Provider-file settings override suite settings, and explicit provider options override the file.
+During `loadApiProvider` and `loadApiProviders`, an omitted or `undefined` `env` inherits the active environment. An object replaces it, including `{}`. Provider-file settings override suite settings, and explicit provider options override the file. Providers that read environment variables later use the environment active at that call.
 
 ### Assertion functions
 
