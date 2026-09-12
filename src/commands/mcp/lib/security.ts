@@ -69,6 +69,11 @@ const PRELOAD_EXECUTION_FLAGS = new Set([
   '--loader',
   '--experimental-loader',
 ]);
+const UNSAFE_EXECUTION_FLAGS = new Set([
+  '--checkpoint-action',
+  '--to-command',
+  '--use-compress-program',
+]);
 
 /**
  * Validates a caller-supplied MCP file path against the current working directory.
@@ -202,6 +207,7 @@ function renderProviderIdForValidation(providerId: string, env?: EnvOverrides): 
 interface ProviderValidationState {
   basePath: string;
   refBasePath?: string;
+  rootConfig?: unknown;
   env?: EnvOverrides;
   validatedConfigFiles: Set<string>;
 }
@@ -265,6 +271,7 @@ function resolveConfigFileReference(value: string, state: ProviderValidationStat
 function validateJsonSchemaRef(
   value: unknown,
   state: ProviderValidationState,
+  assertionContext = false,
   providerConfigContext = false,
 ): void {
   if (typeof value !== 'string') {
@@ -272,7 +279,32 @@ function validateJsonSchemaRef(
   }
 
   const renderedRef = renderConfigFileReferenceForValidation(value, state);
-  if (!renderedRef || renderedRef.startsWith('#')) {
+  if (!renderedRef) {
+    return;
+  }
+
+  if (renderedRef.startsWith('#')) {
+    const cacheKey = JSON.stringify([
+      state.refBasePath ?? state.basePath,
+      renderedRef,
+      assertionContext,
+      providerConfigContext,
+    ]);
+    if (state.validatedConfigFiles.has(cacheKey)) {
+      return;
+    }
+    state.validatedConfigFiles.add(cacheKey);
+    const target = renderedRef
+      .slice(1)
+      .split('/')
+      .filter(Boolean)
+      .reduce<unknown>((current, part) => {
+        const key = part.replace(/~1/g, '/').replace(/~0/g, '~');
+        return Array.isArray(current) ? current[Number(key)] : getObject(current)?.[key];
+      }, state.rootConfig);
+    if (target !== undefined) {
+      validateFileReferencesInValue(target, state, assertionContext, providerConfigContext);
+    }
     return;
   }
 
@@ -289,7 +321,7 @@ function validateJsonSchemaRef(
     ...state,
     basePath: state.refBasePath ?? state.basePath,
   });
-  validateStaticConfigFile(resolvedRefPath, state, true);
+  validateStaticConfigFile(resolvedRefPath, state, true, assertionContext, providerConfigContext);
   if (providerConfigContext) {
     validateProviderConfigCodeReferences(loadYaml(fs.readFileSync(resolvedRefPath, 'utf8')), {
       ...state,
@@ -327,6 +359,9 @@ function validateFileReferencesInValue(
     const rendered = renderEnvOnlyInObject(value, state.env);
     if (rendered.startsWith(FILE_PROVIDER_PREFIX)) {
       validateConfigFileReference(rendered, state);
+      if (assertionContext) {
+        validateStaticConfigFile(resolveConfigFileReference(rendered, state), state, false, true);
+      }
     }
     return;
   }
@@ -363,7 +398,7 @@ function validateFileReferencesInValue(
     }
     for (const [key, entry] of Object.entries(object)) {
       if (key === '$ref') {
-        validateJsonSchemaRef(entry, state, providerConfigContext);
+        validateJsonSchemaRef(entry, state, assertionContext, providerConfigContext);
       }
       validateFileReferencesInValue(
         entry,
@@ -372,6 +407,18 @@ function validateFileReferencesInValue(
         providerConfigContext || key === 'config',
       );
     }
+  }
+}
+
+function rejectRemoteConfigSources(value: unknown): void {
+  if (typeof value === 'string') {
+    if (REMOTE_CONFIG_REFERENCE_PATTERN.test(value.trim())) {
+      throw new ConfigurationError('Remote test sources are not allowed through MCP tools', value);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach(rejectRemoteConfigSources);
   }
 }
 
@@ -441,6 +488,8 @@ function validateStaticConfigLocalReferences(
   rootConfig: Record<string, unknown>,
   state: ProviderValidationState,
 ): void {
+  rejectRemoteConfigSources(rootConfig.tests);
+  rejectRemoteConfigSources(rootConfig.scenarios);
   validateLocalConfigFileReferences(rootConfig.prompts, state, false, true);
   const promptMap = getObject(rootConfig.prompts);
   if (promptMap) {
@@ -654,7 +703,7 @@ function validateExecReference(
     if (separator !== -1 && !option.startsWith('-')) {
       throw new ConfigurationError('MCP exec environment overrides are not allowed');
     }
-    if (option === 'node_options') {
+    if (option === 'node_options' || UNSAFE_EXECUTION_FLAGS.has(option)) {
       throw new ConfigurationError('MCP exec runtime options are not allowed');
     }
     const preload =
@@ -684,8 +733,13 @@ function validateExecReference(
   }
 }
 
-function validateStaticConfigContents(value: unknown, state: ProviderValidationState): void {
-  validateFileReferencesInValue(value, state);
+function validateStaticConfigContents(
+  value: unknown,
+  state: ProviderValidationState,
+  assertionContext = false,
+  providerConfigContext = false,
+): void {
+  validateFileReferencesInValue(value, state, assertionContext, providerConfigContext);
 
   if (Array.isArray(value)) {
     return;
@@ -713,6 +767,8 @@ function validateStaticConfigFile(
   configPath: string,
   state: ProviderValidationState,
   preserveBasePath = false,
+  assertionContext = false,
+  providerConfigContext = false,
 ): void {
   const extension = path.extname(configPath).toLowerCase();
   if (!STATIC_CONFIG_EXTENSIONS.has(extension) || !fs.existsSync(configPath)) {
@@ -733,14 +789,21 @@ function validateStaticConfigFile(
     basePath: preserveBasePath ? state.basePath : path.dirname(realConfigPath),
     refBasePath: path.dirname(realConfigPath),
     env: mergeProviderEnv(getObject(rawConfig)?.env, state.env),
+    rootConfig: rawConfig,
   };
-  const cacheKey = JSON.stringify([realConfigPath, configState.basePath, configState.env]);
+  const cacheKey = JSON.stringify([
+    realConfigPath,
+    configState.basePath,
+    configState.env,
+    assertionContext,
+    providerConfigContext,
+  ]);
   if (state.validatedConfigFiles.has(cacheKey)) {
     return;
   }
   state.validatedConfigFiles.add(cacheKey);
 
-  validateStaticConfigContents(rawConfig, configState);
+  validateStaticConfigContents(rawConfig, configState, assertionContext, providerConfigContext);
 }
 
 function validateProviderIdWithState(providerId: string, state: ProviderValidationState): void {

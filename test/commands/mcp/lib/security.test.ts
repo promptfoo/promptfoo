@@ -154,6 +154,51 @@ describe('MCP Security', () => {
       expect(() => validateMcpConfigFile('config.yaml')).toThrow(ConfigurationError);
     });
 
+    it('keeps assertion context for file and schema references', () => {
+      fs.writeFileSync(
+        path.join(workspace, 'assertions.yaml'),
+        '- type: javascript\n  value: return true\n',
+      );
+      fs.writeFileSync(
+        path.join(workspace, 'config.yaml'),
+        [
+          'prompts: [hello]',
+          'providers: [echo]',
+          'tests:',
+          '  - assert: [file://assertions.yaml]',
+          '',
+        ].join('\n'),
+      );
+      expect(() => validateMcpConfigFile('config.yaml')).toThrow(ConfigurationError);
+
+      fs.writeFileSync(
+        path.join(workspace, 'assertion-ref.yaml'),
+        'type: javascript\nvalue: return true\n',
+      );
+      fs.writeFileSync(
+        path.join(workspace, 'config.yaml'),
+        'prompts: [hello]\nproviders: [echo]\ntests:\n  - assert:\n      - $ref: ./assertion-ref.yaml\n',
+      );
+      expect(() => validateMcpConfigFile('config.yaml')).toThrow(ConfigurationError);
+
+      fs.writeFileSync(
+        path.join(workspace, 'config.yaml'),
+        [
+          'prompts: [hello]',
+          'providers: [echo]',
+          'tests:',
+          '  - assert:',
+          '      - $ref: "#/defs/assertion"',
+          'defs:',
+          '  assertion:',
+          '    type: javascript',
+          '    value: return true',
+          '',
+        ].join('\n'),
+      );
+      expect(() => validateMcpConfigFile('config.yaml')).toThrow(ConfigurationError);
+    });
+
     it('resolves nested schema reference paths relative to the containing file', () => {
       fs.writeFileSync(path.join(workspace, 'sub', 'provider.yaml'), '$ref: ./nested.yaml\n');
       fs.writeFileSync(path.join(workspace, 'sub', 'nested.yaml'), 'id: echo\n');
@@ -574,6 +619,12 @@ describe('MCP Security', () => {
       ).not.toThrow();
     });
 
+    it('rejects exec options that can launch another command after a workspace path', () => {
+      expect(() => validateProviderId('exec:tar ./script.js --checkpoint-action=exec=sh')).toThrow(
+        ConfigurationError,
+      );
+    });
+
     it('should reject MCP provider server command configs', () => {
       expect(() =>
         validateProviderReference({
@@ -753,6 +804,23 @@ describe('MCP Security', () => {
       fs.writeFileSync(
         path.join(workspace, 'promptfooconfig.yaml'),
         ['prompts: [hello]', 'providers:', '  - $ref: ./provider.yaml', ''].join('\n'),
+      );
+      try {
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
+      } finally {
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('rejects remote test sources before resolution', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      fs.mkdirSync(workspace);
+      fs.writeFileSync(
+        path.join(workspace, 'promptfooconfig.yaml'),
+        'prompts: [hello]\nproviders: [echo]\ntests: az://bucket/tests.yaml\n',
       );
       try {
         expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
