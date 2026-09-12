@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
-import { getEnvBool, isCI } from '../../envars';
+import { getEnvBool, isCI, isTemplateProcessEnvDisabled } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts/index';
@@ -307,10 +307,7 @@ export function renderConfigEnvTemplates<T extends { env?: Record<string, string
 
 function renderConfigEnvTemplatesInScope<T extends { env?: Record<string, string> }>(config: T): T {
   // Respect PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS - use empty object if disabled
-  const processEnvDisabled = getEnvBool(
-    'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
-    getEnvBool('PROMPTFOO_SELF_HOSTED', false),
-  );
+  const processEnvDisabled = isTemplateProcessEnvDisabled();
   const baseEnvForFirstPass = processEnvDisabled ? {} : process.env;
 
   // First pass: render config.env values using only process.env (replaceBase=true)

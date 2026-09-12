@@ -1,4 +1,4 @@
-import { getEnvBool } from '../envars';
+import { isTemplateProcessEnvDisabled } from '../envars';
 import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { renderEnvOnlyInObject } from '../util/render';
@@ -26,10 +26,7 @@ export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
       return testSuite;
     }
 
-    const processEnvironmentDisabled = getEnvBool(
-      'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS',
-      getEnvBool('PROMPTFOO_SELF_HOSTED', false),
-    );
+    const processEnvironmentDisabled = isTemplateProcessEnvDisabled();
     const processEnvironment = processEnvironmentDisabled ? {} : process.env;
     let renderedEnv = testSuite.env;
     if (renderedEnv) {

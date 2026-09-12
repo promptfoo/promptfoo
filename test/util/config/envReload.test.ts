@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
@@ -10,6 +11,7 @@ import { evaluate as evaluateResolved } from '../../../src/evaluator';
 import { renderLlmRubricPrompt } from '../../../src/matchers/rubric';
 import Eval from '../../../src/models/eval';
 import { evaluate } from '../../../src/node/evaluate';
+import { nodeEvaluatorRuntime } from '../../../src/node/evaluatorRuntime';
 import { loadApiProvider, loadApiProviders, resolveProvider } from '../../../src/providers/index';
 import { isApiProvider } from '../../../src/types/providers';
 import { readAzureBlobText } from '../../../src/util/azureBlob';
@@ -400,6 +402,88 @@ describe('suite environment loading', () => {
     expect(rendered).toBe('{{ env.OPENAI_API_KEY }}');
   });
 
+  it.each(['', ' with context'])('refreshes env in cached imported macros%s', (context) => {
+    const engine = getNunjucksEngine();
+    const getSource = vi.spyOn(nunjucks.FileSystemLoader.prototype, 'getSource').mockReturnValue({
+      src: '{% macro key() %}{{ env.OPENAI_API_KEY }}{% endmacro %}',
+      path: 'macros.njk',
+      noCache: false,
+    });
+    const template = `{% import "macros.njk" as m${context} %}{{ m.key() }}`;
+    for (const key of ['first-key', 'second-key']) {
+      expect(
+        cliState.withEnv({ OPENAI_API_KEY: key }, () => engine.renderString(template, {})),
+      ).toBe(key);
+    }
+    expect(getSource).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['PROMPTFOO_SELF_HOSTED', 'PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS'] as const)(
+    'keeps operator restrictions when a suite sets %s=false',
+    (flag) => {
+      const restore = mockProcessEnv({
+        PROMPTFOO_SELF_HOSTED: 'true',
+        PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: undefined,
+      });
+      try {
+        cliState.withEnv({ [flag]: 'false' }, () => {
+          expect(getNunjucksEngine().renderString('{{ env.OPENAI_API_KEY }}', {})).toBe('');
+          expect(getNunjucksEngineForFilePath().renderString('{{ env.OPENAI_API_KEY }}', {})).toBe(
+            '',
+          );
+          const resolved = nodeEvaluatorRuntime.resolveRuntimeTestSuite!({
+            providers: [],
+            prompts: [],
+            tracing: {
+              enabled: true,
+              provider: {
+                id: 'tempo',
+                endpoint: 'https://tempo.example.com',
+                auth: { token: '{{ env.OPENAI_API_KEY }}' },
+              },
+            },
+          });
+          expect(resolved.tracing?.provider?.auth?.token).toBe('{{ env.OPENAI_API_KEY }}');
+        });
+      } finally {
+        restore();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'supports callback-only rendering with templating disabled=%s',
+    async (disabled) => {
+      const engine = getNunjucksEngine();
+      const result = await cliState.withEnv(
+        { OPENAI_API_KEY: 'suite-key', PROMPTFOO_DISABLE_TEMPLATING: String(disabled) },
+        () =>
+          new Promise<string>((resolve, reject) => {
+            engine.renderString(
+              '{{ env.OPENAI_API_KEY }}',
+              (error: Error | null, output: string | null) =>
+                error ? reject(error) : resolve(output!),
+            );
+          }),
+      );
+      expect(result).toBe(disabled ? '{{ env.OPENAI_API_KEY }}' : 'suite-key');
+    },
+  );
+
+  it('does not enumerate process.env for ordinary renders', () => {
+    const ownKeys = vi.fn(Reflect.ownKeys);
+    const engine = getNunjucksEngine();
+    vi.stubGlobal('process', { ...process, env: new Proxy(process.env, { ownKeys }) });
+    try {
+      for (let index = 0; index < 100; index++) {
+        expect(engine.renderString('{{ env.OPENAI_API_KEY }}', {})).toBe('previous-key');
+      }
+      expect(ownKeys).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it.each(['single', 'multiple'])(
     'retains scoped credentials through the %s loader',
     async (loader) => {
@@ -418,6 +502,11 @@ describe('suite environment loading', () => {
   );
 
   it('keeps concurrent evaluations scoped through runtime rendering and provider calls', async () => {
+    let arrivals = 0;
+    let release!: () => void;
+    const bothProvidersStarted = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const results = await Promise.all(
       ['first', 'second'].map(async (name) => {
         const result = await evaluate(
@@ -428,7 +517,10 @@ describe('suite environment loading', () => {
               {
                 id: () => name,
                 callApi: async (prompt) => {
-                  await Promise.resolve();
+                  if (++arrivals === 2) {
+                    release();
+                  }
+                  await bothProvidersStarted;
                   return { output: `${prompt}:${getEnvString('OPENAI_API_KEY')}` };
                 },
               },
@@ -437,6 +529,7 @@ describe('suite environment loading', () => {
               {
                 assert: [
                   { type: 'equals', value: '{{ env.OPENAI_API_KEY }}:{{ env.OPENAI_API_KEY }}' },
+                  { type: 'equals', value: `${name}-key:${name}-key` },
                 ],
               },
             ],
@@ -449,6 +542,10 @@ describe('suite environment loading', () => {
     expect(results.map(({ success, score }) => ({ success, score }))).toEqual([
       { success: true, score: 1 },
       { success: true, score: 1 },
+    ]);
+    expect(results.map(({ response }) => response?.output)).toEqual([
+      'first-key:first-key',
+      'second-key:second-key',
     ]);
     expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
   });
