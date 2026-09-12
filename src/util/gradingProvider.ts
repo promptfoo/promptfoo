@@ -1,6 +1,5 @@
 import { isApiProvider } from '../types/providers';
 
-import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderTypeMap } from '../types/providers';
 
 type ProviderTypeValue = NonNullable<ProviderTypeMap[keyof ProviderTypeMap]>;
@@ -68,10 +67,9 @@ function getConfiguredProvider(
 function resolveTypedProviderValue(
   provider: ProviderTypeValue,
   providerMap: Record<string, ApiProvider>,
-  env: EnvOverrides | undefined,
 ): ProviderTypeValue {
   if (typeof provider === 'string') {
-    return getConfiguredProvider(provider, providerMap) ?? (env ? { id: provider, env } : provider);
+    return getConfiguredProvider(provider, providerMap) ?? provider;
   }
   if (isApiProvider(provider)) {
     return provider;
@@ -86,15 +84,13 @@ function resolveTypedProviderValue(
     return configuredProvider;
   }
 
-  return env ? { ...provider, env: { ...env, ...provider.env } } : provider;
+  return provider;
 }
 
-// Resolve configured grader references while carrying suite env into typed
-// provider values that must stay lazy until their assertion type is selected.
+// Unconfigured typed entries stay lazy and inherit the evaluation scope when loaded.
 export function resolveConfiguredProviderReference<T>(
   provider: T,
   providerMap: Record<string, ApiProvider>,
-  env?: EnvOverrides,
 ): T | ApiProvider {
   if (typeof provider === 'string') {
     return getConfiguredProvider(provider, providerMap) ?? provider;
@@ -110,7 +106,7 @@ export function resolveConfiguredProviderReference<T>(
       continue;
     }
 
-    const resolvedProvider = resolveTypedProviderValue(nestedProvider, providerMap, env);
+    const resolvedProvider = resolveTypedProviderValue(nestedProvider, providerMap);
     if (resolvedProvider !== nestedProvider) {
       resolvedTypeMap ??= { ...provider };
       resolvedTypeMap[providerType] = resolvedProvider;

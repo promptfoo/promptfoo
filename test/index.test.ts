@@ -1103,7 +1103,7 @@ describe('evaluate function', () => {
         );
       });
 
-      it('preserves suite env for deferred grading provider map entries', async () => {
+      it('keeps deferred grading provider map entries in the suite environment', async () => {
         const mockTargetProvider = createMockProvider({ id: 'echo' });
 
         loadApiProvidersSpy.mockResolvedValueOnce([mockTargetProvider]);
@@ -1145,12 +1145,8 @@ describe('evaluate function', () => {
                   text: {
                     id: 'litellm:inline-judge',
                     config: { apiKey: '{{ env.GRADER_API_KEY }}' },
-                    env: { GRADER_API_KEY: 'suite-key' },
                   },
-                  embedding: {
-                    id: 'unsupported-provider:unused-embedding',
-                    env: { GRADER_API_KEY: 'suite-key' },
-                  },
+                  embedding: 'unsupported-provider:unused-embedding',
                 },
               }),
             }),

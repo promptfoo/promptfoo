@@ -205,10 +205,11 @@ async function createApiProvider(
       providerId: fileContent.id,
     });
 
-    // Merge file's env with context.env - context.env takes precedence
-    // This allows callers to override file-defined defaults
+    // A provider file owns its credentials; only per-provider overrides beat them.
     const mergedFileEnv: EnvOverrides | undefined =
-      fileContent.env || mergedEnv ? { ...fileContent.env, ...mergedEnv } : undefined;
+      env || fileContent.env || options.env
+        ? { ...env, ...fileContent.env, ...options.env }
+        : undefined;
 
     return loadApiProvider(fileContent.id, {
       basePath,

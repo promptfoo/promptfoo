@@ -212,7 +212,7 @@ async function resolveGradingProvider(
   // A typed map can carry alternatives for assertion types that never run.
   // Reuse configured provider instances, but leave all other entries for
   // getGradingProvider() to instantiate only when its type is selected.
-  return resolveConfiguredProviderReference(provider, providerMap, context.env);
+  return resolveConfiguredProviderReference(provider, providerMap);
 }
 
 async function createRuntimeTestSuite(

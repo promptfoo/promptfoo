@@ -106,8 +106,59 @@ describe('suite environment loading', () => {
     expect(fetchWithCache).toHaveBeenCalledTimes(1);
     const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
     expect(url).toBe(`https://${name}.example/v1/chat/completions`);
-    expect(request?.headers).toMatchObject({ Authorization: `Bearer ${name}-key` });
+    expect(new Headers(request?.headers as HeadersInit).get('authorization')).toBe(
+      `Bearer ${name}-key`,
+    );
   }
+
+  it.each(['assertion', 'typed', 'options', 'test'] as const)(
+    'uses the provider file credentials for a %s provider',
+    async (location) => {
+      const providerPath = `file://${path.join(tempDir, 'provider.yaml')}`;
+      fs.writeFileSync(
+        providerPath.slice('file://'.length),
+        'id: openai:chat:test-model\nenv:\n  OPENAI_API_KEY: file-key\n  OPENAI_API_BASE_URL: https://file.example/v1\n',
+      );
+      const provider = location === 'typed' ? { text: providerPath } : providerPath;
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          choices: [{ message: { content: '{"pass":true,"score":1,"reason":"ok"}' } }],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const result = await evaluate(
+        {
+          env: { OPENAI_API_KEY: 'suite-key' },
+          prompts: ['answer'],
+          providers: ['echo'],
+          tests: [
+            location === 'test'
+              ? { provider: providerPath }
+              : {
+                  ...(location === 'options' ? { options: { provider } } : {}),
+                  assert: [
+                    {
+                      type: 'llm-rubric',
+                      value: 'Correct',
+                      ...(location === 'options' ? {} : { provider }),
+                    },
+                  ],
+                },
+          ],
+        },
+        { cache: false },
+      );
+      expect((await result.getResults())[0].success).toBe(true);
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://file.example/v1/chat/completions');
+      expect(new Headers(request?.headers as HeadersInit).get('authorization')).toBe(
+        'Bearer file-key',
+      );
+    },
+  );
 
   it('retains combined external test credentials after the loading scope exits', async () => {
     const config = await combineConfigs([externalConfig('suite')]);
