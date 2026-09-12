@@ -51,13 +51,14 @@ describe('evalConfig store', () => {
       'retains the %s provider shape while normalizing local options',
       (shape) => {
         const options = { label: 'Imported local', config: { type: 'vllm' } };
-        const providers =
+        // Legacy imports can contain a single options object or provider map.
+        const providers: unknown =
           shape === 'object'
             ? { id: 'openai:chat:gpt-4o', ...options }
             : shape === 'map'
               ? { 'openai:chat:gpt-4o': options }
               : [{ 'openai:chat:gpt-4o': options }];
-        useStore.getState().setConfig({ providers });
+        useStore.getState().setConfig({ providers: providers as UnifiedConfig['providers'] });
         const expectedOptions = {
           ...options,
           config: {
@@ -100,11 +101,10 @@ describe('evalConfig store', () => {
     });
 
     it('uses the provider-map ID when an imported options ID is blank', () => {
-      useStore.getState().setConfig({
-        providers: {
-          'openai:chat:gpt-4o': { id: '', config: { type: 'vllm' } },
-        },
-      });
+      const providers: unknown = {
+        'openai:chat:gpt-4o': { id: '', config: { type: 'vllm' } },
+      };
+      useStore.getState().setConfig({ providers: providers as UnifiedConfig['providers'] });
       expect(useStore.getState().config.providers).toEqual({
         'openai:chat:gpt-4o': {
           id: '',

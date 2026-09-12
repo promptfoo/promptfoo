@@ -1,4 +1,5 @@
 import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
+import { ToastProvider } from '@app/contexts/ToastContext';
 import { useRedTeamConfig } from '@app/pages/redteam/setup/hooks/useRedTeamConfig';
 import { useRedTeamTargetConfigValidation } from '@app/pages/redteam/setup/hooks/useRedTeamTargetConfigValidation';
 import { useStore } from '@app/stores/evalConfig';
@@ -62,13 +63,15 @@ function EvalProviderSetup() {
   const { config, updateConfig } = useStore();
   return (
     <MemoryRouter>
-      <EvalHistoryProvider>
-        <ProvidersListSection
-          providers={normalizeProviders(config.providers)}
-          onChange={(providers) => updateConfig({ providers })}
-        />
-        <RunTestSuiteButton />
-      </EvalHistoryProvider>
+      <ToastProvider>
+        <EvalHistoryProvider>
+          <ProvidersListSection
+            providers={normalizeProviders(config.providers)}
+            onChange={(providers) => updateConfig({ providers })}
+          />
+          <RunTestSuiteButton />
+        </EvalHistoryProvider>
+      </ToastProvider>
     </MemoryRouter>
   );
 }
