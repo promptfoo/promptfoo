@@ -2175,6 +2175,21 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(result.error!.length).toBeLessThan(1_100);
   });
 
+  it('stops reading oversized successful response streams', async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(new Uint8Array(16 * 1024 * 1024));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    vi.mocked(fetchWithRetries).mockResolvedValueOnce(new Response(body));
+    expect((await provider().callApi('hi')).error).toBeDefined();
+    expect(cancelled).toBe(true);
+  });
+
   it('stops reading oversized error streams and cancels the body', async () => {
     let cancelled = false;
     const body = new ReadableStream<Uint8Array>({

@@ -98,6 +98,7 @@ const MAX_LIST_PAGES = 100;
 const MAX_SESSION_LIST_PAGES = 1_000;
 const MAX_LIST_ITEMS = 10_000;
 const MAX_ERROR_DETAIL_LENGTH = 1_024;
+const MAX_RESPONSE_BODY_BYTES = 16 * 1024 * 1024;
 const TRANSIENT_STATUS_CODES = new Set([500, 502, 503, 504]);
 // Assistant messages, messages between agents, and reasoning are not tool activity.
 const MESSAGE_ITEM_TYPES = new Set(['message', 'agent_message', 'reasoning']);
@@ -513,7 +514,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (response.status === 204) {
         return undefined as T;
       }
-      const text = await response.text();
+      const text = await readBoundedText(response, MAX_RESPONSE_BODY_BYTES);
       return (text ? JSON.parse(text) : undefined) as T;
     }
   }
