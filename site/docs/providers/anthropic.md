@@ -74,10 +74,11 @@ the same `not_found_error` a retired model returns.
 
 ### Retired on the Anthropic API
 
-These IDs return `404 not_found_error` from Anthropic. Promptfoo still accepts them — they
-remain valid on AWS Bedrock, GCP Vertex, and OpenAI-compatible gateways, which set their own
-lifecycle dates, and cost attribution for historical evals needs the rates — but a direct
-`anthropic:messages:` call will fail.
+These IDs return `404 not_found_error` from Anthropic, so direct `anthropic:messages:` calls
+fail. Promptfoo retains the IDs and rates for historical cost attribution. Model namespaces,
+availability, and retirement dates differ on [AWS Bedrock](/docs/providers/aws-bedrock),
+[Vertex AI](/docs/providers/vertex), and OpenAI-compatible gateways; consult the relevant
+platform's model catalog before selecting a model.
 
 | Model ID                     | Description            | Suggested replacement |
 | ---------------------------- | ---------------------- | --------------------- |
