@@ -42,6 +42,42 @@ export function getMcpErrorMessage(result: MCPToolResult): string {
 }
 
 /**
+ * Normalize an MCP tool result's content to a readable string, so a structured
+ * content block never reaches the eval output as `[object Object]`.
+ */
+export function normalizeMcpContent(content: unknown): string {
+  if (content == null) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') {
+          return part;
+        }
+        if (part && typeof part === 'object') {
+          if ('text' in part && part.text != null) {
+            return String(part.text);
+          }
+          if ('json' in part) {
+            return JSON.stringify(part.json);
+          }
+          if ('data' in part) {
+            return JSON.stringify(part.data);
+          }
+          return JSON.stringify(part);
+        }
+        return String(part);
+      })
+      .join('\n');
+  }
+  return JSON.stringify(content);
+}
+
+/**
  * Render environment variables in server config auth fields.
  * Supports {{VAR_NAME}} syntax for variable substitution.
  */
