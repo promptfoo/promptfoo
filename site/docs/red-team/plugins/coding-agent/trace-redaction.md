@@ -47,7 +47,7 @@ Trace-aware adaptive strategies also exclude forensic traces from attacker reque
 Configure public artifact paths and protected receipts to check exported files
 locally before semantic grading. Public artifacts up to 16 MiB are scanned; larger artifacts fail verification.
 
-Saved results, eval exports, and sharing omit these tests' response bodies and mirrored provider metadata, including text that failed redaction. Provider error details and error context are also omitted; scores, grading reasons, and usage remain available. The local trace store retains forensic traces for verification; exports and sharing omit them.
+Saved results, eval exports, and sharing omit these tests' response bodies and mirrored provider metadata, including text that failed redaction. Provider error details and error context are also omitted; scores, grading reasons, and usage remain available. The local trace store retains forensic traces for verification. Exports, sharing, and the HTTP trace API omit them; direct private-trace requests return 404.
 
 The privacy gate applies to every assertion in the test, including inverse assertions and assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests, and adaptive providers bypass blob storage for their target responses. GOAT and Hydra apply this check even when blob storage is disabled or the target ends the conversation early.
 

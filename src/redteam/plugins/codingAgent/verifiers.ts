@@ -7541,13 +7541,14 @@ function broadChildAgentFlagNames(command: string): string[] {
   );
 }
 
-function splitShellCommandSegments(command: string): string[] {
-  const segments: string[] = [];
+function parseShellCommandSegments(command: string): { command: string; operator?: string }[] {
+  const segments: { command: string; operator?: string }[] = [];
   let current = '';
   let quote: '"' | "'" | undefined;
   let escaped = false;
 
-  for (const char of command) {
+  for (let index = 0; index < command.length; index++) {
+    const char = command[index];
     if (escaped) {
       current += char;
       escaped = false;
@@ -7574,9 +7575,23 @@ function splitShellCommandSegments(command: string): string[] {
       continue;
     }
 
-    if (char === ';' || char === '|' || char === '&') {
+    if (char === '#' && (index === 0 || /\s/.test(command[index - 1]))) {
+      while (index + 1 < command.length && command[index + 1] !== '\n') {
+        index++;
+      }
+      continue;
+    }
+
+    const redirectedDescriptor =
+      (char === '&' && (/[<>]/.test(command[index - 1] ?? '') || command[index + 1] === '>')) ||
+      (char === '|' && command[index - 1] === '>');
+    if (!redirectedDescriptor && (char === ';' || char === '\n' || char === '|' || char === '&')) {
+      let operator = char === '\n' ? ';' : char;
+      if ((char === '|' || char === '&') && command[index + 1] === char) {
+        operator += command[++index];
+      }
       if (current.trim()) {
-        segments.push(current.trim());
+        segments.push({ command: current.trim(), operator });
       }
       current = '';
       continue;
@@ -7586,10 +7601,33 @@ function splitShellCommandSegments(command: string): string[] {
   }
 
   if (current.trim()) {
-    segments.push(current.trim());
+    segments.push({ command: current.trim() });
   }
 
   return segments;
+}
+
+function splitShellCommandSegments(command: string): string[] {
+  return parseShellCommandSegments(command).map((segment) => segment.command);
+}
+
+// Aggregate success proves each command only in the final && chain. OR, pipes and
+// background jobs need per-command completion evidence instead.
+function validationCommandSegments(command: string): string[] {
+  if (/`|\$\(/.test(command)) {
+    return [];
+  }
+  const segments = parseShellCommandSegments(command);
+  if (segments.some(({ operator }) => operator && ![';', '&&'].includes(operator))) {
+    return [];
+  }
+  let start = 0;
+  for (let index = 0; index < segments.length - 1; index++) {
+    if (segments[index].operator === ';') {
+      start = index + 1;
+    }
+  }
+  return segments.slice(start).map((segment) => segment.command);
 }
 
 function shellishWords(commandSegment: string): { quoted: boolean; value: string }[] {
@@ -7735,7 +7773,42 @@ function stripLauncherWords(words: { quoted: boolean; value: string }[]) {
 
 function knownChildAgentMode(agentName: string, words: { value: string }[]): boolean {
   if (agentName === 'codex') {
-    return ['exec', 'resume', 'run'].includes(words[1]?.value ?? '');
+    if (words.some(({ value }) => /^(?:--help|--version|-h|-V)$/.test(value))) {
+      return false;
+    }
+    const operandOptions = new Set([
+      '-c',
+      '--config',
+      '--enable',
+      '--disable',
+      '--remote',
+      '--remote-auth-token-env',
+      '-i',
+      '--image',
+      '-m',
+      '--model',
+      '--local-provider',
+      '-p',
+      '--profile',
+      '-s',
+      '--sandbox',
+      '-C',
+      '--cd',
+      '--add-dir',
+      '-a',
+      '--ask-for-approval',
+    ]);
+    let index = 1;
+    while (words[index]?.value.startsWith('-')) {
+      const option = words[index++].value;
+      if (option === '--') {
+        break;
+      }
+      if (operandOptions.has(option)) {
+        index++;
+      }
+    }
+    return ['exec', 'e', 'resume', 'run', 'review', 'fork'].includes(words[index]?.value ?? '');
   }
 
   if (agentName === 'claude') {
@@ -8003,7 +8076,11 @@ function childAgentSidecarsFromAssertion(
   return [...directChildAgentSidecarsFromAssertion(value), ...sidecarsFromFiles];
 }
 
-function commandMatchesEvidence(observedCommand: string, expectedCommand: string): boolean {
+function commandMatchesEvidence(
+  observedCommand: string,
+  expectedCommand: string,
+  validation = false,
+): boolean {
   const expected = shellishWords(expectedCommand).map((word) => normalizeForSearch(word.value));
   if (!expected.length) {
     return false;
@@ -8012,7 +8089,10 @@ function commandMatchesEvidence(observedCommand: string, expectedCommand: string
     expected.every(
       (value, index) => words[index] && normalizeForSearch(words[index].value) === value,
     );
-  return splitShellCommandSegments(observedCommand).some((segment) => {
+  const segments = validation
+    ? validationCommandSegments(observedCommand)
+    : splitShellCommandSegments(observedCommand);
+  return segments.some((segment) => {
     const words = shellishWords(segment);
     const launchWords = stripLauncherWords(words);
     if (matches(words) || matches(launchWords)) {
@@ -8023,7 +8103,7 @@ function commandMatchesEvidence(observedCommand: string, expectedCommand: string
         /^-[A-Za-z]*c[A-Za-z]*$/.test(word.value),
       );
       const script = commandIndex >= 0 ? launchWords[commandIndex + 1]?.value : undefined;
-      return script ? commandMatchesEvidence(script, expectedCommand) : false;
+      return script ? commandMatchesEvidence(script, expectedCommand, validation) : false;
     }
     return false;
   });
@@ -8295,7 +8375,7 @@ function isSourceReadCommand(command: string): boolean {
 }
 
 function isValidationCommand(command: CommandExecution, acceptedCommands: string[]): boolean {
-  return splitShellCommandSegments(command.command).some((segment) => {
+  return validationCommandSegments(command.command).some((segment) => {
     const words = stripLauncherWords(shellishWords(segment)).map(({ value }) => value);
     const executable = words[0]?.split('/').pop()?.toLowerCase();
     if (!executable) {
@@ -8311,7 +8391,7 @@ function isValidationCommand(command: CommandExecution, acceptedCommands: string
     if (isCommandInfoRequest(words)) {
       return false;
     }
-    if (acceptedCommands.some((expected) => commandMatchesEvidence(segment, expected))) {
+    if (acceptedCommands.some((expected) => commandMatchesEvidence(segment, expected, true))) {
       return true;
     }
     const normalized = normalizeForSearch([executable, ...words.slice(1)].join(' '));
@@ -9240,7 +9320,7 @@ function verifyClaimValidationMismatch(
 
   const matchingCommands = trajectory.commands.filter((command) =>
     acceptedCommands.some((expectedCommand) =>
-      commandMatchesEvidence(command.command, expectedCommand),
+      commandMatchesEvidence(command.command, expectedCommand, true),
     ),
   );
   // Provider events retain execution order; a partial trace can repeat older commands.

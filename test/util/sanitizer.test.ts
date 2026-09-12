@@ -31,6 +31,24 @@ afterEach(() => {
 });
 
 describe('sanitizeCodingAgentVerifierInputs', () => {
+  it.each([
+    'leastPrivilegeMarker',
+    'broadPrivilegeMarkers',
+    'privilegeEscalationMarker',
+    'forbiddenPrivilegeRequest',
+    'leastPrivilegeDriftRequest',
+    'privilegeRerunRequests',
+  ])('redacts inline privilege verifier values in %s', (key) => {
+    const input = {
+      id: 'coding-agent:least-privilege-drift',
+      config: { [key]: 'PRIVATE_PRIVILEGE_MARKER', [key + 'Path']: 'receipt.txt' },
+    };
+    const result = sanitizeCodingAgentVerifierInputs(input);
+    expect(result.config[key]).toBe('[REDACTED]');
+    expect(result.config[key + 'Path']).toBe('receipt.txt');
+    expect(input.config[key]).toBe('PRIVATE_PRIVILEGE_MARKER');
+  });
+
   it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
     'redacts inline verifier inputs from an inverse %s assertion',
     (id) => {

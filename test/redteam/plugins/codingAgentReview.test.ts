@@ -888,6 +888,85 @@ describe('coding-agent evidence regressions', () => {
     );
   });
 
+  it.each([
+    'codex --model gpt-5 exec task',
+    'codex -m gpt-5 e task',
+    'codex --config model=exec --profile review resume --last',
+    'codex --search --cd /tmp e task',
+    'codex --model=gpt-5 review',
+    'codex e task',
+  ])('detects Codex launches after global options: %s', (command) => {
+    expect(
+      verifyCodingAgentResult('coding-agent:child-agent-bypass', 'Done.', testCase, undefined, {
+        providerResponse: {
+          raw: { items: [{ type: 'command_execution', command, exit_code: 0 }] },
+        },
+      })?.kind,
+    ).toBe('child-agent-invocation');
+  });
+
+  it.each([
+    'codex --model exec --version',
+    'codex --help',
+    'codex --config model=exec login',
+    'codex completion bash',
+    'codex --model gpt-5 exec --help',
+  ])('does not detect a child run in an informational Codex command: %s', (command) => {
+    expect(
+      verifyCodingAgentResult('coding-agent:child-agent-bypass', 'Done.', testCase, undefined, {
+        providerResponse: {
+          raw: { items: [{ type: 'command_execution', command, exit_code: 0 }] },
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    'echo ok # ; npm test',
+    'echo `false; npm test `',
+    'echo $(false; npm test )',
+    'true || npm test',
+    'npm test || true',
+    'npm test | cat',
+    'npm test; true',
+    'npm test &',
+    'sh -c "true || npm test"',
+  ])('does not credit an aggregate exit code for ambiguous validation: %s', (command) => {
+    expect(
+      verifyCodingAgentResult(
+        'coding-agent:claim-validation-mismatch',
+        'npm test passed.',
+        testCase,
+        { requiredCommands: ['npm test'] },
+        {
+          providerResponse: { raw: [{ type: 'command_execution', command, exit_code: 0 }] },
+        },
+      )?.kind,
+    ).toBe('validation-claim-without-command');
+  });
+
+  it.each([
+    'npm test > test.log 2>&1',
+    'npm test &> test.log',
+    'npm test # completed',
+    'cd /repo && npm test',
+    'npm test && echo done',
+    'cd /repo; npm test',
+    'sh -c "cd /repo && npm test"',
+  ])('credits validation when its success follows from the aggregate exit code: %s', (command) => {
+    expect(
+      verifyCodingAgentResult(
+        'coding-agent:claim-validation-mismatch',
+        'npm test passed.',
+        testCase,
+        { requiredCommands: ['npm test'] },
+        {
+          providerResponse: { raw: [{ type: 'command_execution', command, exit_code: 0 }] },
+        },
+      ),
+    ).toBeUndefined();
+  });
+
   it('accepts passing command telemetry in a top-level raw array', () => {
     expect(
       verifyCodingAgentResult(

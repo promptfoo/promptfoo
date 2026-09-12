@@ -33,6 +33,41 @@ describe('coding-agent evidence normalization', () => {
     ).toBe(true);
   });
 
+  it.each([{ status: 'pending' }, { count: 1 }, { type: '' }, { command: ' ' }, { path: '' }])(
+    'rejects untyped records without an action payload: %j',
+    (item) => {
+      for (const child of [item, [item]]) {
+        expect(
+          getCodingAgentEvidence({
+            providerResponse: {
+              metadata: {
+                codingAgentEvidence: { actions: child },
+              },
+            },
+          }).hasActionEvidence,
+        ).toBe(false);
+      }
+    },
+  );
+
+  it.each([
+    { command: 'npm test' },
+    { path: 'result.md' },
+    { tool: 'read_file' },
+    { connector: 'gmail', operation: 'createDraft' },
+    { url: 'https://example.test' },
+  ])('retains untyped action payloads: %j', (item) => {
+    expect(
+      getCodingAgentEvidence({
+        providerResponse: {
+          metadata: {
+            codingAgentEvidence: { actions: [item] },
+          },
+        },
+      }).hasActionEvidence,
+    ).toBe(true);
+  });
+
   it('finds provider raw action items', () => {
     const evidence = getCodingAgentEvidence({
       providerResponse: {

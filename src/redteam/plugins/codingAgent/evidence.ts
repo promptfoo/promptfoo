@@ -141,29 +141,36 @@ function hasStructuredActionEvidence(value: unknown, depth: number = 0): boolean
 
   for (const [key, child] of Object.entries(object)) {
     if (STRUCTURED_ACTION_EVIDENCE_KEYS.has(key)) {
-      if (typeof child === 'string' && child.trim()) {
+      const hasPayload = (item: unknown): boolean => {
+        if (typeof item === 'string') {
+          return Boolean(item.trim());
+        }
+        const action = getObject(item);
+        if (!action) {
+          return false;
+        }
+        if (getString(action.type)) {
+          return providerItemHasActionEvidence(action);
+        }
+        return Boolean(
+          getString(action.command) ||
+            getString(action.path) ||
+            getString(action.url) ||
+            getString(action.connector) ||
+            getString(action.tool) ||
+            getString(getObject(action.function)?.name) ||
+            ((key === 'toolCalls' || key === 'mcpToolCalls') && isNamedToolCall(action)),
+        );
+      };
+      if ((Array.isArray(child) ? child : [child]).some(hasPayload)) {
         return true;
       }
       if (
-        Array.isArray(child) &&
-        child.some((item) =>
-          typeof item === 'string'
-            ? Boolean(item.trim())
-            : Boolean(
-                getObject(item) &&
-                  (getString(getObject(item)?.type)
-                    ? providerItemHasActionEvidence(item)
-                    : Object.keys(item as Record<string, unknown>).length),
-              ),
-        )
-      ) {
-        return true;
-      }
-      if (
+        (key === 'toolCalls' || key === 'mcpToolCalls') &&
         getObject(child) &&
-        (getString(getObject(child)?.type)
-          ? providerItemHasActionEvidence(child)
-          : Object.keys(child as Record<string, unknown>).length > 0)
+        Object.values(getObject(child) ?? {}).some(
+          (call) => getObject(call)?.args !== undefined || getObject(call)?.arguments !== undefined,
+        )
       ) {
         return true;
       }
