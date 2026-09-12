@@ -267,20 +267,35 @@ it('preserves unknown usage and vendor prompt-cache accounting', () => {
     total: undefined,
     cached: 3,
   });
+  expect(
+    getGeminiTokenUsage(
+      { totalTokenCount: 7, cachedContentTokenCount: 3 } as any,
+      true,
+      'ai-studio',
+    ),
+  ).toMatchObject({ total: 7, cached: 7 });
 });
 
-it('keeps passthrough safety settings in their original request order', async () => {
-  const { body } = await prepareGeminiRequest(
-    'gemini-2.5-flash',
-    { passthrough: { marker: true, safetySettings: [{ category: 'HARM_CATEGORY_HATE_SPEECH' }] } },
-    'Hello',
-    undefined,
-    'vertex',
-    true,
-    vi.fn().mockResolvedValue([]),
-  );
+it.each([
+  ['ai-studio', false],
+  ['unified', false],
+  ['vertex', true],
+] as const)(
+  'keeps %s passthrough safety settings in their original request order',
+  async (facade, afterMarker) => {
+    const { body } = await prepareGeminiRequest(
+      'gemini-2.5-flash',
+      {
+        passthrough: { marker: true, safetySettings: [{ category: 'HARM_CATEGORY_HATE_SPEECH' }] },
+      },
+      'Hello',
+      undefined,
+      facade,
+      facade === 'vertex',
+      vi.fn().mockResolvedValue([]),
+    );
 
-  expect(Object.keys(body).indexOf('safetySettings')).toBeGreaterThan(
-    Object.keys(body).indexOf('marker'),
-  );
-});
+    const keys = Object.keys(body);
+    expect(keys.indexOf('safetySettings') > keys.indexOf('marker')).toBe(afterMarker);
+  },
+);

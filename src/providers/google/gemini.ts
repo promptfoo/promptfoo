@@ -104,9 +104,11 @@ export async function prepareGeminiRequest(
         },
       }),
     },
-    ...(config.safetySettings !== undefined && {
-      safetySettings: normalizeSafetySettings(config.safetySettings),
-    }),
+    ...(facade === 'vertex'
+      ? config.safetySettings !== undefined && {
+          safetySettings: normalizeSafetySettings(config.safetySettings),
+        }
+      : { safetySettings: normalizeSafetySettings(config.safetySettings) }),
     ...(toolConfig ? { toolConfig } : {}),
     ...(mergedTools ? { tools: mergedTools } : {}),
     ...(systemInstruction
@@ -245,7 +247,7 @@ export function getGeminiTokenUsage(
             : usage.promptTokenCount + (usage.toolUsePromptTokenCount ?? 0),
         completion: usage?.candidatesTokenCount,
       }),
-      cached: usage?.cachedContentTokenCount ?? usage?.totalTokenCount,
+      cached: usage?.totalTokenCount ?? usage?.cachedContentTokenCount,
       total: usage?.totalTokenCount,
       numRequests: 1,
       ...reasoning,
