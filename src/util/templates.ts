@@ -429,15 +429,16 @@ const templateEnv: Record<string, string | undefined> = new Proxy(
         return undefined;
       }
       const overrides = getEnvOverrides();
-      if (overrides && Object.prototype.hasOwnProperty.call(overrides, key)) {
+      if (overrides?.[key] !== undefined && Object.prototype.hasOwnProperty.call(overrides, key)) {
         return overrides[key];
       }
       return isTemplateProcessEnvDisabled() ? undefined : process.env[key];
     },
     has(_target, key) {
+      const overrides = getEnvOverrides();
       return (
         typeof key === 'string' &&
-        (Object.prototype.hasOwnProperty.call(getEnvOverrides() ?? {}, key) ||
+        ((overrides?.[key] !== undefined && Object.prototype.hasOwnProperty.call(overrides, key)) ||
           (!isTemplateProcessEnvDisabled() &&
             Object.prototype.hasOwnProperty.call(process.env, key)))
       );

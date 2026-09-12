@@ -1294,6 +1294,30 @@ describe('suite environment loading', () => {
     expect(getEnvString('OPENAI_API_KEY')).toBe('previous-key');
   });
 
+  it.each([false, true])(
+    'ignores undefined template env overrides with process access disabled=%s',
+    (disabled) => {
+      const engine = getNunjucksEngine();
+      cliState.withEnv(
+        {
+          OPENAI_API_KEY: undefined,
+          OPENAI_API_BASE_URL: '',
+          PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: String(disabled),
+        },
+        () => {
+          const env = engine.getGlobal('env');
+          expect(engine.renderString('{{ env.OPENAI_API_KEY }}', {})).toBe(
+            disabled ? '' : 'process-key',
+          );
+          expect('OPENAI_API_KEY' in env).toBe(!disabled);
+          expect(Object.keys(env).includes('OPENAI_API_KEY')).toBe(!disabled);
+          expect(env.OPENAI_API_BASE_URL).toBe('');
+          expect('OPENAI_API_BASE_URL' in env).toBe(true);
+        },
+      );
+    },
+  );
+
   it('refreshes cached engine template flags per suite', async () => {
     const engine = getNunjucksEngine();
     expect(

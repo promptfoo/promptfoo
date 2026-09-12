@@ -224,9 +224,9 @@ async function getPromptsWithPredicate(
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
     if (predicate(eval_)) {
+      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
       for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
-        const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
         if (promptId in groupedPrompts) {
           groupedPrompts[promptId].recentEvalDate = new Date(
             Math.max(

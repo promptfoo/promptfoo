@@ -833,7 +833,8 @@ describe('createShareableUrl', () => {
         const outputUri = `promptfoo://blob/${'b'.repeat(64)}`;
         const inputUri = `promptfoo://blob/${'c'.repeat(64)}`;
         const dataUrl = 'data:image/png;base64,cHJpdmF0ZSBvdXRwdXQ=';
-        const preview = { samples: [outputUri, dataUrl], caption: 'keep caption' };
+        const svgUrl = 'data:image/svg+xml,%3Csvg%3Eprivate%20output%3C%2Fsvg%3E';
+        const preview = { samples: [outputUri, dataUrl, svgUrl], caption: 'keep caption' };
         const row = {
           id: 'media-row',
           testCase: { vars: { input: inputUri } },
@@ -874,6 +875,7 @@ describe('createShareableUrl', () => {
         for (const [value] of scans) {
           expect(JSON.stringify(value)).not.toContain(outputUri);
           expect(JSON.stringify(value)).not.toContain(dataUrl);
+          expect(JSON.stringify(value)).not.toContain(svgUrl);
           expect(JSON.stringify(value)).toContain(inputUri);
         }
         const [uploaded] = JSON.parse(mockFetch.mock.calls[1][1].body);
@@ -882,7 +884,7 @@ describe('createShareableUrl', () => {
           metadata: {
             note: 'keep metadata',
             preview: {
-              samples: ['[output stripped]', '[output stripped]'],
+              samples: ['[output stripped]', '[output stripped]', '[output stripped]'],
               caption: 'keep caption',
             },
           },

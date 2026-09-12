@@ -46,7 +46,7 @@ function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
 function stripMediaReferences(value: unknown): unknown {
   if (
     extractBlobHashesFromValue(value).length > 0 ||
-    (typeof value === 'string' && /^data:[^;,]+;base64,/i.test(value))
+    (typeof value === 'string' && /^data:/i.test(value))
   ) {
     return '[output stripped]';
   }
