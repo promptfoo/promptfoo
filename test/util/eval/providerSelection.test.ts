@@ -525,9 +525,6 @@ describe('provider selection', () => {
     ]);
   });
 
-  // Fix 2 (thread 3481053700): the share payload spread the raw config, leaking
-  // secrets in `env`, `tests[*].provider`, `defaultTest`, and grader/red-team
-  // provider configs.
   it('strips secrets from every provider-bearing surface in the share payload', () => {
     const providers = [provider('openai:gpt-5', 'selected')];
     const providerConfigs: SourceProviders = [
@@ -541,7 +538,13 @@ describe('provider selection', () => {
       providers: providerConfigs,
       defaultTest: {
         options: {
-          provider: { id: 'openai:grader', config: { apiKey: 'sentinel-default-secret' } },
+          provider: {
+            id: 'openai:grader',
+            config: {
+              apiKey: 'sentinel-default-secret',
+              headers: { 'X-Client-Token': 'sentinel-short', 'Content-Type': 'application/json' },
+            },
+          },
         },
       },
       tests: [
@@ -569,6 +572,15 @@ describe('provider selection', () => {
     expect(share).not.toHaveProperty('env');
     // Top-level providers are projected to their least-privilege identity.
     expect(share.providers).toEqual([{ id: 'openai:gpt-5', label: 'selected' }]);
+    expect(share.defaultTest).toMatchObject({
+      options: {
+        provider: {
+          config: {
+            headers: { 'X-Client-Token': '[REDACTED]', 'Content-Type': 'application/json' },
+          },
+        },
+      },
+    });
     // Non-secret structure survives.
     expect(share.prompts).toEqual(['Hello']);
     expect((share.tests as Array<{ vars: unknown }>).map((t) => t.vars)).toEqual([

@@ -394,7 +394,7 @@ function isSafeTracingCredentialTemplate(value: unknown): value is string {
   return typeof value === 'string' && SAFE_TRACING_CREDENTIAL_TEMPLATE.test(value.trim());
 }
 
-function isTracingCredentialHeader(name: string, value: string): boolean {
+function isCredentialHeader(name: string, value: string): boolean {
   const normalizedName = name.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
   return (
     isSecretField(name) ||
@@ -408,9 +408,7 @@ function isTracingCredentialHeader(name: string, value: string): boolean {
 }
 
 function isNonSensitiveTracingHeader(name: string, value: string): boolean {
-  return (
-    SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()) && !isTracingCredentialHeader(name, value)
-  );
+  return SAFE_TRACING_PROVIDER_HEADERS.has(name.toLowerCase()) && !isCredentialHeader(name, value);
 }
 
 function getTracingTemplateEnvironmentVariable(template: string): string | undefined {
@@ -1259,7 +1257,9 @@ function redactSecretLeavesInner(
       Object.entries(value).map(([childKey, childValue]) => [
         childKey,
         (apiKeyAuth && childKey === 'value') ||
-        (key?.toLowerCase() === 'env' && isSecretEnvVarName(childKey))
+        (key?.toLowerCase() === 'env' && isSecretEnvVarName(childKey)) ||
+        (key?.toLowerCase() === 'headers' &&
+          isCredentialHeader(childKey, typeof childValue === 'string' ? childValue : ''))
           ? REDACTED
           : redactSecretLeavesInner(childValue, childKey, seen),
       ]),

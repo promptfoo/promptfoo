@@ -239,7 +239,16 @@ async function sendChunkOfResults(
   headers: Record<string, string>,
 ): Promise<ChunkSendResult> {
   const targetUrl = `${url}/${evalId}/results`;
-  const stringifiedChunk = JSON.stringify(chunk);
+  const stringifiedChunk = JSON.stringify(
+    chunk.map((result) => ({
+      ...result,
+      provider: redactSecretLeaves(result.provider),
+      testCase: redactSecretLeaves(result.testCase),
+      ...(result.prompt?.config
+        ? { prompt: { ...result.prompt, config: redactSecretLeaves(result.prompt.config) } }
+        : {}),
+    })),
+  );
   const chunkSizeBytes = Buffer.byteLength(stringifiedChunk, 'utf8');
 
   logger.debug(

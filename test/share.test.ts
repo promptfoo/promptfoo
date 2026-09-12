@@ -6,6 +6,7 @@ import * as constants from '../src/constants';
 import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
+import EvalResult from '../src/models/evalResult';
 import {
   createShareableModelAuditUrl,
   createShareableUrl,
@@ -19,7 +20,6 @@ import { checkCloudPermissions, makeRequest } from '../src/util/cloud';
 import { inlineBlobRefsForShare } from '../src/util/inlineBlobsForShare';
 
 import type Eval from '../src/models/eval';
-import type EvalResult from '../src/models/evalResult';
 import type ModelAudit from '../src/models/modelAudit';
 
 function buildMockEval(): Partial<Eval> {
@@ -769,6 +769,46 @@ describe('createShareableUrl', () => {
       await createShareableUrl(mockEval as Eval);
 
       expect(checkCloudPermissions).toHaveBeenCalledWith(mockEval.config);
+    });
+
+    it('redacts provider credentials in result batches without changing local replay data', async () => {
+      const provider = {
+        id: 'openai:grader',
+        config: { headers: { 'X-Client-Token': 'abc123', 'Content-Type': 'application/json' } },
+      };
+      const result = new EvalResult({
+        id: 'result-with-grader',
+        evalId: mockEval.id!,
+        promptIdx: 0,
+        testIdx: 0,
+        gradingResult: null,
+        failureReason: 0,
+        provider,
+        testCase: { vars: { input: 'Hello' }, options: { provider } },
+        prompt: { raw: 'Hello', label: 'Hello', config: { provider } },
+        response: { output: 'Unchanged response' },
+        score: 1,
+        success: true,
+      });
+      mockEval.fetchResultsBatched = vi.fn(async function* () {
+        yield [result];
+      });
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'shared' }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+
+      await createShareableUrl(mockEval as Eval);
+
+      const body = mockFetch.mock.calls[1][1].body;
+      expect(body).not.toContain('abc123');
+      expect(JSON.parse(body)[0]).toMatchObject({
+        testCase: { vars: { input: 'Hello' } },
+        response: { output: 'Unchanged response' },
+        score: 1,
+        success: true,
+      });
+      expect(body).toContain('application/json');
+      expect(provider.config.headers['X-Client-Token']).toBe('abc123');
     });
 
     it('uploads local blob refs before manually sharing a previously unshared eval', async () => {

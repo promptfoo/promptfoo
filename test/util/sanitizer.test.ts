@@ -32,6 +32,25 @@ afterEach(() => {
 });
 
 describe('redactSecretLeaves', () => {
+  it.each(['X-Client-Token', 'X-Client-Secret', 'X-Client-Auth', 'XClientToken', 'Cookie'])(
+    'redacts short credentials in custom header %s',
+    (name) => {
+      const headers = {
+        [name]: 'abc123',
+        'Content-Type': 'application/json',
+        'X-Tenant-Id': 'team',
+      };
+      expect(
+        redactSecretLeaves({ provider: { config: { headers } } }).provider.config.headers,
+      ).toEqual({
+        [name]: '[REDACTED]',
+        'Content-Type': 'application/json',
+        'X-Tenant-Id': 'team',
+      });
+      expect(headers[name]).toBe('abc123');
+    },
+  );
+
   it.each(['apiBaseUrl', 'tokenUrl', 'API_BASE_URL', 'endpoint', 'uri', 'MONGODB_URI'])(
     'redacts credentials in %s without dropping endpoint semantics',
     (key) => {
