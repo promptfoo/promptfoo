@@ -757,6 +757,19 @@ describe('OTLPTracingExporter', () => {
         input: { api_key: 'tiny', sessions: { 'sk-abcdefghijklmnopqrstuvwxyz': true } },
         expected: { api_key: '<redacted>', sessions: { '<REDACTED_API_KEY>': true } },
       },
+      {
+        name: 'credential text variants',
+        input: {
+          xml: '<entry key="password">opaque/xml</entry>',
+          form: 'user[password]=opaque/value',
+          AWS_ACCESS_KEY_ID: 'ASIAABCDEFGHIJKLMNOP',
+        },
+        expected: {
+          xml: '<redacted>',
+          form: 'user[password]=<redacted>',
+          AWS_ACCESS_KEY_ID: '<redacted>',
+        },
+      },
     ].flatMap((testCase) => ['json', 'protobuf'].map((format) => ({ ...testCase, format }))),
   )('sanitizes $name in $format exports', async ({ input, expected, format }) => {
     await new OTLPTracingExporter().export([
@@ -781,6 +794,7 @@ describe('OTLPTracingExporter', () => {
   it.each(['json', 'protobuf'] as const)(
     'preserves scientific notation while redacting $format tool arguments',
     async (format) => {
+      const decimalUnderflow = `0.${'0'.repeat(400)}1`;
       const exporter = new OTLPTracingExporter();
       await exporter.export([
         {
@@ -790,7 +804,7 @@ describe('OTLPTracingExporter', () => {
           spanData: {
             type: 'function',
             name: 'lookup',
-            input: '{"access_token":"tiny","amount":1e400,"underflow":1e-4000}',
+            input: `{"access_token":"tiny","amount":1e400,"underflow":1e-4000,"decimal":${decimalUnderflow}}`,
           },
           traceMetadata: { 'promptfoo.otlp_format': format },
           error: null,
@@ -804,7 +818,7 @@ describe('OTLPTracingExporter', () => {
           : JSON.parse(body as string);
       const attributes = getAttributes(payload.resourceSpans[0].scopeSpans[0].spans[0]);
       expect(attributes['tool.arguments']).toBe(
-        '{"access_token":"<redacted>","amount":1e400,"underflow":1e-4000}',
+        `{"access_token":"<redacted>","amount":1e400,"underflow":1e-4000,"decimal":${decimalUnderflow}}`,
       );
     },
   );

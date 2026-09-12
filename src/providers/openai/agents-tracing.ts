@@ -608,7 +608,7 @@ function parseStructuredJson(value: string): unknown {
       typeof parsed === 'number' &&
       (!Number.isSafeInteger(parsed) ||
         Object.is(parsed, -0) ||
-        (parsed === 0 && /[eE]-/.test(context?.source ?? ''))) &&
+        (parsed === 0 && !/^-?0+(?:\.0+)?(?:[eE][+-]?\d+)?$/.test(context?.source ?? ''))) &&
       typeof context?.source === 'string'
     ) {
       return losslessJson.rawJSON!(context.source);
@@ -730,7 +730,7 @@ function sanitizeCredentialText(value: string): string {
         isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
     )
     .replace(
-      /(^|[?&#;:\s.])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
+      /(^|[?&#;:\s.])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*(?:\[(?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
       (match, prefix: string, key: string, separator: string, quote: string) => {
         let decodedKey = key;
         try {
@@ -754,9 +754,15 @@ function hasCredentialNamedPayload(value: string): boolean {
   ) {
     return true;
   }
-  for (const [, attributes] of value.matchAll(/<[\w.-]+\b([^>]*)>/g)) {
+  for (const [, , attributes, body] of value.matchAll(
+    /<([\w.-]+)\b([^>]*)(?:\/>|>([\s\S]*?)<\/\1>)/g,
+  )) {
     const key = attributes.match(/\b(?:name|key)=["']([A-Za-z_][A-Za-z\d_.-]*)["']/i)?.[1];
-    if (key && isCredentialAttributeKey(key) && /\bvalue=["']/i.test(attributes)) {
+    if (
+      key &&
+      isCredentialAttributeKey(key) &&
+      (/\bvalue=["']/i.test(attributes) || body?.trim())
+    ) {
       return true;
     }
   }
@@ -886,7 +892,8 @@ function isCredentialAttributeKey(key: string): boolean {
     }
     return (
       (part === 'key' || part === 'keys') &&
-      !['algorithm', 'type', 'format', 'id'].includes(parts[index + 1]) &&
+      (!['algorithm', 'type', 'format', 'id'].includes(parts[index + 1]) ||
+        (parts[index - 1] === 'access' && parts[index + 1] === 'id')) &&
       ['api', 'access', 'private', 'client', 'ssl', 'tls', 'signing', 'encryption'].includes(
         parts[index - 1],
       )
