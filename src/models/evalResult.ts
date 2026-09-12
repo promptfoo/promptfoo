@@ -112,7 +112,7 @@ export function sanitizeProvider(
     return {
       id: typeof id === 'function' ? id.call(provider) : id,
       label,
-      ...(config && { config: sanitizeProviderConfig(config) }),
+      ...(config !== undefined && { config: sanitizeProviderConfig(config) }),
     };
   } catch {
     logger.debug('Unable to sanitize provider safely; omitting provider fields');
@@ -137,14 +137,14 @@ function sanitizeProviderReference(provider: unknown): unknown {
   if (typeof (provider as { id?: unknown }).id === 'function') {
     return sanitizeProvider(provider as ApiProvider | ProviderOptions);
   }
-  if ('id' in provider || 'label' in provider || 'config' in provider) {
+  if (typeof (provider as { id?: unknown }).id === 'string') {
     const { id, label, config, ...options } = provider as ProviderOptions;
     const sanitizedOptions = sanitizeForDbWithSecrets(options);
     return {
       ...(sanitizedOptions && typeof sanitizedOptions === 'object' ? sanitizedOptions : {}),
       id,
       ...(label !== undefined && { label }),
-      ...(config && { config: sanitizeProviderConfig(config) }),
+      ...(config !== undefined && { config: sanitizeProviderConfig(config) }),
     };
   }
   if ('env' in provider) {
@@ -251,42 +251,36 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
     return testCase;
   }
   try {
-    const captured = { ...testCase };
-    const { provider, assert, ...testCaseFields } = captured;
-    const withoutTestProvider = testCaseFields as AtomicTestCase;
-    if (assert !== undefined && !Array.isArray(assert)) {
-      withoutTestProvider.assert = assert;
+    const { provider, assert, options, ...fields } = { ...testCase };
+    const { provider: optionProvider, ...optionFields } = options ?? {};
+    const sanitized = sanitizeForDbWithSecrets({
+      ...fields,
+      ...(options && { options: optionFields }),
+      ...(assert !== undefined && !Array.isArray(assert) && { assert }),
+    }) as AtomicTestCase;
+    if (optionProvider !== undefined && sanitized.options) {
+      sanitized.options.provider = sanitizeProviderReference(optionProvider);
     }
-    const options = captured.options && { ...captured.options };
-    if (options) {
-      const { provider: _provider, ...withoutProvider } = options;
-      captured.options = withoutProvider;
-      withoutTestProvider.options = captured.options;
-    }
-    const sanitized = sanitizeForDbWithSecrets(withoutTestProvider) as AtomicTestCase;
-    if (options?.provider && sanitized.options) {
-      sanitized.options.provider = sanitizeProviderReference(options.provider);
-    }
-    if (captured.vars) {
-      sanitized.vars = sanitizeForDbWithSecrets(captured.vars, false);
+    if (fields.vars) {
+      sanitized.vars = sanitizeForDbWithSecrets(fields.vars, false);
     }
     if (provider !== undefined) {
       sanitized.provider = sanitizeProviderReference(provider) as AtomicTestCase['provider'];
     }
-    if (captured.providerOutput !== undefined) {
-      sanitized.providerOutput = sanitizeForDbWithSecrets(captured.providerOutput, false);
+    if (fields.providerOutput !== undefined) {
+      sanitized.providerOutput = sanitizeForDbWithSecrets(fields.providerOutput, false);
     }
-    if (options?.rubricPrompt !== undefined) {
+    if (optionFields.rubricPrompt !== undefined) {
       sanitized.options = {
         ...sanitized.options,
-        rubricPrompt: sanitizeForDbWithSecrets(options.rubricPrompt, false),
+        rubricPrompt: sanitizeForDbWithSecrets(optionFields.rubricPrompt, false),
       };
     }
     for (const key of ['prefix', 'suffix'] as const) {
-      if (options?.[key] !== undefined) {
+      if (optionFields[key] !== undefined) {
         sanitized.options = {
           ...sanitized.options,
-          [key]: sanitizeForDbWithSecrets(options[key], false),
+          [key]: sanitizeForDbWithSecrets(optionFields[key], false),
         };
       }
     }
@@ -316,7 +310,7 @@ function sanitizePromptForDb(prompt: Prompt): Prompt {
     const sanitized = sanitizeForDbWithSecrets(captured, false);
     if (config !== undefined) {
       sanitized.config = sanitizeForDbWithSecrets(captured.config);
-      if (configProvider) {
+      if (configProvider !== undefined) {
         sanitized.config.provider = sanitizeProviderReference(
           configProvider,
         ) as Prompt['config']['provider'];
@@ -492,41 +486,28 @@ function sanitizeGradingResultForDb<T>(gradingResult: T, seen = new WeakSet<obje
     return {} as T;
   }
   seen.add(gradingResult);
+  try {
+    const next: Record<string, unknown> = { ...(gradingResult as Record<string, unknown>) };
+    const { metadata, assertion, componentResults } = next;
 
-  const gr = gradingResult as Record<string, unknown>;
-  let mutated = false;
-  const next: Record<string, unknown> = { ...gr };
-  const { metadata, assertion, componentResults } = next;
-
-  if (metadata !== undefined) {
-    const redacted = redactHttpHeadersOnMetadata(metadata);
-    if (redacted !== metadata) {
-      next.metadata = redacted;
-      mutated = true;
+    if (metadata !== undefined) {
+      next.metadata = redactHttpHeadersOnMetadata(metadata);
     }
-  }
 
-  if (asRecord(assertion)) {
-    next.assertion = sanitizeAssertionForDb(assertion as Assertion | AssertionSet);
-    mutated = true;
-  }
-
-  if (Array.isArray(componentResults)) {
-    let componentMutated = false;
-    const nextComponents = componentResults.map((component) => {
-      const redacted = sanitizeGradingResultForDb(component, seen);
-      if (redacted !== component) {
-        componentMutated = true;
-      }
-      return redacted;
-    });
-    if (componentMutated) {
-      next.componentResults = nextComponents;
-      mutated = true;
+    if (asRecord(assertion)) {
+      next.assertion = sanitizeAssertionForDb(assertion as Assertion | AssertionSet);
     }
-  }
 
-  return (mutated ? next : gradingResult) as T;
+    if (Array.isArray(componentResults)) {
+      next.componentResults = componentResults.map((component) =>
+        sanitizeGradingResultForDb(component, seen),
+      );
+    }
+
+    return next as T;
+  } finally {
+    seen.delete(gradingResult);
+  }
 }
 
 function sanitizeResponseForDb<T extends ProviderResponse | null | undefined>(response: T): T {

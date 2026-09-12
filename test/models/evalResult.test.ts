@@ -279,6 +279,15 @@ describe('EvalResult', () => {
     });
   });
 
+  it('preserves unchanged JSON variable string formatting', () => {
+    const payload = '{\n  "label": "kept",\n  "count": 1\n}';
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: { vars: { payload } } as AtomicTestCase,
+    });
+
+    expect(result.testCase.vars?.payload).toBe(payload);
+  });
+
   it('preserves malformed legacy assertion sets without throwing', () => {
     const result = sanitizeResultForJsonlArtifact({
       gradingResult: {
@@ -375,6 +384,38 @@ describe('EvalResult', () => {
     });
   });
 
+  it('preserves provider maps whose keys match option fields', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        options: {
+          provider: {
+            id: { env: { API_KEY: 'sk-map-secret' } },
+            label: { prompts: ['judge'] },
+            config: { delay: 1 },
+          },
+        },
+      } as AtomicTestCase,
+    });
+
+    expect(result.testCase.options?.provider).toEqual({
+      id: { env: { API_KEY: '[REDACTED]' } },
+      label: { prompts: ['judge'] },
+      config: { delay: 1 },
+    });
+  });
+
+  it('preserves falsy declarative provider config values', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        provider: { id: 'fixture', config: false } as any,
+      } as AtomicTestCase,
+    });
+
+    expect(result.testCase.provider).toEqual({ id: 'fixture', config: false });
+  });
+
   it('cuts circular grading components before generic serialization', () => {
     const component: any = { pass: true, score: 1, reason: 'ok' };
     component.componentResults = [component];
@@ -384,6 +425,25 @@ describe('EvalResult', () => {
     });
 
     expect(result.gradingResult.componentResults[0].componentResults).toEqual([{}]);
+  });
+
+  it('preserves repeated acyclic grading components', () => {
+    const component = {
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: { type: 'contains', value: 'ok' },
+    };
+    const result = sanitizeResultForJsonlArtifact({
+      gradingResult: {
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        componentResults: [component, component],
+      },
+    });
+
+    expect(result.gradingResult.componentResults).toEqual([component, component]);
   });
 
   it('reads grading-result provider accessors once', () => {
@@ -421,6 +481,27 @@ describe('EvalResult', () => {
     const sanitized = sanitizeResultForJsonlArtifact({ testCase });
 
     expect(sanitized.testCase.vars).toEqual({ prompt: 'fixture input' });
+    expect(reads).toBe(1);
+  });
+
+  it('reads option accessors once while preserving ordinary prompt text', () => {
+    let reads = 0;
+    const options = {} as NonNullable<AtomicTestCase['options']>;
+    Object.defineProperty(options, 'rubricPrompt', {
+      enumerable: true,
+      get() {
+        if (++reads > 1) {
+          throw new Error('unexpected second read');
+        }
+        return 'grade this exact text';
+      },
+    });
+
+    const sanitized = sanitizeResultForJsonlArtifact({
+      testCase: { vars: {}, options } as AtomicTestCase,
+    });
+
+    expect(sanitized.testCase.options?.rubricPrompt).toBe('grade this exact text');
     expect(reads).toBe(1);
   });
 

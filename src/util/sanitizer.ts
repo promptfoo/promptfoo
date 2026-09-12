@@ -859,7 +859,8 @@ function sanitizeJsonString(
     const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') {
       const sanitized = recursiveSanitize(parsed, depth, maxDepth, false, redactStringValues);
-      return JSON.stringify(sanitized);
+      const serialized = JSON.stringify(sanitized);
+      return serialized === JSON.stringify(parsed) ? str : serialized;
     }
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {
