@@ -343,6 +343,17 @@ function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
   }) as OutputFile['config'];
 }
 
+async function createOutputSummary(evalRecord: Eval): Promise<OutputFile['results']> {
+  const summary = await evalRecord.toEvaluateSummary();
+  const prompts = ('prompts' in summary ? summary.prompts : summary.table.head.prompts).map(
+    (prompt) =>
+      prompt.config ? { ...prompt, config: sanitizeConfigForOutput(prompt.config) } : prompt,
+  );
+  return 'prompts' in summary
+    ? { ...summary, prompts }
+    : { ...summary, table: { ...summary.table, head: { ...summary.table.head, prompts } } };
+}
+
 function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
   const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
   const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
@@ -456,7 +467,7 @@ export async function createOutputData(
   shareableUrl: string | null,
   options: OutputOptions = {},
 ): Promise<OutputFile> {
-  const summary = await evalRecord.toEvaluateSummary();
+  const summary = await createOutputSummary(evalRecord);
   const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
   let traces;
   try {
@@ -624,7 +635,7 @@ export async function writeOutput(
   } else if (outputExtension === 'html') {
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
-    const summary = await evalRecord.toEvaluateSummary();
+    const summary = await createOutputSummary(evalRecord);
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
     const metadata = createOutputMetadata(evalRecord);
     const template = await fsPromises.readFile(
@@ -738,7 +749,7 @@ export async function writeOutput(
       throw error;
     }
   } else if (outputExtension === 'xml') {
-    const summary = await evalRecord.toEvaluateSummary();
+    const summary = await createOutputSummary(evalRecord);
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
 
     // Sanitize data for XML builder to prevent textValue.replace errors

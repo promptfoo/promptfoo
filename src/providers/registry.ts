@@ -962,6 +962,14 @@ export const providerMap: ProviderFactory[] = [
       const modelName = splits.slice(2).join(':');
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
 
+      if (modelType === 'agents-api') {
+        const { OpenAiAgentsApiProvider } = await import('./openai/agents-api');
+        return new OpenAiAgentsApiProvider(modelName, {
+          ...providerOptions,
+          env: { ...context.env, ...providerOptions.env },
+        });
+      }
+
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
         const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');

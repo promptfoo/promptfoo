@@ -61,6 +61,27 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each(['openai:agents-api', 'openai:agents-api:gpt-6-astra'])(
+    'routes %s to the hosted Agents API with scoped credentials',
+    async (providerPath) => {
+      const factories = await getProviderFactories(providerPath);
+      const factory = factories.find((entry) => entry.test(providerPath))!;
+      const provider = await factory.create(
+        providerPath,
+        { id: 'hosted-agent', config: { agent_id: 'agent_saved' } },
+        { basePath: '.', options: {}, env: { OPENAI_API_KEY: 'scoped-key' } },
+      );
+      expect(provider.constructor.name).toBe('OpenAiAgentsApiProvider');
+      expect(provider.id()).toBe('hosted-agent');
+      expect(provider).toHaveProperty('env.OPENAI_API_KEY', 'scoped-key');
+      expect(provider).toHaveProperty('config.agent_id', 'agent_saved');
+      expect(provider).toHaveProperty(
+        'modelName',
+        providerPath.endsWith('gpt-6-astra') ? 'gpt-6-astra' : '',
+      );
+    },
+  );
+
   it.each([
     'openai:gpt-4o-mini-realtime-preview-2024-12-17',
     'openai:realtime:gpt-4o-mini-realtime-preview-2024-12-17',

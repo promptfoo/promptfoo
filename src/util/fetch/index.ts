@@ -12,7 +12,7 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { parseRateLimitHeaders, parseRetryAfter } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
-import { sanitizeUrl } from '../sanitizer';
+import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import {
   extractRateLimitErrorCode,
   HttpRateLimitError,
@@ -495,7 +495,7 @@ async function peekRateLimitBody(
  * in that path we consult `Content-Length` first to skip materializing
  * very large bodies entirely.
  */
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+export async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
   if (!response.body) {
     const contentLength = Number.parseInt(response.headers?.get?.('content-length') ?? '', 10);
     if (Number.isFinite(contentLength) && contentLength > maxBytes) {
@@ -600,7 +600,7 @@ export type { FetchOptions } from './types';
  */
 function urlForLog(url: RequestInfo): string {
   const raw = typeof url === 'string' ? url : url.url;
-  return sanitizeUrl(raw);
+  return sanitizeUrlForLogging(raw);
 }
 
 async function handleRateLimitedResponse(

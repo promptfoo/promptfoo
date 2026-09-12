@@ -1336,6 +1336,63 @@ describe('sanitizeObject', () => {
   });
 
   describe('real-world scenarios', () => {
+    it.each([
+      'gateway.example',
+      'gateway.example:8443',
+      'gateway.example/path',
+      'gateway.example/path/',
+      'https://api.azure.com',
+      'https://api.azure.com/',
+      'http://gateway.example:8080',
+      'https://gateway.example/path',
+    ])('preserves apiHost formatting for %s', (apiHost) => {
+      expect(sanitizeObject({ apiHost })).toEqual({ apiHost });
+    });
+
+    it('preserves opaque resource IDs in environment URLs', () => {
+      const url = 'https://example.com/items/123e4567-e89b-12d3-a456-426614174000';
+      expect(sanitizeObject({ env: { CALLBACK_URL: url } })).toEqual({
+        env: { CALLBACK_URL: url },
+      });
+    });
+
+    it.each(['apiBaseUrl', 'server_url', 'apiHost'])('redacts a credential path in %s', (key) => {
+      const endpoint = `${key === 'apiHost' ? '' : 'https://'}gateway.example/auth-supersecretvalue123`;
+      expect(JSON.stringify(sanitizeObject({ [key]: endpoint }))).not.toContain(
+        'auth-supersecretvalue123',
+      );
+    });
+
+    it.each(['/auth/proxy/v1', '/token/count/v1', '/auth/configuration/v1'])(
+      'preserves ordinary route %s',
+      (path) => {
+        const endpoint = 'https://gateway.example' + path;
+        expect(sanitizeObject({ apiBaseUrl: endpoint, apiHost: endpoint })).toEqual({
+          apiBaseUrl: endpoint,
+          apiHost: endpoint,
+        });
+      },
+    );
+
+    it.each(['apiBaseUrl', 'server_url', 'apiHost'])(
+      'redacts split path credentials in %s',
+      (key) => {
+        const endpoint = `${key === 'apiHost' ? '' : 'https://'}gateway.example/auth/opaquegateway7294/v1`;
+        expect(JSON.stringify(sanitizeObject({ [key]: endpoint }))).not.toContain(
+          'opaquegateway7294',
+        );
+      },
+    );
+
+    it('redacts credential path values even when adjacent URL escapes are malformed', () => {
+      expect(sanitizeUrlForLogging('https://gateway.example/auth/opaque%ZZ')).not.toContain(
+        'opaque',
+      );
+      expect(
+        sanitizeUrlForLogging('https://gateway.example/%ZZ/auth-supersecretvalue123'),
+      ).not.toContain('supersecretvalue123');
+    });
+
     it('should sanitize HTTP request config', () => {
       const requestConfig = {
         method: 'POST',
@@ -1344,6 +1401,9 @@ describe('sanitizeObject', () => {
           'Content-Type': 'application/json',
           Authorization: 'Bearer secret-token',
           'x-api-key': 'api-key-value',
+          'X-Gateway-Auth': 'opaque-gateway-7294',
+          'X-Scope-OrgID': 'tenant-a',
+          'X-Trace-Reader': '{{ env.TRACE_READER_KEY }}',
         },
         body: {
           username: 'user',
@@ -1356,6 +1416,10 @@ describe('sanitizeObject', () => {
       expect(result.url).toBe('https://api.example.com/v1/resource');
       expect(result.headers.Authorization).toBe('[REDACTED]');
       expect(result.headers['x-api-key']).toBe('[REDACTED]');
+      expect(result.headers['Content-Type']).toBe('application/json');
+      expect(result.headers['X-Gateway-Auth']).toBe('[REDACTED]');
+      expect(result.headers['X-Scope-OrgID']).toBe('tenant-a');
+      expect(result.headers['X-Trace-Reader']).toBe('{{ env.TRACE_READER_KEY }}');
       expect(result.body.password).toBe('[REDACTED]');
       expect(result.body.data).toBe('public-data');
     });

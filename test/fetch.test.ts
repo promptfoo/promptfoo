@@ -2547,6 +2547,15 @@ describe('fetchWithRetries with disableTransientRetries', () => {
     });
   });
 
+  it('redacts opaque path credentials in retry diagnostics', async () => {
+    const credential = '123e4567-e89b-12d3-a456-426614174000';
+    vi.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('offline'));
+    await expect(
+      fetchWithRetries(`https://gateway.example/v1/${credential}/responses`, {}, 1000, 0),
+    ).rejects.toThrow('Request failed');
+    expect(logger.debug).toHaveBeenCalledWith(expect.not.stringContaining(credential));
+  });
+
   it('should disable transient retries in fetchWithProxy to avoid double-retrying', async () => {
     // This test verifies that fetchWithRetries passes disableTransientRetries: true
     // to prevent fetchWithProxy from also retrying transient errors
