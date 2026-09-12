@@ -46,6 +46,7 @@ export interface TraceSpanQueryOptions extends TraceAttributeSanitizationOptions
 export interface AddSpansOptions {
   skipTraceCheck?: boolean;
   warnIfMissingTrace?: boolean;
+  redactSpans?: (spans: SpanData[]) => SpanData[];
 }
 
 function serializeSpans(
@@ -245,35 +246,63 @@ export class TraceStore {
         logger.debug(`[TraceStore] Trace ${traceId} found, proceeding with span insertion`);
       }
 
-      const spanRecords = spans.map((span) => {
-        logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
-        return {
-          id: crypto.randomUUID(),
-          traceId,
-          spanId: span.spanId,
-          parentSpanId: span.parentSpanId,
-          name: span.name,
-          startTime: span.startTime,
-          endTime: span.endTime,
-          attributes: span.attributes,
-          events: span.events,
-          statusCode: span.statusCode,
-          statusMessage: span.statusMessage,
-        };
-      });
+      const insertSpans = async (connection: Pick<typeof db, 'insert'>, incoming: SpanData[]) => {
+        const spanRecords = incoming.map((span) => {
+          logger.debug(`[TraceStore] Preparing span ${span.spanId} (${span.name}) for insertion`);
+          return {
+            id: crypto.randomUUID(),
+            traceId,
+            spanId: span.spanId,
+            parentSpanId: span.parentSpanId,
+            name: span.name,
+            startTime: span.startTime,
+            endTime: span.endTime,
+            attributes: span.attributes,
+            events: span.events,
+            statusCode: span.statusCode,
+            statusMessage: span.statusMessage,
+          };
+        });
 
-      if (spanRecords.length === 0) {
-        return { stored: true };
+        if (spanRecords.length === 0) {
+          return;
+        }
+
+        await connection
+          .insert(spansTable)
+          .values(spanRecords)
+          .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
+          .run();
+      };
+
+      const redact = options?.redactSpans;
+      if (redact) {
+        await db.transaction(async (tx) => {
+          const stored = await tx.select().from(spansTable).where(eq(spansTable.traceId, traceId));
+          const existing = serializeSpans(stored, false);
+          const sanitized = redact([...existing, ...spans]);
+          for (const [index, previous] of existing.entries()) {
+            const span = sanitized[index];
+            if (JSON.stringify(previous) === JSON.stringify(span)) {
+              continue;
+            }
+            await tx
+              .update(spansTable)
+              .set({
+                name: span.name,
+                attributes: span.attributes,
+                events: span.events,
+                statusMessage: span.statusMessage,
+              })
+              .where(eq(spansTable.id, stored[index].id))
+              .run();
+          }
+          await insertSpans(tx, sanitized.slice(existing.length));
+        });
+      } else {
+        await insertSpans(db, spans);
       }
-
-      await db
-        .insert(spansTable)
-        .values(spanRecords)
-        .onConflictDoNothing({ target: [spansTable.traceId, spansTable.spanId] })
-        .run();
-      logger.debug(
-        `[TraceStore] Successfully added ${spanRecords.length} spans to trace ${traceId}`,
-      );
+      logger.debug(`[TraceStore] Successfully added ${spans.length} spans to trace ${traceId}`);
       return { stored: true };
     } catch (error) {
       logger.error(`[TraceStore] Failed to add spans: ${error}`);

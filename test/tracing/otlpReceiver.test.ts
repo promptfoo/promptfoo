@@ -73,6 +73,7 @@ let mockedTraceStore: typeof import('../../src/tracing/store');
 
 describe('OTLPReceiver', () => {
   let receiver: OTLPReceiver;
+  const persistSpans = vi.fn<(traceId: string, spans: any[], options?: any) => void>();
   let mockTraceStore: {
     createTrace: MockedFunction<() => Promise<void>>;
     addSpans: MockedFunction<(traceId: string, spans: any[], options?: any) => Promise<void>>;
@@ -95,7 +96,9 @@ describe('OTLPReceiver', () => {
       createTrace: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
       addSpans: vi
         .fn<(traceId: string, spans: any[], options?: any) => Promise<void>>()
-        .mockResolvedValue(undefined),
+        .mockImplementation(async (traceId, spans, options) => {
+          persistSpans(traceId, options?.redactSpans?.(spans) ?? spans, options);
+        }),
       getTracesByEvaluation: vi.fn<() => Promise<any[]>>().mockResolvedValue([]),
       getTrace: vi.fn<() => Promise<any | null>>().mockResolvedValue(null),
       getTraceMetadata: vi
@@ -119,6 +122,26 @@ describe('OTLPReceiver', () => {
   afterEach(() => {
     vi.resetAllMocks();
     vi.restoreAllMocks();
+  });
+
+  it('preserves unrelated trace text after the redaction history reaches capacity', () => {
+    const redactingReceiver = new OTLPReceiver({ redactAttributes: ['authorization'] });
+    for (let index = 0; index < 1_025; index++) {
+      const spans = (redactingReceiver as any).redactSpans(
+        [
+          {
+            spanId: 'span',
+            name: 'read_query',
+            startTime: 1,
+            attributes: { authorization: `PRIVATE_${index}` },
+          },
+        ],
+        ['authorization'],
+        `trace-${index}`,
+      );
+      expect(spans[0].name).toBe('read_query');
+      expect(spans[0].attributes.authorization).toBe('[REDACTED]');
+    }
   });
 
   it.each(['invalid', '-1000000', 'Infinity', 'NaN', '1e9', '18446744073709551616', '', undefined])(
@@ -150,7 +173,7 @@ describe('OTLPReceiver', () => {
           ],
         })
         .expect(200);
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         'a'.repeat(32),
         [
           expect.objectContaining({
@@ -249,7 +272,7 @@ describe('OTLPReceiver', () => {
       expect(response.body).toEqual({ partialSuccess: {} });
 
       // Verify spans were stored
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         '12345678901234567890123456789012',
         expect.arrayContaining([
           expect.objectContaining({
@@ -322,7 +345,7 @@ describe('OTLPReceiver', () => {
         .send(otlpRequest)
         .expect(200);
 
-      const storedSpans = mockTraceStore.addSpans.mock.calls[0][1];
+      const storedSpans = persistSpans.mock.calls[0][1];
       expect(storedSpans[0].events).toEqual([
         {
           name: 'agentic runtime verifier',
@@ -393,7 +416,7 @@ describe('OTLPReceiver', () => {
             ],
           })
           .expect(200);
-        expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
+        expect(persistSpans.mock.calls[0][1][0].events).toEqual([
           { name: 'valid tool', timestamp: 1200, timestampNanos: '1200000000', attributes: {} },
         ]);
       },
@@ -431,7 +454,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(mockTraceStore.addSpans.mock.calls[0][1][0].events).toEqual([
+      expect(persistSpans.mock.calls[0][1][0].events).toEqual([
         expect.objectContaining({ name: 'valid event', attributes: {} }),
       ]);
     });
@@ -464,7 +487,7 @@ describe('OTLPReceiver', () => {
         .send(otlpRequest)
         .expect(200);
 
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         '12345678901234567890123456789012',
         expect.arrayContaining([
           expect.objectContaining({
@@ -514,7 +537,7 @@ describe('OTLPReceiver', () => {
         .send(otlpRequest)
         .expect(200);
 
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         expect.arrayContaining([
           expect.objectContaining({
@@ -575,7 +598,7 @@ describe('OTLPReceiver', () => {
         .send(otlpRequest)
         .expect(200);
 
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
         expect.arrayContaining([
           expect.objectContaining({
@@ -632,7 +655,7 @@ describe('OTLPReceiver', () => {
         .expect(415);
 
       expect(response.body).toEqual({ error: 'Unsupported content type' });
-      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+      expect(persistSpans).not.toHaveBeenCalled();
     });
 
     it('should reject json when only protobuf is enabled', async () => {
@@ -646,7 +669,7 @@ describe('OTLPReceiver', () => {
         .expect(415);
 
       expect(response.body).toEqual({ error: 'Unsupported content type' });
-      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+      expect(persistSpans).not.toHaveBeenCalled();
     });
 
     it('should reject malformed json with 415 when json is disabled', async () => {
@@ -660,7 +683,7 @@ describe('OTLPReceiver', () => {
         .expect(415);
 
       expect(response.body).toEqual({ error: 'Unsupported content type' });
-      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+      expect(persistSpans).not.toHaveBeenCalled();
     });
 
     it('should reject invalid protobuf data', async () => {
@@ -704,9 +727,7 @@ describe('OTLPReceiver', () => {
         .send(await encodeOTLPRequest(data))
         .expect(200);
       expect(
-        mockTraceStore.addSpans.mock.calls[0][1][0].events?.map(
-          (event: TraceSpanEvent) => event.name,
-        ),
+        persistSpans.mock.calls[0][1][0].events?.map((event: TraceSpanEvent) => event.name),
       ).toEqual(['tool update_seat']);
     });
 
@@ -743,7 +764,7 @@ describe('OTLPReceiver', () => {
           .set('Content-Type', format === 'json' ? 'application/json' : 'application/x-protobuf')
           .send(format === 'json' ? data : await encodeOTLPRequest(data))
           .expect(200);
-        const spans = mockTraceStore.addSpans.mock.calls[0][1];
+        const spans = persistSpans.mock.calls[0][1];
         const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
           'Update the seat.',
           'ok',
@@ -828,7 +849,7 @@ describe('OTLPReceiver', () => {
       expect(response.body).toEqual({ partialSuccess: {} });
 
       // Verify spans were stored with correct trace ID
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         'deadbeefdeadbeefdeadbeefdeadbeef',
         expect.arrayContaining([
           expect.objectContaining({
@@ -953,7 +974,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         [
           expect.objectContaining({
@@ -972,6 +993,7 @@ describe('OTLPReceiver', () => {
         {
           skipTraceCheck: false,
           warnIfMissingTrace: false,
+          redactSpans: expect.any(Function),
         },
       );
     });
@@ -1012,7 +1034,7 @@ describe('OTLPReceiver', () => {
           ],
         })
         .expect(200);
-      const spans = mockTraceStore.addSpans.mock.calls.at(-1)?.[1];
+      const spans = persistSpans.mock.calls.at(-1)?.[1];
       expect(JSON.stringify(spans)).not.toContain('938471');
       expect(spans?.[0].events?.[0].attributes?.['private.pin']).toBe('[REDACTED]');
     });
@@ -1075,7 +1097,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
         [
           expect.objectContaining({
@@ -1091,6 +1113,7 @@ describe('OTLPReceiver', () => {
         {
           skipTraceCheck: false,
           warnIfMissingTrace: false,
+          redactSpans: expect.any(Function),
         },
       );
     });
@@ -1143,9 +1166,7 @@ describe('OTLPReceiver', () => {
           status: { code: 2, message: `failed ${secret}` },
           events: [{ name: `event ${secret}`, timeUnixNano: '1000000100', attributes: [] }],
         }).expect(200);
-        expect(
-          JSON.stringify(vi.mocked(mockTraceStore.addSpans).mock.calls.at(-1)![1]),
-        ).not.toContain(secret);
+        expect(JSON.stringify(vi.mocked(persistSpans).mock.calls.at(-1)![1])).not.toContain(secret);
       },
     );
 
@@ -1197,7 +1218,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         'ffffffffffffffffffffffffffffffff',
         [
           expect.objectContaining({
@@ -1210,6 +1231,7 @@ describe('OTLPReceiver', () => {
         {
           skipTraceCheck: false,
           warnIfMissingTrace: false,
+          redactSpans: expect.any(Function),
         },
       );
     });
@@ -1329,7 +1351,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
         [
           expect.objectContaining({
@@ -1342,6 +1364,7 @@ describe('OTLPReceiver', () => {
         {
           skipTraceCheck: false,
           warnIfMissingTrace: false,
+          redactSpans: expect.any(Function),
         },
       );
     });
@@ -1380,7 +1403,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         'cccccccccccccccccccccccccccccccc',
         [
           expect.objectContaining({
@@ -1440,7 +1463,7 @@ describe('OTLPReceiver', () => {
         testCaseId: 'receiver-created-test',
         metadata: { otlpHttpRedactAttributes: ['authorization'] },
       });
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         'dddddddddddddddddddddddddddddddd',
         [
           expect.objectContaining({
@@ -1452,6 +1475,7 @@ describe('OTLPReceiver', () => {
         {
           skipTraceCheck: false,
           warnIfMissingTrace: false,
+          redactSpans: expect.any(Function),
         },
       );
     });
@@ -1546,7 +1570,7 @@ describe('OTLPReceiver', () => {
           otlpHttpRedactAttributes: ['authorization'],
         },
       });
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         'ffffffffffffffffffffffffffffffff',
         [
           expect.objectContaining({
@@ -1558,6 +1582,7 @@ describe('OTLPReceiver', () => {
         {
           skipTraceCheck: false,
           warnIfMissingTrace: false,
+          redactSpans: expect.any(Function),
         },
       );
     });
@@ -1601,7 +1626,7 @@ describe('OTLPReceiver', () => {
         })
         .expect(200);
 
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         '11111111111111111111111111111111',
         [
           expect.objectContaining({
@@ -1660,7 +1685,7 @@ describe('OTLPReceiver', () => {
         testCaseId: 'no-redaction-test',
         metadata: undefined,
       });
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+      expect(persistSpans).toHaveBeenCalledWith(
         '11111111111111111111111111111111',
         [
           expect.objectContaining({
@@ -1747,7 +1772,7 @@ describe('OTLPReceiver', () => {
         .send(otlpRequest)
         .expect(200);
 
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
+      expect(persistSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
         skipTraceCheck: false,
         warnIfMissingTrace: false,
       });
@@ -1781,7 +1806,7 @@ describe('OTLPReceiver', () => {
         .expect(200);
 
       expect(mockTraceStore.createTrace).not.toHaveBeenCalled();
-      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
+      expect(persistSpans).toHaveBeenCalledWith(traceIdHex, expect.any(Array), {
         skipTraceCheck: false,
         warnIfMissingTrace: false,
       });
@@ -1810,6 +1835,53 @@ describe('OTLPReceiver', () => {
       };
     }
 
+    it.each(['0', '-1', 'invalid', '1e9', '18446744073709551616', '', undefined])(
+      'drops log controls with invalid timestamp %s',
+      async (timeUnixNano) => {
+        await request(receiver.getApp())
+          .post('/v1/logs')
+          .send(
+            makeLogsRequest([
+              {
+                traceId: hexTraceId,
+                spanId: hexParentSpanId,
+                timeUnixNano,
+                body: { stringValue: 'guardrail update_seat' },
+              },
+              {
+                traceId: hexTraceId,
+                spanId: hexParentSpanId,
+                timeUnixNano: '1700000000000000200',
+                body: { stringValue: 'tool update_seat' },
+              },
+            ]),
+          )
+          .expect(200);
+        const spans = persistSpans.mock.calls[0][1];
+        expect(spans).toHaveLength(1);
+        expect(spans[0].name).toBe('tool update_seat');
+      },
+    );
+
+    it('uses the observed timestamp when the log timestamp is absent', async () => {
+      await request(receiver.getApp())
+        .post('/v1/logs')
+        .send(
+          makeLogsRequest([
+            {
+              traceId: hexTraceId,
+              spanId: hexParentSpanId,
+              observedTimeUnixNano: '1700000000000000200',
+              body: { stringValue: 'tool update_seat' },
+            },
+          ]),
+        )
+        .expect(200);
+      expect(persistSpans.mock.calls[0][1][0].attributes['otel.log.time_unix_nano']).toBe(
+        '1700000000000000200',
+      );
+    });
+
     it('converts a Claude Code log into a child span with event.name attribute', async () => {
       const req = makeLogsRequest([
         {
@@ -1833,8 +1905,8 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      expect(mockTraceStore.addSpans).toHaveBeenCalledTimes(1);
-      const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect(persistSpans).toHaveBeenCalledTimes(1);
+      const [persistedTraceId, spans] = persistSpans.mock.calls[0];
       expect(persistedTraceId).toBe(hexTraceId);
       expect(spans).toHaveLength(1);
       const span = (spans as any[])[0];
@@ -1863,7 +1935,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+      expect(persistSpans).not.toHaveBeenCalled();
     });
 
     it('filters out internal tracing logs via denylist', async () => {
@@ -1882,7 +1954,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+      expect(persistSpans).not.toHaveBeenCalled();
     });
 
     it('falls back to a short body string when no event.name attribute is present', async () => {
@@ -1901,7 +1973,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const [, spans] = persistSpans.mock.calls[0];
       expect((spans as any[])[0].name).toBe('agent.message');
     });
 
@@ -1925,7 +1997,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const [, spans] = persistSpans.mock.calls[0];
       expect((spans as any[])[0]).toEqual(
         expect.objectContaining({
           name: '[REDACTED]',
@@ -1960,7 +2032,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const [, spans] = persistSpans.mock.calls[0];
       expect((spans as any[])[0].parentSpanId).toBeUndefined();
     });
 
@@ -1986,7 +2058,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const [, spans] = persistSpans.mock.calls[0];
       expect((spans as any[]).map((s: any) => s.name)).toEqual([
         'claude_code.tool.execution',
         'claude_code.llm_request',
@@ -2032,7 +2104,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const [persistedTraceId, spans] = persistSpans.mock.calls[0];
       expect(persistedTraceId).toBe(hexTraceId);
       const span = (spans as any[])[0];
       expect(span.parentSpanId).toBe(hexParentSpanId);
@@ -2086,7 +2158,7 @@ describe('OTLPReceiver', () => {
           .send(req)
           .expect(200);
 
-        const [persistedTraceId, spans] = mockTraceStore.addSpans.mock.calls[0];
+        const [persistedTraceId, spans] = persistSpans.mock.calls[0];
         expect(persistedTraceId).toBe(hexTraceId);
         const span = (spans as any[])[0];
         expect(span.parentSpanId).toBe(hexParentSpanId);
@@ -2119,7 +2191,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const [, spans] = persistSpans.mock.calls[0];
       const span = (spans as any[])[0];
       expect(span.statusMessage).toBe('ERROR');
       expect(span.statusCode).toBe(2);
@@ -2138,12 +2210,13 @@ describe('OTLPReceiver', () => {
                 traceId: hexTraceId,
                 spanId: hexParentSpanId,
                 severityText,
+                timeUnixNano: '1700000000000000000',
                 body: { stringValue: 'guardrail update_seat' },
               },
             ]),
           )
           .expect(200);
-        expect(mockTraceStore.addSpans.mock.calls[0][1][0].statusCode).toBe(2);
+        expect(persistSpans.mock.calls[0][1][0].statusCode).toBe(2);
       },
     );
 
@@ -2165,7 +2238,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const [, spans] = persistSpans.mock.calls[0];
       expect((spans as any[])[0].name).toBe('claude_code.llm_request');
     });
 
@@ -2185,7 +2258,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+      expect(persistSpans).not.toHaveBeenCalled();
     });
 
     it('falls back to otel.log for span name when body exceeds the body-as-name limit', async () => {
@@ -2205,7 +2278,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const [, spans] = persistSpans.mock.calls[0];
       expect((spans as any[])[0].name).toBe('otel.log');
     });
 
@@ -2227,7 +2300,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const [, spans] = persistSpans.mock.calls[0];
       const storedBody = (spans as any[])[0].attributes['otel.log.body'] as string;
       expect(storedBody.length).toBeLessThan(huge.length);
       expect(storedBody.endsWith('... [truncated]')).toBe(true);
@@ -2260,8 +2333,8 @@ describe('OTLPReceiver', () => {
       // one was skipped while the good one survived — both acceptable. The
       // failure mode we're guarding against is "bad record → 500 → whole
       // batch dropped", verified by the 200 status.
-      expect(mockTraceStore.addSpans).toHaveBeenCalled();
-      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      expect(persistSpans).toHaveBeenCalled();
+      const [, spans] = persistSpans.mock.calls[0];
       expect((spans as any[]).some((s: any) => s.name === 'claude_code.tool.execution')).toBe(true);
     });
 
@@ -2282,7 +2355,7 @@ describe('OTLPReceiver', () => {
         .send(req)
         .expect(200);
 
-      const [, spans] = mockTraceStore.addSpans.mock.calls[0];
+      const [, spans] = persistSpans.mock.calls[0];
       expect((spans as any[])[0].parentSpanId).toBeUndefined();
     });
 
@@ -2293,7 +2366,7 @@ describe('OTLPReceiver', () => {
         .send({ resourceLogs: [] })
         .expect(200);
 
-      expect(mockTraceStore.addSpans).not.toHaveBeenCalled();
+      expect(persistSpans).not.toHaveBeenCalled();
     });
   });
 });
