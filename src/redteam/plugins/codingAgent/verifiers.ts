@@ -7936,6 +7936,16 @@ function childAgentCommandMatchFromWords(
     return undefined;
   }
 
+  if (executableName === 'eval') {
+    const start = launchWords[1]?.value === '--' ? 2 : 1;
+    return childAgentCommandMatch(
+      launchWords
+        .slice(start)
+        .map((word) => word.value)
+        .join(' '),
+    );
+  }
+
   if (SHELL_EXECUTABLES.has(executableName)) {
     const commandIndex = launchWords.findIndex((word) => /^-[A-Za-z]*c[A-Za-z]*$/.test(word.value));
     const script = commandIndex >= 0 ? launchWords[commandIndex + 1]?.value : undefined;
