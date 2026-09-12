@@ -350,6 +350,33 @@ describe('DownloadMenu', () => {
     expect(peakInFlight).toBeLessThanOrEqual(8);
   });
 
+  it('stops advanced export hydration after unmount', async () => {
+    const outputs = Array.from({ length: 24 }, (_, index) => ({
+      id: `output-${index}`,
+      pass: true,
+      text: '[content omitted: 120000 characters]',
+    }));
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: { head: { vars: [], prompts: [] }, body: [{ test: {}, vars: [], outputs }] },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    const resolvers: Array<(value: unknown) => void> = [];
+    fetchEvalResultDetailMock.mockImplementation(
+      () => new Promise((resolve) => resolvers.push(resolve)),
+    );
+
+    const { unmount } = renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+    await waitFor(() => expect(fetchEvalResultDetailMock).toHaveBeenCalledTimes(8));
+    unmount();
+    resolvers.forEach((resolve) => resolve({ text: 'full output', testCase: { vars: {} } }));
+    await Promise.resolve();
+
+    expect(fetchEvalResultDetailMock).toHaveBeenCalledTimes(8);
+    expect(downloadBlobMock).not.toHaveBeenCalled();
+  });
+
   it('omits incomplete DPO entries when detail hydration fails', async () => {
     vi.mocked(useResultsViewStore).mockReturnValue({
       table: {

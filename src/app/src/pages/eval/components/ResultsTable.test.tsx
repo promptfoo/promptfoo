@@ -1,7 +1,7 @@
 import { act, StrictMode } from 'react';
 
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
-import { prefetchEvalResultDetail } from '@app/utils/api';
+import { fetchEvalConfig, prefetchEvalResultDetail } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
@@ -50,6 +50,7 @@ vi.mock('@app/hooks/useShiftKey', () => {
 vi.mock('@app/utils/api', () => ({
   clearEvalApiResponseCache: vi.fn(),
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
+  fetchEvalConfig: vi.fn(),
   prefetchEvalResultDetail: vi.fn(),
 }));
 
@@ -393,6 +394,33 @@ describe('ResultsTable Metrics Display', () => {
       'style',
       expect.stringContaining('border-bottom: 2px solid var(--border-color)'),
     );
+  });
+
+  it('hydrates an omitted prompt header when opened', async () => {
+    vi.mocked(fetchEvalConfig).mockResolvedValue({
+      config: { prompts: ['full prompt header'] },
+    } as any);
+    const store = vi.mocked(useTableStore)();
+    vi.mocked(useTableStore).mockReturnValue({
+      ...store,
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              raw: '[content omitted: 120000 characters]',
+            },
+          ],
+        },
+      },
+    });
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await userEvent.click(screen.getByText('[content omitted: 120000 characters]'));
+
+    expect(await screen.findByText('full prompt header')).toBeInTheDocument();
   });
 
   it('keeps the header/body boundary border visible with sticky headers', () => {
@@ -905,11 +933,14 @@ describe('ResultsTable Metrics Display', () => {
         config: { redteam: { injectVar: 'inject' } },
         table: {
           ...mockTableWithMedia,
-          head: { prompts: [{}], vars: ['inject'] },
+          head: { prompts: [{}], vars: ['inject', 'ordinary'] },
           body: [
             {
               ...mockTableWithMedia.body[0],
-              vars: ['[content omitted: 120000 characters]'],
+              vars: [
+                '[content omitted: 120000 characters]',
+                '[content omitted: 120000 characters]',
+              ],
               outputs: [
                 null,
                 {
@@ -934,6 +965,7 @@ describe('ResultsTable Metrics Display', () => {
         resultId: 'result-1',
         prompt: '',
         text: '',
+        testCase: { vars: { ordinary: 'full ordinary value' } },
         response: { prompt: 'full actual prompt' },
         metadata: { transformDisplayVars: { __attack: 'full transform' } },
       });
@@ -943,7 +975,9 @@ describe('ResultsTable Metrics Display', () => {
       const buttons = screen.getAllByRole('button', { name: 'Load value' });
       await userEvent.click(buttons[0]);
       await userEvent.click(buttons[1]);
+      await userEvent.click(buttons[2]);
       expect(await screen.findByText('full actual prompt')).toBeInTheDocument();
+      expect(await screen.findByText('full ordinary value')).toBeInTheDocument();
       expect(await screen.findByText('full transform')).toBeInTheDocument();
     });
 

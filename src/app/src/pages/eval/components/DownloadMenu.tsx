@@ -67,12 +67,13 @@ async function mapWithConcurrency<T, U>(
   items: T[],
   concurrency: number,
   mapper: (item: T, index: number) => Promise<U>,
+  isCancelled: () => boolean = () => false,
 ): Promise<U[]> {
   const results = new Array<U>(items.length);
   let nextIndex = 0;
 
   const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-    while (nextIndex < items.length) {
+    while (nextIndex < items.length && !isCancelled()) {
       const index = nextIndex++;
       results[index] = await mapper(items[index], index);
     }
@@ -158,7 +159,15 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     total: number;
   } | null>(null);
   const detailHydrationFailuresRef = React.useRef(0);
+  const exportRevisionRef = React.useRef(0);
   const { showToast } = useToast();
+
+  React.useEffect(
+    () => () => {
+      exportRevisionRef.current++;
+    },
+    [],
+  );
 
   // Use the new hooks for CSV and JSON downloads
   const { download: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadEval(
@@ -180,10 +189,15 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     setDownloadedFiles((prev) => new Set([...prev, downloadName]));
   };
 
-  const handleClose = () => {
+  const handleClose = (invalidateExport = true) => {
+    if (invalidateExport) {
+      exportRevisionRef.current++;
+    }
     onClose();
     // Reset download states when dialog is closed
     setDownloadedFiles(new Set());
+    setAdvancedExportInProgress(null);
+    setAdvancedExportProgress(null);
   };
 
   const copyToClipboard = (text: string) => {
@@ -318,16 +332,24 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     );
   };
 
-  const runAdvancedExport = async (exportName: AdvancedExportName, action: () => Promise<void>) => {
+  const runAdvancedExport = async (
+    exportName: AdvancedExportName,
+    action: (isCurrent: () => boolean) => Promise<void>,
+  ) => {
     if (advancedExportInProgress) {
       return;
     }
 
+    const revision = exportRevisionRef.current;
+    const isCurrent = () => revision === exportRevisionRef.current;
     setAdvancedExportInProgress(exportName);
     setAdvancedExportProgress(null);
     detailHydrationFailuresRef.current = 0;
     try {
-      await action();
+      await action(isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
       const detailHydrationFailures = detailHydrationFailuresRef.current;
       if (detailHydrationFailures > 0) {
         showToast(
@@ -345,8 +367,10 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
         'error',
       );
     } finally {
-      setAdvancedExportInProgress(null);
-      setAdvancedExportProgress(null);
+      if (isCurrent()) {
+        setAdvancedExportInProgress(null);
+        setAdvancedExportProgress(null);
+      }
     }
   };
 
@@ -381,7 +405,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
       return;
     }
 
-    await runAdvancedExport('failed-tests', async () => {
+    await runAdvancedExport('failed-tests', async (isCurrent) => {
       // Exports use the base eval config, so only base-eval failures belong in it.
       const failedRows = table.body.filter((row) => getFailedBaseOutput(row));
 
@@ -405,8 +429,12 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
             incrementExportProgress();
           }
         },
+        () => !isCurrent(),
       );
 
+      if (!isCurrent()) {
+        return;
+      }
       const completeTests = failedTests.filter((test) => test !== null);
       if (completeTests.length === 0) {
         showToast('No complete failed tests available to export', 'warning');
@@ -434,7 +462,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
       return;
     }
 
-    await runAdvancedExport('dpo', async () => {
+    await runAdvancedExport('dpo', async (isCurrent) => {
       setExportProgressTotal(table.body.reduce((total, row) => total + row.outputs.length, 0));
       const { config: fullConfig } = await fetchEvalConfig(evalId);
       const fullConfigPrompts = Array.isArray(fullConfig.prompts)
@@ -476,6 +504,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
             incrementExportProgress();
           }
         },
+        () => !isCurrent(),
       );
 
       let nextDetailIndex = 0;
@@ -510,8 +539,11 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
         })
         .filter((row): row is NonNullable<typeof row> => row !== null);
       const blob = new Blob([JSON.stringify(formattedData, null, 2)], { type: 'application/json' });
+      if (!isCurrent()) {
+        return;
+      }
       openDownloadDialog(blob, getFilename('dpo.json'));
-      handleClose();
+      handleClose(false);
     });
   };
 
@@ -549,7 +581,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
       return;
     }
 
-    await runAdvancedExport('human-eval', async () => {
+    await runAdvancedExport('human-eval', async (isCurrent) => {
       const rowsWithOutputs = table.body.filter((row) =>
         row.outputs.some((output) => output != null),
       );
@@ -590,12 +622,16 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
             incrementExportProgress();
           }
         },
+        () => !isCurrent(),
       );
 
+      if (!isCurrent()) {
+        return;
+      }
       const yamlContent = yaml.dump(humanEvalCases.filter((item) => item !== null));
       const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
       openDownloadDialog(blob, getFilename('human-eval-cases.yaml'));
-      handleClose();
+      handleClose(false);
     });
   };
 
@@ -616,7 +652,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     }
 
     const varName = config.redteam.injectVar || 'prompt';
-    await runAdvancedExport('burp', async () => {
+    await runAdvancedExport('burp', async (isCurrent) => {
       setExportProgressTotal(table.body.length);
       const payloads = await mapWithConcurrency(
         table.body,
@@ -637,6 +673,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
             incrementExportProgress();
           }
         },
+        () => !isCurrent(),
       );
       const encodedPayloads = payloads.filter(Boolean).map((input) => {
         const jsonEscaped = JSON.stringify(input).slice(1, -1); // Remove surrounding quotes
@@ -647,8 +684,11 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
       const content = uniquePayloads.join('\n');
       const blob = new Blob([content], { type: 'text/plain' });
+      if (!isCurrent()) {
+        return;
+      }
       openDownloadDialog(blob, getFilename('burp-payloads.burp'));
-      handleClose();
+      handleClose(false);
     });
   };
 

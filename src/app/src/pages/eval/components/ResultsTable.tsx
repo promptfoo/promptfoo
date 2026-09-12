@@ -15,7 +15,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi, clearEvalApiResponseCache, prefetchEvalResultDetail } from '@app/utils/api';
+import {
+  callApi,
+  clearEvalApiResponseCache,
+  fetchEvalConfig,
+  prefetchEvalResultDetail,
+} from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
@@ -234,11 +239,24 @@ function TableHeader({
   text,
   maxLength,
   expandedText,
+  loadExpandedText,
   resourceId,
   className,
-}: TruncatedTextProps & { expandedText?: string; resourceId?: string; className?: string }) {
+}: TruncatedTextProps & {
+  expandedText?: string;
+  loadExpandedText?: () => Promise<string | undefined>;
+  resourceId?: string;
+  className?: string;
+}) {
   const [promptOpen, setPromptOpen] = React.useState(false);
-  const handlePromptOpen = () => {
+  const [fullExpandedText, setFullExpandedText] = React.useState<string>();
+  const handlePromptOpen = async () => {
+    if (loadExpandedText && isOmittedText(expandedText ?? '')) {
+      const loaded = await loadExpandedText();
+      if (loaded) {
+        setFullExpandedText(loaded);
+      }
+    }
     setPromptOpen(true);
   };
   const handlePromptClose = () => {
@@ -267,7 +285,7 @@ function TableHeader({
             <EvalOutputPromptDialog
               open={promptOpen}
               onClose={handlePromptClose}
-              prompt={expandedText}
+              prompt={fullExpandedText ?? expandedText}
             />
           )}
           {resourceId && (
@@ -651,15 +669,21 @@ function renderVariableCell({
       />
     );
   }
-  if (isOmittedText(value) && varName === injectVarName && output?.id) {
+  if (isOmittedText(value) && output?.id) {
     return (
       <HydratedText
         value={value}
         maxLength={maxTextLength}
-        identity={`${output.evalId || evalId}/${output.id}/actual`}
+        identity={`${output.evalId || evalId}/${output.id}/${varName}`}
         loadValue={async () => {
           const detail = await prefetchEvalResultDetail(output.evalId || evalId, output.id);
-          return getActualPrompt(detail?.response as Parameters<typeof getActualPrompt>[0]);
+          if (varName === injectVarName) {
+            return getActualPrompt(detail?.response as Parameters<typeof getActualPrompt>[0]);
+          }
+          const hydratedValue = (detail?.testCase?.vars as Record<string, unknown> | undefined)?.[
+            varName
+          ];
+          return typeof hydratedValue === 'string' ? hydratedValue : undefined;
         }}
       />
     );
@@ -1291,6 +1315,7 @@ function PromptColumnHeader({
   filterMode,
   headPromptCount,
   maxTextLength,
+  evalId,
   onFailureFilterToggle,
   setFilterMode,
   setCustomMetricsDialogOpen,
@@ -1311,6 +1336,7 @@ function PromptColumnHeader({
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
   maxTextLength: number;
+  evalId: string | null;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   setFilterMode: (mode: EvalResultsFilterMode) => void;
   setCustomMetricsDialogOpen: (open: boolean) => void;
@@ -1379,6 +1405,27 @@ function PromptColumnHeader({
         className="prompt-container collapse-font-small"
         text={prompt.label || prompt.display || prompt.raw}
         expandedText={prompt.raw}
+        loadExpandedText={
+          isOmittedText(prompt.raw) && evalId
+            ? async () => {
+                const { config } = await fetchEvalConfig(evalId);
+                const prompts = Array.isArray(config.prompts)
+                  ? config.prompts
+                  : typeof config.prompts === 'string'
+                    ? [config.prompts]
+                    : config.prompts
+                      ? Object.values(config.prompts)
+                      : [];
+                const fullPrompt = prompts[idx];
+                if (typeof fullPrompt === 'string') {
+                  return fullPrompt;
+                }
+                if (fullPrompt && typeof fullPrompt === 'object') {
+                  return fullPrompt.raw || fullPrompt.display || fullPrompt.label;
+                }
+              }
+            : undefined
+        }
         maxLength={maxTextLength}
         resourceId={prompt.id}
       />
@@ -2401,6 +2448,7 @@ function ResultsTable({
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
                 maxTextLength={maxTextLength}
+                evalId={evalId}
                 onFailureFilterToggle={onFailureFilterToggle}
                 setFilterMode={setFilterMode}
                 setCustomMetricsDialogOpen={setCustomMetricsDialogOpen}
