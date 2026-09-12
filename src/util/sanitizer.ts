@@ -1174,6 +1174,9 @@ export function sanitizeObject(
     if (typeof obj !== 'object') {
       return obj;
     }
+    if (obj instanceof URL && obj.toJSON === URL.prototype.toJSON) {
+      return sanitizeUrl(obj.toString());
+    }
     if (hasUnsafeJsonSerializer(obj)) {
       return REDACTED;
     }

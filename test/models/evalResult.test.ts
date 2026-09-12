@@ -161,6 +161,17 @@ describe('EvalResult', () => {
     expect(result.prompt.config).toBe('opaque config');
   });
 
+  it('sanitizes root URL prompt configs', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      prompt: {
+        raw: 'prompt',
+        label: 'prompt',
+        config: new URL('https://user:secret@example.test/path?api_key=secret') as any,
+      },
+    });
+    expect(result.prompt.config).toBe('https://***:***@example.test/path?api_key=%5BREDACTED%5D');
+  });
+
   it('preserves malformed legacy assertion sets without throwing', () => {
     const result = sanitizeResultForJsonlArtifact({
       gradingResult: {
@@ -172,6 +183,18 @@ describe('EvalResult', () => {
     });
 
     expect(result.gradingResult?.assertion).toEqual({ type: 'assert-set', assert: null });
+  });
+
+  it('preserves test cases with malformed legacy assertion entries', () => {
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: { prompt: 'fixture input' },
+        assert: [null] as any,
+      },
+    });
+
+    expect(result.testCase.vars).toEqual({ prompt: 'fixture input' });
+    expect(result.testCase.assert).toEqual([null]);
   });
 
   it('reads test-case accessors once while preserving their values', () => {

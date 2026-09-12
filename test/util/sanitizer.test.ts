@@ -1200,10 +1200,7 @@ describe('sanitizeObject', () => {
     it('should redact Error messages when requested', () => {
       const error = new Error('Invalid API key sk-error-message-should-not-persist');
       error.name = 'Authentication failed for sk-error-name-should-not-persist';
-      const result = sanitizeObject(
-        { error },
-        { redactErrorMessages: true },
-      );
+      const result = sanitizeObject({ error }, { redactErrorMessages: true });
 
       expect(result.error).toEqual({
         name: '[REDACTED]',
