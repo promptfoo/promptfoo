@@ -309,6 +309,37 @@ describe('loadApiProvider', () => {
     expect(provider.delay).toBe(2000);
   });
 
+  it('resolves a templated Codex subtype before merging credential aliases', async () => {
+    const provider = await loadApiProvider('openai:{{ env.KIND }}', {
+      env: { KIND: 'codex-sdk', OPENAI_API_KEY: 'suite-key' },
+      options: { env: { CODEX_API_KEY: 'provider-key' } },
+    });
+    expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('provider-key');
+  });
+
+  it('resolves a cloud Codex subtype template before merging credential aliases', async () => {
+    vi.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'openai:{{ env.KIND }}',
+      env: { KIND: 'codex-sdk', CODEX_API_KEY: 'cloud-key' },
+    });
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+      env: { OPENAI_API_KEY: 'suite-key' },
+    });
+    expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('cloud-key');
+  });
+
+  it('resolves a file Codex subtype template before merging credential aliases', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('provider config');
+    vi.mocked(loadYaml).mockReturnValue({
+      id: 'openai:{{ env.KIND }}',
+      env: { KIND: 'codex-sdk', OPENAI_API_KEY: 'file-key' },
+    });
+    const provider = await loadApiProvider('file://provider.yaml', {
+      env: { CODEX_API_KEY: 'suite-key' },
+    });
+    expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('suite-key');
+  });
+
   it.each([
     { cloud: { CODEX_API_KEY: 'cloud-key' }, local: undefined, expected: 'cloud-key' },
     {
