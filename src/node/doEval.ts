@@ -229,6 +229,9 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
   });
 }
 
+const activeProviderRuns = new Map<ApiProvider, number>();
+const pendingProviderCleanups = new Map<ApiProvider, Promise<void>>();
+
 function resolveSuggestionOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
   commandLineOptions: Record<string, any> | undefined,
@@ -352,8 +355,6 @@ export async function doEval(
   let config: Partial<UnifiedConfig> | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
-  const activeProviderRuns = new Map<ApiProvider, number>();
-  const pendingProviderCleanups = new Map<ApiProvider, Promise<void>>();
 
   const configArgs = Array.isArray(cmdObj.config)
     ? cmdObj.config
@@ -1056,7 +1057,9 @@ export async function doEval(
           try {
             await cleanup;
           } finally {
-            pendingProviderCleanups.delete(provider);
+            if (pendingProviderCleanups.get(provider) === cleanup) {
+              pendingProviderCleanups.delete(provider);
+            }
           }
         }
       }

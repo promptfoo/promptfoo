@@ -2229,15 +2229,25 @@ describe('evalCommand', () => {
     },
   );
 
-  it.each(['success', 'error'])(
-    'preserves evaluation %s and later cleanup when provider cleanup rejects',
-    async (outcome) => {
+  it.each([
+    ['success', 'rejects'],
+    ['error', 'rejects'],
+    ['success', 'throws synchronously'],
+    ['error', 'throws synchronously'],
+  ])(
+    'preserves evaluation %s and later cleanup when provider cleanup %s',
+    async (outcome, cleanupMode) => {
       const cleanupError = new Error('MCP initialization failed');
       const evaluationError = new Error('primary evaluation failed');
       const failingProvider = {
         id: () => 'failing-cleanup-provider',
         callApi: async () => ({ output: 'ok' }),
-        cleanup: vi.fn().mockRejectedValue(cleanupError),
+        cleanup: vi.fn(() => {
+          if (cleanupMode === 'throws synchronously') {
+            throw cleanupError;
+          }
+          return Promise.reject(cleanupError);
+        }),
       } satisfies ApiProvider;
       const laterProvider = {
         id: () => 'later-cleanup-provider',
@@ -2380,42 +2390,132 @@ describe('evalCommand', () => {
     }
   });
 
-  it('does not shut down a supplied provider used by overlapping watch evaluations', async () => {
-    const makeRequest = () => {
-      const controller = new AbortController();
-      let start!: () => void;
-      let finish!: () => void;
-      const started = new Promise<void>((resolve) => {
-        start = resolve;
-      });
-      const response = new Promise<void>((resolve) => {
-        finish = resolve;
-      });
-      return { controller, start, started, response, finish };
-    };
-    const requestA = makeRequest();
-    const requestB = makeRequest();
-    const active = new Set<AbortController>();
+  it.each(['watch', 'independent doEval'])(
+    'does not shut down a supplied provider used by overlapping %s evaluations',
+    async (mode) => {
+      const makeRequest = () => {
+        const controller = new AbortController();
+        let start!: () => void;
+        let finish!: () => void;
+        const started = new Promise<void>((resolve) => {
+          start = resolve;
+        });
+        const response = new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        return { controller, start, started, response, finish };
+      };
+      const requestA = makeRequest();
+      const requestB = makeRequest();
+      const active = new Set<AbortController>();
+      const provider = {
+        id: () => 'shared-watch-provider',
+        callApi: vi.fn(async (prompt: string) => {
+          if (prompt === 'initial') {
+            return { output: prompt };
+          }
+          const request = prompt === 'A' ? requestA : requestB;
+          active.add(request.controller);
+          request.start();
+          try {
+            await request.response;
+            request.controller.signal.throwIfAborted();
+            return { output: prompt };
+          } finally {
+            active.delete(request.controller);
+          }
+        }),
+        cleanup: vi.fn(async () => {
+          for (const controller of active) {
+            controller.abort();
+          }
+        }),
+      } satisfies ApiProvider;
+      const config = { prompts: [], providers: [provider], tests: [] } as UnifiedConfig;
+      const loadDefaultConfigSpy = vi
+        .spyOn(defaultConfigModule, 'loadDefaultConfig')
+        .mockResolvedValue({ defaultConfig: config, defaultConfigPath: undefined });
+      vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
+      vi.mocked(resolveConfigs)
+        .mockReset()
+        .mockImplementation(async () => ({
+          config,
+          // Each reload makes a new suite but preserves the supplied instance.
+          testSuite: { prompts: [], providers: [provider] },
+          basePath: path.dirname(defaultConfigPath),
+        }));
+      const prompts = ['initial', 'A', 'B'];
+      vi.mocked(evaluate)
+        .mockReset()
+        .mockImplementation(async (suite, evalRecord) => {
+          expect(suite.providers[0]).toBe(provider);
+          await suite.providers[0].callApi(prompts.shift()!);
+          return evalRecord as Eval;
+        });
+      const pending: Promise<unknown>[] = [];
+
+      try {
+        await doEval({ watch: mode === 'watch', write: false }, config, defaultConfigPath, {});
+        // The regression oracle is A completing while B is active; initial idle
+        // cleanup on the old implementation does not abort an active request.
+        expect(provider.cleanup).toHaveBeenCalledTimes(1);
+        provider.cleanup.mockClear();
+        const onChange = chokidarMocks.handlers.get('change');
+        if (mode === 'watch') {
+          expect(onChange).toBeDefined();
+        }
+        const run = (file: string) =>
+          mode === 'watch'
+            ? Promise.resolve(onChange!(file))
+            : doEval({ write: false }, config, defaultConfigPath, {});
+        const evaluationA = run(defaultConfigPath);
+        pending.push(evaluationA);
+        await requestA.started;
+        const evaluationB = run('prompt.txt');
+        pending.push(evaluationB);
+        await requestB.started;
+
+        requestA.finish();
+        await evaluationA;
+        expect(requestB.controller.signal.aborted).toBe(false);
+        expect(provider.cleanup).not.toHaveBeenCalled();
+        expect(active.size).toBe(1);
+
+        requestB.finish();
+        await evaluationB;
+        await expect(provider.callApi.mock.results[2].value).resolves.toEqual({ output: 'B' });
+        expect(provider.cleanup).toHaveBeenCalledTimes(1);
+        expect(active.size).toBe(0);
+        // Provider-wide shutdown remains available to its owner.
+        await provider.cleanup();
+        expect(provider.cleanup).toHaveBeenCalledTimes(2);
+      } finally {
+        requestA.finish();
+        requestB.finish();
+        await Promise.allSettled(pending);
+        loadDefaultConfigSpy.mockRestore();
+        vi.mocked(evaluate).mockReset();
+        vi.mocked(resolveConfigs).mockReset();
+      }
+    },
+  );
+
+  it('waits for an earlier shared-provider cleanup before a new run starts', async () => {
+    let finishCleanup!: () => void;
+    let cleanupStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      cleanupStarted = resolve;
+    });
+    let cleanupCalls = 0;
     const provider = {
-      id: () => 'shared-watch-provider',
-      callApi: vi.fn(async (prompt: string) => {
-        if (prompt === 'initial') {
-          return { output: prompt };
-        }
-        const request = prompt === 'A' ? requestA : requestB;
-        active.add(request.controller);
-        request.start();
-        try {
-          await request.response;
-          request.controller.signal.throwIfAborted();
-          return { output: prompt };
-        } finally {
-          active.delete(request.controller);
-        }
-      }),
+      id: () => 'shared-provider',
+      callApi: vi.fn(async () => ({ output: 'ok' })),
       cleanup: vi.fn(async () => {
-        for (const controller of active) {
-          controller.abort();
+        if (cleanupCalls++ === 0) {
+          cleanupStarted();
+          await new Promise<void>((done) => {
+            finishCleanup = done;
+          });
         }
       }),
     } satisfies ApiProvider;
@@ -2426,55 +2526,23 @@ describe('evalCommand', () => {
     vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
     vi.mocked(resolveConfigs)
       .mockReset()
-      .mockImplementation(async () => ({
+      .mockResolvedValue({
         config,
-        // Each reload makes a new suite but preserves the supplied instance.
         testSuite: { prompts: [], providers: [provider] },
         basePath: path.dirname(defaultConfigPath),
-      }));
-    const prompts = ['initial', 'A', 'B'];
-    vi.mocked(evaluate)
-      .mockReset()
-      .mockImplementation(async (suite, evalRecord) => {
-        expect(suite.providers[0]).toBe(provider);
-        await suite.providers[0].callApi(prompts.shift()!);
-        return evalRecord as Eval;
       });
-    const pending: Promise<unknown>[] = [];
-
+    vi.mocked(evaluate).mockReset().mockResolvedValue(new Eval(config));
     try {
-      await doEval({ watch: true, write: false }, config, defaultConfigPath, {});
-      // The regression oracle is A completing while B is active; initial idle
-      // cleanup on the old implementation does not abort an active request.
-      expect(provider.cleanup).toHaveBeenCalledTimes(1);
-      provider.cleanup.mockClear();
-      const onChange = chokidarMocks.handlers.get('change');
-      expect(onChange).toBeDefined();
-      const evaluationA = Promise.resolve(onChange!(defaultConfigPath));
-      pending.push(evaluationA);
-      await requestA.started;
-      const evaluationB = Promise.resolve(onChange!('prompt.txt'));
-      pending.push(evaluationB);
-      await requestB.started;
-
-      requestA.finish();
-      await evaluationA;
-      expect(requestB.controller.signal.aborted).toBe(false);
-      expect(provider.cleanup).not.toHaveBeenCalled();
-      expect(active.size).toBe(1);
-
-      requestB.finish();
-      await evaluationB;
-      await expect(provider.callApi.mock.results[2].value).resolves.toEqual({ output: 'B' });
-      expect(provider.cleanup).toHaveBeenCalledTimes(1);
-      expect(active.size).toBe(0);
-      // Provider-wide shutdown remains available to its owner.
-      await provider.cleanup();
-      expect(provider.cleanup).toHaveBeenCalledTimes(2);
+      const first = doEval({ write: false }, config, undefined, {});
+      await started;
+      const second = doEval({ write: false }, config, undefined, {});
+      await Promise.resolve();
+      expect(vi.mocked(evaluate)).toHaveBeenCalledOnce();
+      finishCleanup();
+      await Promise.all([first, second]);
+      expect(vi.mocked(evaluate)).toHaveBeenCalledTimes(2);
     } finally {
-      requestA.finish();
-      requestB.finish();
-      await Promise.allSettled(pending);
+      finishCleanup?.();
       loadDefaultConfigSpy.mockRestore();
       vi.mocked(evaluate).mockReset();
       vi.mocked(resolveConfigs).mockReset();

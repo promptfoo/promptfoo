@@ -230,6 +230,7 @@
     "@aws-sdk/credential-provider-ini": "3.973.12",
     "@aws-sdk/credential-provider-node": "3.972.78",
     "@aws-sdk/credential-provider-sso": "^3.972.16",
+    "@aws-sdk/nested-clients": "^3.997.41",
     "@aws-sdk/types": "^3.973.5",
     "@azure/identity": "^4.13.0",
     "@azure/openai-assistants": "^1.0.0-beta.6",

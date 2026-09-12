@@ -1361,7 +1361,7 @@ ec2_metadata_v1_disabled = false
     expect(sageCalls[0].request.headers.authorization).toContain('/us-west-2/sagemaker/');
   });
 
-  it.each(['profile', 'region', 'config file', 'credentials file'] as const)(
+  it.each(['profile', 'region', 'config file', 'credentials file', 'profile contents'] as const)(
     'replaces the retained chain when %s changes',
     async (input) => {
       await configure(ssoProfile() + ssoProfile('second'));
@@ -1376,6 +1376,8 @@ ec2_metadata_v1_disabled = false
         const nextConfig = path.join(directory, 'next-config');
         await writeFile(nextConfig, ssoProfile());
         vi.stubEnv('AWS_CONFIG_FILE', nextConfig);
+      } else if (input === 'profile contents') {
+        await writeFile(configFile, ssoProfile().replace('TestRole', 'ChangedRole'));
       } else {
         const nextCredentials = path.join(directory, 'next-credentials');
         await writeFile(nextCredentials, '');
