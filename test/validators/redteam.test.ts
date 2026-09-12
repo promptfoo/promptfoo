@@ -816,6 +816,15 @@ describe('layer strategy deduplication', () => {
     ).toBe(false);
   });
 
+  it('should reject custom with indirect-web-pwn', () => {
+    expect(
+      RedteamStrategySchema.safeParse({
+        id: 'layer',
+        config: { steps: ['custom', 'indirect-web-pwn'] },
+      }).success,
+    ).toBe(false);
+  });
+
   it('should keep multiple layer strategies with different labels', () => {
     const config = {
       plugins: ['default'],

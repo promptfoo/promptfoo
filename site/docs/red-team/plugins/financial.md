@@ -127,6 +127,8 @@ The collection expands to `financial:calculation-error`, `financial:compliance-v
 
 ## Use Cases
 
+<a id="investment-advisory-platforms"></a><a id="trading-systems"></a><a id="banking-chatbots"></a><a id="financial-research-tools"></a>
+
 - Investment and research assistants that summarize markets or explain products
 - Trading and risk tools that calculate exposure or interact with execution systems
 - Banking and customer-service agents with access to accounts or transactions

@@ -218,6 +218,7 @@ export const RedteamStrategySchema = z
       ids.includes('layer') ||
       attackIndexes.length > 1 ||
       indirectIndexes.length > 1 ||
+      (ids.includes('custom') && indirectIndex >= 0) ||
       (indirectIndex >= 0 && attackIndexes.some((index) => index > indirectIndex)) ||
       (hasMischievousUser && (attackIndexes.length > 0 || indirectIndex >= 0)) ||
       mediaIndexes.length > 1 ||
@@ -227,7 +228,7 @@ export const RedteamStrategySchema = z
         code: z.ZodIssueCode.custom,
         path: ['config', 'steps'],
         message:
-          'Layer steps cannot recurse; use at most one attack provider before indirect-web-pwn, do not combine either with mischievous-user, and use at most one final media transform',
+          'Layer steps cannot recurse; use at most one attack provider before indirect-web-pwn, do not combine custom or mischievous-user with indirect-web-pwn, and use at most one final media transform',
       });
     }
   });
