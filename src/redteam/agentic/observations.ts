@@ -33,6 +33,7 @@ export type AgentObservation = {
   connector?: string;
   endTimestamp?: number;
   evidence?: string;
+  eventId?: string;
   fieldLocations?: Partial<
     Record<'command' | 'evidence' | 'input' | 'output' | 'path' | 'text' | 'tool', string>
   >;
@@ -380,11 +381,13 @@ function controlObservationFromSpan(
       location,
       outcome: failed
         ? 'error'
-        : stringifyValue(
-            guardrailDecision ??
-              getAttribute(attributes, ['guardrail.outcome']) ??
-              attributes['codex.status'],
-          ),
+        : isExplicitlyTrue(attributes['guardrail.triggered'])
+          ? 'blocked'
+          : stringifyValue(
+              guardrailDecision ??
+                getAttribute(attributes, ['guardrail.outcome']) ??
+                attributes['codex.status'],
+            ),
       parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,
@@ -697,7 +700,7 @@ export function observationsFromTraceData(
         'trace-event',
       );
       if (eventControlObservation) {
-        observations.push(eventControlObservation);
+        observations.push({ ...eventControlObservation, eventId: eventLocation });
       }
       observations.push(
         ...observationsFromTraceAttributes(
@@ -705,7 +708,7 @@ export function observationsFromTraceData(
           eventLocation,
           'trace-event',
           eventSpan,
-        ),
+        ).map((observation) => ({ ...observation, eventId: eventLocation })),
       );
     });
   });

@@ -300,6 +300,51 @@ describe('fetchTraceContext', () => {
     expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
   });
 
+  it('replaces overlapping external trace secrets without rewriting redaction markers', async () => {
+    mockExternalTrace([
+      {
+        spanId: 'target',
+        name: 'token EE E',
+        startTime: 1,
+        attributes: { authorization: ['EE', 'E'] },
+        events: [{ name: 'token EE E', timestamp: 2, attributes: {} }],
+      },
+    ]);
+    await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      redactAttributes: ['authorization'],
+    });
+    expect(storedSpans[0].name).toBe('token [REDACTED] [REDACTED]');
+    expect(storedSpans[0].events?.[0].name).toBe('token [REDACTED] [REDACTED]');
+  });
+
+  it('redacts external event text when attribute sanitization stops early', async () => {
+    const secret = 'PRIVATE_DEEP_EXTERNAL_EVENT';
+    let nested: Record<string, unknown> = { authorization: secret };
+    for (let depth = 0; depth < 25; depth++) {
+      nested = { nested };
+    }
+    mockExternalTrace([
+      {
+        spanId: 'target',
+        name: `request ${secret}`,
+        statusMessage: `failed ${secret}`,
+        startTime: 1,
+        events: [{ name: `event ${secret}`, timestamp: 2, attributes: nested }],
+      },
+    ]);
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      redactAttributes: ['authorization'],
+    });
+    expect(JSON.stringify(storedSpans)).not.toContain(secret);
+    expect(JSON.stringify(result)).not.toContain(secret);
+  });
+
   it('redacts configured nested and numeric attribute values before persistence', async () => {
     mockExternalTrace([
       {

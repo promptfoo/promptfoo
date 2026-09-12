@@ -365,7 +365,7 @@ function toolInvocationKey(observation: AgentObservation, index: number): string
   if (observation.spanName || observation.timestamp !== undefined) {
     return `trace:${observation.source}:${observation.spanId ?? ''}:${observation.spanName ?? ''}:${
       observation.timestamp ?? ''
-    }:${observation.callId ?? observation.location}`;
+    }:${observation.callId ?? observation.eventId ?? observation.location}`;
   }
 
   return `observation:${index}:${observation.location}`;

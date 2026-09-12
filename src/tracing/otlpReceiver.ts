@@ -798,31 +798,45 @@ export class OTLPReceiver {
               startTime, // Convert to ms
               endTime: span.endTimeUnixNano ? Number(span.endTimeUnixNano) / 1_000_000 : undefined,
               attributes,
-              events: (Array.isArray(span.events) ? span.events : []).flatMap((event) =>
-                event &&
-                typeof event === 'object' &&
-                typeof event.name === 'string' &&
-                event.name.trim() &&
-                (event.attributes === undefined ||
-                  (Array.isArray(event.attributes) &&
-                    event.attributes.every(
-                      (attribute) =>
-                        attribute &&
-                        typeof attribute === 'object' &&
-                        attribute.value &&
-                        typeof attribute.value === 'object',
-                    )))
-                  ? [
-                      {
-                        name: event.name,
-                        timestamp: event.timeUnixNano
-                          ? Number(event.timeUnixNano) / 1_000_000
-                          : startTime,
-                        attributes: this.parseAttributes(event.attributes),
-                      },
-                    ]
-                  : [],
-              ),
+              events: (Array.isArray(span.events) ? span.events : []).flatMap((event) => {
+                if (
+                  !event ||
+                  typeof event !== 'object' ||
+                  typeof event.name !== 'string' ||
+                  !event.name.trim() ||
+                  (event.attributes !== undefined &&
+                    (!Array.isArray(event.attributes) ||
+                      !event.attributes.every(
+                        (attribute) =>
+                          attribute &&
+                          typeof attribute === 'object' &&
+                          attribute.value &&
+                          typeof attribute.value === 'object',
+                      )))
+                ) {
+                  return [];
+                }
+                const nanos = event.timeUnixNano;
+                if (
+                  nanos !== undefined &&
+                  (typeof nanos !== 'string' ||
+                    !/^\d{1,20}$/.test(nanos) ||
+                    BigInt(nanos) > 0xffffffffffffffffn)
+                ) {
+                  return [];
+                }
+                const timestamp = nanos === undefined ? startTime : Number(nanos) / 1_000_000;
+                if (!Number.isFinite(timestamp) || timestamp < 0) {
+                  return [];
+                }
+                return [
+                  {
+                    name: event.name,
+                    timestamp,
+                    attributes: this.parseAttributes(event.attributes),
+                  },
+                ];
+              }),
               statusCode: span.status?.code,
               statusMessage: span.status?.message,
             },

@@ -120,6 +120,47 @@ describe('OTLPReceiver', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(['invalid', '-1000000', 'Infinity', 'NaN', '1e9', '18446744073709551616', ''])(
+    'drops an OTLP event with invalid timestamp %s',
+    async (timeUnixNano) => {
+      await request(receiver.getApp())
+        .post('/v1/traces')
+        .send({
+          resourceSpans: [
+            {
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'a'.repeat(32),
+                      spanId: '1234567890abcdef',
+                      name: 'route',
+                      startTimeUnixNano: '1000000000',
+                      endTimeUnixNano: '2000000000',
+                      events: [
+                        { name: 'invalid guardrail', timeUnixNano },
+                        { name: 'valid tool', timeUnixNano: '1500000000' },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        })
+        .expect(200);
+      expect(mockTraceStore.addSpans).toHaveBeenCalledWith(
+        'a'.repeat(32),
+        [
+          expect.objectContaining({
+            events: [{ name: 'valid tool', timestamp: 1500, attributes: {} }],
+          }),
+        ],
+        expect.any(Object),
+      );
+    },
+  );
+
   describe('Health check', () => {
     it('should respond to health check endpoint', async () => {
       const response = await request(receiver.getApp()).get('/health').expect(200);

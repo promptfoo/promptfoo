@@ -114,3 +114,48 @@ export function sanitizeTraceAttributes(
 
   return sanitized;
 }
+
+export function getTraceTextRedactor(pairs: { original: unknown; sanitized: unknown }[]) {
+  const pending = [...pairs];
+  const secrets = new Set<string>();
+  let incomplete = false;
+  let visited = 0;
+  while (pending.length) {
+    const { original, sanitized } = pending.pop()!;
+    if (++visited > 10_000 || (sanitized === '[TRUNCATED]' && original !== sanitized)) {
+      incomplete = true;
+      break;
+    }
+    const redacted = sanitized === '[REDACTED]' || sanitized === '<redacted>';
+    if (!original || typeof original !== 'object') {
+      if (original !== undefined && original !== null && redacted && String(original)) {
+        secrets.add(String(original));
+      }
+      continue;
+    }
+    for (const [key, value] of Object.entries(original)) {
+      pending.push({
+        original: value,
+        sanitized: redacted ? sanitized : (sanitized as Record<string, unknown>)?.[key],
+      });
+    }
+  }
+  const pattern = secrets.size
+    ? new RegExp(
+        [...secrets]
+          .sort((a, b) => b.length - a.length)
+          .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('|'),
+        'g',
+      )
+    : undefined;
+  return <T extends string | undefined>(value: T): T => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    if (incomplete) {
+      return '[REDACTED]' as T;
+    }
+    return (pattern ? value.replace(pattern, '[REDACTED]') : value) as T;
+  };
+}
