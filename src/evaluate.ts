@@ -1,9 +1,8 @@
 import * as cache from './cache';
-import cliState from './cliState';
+import cliState, { withGradingProviderTracker } from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
 import { getAuthor } from './globalConfig/accounts';
 import logger from './logger';
-import { withGradingProviderTracker } from './matchers/providers';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
 import { sanitizeProvider } from './models/evalResult';
