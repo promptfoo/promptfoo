@@ -149,11 +149,11 @@ This V1 surface makes provider composition and artifact testing possible, but it
 not yet the final ABI for independently published provider packages. Its factory
 types still use transitional provider contracts from `src/types/providers.ts`.
 Those contracts must move to a narrower portable surface before extracting a real
-`@promptfoo/provider-*` package. Provider loading does not register returned
-instances for process-wide cleanup. The caller owns each provider's `cleanup()`
-hook; the CLI uses its existing teardown path. Programmatic consumers should
-call that hook when they finish using a provider. Run-scoped automatic teardown
-remains separate work.
+`@promptfoo/provider-*` package. Direct `loadApiProvider()` calls do not register
+returned instances for process-wide cleanup, so their caller owns each provider's
+`cleanup()` hook. Providers created from evaluation configuration are instead cleaned
+by `evaluateWithSource()` after that run; caller-supplied instances remain caller-owned.
+The CLI uses its existing teardown path.
 
 The checker also resolves cross-layer source aliases such as `@promptfoo/*`.
 The browser-only `@app/*` alias stays inside the `app` layer. Alias spelling

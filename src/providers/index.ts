@@ -359,7 +359,7 @@ async function loadProvidersFromFile(
   const relativePath = filePath.slice('file://'.length);
 
   const results = await Promise.allSettled(
-    configs.map((config) => {
+    configs.map(async (config) => {
       invariant(config.id, `Provider config in ${relativePath} must have an id`);
       return loadApiProvider(config.id, { options: config, basePath, env });
     }),
@@ -373,7 +373,7 @@ async function loadProvidersFromFile(
         .filter(
           (result): result is PromiseFulfilledResult<ApiProvider> => result.status === 'fulfilled',
         )
-        .map((result) => result.value.cleanup?.()),
+        .map(async (result) => result.value.cleanup?.()),
     );
     throw failure.reason;
   }
@@ -466,7 +466,7 @@ export async function loadApiProviders(
           )
           .flatMap((result) => result.value)
           .filter((provider) => !callerOwned.has(provider))
-          .map((provider) => provider.cleanup?.()),
+          .map(async (provider) => provider.cleanup?.()),
       );
       throw failure.reason;
     }

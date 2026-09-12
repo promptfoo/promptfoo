@@ -325,6 +325,45 @@ describe('ProviderPluginRegistry', () => {
     }
   });
 
+  it('settles file validation and synchronous cleanup failures', async () => {
+    const secondCleanup = vi.fn();
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'provider-file-sync-cleanup-'));
+    const config = path.join(root, 'providers.json');
+    fs.writeFileSync(
+      config,
+      JSON.stringify([{ id: 'sync-cleanup:first' }, {}, { id: 'sync-cleanup:second' }]),
+    );
+    const dispose = registerProviderPlugin(
+      createManifest(
+        'sync-cleanup',
+        (id) => id.startsWith('sync-cleanup:'),
+        async () => [
+          {
+            test: () => true,
+            create: async (id) => ({
+              id: () => id,
+              callApi: async () => ({ output: 'ok' }),
+              cleanup:
+                id === 'sync-cleanup:first'
+                  ? () => {
+                      throw new Error('cleanup failed');
+                    }
+                  : secondCleanup,
+            }),
+          },
+        ],
+      ),
+    );
+
+    try {
+      await expect(loadApiProviders(`file://${config}`)).rejects.toThrow('must have an id');
+      expect(secondCleanup).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('continues evaluation-owned cleanup after one hook fails', async () => {
     const secondCleanup = vi.fn();
     const dispose = registerProviderPlugin(
