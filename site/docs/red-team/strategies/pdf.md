@@ -101,9 +101,11 @@ The strategy preserves the plugin's assertions and attack goal. Redteam graders 
 
 - Standalone, single-turn generation only. Configure `pdf` directly under `redteam.strategies`; it can run alongside other strategies, but cannot be a step inside `layer`. Multi-turn runtime PDF transforms are rejected.
 - Templates must be unencrypted PDFs with extractable text. Image-only source templates are not supported; generate image-only output with `mode: scanned`.
-- Extracted template text and newly rendered text are each limited to 50,000 characters. Template inspection runs in a separate process with a 15-second deadline and a bounded JavaScript heap.
+- Extracted template text and newly rendered text are each limited to 50,000 characters. Template inspection and scanned rendering run in separate processes with a 15-second deadline and a bounded JavaScript heap.
 - Files are limited to 5 MiB. Templates can have at most 9 pages, leaving room for review notes within the 10-page output limit. Page dimensions must be between 1 and 20 inches.
 - New text uses Helvetica's Latin character set. Unsupported characters cause an error instead of disappearing. Existing template fonts remain intact in text mode.
 - Rendering and template-generation errors stop the transformation. There is no text-disguised-as-PDF fallback. Editing signed documents invalidates their signatures; forms, annotations, embedded files, and active PDF content are outside this strategy's coverage.
+
+The setup wizard's single-test preview is disabled for PDF because that preview only sends text. Run a full red team eval to exercise attachment delivery. If your installation omits optional dependencies, install the PDF parser with `npm install pdf-parse` in the same environment as Promptfoo.
 
 For broad coverage, combine the strategy with plugins appropriate to your application's policy. Test clean documents first so ingestion failures do not look like successful defenses.
