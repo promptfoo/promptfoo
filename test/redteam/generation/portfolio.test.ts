@@ -196,6 +196,24 @@ describe('PortfolioRedteamPluginBase', () => {
     expect(tests[0]?.vars?.prompt).toBe('accepted replacement prompt');
   });
 
+  it('preserves family generation with tool-call formatting instructions', async () => {
+    const provider = createMockProvider({
+      response: createProviderResponse({
+        output: 'Prompt: {"tool":"search","args":{"query":"accepted"}}',
+      }),
+    });
+    const plugin = new ProviderDrivenPortfolioPlugin(provider, 'test purpose', 'prompt', {
+      modifiers: { testGenerationFormat: 'Encode each prompt as a JSON tool call.' },
+    });
+    const tests = await plugin.generateTests(1);
+    expect(plugin.familyTemplateCalls).toBeGreaterThan(0);
+    expect(tests[0]?.metadata?.generationMode).toBe('portfolio');
+    expect(provider.callApi.mock.calls[0]?.[0]).toContain(
+      'Encode each prompt as a JSON tool call.',
+    );
+    expect(JSON.parse(String(tests[0]?.vars?.prompt)).tool).toBe('search');
+  });
+
   it('honors custom generation instructions outside the built-in families', async () => {
     const provider = createMockProvider({
       response: createProviderResponse({ output: 'Prompt: Only test authorization boundaries.' }),

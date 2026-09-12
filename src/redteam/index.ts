@@ -415,13 +415,16 @@ function buildRedteamModifiers({
   maxCharsPerMessage,
   pluginConfig,
   testGenerationInstructions,
+  testGenerationFormat,
 }: {
   maxCharsPerMessage?: number;
   pluginConfig?: Record<string, any>;
   testGenerationInstructions?: string;
+  testGenerationFormat?: string;
 }): Record<string, string> {
   const modifiers: Record<string, string> = {
     ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
+    ...(testGenerationFormat ? { testGenerationFormat } : {}),
     ...((pluginConfig?.modifiers as Record<string, string> | undefined) ?? {}),
   };
   const maxCharsPerMessageModifier = getMaxCharsPerMessageModifierValue(
@@ -570,6 +573,7 @@ function addLanguageToPluginMetadata(
   plugin: RedteamPluginObject,
   maxCharsPerMessage?: number,
   testGenerationInstructions?: string,
+  testGenerationFormat?: string,
 ): TestCase {
   const existingLanguage = getLanguageForTestCase(test);
   const languageToAdd = lang && !existingLanguage ? { language: lang } : {};
@@ -588,6 +592,7 @@ function addLanguageToPluginMetadata(
       plugin.config ||
       undefined,
     testGenerationInstructions,
+    testGenerationFormat,
   });
 
   return {
@@ -1029,6 +1034,7 @@ export async function synthesize({
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
   testGenerationInstructions,
+  testGenerationFormat,
 }: SynthesizeOptions): Promise<{
   purpose: string;
   entities: string[];
@@ -1338,6 +1344,7 @@ export async function synthesize({
             maxCharsPerMessage,
             pluginConfig: resolvedPluginConfig,
             testGenerationInstructions,
+            testGenerationFormat,
           }),
         });
       } catch (error) {
@@ -1461,6 +1468,7 @@ export async function synthesize({
               maxCharsPerMessage,
               pluginConfig: plugin.config,
               testGenerationInstructions,
+              testGenerationFormat,
             }),
           },
         });
@@ -1476,6 +1484,7 @@ export async function synthesize({
                 plugin,
                 maxCharsPerMessage,
                 testGenerationInstructions,
+                testGenerationFormat,
               ),
             );
             const constrainedTests = filterOversizedTestCases(
@@ -1621,6 +1630,7 @@ export async function synthesize({
               maxCharsPerMessage,
               pluginConfig: resolvedConfig,
               testGenerationInstructions,
+              testGenerationFormat,
             }),
           };
           const customPlugin = new CustomPlugin(
@@ -1641,6 +1651,7 @@ export async function synthesize({
                 plugin,
                 maxCharsPerMessage,
                 testGenerationInstructions,
+                testGenerationFormat,
               ),
             ),
             injectVar,

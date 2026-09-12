@@ -2988,7 +2988,7 @@ describe('Language configuration', () => {
         key: 'test-plugin',
       });
 
-      await synthesize({
+      const result = await synthesize({
         language: 'en',
         numTests: 1,
         plugins: [
@@ -3006,6 +3006,7 @@ describe('Language configuration', () => {
         strategies: [],
         targetIds: ['test-provider'],
         testGenerationInstructions: 'Focus on edge cases',
+        testGenerationFormat: 'Encode each prompt as a JSON tool call.',
       });
 
       // Verify action was called with correct config containing merged modifiers
@@ -3014,11 +3015,16 @@ describe('Language configuration', () => {
           config: expect.objectContaining({
             modifiers: expect.objectContaining({
               testGenerationInstructions: 'Focus on edge cases',
+              testGenerationFormat: 'Encode each prompt as a JSON tool call.',
               tone: 'aggressive',
             }),
           }),
         }),
       );
+      expect(result.testCases[0].metadata?.modifiers).toMatchObject({
+        testGenerationInstructions: 'Focus on edge cases',
+        testGenerationFormat: 'Encode each prompt as a JSON tool call.',
+      });
     });
   });
 

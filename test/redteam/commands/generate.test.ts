@@ -949,7 +949,7 @@ describe('doGenerateRedteam', () => {
         strategies: expect.any(Array),
         targetIds: [],
         showProgressBar: true,
-        testGenerationInstructions: '',
+        testGenerationFormat: undefined,
       }),
     );
   });
@@ -1709,58 +1709,63 @@ describe('doGenerateRedteam', () => {
     );
   });
 
-  it('should enhance purpose with MCP tools information when available', async () => {
-    vi.mocked(extractMcpToolsInfo).mockResolvedValue(
-      '\nAvailable MCP tools:\n{"name":"search_companies","description":"Search companies.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}}}}',
-    );
+  it.each([undefined, 'Only test authorization boundaries.'])(
+    'keeps MCP formatting separate from custom generation instructions: %s',
+    async (instructions) => {
+      vi.mocked(extractMcpToolsInfo).mockResolvedValue(
+        '\nAvailable MCP tools:\n{"name":"search_companies","description":"Search companies.","inputSchema":{"type":"object","properties":{"query":{"type":"string"}}}}',
+      );
 
-    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
-      basePath: '/mock/path',
-      testSuite: {
-        providers: [mockProvider],
-        prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
-        tests: [],
-        defaultTest: {
-          vars: { user_name: 'Alice' },
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+          defaultTest: {
+            vars: { user_name: 'Alice' },
+          },
         },
-      },
-      config: {
-        redteam: {
-          purpose: 'Original purpose for {{ user_name }}',
+        config: {
+          redteam: {
+            purpose: 'Original purpose for {{ user_name }}',
+            testGenerationInstructions: instructions,
+          },
         },
-      },
-    });
+      });
 
-    vi.mocked(synthesize).mockResolvedValue({
-      testCases: [],
-      purpose: 'Test purpose',
-      entities: [],
-      injectVar: 'input',
-      failedPlugins: [],
-    });
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [],
+        purpose: 'Test purpose',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      });
 
-    const options: RedteamCliGenerateOptions = {
-      output: 'output.yaml',
-      config: 'config.yaml',
-      cache: true,
-      defaultConfig: {},
-      write: true,
-    };
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      };
 
-    await doGenerateRedteam(options);
+      await doGenerateRedteam(options);
 
-    const synthesizePurpose = vi.mocked(synthesize).mock.calls[0][0].purpose;
-    expect(synthesizePurpose).toContain('Original purpose for Alice');
-    expect(synthesizePurpose).toContain('"name":"search_companies"');
-    expect(synthesizePurpose).not.toContain('{{ user_name }}');
-    expect(synthesize).toHaveBeenCalledWith(
-      expect.objectContaining({
-        testGenerationInstructions: expect.stringContaining(
-          'Generate every test case prompt as a json string',
-        ),
-      }),
-    );
-  });
+      const synthesizePurpose = vi.mocked(synthesize).mock.calls[0][0].purpose;
+      expect(synthesizePurpose).toContain('Original purpose for Alice');
+      expect(synthesizePurpose).toContain('"name":"search_companies"');
+      expect(synthesizePurpose).not.toContain('{{ user_name }}');
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          testGenerationFormat: expect.stringContaining(
+            'Generate every test case prompt as a json string',
+          ),
+        }),
+      );
+      expect(vi.mocked(synthesize).mock.calls[0][0].testGenerationInstructions).toBe(instructions);
+    },
+  );
 
   it('should enhance purpose with A2A Agent Card information when available', async () => {
     vi.mocked(extractA2AAgentCardInfo).mockResolvedValue(

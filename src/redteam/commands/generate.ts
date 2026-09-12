@@ -666,7 +666,7 @@ async function doGenerateRedteamInternal(
   // Extract MCP tools information and add it after purpose templating is resolved.
   const rootPurpose = parsedConfig.data.purpose;
   let purposeDetails = '';
-  let augmentedTestGenerationInstructions = config.testGenerationInstructions ?? '';
+  let testGenerationFormat: string | undefined;
   try {
     const a2aAgentCardInfo = await extractA2AAgentCardInfo(testSuite.providers);
     if (a2aAgentCardInfo) {
@@ -685,7 +685,7 @@ async function doGenerateRedteamInternal(
     if (mcpToolsInfo) {
       purposeDetails += mcpToolsInfo;
       logger.info('Added MCP tools information to red team purpose');
-      augmentedTestGenerationInstructions += `\nGenerate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
+      testGenerationFormat = `Generate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
     }
   } catch (error) {
     logger.warn(
@@ -745,7 +745,8 @@ async function doGenerateRedteamInternal(
             cloudTargetDatabaseId,
             targetIds,
             showProgressBar: options.progressBar !== false,
-            testGenerationInstructions: augmentedTestGenerationInstructions,
+            testGenerationInstructions: config.testGenerationInstructions,
+            testGenerationFormat,
           } as SynthesizeOptions),
       );
 
@@ -813,7 +814,8 @@ async function doGenerateRedteamInternal(
         cloudTargetDatabaseId,
         targetIds,
         showProgressBar: options.progressBar !== false,
-        testGenerationInstructions: augmentedTestGenerationInstructions,
+        testGenerationInstructions: config.testGenerationInstructions,
+        testGenerationFormat,
       } as SynthesizeOptions),
     );
 

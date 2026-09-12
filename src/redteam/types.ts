@@ -292,6 +292,8 @@ export interface RedteamFileConfig extends CommonOptions {
 }
 
 export interface SynthesizeOptions extends CommonOptions {
+  /** Target-specific output formatting, independent of custom attack instructions. */
+  testGenerationFormat?: string;
   abortSignal?: AbortSignal;
   redteamGenerationContext?: RedteamGenerationContext;
   /** Cloud target database ID used to preserve target-owned task context during generation. */

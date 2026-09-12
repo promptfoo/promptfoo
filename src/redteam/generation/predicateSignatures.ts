@@ -1,5 +1,35 @@
 import type { AttackPredicateSignature, AttackSignature } from './types';
 
+function toolArgumentText(prompt: string): string {
+  if (!prompt.trimStart().startsWith('{')) {
+    return prompt;
+  }
+  let call;
+  try {
+    call = JSON.parse(prompt);
+  } catch {
+    return prompt;
+  }
+  const tool = call.tool || call.toolName || call.function || call.functionName || call.name;
+  const args = call.args || call.arguments || call.params || call.parameters;
+  if (typeof tool !== 'string' || !args || typeof args !== 'object' || Array.isArray(args)) {
+    return prompt;
+  }
+  const pending: unknown[] = [args];
+  const text: string[] = [];
+  while (pending.length) {
+    const value = pending.pop();
+    if (typeof value === 'string') {
+      text.push(value);
+    } else if (value && typeof value === 'object') {
+      for (const child of Object.values(value).reverse()) {
+        pending.push(child);
+      }
+    }
+  }
+  return text.join('\n');
+}
+
 export const PROMPT_EXTRACTION_PREDICATES = [
   'requestsSystemPrompt',
   'requestsOperatingInstructions',
@@ -57,6 +87,7 @@ const PROMPT_EXTRACTION_RULES: Record<PromptExtractionPredicate, RegExp[]> = {
 };
 
 export function extractPromptExtractionSignature(prompt: string): AttackSignature {
+  prompt = toolArgumentText(prompt);
   const predicates = Object.fromEntries(
     PROMPT_EXTRACTION_PREDICATES.map((predicate) => [
       predicate,
@@ -112,6 +143,7 @@ const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
 };
 
 export function extractExcessiveAgencySignature(prompt: string): AttackSignature {
+  prompt = toolArgumentText(prompt);
   const predicates = Object.fromEntries(
     EXCESSIVE_AGENCY_PREDICATES.map((predicate) => [
       predicate,
@@ -153,6 +185,7 @@ const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
 };
 
 export function extractPiiDirectSignature(prompt: string): AttackSignature {
+  prompt = toolArgumentText(prompt);
   const requestsQuestion = new RegExp(
     String.raw`${REQUEST_PREFIX}(?:what|which)\b(?!\s+(?:does|do|would|could|should)\b)`,
     'i',
@@ -266,6 +299,7 @@ const PII_SOCIAL_RULES: Record<PiiSocialPredicate, RegExp[]> = {
 };
 
 export function extractPiiSocialSignature(prompt: string): AttackSignature {
+  prompt = toolArgumentText(prompt);
   const predicates = Object.fromEntries(
     PII_SOCIAL_PREDICATES.map((predicate) => [
       predicate,
@@ -339,6 +373,7 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
 };
 
 export function extractSqlInjectionSignature(prompt: string): AttackSignature {
+  prompt = toolArgumentText(prompt);
   const predicates = Object.fromEntries(
     SQL_INJECTION_PREDICATES.map((predicate) => [
       predicate,
@@ -392,6 +427,7 @@ const SHELL_INJECTION_RULES: Record<ShellInjectionPredicate, RegExp[]> = {
 };
 
 export function extractShellInjectionSignature(prompt: string): AttackSignature {
+  prompt = toolArgumentText(prompt);
   const predicates = Object.fromEntries(
     SHELL_INJECTION_PREDICATES.map((predicate) => [
       predicate,
