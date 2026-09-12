@@ -2230,13 +2230,17 @@ describe('evalCommand', () => {
   );
 
   it.each([
-    ['success', 'rejects'],
-    ['error', 'rejects'],
-    ['success', 'throws synchronously'],
-    ['error', 'throws synchronously'],
+    ['success', 'rejects', 'top-level'],
+    ['error', 'rejects', 'top-level'],
+    ['success', 'throws synchronously', 'top-level'],
+    ['error', 'throws synchronously', 'top-level'],
+    ['success', 'rejects', 'typed grader'],
+    ['error', 'rejects', 'typed grader'],
+    ['success', 'throws synchronously', 'typed grader'],
+    ['error', 'throws synchronously', 'typed grader'],
   ])(
-    'preserves evaluation %s and later cleanup when provider cleanup %s',
-    async (outcome, cleanupMode) => {
+    'preserves evaluation %s and later cleanup when provider cleanup %s from %s',
+    async (outcome, cleanupMode, position) => {
       const cleanupError = new Error('MCP initialization failed');
       const evaluationError = new Error('primary evaluation failed');
       const failingProvider = {
@@ -2259,7 +2263,21 @@ describe('evalCommand', () => {
         .mockReset()
         .mockResolvedValue({
           config,
-          testSuite: { prompts: [], providers: [failingProvider, laterProvider] },
+          testSuite: {
+            prompts: [],
+            providers:
+              position === 'top-level' ? [failingProvider, laterProvider] : [laterProvider],
+            tests:
+              position === 'typed grader'
+                ? [
+                    {
+                      assert: [
+                        { type: 'llm-rubric', value: 'ok', provider: { text: failingProvider } },
+                      ],
+                    },
+                  ]
+                : [],
+          },
           basePath: path.resolve('/'),
         });
       vi.mocked(checkProviderApiKeys).mockReset().mockReturnValue(new Map());
