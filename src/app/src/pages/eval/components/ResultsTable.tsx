@@ -242,19 +242,27 @@ function TableHeader({
   loadExpandedText,
   resourceId,
   className,
+  identity,
 }: TruncatedTextProps & {
   expandedText?: string;
   loadExpandedText?: () => Promise<string | undefined>;
   resourceId?: string;
   className?: string;
+  identity?: string;
 }) {
   const [promptOpen, setPromptOpen] = React.useState(false);
-  const [fullExpandedText, setFullExpandedText] = React.useState<string>();
+  const [fullExpandedText, setFullExpandedText] = React.useState<{
+    identity: string;
+    value: string;
+  }>();
+  const currentIdentity = identity ?? String(text);
+  const identityRef = React.useRef(currentIdentity);
+  identityRef.current = currentIdentity;
   const handlePromptOpen = async () => {
     if (loadExpandedText && isOmittedText(expandedText ?? '')) {
       const loaded = await loadExpandedText();
-      if (loaded) {
-        setFullExpandedText(loaded);
+      if (loaded && identityRef.current === currentIdentity) {
+        setFullExpandedText({ identity: currentIdentity, value: loaded });
       }
     }
     setPromptOpen(true);
@@ -285,7 +293,11 @@ function TableHeader({
             <EvalOutputPromptDialog
               open={promptOpen}
               onClose={handlePromptClose}
-              prompt={fullExpandedText ?? expandedText}
+              prompt={
+                fullExpandedText && fullExpandedText.identity === currentIdentity
+                  ? fullExpandedText.value
+                  : expandedText
+              }
             />
           )}
           {resourceId && (
@@ -683,7 +695,11 @@ function renderVariableCell({
           const hydratedValue = (detail?.testCase?.vars as Record<string, unknown> | undefined)?.[
             varName
           ];
-          return typeof hydratedValue === 'string' ? hydratedValue : undefined;
+          return typeof hydratedValue === 'string'
+            ? hydratedValue
+            : hydratedValue && typeof hydratedValue === 'object'
+              ? JSON.stringify(hydratedValue, null, 2)
+              : undefined;
         }}
       />
     );
@@ -1416,7 +1432,15 @@ function PromptColumnHeader({
                     : config.prompts
                       ? Object.values(config.prompts)
                       : [];
-                const fullPrompt = prompts[idx];
+                const fullPrompt =
+                  prompts.find((candidate) =>
+                    typeof candidate === 'string'
+                      ? candidate === prompt.label || candidate === prompt.display
+                      : candidate &&
+                        typeof candidate === 'object' &&
+                        ((prompt.id && candidate.id === prompt.id) ||
+                          candidate.label === prompt.label),
+                  ) ?? prompts[idx];
                 if (typeof fullPrompt === 'string') {
                   return fullPrompt;
                 }
@@ -1428,6 +1452,7 @@ function PromptColumnHeader({
         }
         maxLength={maxTextLength}
         resourceId={prompt.id}
+        identity={`${evalId}/${prompt.id ?? prompt.label ?? idx}`}
       />
       {renderPromptMetricDetails({
         metrics,

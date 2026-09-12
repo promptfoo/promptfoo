@@ -356,7 +356,7 @@ export function trimEvalTableForApi<T extends TableLike>(
   table: T,
   { maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT }: TrimOptions = {},
 ): T {
-  return trimForTable(
+  const trimmed = trimForTable(
     {
       ...table,
       head: trimForTable(table.head, maxStringLength),
@@ -364,6 +364,16 @@ export function trimEvalTableForApi<T extends TableLike>(
     } as T,
     maxStringLength,
   );
+  for (const [rowIndex, row] of table.body.entries()) {
+    for (const [cellIndex, cell] of row.outputs.entries()) {
+      const target = trimmed.body[rowIndex]?.outputs[cellIndex];
+      if (cell && target) {
+        target.id = cell.id;
+        target.evalId = cell.evalId;
+      }
+    }
+  }
+  return trimmed;
 }
 
 export function trimEvalConfigForTableApi<T extends object>(

@@ -423,6 +423,41 @@ describe('ResultsTable Metrics Display', () => {
     expect(await screen.findByText('full prompt header')).toBeInTheDocument();
   });
 
+  it('hydrates repeated prompt headers by prompt identity', async () => {
+    vi.mocked(fetchEvalConfig).mockResolvedValue({
+      config: { prompts: [{ label: 'shared-prompt', raw: 'full shared prompt' }] },
+    } as any);
+    const store = vi.mocked(useTableStore)();
+    vi.mocked(useTableStore).mockReturnValue({
+      ...store,
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              label: 'shared-prompt',
+              raw: '[content omitted: 120000 characters]',
+              provider: 'provider-a',
+            },
+            {
+              ...mockTable.head.prompts[0],
+              label: 'shared-prompt',
+              raw: '[content omitted: 120000 characters]',
+              provider: 'provider-b',
+            },
+          ],
+        },
+      },
+    });
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await userEvent.click(screen.getAllByText('shared-prompt')[1]);
+
+    expect(await screen.findByText('full shared prompt')).toBeInTheDocument();
+  });
+
   it('keeps the header/body boundary border visible with sticky headers', () => {
     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
       inComparisonMode: false,
@@ -965,7 +1000,7 @@ describe('ResultsTable Metrics Display', () => {
         resultId: 'result-1',
         prompt: '',
         text: '',
-        testCase: { vars: { ordinary: 'full ordinary value' } },
+        testCase: { vars: { ordinary: { nested: 'full ordinary value' } } },
         response: { prompt: 'full actual prompt' },
         metadata: { transformDisplayVars: { __attack: 'full transform' } },
       });
@@ -977,7 +1012,7 @@ describe('ResultsTable Metrics Display', () => {
       await userEvent.click(buttons[1]);
       await userEvent.click(buttons[2]);
       expect(await screen.findByText('full actual prompt')).toBeInTheDocument();
-      expect(await screen.findByText('full ordinary value')).toBeInTheDocument();
+      expect(await screen.findByText(/"nested": "full ordinary value"/)).toBeInTheDocument();
       expect(await screen.findByText('full transform')).toBeInTheDocument();
     });
 

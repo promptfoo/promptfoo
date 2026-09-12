@@ -239,6 +239,29 @@ describe('trimEvalTableForApi', () => {
     expect(trimTableCellForApi(null)).toBeNull();
   });
 
+  it('preserves result identifiers after the aggregate string budget is exhausted', () => {
+    const text = 'x'.repeat(100_000);
+    const baseRow = createEvaluateTable().body[0];
+    const table = createEvaluateTable({
+      body: Array.from({ length: 101 }, (_, index) => ({
+        ...baseRow,
+        outputs: [
+          {
+            ...baseRow.outputs[0],
+            id: `result-${index}`,
+            evalId: 'eval-1',
+            text,
+          },
+        ],
+      })),
+    });
+
+    const lastCell = trimEvalTableForApi(table).body[100].outputs[0];
+    expect(lastCell.text).toBe('[content omitted: 100000 characters]');
+    expect(lastCell.id).toBe('result-100');
+    expect(lastCell.evalId).toBe('eval-1');
+  });
+
   it('reports media omission when oversized video data is stripped', () => {
     const table = createEvaluateTable({
       body: [
