@@ -1979,6 +1979,10 @@ describe('sanitizeUrl', () => {
   it('redacts credential URLs inside JSON query and form values', () => {
     const value = JSON.stringify({
       endpoint: 'https://inner.example/?tenantClientSecret=short-value',
+      redirect: '/callback?access_token=short-value',
+      alternatives: ['/callback#access_token=short-value'],
+      '/callback?access_token=short-value': 'public',
+      path: '/some benign path',
     });
     const pair = `payload=${encodeURIComponent(value)}`;
     for (const result of [
@@ -1989,6 +1993,12 @@ describe('sanitizeUrl', () => {
       expect(JSON.parse(payload!).endpoint).toBe(
         'https://inner.example/?tenantClientSecret=%5BREDACTED%5D',
       );
+      expect(JSON.parse(payload!)).toMatchObject({
+        redirect: '/callback?access_token=%5BREDACTED%5D',
+        alternatives: ['/callback#access_token=%5BREDACTED%5D'],
+        '/callback?access_token=%5BREDACTED%5D': 'public',
+        path: '/some benign path',
+      });
     }
   });
 

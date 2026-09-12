@@ -12,7 +12,6 @@ import {
   promptsTable,
   tagsTable,
 } from '../database/tables';
-import { getEnvBool } from '../envars';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
@@ -1449,9 +1448,9 @@ export default class Eval {
     }
 
     const stats = await this.getStats();
-    const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
+    const stripFlags = getStripFlags(this.config.env);
 
-    const prompts = shouldStripPromptText
+    const prompts = stripFlags.shouldStripPromptText
       ? this.prompts.map((p) => ({
           ...p,
           raw: '[prompt stripped]',
@@ -1462,7 +1461,7 @@ export default class Eval {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult()),
+      results: this.results.map((r) => r.toEvaluateResult(stripFlags)),
       stats,
     };
   }
@@ -1519,7 +1518,7 @@ export default class Eval {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: sanitizeConfigForOutput(this.config, getStripFlags()),
+      config: sanitizeConfigForOutput(this.config, getStripFlags(this.config.env)),
       author: this.author || null,
       prompts: this.getPrompts(),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),

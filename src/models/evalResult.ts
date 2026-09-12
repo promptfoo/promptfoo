@@ -978,14 +978,14 @@ export default class EvalResult {
     invalidateEvaluationCache(this.evalId);
   }
 
-  toEvaluateResult(): EvaluateResult {
+  toEvaluateResult(stripFlags = getStripFlags()): EvaluateResult {
     const {
       shouldStripPromptText,
       shouldStripResponseOutput,
       shouldStripTestVars,
       shouldStripGradingResult,
       shouldStripMetadata,
-    } = getStripFlags();
+    } = stripFlags;
 
     const response = projectProviderResponse(this.response, {
       stripMetadata: shouldStripMetadata,
@@ -1043,8 +1043,11 @@ export default class EvalResult {
 }
 
 /** Normalize an `EvalResult` model instance or a plain `EvaluateResult` to `EvaluateResult`. */
-export function asEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
-  return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
+export function asEvaluateResult(
+  result: EvalResult | EvaluateResult,
+  stripFlags = getStripFlags(),
+): EvaluateResult {
+  return 'toEvaluateResult' in result ? result.toEvaluateResult(stripFlags) : result;
 }
 
 /** Canonical `testIdx:promptIdx` key used to dedupe/look up a result across the streaming,

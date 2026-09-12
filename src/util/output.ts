@@ -9,7 +9,6 @@ import * as yaml from 'js-yaml';
 import { collectBlobHashes } from '../blobs/blobRefs';
 import { BLOB_MAX_SIZE } from '../blobs/constants';
 import { VERSION } from '../constants';
-import { getEnvBool } from '../envars';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
@@ -92,14 +91,19 @@ async function resolveJsonlOutputPath(outputPath: string): Promise<string> {
   }
 }
 
-async function appendJsonlResultBatch(outputPath: string, results: EvaluateResult[]) {
+async function appendJsonlResultBatch(
+  outputPath: string,
+  results: EvaluateResult[],
+  stripFlags: ReturnType<typeof getStripFlags>,
+) {
   if (results.length === 0) {
     return;
   }
 
   const text =
-    results.map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(result))).join(os.EOL) +
-    os.EOL;
+    results
+      .map((result) => JSON.stringify(sanitizeResultForJsonlArtifact(result, stripFlags)))
+      .join(os.EOL) + os.EOL;
   await fsPromises.appendFile(outputPath, text);
 }
 
@@ -143,6 +147,7 @@ async function readStreamedJsonlResults(outputPath: string): Promise<EvaluateRes
 //   3. the in-memory final rows captured after the failure (timeout / deferred-grading
 //      updates that never streamed), which are authoritative.
 async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, evalRecord: Eval) {
+  const stripFlags = getStripFlags(evalRecord.config.env);
   const finalResults = new Map<string, EvaluateResult>();
   const put = (result: EvaluateResult) => finalResults.set(getResultIndexKey(result), result);
 
@@ -151,7 +156,7 @@ async function collectJsonlResultsAfterPersistenceFailure(outputPath: string, ev
   }
   for await (const batchResults of evalRecord.fetchResultsBatched()) {
     for (const result of batchResults) {
-      const evaluateResult = asEvaluateResult(result);
+      const evaluateResult = asEvaluateResult(result, stripFlags);
       if (!evalRecord.hasResultPersistenceFailure(evaluateResult)) {
         put(evaluateResult);
       }
@@ -179,13 +184,18 @@ async function appendJsonlResults(
   evalRecord: Eval,
   recoveredResults?: EvaluateResult[],
 ): Promise<void> {
+  const stripFlags = getStripFlags(evalRecord.config.env);
   if (recoveredResults) {
-    await appendJsonlResultBatch(outputPath, recoveredResults);
+    await appendJsonlResultBatch(outputPath, recoveredResults, stripFlags);
     return;
   }
 
   for await (const batchResults of evalRecord.fetchResultsBatched()) {
-    await appendJsonlResultBatch(outputPath, batchResults.map(asEvaluateResult));
+    await appendJsonlResultBatch(
+      outputPath,
+      batchResults.map((result) => asEvaluateResult(result, stripFlags)),
+      stripFlags,
+    );
   }
 }
 
@@ -332,12 +342,15 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
   };
 };
 
-function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
-  const shouldStripMetadata = getEnvBool('PROMPTFOO_STRIP_METADATA', false);
-  const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
-  const shouldStripResponseOutput = getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false);
-  const shouldStripTestVars = getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false);
-
+function projectTracesForOutput(
+  traces: NonNullable<OutputFile['traces']>,
+  {
+    shouldStripMetadata,
+    shouldStripPromptText,
+    shouldStripResponseOutput,
+    shouldStripTestVars,
+  }: ReturnType<typeof getStripFlags>,
+) {
   if (
     !shouldStripMetadata &&
     !shouldStripPromptText &&
@@ -392,8 +405,11 @@ function projectTracesForOutput(traces: NonNullable<OutputFile['traces']>) {
   });
 }
 
-function resultsForMediaExportScan(results: OutputFile['results']): unknown {
-  if (!getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false)) {
+function resultsForMediaExportScan(
+  results: OutputFile['results'],
+  shouldStripResponseOutput: boolean,
+): unknown {
+  if (!shouldStripResponseOutput) {
     return results;
   }
 
@@ -445,8 +461,9 @@ export async function createOutputData(
   shareableUrl: string | null,
   options: OutputOptions = {},
 ): Promise<OutputFile> {
+  const stripFlags = getStripFlags(evalRecord.config.env);
   const summary = await evalRecord.toEvaluateSummary();
-  const redactedConfig = sanitizeConfigForOutput(evalRecord.config, getStripFlags());
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
   let traces;
   try {
     // TraceStore redacts sensitive attribute keys on reads by default.
@@ -468,11 +485,16 @@ export async function createOutputData(
     ...(evalRecord.runtimeOptions && {
       runtimeOptions: sanitizeRuntimeOptions(evalRecord.runtimeOptions),
     }),
-    ...(traces && traces.length > 0 && { traces: projectTracesForOutput(traces) }),
+    ...(traces && traces.length > 0 && { traces: projectTracesForOutput(traces, stripFlags) }),
   };
 
   if (options.includeMedia) {
-    const blobAssets = await exportBlobAssets(evalRecord.id, summary, output.traces);
+    const blobAssets = await exportBlobAssets(
+      evalRecord.id,
+      summary,
+      stripFlags.shouldStripResponseOutput,
+      output.traces,
+    );
     if (blobAssets.length > 0) {
       output.blobAssets = blobAssets;
     }
@@ -484,11 +506,15 @@ export async function createOutputData(
 async function exportBlobAssets(
   evalId: string,
   results: OutputFile['results'],
+  shouldStripResponseOutput: boolean,
   traces?: OutputFile['traces'],
 ): Promise<ExportedBlobAsset[]> {
   const { getShareAuthorizedBlob } = await import('../blobs');
   const assets: ExportedBlobAsset[] = [];
-  for (const hash of collectBlobHashes({ results: resultsForMediaExportScan(results), traces })) {
+  for (const hash of collectBlobHashes({
+    results: resultsForMediaExportScan(results, shouldStripResponseOutput),
+    traces,
+  })) {
     try {
       const blob = await getShareAuthorizedBlob(hash, evalId);
       if (!blob) {
@@ -614,7 +640,10 @@ export async function writeOutput(
     const table = await evalRecord.getTable();
     invariant(table, 'Table is required');
     const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, getStripFlags());
+    const redactedConfig = sanitizeConfigForOutput(
+      evalRecord.config,
+      getStripFlags(evalRecord.config.env),
+    );
     const metadata = createOutputMetadata(evalRecord);
     const template = await fsPromises.readFile(
       path.join(getDirectory(), 'tableOutput.html'),
@@ -728,7 +757,10 @@ export async function writeOutput(
     }
   } else if (outputExtension === 'xml') {
     const summary = await evalRecord.toEvaluateSummary();
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, getStripFlags());
+    const redactedConfig = sanitizeConfigForOutput(
+      evalRecord.config,
+      getStripFlags(evalRecord.config.env),
+    );
 
     // Sanitize data for XML builder to prevent textValue.replace errors
     const sanitizeForXml = (obj: any): any => {

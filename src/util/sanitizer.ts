@@ -8,7 +8,7 @@ import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
 
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
-const ABSOLUTE_URL = /^[a-z][a-z0-9+.-]*:\/\//i;
+const URL_REFERENCE = /^(?:[a-z][a-z0-9+.-]*:\/\/|\/[^?#]*[?#])/i;
 
 export const REDACTED = '[REDACTED]';
 
@@ -1156,7 +1156,7 @@ function sanitizePlainObject(
   let keySuffix = 0;
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [rawKey, value] of Object.entries(obj)) {
-    const redactedKey = sanitizeUrls && ABSOLUTE_URL.test(rawKey) ? sanitizeUrl(rawKey) : rawKey;
+    const redactedKey = sanitizeUrls && URL_REFERENCE.test(rawKey) ? sanitizeUrl(rawKey) : rawKey;
     let key = redactedKey;
     while (
       Object.prototype.hasOwnProperty.call(sanitized, key) ||
@@ -1206,7 +1206,7 @@ function recursiveSanitize(
 
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
-    return sanitizeUrls && ABSOLUTE_URL.test(obj)
+    return sanitizeUrls && URL_REFERENCE.test(obj)
       ? sanitizeUrl(obj)
       : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls);
   }
