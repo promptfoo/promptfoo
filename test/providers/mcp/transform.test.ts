@@ -261,14 +261,156 @@ describe('transformMCPConfigToClaudeCode', () => {
     ).resolves.toEqual({});
   });
 
-  it('uses the singular server when it shares a key with a plural server', async () => {
+  it('rejects duplicate server keys instead of silently dropping a server', async () => {
     await expect(
       transformMCPConfigToClaudeCode({
         enabled: true,
         server: { name: 'shared', command: 'single-server' },
         servers: [{ name: 'shared', command: 'plural-server' }],
       }),
-    ).resolves.toEqual({ shared: { type: 'stdio', command: 'single-server', args: [] } });
+    ).rejects.toThrow('Duplicate Claude Agent SDK MCP server `shared`');
+  });
+
+  it('rejects duplicate names before any OAuth token is fetched', async () => {
+    // OAuth here has neither tokenUrl nor a discoverable endpoint, so reaching the
+    // token fetch at all would surface that error instead of the duplicate.
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [
+          {
+            name: 'shared',
+            url: 'https://a.example.com/mcp',
+            auth: {
+              type: 'oauth',
+              grantType: 'client_credentials',
+              clientId: 'id',
+              clientSecret: 'secret',
+            },
+          },
+          {
+            name: 'shared',
+            url: 'https://b.example.com/mcp',
+            auth: {
+              type: 'oauth',
+              grantType: 'client_credentials',
+              clientId: 'id',
+              clientSecret: 'secret',
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow('Duplicate Claude Agent SDK MCP server `shared`');
+  });
+
+  it('keeps unnamed path-based servers distinct', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [{ path: 'first.js' }, { path: 'second.js' }],
+      }),
+    ).resolves.toEqual({
+      default: { type: 'stdio', command: process.execPath, args: ['first.js'] },
+      default_2: { type: 'stdio', command: process.execPath, args: ['second.js'] },
+    });
+  });
+
+  it('keeps unnamed servers that share a command but differ by args distinct', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [
+          { command: 'npx', args: ['-y', 'first-server'] },
+          { command: 'npx', args: ['-y', 'second-server'] },
+        ],
+      }),
+    ).resolves.toEqual({
+      npx: { type: 'stdio', command: 'npx', args: ['-y', 'first-server'] },
+      npx_2: { type: 'stdio', command: 'npx', args: ['-y', 'second-server'] },
+    });
+  });
+
+  it('keeps unnamed servers whose args differ only by argument boundaries distinct', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [
+          { command: 'node', args: ['a b'] },
+          { command: 'node', args: ['a', 'b'] },
+        ],
+      }),
+    ).resolves.toEqual({
+      node: { type: 'stdio', command: 'node', args: ['a b'] },
+      node_2: { type: 'stdio', command: 'node', args: ['a', 'b'] },
+    });
+  });
+
+  it('keeps unnamed url servers that differ only by query-placed auth distinct', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [
+          {
+            url: 'https://mcp.example.com/v1',
+            auth: { type: 'api_key', api_key: 'first-key', placement: 'query' },
+          },
+          {
+            url: 'https://mcp.example.com/v1',
+            auth: { type: 'api_key', api_key: 'second-key', placement: 'query' },
+          },
+        ],
+      }),
+    ).resolves.toEqual({
+      'https://mcp.example.com/v1': {
+        type: 'http',
+        url: 'https://mcp.example.com/v1?X-API-Key=first-key',
+        headers: {},
+      },
+      'https://mcp.example.com/v1_2': {
+        type: 'http',
+        url: 'https://mcp.example.com/v1?X-API-Key=second-key',
+        headers: {},
+      },
+    });
+  });
+
+  it('keeps argument values out of the derived server key', async () => {
+    // The key becomes the SDK's server name and is logged verbatim by the Claude
+    // Agent SDK provider (`Object.keys(options.mcpServers)`), which is a plain log
+    // message and therefore not sanitized.
+    const servers = await transformMCPConfigToClaudeCode({
+      enabled: true,
+      servers: [{ command: 'npx', args: ['-y', 'some-server', '--api-key', 'sk-secret-value'] }],
+    });
+
+    expect(Object.keys(servers)).toEqual(['npx']);
+  });
+
+  it('preserves the legacy key for a single unnamed server with args', async () => {
+    // `mcp__npx__tool` allow/deny rules written against the old key must keep matching.
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [{ command: 'npx', args: ['-y', '@h1deya/mcp-server-weather'] }],
+      }),
+    ).resolves.toEqual({
+      npx: { type: 'stdio', command: 'npx', args: ['-y', '@h1deya/mcp-server-weather'] },
+    });
+  });
+
+  it('does not let a derived key steal an explicit name', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        servers: [
+          { command: 'npx', args: ['first'] },
+          { name: 'npx', command: 'other' },
+        ],
+      }),
+    ).resolves.toEqual({
+      npx: { type: 'stdio', command: 'other', args: [] },
+      npx_2: { type: 'stdio', command: 'npx', args: ['first'] },
+    });
   });
 
   it('rejects a server without a URL, command, or path', async () => {
