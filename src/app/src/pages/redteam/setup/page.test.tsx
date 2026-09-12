@@ -156,6 +156,43 @@ describe('RedTeamSetupPage', () => {
     });
   });
 
+  it.each(['network', 'server', 'success'])(
+    'updates dirty state for the %s save outcome',
+    async (outcome) => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      await user.click(screen.getByRole('button', { name: 'Config' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Save Config' }));
+      await user.type(screen.getByLabelText('Configuration Name'), 'Test config');
+      expect(screen.getAllByText(/Unsaved changes/).length).toBeGreaterThan(0);
+      if (outcome === 'network') {
+        mockedCallApi.mockRejectedValueOnce(new Error('Save failed'));
+      } else {
+        mockedCallApi.mockResolvedValueOnce({
+          ok: outcome === 'success',
+          json: async () =>
+            outcome === 'success' ? { createdAt: '2026-09-11' } : { error: 'Save failed' },
+        } as Response);
+      }
+      await user.click(screen.getByRole('button', { name: /^Save$/ }));
+      await waitFor(() =>
+        expect(mockedUseToast().showToast).toHaveBeenCalledWith(
+          outcome === 'success' ? 'Configuration saved successfully' : 'Save failed',
+          outcome === 'success' ? 'success' : 'error',
+        ),
+      );
+      if (outcome === 'success') {
+        expect(screen.queryByText(/Unsaved changes/)).not.toBeInTheDocument();
+      } else {
+        expect(screen.getAllByText(/Unsaved changes/).length).toBeGreaterThan(0);
+      }
+    },
+  );
+
   describe('URL Hash Updates', () => {
     it('should update the URL hash when the tab state changes', async () => {
       const user = userEvent.setup();
