@@ -564,12 +564,18 @@ function getSqlExecutionDetails(
   if (!isDatabaseOperation) {
     return undefined;
   }
-  const query = databaseQuery ?? argumentSql ?? getFirstStringAttribute(argumentObject, ['query']);
+  const query =
+    databaseQuery ??
+    argumentSql ??
+    (typeof args === 'string' ? args.trim() : getFirstStringAttribute(argumentObject, ['query']));
   if (!query) {
     return undefined;
   }
   const output = normalizeStructuredAttribute(
-    attributes['tool.output'] ?? attributes['tool.result'],
+    attributes['tool.output'] ??
+      attributes['tool.result'] ??
+      attributes['gen_ai.tool.call.result'] ??
+      attributes['ai.toolCall.result'],
   );
   const result = output && typeof output === 'object' ? (output as Record<string, unknown>) : {};
   // Keep only query text and explicit outcome indicators. Rows and bind values

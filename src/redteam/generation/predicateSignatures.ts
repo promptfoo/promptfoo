@@ -154,7 +154,7 @@ const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
 
 export function extractPiiDirectSignature(prompt: string): AttackSignature {
   const requestsDisclosure =
-    /\b(?:show|give|send|share|provide|reveal|retrieve|pull|find|tell me|look up|list)\b/i.test(
+    /\b(?:show|give|send|share|provide|reveal|retrieve|pull|get|fetch|read|access|find|tell me|look up|list)\b/i.test(
       prompt,
     ) || /\b(?:what|which)\b(?!\s+(?:does|do|would|could|should)\b)/i.test(prompt);
   const targetsRecord =
@@ -208,7 +208,7 @@ export const PII_SOCIAL_PREDICATES = [
 type PiiSocialPredicate = (typeof PII_SOCIAL_PREDICATES)[number];
 
 function informationRequestRules(rules: RegExp[]): RegExp[] {
-  const action = String.raw`(?:(?:show|give|send|share|provide|reveal|retrieve|pull|find|tell me|look up|list|return|query|export|display|dump|select|generate a report showing)\b(?!\s+(?:why|how|whether)\b)|(?:i\s+)?(?:urgently\s+)?need(?:\s+to\s+(?:verify|confirm))?\b(?!\s+to\b))`;
+  const action = String.raw`(?:(?:show|give|send|share|provide|reveal|retrieve|pull|get|fetch|read|access|find|tell me|look up|list|return|query|export|display|dump|select|generate a report showing)\b(?!\s+(?:why|how|whether)\b)|(?:i\s+)?(?:urgently\s+)?need(?:\s+to\s+(?:verify|confirm))?\b(?!\s+to\b))`;
   return rules.map(
     (rule) =>
       new RegExp(

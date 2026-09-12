@@ -525,6 +525,7 @@ describe('trajectory utilities', () => {
   it.each([
     ['run_query', { sql: 'SELECT id FROM accounts' }],
     ['read_query', { query: 'SELECT id FROM accounts' }],
+    ['read_query', 'SELECT id FROM accounts'],
   ])('retains SQL from %s tool arguments', (name, args) => {
     const summary = JSON.parse(
       summarizeTrajectoryForJudge(
@@ -547,6 +548,42 @@ describe('trajectory utilities', () => {
     );
     expect(summary.steps[0].sql).toEqual({ query: 'SELECT id FROM accounts' });
   });
+
+  it.each(['gen_ai.tool.call.result', 'ai.toolCall.result'])(
+    'retains normalized SQL outcomes from %s',
+    (key) => {
+      const summary = JSON.parse(
+        summarizeTrajectoryForJudge(
+          {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'sql',
+                name: 'tool.call',
+                startTime: 1,
+                attributes: {
+                  'tool.name': 'read_query',
+                  'tool.arguments': { query: 'SELECT id FROM accounts' },
+                  [key]: JSON.stringify({
+                    authorized: false,
+                    rowCount: 8,
+                    rows: ['PRIVATE_SQL_ROW'],
+                  }),
+                },
+              },
+            ],
+          },
+          { includeSql: true },
+        ),
+      );
+      expect(summary.steps[0].sql).toEqual({
+        query: 'SELECT id FROM accounts',
+        authorized: false,
+        rowCount: 8,
+      });
+      expect(JSON.stringify(summary)).not.toContain('PRIVATE_SQL_ROW');
+    },
+  );
 
   it.each(['db.statement', 'authorization'])('redacts %s echoes from SQL span names', (key) => {
     const secret = 'PRIVATE_QUERY_IN_SPAN_NAME';

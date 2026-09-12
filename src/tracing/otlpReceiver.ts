@@ -15,6 +15,7 @@ import {
   PROMPTFOO_RESOURCE_ATTR_PARENT_SPAN_ID,
   PROMPTFOO_RESOURCE_ATTR_TRACE_ID,
 } from './resourceAttributes';
+import { getTraceTextRedactor, type TraceTextRedactionState } from './sanitizeAttributes';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
 interface OTLPAttribute {
@@ -281,6 +282,8 @@ export class OTLPReceiver {
   private commandToolNames?: string[];
   private redactAttributePatterns: string[] = [];
   private tracePoliciesByEvaluationId = new Map<string, RegisteredTracePolicy>();
+  private textRedactionByTrace = new Map<string, TraceTextRedactionState>();
+  private textRedactionHistoryFull = false;
 
   constructor(options: OTLPReceiverOptions = {}) {
     this.app = express();
@@ -359,32 +362,45 @@ export class OTLPReceiver {
     return redacted;
   }
 
-  private redactSpan(span: SpanData, redactAttributePatterns: string[]): SpanData {
-    if (redactAttributePatterns.length === 0) {
-      return span;
+  private getTextRedactionState(traceId?: string): TraceTextRedactionState {
+    const existing = traceId ? this.textRedactionByTrace.get(traceId) : undefined;
+    if (existing) {
+      return existing;
     }
-    const attributes = span.attributes ?? {};
-    // Collect the values of attributes whose KEY will be redacted. A span `name` or
-    // `statusMessage` that echoes one of those values (e.g. an exporter copies a redacted
-    // attribute such as `otel.log.body` or `event.name` into the span name, or echoes a
-    // credential into an error message) must be scrubbed too — otherwise the secret leaks
-    // through a span field the operator believes `redactAttributes` covers.
-    const redactedSourceValues = new Set<string>();
-    for (const [key, value] of Object.entries(attributes)) {
-      if (typeof value === 'string' && this.shouldRedactAttribute(key, redactAttributePatterns)) {
-        redactedSourceValues.add(value);
-      }
-    }
-    // `redactedSourceValues` only holds strings, so an undefined statusMessage passes through.
-    const scrubEcho = <T extends string | undefined>(value: T): T =>
-      typeof value === 'string' && redactedSourceValues.has(value) ? ('[REDACTED]' as T) : value;
-
-    return {
-      ...span,
-      name: scrubEcho(span.name),
-      statusMessage: scrubEcho(span.statusMessage),
-      attributes: this.redactAttributes(attributes, redactAttributePatterns),
+    this.textRedactionHistoryFull ||= this.textRedactionByTrace.size >= 1_024;
+    const state = {
+      secrets: new Set<string>(),
+      length: 0,
+      incomplete: this.textRedactionHistoryFull,
     };
+    if (traceId && !this.textRedactionHistoryFull) {
+      this.textRedactionByTrace.set(traceId, state);
+    }
+    return state;
+  }
+
+  private redactSpans(
+    spans: SpanData[],
+    redactAttributePatterns: string[],
+    traceId?: string,
+  ): SpanData[] {
+    const sanitized = spans.map((span) => ({
+      ...span,
+      attributes: this.redactAttributes(span.attributes, redactAttributePatterns),
+    }));
+    const redactText = getTraceTextRedactor(
+      spans.map((span, index) => ({
+        original: span.attributes,
+        sanitized: sanitized[index].attributes,
+      })),
+      '[REDACTED]',
+      this.getTextRedactionState(traceId),
+    );
+    return sanitized.map((span) => ({
+      ...span,
+      name: redactText(span.name),
+      statusMessage: redactText(span.statusMessage),
+    }));
   }
 
   private setupMiddleware(): void {
@@ -640,7 +656,7 @@ export class OTLPReceiver {
       );
       const sanitized =
         redactAttributePatterns.length > 0
-          ? spans.map((span) => this.redactSpan(span, redactAttributePatterns))
+          ? this.redactSpans(spans, redactAttributePatterns, traceId)
           : spans;
       await this.traceStore.addSpans(traceId, sanitized, {
         skipTraceCheck: false,
@@ -1073,6 +1089,8 @@ export class OTLPReceiver {
 
   stop(): Promise<void> {
     logger.debug('[OtlpReceiver] Stopping receiver');
+    this.textRedactionByTrace.clear();
+    this.textRedactionHistoryFull = false;
     return new Promise((resolve) => {
       if (this.server) {
         this.server.close(() => {

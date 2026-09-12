@@ -115,15 +115,22 @@ export function sanitizeTraceAttributes(
   return sanitized;
 }
 
+export interface TraceTextRedactionState {
+  secrets: Set<string>;
+  length: number;
+  incomplete: boolean;
+}
+
 export function getTraceTextRedactor(
   pairs: { original: unknown; sanitized: unknown }[],
   replacement = '[REDACTED]',
+  state: TraceTextRedactionState = { secrets: new Set(), length: 0, incomplete: false },
 ) {
   const pending = [...pairs];
-  const secrets = new Set<string>();
-  let incomplete = false;
+  const secrets = state.secrets;
+  let incomplete = state.incomplete;
   let visited = 0;
-  while (pending.length) {
+  while (pending.length && !incomplete) {
     const { original, sanitized } = pending.pop()!;
     if (++visited > 10_000 || (sanitized === '[TRUNCATED]' && original !== sanitized)) {
       incomplete = true;
@@ -142,7 +149,15 @@ export function getTraceTextRedactor(
     }
     if (!original || typeof original !== 'object') {
       if (original !== undefined && original !== null && redacted && String(original)) {
-        secrets.add(String(original));
+        const secret = String(original);
+        if (!secrets.has(secret)) {
+          state.length += secret.length;
+          if (state.length > 16_384 || secrets.size >= 1_000) {
+            incomplete = true;
+            break;
+          }
+          secrets.add(secret);
+        }
       }
       continue;
     }
@@ -152,6 +167,10 @@ export function getTraceTextRedactor(
         sanitized: redacted ? sanitized : (sanitized as Record<string, unknown>)?.[key],
       });
     }
+  }
+  state.incomplete = incomplete;
+  if (incomplete) {
+    secrets.clear();
   }
   const pattern = secrets.size
     ? new RegExp(

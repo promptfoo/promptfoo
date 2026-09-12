@@ -718,6 +718,114 @@ describe('OTLPReceiver', () => {
       );
     });
 
+    it.each(['plain', 'json'])(
+      'redacts partial and sibling-span echoes before storing %s sources',
+      async (format) => {
+        const secret = 'PRIVATE_OTLP_SIBLING_RECEIPT';
+        const redactingReceiver = new OTLPReceiver({
+          acceptFormats: ['json'],
+          redactAttributes: ['tool.output'],
+        });
+        (redactingReceiver as any).traceStore = mockTraceStore;
+        await request(redactingReceiver.getApp())
+          .post('/v1/traces')
+          .set('Content-Type', 'application/json')
+          .send({
+            resourceSpans: [
+              {
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId: 'e'.repeat(32),
+                        spanId: '1234567890abcdef',
+                        name: `sql ${secret}`,
+                        startTimeUnixNano: '1000000000',
+                        attributes: [
+                          {
+                            key: 'tool.output',
+                            value: {
+                              stringValue:
+                                format === 'json' ? JSON.stringify({ rows: [secret] }) : secret,
+                            },
+                          },
+                        ],
+                      },
+                      {
+                        traceId: 'e'.repeat(32),
+                        spanId: '1234567890abcdea',
+                        name: `read ${secret}`,
+                        status: { code: 2, message: `failed ${secret}` },
+                        startTimeUnixNano: '1001000000',
+                        attributes: [{ key: 'tool.name', value: { stringValue: 'read_query' } }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+          .expect(200);
+        const spans = vi.mocked(mockTraceStore.addSpans).mock.calls.at(-1)![1];
+        expect(JSON.stringify(spans)).not.toContain(secret);
+        expect(spans[1].attributes?.['tool.name']).toBe('read_query');
+      },
+    );
+
+    it.each(['plain', 'json'])(
+      'redacts echoes in later OTLP uploads after a %s source',
+      async (format) => {
+        const secret = 'PRIVATE_PREVIOUS_BATCH_RECEIPT';
+        const redactingReceiver = new OTLPReceiver({
+          acceptFormats: ['json'],
+          redactAttributes: ['authorization'],
+        });
+        (redactingReceiver as any).traceStore = mockTraceStore;
+        const send = (span: Record<string, unknown>) =>
+          request(redactingReceiver.getApp())
+            .post('/v1/traces')
+            .set('Content-Type', 'application/json')
+            .send({
+              resourceSpans: [
+                {
+                  scopeSpans: [
+                    {
+                      spans: [
+                        {
+                          traceId: 'e'.repeat(32),
+                          spanId: '1234567890abcdef',
+                          startTimeUnixNano: '1000000000',
+                          ...span,
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            });
+        await send({
+          name: 'source',
+          attributes: [
+            {
+              key: 'authorization',
+              value: {
+                stringValue: format === 'json' ? JSON.stringify({ token: secret }) : secret,
+              },
+            },
+          ],
+        }).expect(200);
+        await send({
+          spanId: '1234567890abcdea',
+          name: `echo ${secret}`,
+          status: { code: 2, message: `failed ${secret}` },
+          events: [{ name: `event ${secret}`, timeUnixNano: '1000000100', attributes: [] }],
+        }).expect(200);
+        expect(
+          JSON.stringify(vi.mocked(mockTraceStore.addSpans).mock.calls.at(-1)![1]),
+        ).not.toContain(secret);
+      },
+    );
+
     it('replaces a matched key wholesale when its value is a nested object or array', async () => {
       const redactingReceiver = new OTLPReceiver({
         acceptFormats: ['json'],
