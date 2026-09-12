@@ -1487,12 +1487,17 @@ describe('CustomProvider', () => {
 
       const result = await provider.callApi('test prompt', context);
 
-      // Verify redteamHistory is populated
-      expect(result.metadata?.redteamHistory).toBeDefined();
-      expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
-      expect(result.metadata?.redteamHistory?.[0].outputAudio).toEqual(
-        assertionType ? undefined : { data: 'response-audio-data', format: 'wav' },
-      );
+      if (assertionType) {
+        expect(result.error).toMatch(/audio.*redaction.*verified/i);
+        expect(result.metadata.redteamHistory).toEqual([]);
+        expect(JSON.stringify(result)).not.toContain('response-audio-data');
+      } else {
+        expect(result.error).toBeUndefined();
+        expect(result.metadata.redteamHistory?.[0].outputAudio).toEqual({
+          data: 'response-audio-data',
+          format: 'wav',
+        });
+      }
     });
   });
 });

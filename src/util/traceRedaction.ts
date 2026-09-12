@@ -15,7 +15,7 @@ export function requiresTraceRedaction(assertions: AssertionOrSet[] | undefined)
   );
 }
 
-/** Keep unverified image pixels and their response echoes out of public result copies. */
+/** Keep unverified media and their response echoes out of public result copies. */
 export function sanitizeRedactionResult<T extends object>(input: T): T {
   const result = input as T & {
     testCase?: AtomicTestCase;
@@ -23,7 +23,14 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     metadata?: Record<string, unknown>;
   };
   const response = result.response;
-  if (!response?.images?.length || !requiresTraceRedaction(result.testCase?.assert)) {
+  if (
+    !(
+      response?.images?.length ||
+      response?.audio?.data ||
+      response?.metadata?.redactionMediaOmitted === true
+    ) ||
+    !requiresTraceRedaction(result.testCase?.assert)
+  ) {
     return input;
   }
   const metadata = { ...result.metadata };
@@ -34,7 +41,7 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     ...input,
     metadata,
     response: {
-      output: '[Image response omitted: pixel redaction could not be verified.]',
+      output: '[Media response omitted: image or audio redaction could not be verified.]',
       cached: response.cached,
       cost: response.cost,
       incurredCost: response.incurredCost,

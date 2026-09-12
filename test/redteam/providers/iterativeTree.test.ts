@@ -421,6 +421,49 @@ describe('RedteamIterativeProvider', () => {
       }
     });
 
+    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+      'omits audio from the final tree probe for %s',
+      async (pluginId) => {
+        const data = Buffer.from('PRIVATE_FINAL_TREE_AUDIO').toString('base64');
+        mockRedteamProvider.callApi.mockResolvedValue({ output: 'invalid attack JSON' });
+        const gradingProvider = createMockProvider({ id: 'mock-grader' });
+        const targetProvider = createMockProvider({ id: 'mock-target' });
+        targetProvider.callApi.mockResolvedValue({ output: data, audio: { data, format: 'wav' } });
+        const remote = vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(false);
+        const attacker = vi
+          .spyOn(redteamProviderManager, 'getProvider')
+          .mockResolvedValue(mockRedteamProvider);
+        const grading = vi
+          .spyOn(redteamProviderManager, 'getGradingProvider')
+          .mockResolvedValue(gradingProvider);
+        try {
+          const provider = new RedteamIterativeTreeProvider({
+            injectVar: 'goal',
+            maxDepth: 1,
+            branchingFactor: 1,
+          });
+          const result = await provider.callApi('test prompt', {
+            originalProvider: targetProvider,
+            vars: { goal: 'Inspect a report' },
+            prompt: { raw: '{{goal}}', label: 'test' },
+            test: {
+              assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+              metadata: { pluginId },
+            } as AtomicTestCase,
+          });
+          expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+          expect(result.metadata?.stopReason).toBe('MAX_DEPTH');
+          expect(JSON.stringify(result)).not.toContain(data);
+          expect(result.metadata?.redactionMediaOmitted).toBe(true);
+          expect(result.tokenUsage?.numRequests).toBe(2);
+        } finally {
+          remote.mockRestore();
+          attacker.mockRestore();
+          grading.mockRestore();
+        }
+      },
+    );
+
     it('counts the final target probe even when the target reports no token usage', async () => {
       const gradingProvider = createMockProvider({ id: 'mock-grader' });
       const targetProvider = createMockProvider({ id: 'mock-target' });

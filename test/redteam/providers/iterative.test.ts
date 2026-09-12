@@ -149,18 +149,24 @@ describe('RedteamIterativeProvider', () => {
 
   describe('runRedteamConversation', () => {
     it.each([
-      ['coding-agent:trace-redaction', false],
-      ['harness:artifact-redaction', false],
-      ['coding-agent:trace-redaction', true],
-      ['harness:artifact-redaction', true],
+      ['coding-agent:trace-redaction', false, false],
+      ['coding-agent:trace-redaction', false, true],
+      ['harness:artifact-redaction', false, false],
+      ['harness:artifact-redaction', false, true],
+      ['coding-agent:trace-redaction', true, false],
+      ['coding-agent:trace-redaction', true, true],
+      ['harness:artifact-redaction', true, false],
+      ['harness:artifact-redaction', true, true],
     ] as const)(
       'keeps %s forensic traces out of the attacker and returned histories',
-      async (pluginId, assertionSet) => {
+      async (pluginId, assertionSet, media) => {
         const canary = 'PRIVATE_ITERATIVE_FORENSIC_TRACE';
         mockGetTargetResponse.mockResolvedValue({
           output: 'Public report',
-          image: { data: canary + '_IMAGE', format: 'png' },
-          audio: { data: canary + '_AUDIO', format: 'wav' },
+          ...(media && {
+            images: [{ data: canary + '_IMAGE', mimeType: 'image/png' }],
+            audio: { data: canary + '_AUDIO', format: 'wav' },
+          }),
         });
         const fetchTrace = vi.spyOn(traceContext, 'fetchTraceContext').mockResolvedValue({
           traceId: 'trace',
@@ -214,7 +220,12 @@ describe('RedteamIterativeProvider', () => {
             excludeTargetOutputFromAgenticAttackGeneration: false,
           });
           expect(mockGetTargetResponse).toHaveBeenCalledTimes(2);
-          expect(fetchTrace).toHaveBeenCalledTimes(2);
+          expect(fetchTrace).toHaveBeenCalledTimes(media ? 0 : 2);
+          if (media) {
+            expect(result.error).toMatch(/audio.*redaction.*verified/i);
+          } else {
+            expect(result.error).toBeUndefined();
+          }
           expect(JSON.stringify(mockRedteamProvider.callApi.mock.calls)).not.toContain(canary);
           expect(JSON.stringify(result.metadata)).not.toContain(canary);
         } finally {

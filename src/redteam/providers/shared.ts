@@ -35,7 +35,7 @@ import {
   accumulateGradingResponseTokenUsage,
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
-import { requiresTraceRedaction } from '../../util/traceRedaction';
+import { requiresTraceRedaction, sanitizeRedactionResult } from '../../util/traceRedaction';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -905,10 +905,17 @@ export async function externalizeResponseForRedteamHistory<T extends ProviderRes
   response: T,
   context?: Pick<CallApiContextParams, 'evaluationId' | 'testIdx' | 'promptIdx' | 'test'>,
 ): Promise<T> {
-  if (
-    requiresTraceRedaction((context?.test as AtomicTestCase | undefined)?.assert) ||
-    (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload())
-  ) {
+  const testCase = context?.test as AtomicTestCase | undefined;
+  if (requiresTraceRedaction(testCase?.assert)) {
+    const sanitized = sanitizeRedactionResult({ response, testCase }).response;
+    return sanitized === response
+      ? response
+      : {
+          ...sanitized,
+          error: 'Image and audio redaction cannot be verified; provide a text-only report.',
+        };
+  }
+  if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
     return response;
   }
   const blobbed = await extractAndStoreBinaryData(response, {

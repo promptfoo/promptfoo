@@ -1875,9 +1875,37 @@ describe('redteam history blob storage', () => {
       await externalizeResponseForRedteamHistory(response, {
         test: { assert: [{ type }] } as AtomicTestCase,
       }),
-    ).toBe(response);
+    ).toMatchObject({ metadata: { redactionMediaOmitted: true } });
     expect(store).not.toHaveBeenCalled();
   });
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'omits audio before copying %s responses into history',
+    async (plugin) => {
+      const blobs = await import('../../../src/blobs/extractor');
+      vi.spyOn(blobs, 'isBlobStorageEnabled').mockReturnValue(true);
+      const store = vi.spyOn(blobs, 'extractAndStoreBinaryData').mockResolvedValue(undefined);
+      const data = Buffer.from('PRIVATE_AUDIO_HISTORY_RECEIPT').toString('base64');
+      const response = {
+        output: data,
+        audio: { data, format: 'wav' },
+        raw: { data },
+        metadata: { audioEcho: data },
+        cost: 0.01,
+      };
+      const history = await externalizeResponseForRedteamHistory(response, {
+        test: { assert: [{ type: `promptfoo:redteam:${plugin}` }] } as AtomicTestCase,
+      });
+      expect(JSON.stringify(history)).not.toContain(data);
+      expect(history).toMatchObject({
+        cost: 0.01,
+        error: expect.stringMatching(/audio.*redaction.*verified/i),
+        metadata: { redactionMediaOmitted: true },
+      });
+      expect(store).not.toHaveBeenCalled();
+      expect(response.audio.data).toBe(data);
+    },
+  );
 
   it('preserves eval-scoped blob storage for ordinary responses', async () => {
     const blobs = await import('../../../src/blobs/extractor');

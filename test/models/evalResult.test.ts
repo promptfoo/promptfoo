@@ -97,6 +97,48 @@ describe('EvalResult', () => {
     },
   );
 
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'omits audio-bearing %s responses from result copies',
+    async (pluginId) => {
+      const data = Buffer.from('PRIVATE_AUDIO_ARTIFACT_RECEIPT').toString('base64');
+      const response = {
+        output: data,
+        audio: { data, format: 'wav' },
+        raw: { data },
+        metadata: { audioEcho: data },
+        cost: 0.01,
+      };
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        response,
+        testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+        metadata: { audioEcho: data, custom: 'retained' },
+      });
+      const artifact = sanitizeResultForJsonlArtifact(row);
+      expect(JSON.stringify(artifact)).not.toContain(data);
+      expect(artifact.response).toMatchObject({
+        cost: 0.01,
+        metadata: { redactionMediaOmitted: true },
+      });
+      expect(artifact.metadata?.custom).toBe('retained');
+      const saved = await EvalResult.createFromEvaluateResult('audio-redaction-copy', row, {
+        persist: false,
+      });
+      expect(JSON.stringify(saved.toEvaluateResult())).not.toContain(data);
+      expect(row.response?.audio?.data).toBe(data);
+    },
+  );
+
+  it('preserves audio responses for ordinary assertions', () => {
+    const response = { output: 'audio', audio: { data: 'private-audio', format: 'wav' } };
+    expect(
+      sanitizeResultForJsonlArtifact({
+        response,
+        testCase: { assert: [{ type: 'contains', value: 'audio' }] },
+      }).response,
+    ).toEqual(response);
+  });
+
   it('preserves image responses for ordinary assertions', () => {
     const row = {
       response: { output: 'image', images: [{ data: 'data:image/png;base64,abc' }] },

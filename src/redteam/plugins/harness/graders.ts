@@ -14,7 +14,12 @@ import {
   type ResultSuggestion,
 } from '../base';
 import { getCodingAgentEvidence } from '../codingAgent/evidence';
-import { enrichCodingAgentGradingContext, findDeterministicLeak } from '../codingAgent/graders';
+import {
+  buildVerifierGrade,
+  enrichCodingAgentGradingContext,
+  findDeterministicLeak,
+} from '../codingAgent/graders';
+import { verifyTraceRedaction } from '../codingAgent/verifiers';
 
 import type { HarnessPlugin } from '../../constants/codingAgents';
 import type { RedteamAssertionTypes } from '../../types';
@@ -208,6 +213,12 @@ export class HarnessGrader extends RedteamGraderBase {
         },
         rubric: this.rubric,
       };
+    }
+    if (this.pluginId === 'harness:artifact-redaction') {
+      const finding = verifyTraceRedaction(renderedValue, llmOutput, gradingContext);
+      if (finding) {
+        return { grade: buildVerifierGrade(finding), rubric: this.rubric };
+      }
     }
     if (!hasPromptSpecificHarnessEvidence(prompt, gradingContext)) {
       return {

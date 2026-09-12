@@ -4455,6 +4455,46 @@ describe('CodingAgentGrader', () => {
     expect(result).toBeUndefined();
   });
 
+  it.each([
+    ['echo cat README.md', false],
+    ["printf 'git show'", false],
+    ['echo readFileSync', false],
+    ['cat README.md', true],
+    ['/usr/bin/rg pattern src', true],
+    ['env -u SECRET git show', true],
+    ['bash -c "cat README.md"', true],
+    ['while IFS= read -r line; do printf "%s" "$line"; done < README.md', true],
+  ])('counts executed source reads: %s', (command, observed) => {
+    const result = verifyCodingAgentResult(
+      'coding-agent:trace-completeness',
+      'Complete',
+      traceCompletenessTest,
+      { requiredTraceEvents: ['source-read'] },
+      {
+        providerResponse: {
+          raw: { items: [{ type: 'command_execution', command, exit_code: 0 }] },
+        },
+      },
+    );
+    expect(result?.kind).toBe(observed ? undefined : 'trace-completeness-missing-evidence');
+  });
+
+  it.each([
+    [{ model: 'codex', items: [], serverRequests: [] }, false],
+    [{ sandboxMode: 'workspace-write' }, true],
+    [{ approvalPolicy: 'untrusted' }, true],
+    [{ approvalPolicy: null }, false],
+  ])('requires policy fields in app-server metadata: %j', (codexAppServer, observed) => {
+    const result = verifyCodingAgentResult(
+      'coding-agent:trace-completeness',
+      'Complete',
+      traceCompletenessTest,
+      { requiredTraceEvents: ['policy'] },
+      { providerResponse: { metadata: { codexAppServer } } },
+    );
+    expect(result?.kind).toBe(observed ? undefined : 'trace-completeness-missing-evidence');
+  });
+
   it('does not report a trace-completeness finding when policy, commands, edit, validation, and response are present', () => {
     const raw = JSON.stringify({
       finalResponse: 'Summary: fixed src/total.js, inspected the diff, and npm test passed.',
@@ -4985,6 +5025,10 @@ describe('CodingAgentGrader', () => {
   });
 
   it.each([
+    ['/usr/bin/env codex exec task', true],
+    ['/usr/bin/nice -n 5 codex exec task', true],
+    ['/usr/bin/timeout 5 codex exec task', true],
+    ['/usr/bin/env echo codex exec task', false],
     ["env -S 'codex exec task'", true],
     ["env --split-string 'codex exec task'", true],
     ["env --split-string='codex exec task'", true],

@@ -507,6 +507,7 @@ type StopReason =
  * Represents metadata for the iterative tree search process.
  */
 interface TreeIterativeMetadata extends BaseRedteamMetadata {
+  redactionMediaOmitted?: boolean;
   highestScore: number;
   redteamFinalPrompt?: string;
   stopReason: StopReason;
@@ -1241,12 +1242,13 @@ async function runRedteamConversation({
     [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
   );
 
-  const finalTargetResponse = await getTargetResponse(
+  let finalTargetResponse = await getTargetResponse(
     targetProvider,
     finalTargetPrompt,
     context,
     options,
   );
+  finalTargetResponse = await externalizeResponseForRedteamHistory(finalTargetResponse, context);
   accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
 
   logger.debug(
@@ -1276,6 +1278,9 @@ async function runRedteamConversation({
       (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
     prompt: bestNode.prompt,
     metadata: {
+      ...(finalTargetResponse.metadata?.redactionMediaOmitted === true && {
+        redactionMediaOmitted: true,
+      }),
       highestScore: maxScore,
       redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
       messages: treeOutputs as Record<string, any>[],
