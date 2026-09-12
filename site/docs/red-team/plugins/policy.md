@@ -12,6 +12,7 @@ Confirm that required object IDs, ordered actions, and result checks are retaine
 Semicolons within a generated `Prompt:` payload are preserved, including before
 newlines. On the same line, a semicolon followed by a new `Prompt:` marker separates
 test cases, including numbered or bold markers such as `**2. Prompt:**`.
+Leading numeric terms such as `2FA` and `2024` are preserved.
 
 Use custom policies for requirements such as:
 
