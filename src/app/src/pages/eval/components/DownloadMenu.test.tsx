@@ -218,6 +218,30 @@ describe('DownloadMenu', () => {
     );
   });
 
+  it('drops a config download when the mounted dialog switches evaluations', async () => {
+    let resolveConfig: ((value: { config: typeof mockConfig }) => void) | undefined;
+    fetchEvalConfigMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveConfig = resolve;
+      }),
+    );
+
+    const view = renderDownloadDialog();
+    await userEvent.click(screen.getByText('Download YAML Config'));
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: mockTable,
+      config: mockConfig,
+      evalId: 'eval-2',
+    });
+    view.rerender(<DownloadDialog open={true} onClose={view.onClose} />);
+
+    expect(screen.getByText('Download YAML Config')).toBeEnabled();
+    resolveConfig?.({ config: mockConfig });
+    await Promise.resolve();
+
+    expect(downloadBlobMock).not.toHaveBeenCalled();
+  });
+
   it('downloads CSV when clicking the button', async () => {
     renderDownloadDialog();
     // Hook options should be set after component renders

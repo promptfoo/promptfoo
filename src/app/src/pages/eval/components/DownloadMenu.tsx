@@ -160,6 +160,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
   } | null>(null);
   const detailHydrationFailuresRef = React.useRef(0);
   const exportRevisionRef = React.useRef(0);
+  const previousEvalIdRef = React.useRef(evalId);
   const { showToast } = useToast();
 
   React.useEffect(
@@ -168,6 +169,16 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     },
     [],
   );
+  React.useEffect(() => {
+    if (previousEvalIdRef.current === evalId) {
+      return;
+    }
+    previousEvalIdRef.current = evalId;
+    exportRevisionRef.current++;
+    setAdvancedExportInProgress(null);
+    setAdvancedExportProgress(null);
+    setIsDownloadingConfig(false);
+  }, [evalId]);
 
   // Use the new hooks for CSV and JSON downloads
   const { download: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadEval(

@@ -242,27 +242,19 @@ function TableHeader({
   loadExpandedText,
   resourceId,
   className,
-  identity,
 }: TruncatedTextProps & {
   expandedText?: string;
   loadExpandedText?: () => Promise<string | undefined>;
   resourceId?: string;
   className?: string;
-  identity?: string;
 }) {
   const [promptOpen, setPromptOpen] = React.useState(false);
-  const [fullExpandedText, setFullExpandedText] = React.useState<{
-    identity: string;
-    value: string;
-  }>();
-  const currentIdentity = identity ?? String(text);
-  const identityRef = React.useRef(currentIdentity);
-  identityRef.current = currentIdentity;
+  const [fullExpandedText, setFullExpandedText] = React.useState<string>();
   const handlePromptOpen = async () => {
     if (loadExpandedText && isOmittedText(expandedText ?? '')) {
       const loaded = await loadExpandedText();
-      if (loaded && identityRef.current === currentIdentity) {
-        setFullExpandedText({ identity: currentIdentity, value: loaded });
+      if (loaded) {
+        setFullExpandedText(loaded);
       }
     }
     setPromptOpen(true);
@@ -293,11 +285,7 @@ function TableHeader({
             <EvalOutputPromptDialog
               open={promptOpen}
               onClose={handlePromptClose}
-              prompt={
-                fullExpandedText && fullExpandedText.identity === currentIdentity
-                  ? fullExpandedText.value
-                  : expandedText
-              }
+              prompt={fullExpandedText ?? expandedText}
             />
           )}
           {resourceId && (
@@ -1418,6 +1406,7 @@ function PromptColumnHeader({
         ) : null}
       </div>
       <TableHeader
+        key={`${evalId}/${prompt.id ?? prompt.label ?? idx}`}
         className="prompt-container collapse-font-small"
         text={prompt.label || prompt.display || prompt.raw}
         expandedText={prompt.raw}
@@ -1452,7 +1441,6 @@ function PromptColumnHeader({
         }
         maxLength={maxTextLength}
         resourceId={prompt.id}
-        identity={`${evalId}/${prompt.id ?? prompt.label ?? idx}`}
       />
       {renderPromptMetricDetails({
         metrics,
