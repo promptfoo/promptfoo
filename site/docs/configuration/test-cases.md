@@ -588,6 +588,8 @@ tests:
       shared: file://../shared/context.json
 ```
 
+Nested `file://` references inside test and vars files keep the config directory as their base. With multiple configs, each config's tests load from its directory; configured providers and deferred grader references use the first config's directory.
+
 Without the `file://` prefix, values are passed as plain strings to your provider.
 
 ### Supported File Types

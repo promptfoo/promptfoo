@@ -58,14 +58,17 @@
         "tracing": {
           "$ref": "#/definitions/__schema40"
         },
-        "evaluateOptions": {
+        "basePath": {
           "$ref": "#/definitions/__schema45"
         },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema46"
+        },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema47"
+          "$ref": "#/definitions/__schema48"
         },
         "targets": {
-          "$ref": "#/definitions/__schema48"
+          "$ref": "#/definitions/__schema49"
         }
       },
       "required": ["prompts"],
@@ -3347,6 +3350,9 @@
       "minLength": 1
     },
     "__schema45": {
+      "type": "string"
+    },
+    "__schema46": {
       "type": "object",
       "properties": {
         "cache": {
@@ -3389,15 +3395,15 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema46"
+          "$ref": "#/definitions/__schema47"
         }
       },
       "additionalProperties": false
     },
-    "__schema46": {
+    "__schema47": {
       "type": "string"
     },
-    "__schema47": {
+    "__schema48": {
       "type": "object",
       "properties": {
         "description": {
@@ -3525,7 +3531,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema46"
+              "$ref": "#/definitions/__schema47"
             }
           ]
         },
@@ -3599,7 +3605,7 @@
       },
       "additionalProperties": false
     },
-    "__schema48": {
+    "__schema49": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"
