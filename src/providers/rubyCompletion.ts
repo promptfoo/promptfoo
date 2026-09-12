@@ -8,6 +8,7 @@ import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { getFileSourceHash } from '../util/sourceHash';
 import { sanitizeScriptContext } from './scriptContext';
 
 import type {
@@ -188,6 +189,13 @@ export class RubyProvider implements ApiProvider {
     this.label = options?.label;
     this.config = options?.config ?? {};
     this.id = () => options?.id ?? `ruby:${this.scriptPath}:${this.functionName || 'default'}`;
+  }
+
+  getSourceHash(): string {
+    return getFileSourceHash(
+      path.resolve(this.options?.config?.basePath || '', this.scriptPath),
+      this.functionName,
+    );
   }
 
   /**

@@ -10,6 +10,7 @@ import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { getFileSourceHash } from '../util/sourceHash';
 import { providerRegistry } from './providerRegistry';
 import { sanitizeScriptContext } from './scriptContext';
 
@@ -196,6 +197,13 @@ export class PythonProvider implements ApiProvider {
     this.id = () => options?.id ?? `python:${this.scriptPath}:${this.functionName || 'default'}`;
     this.label = options?.label;
     this.config = options?.config ?? {};
+  }
+
+  getSourceHash(): string {
+    return getFileSourceHash(
+      path.resolve(this.options?.config?.basePath || '', this.scriptPath),
+      this.functionName,
+    );
   }
 
   id() {

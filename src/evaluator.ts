@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import path from 'path';
 import readline from 'readline';
 import { isDeepStrictEqual } from 'util';
 
@@ -104,6 +105,7 @@ import {
 } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { redactSecretLeaves } from './util/sanitizer';
+import { getFileSourceHash } from './util/sourceHash';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -2538,8 +2540,20 @@ function sanitizeAssertionProviderForSelection(assertion: unknown): unknown {
     return assertion;
   }
   const record = assertion as Record<string, unknown>;
+  const file =
+    typeof record.value === 'string' && record.value.startsWith('file://')
+      ? parseFileUrl(record.value)
+      : undefined;
   return {
     ...record,
+    ...(file
+      ? {
+          sourceHash: getFileSourceHash(
+            path.resolve(cliState.basePath || '.', file.filePath),
+            file.functionName,
+          ),
+        }
+      : {}),
     ...('provider' in record
       ? {
           provider: redactSecretLeaves(record.provider),

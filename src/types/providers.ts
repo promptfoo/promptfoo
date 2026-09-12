@@ -129,6 +129,8 @@ export interface ApiProvider extends MinimalApiProvider {
   config?: any;
   delay?: number;
   getSessionId?: () => string;
+  /** Current file-backed implementation identity used to validate eval replay. */
+  getSourceHash?: () => string;
   /** Native audio input content format accepted by this provider and its configured model. */
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;

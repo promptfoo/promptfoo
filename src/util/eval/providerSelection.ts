@@ -15,6 +15,7 @@ interface RuntimeProvider {
   label?: string;
   config?: Record<string, unknown>;
   callApi?: unknown;
+  getSourceHash?: () => string;
 }
 
 interface ProviderSelectionEntry {
@@ -99,6 +100,7 @@ function getProviderFingerprint(
   const fingerprintInput = {
     runtime: {
       callApi: provider.callApi,
+      sourceHash: provider.getSourceHash?.(),
       config: redactSecretLeaves(provider.config ?? {}),
       id: getRuntimeProviderId(provider),
       label: provider.label,

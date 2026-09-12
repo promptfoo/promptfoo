@@ -7,6 +7,7 @@ import { getRuntimeEnv } from '../envOverrides';
 import logger from '../logger';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
+import { getExecutableSourceHash } from '../util/sourceHash';
 
 import type {
   ApiProvider,
@@ -60,6 +61,13 @@ export class ScriptCompletionProvider implements ApiProvider {
     private scriptPath: string,
     private options?: ProviderOptions,
   ) {}
+
+  getSourceHash(): string {
+    return getExecutableSourceHash(
+      parseScriptParts(this.scriptPath),
+      this.options?.config?.basePath,
+    );
+  }
 
   id() {
     return `exec:${this.scriptPath}`;

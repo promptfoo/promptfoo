@@ -12,6 +12,7 @@ import { sha256 } from '../util/createHash';
 import { pathExists } from '../util/file';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { getFileSourceHash } from '../util/sourceHash';
 
 import type {
   ApiProvider,
@@ -48,6 +49,13 @@ export class GolangProvider implements ApiProvider {
     this.id = () => options?.id ?? `golang:${this.scriptPath}:${this.functionName || 'default'}`;
     this.label = options?.label;
     this.config = options?.config ?? {};
+  }
+
+  getSourceHash(): string {
+    return getFileSourceHash(
+      path.resolve(this.options?.config?.basePath || '', this.scriptPath),
+      this.functionName,
+    );
   }
 
   id() {

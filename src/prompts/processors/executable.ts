@@ -1,14 +1,12 @@
 import { execFile } from 'child_process';
-import { createHash, randomUUID } from 'crypto';
-import { constants, createReadStream } from 'fs';
-import { access, stat as fsStat, readFile } from 'fs/promises';
-import path from 'path';
+import { stat as fsStat, readFile } from 'fs/promises';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import { getRuntimeEnv } from '../../envOverrides';
 import { getFileHashes, parseScriptParts } from '../../providers/scriptCompletion';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
+import { getExecutableSourceHash } from '../../util/sourceHash';
 
 import type { ApiProvider, Prompt, PromptFunctionContext, VarValue } from '../../types/index';
 
@@ -16,68 +14,6 @@ const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
 function stripText(text: string) {
   return text.replace(ANSI_ESCAPE, '');
-}
-
-async function getExecutableSourceHash(parts: string[], basePath?: string): Promise<string> {
-  const cwd = path.resolve(basePath || '.');
-  const command = parts[0];
-  const searchPath = command && !/[\\/]/.test(command);
-  const processEnv = getRuntimeEnv();
-  const suffixes =
-    process.platform === 'win32'
-      ? ['', ...(processEnv.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';')]
-      : [''];
-  const candidates = searchPath
-    ? (processEnv.PATH || '')
-        .split(path.delimiter)
-        .flatMap((directory) =>
-          suffixes.map((suffix) => path.resolve(cwd, directory, command + suffix)),
-        )
-    : [path.resolve(cwd, command || '')];
-  try {
-    let executable: string | undefined;
-    for (const candidate of candidates) {
-      try {
-        if ((await fsStat(candidate)).isFile()) {
-          if (searchPath) {
-            await access(candidate, constants.X_OK);
-          }
-          executable = candidate;
-          break;
-        }
-      } catch {
-        // Continue searching PATH for the executable used by execFile.
-      }
-    }
-    if (!executable) {
-      return randomUUID();
-    }
-    const files = [executable];
-    for (const argument of parts.slice(1)) {
-      const candidate = path.resolve(cwd, argument);
-      try {
-        if ((await fsStat(candidate)).isFile()) {
-          files.push(candidate);
-        }
-      } catch (error) {
-        if (!['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code || '')) {
-          throw error;
-        }
-      }
-    }
-    const hash = createHash('sha256').update(JSON.stringify(parts));
-    for (const file of files) {
-      const fileHash = createHash('sha256');
-      for await (const chunk of createReadStream(file)) {
-        fileHash.update(chunk);
-      }
-      hash.update(JSON.stringify([file, fileHash.digest('hex')]));
-    }
-    return hash.digest('hex');
-  } catch {
-    // Unreadable implementations can run, but a fresh token prevents unverifiable replay.
-    return randomUUID();
-  }
 }
 
 /**
@@ -207,7 +143,7 @@ export async function processExecutableFile(
       function: (context) =>
         executablePromptFunction(filePath, { ...context, config: prompt.config }),
       config: prompt.config,
-      sourceHash: await getExecutableSourceHash(scriptParts, prompt.config?.basePath),
+      sourceHash: getExecutableSourceHash(scriptParts, prompt.config?.basePath),
     },
   ];
 }
