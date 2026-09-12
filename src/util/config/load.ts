@@ -1175,12 +1175,6 @@ async function resolveLoadedConfig(
         );
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
-      config.scenarios[scenarioIndex] = clone(scenario);
-      if (Array.isArray(scenario.tests)) {
-        scenario.tests = await Promise.all(
-          scenario.tests.map((test) => readTest(test, basePath, false, config.env)),
-        );
-      }
       const filteredTests = await filterTests(
         {
           ...(scenario ?? {}),
@@ -1199,7 +1193,15 @@ async function resolveLoadedConfig(
         },
       );
       invariant(filteredTests, 'filteredTests are undefined');
-      scenario.tests = filteredTests;
+      config.scenarios[scenarioIndex] = clone({
+        ...scenario,
+        tests: filteredTests.map((test) =>
+          isApiProvider(test.provider) ? { ...test, provider: undefined } : test,
+        ),
+      });
+      scenario.tests = await Promise.all(
+        filteredTests.map((test) => readTest(test, basePath, false, config.env)),
+      );
     }
   }
 

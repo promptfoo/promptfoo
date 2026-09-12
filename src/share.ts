@@ -139,12 +139,13 @@ async function sendEvalRecord(
   evalRecord: Eval,
   url: string,
   headers: Record<string, string>,
+  stripFlags: ReturnType<typeof getStripFlags>,
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
   const { basePath: _basePath, ...redactedConfig } = sanitizeConfigForOutput(
     evalRecord.config,
-    getStripFlags(),
+    stripFlags,
   );
 
   // Preserve the verified runtime team on server-issued unified configs. For
@@ -221,15 +222,7 @@ async function sendChunkOfResults(
   headers: Record<string, string>,
 ): Promise<ChunkSendResult> {
   const targetUrl = `${url}/${evalId}/results`;
-  const sharedResults = chunk.map((row) => {
-    const result = sanitizeResultForJsonlArtifact(row);
-    if (result.provider?.config) {
-      const { basePath: _basePath, ...config } = result.provider.config;
-      result.provider = { ...result.provider, config };
-    }
-    return result;
-  });
-  const stringifiedChunk = JSON.stringify(sharedResults);
+  const stringifiedChunk = JSON.stringify(chunk);
   const chunkSizeBytes = Buffer.byteLength(stringifiedChunk, 'utf8');
 
   logger.debug(
@@ -402,14 +395,23 @@ async function prepareChunkForShare(
   remoteEvalId: string,
   inlineCache: ReturnType<typeof createBlobInlineCache> | null,
   remoteBlobUploadCache: ReturnType<typeof createRemoteBlobUploadCache> | null,
+  stripFlags: ReturnType<typeof getStripFlags>,
 ): Promise<EvalResult[]> {
+  const sharedResults = chunk.map((row) => {
+    const result = sanitizeResultForJsonlArtifact(row, stripFlags);
+    if (result.provider?.config) {
+      const { basePath: _basePath, ...config } = result.provider.config;
+      result.provider = { ...result.provider, config };
+    }
+    return result;
+  });
   const chunkToSend = inlineCache
-    ? await inlineBlobRefsForShare(chunk, inlineCache, localEvalId)
-    : chunk;
+    ? await inlineBlobRefsForShare(sharedResults, inlineCache, localEvalId)
+    : sharedResults;
 
   if (remoteBlobUploadCache) {
     await Promise.all(
-      chunk.map((result) =>
+      chunkToSend.map((result) =>
         uploadBlobRefsForShare(result, remoteBlobUploadCache, {
           localEvalId,
           remoteEvalId,
@@ -430,6 +432,7 @@ async function sendChunkedResults(
 ): Promise<string | null> {
   const isVerbose = isDebugEnabled();
   const { silent = false } = options;
+  const stripFlags = getStripFlags(evalRecord.config.env);
   logger.debug(`Starting chunked results upload to ${url}`);
 
   await checkCloudPermissions(evalRecord.config);
@@ -498,7 +501,7 @@ async function sendChunkedResults(
   let evalId: string | undefined;
   try {
     // Send initial data and get eval ID
-    evalId = await sendEvalRecord(evalRecord, url, headers);
+    evalId = await sendEvalRecord(evalRecord, url, headers, stripFlags);
     logger.debug(`Initial eval data sent successfully - ${evalId}`);
 
     // Progress callback for adaptive retry
@@ -531,6 +534,7 @@ async function sendChunkedResults(
             evalId,
             inlineCache,
             remoteBlobUploadCache,
+            stripFlags,
           );
 
           await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);
@@ -550,6 +554,7 @@ async function sendChunkedResults(
         evalId,
         inlineCache,
         remoteBlobUploadCache,
+        stripFlags,
       );
 
       await sendChunkWithRetry(chunkToSend, url, evalId, headers, chunkConfig, onProgress);

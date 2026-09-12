@@ -4,13 +4,14 @@ import { and, eq, gte, inArray, lt, ne } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
-import { getEnvBool } from '../envars';
+import { type EnvVarKey, getEnvBool, parseEnvBool } from '../envars';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { ProviderConfig } from '../providers/shared';
 import {
   type ApiProvider,
   type AtomicTestCase,
+  type EnvOverrides,
   type EvaluateResult,
   type GradingResult,
   isResultFailureReason,
@@ -537,13 +538,17 @@ function redactSensitiveResultFieldsForDb<
 }
 
 // Shared by configuration and result-row output projections.
-export function getStripFlags() {
+export function getStripFlags(env?: EnvOverrides) {
+  const getFlag = (key: EnvVarKey) => {
+    const value = env?.[key];
+    return value === undefined ? getEnvBool(key, false) : parseEnvBool(String(value), false);
+  };
   return {
-    shouldStripPromptText: getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false),
-    shouldStripResponseOutput: getEnvBool('PROMPTFOO_STRIP_RESPONSE_OUTPUT', false),
-    shouldStripTestVars: getEnvBool('PROMPTFOO_STRIP_TEST_VARS', false),
-    shouldStripGradingResult: getEnvBool('PROMPTFOO_STRIP_GRADING_RESULT', false),
-    shouldStripMetadata: getEnvBool('PROMPTFOO_STRIP_METADATA', false),
+    shouldStripPromptText: getFlag('PROMPTFOO_STRIP_PROMPT_TEXT'),
+    shouldStripResponseOutput: getFlag('PROMPTFOO_STRIP_RESPONSE_OUTPUT'),
+    shouldStripTestVars: getFlag('PROMPTFOO_STRIP_TEST_VARS'),
+    shouldStripGradingResult: getFlag('PROMPTFOO_STRIP_GRADING_RESULT'),
+    shouldStripMetadata: getFlag('PROMPTFOO_STRIP_METADATA'),
   };
 }
 
@@ -555,14 +560,17 @@ export function getStripFlags() {
  * grading result, metadata). In-memory rows keep their real values for hooks; only the
  * on-disk copy is sanitized.
  */
-export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
+export function sanitizeResultForJsonlArtifact<T extends object>(
+  result: T,
+  stripFlags = getStripFlags(),
+): T {
   const {
     shouldStripPromptText,
     shouldStripResponseOutput,
     shouldStripTestVars,
     shouldStripGradingResult,
     shouldStripMetadata,
-  } = getStripFlags();
+  } = stripFlags;
 
   const artifactResult = result as T & Record<string, unknown>;
   const redacted = redactSensitiveResultFieldsForDb({

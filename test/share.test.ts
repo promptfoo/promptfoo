@@ -104,7 +104,8 @@ vi.mock('../src/util/cloud', () => ({
   getOrgContext: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock('../src/envars', () => ({
+vi.mock('../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../src/envars')>()),
   getEnvBool: vi.fn(),
   getEnvInt: vi.fn(),
   getEnvString: vi.fn().mockReturnValue(''),
@@ -867,6 +868,44 @@ describe('createShareableUrl', () => {
         }
       },
     );
+
+    it('honors saved strip flags when sharing outside the evaluation scope', async () => {
+      const { getEnvBool } = await vi.importActual<typeof import('../src/envars')>('../src/envars');
+      vi.mocked(envars.getEnvBool).mockImplementation(getEnvBool);
+      vi.stubEnv('PROMPTFOO_STRIP_TEST_VARS', 'false');
+      vi.stubEnv('PROMPTFOO_STRIP_METADATA', 'false');
+      vi.stubEnv('PROMPTFOO_STRIP_RESPONSE_OUTPUT', 'false');
+      const testCase = {
+        vars: { input: 'private-input' },
+        metadata: { note: 'private-note' },
+        providerOutput: 'private-output',
+      };
+      mockEval.config = {
+        env: {
+          PROMPTFOO_STRIP_TEST_VARS: 'true',
+          PROMPTFOO_STRIP_METADATA: 'true',
+          PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true',
+        },
+        tests: [testCase],
+      };
+      mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
+        yield [{ id: 'row', testCase }];
+      });
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ id: mockEval.id }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      try {
+        await createShareableUrl(mockEval as Eval);
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+        for (const [, options] of mockFetch.mock.calls) {
+          expect(options.body).not.toContain('private-');
+        }
+        expect(testCase.vars.input).toBe('private-input');
+        expect(getEnvBool('PROMPTFOO_STRIP_TEST_VARS')).toBe(false);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
 
     it('redacts gateway URL credentials from shared config without changing the live provider', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);

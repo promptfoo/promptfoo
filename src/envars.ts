@@ -510,7 +510,7 @@ export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
   return parseEnvBool(getEnvString(key), defaultValue);
 }
 
-function parseEnvBool(input: string | undefined, defaultValue?: boolean): boolean {
+export function parseEnvBool(input: string | undefined, defaultValue?: boolean): boolean {
   const value = input || defaultValue;
   if (typeof value === 'boolean') {
     return value;

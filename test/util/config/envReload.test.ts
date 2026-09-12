@@ -414,6 +414,33 @@ describe('suite environment loading', () => {
     },
   );
 
+  it.each([
+    { filterFirstN: 1 },
+    { filterPattern: 'second' },
+    { filterSample: 1, filterSampleSeed: 7 },
+  ])('replays the selected scenario rows with %j', async (filters) => {
+    const configPath = writeConfig('filtered-scenario', {
+      scenarios: [
+        {
+          config: [{}],
+          tests: [
+            { description: 'first', vars: { source: 'first' }, provider: 'echo' },
+            { description: 'second', vars: { source: 'second' }, provider: 'echo' },
+          ],
+        },
+      ],
+    });
+    const first = await resolveConfigs({ config: [configPath], ...filters }, {});
+    const selected = first.testSuite.scenarios?.[0].tests;
+    expect(selected).toHaveLength(1);
+    const saved = JSON.stringify(first.config);
+    const replay = await resolveConfigs({}, JSON.parse(saved));
+    expect(replay.testSuite.scenarios?.[0].tests?.map((test) => test.vars)).toEqual(
+      selected?.map((test) => test.vars),
+    );
+    expect(first.config.scenarios?.[0]).toMatchObject({ tests: [{ provider: 'echo' }] });
+  });
+
   it('keeps loading other sources when a test glob matches no files', async () => {
     const configPath = writeConfig('optional-source', {
       tests: ['good/*.yaml', 'optional/*.yaml'],
@@ -478,11 +505,18 @@ describe('suite environment loading', () => {
     }
   });
 
-  it('keeps a generator provider instance live without saving its runtime state', async () => {
-    const configPath = writeConfig('instance-generator', { tests: 'file://tests.cjs' });
-    fs.writeFileSync(
-      path.join(path.dirname(configPath), 'tests.cjs'),
-      `
+  it.each(['top-level', 'scenario'] as const)(
+    'keeps a %s generator provider instance live without saving its runtime state',
+    async (location) => {
+      const configPath = writeConfig(
+        'instance-generator',
+        location === 'top-level'
+          ? { tests: 'file://tests.cjs' }
+          : { scenarios: [{ config: [{}], tests: ['file://tests.cjs'] as unknown as TestCase[] }] },
+      );
+      fs.writeFileSync(
+        path.join(path.dirname(configPath), 'tests.cjs'),
+        `
       class Target {
         constructor() { this.self = this; this.privateState = 'private-runtime-value'; }
         id() { return 'generated-target'; }
@@ -490,23 +524,25 @@ describe('suite environment loading', () => {
       }
       module.exports = () => [{ provider: new Target(), vars: { source: 'generated' } }];
     `,
-    );
-    const warning = vi.spyOn(logger, 'warn');
-    try {
-      const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
-      expect(isApiProvider(testSuite.tests?.[0].provider)).toBe(true);
-      const result = await evaluateResolved(testSuite, new Eval(config), {});
-      const [row] = await result.getResults();
-      expect(row.response?.output).toBe('FROM-CLASS-INSTANCE');
-      expect(row.success).toBe(true);
-      expect(JSON.stringify(config)).not.toContain('private-runtime-value');
-      expect(warning).toHaveBeenCalledWith(
-        expect.stringContaining('cannot be saved for resume/retry'),
       );
-    } finally {
-      warning.mockRestore();
-    }
-  });
+      const warning = vi.spyOn(logger, 'warn');
+      try {
+        const { config, testSuite } = await resolveConfigs({ config: [configPath] }, {});
+        const tests = location === 'top-level' ? testSuite.tests : testSuite.scenarios?.[0].tests;
+        expect(isApiProvider(tests?.[0].provider)).toBe(true);
+        const result = await evaluateResolved(testSuite, new Eval(config), {});
+        const [row] = await result.getResults();
+        expect(row.response?.output).toBe('FROM-CLASS-INSTANCE');
+        expect(row.success).toBe(true);
+        expect(JSON.stringify(config)).not.toContain('private-runtime-value');
+        expect(warning).toHaveBeenCalledWith(
+          expect.stringContaining('cannot be saved for resume/retry'),
+        );
+      } finally {
+        warning.mockRestore();
+      }
+    },
+  );
 
   it('reuses configured file graders across assertion, options, typed, and assertion-set forms', async () => {
     fs.writeFileSync(
