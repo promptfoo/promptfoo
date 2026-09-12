@@ -71,6 +71,28 @@ describe('useRedTeamConfig', () => {
   });
 
   it.each([
+    ['llamafile', 'http://localhost:8080/v1'],
+    ['vllm', 'http://localhost:8000/v1'],
+    ['text-generation-webui', 'http://localhost:5000/v1'],
+  ] as const)('normalizes an imported %s target before storing it', (type, apiBaseUrl) => {
+    useRedTeamConfig.getState().setFullConfig({
+      ...useRedTeamConfig.getState().config,
+      target: { id: 'openai:chat:local-model', config: { type } },
+    });
+
+    const expected = {
+      type,
+      apiBaseUrl,
+      apiKeyRequired: false,
+      useDefaultApiKey: false,
+    };
+    expect(useRedTeamConfig.getState().config.target.config).toEqual(expected);
+    expect(
+      JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target.config,
+    ).toEqual(expected);
+  });
+
+  it.each([
     ['array', [], '[]'],
     ['null', null, 'null'],
     ['scalar', 'invalid-config', '"invalid-config"'],

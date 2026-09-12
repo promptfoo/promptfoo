@@ -881,6 +881,7 @@ describe('evalConfig store', () => {
               googleAuthOptions: { keyFilename: '/var/run/secrets/another.json' },
               apiBearerTokenEnvar: 'CUSTOM_WATSONX_BEARER',
               apiKeyRequired: false,
+              useDefaultApiKey: false,
               isPayPerToken: true,
               prompt_cache_key: 'partition-a',
               max_new_tokens: 32,
@@ -889,6 +890,10 @@ describe('evalConfig store', () => {
               max_thinking_tokens: 4096,
               endpoint: 'https://example.com',
             } as any,
+          },
+          {
+            id: 'openai:chat:local-model',
+            config: { useDefaultApiKey: 'short-local-secret' as any },
           },
         ],
         env: {
@@ -903,6 +908,7 @@ describe('evalConfig store', () => {
         googleAuthOptions: { keyFilename: '/var/run/secrets/another.json' },
         apiBearerTokenEnvar: 'CUSTOM_WATSONX_BEARER',
         apiKeyRequired: false,
+        useDefaultApiKey: false,
         isPayPerToken: true,
         prompt_cache_key: 'partition-a',
         max_new_tokens: 32,
@@ -911,6 +917,7 @@ describe('evalConfig store', () => {
         max_thinking_tokens: 4096,
         endpoint: 'https://example.com',
       });
+      expect(persisted.providers[1].config).toEqual({});
       expect(persisted.env.LANGFUSE_SECRET_KEY).toBeUndefined();
       expect(persisted.env.LANGFUSE_PUBLIC_KEY).toBe('pk-langfuse-public-id');
     });

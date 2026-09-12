@@ -6,7 +6,7 @@ import {
 import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { getProviderType } from '../components/Targets/helpers';
+import { getProviderType, withLocalProviderType } from '../components/Targets/helpers';
 import {
   getCurrentTargetConfigInvalidMarker,
   registerTargetConfigReconciler,
@@ -1710,13 +1710,14 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
       },
       setFullConfig: (config) => {
         const providerType = getProviderType(config.target?.id, config.target?.config);
+        const targetConfig = config.target?.config === undefined ? {} : config.target.config;
         const normalizedConfig =
-          config.target && config.target.config === undefined
+          config.target && isPlainObject(targetConfig)
             ? {
                 ...config,
                 target: {
                   ...config.target,
-                  config: {},
+                  config: withLocalProviderType(config.target.id, targetConfig, providerType),
                 },
               }
             : config;
