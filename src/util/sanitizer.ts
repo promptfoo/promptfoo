@@ -55,7 +55,7 @@ function isSecretParameterName(name: string): boolean {
 
   // Check credential compounds at word boundaries, including camelCase and numeric versions.
   const words = name
-    .replace(/v?\d+$/i, '')
+    .replace(/v?\d+/gi, '_')
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .split(/[-_\s=]+/);
   let prefix = '';

@@ -42,7 +42,7 @@ const FORWARDED_PROVIDER_METADATA_KEYS = [
   'config',
 ] as const satisfies ReadonlyArray<keyof ProviderFunctionWithMetadata>;
 
-// Optional env entries inherit; explicit empty strings still override credentials.
+// Preserve explicit empty values while merging provider-loading environments.
 function mergeProviderEnv(...sources: (EnvOverrides | undefined)[]): EnvOverrides | undefined {
   const provided = sources.filter((source) => source !== undefined);
   if (provided.length === 0) {

@@ -1955,6 +1955,10 @@ describe('sanitizeUrl', () => {
     'api_key_2',
     'apikey1',
     'apikeyv2',
+    'apiKey2Value',
+    'apiKeyV2Value',
+    'tenantClientSecret2Value',
+    'tenant_client_secret_v2_value',
     'apiKeyForTenant',
     'tenantApiKeyV2',
     'user_api_key_2',
@@ -1967,7 +1971,7 @@ describe('sanitizeUrl', () => {
     'signatureValue',
     'sigValue',
   ])('redacts credential parameter %s with a trailing qualifier', (key) => {
-    const pair = `${key}=0123456789abcdef0123456789abcdef`;
+    const pair = `${key}=abc`;
     expect(sanitizeUrl(`https://gateway.example/?${pair}`)).toContain('%5BREDACTED%5D');
     expect(sanitizeUrlEncodedString(pair)).toBe(`${key}=%5BREDACTED%5D`);
   });
