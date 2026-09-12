@@ -8,6 +8,7 @@ import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
 
 const MAX_DEPTH = 4;
 const DUMMY_BASE = 'http://placeholder';
+const ABSOLUTE_URL = /^[a-z][a-z0-9+.-]*:\/\//i;
 
 export const REDACTED = '[REDACTED]';
 
@@ -40,9 +41,30 @@ function hasUrlUserinfoPassword(url: string): boolean {
 
 function isSecretParameterName(name: string): boolean {
   const normalized = normalizeFieldName(name);
-  return (
-    isSecretField(name) || SECRET_PARAMETER_SUFFIXES.some((suffix) => normalized.endsWith(suffix))
-  );
+  if (
+    /^(?:eos|bos|pad|unk|mask|sep|cls|stop|start|end|next|prev|page|nextpage|continuation|resume|cursor|max|min)tokens?$/.test(
+      normalized,
+    ) ||
+    /(?:version|type|enabled)$/.test(normalized)
+  ) {
+    return false;
+  }
+  if (isSecretField(name) || name.split(/[-_\s=]+/).some(isSecretField)) {
+    return true;
+  }
+
+  // Check credential compounds at word boundaries, including camelCase and numeric versions.
+  const words = name
+    .replace(/v?\d+$/i, '')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .split(/[-_\s=]+/);
+  let prefix = '';
+  return words.some((word) => {
+    prefix += word.toLowerCase();
+    return SECRET_PARAMETER_NAMES.some(
+      (secret) => prefix === secret || (secret.length > 3 && prefix.endsWith(secret)),
+    );
+  });
 }
 
 function isSecretParameter(name: string, value: string | undefined): boolean {
@@ -53,7 +75,7 @@ function isSecretParameter(name: string, value: string | undefined): boolean {
   ) {
     return false;
   }
-  return isSecretParameterName(name) || name.split(/[._\-\[\]]+/).some(isSecretParameterName);
+  return name.split(/[.\[\]]+/).some(isSecretParameterName);
 }
 
 /**
@@ -199,8 +221,8 @@ export const SECRET_FIELD_NAMES = new Set([
 ]);
 
 // Ambiguous names need a complete segment match: oauth/useSession/sameSiteCookie are settings.
-const SECRET_PARAMETER_SUFFIXES = [...SECRET_FIELD_NAMES].filter(
-  (name) => name.length > 3 && !['auth', 'session', 'cookie', 'setcookie'].includes(name),
+const SECRET_PARAMETER_NAMES = [...SECRET_FIELD_NAMES].filter(
+  (name) => !['auth', 'session', 'cookie', 'setcookie'].includes(name),
 );
 
 /**
@@ -657,11 +679,16 @@ export function sanitizeConfigForOutput(
   } = {},
 ): Partial<UnifiedConfig> {
   const safe = sanitizeTracingConfigForPersistence(config);
-  const sanitized = sanitizeObject(safe, {
+  const { basePath, ...outputConfig } = safe;
+  const sanitized = sanitizeObject(outputConfig, {
     context: 'output config',
+    sanitizeUrls: true,
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as Partial<UnifiedConfig>;
+  if (basePath !== undefined) {
+    sanitized.basePath = basePath;
+  }
   const {
     shouldStripTestVars: stripVars,
     shouldStripMetadata: stripMetadata,
@@ -933,7 +960,12 @@ export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T 
 /**
  * Parse and sanitize JSON strings, also check if the string looks like a secret
  */
-function sanitizeJsonString(str: string, depth: number, maxDepth: number): string {
+function sanitizeJsonString(
+  str: string,
+  depth: number,
+  maxDepth: number,
+  sanitizeUrls = false,
+): string {
   const redactedAzureBlobUri = redactAzureBlobSasToken(str);
   if (redactedAzureBlobUri !== str) {
     return redactedAzureBlobUri;
@@ -942,7 +974,7 @@ function sanitizeJsonString(str: string, depth: number, maxDepth: number): strin
   try {
     const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') {
-      const sanitized = recursiveSanitize(parsed, depth, maxDepth);
+      const sanitized = recursiveSanitize(parsed, depth, maxDepth, sanitizeUrls);
       return JSON.stringify(sanitized);
     }
   } catch {
@@ -1110,12 +1142,18 @@ export function sanitizeUrlEncodedString(value: string): string {
 /**
  * Sanitize plain object fields
  */
-function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap = false): any {
+function sanitizePlainObject(
+  obj: any,
+  depth: number,
+  maxDepth: number,
+  sanitizeUrls: boolean,
+  isEnvMap: boolean,
+): any {
   const sanitized: any = {};
   let keySuffix = 0;
   const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [rawKey, value] of Object.entries(obj)) {
-    const redactedKey = /^https?:\/\//i.test(rawKey) ? sanitizeUrl(rawKey) : rawKey;
+    const redactedKey = sanitizeUrls && ABSOLUTE_URL.test(rawKey) ? sanitizeUrl(rawKey) : rawKey;
     let key = redactedKey;
     while (
       Object.prototype.hasOwnProperty.call(sanitized, key) ||
@@ -1131,9 +1169,17 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
     } else {
       // An `env` map is handed verbatim to a subprocess, so its keys are environment
       // variable names and get the broader credential-word match one level down.
-      const sanitizedValue = recursiveSanitize(value, depth + 1, maxDepth, key === 'env');
+      const sanitizedValue = recursiveSanitize(
+        value,
+        depth + 1,
+        maxDepth,
+        sanitizeUrls,
+        key === 'env',
+      );
       sanitized[key] =
-        typeof sanitizedValue === 'string' && /(?:url|uri|host|endpoint|proxy)$/i.test(key)
+        typeof sanitizedValue === 'string' &&
+        (key.toLowerCase() === 'url' ||
+          (sanitizeUrls && /(?:url|uri|host|endpoint|proxy)$/i.test(key)))
           ? sanitizeUrl(sanitizedValue)
           : sanitizedValue;
     }
@@ -1144,14 +1190,22 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
 /**
  * Recursively sanitize an object, redacting secret fields at any depth
  */
-function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap = false): any {
+function recursiveSanitize(
+  obj: any,
+  depth = 0,
+  maxDepth = MAX_DEPTH,
+  sanitizeUrls = false,
+  isEnvMap = false,
+): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
 
   // Handle strings - check if they're JSON and sanitize if so
   if (typeof obj === 'string') {
-    return /^https?:\/\//i.test(obj) ? sanitizeUrl(obj) : sanitizeJsonString(obj, depth, maxDepth);
+    return sanitizeUrls && ABSOLUTE_URL.test(obj)
+      ? sanitizeUrl(obj)
+      : sanitizeJsonString(obj, depth, maxDepth, sanitizeUrls);
   }
 
   // Handle primitives and null/undefined
@@ -1166,7 +1220,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
 
   // Handle arrays
   if (Array.isArray(obj)) {
-    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth));
+    return obj.map((item) => recursiveSanitize(item, depth + 1, maxDepth, sanitizeUrls));
   }
 
   // Handle class instances
@@ -1176,7 +1230,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap);
+  return sanitizePlainObject(obj, depth, maxDepth, sanitizeUrls, isEnvMap);
 }
 
 /**
@@ -1191,9 +1245,16 @@ export function sanitizeObject(
     context?: string;
     throwOnError?: boolean;
     maxDepth?: number;
+    // Config output and provider configs can carry credentials in any URL string or map key.
+    sanitizeUrls?: boolean;
   } = {},
 ): any {
-  const { context = 'object', throwOnError = false, maxDepth = MAX_DEPTH } = options;
+  const {
+    context = 'object',
+    throwOnError = false,
+    maxDepth = MAX_DEPTH,
+    sanitizeUrls = false,
+  } = options;
 
   try {
     // Handle null/undefined
@@ -1203,7 +1264,7 @@ export function sanitizeObject(
 
     // Handle strings - check if they're JSON and sanitize if so
     if (typeof obj === 'string') {
-      return sanitizeJsonString(obj, 0, maxDepth);
+      return recursiveSanitize(obj, 0, maxDepth, sanitizeUrls);
     }
 
     // Handle other primitives
@@ -1235,7 +1296,7 @@ export function sanitizeObject(
     );
 
     // Apply recursive sanitization with depth limiting
-    return recursiveSanitize(safeObj, 0, maxDepth);
+    return recursiveSanitize(safeObj, 0, maxDepth, sanitizeUrls);
   } catch (error) {
     if (throwOnError) {
       throw error;
@@ -1340,6 +1401,11 @@ export function sanitizeUrl(url: string): string {
           (value.includes(';') && hasSecretFormSegment(value))
         ) {
           sanitizedUrl.searchParams.set(key, '[REDACTED]');
+        } else {
+          const nestedJson = redactNestedJsonValue(value);
+          if (nestedJson !== null) {
+            sanitizedUrl.searchParams.set(key, nestedJson);
+          }
         }
       }
     } catch (paramError) {

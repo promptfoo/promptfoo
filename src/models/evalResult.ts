@@ -34,6 +34,7 @@ import { clearCountCache } from './evalPerformance';
 function sanitizeProviderConfig(config: ProviderConfig): ProviderConfig {
   return sanitizeObject(JSON.parse(safeJsonStringify(config) as string), {
     context: 'provider config',
+    sanitizeUrls: true,
     maxDepth: Number.POSITIVE_INFINITY,
   }) as ProviderConfig;
 }
