@@ -39,7 +39,6 @@ import {
   ElevenLabsSTTProvider,
   ElevenLabsTTSProvider,
 } from './elevenlabs';
-import { mergeProviderEnv } from './env';
 import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
@@ -120,6 +119,27 @@ import { createXAIVoiceProvider } from './xai/voice';
 import type { LoadApiProviderContext } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
+
+/** Merge low-to-high priority scopes without letting a lower-priority key alias win. */
+export function mergeProviderEnv(
+  providerPath: string,
+  ...layers: (NonNullable<ProviderOptions['env']> | undefined)[]
+): NonNullable<ProviderOptions['env']> | undefined {
+  const isCodexSDK = /^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath);
+  let merged: NonNullable<ProviderOptions['env']> | undefined;
+  for (const layer of layers) {
+    if (!layer) {
+      continue;
+    }
+    merged ??= {};
+    if (isCodexSDK && (layer.OPENAI_API_KEY || layer.CODEX_API_KEY)) {
+      delete merged.OPENAI_API_KEY;
+      delete merged.CODEX_API_KEY;
+    }
+    Object.assign(merged, layer);
+  }
+  return merged;
+}
 
 function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | undefined {
   const configuredModel = providerOptions.config?.model;
