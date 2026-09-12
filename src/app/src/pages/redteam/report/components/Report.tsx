@@ -892,36 +892,37 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
                   )}
                 </div>
               </Card>
-              <nav
-                aria-label="Report sections"
-                className="print:hidden"
-                data-testid="report-section-nav"
-              >
-                <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-card p-3 shadow-sm">
-                  {reportSections.map((section) => (
-                    <Link
-                      key={section.id}
-                      to={{ search: location.search, hash: `#${section.id}` }}
-                      replace
-                      state={location.state}
-                      preventScrollReset
-                      onClick={(event) => {
-                        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-                          return;
-                        }
-                        const target = document.getElementById(section.id);
-                        target?.focus({ preventScroll: true });
-                        target?.scrollIntoView();
-                      }}
-                      className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {section.label}
-                    </Link>
-                  ))}
-                </div>
-              </nav>
             </>
           )}
+
+          <nav
+            aria-label="Report sections"
+            className="print:hidden"
+            data-testid="report-section-nav"
+          >
+            <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-card p-3 shadow-sm">
+              {reportSections.map((section) => (
+                <Link
+                  key={section.id}
+                  to={{ search: location.search, hash: `#${section.id}` }}
+                  replace
+                  state={location.state}
+                  preventScrollReset
+                  onClick={(event) => {
+                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                      return;
+                    }
+                    const target = document.getElementById(section.id);
+                    target?.focus({ preventScroll: true });
+                    target?.scrollIntoView();
+                  }}
+                  className="inline-flex h-9 items-center rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {section.label}
+                </Link>
+              ))}
+            </div>
+          </nav>
 
           {/* Filters Card */}
           {isFiltersVisible && (

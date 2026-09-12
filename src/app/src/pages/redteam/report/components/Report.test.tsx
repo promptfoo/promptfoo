@@ -965,6 +965,7 @@ describe('App component target selector rendering', () => {
     await screen.findByTestId('overview-total');
 
     expect(container.querySelector('.mx-auto.max-w-7xl')).toHaveClass('w-full', 'min-w-0');
+    expect(screen.getByTestId('report-section-nav')).toBeInTheDocument();
   });
 });
 
