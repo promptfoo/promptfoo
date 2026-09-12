@@ -302,6 +302,9 @@ describe('HttpProvider structured multipart requests', () => {
   it('rejects path sources that escape the configured base directory', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-multipart-'));
     tempDirs.push(tempDir);
+    const outsidePath = path.join(path.dirname(tempDir), `${path.basename(tempDir)}-outside.txt`);
+    fs.writeFileSync(outsidePath, 'outside');
+    tempDirs.push(outsidePath);
     const previousBasePath = cliState.basePath;
     cliState.basePath = tempDir;
 
@@ -314,7 +317,7 @@ describe('HttpProvider structured multipart requests', () => {
               {
                 kind: 'file',
                 name: 'files',
-                source: { type: 'path', path: '../outside.txt' },
+                source: { type: 'path', path: `../${path.basename(outsidePath)}` },
               },
             ],
           },
@@ -322,8 +325,24 @@ describe('HttpProvider structured multipart requests', () => {
       });
 
       await expect(provider.callApi('test')).rejects.toThrow(
-        'File path escapes allowed base directory: ../outside.txt',
+        `File path escapes allowed base directory: ../${path.basename(outsidePath)}`,
       );
+
+      const missingProvider = new HttpProvider('http', {
+        config: {
+          url: 'http://127.0.0.1:1',
+          multipart: {
+            parts: [
+              {
+                kind: 'file',
+                name: 'files',
+                source: { type: 'path', path: 'missing.txt' },
+              },
+            ],
+          },
+        },
+      });
+      await expect(missingProvider.callApi('test')).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       cliState.basePath = previousBasePath;
     }

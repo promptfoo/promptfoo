@@ -19,7 +19,8 @@ import logger from '../logger';
  * @returns Promise that resolves to true if the path is within dir
  */
 export async function isPathWithinDir(filePath: string, dir: string): Promise<boolean> {
-  return isPathWithinCanonicalDir(filePath, await resolveCanonicalDir(dir));
+  const target = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
+  return isPathWithinCanonicalDir(target, await resolveCanonicalDir(dir));
 }
 
 /** Resolve a directory once when callers need to keep its identity stable. */

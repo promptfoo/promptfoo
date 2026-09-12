@@ -253,9 +253,7 @@ async function loadFilePart(
 ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
   const renderedPath = renderTemplate(source.path, vars);
   const resolvedPath = resolvePath(renderedPath);
-  const canonicalPath = await fs.realpath(resolvedPath).catch(() => {
-    throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
-  });
+  const canonicalPath = await fs.realpath(resolvedPath);
   if (!isCanonicalPathWithinDir(canonicalPath, basePath)) {
     throw new Error(`File path escapes allowed base directory: ${renderedPath}`);
   }
@@ -264,7 +262,7 @@ async function loadFilePart(
     const [opened, canonical, currentPath] = await Promise.all([
       file.stat({ bigint: true }),
       fs.stat(canonicalPath, { bigint: true }),
-      fs.realpath(canonicalPath),
+      fs.realpath(process.platform === 'win32' ? canonicalPath : `/dev/fd/${file.fd}`),
     ]);
     if (
       opened.dev === 0n ||
