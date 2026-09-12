@@ -218,7 +218,7 @@ export const RedteamStrategySchema = z
       ids.includes('layer') ||
       attackIndexes.length > 1 ||
       indirectIndexes.length > 1 ||
-      (ids.includes('custom') && indirectIndex >= 0) ||
+      (ids.some((id) => typeof id === 'string' && isCustomStrategy(id)) && indirectIndex >= 0) ||
       (indirectIndex >= 0 && attackIndexes.some((index) => index > indirectIndex)) ||
       (hasMischievousUser && (attackIndexes.length > 0 || indirectIndex >= 0)) ||
       mediaIndexes.length > 1 ||

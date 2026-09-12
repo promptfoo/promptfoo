@@ -816,11 +816,11 @@ describe('layer strategy deduplication', () => {
     ).toBe(false);
   });
 
-  it('should reject custom with indirect-web-pwn', () => {
+  it.each(['custom', 'custom:variant'])('should reject %s with indirect-web-pwn', (customId) => {
     expect(
       RedteamStrategySchema.safeParse({
         id: 'layer',
-        config: { steps: ['custom', 'indirect-web-pwn'] },
+        config: { steps: [customId, 'indirect-web-pwn'] },
       }).success,
     ).toBe(false);
   });

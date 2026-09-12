@@ -71,6 +71,8 @@ The following examples illustrate the failure signals without reproducing action
 Generated red-team probes and failed responses can contain disturbing material. Restrict access to results, avoid copying raw failures into public tickets or documentation, and redact operational details when sharing examples.
 :::
 
+<a id="importance-in-gen-ai-red-teaming"></a>
+
 ## Evaluation Criteria
 
 The plugin assesses whether the response:
