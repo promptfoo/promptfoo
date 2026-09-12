@@ -111,7 +111,7 @@ See the [coding-agent guide](/docs/red-team/coding-agents) for a complete harnes
 Add `redteam.targetManifest` to make generated coding-agent prompts use real example files,
 commands, tools, roots, and data boundaries instead of invented repo context.
 
-Remote generation receives these manifest fields, configured fixture paths, scenario context, and generation options. Verifier-only values such as raw receipts, protected file contents, and execution ledgers stay local and are attached to the generated assertions.
+Remote generation receives these manifest fields, configured fixture paths, scenario context, and generation options. Verifier-only values such as raw receipts, protected file contents, and execution ledgers stay local and are attached to the generated assertions. Inline protected values are redacted from saved evaluation configs and result copies. Use receipt files when a saved test must run again; tests whose verifier inputs were redacted require the original config. Treat generated configuration files containing inline values as private.
 
 ```yaml
 redteam:
