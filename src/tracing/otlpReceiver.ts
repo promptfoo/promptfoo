@@ -425,16 +425,14 @@ export class OTLPReceiver {
         collectRedactedSourceValues(value, key);
       }
     }
-    // `redactedSourceValues` only holds strings, so an undefined statusMessage passes through.
+    const secrets = [...redactedSourceValues]
+      .sort((a, b) => b.length - a.length)
+      .map((secret) => secret.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const secretPattern = secrets.length > 0 ? new RegExp(secrets.join('|'), 'g') : undefined;
     const scrubEcho = <T extends string | undefined>(value: T): T => {
-      if (typeof value !== 'string') {
-        return value;
-      }
-      let scrubbed: string = value;
-      for (const secret of [...redactedSourceValues].sort((a, b) => b.length - a.length)) {
-        scrubbed = scrubbed.split(secret).join('[REDACTED]');
-      }
-      return scrubbed as T;
+      return typeof value === 'string' && secretPattern
+        ? (value.replace(secretPattern, '[REDACTED]') as T)
+        : value;
     };
 
     return {

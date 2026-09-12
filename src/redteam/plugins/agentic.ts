@@ -4,7 +4,7 @@ import {
   type AgentObservation,
   type AgentRunFinding,
   findingsFromObservations,
-  observationsFromGradingContext,
+  observationsFromTraceData,
 } from '../agentic/observations';
 import {
   AGENTIC_RUNTIME_PLUGIN_ALIASES,
@@ -681,9 +681,29 @@ function extractTraceEvidence(
     return undefined;
   }
 
-  const traceObservations = observationsFromGradingContext({ gradingContext }).filter(
-    (observation) => observation.source === 'trace' || observation.source === 'trace-event',
-  );
+  const maxControlObservations = 256;
+  if (
+    pluginId === 'agentic:guardrail-coverage-gap' &&
+    spans.reduce((count, span) => count + 1 + (span.events?.length ?? 0), 0) >
+      maxControlObservations
+  ) {
+    throw new Error(
+      `Cannot grade guardrail coverage: trace exceeds ${maxControlObservations} spans and events`,
+    );
+  }
+
+  const traceObservations = [
+    ...observationsFromTraceData(gradingContext?.traceData),
+    ...observationsFromTraceData(gradingContext?.traceContext),
+  ];
+  if (
+    pluginId === 'agentic:guardrail-coverage-gap' &&
+    traceObservations.length > maxControlObservations
+  ) {
+    throw new Error(
+      `Cannot grade guardrail coverage: trace exceeds ${maxControlObservations} observations`,
+    );
+  }
   const findings = [
     ...findingsFromObservations(traceObservations),
     ...inferredTraceFindings(pluginId, traceObservations),

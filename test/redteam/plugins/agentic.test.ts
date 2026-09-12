@@ -1874,6 +1874,130 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.verifierStatus).toBe('passed');
   });
 
+  it.each([
+    ['guardrail', { statusCode: 2 }],
+    ['approval', { statusCode: 2 }],
+    ['guardrail', { status: { code: 'error' } }],
+    ['approval', { status: { code: 'ERROR' } }],
+  ])('rejects a %s control with OTEL error status %j', async (kind, status) => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`)!;
+    const result = await grader.getResult(
+      'prompt',
+      'completed',
+      {} as AtomicTestCase,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        ...providerEvidenceContext({ findings: [], mode: 'hardened', pluginId }),
+        traceData: {
+          evaluationId: 'eval-bounded-controls',
+          testCaseId: 'case',
+          traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          spans: [
+            {
+              ...status,
+              name: `${kind} update_seat`,
+              spanId: 'control',
+              parentSpanId: 'route',
+              startTime: 0,
+              endTime: 1,
+            },
+            {
+              name: 'tool update_seat',
+              spanId: 'tool',
+              parentSpanId: 'route',
+              startTime: 2,
+              attributes: { 'tool.name': 'update_seat' },
+            },
+          ],
+        },
+      },
+    );
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.deterministicFailureKind).toBe('guardrail-coverage-gap');
+  });
+
+  it('rejects excessive control events before attempting assignment', async () => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`)!;
+    const events = Array.from({ length: 256 }, (_, index) =>
+      index < 128
+        ? {
+            name: 'guardrail update_seat',
+            timestamp: index,
+            attributes: { 'guardrail.outcome': 'allowed' },
+          }
+        : {
+            name: 'tool update_seat',
+            timestamp: index,
+            attributes: { 'tool.name': 'update_seat' },
+          },
+    );
+    await expect(
+      grader.getResult(
+        'prompt',
+        'completed',
+        {} as AtomicTestCase,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ findings: [], mode: 'hardened', pluginId }),
+          traceData: {
+            evaluationId: 'eval-bounded-controls',
+            testCaseId: 'case',
+            traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            spans: [{ name: 'route', spanId: 'route', startTime: 0, events }],
+          },
+        },
+      ),
+    ).rejects.toThrow('trace exceeds 256 spans and events');
+  });
+
+  it('rejects excessive normalized observations from a single evidence attribute', async () => {
+    const pluginId = 'agentic:guardrail-coverage-gap';
+    const grader = getGraderById(`promptfoo:redteam:${pluginId}`)!;
+    await expect(
+      grader.getResult(
+        'prompt',
+        'completed',
+        {} as AtomicTestCase,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ findings: [], mode: 'hardened', pluginId }),
+          traceData: {
+            evaluationId: 'eval-bounded-controls',
+            testCaseId: 'case',
+            traceId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+            spans: [
+              {
+                name: 'route',
+                spanId: 'route',
+                startTime: 0,
+                attributes: {
+                  'promptfoo.agentic.evidence_json': JSON.stringify({
+                    pluginId,
+                    findings: Array.from({ length: 257 }, (_, index) => ({
+                      location: `finding-${index}`,
+                      evidence: 'fixture',
+                    })),
+                  }),
+                },
+              },
+            ],
+          },
+        },
+      ),
+    ).rejects.toThrow('trace exceeds 256 observations');
+  });
+
   it('matches distinct named guardrail spans to distinct same-name tool invocations', async () => {
     const pluginId = 'agentic:guardrail-coverage-gap';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);

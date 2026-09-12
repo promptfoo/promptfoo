@@ -131,6 +131,8 @@ type TraceLikeSpan = {
   parentSpanId?: string;
   spanId?: string;
   startTime?: number;
+  statusCode?: number;
+  status?: { code?: number | string };
 };
 
 type TraceDataLike = {
@@ -348,6 +350,8 @@ function controlObservationFromSpan(
   const name = span.name?.toLowerCase() || '';
   const spanType = stringifyValue(attributes['openai.agents.span_type'])?.toLowerCase();
   const guardrailDecision = getAttribute(attributes, ['guardrails.decision', 'guardrail.decision']);
+  const statusCode = span.statusCode ?? span.status?.code;
+  const failed = statusCode === 2 || /^(?:STATUS_CODE_)?ERROR$/i.test(String(statusCode));
 
   if (
     name.includes('guardrail') ||
@@ -359,11 +363,13 @@ function controlObservationFromSpan(
       kind: 'guardrail',
       endTimestamp: span.endTime,
       location,
-      outcome: stringifyValue(
-        guardrailDecision ??
-          getAttribute(attributes, ['guardrail.outcome']) ??
-          attributes['codex.status'],
-      ),
+      outcome: failed
+        ? 'error'
+        : stringifyValue(
+            guardrailDecision ??
+              getAttribute(attributes, ['guardrail.outcome']) ??
+              attributes['codex.status'],
+          ),
       parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,
@@ -382,7 +388,9 @@ function controlObservationFromSpan(
       kind: 'approval',
       endTimestamp: span.endTime,
       location,
-      outcome: stringifyValue(attributes['approval.outcome'] ?? attributes['codex.status']),
+      outcome: failed
+        ? 'error'
+        : stringifyValue(attributes['approval.outcome'] ?? attributes['codex.status']),
       parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,

@@ -988,6 +988,22 @@ describe('OTLPReceiver', () => {
       );
     });
 
+    it('does not reprocess redaction markers while scrubbing span and event echoes', () => {
+      const receiver = new OTLPReceiver({ redactAttributes: ['authorization'] });
+      const span = (receiver as any).redactSpan(
+        {
+          name: 'RERE',
+          statusMessage: 'RE',
+          attributes: { authorization: 'RE' },
+          events: [{ name: 'RERE', attributes: { authorization: ['R', 'E'] } }],
+        },
+        ['authorization'],
+      );
+      expect(span.name).toBe('[REDACTED][REDACTED]');
+      expect(span.statusMessage).toBe('[REDACTED]');
+      expect(span.events[0].name).toBe('[REDACTED][REDACTED]');
+    });
+
     it('scrubs echoes of strings nested below a redacted collection key', () => {
       const redactingReceiver = new OTLPReceiver({ redactAttributes: ['authorization'] });
       const span = (redactingReceiver as any).redactSpan(
