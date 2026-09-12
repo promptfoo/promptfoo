@@ -20,7 +20,7 @@ require_command() {
 
 reject_state_overrides() {
   local arg config index env_path
-  local -a configs declared_env_paths
+  local -a configs
   reject_state_file() {
     local file="$1"
     [[ "$file" = /* ]] || file="$EXAMPLE_DIR/$file"
@@ -33,12 +33,12 @@ reject_state_overrides() {
   for ((index = 1; index <= $#; index++)); do
     arg="${!index}"
     case "$arg" in
-      --config=* | --env-file=* | --env-path=*) config="${arg#*=}" ;;
-      -c | --config | --env-file | --env-path)
-        ((index++))
-        config="${!index:-}"
-        ;;
-      *) continue ;;
+    --config=* | --env-file=* | --env-path=*) config="${arg#*=}" ;;
+    -c | --config | --env-file | --env-path)
+      ((index++))
+      config="${!index:-}"
+      ;;
+    *) continue ;;
     esac
     [[ "$config" == -* ]] && continue
     IFS=, read -ra configs <<<"$config"
@@ -49,15 +49,12 @@ reject_state_overrides() {
       [[ "$config" = /* ]] || config="$EXAMPLE_DIR/$config"
       reject_state_file "$config"
       if [[ "$arg" == -c || "$arg" == --config || "$arg" == --config=* ]]; then
-        mapfile -t declared_env_paths < <(
-          sed -nE 's/^[[:space:]]*envPath:[[:space:]]*([^#]+).*$/\1/p' "$config"
-        )
-        for env_path in "${declared_env_paths[@]}"; do
+        while IFS= read -r env_path; do
           env_path="${env_path#"${env_path%%[![:space:]]*}"}"
           env_path="${env_path%"${env_path##*[![:space:]]}"}"
           [[ "$env_path" = /* ]] || env_path="${config%/*}/$env_path"
           [[ -n "$env_path" ]] && reject_state_file "$env_path"
-        done
+        done < <(sed -nE 's/^[[:space:]]*envPath:[[:space:]]*([^#]+).*$/\1/p' "$config")
       fi
     done
   done
