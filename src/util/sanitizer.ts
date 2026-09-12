@@ -16,11 +16,11 @@ const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
 
 /**
- * Whether a `scheme://user:pass@host` userinfo password is present. Implemented
+ * Whether a `scheme://user@host` username or password is present. Implemented
  * with plain string scans rather than a regex to avoid polynomial backtracking
  * on adversarial input (e.g. `://:::::…`).
  */
-function hasUrlUserinfoPassword(url: string): boolean {
+function hasUrlUserinfo(url: string): boolean {
   const schemeIndex = url.indexOf('://');
   if (schemeIndex === -1) {
     return false;
@@ -36,7 +36,7 @@ function hasUrlUserinfoPassword(url: string): boolean {
   }
   const authority = url.slice(authorityStart, authorityEnd);
   const atIndex = authority.indexOf('@');
-  return atIndex !== -1 && authority.slice(0, atIndex).includes(':');
+  return atIndex > 0;
 }
 
 function isSecretParameterName(name: string): boolean {
@@ -118,7 +118,7 @@ function hasSecretFormSegment(text: string): boolean {
  * sanitizeObject for any field literally named `url` and would otherwise be
  * destroyed in persisted eval results.
  *
- * Detection is structural — a `user:pass@` userinfo password, a whole value that
+ * Detection is structural — URL userinfo, a whole value that
  * looks like a secret, or a `key=value` form segment that carries one. We do NOT
  * fail closed on a bare credential keyword appearing anywhere in the string:
  * substring-matching `token`/`secret`/`sig`/etc. redacts benign values such as
@@ -128,7 +128,7 @@ function hasSecretFormSegment(text: string): boolean {
  * by `hasSecretFormSegment`, which normalizes keys like `api_key` before matching).
  */
 function unparseableUrlMightLeakSecret(url: string): boolean {
-  return hasUrlUserinfoPassword(url) || looksLikeSecret(url.trim()) || hasSecretFormSegment(url);
+  return hasUrlUserinfo(url) || looksLikeSecret(url.trim()) || hasSecretFormSegment(url);
 }
 
 /**
@@ -1343,7 +1343,7 @@ function sanitizeTemplatedUrl(url: string): string {
   // parsing here because it encodes the remaining Nunjucks syntax, but still
   // scrub literal query and fragment credentials before the value is logged or
   // persisted.
-  if (hasUrlUserinfoPassword(url)) {
+  if (hasUrlUserinfo(url)) {
     return REDACTED;
   }
 

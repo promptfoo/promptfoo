@@ -2164,8 +2164,11 @@ describe('sanitizeUrl', () => {
       expect(sanitizeUrl(url)).toBe('{{ api_base }}/api?token=%5BREDACTED%5D&user_id=42');
     });
 
-    it('should fail closed for templated URLs with userinfo credentials', () => {
-      const url = 'https://user:pass@{{ host }}/api';
+    it.each([
+      'https://user:pass@{{ host }}/api',
+      'https://short-api-key@gateway.example/{{ vars.path }}',
+      'wss://short-api-key@{{ host }}/api',
+    ])('should fail closed for templated URLs with userinfo credentials: %s', (url) => {
       expect(sanitizeUrl(url)).toBe('[REDACTED]');
     });
 
