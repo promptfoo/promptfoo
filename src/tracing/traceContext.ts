@@ -55,6 +55,8 @@ export interface FetchTraceContextOptions
   extends Omit<TraceSpanQueryOptions, 'includeInternalSpans' | 'sanitizeAttributes'> {
   includeInternalSpans?: boolean;
   sanitizeAttributes?: boolean;
+  /** Read all spans in the requested time range for deterministic grading. */
+  requireComplete?: boolean;
   maxRetries?: number;
   retryDelayMs?: number;
   /** External trace provider configuration (Tempo, Jaeger, etc.) */
@@ -599,6 +601,7 @@ export async function fetchTraceContext(
   options: FetchTraceContextOptions = {},
 ): Promise<TraceContextData | null> {
   const {
+    requireComplete = false,
     includeInternalSpans = true,
     sanitizeAttributes = true,
     maxRetries = DEFAULT_MAX_RETRIES,
@@ -611,9 +614,10 @@ export async function fetchTraceContext(
   const fetchOptions = {
     maxRetries,
     retryDelayMs,
-    includeInternalSpans,
     sanitizeAttributes,
     ...spanOptions,
+    includeInternalSpans: requireComplete || includeInternalSpans,
+    ...(requireComplete ? { maxSpans: undefined, maxDepth: undefined, spanFilter: undefined } : {}),
   };
 
   // If external provider is configured, use it

@@ -283,7 +283,14 @@ function traceAttributeField(
     return { field: 'output', kind: 'command' };
   }
 
-  if (normalizedAttributeName.includes('tool.output')) {
+  if (
+    normalizedAttributeName.includes('tool.output') ||
+    normalizedAttributeName.includes('tool.result') ||
+    normalizedAttributeName === 'gen_ai.tool.call.result' ||
+    normalizedAttributeName === 'ai.toolcall.result' ||
+    normalizedAttributeName === 'langfuse.output' ||
+    normalizedAttributeName === 'braintrust.output'
+  ) {
     return { field: 'output', kind: 'tool_call' };
   }
 

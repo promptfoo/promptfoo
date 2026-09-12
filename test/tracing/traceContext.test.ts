@@ -43,6 +43,55 @@ function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
 
 describe('fetchTraceContext', () => {
   it.each([false, true])(
+    'reads complete grading evidence despite view filters (external: %s)',
+    async (external) => {
+      const spans: SpanData[] = [
+        { spanId: 'previous', name: 'previous iteration', startTime: 1 },
+        {
+          spanId: 'clean',
+          name: 'target.call',
+          startTime: 2,
+          attributes: { 'gen_ai.operation.name': 'chat' },
+        },
+        {
+          spanId: 'unsafe',
+          name: 'tool update_seat',
+          startTime: 3,
+          attributes: { 'tool.name': 'update_seat' },
+        },
+      ];
+      mocks.isExternalTraceProvider.mockReturnValue(external);
+      if (external) {
+        mockExternalTrace(spans);
+      } else {
+        storedSpans.push(...spans);
+      }
+      const result = await fetchTraceContext('trace-1', {
+        ...(external ? { providerConfig } : {}),
+        queryDelay: 0,
+        maxRetries: 0,
+        earliestStartTime: 2,
+        requireComplete: true,
+        includeInternalSpans: false,
+        maxSpans: 1,
+        maxDepth: 1,
+        spanFilter: ['target'],
+      });
+      expect(result?.spans.map((span) => span.spanId)).toEqual(['clean', 'unsafe']);
+      expect(mocks.getSpans).toHaveBeenLastCalledWith(
+        'trace-1',
+        expect.objectContaining({
+          earliestStartTime: 2,
+          includeInternalSpans: true,
+          maxSpans: undefined,
+          maxDepth: undefined,
+          spanFilter: undefined,
+        }),
+      );
+    },
+  );
+
+  it.each([false, true])(
     'rejects incomplete local traces even with no visible spans (%s)',
     async (hasSpans) => {
       mocks.isExternalTraceProvider.mockReturnValue(false);
