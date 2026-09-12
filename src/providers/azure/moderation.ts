@@ -267,6 +267,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       }
     }
 
+    let completedResponse: ProviderModerationResponse | undefined;
     try {
       const cleanEndpoint = endpoint.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
       const url = `${cleanEndpoint}/contentsafety/text:analyze?api-version=${this.apiVersion}`;
@@ -318,6 +319,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
 
       const data = await response.json();
       const result = parseAzureModerationResponse(data);
+      completedResponse = result;
 
       if (useCache && cacheKey) {
         options?.abortSignal?.throwIfAborted();
@@ -329,7 +331,7 @@ export class AzureModerationProvider extends AzureGenericProvider implements Api
       options?.abortSignal?.throwIfAborted();
       return result;
     } catch (err) {
-      return handleApiError(err);
+      return { ...completedResponse, ...handleApiError(err) };
     }
   }
 }
