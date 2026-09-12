@@ -198,6 +198,7 @@ describe('VVAH example provider', () => {
     '.. \\.. \\outside.txt',
     'security-scan./findings.json',
     'src/app.py ',
+    '\ud800.py',
     'NUL.txt',
   ])('rejects unsafe fixture path %s before spawning', async (name) => {
     vi.mocked(spawn).mockImplementation(() => {
