@@ -48,6 +48,7 @@ import {
   accumulateTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../util/traceRedaction';
 import {
   invalidateEvaluationCache,
   notifyEvaluationChanged,
@@ -1462,13 +1463,41 @@ export default class Eval {
     };
   }
 
-  async getTraces(): Promise<TraceData[]> {
+  async getTraces(options: { normalizeSpans?: boolean } = {}): Promise<TraceData[]> {
     try {
       const traceStore = getTraceStore();
       const tracesData = await traceStore.getTracesByEvaluation(this.id);
+      if (!tracesData.length) {
+        return [];
+      }
+      // Redaction graders need local forensic evidence; exports and sharing must omit it.
+      const privateTraceIds = new Set<string>();
+      const privateTestCaseIds = new Set<string>();
+      for await (const batch of this.fetchResultsBatched()) {
+        for (const result of batch) {
+          if (requiresTraceRedaction(result.testCase.assert)) {
+            if (result.traceId) {
+              privateTraceIds.add(result.traceId);
+            }
+            privateTestCaseIds.add(`${result.testIdx}-${result.promptIdx}`);
+            const testCaseId = result.testCase.metadata?.testCaseId;
+            if (typeof testCaseId === 'string') {
+              privateTestCaseIds.add(testCaseId);
+            }
+            if ('id' in result.testCase && typeof result.testCase.id === 'string') {
+              privateTestCaseIds.add(result.testCase.id);
+            }
+          }
+        }
+      }
 
-      // Transform trace data to match the expected schema
-      return tracesData.map((trace: TraceData) => ({
+      const publicTraces = tracesData.filter(
+        (trace) => !privateTraceIds.has(trace.traceId) && !privateTestCaseIds.has(trace.testCaseId),
+      );
+      if (options.normalizeSpans === false) {
+        return publicTraces;
+      }
+      return publicTraces.map((trace: TraceData) => ({
         traceId: trace.traceId,
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,

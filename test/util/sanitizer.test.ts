@@ -31,6 +31,20 @@ afterEach(() => {
 });
 
 describe('sanitizeCodingAgentVerifierInputs', () => {
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'redacts inline verifier inputs from an inverse %s assertion',
+    (id) => {
+      const assertion = {
+        type: `not-promptfoo:redteam:${id}`,
+        value: { canary: 'PRIVATE_INVERSE_RECEIPT', rawReceipt: 'PRIVATE_INVERSE_RECEIPT' },
+      };
+      expect(JSON.stringify(sanitizeCodingAgentVerifierInputs(assertion))).not.toContain(
+        'PRIVATE_INVERSE_RECEIPT',
+      );
+      expect(assertion.value.canary).toBe('PRIVATE_INVERSE_RECEIPT');
+    },
+  );
+
   it.each(['mcpSourceLedger', 'connectorReadLedger', 'externalizedAgentLedger', 'jobQueueLedgers'])(
     'redacts the complete inline %s payload',
     (key) => {

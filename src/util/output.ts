@@ -454,16 +454,7 @@ export async function createOutputData(
 ): Promise<OutputFile> {
   const summary = await evalRecord.toEvaluateSummary();
   const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
-  let traces;
-  try {
-    // TraceStore redacts sensitive attribute keys on reads by default.
-    const { getTraceStore } = await import('../tracing/store');
-    traces = await getTraceStore().getTracesByEvaluation(evalRecord.id);
-  } catch (error) {
-    logger.warn(
-      `Failed to fetch traces for output ${evalRecord.id}; traces omitted from export: ${error}`,
-    );
-  }
+  const traces = await evalRecord.getTraces({ normalizeSpans: false });
 
   const output: OutputFile = {
     evalId: evalRecord.id,

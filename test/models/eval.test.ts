@@ -1519,6 +1519,55 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it.each([
+      'promptfoo:redteam:coding-agent:trace-redaction',
+      'promptfoo:redteam:harness:artifact-redaction',
+    ] as const)('keeps forensic %s traces out of export and sharing', async (type) => {
+      const evaluation = await Eval.create({}, []);
+      const store = new TraceStore();
+      for (const [testIdx, traceId] of [
+        'private-trace',
+        'private-indexed',
+        'private-named',
+        'ordinary-trace',
+      ].entries()) {
+        await evaluation.addResult(
+          createEvaluateResult({
+            testIdx,
+            traceId: testIdx === 1 || testIdx === 2 ? undefined : traceId,
+            testCase: {
+              assert: testIdx < 3 ? [{ type: 'assert-set', assert: [{ type }] }] : [],
+              metadata: testIdx === 2 ? { testCaseId: 'custom-private-case' } : {},
+            },
+          }),
+        );
+        await store.createTrace({
+          evaluationId: evaluation.id,
+          testCaseId: testIdx === 2 ? 'custom-private-case' : `${testIdx}-0`,
+          traceId,
+        });
+        await store.addSpans(traceId, [
+          {
+            spanId: traceId,
+            name: 'trace',
+            startTime: 1,
+            attributes: {
+              diagnostic: testIdx < 3 ? 'PRIVATE_FORENSIC_VALUE' : 'ordinary diagnostic',
+            },
+          },
+        ]);
+      }
+      expect((await evaluation.getTraces()).map((trace) => trace.traceId)).toEqual([
+        'ordinary-trace',
+      ]);
+      expect(JSON.stringify(await evaluation.toResultsFile())).not.toContain(
+        'PRIVATE_FORENSIC_VALUE',
+      );
+      expect(JSON.stringify(await store.getTrace('private-trace'))).toContain(
+        'PRIVATE_FORENSIC_VALUE',
+      );
+    });
+
     it.each(['rawReceipt', 'sensitiveValue', 'expectedContent'])(
       'keeps %s out of persisted and exported verifier configuration',
       async (key) => {

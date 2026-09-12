@@ -1437,10 +1437,14 @@ describe('CustomProvider', () => {
       }
     });
 
-    it('should include redteamHistory with media fields when perTurnLayers is configured', async () => {
+    it.each([
+      undefined,
+      'promptfoo:redteam:coding-agent:trace-redaction',
+      'promptfoo:redteam:harness:artifact-redaction',
+    ] as const)('keeps only permitted history audio for %s', async (assertionType) => {
       // Configure the hoisted mock to return audio/image data for this test
       mockApplyRuntimeTransforms.mockResolvedValueOnce({
-        transformedPrompt: 'transformed prompt',
+        prompt: 'transformed prompt',
         audio: { data: 'base64-audio-data', format: 'mp3' },
         image: { data: 'base64-image-data', format: 'png' },
       });
@@ -1468,7 +1472,7 @@ describe('CustomProvider', () => {
 
       mockScoringProvider.callApi.mockResolvedValue({
         output: JSON.stringify({
-          value: true,
+          value: false,
           metadata: 100,
           rationale: 'Success',
         }),
@@ -1478,6 +1482,7 @@ describe('CustomProvider', () => {
         originalProvider: mockTargetProvider,
         vars: { objective: 'test objective' },
         prompt: { raw: 'test prompt', label: 'test' },
+        test: { vars: {}, assert: assertionType ? [{ type: assertionType }] : [] },
       };
 
       const result = await provider.callApi('test prompt', context);
@@ -1485,6 +1490,9 @@ describe('CustomProvider', () => {
       // Verify redteamHistory is populated
       expect(result.metadata?.redteamHistory).toBeDefined();
       expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
+      expect(result.metadata?.redteamHistory?.[0].outputAudio).toEqual(
+        assertionType ? undefined : { data: 'response-audio-data', format: 'wav' },
+      );
     });
   });
 });

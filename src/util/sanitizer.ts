@@ -18,7 +18,7 @@ const PRIVATE_VERIFIER_FIELD =
 export function sanitizeCodingAgentVerifierInputs<T>(input: T): T {
   const seen = [new WeakMap<object, unknown>(), new WeakMap<object, unknown>()];
   const isCodingAgentId = (id: unknown) =>
-    typeof id === 'string' && /^(?:promptfoo:redteam:)?(?:coding-agent|harness):/.test(id);
+    typeof id === 'string' && /^(?:not-)?(?:promptfoo:redteam:)?(?:coding-agent|harness):/.test(id);
   const stack: {
     entries: [string, unknown][];
     result: Record<string, unknown> | unknown[];

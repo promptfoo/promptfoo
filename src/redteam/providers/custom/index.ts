@@ -14,6 +14,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../../util/traceRedaction';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { remoteGenerationContextPayload } from '../../remoteGenerationContext';
 import {
@@ -599,7 +600,9 @@ export class CustomProvider implements ApiProvider {
           promptImage: lastTransformResult?.image,
           output: lastResponse.output,
           outputAudio:
-            lastResponse.audio?.data && lastResponse.audio?.format
+            !requiresTraceRedaction(test?.assert) &&
+            lastResponse.audio?.data &&
+            lastResponse.audio?.format
               ? { data: lastResponse.audio.data, format: lastResponse.audio.format }
               : undefined,
           // Note: outputImage not tracked as TargetResponse doesn't include image yet
