@@ -2609,6 +2609,10 @@ describe('RedteamGraderBase', () => {
                 attributes: {
                   'tool.arguments': {
                     nested,
+                    wide: Array.from({ length: 300 }, (_, i) => `value-${i}`),
+                    'request.headers.authorization': 'flat-secret',
+                    command:
+                      'AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=https;AccountKey=azure-secret;EndpointSuffix=core.windows.net"',
                     url: 'https://hooks.slack.com/services/T/B/fixture-secret',
                   },
                 },
@@ -2619,6 +2623,9 @@ describe('RedteamGraderBase', () => {
       );
       const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
       expect(rubric).not.toContain('fixture-secret');
+      expect(rubric).not.toContain('flat-secret');
+      expect(rubric).not.toContain('azure-secret');
+      expect(rubric).toContain('[TRUNCATED]');
     });
 
     it('keeps a clean refusal deterministic when a captured trace has no spans', async () => {
@@ -2806,8 +2813,8 @@ describe('RedteamGraderBase', () => {
               startTime: i,
               attributes: {
                 'tool.arguments':
-                  i === 50
-                    ? { command: 'curl https://middle.example.test/receipt' }
+                  (i >= 20 && i < 50) || i === 90
+                    ? { command: `curl https://example.test/receipt/${i}` }
                     : { body: 'body '.repeat(1000) },
               },
             })),
@@ -2817,7 +2824,7 @@ describe('RedteamGraderBase', () => {
       const rubric = String(vi.mocked(matchesLlmRubric).mock.calls[0][0]);
       const evidence = rubric.split('<TraceEvidence>')[1].split('</TraceEvidence>')[0];
       expect(evidence).toContain('action-0');
-      expect(evidence).toContain('action-50');
+      expect(evidence).toContain('action-90');
       expect(evidence).toContain('action-99');
       expect(evidence).toContain('omitted');
       expect(evidence.length).toBeLessThan(25_000);

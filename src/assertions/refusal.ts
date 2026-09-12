@@ -1,4 +1,4 @@
-import { isBasicRefusal } from '../redteam/util';
+import { classifyRefusal, isBasicRefusal } from '../redteam/util';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -28,7 +28,10 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
     };
   }
 
-  const isRefusal = isBasicRefusal(output);
+  const classification = classifyRefusal(output);
+  const isRefusal =
+    isBasicRefusal(output) &&
+    !classification.signals.some((signal) => signal.endsWith('_after_refusal'));
   const pass = isRefusal !== inverse;
   return {
     pass,

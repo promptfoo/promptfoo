@@ -386,11 +386,16 @@ export abstract class RedteamPluginBase {
   }
 }
 
-function redactTraceValue(value: unknown, key = '', depth = 0): unknown {
-  if (depth > 20) {
+function redactTraceValue(
+  value: unknown,
+  key = '',
+  depth = 0,
+  budget = { remaining: 256 },
+): unknown {
+  if (depth > 20 || budget.remaining-- <= 0) {
     return '[TRUNCATED]';
   }
-  if (isSecretField(key) || isSecretEnvVarName(key)) {
+  if (key.split('.').some((part) => isSecretField(part) || isSecretEnvVarName(part))) {
     return '[REDACTED]';
   }
   if (Array.isArray(value)) {
@@ -401,7 +406,7 @@ function redactTraceValue(value: unknown, key = '', depth = 0): unknown {
         typeof previous === 'string' &&
         (option === 'u' || option === 'user' || option === 'proxy-user' || isSecretField(option))
         ? '[REDACTED]'
-        : redactTraceValue(entry, '', depth + 1);
+        : redactTraceValue(entry, '', depth + 1, budget);
     });
   }
   if (value && typeof value === 'object') {
@@ -414,7 +419,7 @@ function redactTraceValue(value: unknown, key = '', depth = 0): unknown {
         headerName &&
         (isSecretField(headerName) || isSecretEnvVarName(headerName))
           ? '[REDACTED]'
-          : redactTraceValue(entryValue, entryKey, depth + 1),
+          : redactTraceValue(entryValue, entryKey, depth + 1, budget),
       ]),
     );
   }
@@ -430,6 +435,7 @@ function redactTraceEvidence(text: string): string {
     }
   }
   return redactPrivateKeys(text.replace(/\\\r?\n\s*/g, ' '))
+    .replace(/\b(AccountKey\s*=\s*)[^;\s\"'\\]+/gi, '$1[REDACTED]')
     .replace(/\b([a-z][a-z0-9+.-]*:\/\/)([^/@\s"'`\\]+)@/gi, '$1[REDACTED]@')
     .replace(/\bhttps?:\/\/[^\s"'`\\]+/gi, (url) => {
       const sanitized = sanitizeUrl(url);
@@ -542,7 +548,7 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
     let args = TOOL_ARGUMENT_ATTRIBUTE_KEYS.map((key) => attributes[key]).find(
       (value) => value !== undefined && value !== '',
     );
-    if (typeof args === 'string') {
+    if (typeof args === 'string' && args.length <= 32_000) {
       try {
         args = JSON.parse(args);
       } catch {
@@ -595,10 +601,14 @@ function formatTraceEvidence(gradingContext?: RedteamGradingContext): string {
   const priorityActions = actions.filter((action) => /"(?:path|url)":|https?:\/\//.test(action));
   const selected =
     actions.length > 24
-      ? [...new Set([...priorityActions, ...actions.slice(0, 15), ...actions.slice(-8)])].slice(
-          0,
-          24,
-        )
+      ? [
+          ...new Set([
+            ...priorityActions.slice(0, 8),
+            ...priorityActions.slice(-8),
+            ...actions.slice(0, 4),
+            ...actions.slice(-4),
+          ]),
+        ].slice(0, 24)
       : actions;
   const insights = gradingContext?.traceContext?.insights ?? [];
   return [

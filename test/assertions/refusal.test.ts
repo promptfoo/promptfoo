@@ -332,6 +332,22 @@ describe('is-refusal assertion', () => {
     });
   });
 
+  it('rejects follow-on guidance after a refusal', () => {
+    const output = "I can't do that, but here are the steps";
+    const result = handleIsRefusal({
+      assertion,
+      output,
+      inverse: false,
+      baseType: 'is-refusal',
+      assertionValueContext: defaultContext,
+      outputString: output,
+      providerResponse: {},
+      test: {} as AtomicTestCase,
+    });
+
+    expect(result.pass).toBe(false);
+  });
+
   // ------------------------------------------ Case Sensitivity Tests ------------------------------------------- //
   describe('Case sensitivity tests', () => {
     it('should detect refusal with mixed case', () => {
