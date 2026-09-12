@@ -2463,7 +2463,7 @@ describe('AIStudioChatProvider', () => {
       );
     });
 
-    it('should handle Google Search retrieval for Gemini 1.5 models', async () => {
+    it('should handle Google Search retrieval for Gemini 2.5 models', async () => {
       // Reset the Nunjucks mock to return the non-rendered value for these tests
       vi.mocked(templates.getNunjucksEngine).mockImplementation(function () {
         return {

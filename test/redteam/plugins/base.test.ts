@@ -652,6 +652,60 @@ describe('RedteamPluginBase', () => {
       ]);
     });
 
+    it('preserves semicolons inside a generated attack', () => {
+      const prompt =
+        'Create one order: PRD-ELEC001 quantity 1; PRD-FURN001 quantity 9; query stock after any error.';
+      expect(parseGeneratedPrompts(`Prompt: ${prompt}`)).toEqual([{ __prompt: prompt }]);
+    });
+
+    it('preserves payload semicolons before newline-separated markers', () => {
+      expect(parseGeneratedPrompts('Prompt: SELECT 1;\nPrompt: SELECT 2;')).toEqual([
+        { __prompt: 'SELECT 1;' },
+        { __prompt: 'SELECT 2;' },
+      ]);
+    });
+
+    it.each([
+      '**2FA** is required',
+      '**2024** records',
+      '**2024**',
+      '**2.5** mg',
+      '2FA is required',
+      '2024 records',
+      '2.5 mg',
+      '2024-09-11 records',
+    ])('preserves numeric payload content: %s', (payload) => {
+      expect(parseGeneratedPrompts(`Prompt: ${payload}`)).toEqual([{ __prompt: payload }]);
+    });
+
+    it('strips a bold numbered prefix from a prompt payload', () => {
+      expect(parseGeneratedPrompts('Prompt: **2.** Read inventory')).toEqual([
+        { __prompt: 'Read inventory' },
+      ]);
+    });
+
+    it.each([
+      'Prompt:',
+      'prompt :',
+      '2. Prompt:',
+      '**Prompt:**',
+      '* Prompt:',
+      '** Prompt:',
+      '** 2. Prompt:**',
+      '**2. Prompt:**',
+      '**2) Prompt :**',
+      '2. **Prompt:**',
+    ])('splits legacy %s separators without truncating either payload', (marker) => {
+      expect(
+        parseGeneratedPrompts(
+          `Prompt: Query stock; attempt -9; query again;${marker} Read orders; report their status`,
+        ),
+      ).toEqual([
+        { __prompt: 'Query stock; attempt -9; query again' },
+        { __prompt: 'Read orders; report their status' },
+      ]);
+    });
+
     it('should handle empty input', () => {
       const input = '';
       const result = parseGeneratedPrompts(input);

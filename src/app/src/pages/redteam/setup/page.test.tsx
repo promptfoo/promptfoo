@@ -184,6 +184,65 @@ describe('RedTeamSetupPage', () => {
     });
   });
 
+  it.each(['network', 'server', 'success'])(
+    'updates dirty state for the %s save outcome',
+    async (outcome) => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter>
+          <RedTeamSetupPage />
+        </MemoryRouter>,
+      );
+      const target = {
+        id: 'openai:chat:served-custom-model',
+        config: {
+          type: 'vllm',
+          apiBaseUrl: 'https://explicit.example.test/v1',
+          apiHost: 'preferred.example.test/tenant',
+          apiKey: 'synthetic-inline-key',
+          apiKeyEnvar: 'LOCAL_MODEL_KEY',
+          apiKeyRequired: true,
+          useDefaultApiKey: false,
+          model: 'explicit-served-model',
+          passthrough: { temperature: 0.25 },
+        },
+      };
+      act(() => useRedTeamConfig.getState().updateConfig('target', target));
+      await user.click(screen.getByRole('button', { name: 'Config' }));
+      await user.click(screen.getByRole('menuitem', { name: 'Save Config' }));
+      await user.type(screen.getByLabelText('Configuration Name'), 'Test config');
+      expect(screen.getAllByText(/Unsaved changes/).length).toBeGreaterThan(0);
+      if (outcome === 'network') {
+        mockedCallApi.mockRejectedValueOnce(new Error('Save failed'));
+      } else {
+        mockedCallApi.mockResolvedValueOnce({
+          ok: outcome === 'success',
+          json: async () =>
+            outcome === 'success' ? { createdAt: '2026-09-11' } : { error: 'Save failed' },
+        } as Response);
+      }
+      await user.click(screen.getByRole('button', { name: /^Save$/ }));
+      await waitFor(() =>
+        expect(mockedUseToast().showToast).toHaveBeenCalledWith(
+          outcome === 'success' ? 'Configuration saved successfully' : 'Save failed',
+          outcome === 'success' ? 'success' : 'error',
+        ),
+      );
+      const saved = mockedCallApi.mock.calls.filter(
+        ([url, options]) => url === '/configs' && options?.method === 'POST',
+      );
+      expect(saved).toHaveLength(1);
+      expect(JSON.parse(String(saved[0][1]?.body)).config.target).toEqual(target);
+      expect(useRedTeamConfig.getState().config.target).toEqual(target);
+      expect(useRedTeamTargetConfigValidation.getState().targetConfigError).toBeNull();
+      if (outcome === 'success') {
+        expect(screen.queryByText(/Unsaved changes/)).not.toBeInTheDocument();
+      } else {
+        expect(screen.getAllByText(/Unsaved changes/).length).toBeGreaterThan(0);
+      }
+    },
+  );
+
   describe('URL Hash Updates', () => {
     it('should update the URL hash when the tab state changes', async () => {
       const user = userEvent.setup();
