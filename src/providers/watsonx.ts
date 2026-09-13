@@ -436,7 +436,10 @@ export class WatsonXProvider implements ApiProvider {
     this.modelName = modelName;
     this.options = options;
     this.env = env;
-    this.config = validatedConfig;
+    this.config = {
+      ...validatedConfig,
+      apiKeyEnvar: validatedConfig.apiKeyEnvar || 'WATSONX_AI_APIKEY',
+    };
   }
 
   id(): string {

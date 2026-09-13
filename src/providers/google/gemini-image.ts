@@ -98,12 +98,12 @@ const MODEL_IMAGE_SIZES: Record<string, string[]> = {
  */
 export class GeminiImageProvider implements ApiProvider {
   modelName: string;
-  config: CompletionOptions;
+  config: CompletionOptions & { apiKeyEnvar?: string };
   env?: EnvOverrides;
 
   constructor(modelName: string, options: GeminiImageOptions = {}) {
     this.modelName = modelName;
-    this.config = options.config || {};
+    this.config = { apiKeyEnvar: 'GOOGLE_API_KEY', ...options.config };
     const id = options.id;
     if (id) {
       this.id = () => id;
@@ -122,12 +122,12 @@ export class GeminiImageProvider implements ApiProvider {
   private getApiKey(): string | undefined {
     return (
       this.config.apiKey ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
-      getEnvString('GEMINI_API_KEY') ||
       this.env?.GOOGLE_API_KEY ||
       this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      this.env?.GEMINI_API_KEY
+      this.env?.GEMINI_API_KEY ||
+      getEnvString('GOOGLE_API_KEY') ||
+      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
+      getEnvString('GEMINI_API_KEY')
     );
   }
 

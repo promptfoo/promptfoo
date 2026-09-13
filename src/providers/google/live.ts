@@ -181,14 +181,14 @@ export const tryGetThenPost = async <T = unknown>(url: string, data?: unknown): 
 };
 
 export class GoogleLiveProvider implements ApiProvider {
-  config: CompletionOptions;
+  config: CompletionOptions & { apiKeyEnvar?: string };
   modelName: string;
   private env?: ProviderOptions['env'];
   private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(modelName: string, options: ProviderOptions) {
     this.modelName = modelName;
-    this.config = options.config || {};
+    this.config = { apiKeyEnvar: 'GOOGLE_API_KEY', ...options.config };
     this.env = options.env;
     const id = options.id;
     if (id) {

@@ -72,14 +72,14 @@ const IMAGEN_COSTS: Record<string, number> = {
 
 export class GoogleImageProvider implements ApiProvider {
   modelName: string;
-  config: CompletionOptions;
+  config: CompletionOptions & { apiKeyEnvar?: string };
   env?: EnvOverrides;
   maxRetries: number = 3;
   baseRetryDelay: number = 1000; // 1 second
 
   constructor(modelName: string, options: GoogleImageOptions = {}) {
     this.modelName = modelName;
-    this.config = options.config || {};
+    this.config = { apiKeyEnvar: 'GOOGLE_API_KEY', ...options.config };
     const id = options.id;
     if (id) {
       this.id = () => id;
@@ -353,12 +353,12 @@ export class GoogleImageProvider implements ApiProvider {
   private getApiKey(): string | undefined {
     return (
       this.config.apiKey ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
-      getEnvString('GEMINI_API_KEY') ||
       this.env?.GOOGLE_API_KEY ||
       this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      this.env?.GEMINI_API_KEY
+      this.env?.GEMINI_API_KEY ||
+      getEnvString('GOOGLE_API_KEY') ||
+      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
+      getEnvString('GEMINI_API_KEY')
     );
   }
 
