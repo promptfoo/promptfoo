@@ -3,7 +3,7 @@ import * as fsp from 'fs/promises';
 
 import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
-import { HttpProvider } from '../../src/providers/http';
+import { HttpProvider, HttpProviderConfigSchema } from '../../src/providers/http';
 
 // Mock dependencies
 vi.mock('../../src/cache', async (importOriginal) => {
@@ -57,6 +57,10 @@ vi.mock('fs/promises', () => {
   return { default: { readFile }, readFile };
 });
 
+vi.mock('jks-js', () => ({
+  toPem: vi.fn(),
+}));
+
 describe('HttpProvider with TLS Configuration', () => {
   const mockFetchWithCache = vi.mocked(fetchWithCache);
 
@@ -80,6 +84,24 @@ describe('HttpProvider with TLS Configuration', () => {
   });
 
   describe('TLS certificate configuration', () => {
+    it('should preserve JKS TLS fields during configuration validation', () => {
+      const config = HttpProviderConfigSchema.parse({
+        tls: {
+          jksPath: '/path/to/client.jks',
+          jksContent: 'base64-jks',
+          keyAlias: 'client',
+          passphrase: 'secret',
+        },
+      });
+
+      expect(config.tls).toMatchObject({
+        jksPath: '/path/to/client.jks',
+        jksContent: 'base64-jks',
+        keyAlias: 'client',
+        passphrase: 'secret',
+      });
+    });
+
     it('should create HTTPS agent when TLS config is provided', async () => {
       // Mock file reads before creating provider
       (fs.readFileSync as Mock)
@@ -122,6 +144,48 @@ describe('HttpProvider with TLS Configuration', () => {
 
       // Verify files were read
       expect(mockReadFileSync).toHaveBeenCalledTimes(3);
+    });
+
+    it('should extract client certificates from inline JKS TLS configuration', async () => {
+      const jks = vi.mocked(await import('jks-js'));
+      jks.toPem.mockReturnValue({
+        client: {
+          cert: 'CLIENT_CERT_CONTENT',
+          key: 'PRIVATE_KEY_CONTENT',
+        },
+      });
+
+      const provider = new HttpProvider('https://api.example.com', {
+        config: {
+          method: 'GET',
+          tls: {
+            jksContent: Buffer.from('JKS_CONTENT').toString('base64'),
+            passphrase: 'secret',
+            keyAlias: 'client',
+          },
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(jks.toPem).toHaveBeenCalledWith(Buffer.from('JKS_CONTENT'), 'secret');
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          dispatcher: expect.objectContaining({
+            options: expect.objectContaining({
+              connect: expect.objectContaining({
+                cert: 'CLIENT_CERT_CONTENT',
+                key: 'PRIVATE_KEY_CONTENT',
+              }),
+            }),
+          }),
+        }),
+        expect.any(Number),
+        expect.any(String),
+        undefined,
+        undefined,
+      );
     });
 
     it('should start independent TLS file reads in parallel', async () => {
