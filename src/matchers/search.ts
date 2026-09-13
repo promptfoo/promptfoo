@@ -119,6 +119,12 @@ export async function matchesSearchRubric(
     if (typeof result.pass !== 'boolean') {
       throw new Error('Missing search-rubric verdict');
     }
+    if (
+      result.score !== undefined &&
+      (typeof result.score !== 'number' || !Number.isFinite(result.score))
+    ) {
+      throw new Error('Invalid search-rubric score');
+    }
 
     // Apply threshold if specified
     let pass = result.pass ?? false;

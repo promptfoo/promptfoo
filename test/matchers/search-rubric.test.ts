@@ -158,6 +158,19 @@ describe('matchesSearchRubric', () => {
     );
   });
 
+  it('fails closed on an explicit malformed score', async () => {
+    const { matchesSearchRubric } = await import('../../src/matchers/search');
+    mocks.webSearchProvider.callApi = vi.fn(
+      async (): Promise<ProviderResponse> => ({
+        output: JSON.stringify({ pass: false, score: 'bad' }),
+      }),
+    ) as ApiProvider['callApi'];
+
+    await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
+      expect.objectContaining({ pass: false, metadata: { graderError: true } }),
+    );
+  });
+
   it('returns a failure when the search provider returns no output', async () => {
     const { matchesSearchRubric } = await import('../../src/matchers/search');
     mocks.webSearchProvider.callApi = vi.fn(

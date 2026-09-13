@@ -31,6 +31,9 @@ export async function matchesClassification(
   if (!resp.classification) {
     return graderFail(resp.error || 'Unknown error fetching classification');
   }
+  if (Object.values(resp.classification).some((score) => !Number.isFinite(score))) {
+    return graderFail('Invalid classification scores returned');
+  }
   let score: number;
   if (expected === undefined) {
     const scores = Object.values(resp.classification);

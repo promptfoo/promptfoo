@@ -137,6 +137,22 @@ describe('matchesClassification', () => {
     });
   });
 
+  it('should fail closed on malformed scores', async () => {
+    const grading: GradingConfig = {
+      provider: Object.assign(createMockProvider({ id: 'bad-classification-provider' }), {
+        callClassificationApi: vi.fn().mockResolvedValue({ classification: { classA: NaN } }),
+      }),
+    };
+
+    await expect(
+      matchesClassification(undefined, 'Sample output', 0.5, grading),
+    ).resolves.toMatchObject({
+      pass: false,
+      reason: 'Invalid classification scores returned',
+      metadata: { graderError: true },
+    });
+  });
+
   it('should use the overridden classification grading config', async () => {
     const expected = 'classA';
     const output = 'Sample output';

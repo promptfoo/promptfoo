@@ -118,6 +118,13 @@ describe('validateAssertions', () => {
   });
 
   describe('assert-set validation', () => {
+    it('rejects excessive nested assertions', () => {
+      const nested = Array.from({ length: 10000 }, () => ({ type: 'equals', value: 'ok' }));
+      expect(() =>
+        validateAssertions([{ vars: {}, assert: [{ type: 'assert-set', assert: nested } as any] }]),
+      ).toThrow(/more than 10000 assertions/);
+    });
+
     it('does not fail on valid assert-set', () => {
       const tests: TestCase[] = [
         {

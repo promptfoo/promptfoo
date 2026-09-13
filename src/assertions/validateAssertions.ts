@@ -105,6 +105,46 @@ export class AssertValidationError extends Error {
   }
 }
 
+// Prevent recursive assertion parsing from turning malformed configs into
+// unbounded work before schema validation can report them.
+const MAX_ASSERTIONS_PER_TEST = 10000;
+const MAX_ASSERTION_NESTING = 100;
+
+function countAssertions(assertions: unknown[], context: string, depth = 0): number {
+  if (depth > MAX_ASSERTION_NESTING) {
+    throw new AssertValidationError(`${context} exceeds maximum assertion nesting`);
+  }
+
+  let count = 0;
+  for (let i = 0; i < assertions.length; i++) {
+    count++;
+    if (count > MAX_ASSERTIONS_PER_TEST) {
+      throw new AssertValidationError(
+        `${context} has more than ${MAX_ASSERTIONS_PER_TEST} assertions`,
+      );
+    }
+    const assertion = assertions[i];
+    if (
+      typeof assertion === 'object' &&
+      assertion !== null &&
+      (assertion as Record<string, unknown>).type === 'assert-set' &&
+      Array.isArray((assertion as Record<string, unknown>).assert)
+    ) {
+      count += countAssertions(
+        (assertion as Record<string, unknown>).assert as unknown[],
+        `${context}[${i}].assert`,
+        depth + 1,
+      );
+      if (count > MAX_ASSERTIONS_PER_TEST) {
+        throw new AssertValidationError(
+          `${context} has more than ${MAX_ASSERTIONS_PER_TEST} assertions`,
+        );
+      }
+    }
+  }
+  return count;
+}
+
 /**
  * Parse and validate a single assertion using Zod schema.
  * Returns the validated assertion with proper type narrowing.
@@ -176,9 +216,6 @@ function validateFallbackChainsForConfig(assertions: AssertionOrSet[], context: 
   }
 }
 
-// Maximum number of assertions per test case to prevent DoS
-const MAX_ASSERTIONS_PER_TEST = 10000;
-
 /**
  * Validate assertions in test cases and defaultTest.
  * Uses Zod schema validation for type safety and helpful error messages.
@@ -194,6 +231,7 @@ export function validateAssertions(
   scenarios?: Scenario[],
 ): void {
   const parsedDefaultAssertions: AssertionOrSet[] = [];
+  let defaultAssertionCount = 0;
 
   // Validate defaultTest assertions
   if (defaultTest?.assert) {
@@ -205,6 +243,7 @@ export function validateAssertions(
         `defaultTest.assert has ${defaultTest.assert.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
       );
     }
+    defaultAssertionCount = countAssertions(defaultTest.assert, 'defaultTest.assert');
     for (let i = 0; i < defaultTest.assert.length; i++) {
       parsedDefaultAssertions.push(
         parseAssertion(defaultTest.assert[i], `defaultTest.assert[${i}]`),
@@ -237,6 +276,7 @@ export function validateAssertions(
   for (let testIdx = 0; testIdx < validationTests.length; testIdx++) {
     const { test, path } = validationTests[testIdx];
     const parsedAssertions: AssertionOrSet[] = [];
+    let testAssertionCount = 0;
     if (test.assert !== undefined) {
       if (!Array.isArray(test.assert)) {
         throw new AssertValidationError(`${path}.assert must be an array`);
@@ -246,6 +286,7 @@ export function validateAssertions(
           `${path}.assert has ${test.assert.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
         );
       }
+      testAssertionCount = countAssertions(test.assert, `${path}.assert`);
       for (let i = 0; i < test.assert.length; i++) {
         parsedAssertions.push(parseAssertion(test.assert[i], `${path}.assert[${i}]`));
       }
@@ -255,9 +296,12 @@ export function validateAssertions(
     const effectiveAssertions = includeDefaultAssertions
       ? [...parsedDefaultAssertions, ...parsedAssertions]
       : parsedAssertions;
-    if (effectiveAssertions.length > MAX_ASSERTIONS_PER_TEST) {
+    const effectiveAssertionCount = includeDefaultAssertions
+      ? defaultAssertionCount + testAssertionCount
+      : testAssertionCount;
+    if (effectiveAssertionCount > MAX_ASSERTIONS_PER_TEST) {
       throw new AssertValidationError(
-        `${path}.mergedAssert has ${effectiveAssertions.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
+        `${path}.mergedAssert has ${effectiveAssertionCount} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
       );
     }
     if (effectiveAssertions.length > 0) {
