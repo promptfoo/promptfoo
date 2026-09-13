@@ -164,6 +164,35 @@ describe('handleSearchRubric', () => {
     expect(result.reason).toContain('does not require web search verification');
   });
 
+  it('propagates grader/transport failures verbatim without flipping pass for not-search-rubric', async () => {
+    // When the search provider errors, the result must NOT be inverted into a
+    // spurious pass. This test verifies the isGraderFailure() guard end-to-end:
+    // matchesSearchRubric() returns graderFail() → handler checks isGraderFailure()
+    // → returns pass:false unchanged.
+    const params: AssertionParams = {
+      ...defaultParams,
+      inverse: true,
+      renderedValue: 'Some rubric',
+    };
+
+    const graderErrorResult: GradingResult = {
+      pass: false,
+      score: 0,
+      reason: 'Search rubric evaluation failed: provider timeout',
+      metadata: { graderError: true },
+    };
+
+    mockMatchesSearchRubric.mockResolvedValue(graderErrorResult);
+
+    const result = await handleSearchRubric(params);
+
+    // Must remain pass:false — grader errors must NOT be inverted
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('Search rubric evaluation failed: provider timeout');
+    expect(result.metadata?.graderError).toBe(true);
+  });
+
   it('should pass provider to matchesSearchRubric', async () => {
     const mockProvider = createMockProvider();
 

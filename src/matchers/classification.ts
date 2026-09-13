@@ -1,5 +1,5 @@
 import { callGradingProvider, getAndCheckProvider } from './providers';
-import { fail } from './shared';
+import { graderFail } from './shared';
 
 import type { ApiClassificationProvider, GradingConfig, GradingResult } from '../types/index';
 
@@ -29,7 +29,10 @@ export async function matchesClassification(
   );
 
   if (!resp.classification) {
-    return fail(resp.error || 'Unknown error fetching classification');
+    // Tag transport/API errors with graderError so inverse-aware callers
+    // (not-classifier) propagate the failure verbatim instead of flipping it
+    // into a spurious pass. Mirrors the pattern in llmGrading.ts / moderation.ts.
+    return graderFail(resp.error || 'Unknown error fetching classification');
   }
   let score: number;
   if (expected === undefined) {

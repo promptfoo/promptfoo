@@ -1,3 +1,4 @@
+import { isGraderFailure } from '../matchers/llmGrading';
 import { matchesSearchRubric } from '../matchers/search';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -25,6 +26,12 @@ export async function handleSearchRubric({
     provider,
     providerCallContext,
   );
+
+  // A grader/transport error must never be flipped into a pass.
+  // This mirrors the guard used in llmRubric.ts, geval.ts, moderation.ts, etc.
+  if (isGraderFailure(result)) {
+    return result;
+  }
 
   if (inverse) {
     result.pass = !result.pass;

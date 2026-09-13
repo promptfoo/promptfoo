@@ -114,4 +114,45 @@ describe('handleClassifier', () => {
     );
     expect(mockedMatchesClassification).not.toHaveBeenCalled();
   });
+
+  it('propagates grader/transport failures verbatim without flipping pass for not-classifier', async () => {
+    // When the classification API errors, matchesClassification returns a graderFail result
+    // (pass: false, metadata.graderError: true). A not-classifier assertion must NOT flip
+    // this into pass: true — a broken grader is not evidence the criterion was unmet.
+    mockedMatchesClassification.mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'Simulated timeout',
+      metadata: { graderError: true },
+    });
+
+    const params = createParams({
+      assertion: { type: 'not-classifier', value: 'harmful', threshold: 0.5 },
+      renderedValue: 'harmful',
+      inverse: true,
+    });
+
+    const result = await handleClassifier(params);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('Simulated timeout');
+    expect(result.metadata?.graderError).toBe(true);
+  });
+
+  it('propagates grader/transport failures verbatim without flipping pass for classifier (non-inverted)', async () => {
+    mockedMatchesClassification.mockResolvedValue({
+      pass: false,
+      score: 0,
+      reason: 'API key invalid',
+      metadata: { graderError: true },
+    });
+
+    const params = createParams({ inverse: false });
+
+    const result = await handleClassifier(params);
+
+    expect(result.pass).toBe(false);
+    expect(result.metadata?.graderError).toBe(true);
+  });
 });
