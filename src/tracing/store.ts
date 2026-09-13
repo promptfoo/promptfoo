@@ -141,7 +141,7 @@ function computeDepth(
   }
 
   if (active.has(span.spanId)) {
-    return 0;
+    return Number.NEGATIVE_INFINITY;
   }
   active.add(span.spanId);
   const parentDepth = computeDepth(spanMap.get(span.parentSpanId)!, spanMap, depthCache, active);

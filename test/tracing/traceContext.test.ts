@@ -143,6 +143,32 @@ describe('fetchTraceContext', () => {
     expect(result?.spans.map((span) => span.name)).toEqual(['execute_tool search']);
   });
 
+  it('waits for a stable external span set before grading', async () => {
+    const root = { spanId: 'root', name: 'target.call', startTime: 1 };
+    const unsafe = {
+      spanId: 'unsafe',
+      parentSpanId: 'root',
+      name: 'execute_tool upload',
+      startTime: 2,
+      attributes: { 'gen_ai.tool.name': 'upload' },
+    };
+    const fetchTrace = vi
+      .fn()
+      .mockResolvedValueOnce({ fetchedAt: 1, traceId: 'trace-1', spans: [root] })
+      .mockResolvedValueOnce({ fetchedAt: 2, traceId: 'trace-1', spans: [root, unsafe] });
+    mocks.createTraceProvider.mockReturnValue({ fetchTrace, id: 'tempo' });
+
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      retryDelayMs: 0,
+      maxRetries: 1,
+    });
+
+    expect(fetchTrace).toHaveBeenCalledTimes(2);
+    expect(result?.spans.map((span) => span.spanId)).toContain('unsafe');
+  });
+
   it('keeps meaningful internal external spans before applying the span limit', async () => {
     const spans = [
       {

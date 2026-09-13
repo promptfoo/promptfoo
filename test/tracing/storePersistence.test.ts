@@ -357,13 +357,22 @@ describe('TraceStore span persistence', () => {
       { spanId: 'aaaaaaaaaaaaaaaa', parentSpanId: 'bbbbbbbbbbbbbbbb', name: 'first', startTime: 1 },
       {
         spanId: 'bbbbbbbbbbbbbbbb',
-        parentSpanId: 'aaaaaaaaaaaaaaaa',
+        parentSpanId: 'cccccccccccccccc',
         name: 'second',
         startTime: 2,
       },
+      { spanId: 'cccccccccccccccc', parentSpanId: 'dddddddddddddddd', name: 'third', startTime: 3 },
+      {
+        spanId: 'dddddddddddddddd',
+        parentSpanId: 'eeeeeeeeeeeeeeee',
+        name: 'fourth',
+        startTime: 4,
+      },
+      { spanId: 'eeeeeeeeeeeeeeee', parentSpanId: 'ffffffffffffffff', name: 'fifth', startTime: 5 },
+      { spanId: 'ffffffffffffffff', parentSpanId: 'aaaaaaaaaaaaaaaa', name: 'sixth', startTime: 6 },
     ]);
 
-    await expect(traceStore.getSpans('cyclic-parents', { maxDepth: 5 })).resolves.toHaveLength(2);
+    await expect(traceStore.getSpans('cyclic-parents', { maxDepth: 5 })).resolves.toHaveLength(6);
   });
 });
 

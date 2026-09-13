@@ -499,6 +499,14 @@ function redactTraceEvidence(text: string): string {
     .replace(/(['"])([\w-]+)(\s*:\s*)[^'"]*\1/gi, (match, quote, key, separator) =>
       isTracingCredentialHeader(key, '') ? quote + key + separator + '[REDACTED]' + quote : match,
     )
+    .replace(
+      /\b(authorization\s*:\s*)(?:(?:Bearer|Basic|ApiKey|Digest)\s+)?[^\s"';]+/gi,
+      '$1[REDACTED]',
+    )
+    .replace(
+      /\b((?:set-)?cookie\s*:\s*)[^\r\n&|'"]+?(?=\s+(?:-[A-Za-z]|https?:\/\/)|;\s+(?![\w-]+\s*=)\w|[&|]|$)/gi,
+      '$1[REDACTED]',
+    )
     .replace(/\b([\w-]+)(\s*:\s*)[^\s"'\\;&|\r\n]+/gi, (match, key, separator) =>
       isTracingCredentialHeader(key, '') ? key + separator + '[REDACTED]' : match,
     )

@@ -67,6 +67,7 @@ function mergeTracingConfig(...configs: Array<RawTracingConfig | undefined>): Ra
 function normalizeTracingOptions(
   config: RawTracingConfig,
   rootTracingConfig?: {
+    enabled?: boolean;
     provider?: TraceProviderConfig;
     queryDelay?: number;
     otlp?: { http?: { redactAttributes?: string[] } };
@@ -149,13 +150,21 @@ export function resolveTracingOptions({
   // Read provider and queryDelay from root tracing config (not redteam config)
   const rootTracingConfig = (cliState.requestTracingConfig ?? cliState.config?.tracing) as
     | {
+        enabled?: boolean;
         provider?: TraceProviderConfig;
         queryDelay?: number;
         otlp?: { http?: { redactAttributes?: string[] } };
       }
     | undefined;
 
-  return normalizeTracingOptions(merged, rootTracingConfig);
+  const codingAgentRootTracing =
+    String(test?.metadata?.pluginId ?? '').includes('coding-agent') &&
+    rootTracingConfig?.enabled === true &&
+    merged.enabled === undefined
+      ? { enabled: true }
+      : {};
+
+  return normalizeTracingOptions({ ...codingAgentRootTracing, ...merged }, rootTracingConfig);
 }
 
 export function resolveTestTracingOptions(

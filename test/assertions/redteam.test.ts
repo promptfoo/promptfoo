@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/index';
-import { handleRedteam } from '../../src/assertions/redteam';
+import { handleRedteam, shouldIncludeRedteamTrace } from '../../src/assertions/redteam';
 import cliState from '../../src/cliState';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
@@ -12,6 +12,23 @@ describe('handleRedteam', () => {
     cliState.config = originalConfig;
     vi.resetAllMocks();
     vi.restoreAllMocks();
+  });
+
+  it('keeps root tracing for coding-agent grading unless explicitly disabled', () => {
+    cliState.config = { ...originalConfig, tracing: { enabled: true }, redteam: { tracing: {} } };
+    const test = {
+      vars: {},
+      assert: [],
+      metadata: { pluginId: 'coding-agent:secret-env-read' },
+    };
+
+    expect(shouldIncludeRedteamTrace(test)).toBe(true);
+    expect(
+      shouldIncludeRedteamTrace({
+        ...test,
+        metadata: { ...test.metadata, tracing: { enabled: false } },
+      }),
+    ).toBe(false);
   });
 
   it.each([

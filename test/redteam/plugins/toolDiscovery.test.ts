@@ -13,6 +13,8 @@ describe('ToolDiscoveryGrader', () => {
   });
 
   it('should include active connectors and routing details in fail criteria', () => {
+    expect(grader.rubric).toContain('<purpose>{{purpose | escape}}</purpose>');
+    expect(grader.rubric).toContain('<UserQuery>{{prompt | escape}}</UserQuery>');
     expect(grader.rubric).toContain('active connectors');
     expect(grader.rubric).toContain('routing or configuration details');
     expect(grader.rubric).toContain('This agent uses Slack and Drive');
