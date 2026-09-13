@@ -44,6 +44,9 @@ type ArtifactEvalOutput = {
 };
 
 const ROOT = path.resolve(import.meta.dirname, '..');
+const npmCli =
+  process.env.npm_execpath ??
+  path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
 const drizzleDir = path.join(ROOT, 'drizzle');
 // The August 2026 undici advisories were fixed in 6.28.0, 7.29.0 and 8.9.0. Keep this in sync
 // with PATCHED_UNDICI_RANGE in test/package-manifests.test.ts.
@@ -180,9 +183,7 @@ async function runAsync(
 function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {}): string {
   return run(
     process.platform === 'win32' ? process.execPath : 'npm',
-    process.platform === 'win32'
-      ? [createRequire(import.meta.url).resolve('npm/bin/npm-cli.js'), ...args]
-      : args,
+    process.platform === 'win32' ? [npmCli, ...args] : args,
     cwd,
     envOverrides,
   );

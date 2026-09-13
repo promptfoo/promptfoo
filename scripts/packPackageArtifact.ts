@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 
 interface PackResult {
@@ -11,6 +10,9 @@ interface PackResult {
 }
 
 const ROOT = path.resolve(import.meta.dirname, '..');
+const npmCli =
+  process.env.npm_execpath ??
+  path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
 
 function main(): void {
   const destinationArgumentIndex = process.argv.indexOf('--destination');
@@ -29,9 +31,7 @@ function main(): void {
   const output = execFileSync(
     process.platform === 'win32' ? process.execPath : 'npm',
     [
-      ...(process.platform === 'win32'
-        ? [createRequire(import.meta.url).resolve('npm/bin/npm-cli.js')]
-        : []),
+      ...(process.platform === 'win32' ? [npmCli] : []),
       'pack',
       '--ignore-scripts',
       '--json',
