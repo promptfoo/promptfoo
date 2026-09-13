@@ -29,6 +29,10 @@ import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
+import {
+  withMcpLedgerScope,
+  withTraceRedactionReceiptScope,
+} from './redteam/plugins/codingAgent/verifiers';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
@@ -109,6 +113,7 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
+import { requiresTraceRedaction, sanitizeRedactionResult } from './util/traceRedaction';
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
@@ -1528,6 +1533,9 @@ async function transformRunEvalResponse({
   }
 
   invariant(processedResponse.output != null, 'Response output should not be null');
+  if (requiresTraceRedaction(test.assert)) {
+    return { processedResponse, providerTransformedOutput };
+  }
   const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
     evalId,
     testIdx,
@@ -1603,7 +1611,10 @@ export function getTraceLinkage(
 export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]> {
   return withCacheNamespace(
     getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions),
-    () => runEvalInternal(options),
+    () =>
+      withTraceRedactionReceiptScope([options.test], () => runEvalInternal(options), {
+        inherit: true,
+      }),
   );
 }
 
@@ -1685,105 +1696,109 @@ async function runEvalInternal({
         );
     const executionTraceContext = traceContext;
     const runExecution = () =>
-      withTestCaseSpan(
-        executionTraceContext?.rootSpan,
-        async () => {
-          const providerCall = await callProviderForRunEval({
-            abortSignal,
-            evalId,
-            filters,
-            promptForRender: {
-              ...state.promptForRender,
-              config: rendered.setup.prompt.config,
-            },
-            provider,
-            rateLimitRegistry,
-            renderedPrompt: rendered.renderedPrompt,
-            repeatIndex,
-            test,
-            testIndex,
-            testSuite,
-            traceContext: executionTraceContext,
-            vars: state.vars,
-          });
-          const response = normalizeCachedTargetResponse(providerCall.response);
-          latencyMs = providerCall.latencyMs;
+      withMcpLedgerScope(test, omitEvalRuntimeVars(state.vars), (captureMcpLedgers) =>
+        withTestCaseSpan(
+          executionTraceContext?.rootSpan,
+          async () => {
+            const providerCall = await callProviderForRunEval({
+              abortSignal,
+              evalId,
+              filters,
+              promptForRender: {
+                ...state.promptForRender,
+                config: rendered.setup.prompt.config,
+              },
+              provider,
+              rateLimitRegistry,
+              renderedPrompt: rendered.renderedPrompt,
+              repeatIndex,
+              test,
+              testIndex,
+              testSuite,
+              traceContext: executionTraceContext,
+              vars: state.vars,
+            });
+            captureMcpLedgers(providerCall.response.cached);
+            const response = normalizeCachedTargetResponse(providerCall.response);
+            latencyMs = providerCall.latencyMs;
+            const publicResponse = sanitizeRedactionResult({ response, testCase: test }).response;
 
-          updateConversationHistory({
-            conversationKey: state.conversationKey,
-            conversations,
-            renderedJson: rendered.renderedJson,
-            renderedPrompt: rendered.renderedPrompt,
-            response,
-          });
+            updateConversationHistory({
+              conversationKey: state.conversationKey,
+              conversations,
+              renderedJson: rendered.renderedJson,
+              renderedPrompt: rendered.renderedPrompt,
+              response: publicResponse,
+            });
 
-          logger.debug('Evaluator response', {
-            responsePreview: (safeJsonStringify(response) ?? '').slice(0, 100),
-          });
-          logger.debug(
-            `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
-          );
+            logger.debug('Evaluator response', {
+              responsePreview: (safeJsonStringify(publicResponse) ?? '').slice(0, 100),
+            });
+            logger.debug(
+              `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
+            );
 
-          await applyProviderDelayIfNeeded(provider, response);
+            await applyProviderDelayIfNeeded(provider, response);
 
-          // The __eval* runtime vars were exposed to prompt/provider rendering above.
-          // Build a copy without them for the persisted result, assertions, and
-          // graders. state.vars itself is left intact — it is shared by reference
-          // with the provider call context.
-          const persistedVars = omitEvalRuntimeVars(state.vars);
+            // The __eval* runtime vars were exposed to prompt/provider rendering above.
+            // Build a copy without them for the persisted result, assertions, and
+            // graders. state.vars itself is left intact — it is shared by reference
+            // with the provider call context.
+            const persistedVars = omitEvalRuntimeVars(state.vars);
 
-          const ret = createEvaluateResult({
-            fileMetadata: state.fileMetadata,
-            latencyMs,
-            prompt,
-            promptIdx: promptIndex,
-            rendered,
-            response,
-            setup,
-            test,
-            testIdx: testIndex,
-            traceContext: executionTraceContext,
-            evalId,
-            vars: persistedVars,
-          });
+            const ret = createEvaluateResult({
+              fileMetadata: state.fileMetadata,
+              latencyMs,
+              prompt,
+              promptIdx: promptIndex,
+              rendered,
+              response,
+              setup,
+              test,
+              testIdx: testIndex,
+              traceContext: executionTraceContext,
+              evalId,
+              vars: persistedVars,
+            });
 
-          invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
+            invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
-          trackProviderUsage(provider, response);
-          await applyRunEvalResponseOutcome({
-            abortSignal,
-            deferGrading,
-            evalId,
-            isRedteam,
-            latencyMs,
-            prompt,
-            promptIdx: promptIndex,
-            provider,
-            providerCallQueue,
-            rateLimitRegistry,
-            renderedPrompt: rendered.renderedPrompt,
-            response,
-            ret,
-            test,
-            testIdx: testIndex,
-            testSuite,
-            traceContext: executionTraceContext,
-            vars: persistedVars,
-          });
+            trackProviderUsage(provider, publicResponse);
+            await applyRunEvalResponseOutcome({
+              abortSignal,
+              deferGrading,
+              evalId,
+              isRedteam,
+              latencyMs,
+              prompt,
+              promptIdx: promptIndex,
+              provider,
+              providerCallQueue,
+              rateLimitRegistry,
+              renderedPrompt: rendered.renderedPrompt,
+              response,
+              ret,
+              test,
+              testIdx: testIndex,
+              testSuite,
+              traceContext: executionTraceContext,
+              vars: persistedVars,
+            });
 
-          // Update token usage stats
-          if (response.tokenUsage) {
-            accumulateResponseTokenUsage(ret.tokenUsage, response);
-          }
+            // Update token usage stats
+            if (response.tokenUsage) {
+              accumulateResponseTokenUsage(ret.tokenUsage, response);
+            }
 
-          if (test.options?.storeOutputAs && ret.response?.output && registers) {
-            // Save the output in a register for later use
-            registers[test.options.storeOutputAs] = ret.response.output;
-          }
+            if (test.options?.storeOutputAs && ret.response?.output && registers) {
+              // Save the output in a register for later use
+              registers[test.options.storeOutputAs] = sanitizeRedactionResult(ret).response?.output;
+            }
 
-          return [ret];
-        },
-        (rows) => deferredGradingPromises.get(rows[0]),
+            return [ret];
+          },
+          (rows) => deferredGradingPromises.get(rows[0]),
+        ),
       );
     return executionTraceContext
       ? await withProviderCallTracingContext(
@@ -3444,6 +3459,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private trackRowStats(row: EvaluateResult): void {
+    row = sanitizeRedactionResult(row);
     if (row.success) {
       this.stats.successes++;
     } else if (row.failureReason === ResultFailureReason.ERROR) {
@@ -3500,6 +3516,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     promptEvalCount: number;
     row: EvaluateResult;
   }): void {
+    row = sanitizeRedactionResult(row);
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
       accumulateNamedMetric(metrics, {
@@ -4972,24 +4989,28 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       progressBarManager.installLogInterceptor();
     }
 
-    const interruptedEval = await this.executeEvalSteps({
-      checkAbort,
-      ciProgressReporter,
-      combinedAbortSignal,
-      concurrentRunEvalOptions,
-      evalStepIndexMap,
-      globalTimeout,
-      groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
-      isEvalTimedOut: () => evalTimedOut,
-      isWebUI,
-      maxEvalTimeMs,
-      processingContext,
-      processedIndices,
-      progressBarManager,
-      prompts,
-      serialRunEvalOptions,
-      shouldGroupGradingByProvider,
-    });
+    const interruptedEval = await withTraceRedactionReceiptScope(
+      runEvalOptions.map(({ test }) => test),
+      () =>
+        this.executeEvalSteps({
+          checkAbort,
+          ciProgressReporter,
+          combinedAbortSignal,
+          concurrentRunEvalOptions,
+          evalStepIndexMap,
+          globalTimeout,
+          groupedRunEvalOptions: [...serialRunEvalOptions, ...concurrentRunEvalOptions],
+          isEvalTimedOut: () => evalTimedOut,
+          isWebUI,
+          maxEvalTimeMs,
+          processingContext,
+          processedIndices,
+          progressBarManager,
+          prompts,
+          serialRunEvalOptions,
+          shouldGroupGradingByProvider,
+        }),
+    );
     if (interruptedEval) {
       return interruptedEval;
     }

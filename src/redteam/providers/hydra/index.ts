@@ -16,6 +16,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../../util/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -118,6 +119,7 @@ export interface HydraConfig {
   maxTurns?: number;
   maxBacktracks?: number;
   stateful?: boolean;
+  sendCurrentTurnOnly?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   /**
    * Per-turn layer transforms to apply to each turn's prompt before sending to target.
@@ -198,6 +200,7 @@ export class HydraProvider implements ApiProvider {
   private readonly maxTurns: number;
   private readonly maxBacktracks: number;
   private readonly stateful: boolean;
+  private readonly sendCurrentTurnOnly: boolean;
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
   private conversationHistory: Message[] = [];
@@ -216,6 +219,7 @@ export class HydraProvider implements ApiProvider {
     this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
 
     this.stateful = config.stateful ?? false;
+    this.sendCurrentTurnOnly = config.sendCurrentTurnOnly ?? false;
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
     this.perTurnLayers = config._perTurnLayers ?? [];
@@ -250,6 +254,7 @@ export class HydraProvider implements ApiProvider {
       maxTurns: this.maxTurns,
       maxBacktracks: this.maxBacktracks,
       stateful: this.stateful,
+      sendCurrentTurnOnly: this.sendCurrentTurnOnly,
       injectVar: this.injectVar,
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
@@ -383,6 +388,9 @@ export class HydraProvider implements ApiProvider {
       assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     }
 
+    const redactTrace = requiresTraceRedaction(test?.assert);
+    let redactionError: string | undefined;
+
     // Track the previous turn's trace summary for attack generation
     let previousTraceSummary: string | undefined;
 
@@ -421,7 +429,7 @@ export class HydraProvider implements ApiProvider {
         excludeTargetOutputFromAgenticAttackGeneration:
           this.excludeTargetOutputFromAgenticAttackGeneration,
         // Include trace summary from previous turn if tracing is enabled for attack generation
-        ...(tracingOptions.includeInAttack && previousTraceSummary
+        ...(!redactTrace && tracingOptions.includeInAttack && previousTraceSummary
           ? { traceSummary: previousTraceSummary }
           : {}),
       };
@@ -532,8 +540,10 @@ export class HydraProvider implements ApiProvider {
       // Send to target (different based on stateful/stateless)
       let targetPrompt: string;
 
-      if (this.stateful) {
-        // Stateful: send only the new message with sessionId
+      if (this.stateful || this.sendCurrentTurnOnly) {
+        // Stateful targets receive the new message plus sessionId. Some target classes
+        // such as coding agents also need the current turn as plain text even when
+        // the target itself is stateless.
         const escapedMessage = processedMessage
           .replace(/\{\{/g, '{ {')
           .replace(/\}\}/g, '} }')
@@ -544,7 +554,7 @@ export class HydraProvider implements ApiProvider {
         const updatedVars: Record<string, VarValue> = {
           ...vars,
           [this.injectVar]: escapedMessage,
-          ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+          ...(this.stateful && this.sessionId ? { sessionId: this.sessionId } : {}),
           // Add extracted input vars if available
           ...(currentRenderInputVars || {}),
         };
@@ -608,16 +618,14 @@ export class HydraProvider implements ApiProvider {
           continue;
         }
 
-        // For audio/image transforms, send a hybrid format:
-        // - Previous turns as text (for context)
-        // - Current turn as audio/image (the actual attack)
-        // This allows the target model to understand conversation context while receiving the current attack in the transformed format
+        // Match the target's history mode when combining text with the current audio/image turn.
         if (lastTransformResult.audio || lastTransformResult.image) {
-          // Build hybrid payload with conversation history + current transformed turn
-          const historyWithoutCurrentTurn = this.conversationHistory.slice(0, -1);
           const hybridPayload = {
             _promptfoo_audio_hybrid: true,
-            history: historyWithoutCurrentTurn,
+            history:
+              this.stateful || this.sendCurrentTurnOnly
+                ? []
+                : this.conversationHistory.slice(0, -1),
             currentTurn: {
               role: 'user' as const,
               transcript: nextMessage, // Original text for reference
@@ -634,7 +642,7 @@ export class HydraProvider implements ApiProvider {
             `${this.logPrefix} Using hybrid format (history + audio/image current turn)`,
             {
               turn,
-              historyLength: historyWithoutCurrentTurn.length,
+              historyLength: hybridPayload.history.length,
               hasAudio: !!lastTransformResult.audio,
               hasImage: !!lastTransformResult.image,
             },
@@ -680,6 +688,13 @@ export class HydraProvider implements ApiProvider {
         targetContext,
         options,
       );
+      const targetSessionId = targetResponse.sessionId;
+      if (redactTrace) {
+        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+        if (targetResponse.metadata?.redactionMediaOmitted === true) {
+          redactionError ??= targetResponse.error;
+        }
+      }
       lastTargetResponse = targetResponse;
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
@@ -757,27 +772,25 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Capture sessionId if stateful
-      if (this.stateful && targetResponse.sessionId) {
-        this.sessionId = targetResponse.sessionId;
-        sessionIds.push(targetResponse.sessionId);
-        vars['sessionId'] = targetResponse.sessionId;
-        if (!context) {
-          context = {
-            vars: { ...vars, sessionId: targetResponse.sessionId },
-            prompt,
-          };
+      if (this.stateful && targetSessionId) {
+        this.sessionId = targetSessionId;
+        sessionIds.push(targetSessionId);
+        if (!redactTrace) {
+          vars['sessionId'] = targetSessionId;
+          if (!context) {
+            context = {
+              vars: { ...vars, sessionId: targetSessionId },
+              prompt,
+            };
+          }
+          context.vars['sessionId'] = targetSessionId;
         }
-        context.vars['sessionId'] = targetResponse.sessionId;
       }
 
       // Externalize blobs to avoid token bloat in Hydra/meta prompts
-      if (isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload()) {
+      if (!redactTrace && (isBlobStorageEnabled() || shouldAttemptRemoteBlobUpload())) {
         const beforeOutput = targetResponse.output;
-        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-          evalId: context?.evaluationId,
-          testIdx: context?.testIdx,
-          promptIdx: context?.promptIdx,
-        });
+        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
         if (targetResponse.output !== beforeOutput) {
           logger.debug(`${this.logPrefix} Externalized binary output`, {
             turn,
@@ -953,13 +966,17 @@ export class HydraProvider implements ApiProvider {
         promptAudio: lastTransformResult?.audio,
         promptImage: lastTransformResult?.image,
         output: historyOutput,
-        outputAudio: targetResponse.audio
-          ? { data: targetResponse.audio.data || '', format: targetResponse.audio.format || 'wav' }
-          : undefined,
+        outputAudio:
+          !redactTrace && targetResponse.audio
+            ? {
+                data: targetResponse.audio.data || '',
+                format: targetResponse.audio.format || 'wav',
+              }
+            : undefined,
         // Note: outputImage would come from provider if model responds with image
         graderPassed: graderResult?.pass,
-        trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
-        traceSummary: computedTraceSummary,
+        trace: !redactTrace && traceContext ? formatTraceForMetadata(traceContext) : undefined,
+        traceSummary: redactTrace ? undefined : computedTraceSummary,
         // Include input vars for multi-input mode (extracted from current prompt)
         inputVars: currentRenderInputVars,
       });
@@ -971,7 +988,7 @@ export class HydraProvider implements ApiProvider {
           turn,
           message: nextMessage,
           response: targetResponse.output,
-          traceSummary: computedTraceSummary,
+          traceSummary: redactTrace ? undefined : computedTraceSummary,
         });
         stopReason = 'Grader failed';
 
@@ -1043,13 +1060,16 @@ export class HydraProvider implements ApiProvider {
 
     return {
       output: lastTargetResponse?.output || '',
-      ...(failClosedError
-        ? { error: failClosedError }
+      ...(redactionError || failClosedError
+        ? { error: redactionError || failClosedError }
         : lastTargetResponse?.error
           ? { error: lastTargetResponse.error }
           : {}),
       metadata: {
-        sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
+        ...(!redactTrace && {
+          sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
+        }),
+        sessionIds: redactTrace ? [] : sessionIds,
         messages,
         ...strategyMetadata,
         stopReason,
@@ -1057,9 +1077,8 @@ export class HydraProvider implements ApiProvider {
         totalSuccessfulAttacks: successfulAttacks.length,
         storedGraderResult,
         redteamHistory,
-        sessionIds,
         traceSnapshots:
-          traceSnapshots.length > 0
+          !redactTrace && traceSnapshots.length > 0
             ? traceSnapshots.map((t) => formatTraceForMetadata(t))
             : undefined,
         ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),

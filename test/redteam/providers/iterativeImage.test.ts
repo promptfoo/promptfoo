@@ -286,6 +286,33 @@ describe('RedteamIterativeImageProvider', () => {
     expect(result.tokenUsage?.numRequests).toBe(1);
   });
 
+  it.each([false, true])(
+    'retains only unrecoverable media errors across probes: %s',
+    async (media) => {
+      const { getEnvInt } = await import('../../../src/envars');
+      vi.mocked(getEnvInt).mockReturnValue(2);
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: JSON.stringify({ improvement: 'Try again', prompt: 'Inspect report' }),
+      });
+      vi.mocked(getTargetResponse).mockReset();
+      vi.mocked(getTargetResponse)
+        .mockResolvedValue({ output: 'Clean report' })
+        .mockResolvedValueOnce({
+          output: 'Omitted',
+          error: 'First probe failed',
+          ...(media && { metadata: { redactionMediaOmitted: true } }),
+        });
+      const result = await new RedteamIterativeProvider({}).callApi('test', {
+        originalProvider: mockTargetProvider,
+        vars: { goal: 'Inspect report' },
+        prompt: { raw: '{{goal}}', label: 'test' },
+      });
+      expect(getTargetResponse).toHaveBeenCalledTimes(2);
+      expect(result.error).toBe(media ? 'First probe failed' : undefined);
+      expect(result.metadata?.redactionMediaOmitted).toBe(media ? true : undefined);
+    },
+  );
+
   it('should include metadata with iteration results', async () => {
     vi.mocked(mockRedteamProvider.callApi)
       .mockResolvedValueOnce({

@@ -6,6 +6,7 @@ import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
   sanitizeBody,
+  sanitizeCodingAgentVerifierInputs,
   sanitizeHeaders,
   sanitizeObject,
   sanitizeQueryParams,
@@ -27,6 +28,200 @@ beforeEach(() => {
 afterEach(() => {
   consoleErrorSpy.mockRestore();
   consoleWarnSpy.mockRestore();
+});
+
+describe('sanitizeCodingAgentVerifierInputs', () => {
+  it.each([
+    'terminalOutputMarker',
+    'terminalOutputMarkers',
+    'marker',
+    'markers',
+    'lifecycleMarker',
+    'lifecycleMarkers',
+    'lifecycleScriptMarker',
+    'lifecycleScriptMarkers',
+    'postinstallMarker',
+    'postinstallMarkers',
+    'agentsMdMarker',
+    'agentsMdMarkers',
+    'repoInstructionMarker',
+    'repoInstructionMarkers',
+  ])('redacts terminal receipt alias %s only in verifier inputs', (key) => {
+    const input = {
+      id: 'coding-agent:terminal-output-injection',
+      config: { [key]: 'PRIVATE_TERMINAL_MARKER', [key + 'Path']: 'receipt.txt' },
+    };
+    expect(sanitizeCodingAgentVerifierInputs(input).config).toMatchObject({
+      [key]: '[REDACTED]',
+      [key + 'Path']: 'receipt.txt',
+    });
+    expect(sanitizeCodingAgentVerifierInputs({ [key]: 'ordinary marker' })[key]).toBe(
+      'ordinary marker',
+    );
+  });
+
+  it.each([
+    'leastPrivilegeMarker',
+    'broadPrivilegeMarkers',
+    'privilegeEscalationMarker',
+    'forbiddenPrivilegeRequest',
+    'leastPrivilegeDriftRequest',
+    'privilegeRerunRequests',
+  ])('redacts inline privilege verifier values in %s', (key) => {
+    const input = {
+      id: 'coding-agent:least-privilege-drift',
+      config: { [key]: 'PRIVATE_PRIVILEGE_MARKER', [key + 'Path']: 'receipt.txt' },
+    };
+    const result = sanitizeCodingAgentVerifierInputs(input);
+    expect(result.config[key]).toBe('[REDACTED]');
+    expect(result.config[key + 'Path']).toBe('receipt.txt');
+    expect(input.config[key]).toBe('PRIVATE_PRIVILEGE_MARKER');
+  });
+
+  it.each([
+    'redactedArtifactText',
+    'redactedReportTexts',
+    'redactedTraceText',
+    'traceRedactionArtifactTexts',
+    'adminPayloadText',
+    'promptfooLogTexts',
+    'providerMetadataText',
+    'providerRawTexts',
+    'terminalLogText',
+    'traceExportTexts',
+  ])('redacts private receipts echoed in inline %s', (key) => {
+    const receipt = 'PRIVATE_RECEIPT_123456';
+    const assertion = {
+      type: 'promptfoo:redteam:coding-agent:trace-redaction',
+      value: {
+        rawReceipt: receipt,
+        [key]: `leaked ${receipt}`,
+        [key + 'Path']: 'public/report.txt',
+      },
+    };
+    expect(JSON.stringify(sanitizeCodingAgentVerifierInputs(assertion))).not.toContain(receipt);
+    expect(sanitizeCodingAgentVerifierInputs(assertion).value[key + 'Path']).toBe(
+      'public/report.txt',
+    );
+    expect(assertion.value[key]).toContain(receipt);
+  });
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
+    'redacts inline verifier inputs from an inverse %s assertion',
+    (id) => {
+      const assertion = {
+        type: `not-promptfoo:redteam:${id}`,
+        value: { canary: 'PRIVATE_INVERSE_RECEIPT', rawReceipt: 'PRIVATE_INVERSE_RECEIPT' },
+      };
+      expect(JSON.stringify(sanitizeCodingAgentVerifierInputs(assertion))).not.toContain(
+        'PRIVATE_INVERSE_RECEIPT',
+      );
+      expect(assertion.value.canary).toBe('PRIVATE_INVERSE_RECEIPT');
+    },
+  );
+
+  it.each(['mcpSourceLedger', 'connectorReadLedger', 'externalizedAgentLedger', 'jobQueueLedgers'])(
+    'redacts the complete inline %s payload',
+    (key) => {
+      const payload = { result: { text: 'PRIVATE_INLINE_LEDGER_PAYLOAD' } };
+      const config = {
+        type: 'promptfoo:redteam:coding-agent:mcp-confused-deputy',
+        value: { [key]: payload },
+      };
+      expect(JSON.stringify(sanitizeCodingAgentVerifierInputs(config))).not.toContain(
+        payload.result.text,
+      );
+      expect(config.value[key]).toBe(payload);
+    },
+  );
+
+  it('bounds deeply nested metadata before general serialization', () => {
+    let nested: Record<string, unknown> = { text: 'PRIVATE_DEEP_METADATA' };
+    for (let i = 0; i < 6000; i++) {
+      nested = { nested };
+    }
+    expect(() =>
+      JSON.stringify(
+        sanitizeCodingAgentVerifierInputs({
+          type: 'promptfoo:redteam:coding-agent:trace-redaction',
+          metadata: nested,
+        }),
+      ),
+    ).not.toThrow();
+    expect(
+      JSON.stringify(
+        sanitizeCodingAgentVerifierInputs({
+          type: 'promptfoo:redteam:coding-agent:trace-redaction',
+          metadata: nested,
+        }),
+      ),
+    ).not.toContain('PRIVATE_DEEP_METADATA');
+  });
+
+  it('handles nested and cyclic assertion sets without changing ordinary vars', () => {
+    const assertionSet: Record<string, unknown> = { type: 'assert-set' };
+    assertionSet.assert = [assertionSet, null, { type: 42 }];
+    const ordinary = { assert: [assertionSet], vars: { rawReceipt: 'ordinary receipt' } };
+    expect(sanitizeCodingAgentVerifierInputs(ordinary).vars).toEqual(ordinary.vars);
+    (assertionSet.assert as unknown[]).push({
+      type: 'not-promptfoo:redteam:harness:artifact-redaction',
+    });
+    const sanitized = sanitizeCodingAgentVerifierInputs(ordinary);
+    expect(sanitized.vars.rawReceipt).toBe('[REDACTED]');
+    expect(ordinary.vars.rawReceipt).toBe('ordinary receipt');
+  });
+
+  it('preserves ordinary deep provider schemas without recursive traversal', () => {
+    let schema: Record<string, unknown> = { type: 'string' };
+    for (let i = 0; i < 6000; i++) {
+      schema = { properties: schema };
+    }
+    const result = sanitizeCodingAgentVerifierInputs({ provider: { config: { schema } } });
+    let leaf = result.provider.config.schema;
+    for (let i = 0; i < 6000; i++) {
+      leaf = leaf.properties as Record<string, unknown>;
+    }
+    expect(leaf).toEqual({ type: 'string' });
+  });
+
+  it('keeps the redaction marker when input metadata explicitly clears it', () => {
+    expect(
+      sanitizeCodingAgentVerifierInputs({
+        type: 'promptfoo:redteam:coding-agent:trace-redaction',
+        rawReceipt: 'PRIVATE_RECEIPT',
+        privateVerifierInputsRedacted: false,
+      }),
+    ).toMatchObject({ rawReceipt: '[REDACTED]', privateVerifierInputsRedacted: true });
+  });
+
+  it('redacts only verifier-owned copies of shared configuration objects', () => {
+    const fixture = { rawReceipt: 'private fixture text', expectedContent: 'expected file text' };
+    const config = {
+      ordinary: fixture,
+      redteam: { plugins: [{ id: 'coding-agent:trace-redaction', config: fixture }] },
+    };
+    const sanitized = sanitizeCodingAgentVerifierInputs(config);
+    expect(sanitized.ordinary).toEqual(fixture);
+    expect(sanitized.redteam.plugins[0].config).toMatchObject({
+      rawReceipt: '[REDACTED]',
+      expectedContent: '[REDACTED]',
+      privateVerifierInputsRedacted: true,
+    });
+    expect(fixture.rawReceipt).toBe('private fixture text');
+  });
+
+  it('preserves file references and nonsecret verifier settings for replay', () => {
+    const config = {
+      id: 'coding-agent:trace-redaction',
+      config: {
+        rawReceiptPath: 'receipts/private.txt',
+        canaryPaths: ['receipts/canary.txt'],
+        forbiddenPackageName: 'internal-package',
+        expectedSize: 12,
+      },
+    };
+    expect(sanitizeCodingAgentVerifierInputs(config)).toEqual(config);
+  });
 });
 
 describe('sanitizeRuntimeOptions', () => {

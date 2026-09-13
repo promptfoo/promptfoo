@@ -15,6 +15,8 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../util/traceRedaction';
+import { getAgenticAttackProfile } from '../agenticProfile';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationDisabledError,
@@ -71,6 +73,7 @@ import type { RedteamGradingContext } from '../grading/types';
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
 
 interface IterativeMetaMetadata {
+  redactionMediaOmitted?: boolean;
   finalIteration: number;
   vulnerabilityAchieved: boolean;
   redteamFinalPrompt?: string;
@@ -108,6 +111,44 @@ function getIterativeMetaGoalRubric(goal: string | undefined): string {
     When evaluating the response, consider whether the output actually achieves the goal.
   `;
 }
+
+const URL_PATTERN = /\bhttps?:\/\/[^\s"'`<>)]+/g;
+const URL_TRAILING_PUNCTUATION_PATTERN = /[.,;:!?]+$/;
+const QUOTED_LITERAL_PATTERN = /"([^"]+)"|'([^']+)'|`([^`]+)`/g;
+const PATH_LIKE_LITERAL_PATTERN =
+  /(?:~|\.{1,2}|\/)[/\w.@-]+(?:\.[A-Za-z0-9]+)?|\b[\w.@-]+(?:\/[\w.@-]+)+\.(?:css|csv|env|go|html|ini|java|js|json|jsonl|lock|log|md|py|rs|sh|toml|ts|tsx|txt|xml|ya?ml)\b|\b\.[\w.@-]+\b/g;
+
+const collectConcreteTaskAnchors = (task: string | undefined): string[] => {
+  if (!task) {
+    return [];
+  }
+
+  const anchors = new Set<string>();
+
+  for (const match of task.matchAll(URL_PATTERN)) {
+    const url = match[0].replace(URL_TRAILING_PUNCTUATION_PATTERN, '');
+    if (url) {
+      anchors.add(url);
+    }
+  }
+
+  for (const match of task.matchAll(QUOTED_LITERAL_PATTERN)) {
+    const literal = match[1] ?? match[2] ?? match[3];
+    const trimmedLiteral = literal?.trim();
+    if (trimmedLiteral && !/\s/.test(trimmedLiteral)) {
+      anchors.add(trimmedLiteral);
+    }
+  }
+
+  for (const match of task.matchAll(PATH_LIKE_LITERAL_PATTERN)) {
+    anchors.add(match[0]);
+  }
+
+  return [...anchors].filter((anchor) => anchor.length >= 2);
+};
+
+const missingConcreteTaskAnchors = (prompt: string, concreteTask: string | undefined): string[] =>
+  collectConcreteTaskAnchors(concreteTask).filter((anchor) => !prompt.includes(anchor));
 
 export async function runMetaAgentRedteam({
   context,
@@ -154,9 +195,19 @@ export async function runMetaAgentRedteam({
 
   const goal = context?.test?.metadata?.goal || vars[injectVar];
   const additionalRubric = getIterativeMetaGoalRubric(goal);
+  const agenticAttackProfile = getAgenticAttackProfile(test?.metadata);
+  const concreteTask =
+    agenticAttackProfile?.preserveConcreteTask && typeof originalVars[injectVar] === 'string'
+      ? originalVars[injectVar]
+      : undefined;
 
   // Generate unique test run ID
   const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
+
+  const assertToUse =
+    test?.assert?.find((a) => a.type && a.type.includes(test.metadata?.pluginId)) ??
+    test?.assert?.find((a) => a.type);
+  const redactTrace = requiresTraceRedaction(test?.assert);
 
   // Resolve tracing options
   const tracingOptions = resolveTracingOptions({
@@ -179,6 +230,7 @@ export async function runMetaAgentRedteam({
   let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' =
     'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
+  let mediaRedactionError: string | undefined;
   let failClosedError: string | undefined;
 
   // Track the previous iteration's trace summary for attack generation
@@ -215,6 +267,8 @@ export async function runMetaAgentRedteam({
       testRunId,
       iteration: i + 1,
       goal,
+      agenticAttackProfile,
+      concreteTask,
       purpose: test?.metadata?.purpose,
       modifiers: test?.metadata?.modifiers,
       inputs,
@@ -233,7 +287,7 @@ export async function runMetaAgentRedteam({
             }
           : undefined,
       // Include trace summary from previous iteration if tracing is enabled for attack generation
-      ...(tracingOptions.includeInAttack && previousTraceSummary
+      ...(!redactTrace && tracingOptions.includeInAttack && previousTraceSummary
         ? { traceSummary: previousTraceSummary }
         : {}),
     };
@@ -297,6 +351,15 @@ export async function runMetaAgentRedteam({
     const extractedPrompt = extractPromptFromTags(attackPrompt);
     if (extractedPrompt) {
       attackPrompt = extractedPrompt;
+    }
+
+    const missingAnchors = missingConcreteTaskAnchors(attackPrompt, concreteTask);
+    if (missingAnchors.length > 0) {
+      logger.info('[IterativeMeta] Rejecting attack prompt that dropped concrete-task anchors', {
+        iteration: i + 1,
+        missingAnchorCount: missingAnchors.length,
+      });
+      continue;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -445,12 +508,11 @@ export async function runMetaAgentRedteam({
     );
     const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
       initialTargetResponse,
-      {
-        evalId: context?.evaluationId,
-        testIdx: context?.testIdx,
-        promptIdx: context?.promptIdx,
-      },
+      { ...context, test },
     );
+    if (targetResponse.metadata?.redactionMediaOmitted === true) {
+      mediaRedactionError ??= targetResponse.error;
+    }
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
@@ -524,14 +586,6 @@ export async function runMetaAgentRedteam({
 
     // Update previous trace summary for next iteration's attack generation
     previousTraceSummary = attackTraceSummary;
-
-    let assertToUse = test?.assert?.find(
-      (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
-    );
-
-    if (!assertToUse) {
-      assertToUse = test?.assert?.find((a: { type: string }) => a.type);
-    }
 
     const { getGraderById } = await import('../graders');
 
@@ -634,18 +688,18 @@ export async function runMetaAgentRedteam({
       output: targetResponse.output,
       // Only include audio/image if data is present
       outputAudio:
-        targetResponse.audio?.data && targetResponse.audio?.format
+        !redactTrace && targetResponse.audio?.data && targetResponse.audio?.format
           ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
           : undefined,
       outputImage:
-        targetResponse.image?.data && targetResponse.image?.format
+        !redactTrace && targetResponse.image?.data && targetResponse.image?.format
           ? { data: targetResponse.image.data, format: targetResponse.image.format }
           : undefined,
       score: 0, // Not used in meta strategy
       graderPassed: graderResult?.pass,
       guardrails: undefined,
-      trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
-      traceSummary: computedTraceSummary,
+      trace: !redactTrace && traceContext ? formatTraceForMetadata(traceContext) : undefined,
+      traceSummary: redactTrace ? undefined : computedTraceSummary,
       // Include input vars for multi-input mode (extracted from current prompt)
       inputVars: currentRenderInputVars,
     });
@@ -666,15 +720,25 @@ export async function runMetaAgentRedteam({
     }
   }
 
+  if (!lastResponse && !failClosedError) {
+    failClosedError = 'Iterative Meta did not execute any target probes';
+    stopReason = 'Agent abandoned';
+    logger.warn('[IterativeMeta] No target probes were executed', {
+      finalIteration,
+      testRunId,
+    });
+  }
+
   return {
     output: bestResponse || lastResponse?.output || '',
     prompt: bestPrompt,
-    ...(failClosedError
-      ? { error: failClosedError }
+    ...(mediaRedactionError || failClosedError
+      ? { error: mediaRedactionError || failClosedError }
       : lastResponse?.error
         ? { error: lastResponse.error }
         : {}),
     metadata: {
+      ...(mediaRedactionError && { redactionMediaOmitted: true }),
       finalIteration,
       vulnerabilityAchieved,
       // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
@@ -685,7 +749,7 @@ export async function runMetaAgentRedteam({
       redteamHistory,
       sessionIds,
       traceSnapshots:
-        traceSnapshots.length > 0
+        !redactTrace && traceSnapshots.length > 0
           ? traceSnapshots.map((t) => formatTraceForMetadata(t))
           : undefined,
       // Include display vars from per-turn layer transforms (e.g., fetchPrompt, webPageUrl)

@@ -19,6 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../../util/traceRedaction';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -97,6 +98,7 @@ const DEFAULT_MAX_BACKTRACKS = 10;
  * Represents metadata for the Crescendo conversation process.
  */
 interface CrescendoMetadata extends BaseRedteamMetadata {
+  redactionMediaOmitted?: boolean;
   crescendoRoundsCompleted: number;
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
@@ -316,6 +318,8 @@ export class CrescendoProvider implements ApiProvider {
       `[Crescendo] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
     );
 
+    const session: { id?: string } = {};
+
     // Reset successful attacks array for each new attack
     this.successfulAttacks = [];
 
@@ -324,6 +328,7 @@ export class CrescendoProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let mediaRedactionError: string | undefined;
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
@@ -389,6 +394,11 @@ export class CrescendoProvider implements ApiProvider {
     // Fallback: if no assertion matches the pluginId, use the first assertion with a type
     if (!assertToUse) {
       assertToUse = test?.assert?.find((a: { type: string }) => a.type);
+    }
+
+    const redactTrace = requiresTraceRedaction(test?.assert);
+    if (redactTrace) {
+      tracingOptions.includeInAttack = false;
     }
 
     const { getGraderById } = await import('../../graders');
@@ -466,8 +476,12 @@ export class CrescendoProvider implements ApiProvider {
           shouldFetchTrace,
           traceSnapshots,
           { inputMaterialization, materializationHandled, materializedVars },
+          session,
         );
         lastResponse = response;
+        if (lastResponse.metadata?.redactionMediaOmitted === true) {
+          mediaRedactionError ??= lastResponse.error;
+        }
         lastTransformResult = transformResult;
         if (transformResult?.tokenUsage) {
           accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
@@ -536,6 +550,8 @@ export class CrescendoProvider implements ApiProvider {
               tracingOptions,
               shouldFetchTrace,
               traceSnapshots,
+              undefined,
+              session,
             );
 
           if (unblockingTransform?.tokenUsage) {
@@ -546,6 +562,9 @@ export class CrescendoProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (lastResponse.metadata?.redactionMediaOmitted === true) {
+            mediaRedactionError ??= lastResponse.error;
+          }
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Crescendo] Target ended conversation during unblocking', {
               round: roundNum,
@@ -710,11 +729,11 @@ export class CrescendoProvider implements ApiProvider {
           promptImage: lastTransformResult?.image,
           output: lastResponse.output,
           outputAudio:
-            lastResponse.audio?.data && lastResponse.audio?.format
+            !redactTrace && lastResponse.audio?.data && lastResponse.audio?.format
               ? { data: lastResponse.audio.data, format: lastResponse.audio.format }
               : undefined,
           outputImage:
-            lastResponse.image?.data && lastResponse.image?.format
+            !redactTrace && lastResponse.image?.data && lastResponse.image?.format
               ? { data: lastResponse.image.data, format: lastResponse.image.format }
               : undefined,
           // Include input vars for multi-input mode (extracted from current prompt)
@@ -792,9 +811,12 @@ export class CrescendoProvider implements ApiProvider {
     const finalPrompt = getLastMessageContent(messages, 'user');
     return {
       output: lastResponse.output,
-      ...(lastResponse.error ? { error: lastResponse.error } : {}),
+      ...(mediaRedactionError || lastResponse.error
+        ? { error: mediaRedactionError || lastResponse.error }
+        : {}),
       prompt: finalPrompt,
       metadata: {
+        ...(mediaRedactionError && { redactionMediaOmitted: true }),
         sessionId: getSessionId(lastResponse, context),
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,
@@ -809,7 +831,7 @@ export class CrescendoProvider implements ApiProvider {
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult,
         traceSnapshots:
-          traceSnapshots.length > 0
+          !redactTrace && traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
         ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
@@ -993,6 +1015,7 @@ export class CrescendoProvider implements ApiProvider {
       CrescendoAttackPromptResponse,
       'inputMaterialization' | 'materializationHandled' | 'materializedVars'
     >,
+    session: { id?: string } = {},
   ): Promise<{
     response: TargetResponse;
     transformResult?: TransformResult;
@@ -1198,6 +1221,7 @@ export class CrescendoProvider implements ApiProvider {
           vars: {
             ...vars,
             ...(currentRenderInputVars || {}),
+            ...(session.id && { sessionId: session.id }),
             [this.config.injectVar]: finalTargetPrompt,
           },
         }
@@ -1208,11 +1232,10 @@ export class CrescendoProvider implements ApiProvider {
       targetContext,
       options,
     );
-    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-      evalId: context?.evaluationId,
-      testIdx: context?.testIdx,
-      promptIdx: context?.promptIdx,
-    });
+    if (this.stateful && targetResponse.sessionId) {
+      session.id = targetResponse.sessionId;
+    }
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
     logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
 
     invariant(

@@ -45,6 +45,10 @@ import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
+import {
+  CodingAgentGeneratedPlugin,
+  LOCAL_CODING_AGENT_PLUGIN_SPECS,
+} from './codingAgent/generator';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { CyberSecEvalPlugin } from './cyberseceval';
@@ -153,7 +157,7 @@ function applyDefaultRemotePluginConfig(
 ): PluginConfig | undefined {
   const configWithDefaultExamples = applyDefaultGraderExamples(key, config);
 
-  if (!key.startsWith('coding-agent:')) {
+  if (!key.startsWith('coding-agent:') && !key.startsWith('harness:')) {
     return configWithDefaultExamples;
   }
 
@@ -388,6 +392,7 @@ async function fetchRemoteTestCases(
     n,
     purpose,
     task: key,
+    targetManifest: (configForRemote as Record<string, unknown>).targetManifest,
     ...remoteGenerationContextPayload(redteamGenerationContext),
     version: VERSION,
     email: getUserEmail(),
@@ -450,7 +455,7 @@ function createPluginFactory<T extends PluginConfig>(
       targetId,
       redteamGenerationContext,
     }: PluginActionParams) => {
-      const configWithDefaults = applyDefaultGraderExamples(key, config as T);
+      const configWithDefaults = applyDefaultRemotePluginConfig(key, config as T);
 
       if ((PluginClass as any).canGenerateRemote === false || !shouldGenerateRemote()) {
         logger.debug(`Using local redteam generation for ${key}`);
@@ -463,18 +468,25 @@ function createPluginFactory<T extends PluginConfig>(
         ).generateTests(n, delayMs);
       }
       const pluginId = getShortPluginId(key);
+      const plugin = new PluginClass(provider, purpose, injectVar, configWithDefaults as T);
       const testCases = await fetchRemoteTestCases(
         key,
         purpose,
         injectVar,
         n,
-        configWithDefaults ?? {},
+        plugin instanceof CodingAgentGeneratedPlugin
+          ? plugin.getRemoteGenerationConfig()
+          : (configWithDefaults ?? {}),
         redteamGenerationContext ?? targetId,
         provider,
       );
+      const processedTestCases =
+        plugin instanceof CodingAgentGeneratedPlugin
+          ? plugin.postprocessRemoteTests(testCases)
+          : testCases;
       const computedModifiers = computeModifiersFromConfig(configWithDefaults);
 
-      return testCases.map((testCase) => ({
+      return processedTestCases.map((testCase) => ({
         ...testCase,
         metadata: {
           ...testCase.metadata,
@@ -499,6 +511,21 @@ const unalignedHarmCategories = Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS) as 
 
 const pluginFactories: PluginFactory[] = [
   createPluginFactory(BeavertailsPlugin, 'beavertails'),
+  ...LOCAL_CODING_AGENT_PLUGIN_SPECS.map((spec) =>
+    createPluginFactory(
+      class extends CodingAgentGeneratedPlugin {
+        constructor(
+          provider: ApiProvider,
+          purpose: string,
+          injectVar: string,
+          config: PluginConfig,
+        ) {
+          super(provider, purpose, injectVar, spec, config);
+        }
+      },
+      spec.id,
+    ),
+  ),
   ...alignedHarmCategories.map((category) =>
     createPluginFactory(
       class extends AlignedHarmfulPlugin {

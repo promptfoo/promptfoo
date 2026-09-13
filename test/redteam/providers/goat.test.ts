@@ -129,6 +129,91 @@ describe('RedteamGoatProvider', () => {
     vi.clearAllMocks();
   });
 
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      [false, true].map((unblocking) => [pluginId, unblocking] as const),
+    ),
+  )('retains private target sessions for %s unblocking=%s', async (pluginId, unblocking) => {
+    mockGrader.getResult.mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' });
+    const unblock = vi
+      .spyOn(redteamProviderShared, 'tryUnblocking')
+      .mockResolvedValue(
+        unblocking ? { success: true, unblockingPrompt: 'Continue' } : { success: false },
+      );
+    const sessions: unknown[] = [];
+    const target = createMockTargetProvider();
+    target.callApi.mockImplementation(async (_prompt, context) => {
+      sessions.push(context?.vars.sessionId);
+      return { output: 'Clean report', sessionId: `PRIVATE_SESSION_${sessions.length}` };
+    });
+    const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2, stateful: true });
+    const context = createMockContext(
+      target,
+      { goal: 'Inspect report' },
+      {
+        assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+        metadata: { pluginId },
+      },
+    );
+    try {
+      const callsPerRun = unblocking ? 3 : 2;
+      for (let run = 0; run < 2; run++) {
+        const result = await provider.callApi('', context);
+        expect(sessions[run * callsPerRun]).toBeUndefined();
+        for (let index = 1; index < callsPerRun; index++) {
+          const call = run * callsPerRun + index;
+          expect(sessions[call]).toBe(`PRIVATE_SESSION_${call}`);
+        }
+        expect(context.vars.sessionId).toBeUndefined();
+        expect(JSON.stringify(result)).not.toContain('PRIVATE_SESSION_');
+        expect(JSON.stringify(mockFetch.mock.calls)).not.toContain('PRIVATE_SESSION_');
+      }
+      expect(sessions).toHaveLength(2 * callsPerRun);
+    } finally {
+      unblock.mockRestore();
+    }
+  });
+
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      [false, true].flatMap((conversationEnded) =>
+        [false, true].map((isMedia) => [pluginId, conversationEnded, isMedia] as const),
+      ),
+    ),
+  )(
+    'keeps private GOAT output out of history for %s ended=%s media=%s',
+    async (pluginId, conversationEnded, isMedia) => {
+      const media = isMedia
+        ? 'data:image/png;base64,PRIVATE_GOAT_OUTPUT_MEDIA'
+        : 'PRIVATE_GOAT_OUTPUT_TEXT';
+      mockGrader.getResult.mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' });
+      const target = createMockTargetProvider(media, {}, { conversationEnded });
+      const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
+      const result = await provider.callApi(
+        '',
+        createMockContext(
+          target,
+          { goal: 'Inspect report' },
+          {
+            assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+            metadata: { pluginId },
+          },
+        ),
+      );
+      expect(target.callApi).toHaveBeenCalled();
+      if (conversationEnded) {
+        expect(target.callApi).toHaveBeenCalledTimes(1);
+      }
+      if (isMedia) {
+        expect(result.error).toContain('redaction cannot be verified');
+      } else {
+        expect(result.error).toBeUndefined();
+      }
+      expect(JSON.stringify(mockFetch.mock.calls)).not.toContain(media);
+      expect(JSON.stringify(result)).not.toContain(media);
+    },
+  );
+
   it('should initialize with required config', () => {
     const provider = new RedteamGoatProvider({
       injectVar: 'goal',
@@ -137,6 +222,60 @@ describe('RedteamGoatProvider', () => {
 
     expect(provider.id()).toBe('promptfoo:redteam:goat');
   });
+
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      [false, true].flatMap((unblocking) =>
+        [false, true].map((media) => [pluginId, unblocking, media] as const),
+      ),
+    ),
+  )(
+    'preserves only media failures across later clean turns: %s unblocking=%s media=%s',
+    async (pluginId, unblocking, media) => {
+      mockGrader.getResult.mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' });
+      const unblock = vi
+        .spyOn(redteamProviderShared, 'tryUnblocking')
+        .mockResolvedValue({ success: false });
+      if (unblocking) {
+        unblock.mockResolvedValueOnce({ success: true, unblockingPrompt: 'Continue' });
+      }
+      const target = createMockTargetProvider('Clean report');
+      target.callApi.mockReset();
+      if (unblocking) {
+        target.callApi.mockResolvedValueOnce({ output: 'Clean report' });
+      }
+      target.callApi
+        .mockResolvedValueOnce(
+          media
+            ? { output: 'data:image/png;base64,PRIVATE_GOAT_MEDIA' }
+            : { error: 'PRIVATE_TRANSIENT_ERROR' },
+        )
+        .mockResolvedValue({ output: 'Clean report' });
+      try {
+        const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2 });
+        const result = await provider.callApi(
+          '',
+          createMockContext(
+            target,
+            { goal: 'Inspect report' },
+            {
+              assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+              metadata: { pluginId },
+            },
+          ),
+        );
+        expect(target.callApi).toHaveBeenCalledTimes(unblocking ? 3 : 2);
+        if (media) {
+          expect(result.error).toMatch(/redaction cannot be verified/);
+        } else {
+          expect(result.error).toBeUndefined();
+        }
+        expect(JSON.stringify(result)).not.toContain('PRIVATE_');
+      } finally {
+        unblock.mockRestore();
+      }
+    },
+  );
 
   it('should throw error if injectVar is missing', () => {
     expect(() => {
@@ -200,6 +339,69 @@ describe('RedteamGoatProvider', () => {
       fetchTraceContextSpy.mockRestore();
     }
   });
+
+  it.each([
+    ['coding-agent:trace-redaction', false],
+    ['harness:artifact-redaction', false],
+    ['coding-agent:trace-redaction', true],
+    ['harness:artifact-redaction', true],
+  ] as const)(
+    'keeps %s forensic traces out of the attacker and returned snapshots',
+    async (pluginId, assertionSet) => {
+      const canary = 'PRIVATE_GOAT_FORENSIC_TRACE';
+      const fetchTrace = vi.spyOn(traceContext, 'fetchTraceContext').mockResolvedValue({
+        traceId: 'trace',
+        spans: [
+          {
+            spanId: 'span',
+            name: canary,
+            kind: 'client',
+            startTime: 0,
+            attributes: {},
+            status: { code: 'ok' },
+            depth: 0,
+            events: [],
+          },
+        ],
+        insights: [canary],
+        fetchedAt: 0,
+      });
+      mockGrader.getResult.mockResolvedValue({
+        grade: { pass: true, score: 1 },
+        rubric: 'Public report',
+      });
+      const target = createMockTargetProvider('Public report');
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+        tracing: { enabled: true },
+      });
+      try {
+        const result = await provider.callApi('', {
+          ...createMockContext(
+            target,
+            { goal: 'Inspect report' },
+            {
+              assert: [
+                { type: 'promptfoo:redteam:contracts' },
+                assertionSet
+                  ? { type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}` }] }
+                  : { type: `promptfoo:redteam:${pluginId}` },
+              ],
+              metadata: { pluginId: 'contracts', purpose: 'Fixture' },
+            },
+          ),
+          traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+        });
+        expect(target.callApi).toHaveBeenCalledTimes(2);
+        expect(fetchTrace).toHaveBeenCalledTimes(2);
+        expect(JSON.stringify(mockFetch.mock.calls)).not.toContain(canary);
+        expect(JSON.stringify(result.metadata)).not.toContain(canary);
+      } finally {
+        fetchTrace.mockRestore();
+      }
+    },
+  );
 
   it('should preserve an explicit maxTurns value of 0', async () => {
     const provider = new RedteamGoatProvider({

@@ -41,13 +41,14 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
+import { sanitizeConfigForPersistence, sanitizeRuntimeOptions } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGenerationTokenUsage,
   accumulateTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../util/traceRedaction';
 import {
   invalidateEvaluationCache,
   notifyEvaluationChanged,
@@ -503,7 +504,7 @@ export default class Eval {
           createdAt: createdAt.getTime(),
           author,
           description: config.description,
-          config: sanitizeTracingConfigForPersistence(config),
+          config: sanitizeConfigForPersistence(config),
           results: durationResults,
           vars: opts?.vars || [],
           runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
@@ -669,7 +670,7 @@ export default class Eval {
   async save() {
     const db = await getDb();
     const updateObj: Record<string, unknown> = {
-      config: sanitizeTracingConfigForPersistence(this.config),
+      config: sanitizeConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
       prompts: this.prompts,
       description: this.config.description,
@@ -1462,13 +1463,53 @@ export default class Eval {
     };
   }
 
-  async getTraces(): Promise<TraceData[]> {
+  async getTraces(
+    options: { normalizeSpans?: boolean; throwOnError?: boolean } = {},
+  ): Promise<TraceData[]> {
     try {
       const traceStore = getTraceStore();
       const tracesData = await traceStore.getTracesByEvaluation(this.id);
+      if (!tracesData.length) {
+        return [];
+      }
+      // Redaction graders need local forensic evidence; exports and sharing must omit it.
+      const privateTraceIds = new Set<string>();
+      const privateTestCaseIds = new Set<string>();
+      const excludePrivateTrace = (
+        result: Pick<EvaluateResult, 'testCase' | 'traceId' | 'testIdx' | 'promptIdx'>,
+      ) => {
+        if (!requiresTraceRedaction(result.testCase.assert)) {
+          return;
+        }
+        if (result.traceId) {
+          privateTraceIds.add(result.traceId);
+        }
+        privateTestCaseIds.add(`${result.testIdx}-${result.promptIdx}`);
+        const testCaseId = result.testCase.metadata?.testCaseId;
+        if (typeof testCaseId === 'string') {
+          privateTestCaseIds.add(testCaseId);
+        }
+        if ('id' in result.testCase && typeof result.testCase.id === 'string') {
+          privateTestCaseIds.add(result.testCase.id);
+        }
+      };
+      for (const result of this.failedResults.values()) {
+        excludePrivateTrace(result);
+      }
+      for await (const batch of this.fetchResultsBatched()) {
+        batch.forEach(excludePrivateTrace);
+      }
 
-      // Transform trace data to match the expected schema
-      return tracesData.map((trace: TraceData) => ({
+      const publicTraces = tracesData.filter(
+        (trace) =>
+          trace.metadata?.privateForensicEvidence !== true &&
+          !privateTraceIds.has(trace.traceId) &&
+          !privateTestCaseIds.has(trace.testCaseId),
+      );
+      if (options.normalizeSpans === false) {
+        return publicTraces;
+      }
+      return publicTraces.map((trace: TraceData) => ({
         traceId: trace.traceId,
         evaluationId: trace.evaluationId,
         testCaseId: trace.testCaseId,
@@ -1502,6 +1543,9 @@ export default class Eval {
         }),
       }));
     } catch (error) {
+      if (options.throwOnError) {
+        throw error;
+      }
       logger.debug(`Failed to fetch traces for eval ${this.id}: ${error}`);
       return [];
     }
@@ -1514,7 +1558,7 @@ export default class Eval {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
       results: await this.toEvaluateSummary(),
-      config: sanitizeTracingConfigForPersistence(this.config),
+      config: sanitizeConfigForPersistence(this.config),
       author: this.author || null,
       prompts: this.getPrompts(),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
@@ -1560,7 +1604,7 @@ export default class Eval {
     });
 
     // Deep clone to prevent mutation issues
-    const newConfig = structuredClone(sanitizeTracingConfigForPersistence(this.config));
+    const newConfig = structuredClone(sanitizeConfigForPersistence(this.config));
     newConfig.description = copyDescription;
 
     const newPrompts = structuredClone(this.prompts);
@@ -1580,7 +1624,7 @@ export default class Eval {
           createdAt: Date.now(),
           author,
           description: copyDescription,
-          config: sanitizeTracingConfigForPersistence(newConfig),
+          config: sanitizeConfigForPersistence(newConfig),
           results: {},
           prompts: newPrompts,
           vars: newVars,

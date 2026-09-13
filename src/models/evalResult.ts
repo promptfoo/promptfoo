@@ -21,13 +21,19 @@ import {
 } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { isSecretField, REDACTED, sanitizeObject } from '../util/sanitizer';
+import {
+  isSecretField,
+  REDACTED,
+  sanitizeCodingAgentVerifierInputs,
+  sanitizeObject,
+} from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
+import { sanitizeRedactionResult } from '../util/traceRedaction';
 import { invalidateEvaluationCache } from './evalMutation';
 import { clearCountCache } from './evalPerformance';
 
@@ -74,6 +80,7 @@ function projectTestCase(
   testCase: AtomicTestCase,
   options: { stripMetadata: boolean; stripVars: boolean },
 ): AtomicTestCase {
+  testCase = sanitizeCodingAgentVerifierInputs(testCase);
   if (!options.stripMetadata && !options.stripVars) {
     return testCase;
   }
@@ -178,7 +185,7 @@ function sanitizeForDbWithSecrets<T>(obj: T): T {
   if (obj === null || obj === undefined) {
     return obj;
   }
-  return sanitizeObject(obj, {
+  return sanitizeObject(sanitizeCodingAgentVerifierInputs(obj), {
     context: 'evalResult field',
     // Nested provider configs can be deeper than the default maxDepth (4);
     // match the behavior of `sanitizeConfigForOutput` in `src/util/output.ts`.
@@ -402,7 +409,7 @@ function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
 }
 
 function sanitizeGradingResultForDb<T>(gradingResult: T): T {
-  return redactHttpHeadersOnGradingResult(gradingResult);
+  return redactHttpHeadersOnGradingResult(sanitizeCodingAgentVerifierInputs(gradingResult));
 }
 
 // `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
@@ -523,7 +530,7 @@ function redactSensitiveResultFieldsForDb<
     // sanitizeMetadataForDb). fields.response is the raw input, so its headers are still
     // cleartext here and can be matched against an echoed result-level metadata.headers.
     metadata: sanitizeMetadataForDb(
-      fields.metadata,
+      sanitizeCodingAgentVerifierInputs(fields.metadata),
       (fields.response as ProviderResponse | null | undefined)?.metadata,
     ),
   };
@@ -550,6 +557,7 @@ function getStripFlags() {
  * on-disk copy is sanitized.
  */
 export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
+  result = sanitizeRedactionResult(result);
   const {
     shouldStripPromptText,
     shouldStripResponseOutput,
@@ -585,7 +593,12 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     ...(artifactResult.vars === undefined
       ? {}
       : {
-          vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(artifactResult.vars),
+          vars: shouldStripTestVars
+            ? {}
+            : sanitizeForDbWithSecrets({
+                ...(artifactResult.testCase as AtomicTestCase | undefined),
+                vars: artifactResult.vars,
+              }).vars,
         }),
     ...(artifactResult.prompt
       ? {
@@ -615,6 +628,7 @@ export default class EvalResult {
     result: EvaluateResult,
     opts?: { persist: boolean },
   ) {
+    result = sanitizeRedactionResult(result);
     const persist = opts?.persist == null ? true : opts.persist;
     const {
       prompt,
@@ -700,7 +714,8 @@ export default class EvalResult {
     const db = await getDb();
     const returnResults: EvalResult[] = [];
     const processedResults: EvaluateResult[] = [];
-    for (const result of results) {
+    for (const input of results) {
+      const result = sanitizeRedactionResult(input);
       const processedResponse = isBlobStorageEnabled()
         ? await extractAndStoreBinaryData(result.response, {
             evalId,
@@ -996,7 +1011,7 @@ export default class EvalResult {
       });
     }
 
-    return {
+    return sanitizeRedactionResult({
       cost: this.cost,
       ...(this.response?.incurredCost !== undefined && {
         incurredCost: this.response.incurredCost,
@@ -1019,10 +1034,10 @@ export default class EvalResult {
       testCase,
       testIdx: this.testIdx,
       tokenUsage,
-      vars: shouldStripTestVars ? {} : this.testCase.vars || {},
+      vars: testCase.vars || {},
       metadata: shouldStripMetadata ? {} : this.metadata,
       failureReason: this.failureReason,
-    };
+    });
   }
 }
 

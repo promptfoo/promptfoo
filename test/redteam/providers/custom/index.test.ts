@@ -177,6 +177,129 @@ describe('CustomProvider', () => {
     vi.resetAllMocks();
   });
 
+  it('keeps concurrent private sessions with their own attack', async () => {
+    const provider = new CustomProvider({
+      injectVar: 'objective',
+      strategyText: 'Inspect reports',
+      maxTurns: 2,
+      maxBacktracks: 0,
+      stateful: true,
+      redteamProvider: mockRedTeamProvider,
+    });
+    vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+      generatedQuestion: 'Inspect report',
+    });
+    vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+    vi.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+      value: false,
+      metadata: 0,
+      rationale: '',
+    });
+    vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
+    mockGetGraderById.mockReturnValue({
+      getResult: vi.fn().mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' }),
+    });
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const sessions: Record<string, unknown[]> = { first: [], second: [] };
+    mockTargetProvider.callApi.mockImplementation(async (_prompt, context) => {
+      const run = String(context?.vars.run);
+      sessions[run].push(context?.vars.sessionId);
+      if (sessions.first.length && sessions.second.length) {
+        release();
+      }
+      await ready;
+      return { output: 'Clean report', sessionId: `PRIVATE_SESSION_${run}` };
+    });
+    const results = await Promise.all(
+      ['first', 'second'].map((run) => {
+        const context = {
+          originalProvider: mockTargetProvider,
+          vars: { objective: 'Inspect report', run },
+          prompt: { raw: 'Inspect report', label: 'fixture' },
+          test: {
+            vars: {},
+            assert: [
+              {
+                type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                value: { rawReceipt: 'SYNTHETIC_PROTECTED_RECEIPT_8964' },
+              },
+            ],
+          },
+        };
+        return provider.callApi('Inspect report', context);
+      }),
+    );
+    expect(sessions.first).toEqual([undefined, 'PRIVATE_SESSION_first']);
+    expect(sessions.second).toEqual([undefined, 'PRIVATE_SESSION_second']);
+    expect(JSON.stringify(results)).not.toContain('PRIVATE_SESSION_');
+  });
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'keeps %s sessions private through normal and unblocking turns',
+    async (pluginId) => {
+      const provider = new CustomProvider({
+        injectVar: 'objective',
+        strategyText: 'Inspect reports',
+        maxTurns: 2,
+        maxBacktracks: 0,
+        stateful: true,
+        redteamProvider: mockRedTeamProvider,
+      });
+      vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+        generatedQuestion: 'Inspect report',
+      });
+      vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+      vi.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+        value: false,
+        metadata: 0,
+        rationale: '',
+      });
+      vi.mocked(tryUnblocking)
+        .mockResolvedValue({ success: false })
+        .mockResolvedValueOnce({ success: true, unblockingPrompt: 'Continue report' });
+      mockGetGraderById.mockReturnValue({
+        getResult: vi
+          .fn()
+          .mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean report' }),
+      });
+      const receivedSessions: unknown[] = [];
+      let calls = 0;
+      mockTargetProvider.callApi.mockImplementation(async (_prompt, targetContext) => {
+        receivedSessions.push(targetContext?.vars.sessionId);
+        return { output: 'Clean report', sessionId: `PRIVATE_SESSION_${++calls}` };
+      });
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'Inspect report' },
+        prompt: { raw: 'Inspect report', label: 'fixture' },
+        test: { vars: {}, assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+      };
+      const first = await provider.callApi('Inspect report', context);
+      expect(receivedSessions).toEqual([undefined, 'PRIVATE_SESSION_1', 'PRIVATE_SESSION_2']);
+      const second = await provider.callApi('Inspect report', context);
+      expect(receivedSessions).toEqual([
+        undefined,
+        'PRIVATE_SESSION_1',
+        'PRIVATE_SESSION_2',
+        undefined,
+        'PRIVATE_SESSION_4',
+      ]);
+      expect(
+        JSON.stringify([
+          first,
+          second,
+          context.vars,
+          mockRedTeamProvider.callApi.mock.calls,
+          mockScoringProvider.callApi.mock.calls,
+          vi.mocked(tryUnblocking).mock.calls,
+        ]),
+      ).not.toContain('PRIVATE_SESSION_');
+    },
+  );
+
   it('should initialize with default config values', () => {
     const provider = new CustomProvider({
       injectVar: 'objective',
@@ -1437,54 +1560,75 @@ describe('CustomProvider', () => {
       }
     });
 
-    it('should include redteamHistory with media fields when perTurnLayers is configured', async () => {
-      // Configure the hoisted mock to return audio/image data for this test
-      mockApplyRuntimeTransforms.mockResolvedValueOnce({
-        transformedPrompt: 'transformed prompt',
-        audio: { data: 'base64-audio-data', format: 'mp3' },
-        image: { data: 'base64-image-data', format: 'png' },
-      });
+    it.each([
+      [undefined, false],
+      ['promptfoo:redteam:coding-agent:trace-redaction', false],
+      ['promptfoo:redteam:harness:artifact-redaction', false],
+      ['promptfoo:redteam:coding-agent:trace-redaction', true],
+      ['promptfoo:redteam:harness:artifact-redaction', true],
+    ] as const)(
+      'keeps only permitted history audio for %s with ending=%s',
+      async (assertionType, ended) => {
+        // Configure the hoisted mock to return audio/image data for this test
+        mockApplyRuntimeTransforms.mockResolvedValueOnce({
+          prompt: 'transformed prompt',
+          audio: { data: 'base64-audio-data', format: 'mp3' },
+          image: { data: 'base64-image-data', format: 'png' },
+        });
 
-      const provider = new CustomProvider({
-        injectVar: 'objective',
-        strategyText: 'Test strategy',
-        maxTurns: 1,
-        redteamProvider: mockRedTeamProvider,
-        _perTurnLayers: [{ id: 'audio' }],
-      });
+        const provider = new CustomProvider({
+          injectVar: 'objective',
+          strategyText: 'Test strategy',
+          maxTurns: 2,
+          redteamProvider: mockRedTeamProvider,
+          _perTurnLayers: [{ id: 'audio' }],
+        });
 
-      mockRedTeamProvider.callApi.mockResolvedValue({
-        output: JSON.stringify({
-          generatedQuestion: 'test question',
-          rationaleBehindJailbreak: 'test rationale',
-          lastResponseSummary: 'test summary',
-        }),
-      });
+        mockRedTeamProvider.callApi.mockResolvedValue({
+          output: JSON.stringify({
+            generatedQuestion: 'test question',
+            rationaleBehindJailbreak: 'test rationale',
+            lastResponseSummary: 'test summary',
+          }),
+        });
 
-      mockTargetProvider.callApi.mockResolvedValue({
-        output: 'target response',
-        audio: { data: 'response-audio-data', format: 'wav' },
-      });
+        mockTargetProvider.callApi
+          .mockResolvedValue({ output: 'Clean report' })
+          .mockResolvedValueOnce({
+            output: 'target response',
+            conversationEnded: ended,
+            audio: { data: 'response-audio-data', format: 'wav' },
+          });
 
-      mockScoringProvider.callApi.mockResolvedValue({
-        output: JSON.stringify({
-          value: true,
-          metadata: 100,
-          rationale: 'Success',
-        }),
-      });
+        mockScoringProvider.callApi.mockResolvedValue({
+          output: JSON.stringify({
+            value: false,
+            metadata: 100,
+            rationale: 'Success',
+          }),
+        });
 
-      const context = {
-        originalProvider: mockTargetProvider,
-        vars: { objective: 'test objective' },
-        prompt: { raw: 'test prompt', label: 'test' },
-      };
+        const context = {
+          originalProvider: mockTargetProvider,
+          vars: { objective: 'test objective' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: { vars: {}, assert: assertionType ? [{ type: assertionType }] : [] },
+        };
 
-      const result = await provider.callApi('test prompt', context);
+        const result = await provider.callApi('test prompt', context);
 
-      // Verify redteamHistory is populated
-      expect(result.metadata?.redteamHistory).toBeDefined();
-      expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
-    });
+        if (assertionType) {
+          expect(result.error).toMatch(/audio.*redaction.*verified/i);
+          expect(result.metadata.redactionMediaOmitted).toBe(true);
+          expect(JSON.stringify(result)).not.toContain('response-audio-data');
+        } else {
+          expect(result.error).toBeUndefined();
+          expect(result.metadata.redteamHistory?.[0].outputAudio).toEqual({
+            data: 'response-audio-data',
+            format: 'wav',
+          });
+        }
+      },
+    );
   });
 });

@@ -148,6 +148,92 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('runRedteamConversation', () => {
+    it.each([
+      ['coding-agent:trace-redaction', false, false],
+      ['coding-agent:trace-redaction', false, true],
+      ['harness:artifact-redaction', false, false],
+      ['harness:artifact-redaction', false, true],
+      ['coding-agent:trace-redaction', true, false],
+      ['coding-agent:trace-redaction', true, true],
+      ['harness:artifact-redaction', true, false],
+      ['harness:artifact-redaction', true, true],
+    ] as const)(
+      'keeps %s forensic traces out of the attacker and returned histories',
+      async (pluginId, assertionSet, media) => {
+        const canary = 'PRIVATE_ITERATIVE_FORENSIC_TRACE';
+        mockGetTargetResponse.mockResolvedValue({ output: 'Public report' }).mockResolvedValueOnce({
+          output: 'Public report',
+          ...(media && {
+            images: [{ data: canary + '_IMAGE', mimeType: 'image/png' }],
+            audio: { data: canary + '_AUDIO', format: 'wav' },
+          }),
+        });
+        const fetchTrace = vi.spyOn(traceContext, 'fetchTraceContext').mockResolvedValue({
+          traceId: 'trace',
+          spans: [
+            {
+              spanId: 'span',
+              name: canary,
+              kind: 'client',
+              startTime: 0,
+              attributes: {},
+              status: { code: 'ok' },
+              depth: 0,
+              events: [],
+            },
+          ],
+          insights: [canary],
+          fetchedAt: 0,
+        });
+        const test: AtomicTestCase = {
+          assert: [
+            { type: 'promptfoo:redteam:contracts' },
+            assertionSet
+              ? { type: 'assert-set', assert: [{ type: `promptfoo:redteam:${pluginId}` }] }
+              : { type: `promptfoo:redteam:${pluginId}` },
+          ],
+          metadata: { pluginId: 'contracts', tracing: { enabled: true } },
+        };
+        mockGetGraderById.mockReturnValue({
+          getResult: vi
+            .fn()
+            .mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Public report' }),
+        });
+        try {
+          const result = await runRedteamConversation({
+            context: {
+              vars: {},
+              prompt: { raw: '{{test}}', label: 'test' },
+              test,
+              traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01',
+            },
+            filters: undefined,
+            injectVar: 'test',
+            numIterations: 2,
+            options: {},
+            prompt: { raw: '{{test}}', label: 'test' },
+            redteamProvider: mockRedteamProvider,
+            gradingProvider: mockRedteamProvider,
+            targetProvider: mockTargetProvider,
+            test,
+            vars: { test: 'Inspect report' },
+            excludeTargetOutputFromAgenticAttackGeneration: false,
+          });
+          expect(mockGetTargetResponse).toHaveBeenCalledTimes(2);
+          expect(fetchTrace).toHaveBeenCalledTimes(media ? 1 : 2);
+          if (media) {
+            expect(result.error).toMatch(/audio.*redaction.*verified/i);
+            expect(result.metadata?.redactionMediaOmitted).toBe(true);
+          } else {
+            expect(result.error).toBeUndefined();
+          }
+          expect(JSON.stringify(mockRedteamProvider.callApi.mock.calls)).not.toContain(canary);
+          expect(JSON.stringify(result.metadata)).not.toContain(canary);
+        } finally {
+          fetchTrace.mockRestore();
+        }
+      },
+    );
     it('skips trace retrieval when an iterative target response came from cache', async () => {
       mockGetTargetResponse.mockResolvedValue({ output: 'Cached target response', cached: true });
       const test: AtomicTestCase = { metadata: { tracing: { enabled: true } } };

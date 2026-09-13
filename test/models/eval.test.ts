@@ -15,6 +15,7 @@ import Eval, {
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
+import { generateTraceContextIfNeeded } from '../../src/tracing/evaluatorTracing';
 import { TraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
@@ -1519,6 +1520,115 @@ describe('evaluator', () => {
   });
 
   describe('toResultsFile', () => {
+    it.each([
+      'promptfoo:redteam:coding-agent:trace-redaction',
+      'promptfoo:redteam:harness:artifact-redaction',
+    ] as const)('keeps forensic %s traces out of export and sharing', async (type) => {
+      const evaluation = await Eval.create({}, []);
+      const store = new TraceStore();
+      for (const [testIdx, traceId] of [
+        'private-trace',
+        'private-indexed',
+        'private-named',
+        'failed-private-trace',
+        'failed-private-indexed',
+        'ordinary-trace',
+      ].entries()) {
+        const result = createEvaluateResult({
+          testIdx,
+          traceId: [1, 2, 4].includes(testIdx) ? undefined : traceId,
+          testCase: {
+            assert: testIdx < 5 ? [{ type: 'assert-set', assert: [{ type }] }] : [],
+            metadata: testIdx === 2 ? { testCaseId: 'custom-private-case' } : {},
+          },
+        });
+        if (testIdx === 3 || testIdx === 4) {
+          evaluation.recordResultPersistenceFailure(result);
+        } else {
+          await evaluation.addResult(result);
+        }
+        await store.createTrace({
+          evaluationId: evaluation.id,
+          testCaseId: testIdx === 2 ? 'custom-private-case' : `${testIdx}-0`,
+          traceId,
+        });
+        await store.addSpans(traceId, [
+          {
+            spanId: traceId,
+            name: 'trace',
+            startTime: 1,
+            attributes: {
+              diagnostic: testIdx < 5 ? 'PRIVATE_FORENSIC_VALUE' : 'ordinary diagnostic',
+            },
+          },
+        ]);
+      }
+      expect((await evaluation.getTraces()).map((trace) => trace.traceId)).toEqual([
+        'ordinary-trace',
+      ]);
+      expect(JSON.stringify(await evaluation.toResultsFile())).not.toContain(
+        'PRIVATE_FORENSIC_VALUE',
+      );
+      expect(JSON.stringify(await store.getTrace('private-trace'))).toContain(
+        'PRIVATE_FORENSIC_VALUE',
+      );
+    });
+
+    it.each([
+      'promptfoo:redteam:coding-agent:trace-redaction',
+      'promptfoo:redteam:harness:artifact-redaction',
+    ] as const)('keeps %s traces private after a failed row is reloaded', async (type) => {
+      const evaluation = await Eval.create({}, []);
+      const testCase = {
+        assert: [{ type: 'assert-set' as const, assert: [{ type }] }],
+        metadata: { evaluationId: evaluation.id, tracingEnabled: true },
+      };
+      const context = await generateTraceContextIfNeeded(testCase, {}, 0, 0);
+      const traceId = context!.traceparent!.split('-')[1];
+      const store = new TraceStore();
+      await store.addSpans(traceId, [
+        {
+          spanId: 'private-source',
+          name: 'forensic evidence',
+          startTime: 1,
+          attributes: { diagnostic: 'PRIVATE_RELOADED_FORENSIC_VALUE' },
+        },
+      ]);
+      evaluation.recordResultPersistenceFailure(createEvaluateResult({ testCase, traceId }));
+      const reloaded = await Eval.findById(evaluation.id);
+      expect(await reloaded!.getTraces()).toEqual([]);
+      expect(JSON.stringify(await reloaded!.toResultsFile())).not.toContain(
+        'PRIVATE_RELOADED_FORENSIC_VALUE',
+      );
+      expect(JSON.stringify(await store.getTrace(traceId))).toContain(
+        'PRIVATE_RELOADED_FORENSIC_VALUE',
+      );
+      context?.rootSpan?.end();
+    });
+
+    it.each(['rawReceipt', 'sensitiveValue', 'expectedContent'])(
+      'keeps %s out of persisted and exported verifier configuration',
+      async (key) => {
+        const secret = 'protected fixture receipt';
+        const config = {
+          redteam: {
+            plugins: [
+              {
+                id: 'coding-agent:trace-redaction' as const,
+                config: { [key]: secret, rawReceiptPath: 'fixtures/receipt.txt' },
+              },
+            ],
+          },
+        };
+        const evaluation = await Eval.create(config, []);
+        const persisted = await Eval.findById(evaluation.id);
+        expect(JSON.stringify(persisted?.config)).not.toContain(secret);
+        expect(JSON.stringify((await evaluation.toResultsFile()).config)).not.toContain(secret);
+        expect(evaluation.config).toEqual(config);
+        expect(JSON.stringify(persisted?.config)).toContain('fixtures/receipt.txt');
+      },
+    );
+
     it('drops malformed trace-provider headers when exporting older evaluations', async () => {
       const evaluation = new Eval({
         tracing: {
@@ -2591,6 +2701,7 @@ describe('evaluator', () => {
 
     afterEach(() => {
       vi.restoreAllMocks();
+      vi.doUnmock('../../src/tracing/store');
     });
 
     it('should return traces with properly formatted data', async () => {
@@ -2774,6 +2885,9 @@ describe('evaluator', () => {
       const traces = await evalInstance.getTraces();
 
       expect(traces).toEqual([]);
+      await expect(evalInstance.getTraces({ throwOnError: true })).rejects.toThrow(
+        'Database error',
+      );
     });
   });
 

@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
 import {
+  CODING_AGENT_PLUGINS,
   getDefaultNFanout,
   HARM_PLUGINS,
   MULTI_INPUT_VAR,
@@ -649,6 +650,23 @@ describe('synthesize', () => {
 
       expect(logger.warn).toHaveBeenCalledWith(
         'Plugin unregistered-plugin not registered, skipping',
+      );
+    });
+
+    it('expands coding-agent:all to include the legacy plugins in direct synthesis', async () => {
+      const action = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action, key: 'mockPlugin' });
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'coding-agent:all', numTests: 1 }],
+        prompts: ['{{query}}'],
+        purpose: 'Coding agent',
+        strategies: [],
+        targetIds: ['test-provider'],
+      });
+      expect(result.testCases.map((test) => test.metadata.pluginId).sort()).toEqual(
+        [...CODING_AGENT_PLUGINS].sort(),
       );
     });
 
@@ -2184,6 +2202,15 @@ describe('calculateTotalTests', () => {
     { id: 'plugin1', numTests: 2 },
     { id: 'plugin2', numTests: 3 },
   ];
+
+  it('counts every harness preflight case before applying strategies', () => {
+    expect(
+      calculateTotalTests([{ id: 'harness:preflight', numTests: 1 }], [{ id: 'rot13' }]),
+    ).toMatchObject({
+      totalPluginTests: 14,
+      totalTests: 28,
+    });
+  });
 
   it('should calculate basic test counts with no strategies', () => {
     const result = calculateTotalTests(mockPlugins, []);

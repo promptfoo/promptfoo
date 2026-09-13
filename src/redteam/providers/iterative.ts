@@ -20,6 +20,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../util/traceRedaction';
 import {
   buildPromptInputDescriptions,
   materializeInputVariablesWithMetadata,
@@ -99,6 +100,7 @@ const getIterativeGoalRubric = (goal: string | undefined): string => {
 type StopReason = 'Grader failed' | 'Max iterations reached';
 
 interface IterativeMetadata {
+  redactionMediaOmitted?: boolean;
   finalIteration: number;
   highestScore: number;
   redteamFinalPrompt?: string;
@@ -236,12 +238,17 @@ export async function runRedteamConversation({
   }[] = [];
 
   let lastResponse: TargetResponse | undefined = undefined;
+  let mediaRedactionError: string | undefined;
 
   const tracingOptions = resolveTracingOptions({
     strategyId: 'iterative',
     test,
     config: test?.metadata?.strategyConfig,
   });
+  const redactTrace = requiresTraceRedaction(test?.assert);
+  if (redactTrace) {
+    tracingOptions.includeInAttack = false;
+  }
   const shouldFetchTrace =
     tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
   const traceSnapshots: TraceContextData[] = [];
@@ -451,11 +458,10 @@ export async function runRedteamConversation({
       options,
     );
     // Externalize blobs before they hit history/prompts
-    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-      evalId: context?.evaluationId,
-      testIdx: context?.testIdx,
-      promptIdx: context?.promptIdx,
-    });
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+    if (targetResponse.metadata?.redactionMediaOmitted === true) {
+      mediaRedactionError ??= targetResponse.error;
+    }
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
@@ -796,17 +802,17 @@ export async function runRedteamConversation({
       output: targetResponse.output,
       // Only include audio/image if data is present
       outputAudio:
-        targetResponse.audio?.data && targetResponse.audio?.format
+        !redactTrace && targetResponse.audio?.data && targetResponse.audio?.format
           ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
           : undefined,
       outputImage:
-        targetResponse.image?.data && targetResponse.image?.format
+        !redactTrace && targetResponse.image?.data && targetResponse.image?.format
           ? { data: targetResponse.image.data, format: targetResponse.image.format }
           : undefined,
       score: currentScore,
       graderPassed: storedGraderResult?.pass,
       guardrails: targetResponse?.guardrails,
-      trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
+      trace: !redactTrace && traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary,
       // Include input vars for multi-input mode (extracted from current prompt)
       inputVars: currentRenderInputVars,
@@ -826,10 +832,13 @@ export async function runRedteamConversation({
 
   return {
     output: bestResponse || lastResponse?.output || '',
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    ...(mediaRedactionError || lastResponse?.error
+      ? { error: mediaRedactionError || lastResponse?.error }
+      : {}),
     prompt: bestInjectVar,
     metadata: {
       finalIteration,
+      ...(mediaRedactionError && { redactionMediaOmitted: true }),
       highestScore,
       redteamHistory: previousOutputs,
       redteamFinalPrompt: bestInjectVar,
@@ -837,7 +846,7 @@ export async function runRedteamConversation({
       stopReason: stopReason,
       sessionIds,
       traceSnapshots:
-        traceSnapshots.length > 0
+        !redactTrace && traceSnapshots.length > 0
           ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
           : undefined,
     },

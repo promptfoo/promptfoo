@@ -35,6 +35,12 @@ import {
   accumulateGradingResponseTokenUsage,
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
+import {
+  hasRedactionMedia,
+  requiresTraceRedaction,
+  sanitizeRedactionResult,
+  TRACE_REDACTION_ASSERTIONS,
+} from '../../util/traceRedaction';
 import { TransformInputType, transform } from '../../util/transform';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
@@ -43,6 +49,7 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
+import type { RedteamGradingContext } from '../grading/types';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -638,6 +645,8 @@ interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
   ) => Promise<TResult>;
 }
 
+const privateRedactionResponses = new WeakMap<ProviderResponse, ProviderResponse>();
+
 /** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
 export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   grader: TraceableRedteamGrader<TResult, TArgs>,
@@ -646,6 +655,16 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   test: AtomicTestCase,
   ...args: TArgs
 ): Promise<TResult> {
+  const context = args[args.length - 1] as RedteamGradingContext | undefined;
+  const privateResponse =
+    context?.providerResponse && privateRedactionResponses.get(context.providerResponse);
+  if (privateResponse && TRACE_REDACTION_ASSERTIONS.has(grader.id)) {
+    output =
+      typeof privateResponse.output === 'string'
+        ? privateResponse.output
+        : (safeJsonStringify(privateResponse.output) ?? '');
+    args = [...args.slice(0, -1), { ...context, providerResponse: privateResponse }] as TArgs;
+  }
   const invoke = () => grader.getResult(prompt, output, test, ...args);
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {
@@ -902,12 +921,32 @@ export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max tur
  */
 export async function externalizeResponseForRedteamHistory<T extends ProviderResponse>(
   response: T,
-  context?: { evalId?: string; testIdx?: number; promptIdx?: number },
+  context?: Pick<CallApiContextParams, 'evaluationId' | 'testIdx' | 'promptIdx' | 'test'>,
 ): Promise<T> {
+  const testCase = context?.test as AtomicTestCase | undefined;
+  if (requiresTraceRedaction(testCase?.assert)) {
+    if (!hasRedactionMedia(response)) {
+      const sanitized = sanitizeRedactionResult({ response, testCase }).response;
+      privateRedactionResponses.set(
+        sanitized,
+        response.raw === undefined ? response : { ...response, raw: undefined },
+      );
+      return sanitized;
+    }
+    const sanitized = sanitizeRedactionResult({ response, testCase }).response;
+    return {
+      ...sanitized,
+      error: 'Image, audio, and video redaction cannot be verified; provide a text-only report.',
+    };
+  }
   if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
     return response;
   }
-  const blobbed = await extractAndStoreBinaryData(response, context);
+  const blobbed = await extractAndStoreBinaryData(response, {
+    evalId: context?.evaluationId,
+    testIdx: context?.testIdx,
+    promptIdx: context?.promptIdx,
+  });
   return (blobbed as T) || response;
 }
 

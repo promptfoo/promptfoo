@@ -19,6 +19,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../util/tokenUsageUtils';
+import { requiresTraceRedaction } from '../../util/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import {
   getRemoteGenerationHeaders,
@@ -47,6 +48,7 @@ import {
   accumulateUnblockingTokenUsage,
   buildGraderResultAssertion,
   callTargetProvider,
+  externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getLastMessageContent,
   runRedteamGrader,
@@ -270,6 +272,14 @@ export default class GoatProvider implements ApiProvider {
       }
     }
 
+    const redactTrace = requiresTraceRedaction(test?.assert);
+    let redactionError: string | undefined;
+    let mediaRedactionFailed = false;
+    if (redactTrace) {
+      tracingOptions.includeInAttack = false;
+      context = { ...context, vars: { ...context.vars } };
+    }
+
     let previousAttackerMessage = '';
     let previousTargetOutput = '';
     let previousTraceSummary: string | undefined;
@@ -333,12 +343,27 @@ export default class GoatProvider implements ApiProvider {
             }
 
             throwIfTargetPromptExceedsMaxChars(unblockingTargetPrompt, maxCharsPerMessage);
-            const unblockingResponse = await callTargetProvider(
+            let unblockingResponse = await callTargetProvider(
               targetProvider,
               unblockingTargetPrompt,
               context,
               options,
             );
+
+            if (unblockingResponse.sessionId) {
+              context.vars.sessionId = unblockingResponse.sessionId;
+            }
+
+            if (redactTrace) {
+              unblockingResponse = await externalizeResponseForRedteamHistory(
+                unblockingResponse,
+                context,
+              );
+              if (!mediaRedactionFailed) {
+                redactionError = unblockingResponse.error;
+              }
+              mediaRedactionFailed ||= unblockingResponse.metadata?.redactionMediaOmitted === true;
+            }
 
             if (!unblockingResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
               logger.debug(`Sleeping for ${targetProvider.delay}ms`);
@@ -607,12 +632,24 @@ export default class GoatProvider implements ApiProvider {
               },
             }
           : context;
-        const targetResponse = (await callTargetProvider(
+        let targetResponse = (await callTargetProvider(
           targetProvider,
           targetPrompt,
           targetContext,
           options,
         )) as GoatProviderResponse;
+
+        if (targetResponse.sessionId) {
+          context.vars.sessionId = targetResponse.sessionId;
+        }
+
+        if (redactTrace) {
+          targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+          if (!mediaRedactionFailed) {
+            redactionError = targetResponse.error;
+          }
+          mediaRedactionFailed ||= targetResponse.metadata?.redactionMediaOmitted === true;
+        }
 
         if (!targetResponse.cached && targetProvider.delay && targetProvider.delay > 0) {
           logger.debug(`Sleeping for ${targetProvider.delay}ms`);
@@ -655,10 +692,6 @@ export default class GoatProvider implements ApiProvider {
           }
         }
 
-        if (targetResponse.sessionId) {
-          context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
-          context.vars.sessionId = targetResponse.sessionId;
-        }
         if (targetResponse.conversationEnded) {
           logger.info('[GOAT] Target ended conversation', {
             turn,
@@ -680,7 +713,7 @@ export default class GoatProvider implements ApiProvider {
               promptImage: lastTransformResult?.image,
               output: endedOutput,
               outputAudio:
-                targetResponse.audio?.data && targetResponse.audio?.format
+                !redactTrace && targetResponse.audio?.data && targetResponse.audio?.format
                   ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
                   : undefined,
               inputVars: currentRenderInputVars,
@@ -727,7 +760,7 @@ export default class GoatProvider implements ApiProvider {
           promptImage: lastTransformResult?.image,
           output: finalOutput,
           outputAudio:
-            targetResponse.audio?.data && targetResponse.audio?.format
+            !redactTrace && targetResponse.audio?.data && targetResponse.audio?.format
               ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
               : undefined,
           // Note: outputImage not tracked as ProviderResponse doesn't include image yet
@@ -861,6 +894,7 @@ export default class GoatProvider implements ApiProvider {
     const finalPrompt = getLastMessageContent(messages, 'user') || '';
     return {
       output: getLastMessageContent(messages, 'assistant') || '',
+      ...(redactionError && { error: redactionError }),
       prompt: finalPrompt,
       metadata: {
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
@@ -872,10 +906,10 @@ export default class GoatProvider implements ApiProvider {
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult,
         traceSnapshots:
-          traceSnapshots.length > 0
+          !redactTrace && traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
-        sessionId: getSessionId(lastTargetResponse, context),
+        ...(!redactTrace && { sessionId: getSessionId(lastTargetResponse, context) }),
         ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
       },
       tokenUsage: totalTokenUsage,

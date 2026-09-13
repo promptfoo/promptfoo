@@ -1,8 +1,12 @@
 import './setup';
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { randomUUID } from 'crypto';
 
 import { expect, it, vi } from 'vitest';
+import * as blobExtractor from '../../src/blobs/extractor';
 import { evaluate } from '../../src/evaluator';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
@@ -15,6 +19,174 @@ import {
 import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
+      [1, 2].map((maxConcurrency) => ({ plugin, maxConcurrency })),
+    ),
+  )(
+    'snapshots all $plugin receipts before targets run at concurrency $maxConcurrency',
+    async ({ plugin, maxConcurrency }) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'protected-receipts-'));
+      try {
+        const secrets = ['PRIVATE_FIRST_RECEIPT_VALUE', 'PRIVATE_SECOND_RECEIPT_VALUE'];
+        const receipts = secrets.map((secret, index) => {
+          const receipt = path.join(directory, `receipt-${index}`);
+          fs.writeFileSync(receipt, secret);
+          return receipt;
+        });
+        const artifacts = secrets.map((_, index) => path.join(directory, `report-${index}`));
+        let targetCalls = 0;
+        vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+          if (targetCalls++ === 0) {
+            receipts.forEach((receipt, index) => {
+              fs.copyFileSync(receipt, artifacts[index]);
+              fs.writeFileSync(receipt, 'DECOY_RECEIPT_FROM_TARGET');
+            });
+          }
+          return { output: 'Clean public report' };
+        });
+        const testSuite: TestSuite = {
+          providers: [mockApiProvider],
+          prompts: [toPrompt('Inspect the public report')],
+          tests: receipts.map((receipt, index) => ({
+            vars: { receipt },
+            assert: [
+              {
+                type: 'assert-set',
+                assert: [
+                  {
+                    type: `promptfoo:redteam:${plugin}`,
+                    value:
+                      index === 0
+                        ? { rawReceiptPaths: [receipt], redactedArtifactPath: artifacts[index] }
+                        : { redactedArtifact: { receiptPath: receipt, path: artifacts[index] } },
+                  },
+                ],
+              },
+            ],
+          })),
+        };
+        const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+        await evaluate(testSuite, evalRecord, { maxConcurrency });
+        const summary = await evalRecord.toEvaluateSummary();
+        expect(targetCalls).toBe(2);
+        expect(summary.results).toHaveLength(2);
+        for (const result of summary.results) {
+          expect(result).toMatchObject({
+            success: false,
+            failureReason: ResultFailureReason.ASSERT,
+          });
+          expect(result.gradingResult?.reason).toContain('raw sensitive value');
+        }
+        for (const secret of secrets) {
+          expect(JSON.stringify(summary)).not.toContain(secret);
+        }
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each(['missing', 'invalid'])(
+    'rejects a receipt that was %s before the target supplied a decoy',
+    async (initial) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'missing-receipt-'));
+      try {
+        const receipt = path.join(directory, 'receipt');
+        if (initial === 'invalid') {
+          fs.writeFileSync(receipt, '');
+        }
+        vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+          fs.writeFileSync(receipt, 'DECOY_RECEIPT_FROM_TARGET');
+          return { output: 'Clean public report' };
+        });
+        const testSuite: TestSuite = {
+          providers: [mockApiProvider],
+          prompts: [toPrompt('Inspect the public report')],
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                  value: { rawReceiptPath: receipt },
+                },
+              ],
+            },
+          ],
+        };
+        const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+        await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+        const summary = await evalRecord.toEvaluateSummary();
+        expect(summary.results[0]).toMatchObject({
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+        });
+        expect(JSON.stringify(summary)).toContain('verifier-sidecar-failed');
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'keeps %s output out of later conversation and register state',
+    async (plugin) => {
+      const secret = 'PRIVATE_STATE_RECEIPT';
+      vi.mocked(mockApiProvider.callApi)
+        .mockResolvedValueOnce({ output: secret })
+        .mockResolvedValueOnce({ output: 'Clean' });
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect report. {{ saved }} {{ _conversation[0].response.output }}')],
+        tests: [
+          {
+            options: { storeOutputAs: 'saved' },
+            assert: [{ type: `promptfoo:redteam:${plugin}`, value: { rawReceipt: secret } }],
+          },
+          { assert: [{ type: 'equals', value: 'Clean' }] },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+      const summary = await evalRecord.toEvaluateSummary();
+      expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(mockApiProvider.callApi).mock.calls[1][0]).not.toContain(secret);
+      expect(summary.results[0].failureReason).toBe(ResultFailureReason.ASSERT);
+      expect(summary.results[1].success).toBe(true);
+      expect(JSON.stringify(summary)).not.toContain(secret);
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'does not write private output media to blobs for %s',
+    async (plugin) => {
+      const extract = vi.spyOn(blobExtractor, 'extractAndStoreBinaryData');
+      try {
+        const output = `data:image/png;base64,${Buffer.alloc(2048, 1).toString('base64')}`;
+        vi.mocked(mockApiProvider.callApi).mockResolvedValue({ output });
+        const testSuite: TestSuite = {
+          providers: [mockApiProvider],
+          prompts: [toPrompt('Inspect the public report')],
+          tests: [{ assert: [{ type: `promptfoo:redteam:${plugin}` }] }],
+        };
+        const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+        await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
+        const summary = await evalRecord.toEvaluateSummary();
+        expect(
+          extract.mock.calls.some(([response]) => JSON.stringify(response)?.includes(output)),
+        ).toBe(false);
+        expect(summary.results[0]).toMatchObject({
+          success: false,
+          failureReason: ResultFailureReason.ERROR,
+        });
+        expect(JSON.stringify(summary)).not.toContain(output);
+        expect(JSON.stringify(summary)).not.toContain('promptfoo://blob/');
+      } finally {
+        extract.mockRestore();
+      }
+    },
+  );
+
   it.each(['failed', 'aborted'])(
     'preserves completed audio output when grading is %s',
     async (outcome) => {

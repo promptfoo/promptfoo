@@ -8,6 +8,7 @@ import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
+import { requiresTraceRedaction, TRACE_REDACTION_ASSERTIONS } from '../../util/traceRedaction';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
 import { redteamProviderManager } from '../providers/shared';
 import {
@@ -34,6 +35,18 @@ import type {
   TestCase,
 } from '../../types/index';
 import type { RedteamGradingContext } from '../grading/types';
+
+export type { RedteamGradingContext } from '../grading/types';
+export type {
+  ApiProvider,
+  Assertion,
+  AssertionValue,
+  AtomicTestCase,
+  GradingResult,
+  PluginConfig,
+  ResultSuggestion,
+  TestCase,
+};
 
 /**
  * Abstract base class for creating plugins that generate test cases.
@@ -448,9 +461,24 @@ export abstract class RedteamGraderBase {
     suggestions?: ResultSuggestion[];
   }> {
     invariant(test.metadata?.purpose, 'Test is missing purpose metadata');
+    if (
+      gradingContext &&
+      (TRACE_REDACTION_ASSERTIONS.has(this.id) || requiresTraceRedaction(test.assert))
+    ) {
+      const {
+        traceData: _data,
+        traceContext: _context,
+        traceSummary: _summary,
+        imageOutputs: _images,
+        providerResponse: _response,
+        ...publicContext
+      } = gradingContext;
+      gradingContext = publicContext;
+    }
     const {
       providerResponse: gradingProviderResponse,
       imageOutputs,
+      traceData: _traceData,
       ...templateGradingContext
     } = gradingContext ?? {};
 
@@ -471,7 +499,7 @@ export abstract class RedteamGraderBase {
       tools,
       testVars: test.vars ?? {},
       // Spread public grading context properties to make them accessible in rubrics.
-      // Image payloads/provider internals are intentionally excluded above.
+      // Image payloads, provider internals, and raw local-verifier traces are excluded above.
       ...templateGradingContext,
       // Spread renderedValue to make properties accessible at top level (e.g., categoryGuidance)
       // This is done after gradingContext so renderedValue properties take precedence,

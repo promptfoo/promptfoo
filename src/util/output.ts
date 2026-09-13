@@ -29,11 +29,7 @@ import { streamEvalCsv } from './eval/evalTableUtils';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
-import {
-  sanitizeObject,
-  sanitizeRuntimeOptions,
-  sanitizeTracingConfigForPersistence,
-} from './sanitizer';
+import { sanitizeConfigForPersistence, sanitizeObject, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
@@ -336,7 +332,7 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
 };
 
 function sanitizeConfigForOutput(config: Eval['config']): OutputFile['config'] {
-  return sanitizeObject(sanitizeTracingConfigForPersistence(config), {
+  return sanitizeObject(sanitizeConfigForPersistence(config), {
     context: 'output config',
     throwOnError: true,
     maxDepth: Number.POSITIVE_INFINITY,
@@ -458,16 +454,7 @@ export async function createOutputData(
 ): Promise<OutputFile> {
   const summary = await evalRecord.toEvaluateSummary();
   const redactedConfig = sanitizeConfigForOutput(evalRecord.config);
-  let traces;
-  try {
-    // TraceStore redacts sensitive attribute keys on reads by default.
-    const { getTraceStore } = await import('../tracing/store');
-    traces = await getTraceStore().getTracesByEvaluation(evalRecord.id);
-  } catch (error) {
-    logger.warn(
-      `Failed to fetch traces for output ${evalRecord.id}; traces omitted from export: ${error}`,
-    );
-  }
+  const traces = await evalRecord.getTraces({ normalizeSpans: false });
 
   const output: OutputFile = {
     evalId: evalRecord.id,
