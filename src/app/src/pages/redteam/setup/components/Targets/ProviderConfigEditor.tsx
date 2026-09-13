@@ -18,6 +18,11 @@ import CustomTargetConfiguration from './CustomTargetConfiguration';
 import { AGENT_FRAMEWORKS } from './consts';
 import FoundationModelConfiguration from './FoundationModelConfiguration';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
+import {
+  isLocalOpenAiProviderType,
+  isOpenAiChatProviderId,
+  withLocalProviderType,
+} from './helpers';
 import WebSocketEndpointConfiguration from './WebSocketEndpointConfiguration';
 
 import type { ProviderOptions } from '../../types';
@@ -112,7 +117,7 @@ function ProviderConfigEditor({
   const [rawConfigJson, setRawConfigJson] = useState<string>(() =>
     isRedTeam && targetConfigDraft !== null
       ? targetConfigDraft
-      : JSON.stringify(provider.config, null, 2),
+      : (JSON.stringify(provider.config, null, 2) ?? '{}'),
   );
   const [extensionErrors, setExtensionErrors] = useState(false);
   const [a2aAdvancedConfigError, setA2AAdvancedConfigError] = useState<string | null>(null);
@@ -171,7 +176,7 @@ function ProviderConfigEditor({
   useEffect(() => {
     if (previousProviderType.current !== providerType) {
       previousProviderType.current = providerType;
-      setRawConfigJson(JSON.stringify(provider.config, null, 2));
+      setRawConfigJson(JSON.stringify(provider.config, null, 2) ?? '{}');
       if (isRedTeam) {
         let cleared = false;
         try {
@@ -307,6 +312,11 @@ function ProviderConfigEditor({
       updatedTarget.config[field] = value;
     }
 
+    updatedTarget.config = withLocalProviderType(
+      updatedTarget.id,
+      updatedTarget.config,
+      providerType,
+    );
     providerRef.current = updatedTarget;
     setProvider(updatedTarget);
   };
@@ -480,13 +490,44 @@ function ProviderConfigEditor({
         errors.push('Provider ID must start with file:// for Python agent files');
       }
     } else if (
-      ['a2a', 'javascript', 'python', 'go', 'custom', 'mcp', 'exec', 'openinterpreter'].includes(
-        providerType || '',
-      )
+      isLocalOpenAiProviderType(providerType) ||
+      [
+        'a2a',
+        'bedrock-agent',
+        'javascript',
+        'python',
+        'go',
+        'custom',
+        'mcp',
+        'exec',
+        'openinterpreter',
+      ].includes(providerType || '')
     ) {
       // Custom providers validation
       if (!provider.id || provider.id.trim() === '') {
         errors.push('Provider ID is required');
+      }
+      if (isLocalOpenAiProviderType(providerType)) {
+        if (isOpenAiChatProviderId(provider.id)) {
+          const servedModel = provider.id.slice('openai:chat:'.length);
+          if (
+            (servedModel && !servedModel.trim()) ||
+            (!servedModel &&
+              (typeof provider.config?.model !== 'string' || !provider.config.model.trim()))
+          ) {
+            errors.push('A served model is required in the provider ID or config.model');
+          }
+        } else {
+          errors.push(
+            'Local provider ID must be openai:chat:<model> or openai:chat with config.model',
+          );
+        }
+      }
+      if (
+        providerType === 'bedrock-agent' &&
+        (typeof provider.config?.agentAliasId !== 'string' || !provider.config.agentAliasId.trim())
+      ) {
+        errors.push('Agent Alias ID is required');
       }
       if (
         providerType === 'openinterpreter' &&
@@ -669,6 +710,7 @@ function ProviderConfigEditor({
 
       {/* Cloud and enterprise providers - use custom config for now */}
       {[
+        'bedrock-agent',
         'sagemaker',
         'databricks',
         'cloudflare-ai',

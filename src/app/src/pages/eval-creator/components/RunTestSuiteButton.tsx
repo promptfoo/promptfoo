@@ -6,6 +6,7 @@ import { Spinner } from '@app/components/ui/spinner';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useEvalHistoryRefresh } from '@app/hooks/useEvalHistoryRefresh';
 import { useToast } from '@app/hooks/useToast';
+import { normalizeLocalProviders } from '@app/pages/redteam/setup/components/Targets/helpers';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -88,7 +89,7 @@ const RunTestSuiteButton = () => {
       env,
       evaluateOptions,
       prompts: jobPrompts,
-      providers,
+      providers: normalizeLocalProviders(providers, { forRuntime: true }),
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'
       tracing,

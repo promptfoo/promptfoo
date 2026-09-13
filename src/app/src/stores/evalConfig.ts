@@ -5,6 +5,10 @@ import {
   redactAzureBlobSasTokens,
   sanitizeUrlForLogging,
 } from '../../../util/sanitizer';
+import {
+  isProviderOptionsMap,
+  normalizeLocalProviders,
+} from '../pages/redteam/setup/components/Targets/helpers';
 
 import type { EvaluateTestSuiteWithEvaluateOptions, UnifiedConfig } from '../../../types/index';
 
@@ -602,6 +606,14 @@ const walkValue = (
 
     return Object.fromEntries(
       Object.entries(record).flatMap(([key, nestedValue]) => {
+        // This credential selector is safe to persist only as a literal boolean.
+        // Imported YAML can contain strings or nested values despite the TS type.
+        if (normalizeCredentialName(key) === 'use_default_api_key') {
+          if (typeof nestedValue === 'string') {
+            recordCredentialTemplatePaths(nestedValue, templatePaths);
+          }
+          return typeof nestedValue === 'boolean' ? [[key, nestedValue]] : [];
+        }
         const credential = isHeaders
           ? looksLikeHeaderCredential(key, nestedValue)
           : isQueryParams
@@ -695,34 +707,13 @@ export const omitProviderCredentials = (
   return omitReferencedProviderEnv(sanitized, providerTemplatePaths);
 };
 
-const PROVIDER_OPTION_KEYS = new Set([
-  'id',
-  'label',
-  'config',
-  'prompts',
-  'transform',
-  'delay',
-  'env',
-  'inputs',
-]);
-
 const scrubProviderIdentifier = (value: string, templatePaths?: Set<string>): string =>
   scrubProviderUrl(redactAzureBlobSasTokens(value), templatePaths);
 
-// A provider can be supplied as an options-map keyed by the provider id —
-// `{ '<provider-id>': { ...options } }` — where the id key itself may embed
-// credentials (URL userinfo, an Azure SAS token). Those keys are scrubbed via
-// scrubProviderIdentifier; the values are sanitized via omitProviderCredentials.
-// Only an unambiguous map takes this path: at least one key outside the known
-// option fields AND every value a record. A provider OBJECT with a stray
-// non-record field (e.g. `{ id, apiKey: '...' }` or a top-level headers bag)
-// must take the normal walk instead, which drops credential-named keys and
-// applies parent-key semantics (headers, opaque tool schemas, raw requests,
-// env indirection) that the map path would bypass.
-const isProviderOptionsMap = (value: unknown): value is Record<string, unknown> =>
-  isRecord(value) &&
-  Object.keys(value).some((key) => !PROVIDER_OPTION_KEYS.has(key)) &&
-  Object.values(value).every(isRecord);
+const normalizeLocalConfig = (config: Partial<UnifiedConfig>): Partial<UnifiedConfig> =>
+  hasOwn(config, 'providers')
+    ? { ...config, providers: normalizeLocalProviders(config.providers) }
+    : config;
 
 // walkValue never rewrites object keys, so after the walk the surviving
 // top-level keys are scrubbed here. This covers a credential-bearing id key on
@@ -1328,11 +1319,11 @@ export const useStore = create<EvalConfigState>()(
     (set, get) => ({
       config: { ...DEFAULT_CONFIG },
 
-      setConfig: (config) => set({ config }),
+      setConfig: (config) => set({ config: normalizeLocalConfig(config) }),
 
       updateConfig: (updates) =>
         set((state) => ({
-          config: { ...state.config, ...updates },
+          config: normalizeLocalConfig({ ...state.config, ...updates }),
         })),
 
       reset: () => set({ config: { ...DEFAULT_CONFIG } }),
@@ -1347,7 +1338,7 @@ export const useStore = create<EvalConfigState>()(
           env: config.env,
           extensions: config.extensions,
           prompts: config.prompts,
-          providers: config.providers,
+          providers: normalizeLocalProviders(config.providers, { forRuntime: true }),
           scenarios: config.scenarios,
           tests: config.tests || [], // This is what was 'testCases' before
           tracing: config.tracing,
@@ -1361,7 +1352,7 @@ export const useStore = create<EvalConfigState>()(
       name: 'promptfoo',
       skipHydration: true,
       partialize: (state) => ({
-        config: omitPersistedSensitiveValues(state.config),
+        config: normalizeLocalConfig(omitPersistedSensitiveValues(state.config)),
       }),
       merge: (persistedState, currentState) => {
         const persistedConfig = (persistedState as Partial<EvalConfigState> | undefined)?.config;
@@ -1369,10 +1360,12 @@ export const useStore = create<EvalConfigState>()(
         return {
           ...currentState,
           ...(persistedState as Partial<EvalConfigState> | undefined),
-          config: omitPersistedSensitiveValues({
-            ...DEFAULT_CONFIG,
-            ...persistedConfig,
-          }),
+          config: normalizeLocalConfig(
+            omitPersistedSensitiveValues({
+              ...DEFAULT_CONFIG,
+              ...persistedConfig,
+            }),
+          ),
         };
       },
       onRehydrateStorage: () => (state) => {
