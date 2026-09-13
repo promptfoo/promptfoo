@@ -170,7 +170,7 @@ describe('AzureCompletionProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toBeUndefined();
-    expect(result.output).toBe('');
+    expect(result.output).toBeUndefined();
   });
 
   it('returns graceful output when the response has no choices field', async () => {
@@ -188,7 +188,7 @@ describe('AzureCompletionProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toBeUndefined();
-    expect(result.output).toBe('');
+    expect(result.output).toBeUndefined();
   });
 
   it('should handle API errors', async () => {

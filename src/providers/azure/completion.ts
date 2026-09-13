@@ -102,7 +102,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
       const contentFilterTriggered = finishReason === 'content_filter';
 
       let output = choice?.text;
-      if (output == null) {
+      if (choice && output == null) {
         if (contentFilterTriggered) {
           output =
             "The generated content was filtered due to triggering Azure OpenAI Service's content filtering system.";
