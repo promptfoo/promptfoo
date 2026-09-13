@@ -39,6 +39,7 @@
       ],
       "allowedImportPaths": [
         "src/contracts.ts",
+        "src/contracts/validators/traceAssertionConfig.ts",
         "src/csv.ts",
         "src/logger.ts",
         "src/providers/constants.ts",

@@ -6,6 +6,7 @@ import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContex
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
+  raceWithAbortSignal,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
 import invariant from '../util/invariant';
@@ -60,20 +61,30 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
-  const callProvider = (): Promise<T> =>
-    tracingContext
+  const invokeProvider = (): Promise<T> => {
+    executionContext?.queuedCallAbortSignal?.throwIfAborted();
+    return tracingContext
       ? (tracingContext.withProviderSpan(
           { provider, callContext, operationName, role: 'grader', promptLabel: label },
           invoke,
         ) as Promise<T>)
       : invoke(callContext);
+  };
+  const callProvider = () =>
+    raceWithAbortSignal(invokeProvider(), executionContext?.queuedCallAbortSignal);
 
   const executeCall = () => {
+    executionContext?.queuedCallAbortSignal?.throwIfAborted();
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
-      return executionContext.rateLimitRegistry.execute(
-        provider,
-        callProvider,
-        createProviderRateLimitOptions(),
+      // Keep the limiter slot until the provider settles, even if the caller times out.
+      // Some providers cannot stop an in-flight request when their signal aborts.
+      return raceWithAbortSignal(
+        executionContext.rateLimitRegistry.execute(
+          provider,
+          invokeProvider,
+          createProviderRateLimitOptions(executionContext.queuedCallAbortSignal),
+        ),
+        executionContext.queuedCallAbortSignal,
       );
     }
 

@@ -6,6 +6,7 @@ import {
 } from '../../src/scheduler/providerCallExecutionContext';
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
+import { createRateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { createMockProvider } from '../factories/provider';
 
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
@@ -40,6 +41,26 @@ function createRegistry(): RateLimitRegistryRef & {
     },
     executeSpy,
     disposeSpy,
+  };
+}
+
+function createGatedRegistry(): {
+  registry: RateLimitRegistryRef;
+  release: () => void;
+} {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    registry: {
+      async execute(_provider, callFn) {
+        await gate;
+        return callFn();
+      },
+      dispose() {},
+    },
+    release,
   };
 }
 
@@ -218,6 +239,8 @@ describe('callProviderWithContext', () => {
 });
 
 describe('callGradingProvider', () => {
+  const vars: Record<string, VarValue> = { question: 'What is two plus two?' };
+
   afterEach(() => {
     vi.resetAllMocks();
   });
@@ -269,5 +292,173 @@ describe('callGradingProvider', () => {
     await expect(promise).resolves.toEqual({ embedding: [1, 0, 0] });
     expect(registry.executeSpy).toHaveBeenCalledTimes(1);
     expect(invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips provider calls whose queued-call signal was aborted', async () => {
+    const provider = createProvider();
+    const providerCallQueue = new ProviderGroupedCallQueue();
+    const abortController = new AbortController();
+
+    const promise = withProviderCallExecutionContext(
+      {
+        abortSignal: abortController.signal,
+        providerCallQueue,
+        queuedCallAbortSignal: abortController.signal,
+      },
+      () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
+    );
+    abortController.abort();
+    const rejection = expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+
+    const group = providerCallQueue.takeNextGroup();
+    expect(group).toHaveLength(1);
+    await providerCallQueue.run(group[0]);
+
+    await rejection;
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('settles an aborted queued call without waiting for the context rate limiter', async () => {
+    const provider = createProvider();
+    const providerCallQueue = new ProviderGroupedCallQueue();
+    const abortController = new AbortController();
+    const { registry, release } = createGatedRegistry();
+
+    const promise = withProviderCallExecutionContext(
+      {
+        abortSignal: abortController.signal,
+        providerCallQueue,
+        queuedCallAbortSignal: abortController.signal,
+        rateLimitRegistry: registry,
+      },
+      () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
+    );
+    const rejection = expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+    const group = providerCallQueue.takeNextGroup();
+    const run = providerCallQueue.run(group[0]);
+
+    abortController.abort();
+    await run;
+    await rejection;
+    expect(provider.callApi).not.toHaveBeenCalled();
+
+    release();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
+
+  it('keeps an aborted in-flight call in its rate-limit slot until it settles', async () => {
+    let releaseFirst!: () => void;
+    const firstCall = new Promise<ProviderResponse>((resolve) => {
+      releaseFirst = () => resolve({ output: 'first' });
+    });
+    const provider = createProvider();
+    vi.mocked(provider.callApi).mockImplementation((prompt) =>
+      prompt === 'first' ? firstCall : Promise.resolve({ output: prompt }),
+    );
+    const registry = createRateLimitRegistry({ maxConcurrency: 1, minConcurrency: 1 });
+    const abortController = new AbortController();
+
+    try {
+      const first = withProviderCallExecutionContext(
+        {
+          rateLimitRegistry: registry,
+          queuedCallAbortSignal: abortController.signal,
+        },
+        () => callProviderWithContext(provider, 'first', 'rubric', vars),
+      );
+      await vi.waitFor(() => expect(provider.callApi).toHaveBeenCalledTimes(1));
+      abortController.abort();
+      const rejection = expect(first).rejects.toMatchObject({ name: 'AbortError' });
+
+      const second = withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+        callProviderWithContext(provider, 'second', 'rubric', vars),
+      );
+      await Promise.resolve();
+      expect(provider.callApi).toHaveBeenCalledTimes(1);
+
+      releaseFirst();
+      await rejection;
+      await expect(second).resolves.toEqual({ output: 'second' });
+      expect(provider.callApi).toHaveBeenCalledTimes(2);
+    } finally {
+      registry.dispose();
+    }
+  });
+
+  it('settles an aborted queued call waiting in a wrapped provider rate limiter', async () => {
+    let releaseHold!: () => void;
+    const holdGate = new Promise<void>((resolve) => {
+      releaseHold = resolve;
+    });
+    const provider = createProvider();
+    vi.mocked(provider.callApi).mockImplementation(async (prompt) => {
+      if (prompt === 'hold') {
+        await holdGate;
+      }
+      return { output: prompt };
+    });
+    const providerCallQueue = new ProviderGroupedCallQueue();
+    const abortController = new AbortController();
+    const registry = createRateLimitRegistry({ maxConcurrency: 1, minConcurrency: 1 });
+    const wrappedProvider = wrapProviderWithRateLimiting(provider, registry);
+
+    try {
+      const hold = wrappedProvider.callApi('hold');
+      await vi.waitFor(() => expect(provider.callApi).toHaveBeenCalledTimes(1));
+
+      const promise = withProviderCallExecutionContext(
+        {
+          abortSignal: abortController.signal,
+          providerCallQueue,
+          queuedCallAbortSignal: abortController.signal,
+        },
+        () => callProviderWithContext(wrappedProvider, 'grade this', 'rubric', vars),
+      );
+      const rejection = expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+      const group = providerCallQueue.takeNextGroup();
+      const run = providerCallQueue.run(group[0]);
+
+      abortController.abort();
+      await run;
+      await rejection;
+      expect(provider.callApi).toHaveBeenCalledTimes(1);
+
+      releaseHold();
+      await hold;
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(provider.callApi).toHaveBeenCalledTimes(1);
+    } finally {
+      releaseHold();
+      registry.dispose();
+    }
+  });
+
+  it('still drains queued provider calls after an outer execution abort', async () => {
+    const provider = createProvider();
+    const providerCallQueue = new ProviderGroupedCallQueue();
+    const abortController = new AbortController();
+
+    const promise = withProviderCallExecutionContext(
+      { abortSignal: abortController.signal, providerCallQueue },
+      () => callProviderWithContext(provider, 'grade this', 'rubric', vars),
+    );
+    abortController.abort();
+
+    const group = providerCallQueue.takeNextGroup();
+    expect(group).toHaveLength(1);
+    await providerCallQueue.run(group[0]);
+
+    await expect(promise).resolves.toEqual({ output: 'ok' });
+    expect(provider.callApi).toHaveBeenCalledWith(
+      'grade this',
+      {
+        prompt: { raw: 'grade this', label: 'rubric' },
+        vars,
+      },
+      { abortSignal: abortController.signal },
+    );
   });
 });
