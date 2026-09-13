@@ -775,9 +775,14 @@ ec2_metadata_service_endpoint = http://metadata-b.invalid
       expect(metadata).toHaveLength(0);
       vi.stubEnv('AWS_PROFILE', 'ambient-b');
       resume.resolve();
-      expect(await first).toMatchObject({ output: 'offline response' });
-      // Keep the actual later SDK result; the fix must reject future retention,
-      // not rewrite the credential profile or pretend resolution was atomic.
+      expect(await first).toMatchObject({
+        error: expect.stringContaining('SageMaker credential inputs changed during initialization'),
+      });
+      expect(sageCalls).toHaveLength(0);
+      expect(metadata).toHaveLength(0);
+      expect(stsCalls).toHaveLength(0);
+
+      await expectSignedRow(provider, 'ROLE_B');
       expect(sageCalls[0].request.headers.authorization).toContain('Credential=ROLE_B/');
       expect(metadata.map(({ options }) => options.hostname)).toEqual([
         'metadata-b.invalid',
@@ -802,6 +807,63 @@ ec2_metadata_service_endpoint = http://metadata-b.invalid
     }
     expect(metadata.every(({ destroy }) => destroy.mock.calls.length === 1)).toBe(true);
     expect(stsCalls.every(({ handler }) => !destroyedHandlers.has(handler))).toBe(true);
+  });
+
+  it('keeps an awaiting explicit SSO request independent of a later configured-key request', async () => {
+    await configure();
+    const provider = createProvider({
+      profile: 'named',
+      region: 'us-east-1',
+      endpoint: 'profile-endpoint',
+    });
+    const started = deferred<void>();
+    const resume = deferred<void>();
+    const normalReply = ssoReply;
+    ssoReply = async (generation) => {
+      started.resolve();
+      await resume.promise;
+      return normalReply(generation);
+    };
+    const first = provider.callApi('pending profile request');
+    try {
+      await Promise.race([
+        started.promise,
+        first.then(() => {
+          throw new Error('Profile request completed before its credential boundary');
+        }),
+      ]);
+      provider.config = {
+        region: 'us-west-2',
+        modelType: 'custom',
+        endpoint: 'keys-endpoint',
+        accessKeyId: 'EXPLICIT_KEYS',
+        secretAccessKey: 'offline-explicit-secret',
+        sessionToken: 'offline-explicit-session',
+      };
+      expect(await provider.callApi('independent key request')).toMatchObject({
+        output: 'offline response',
+      });
+      expect(sageCalls).toHaveLength(1);
+      expect(sageCalls[0].request.headers.authorization).toContain('Credential=EXPLICIT_KEYS/');
+      expect(sageCalls[0].request.headers.authorization).toContain('/us-west-2/sagemaker/');
+      expect(sageCalls[0].request.path).toBe('/endpoints/keys-endpoint/invocations');
+      expect(sageCalls[0].request.headers['x-amz-security-token']).toBe('offline-explicit-session');
+
+      resume.resolve();
+      expect(await first).toMatchObject({ output: 'offline response' });
+      expect(sageCalls).toHaveLength(2);
+      expect(sageCalls[1].request.headers.authorization).toContain('Credential=SSO_1/');
+      expect(sageCalls[1].request.headers.authorization).toContain('/us-east-1/sagemaker/');
+      expect(sageCalls[1].request.path).toBe('/endpoints/profile-endpoint/invocations');
+      expect(sageCalls[1].request.headers['x-amz-security-token']).toBe('offline-session');
+      expect(ssoCalls).toHaveLength(1);
+      expect(process.env.AWS_PROFILE).toBe('named');
+    } finally {
+      resume.resolve();
+      await Promise.allSettled([first]);
+    }
+    expect(sageCalls.every(({ handler }) => destroyedHandlers.has(handler))).toBe(true);
+    expect(ssoCalls.every(({ handler }) => !destroyedHandlers.has(handler))).toBe(true);
   });
 
   it('keeps metadata v1 disabling owned by the explicit credential profile', async () => {

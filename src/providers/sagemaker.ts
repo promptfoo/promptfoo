@@ -660,10 +660,34 @@ abstract class SageMakerGenericProvider {
     return { url, useFipsEndpoint, useDualstackEndpoint };
   }
 
+  protected captureRuntimeInputs() {
+    const credentialConfig = {
+      profile: this.config.profile,
+      accessKeyId: this.config.accessKeyId,
+      secretAccessKey: this.config.secretAccessKey,
+      sessionToken: this.config.sessionToken,
+    };
+    const environment = Object.fromEntries(
+      [...CREDENTIAL_ENV_VARS, ...DEFAULTS_ENV_VARS, 'AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME'].map(
+        (name) => [name, process.env[name]],
+      ),
+    );
+    return {
+      credentialConfig,
+      environment,
+      files: captureSharedFiles(environment),
+      maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
+    };
+  }
+
   /**
    * Initialize and return the SageMaker runtime client
    */
-  async getSageMakerRuntimeInstance(region?: string, generation = this.runtimeGeneration) {
+  async getSageMakerRuntimeInstance(
+    region?: string,
+    generation = this.runtimeGeneration,
+    inputs?: ReturnType<SageMakerGenericProvider['captureRuntimeInputs']>,
+  ) {
     this.assertRuntimeGeneration(generation);
     // A caller-supplied client is borrowed, not part of the provider's region pool.
     if (this.sagemakerRuntime && this.sagemakerRuntime !== this.#initializedRuntime?.client) {
@@ -680,19 +704,8 @@ abstract class SageMakerGenericProvider {
       );
     };
     const runtimeRegion = region ?? this.getRegion();
-    const credentialConfig = {
-      profile: this.config.profile,
-      accessKeyId: this.config.accessKeyId,
-      secretAccessKey: this.config.secretAccessKey,
-      sessionToken: this.config.sessionToken,
-    };
-    const environment = Object.fromEntries(
-      [...CREDENTIAL_ENV_VARS, ...DEFAULTS_ENV_VARS, 'AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME'].map(
-        (name) => [name, process.env[name]],
-      ),
-    );
-    const files = captureSharedFiles(environment);
-    const maxAttempts = getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3);
+    const { credentialConfig, environment, files, maxAttempts } =
+      inputs ?? this.captureRuntimeInputs();
     const smithyConfig = await import('@smithy/core/config').catch(importError);
     const scope = await this.getCredentialScope(
       runtimeRegion,
@@ -841,7 +854,7 @@ abstract class SageMakerGenericProvider {
                 }
                 try {
                   return (
-                    (await this.getCredentialScope(runtimeRegion, smithyConfig))
+                    (await this.getCredentialScope(runtimeRegion, smithyConfig, credentialConfig))
                       .helperEndpointPolicy === scope.helperEndpointPolicy
                   );
                 } catch {
@@ -1522,6 +1535,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       responsePath: this.config.responseFormat?.path ?? null,
       region: this.getRegion(),
     };
+    // Capture authentication separately from the secret-free cache identity.
+    const runtimeInputs = this.captureRuntimeInputs();
     let cacheKey: string | undefined;
     const getCacheKey = () => {
       if (cacheKey === undefined) {
@@ -1532,7 +1547,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
     };
     const bustCache = context?.bustCache ?? context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
-      const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
+      const cache = getCache();
 
       // Try to get from cache
       const cachedResult = await cache.get<string>(getCacheKey());
@@ -1572,7 +1587,11 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
     // Not in cache or cache disabled, make the actual API call
     abortSignal.throwIfAborted();
-    const runtime = await this.getSageMakerRuntimeInstance(request.region, generation);
+    const runtime = await this.getSageMakerRuntimeInstance(
+      request.region,
+      generation,
+      runtimeInputs,
+    );
 
     logger.debug(`Calling SageMaker endpoint ${request.endpoint}`);
     logger.debug(
@@ -1649,7 +1668,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
 
       // Save result to cache if successful and caching enabled
       if (isCacheEnabled() && !bustCache && result.output && !result.error) {
-        const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
+        const cache = getCache();
         const resultToCache = JSON.stringify(result);
         abortSignal.throwIfAborted();
         this.assertRuntimeGeneration(generation);
@@ -1763,15 +1782,14 @@ export class SageMakerEmbeddingProvider
       region: this.getRegion(),
       responseFormat: this.config.responseFormat ? { ...this.config.responseFormat } : undefined,
     };
+    const runtimeInputs = this.captureRuntimeInputs();
     let cacheKey: string | undefined;
     const getCacheKey = () => (cacheKey ??= this.getCacheKey(transformedText, request));
 
     // Check if we should use cache - use the transformed text for cache key
     const bustCache = context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
-      const cache = (await getCache)
-        ? await getCache()
-        : await import('../cache').then((m) => m.getCache());
+      const cache = getCache();
 
       // Try to get from cache
       const cachedResult = await cache.get<string>(getCacheKey());
@@ -1806,7 +1824,11 @@ export class SageMakerEmbeddingProvider
 
     // Not in cache or cache disabled, make the actual API call
     abortSignal.throwIfAborted();
-    const runtime = await this.getSageMakerRuntimeInstance(request.region, generation);
+    const runtime = await this.getSageMakerRuntimeInstance(
+      request.region,
+      generation,
+      runtimeInputs,
+    );
 
     let payload;
     const modelType = request.modelType || 'custom';
@@ -1993,9 +2015,7 @@ export class SageMakerEmbeddingProvider
     // Save result to cache if successful and caching enabled
     if (isCacheEnabled() && !bustCache && result.embedding && !result.error) {
       const cacheKey = getCacheKey();
-      const cache = (await getCache)
-        ? await getCache()
-        : await import('../cache').then((m) => m.getCache());
+      const cache = getCache();
 
       // Add metadata about transformation
       if (isTransformed && originalText && !result.metadata) {
