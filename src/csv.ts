@@ -212,7 +212,12 @@ export function assertionFromString(expected: string): Assertion {
       type === 'similar' ||
       type === 'starts-with'
     ) {
-      const defaultThreshold = type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75;
+      const defaultThreshold =
+        type === 'similar'
+          ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD
+          : type === 'context-faithfulness'
+            ? 0.7
+            : 0.75;
       return {
         type: fullType as AssertionType,
         value: value?.trim?.(),

@@ -17,6 +17,7 @@ import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
   fail,
+  graderFail,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
@@ -381,7 +382,7 @@ export async function matchesContextFaithfulness(
   );
   accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', tokensUsed);
+    return graderFail(resp.error || 'No output', tokensUsed);
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
@@ -389,6 +390,9 @@ export async function matchesContextFaithfulness(
   const contextString = serializeContext(context);
 
   const statements = splitIntoSentences(resp.output);
+  if (statements.length === 0) {
+    return graderFail('Could not extract context-faithfulness statements', tokensUsed);
+  }
   promptText = await renderLlmRubricPrompt(nliPrompt, {
     ...(vars || {}),
     context: contextString,
@@ -408,7 +412,7 @@ export async function matchesContextFaithfulness(
   );
   accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', tokensUsed);
+    return graderFail(resp.error || 'No output', tokensUsed);
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
@@ -417,25 +421,30 @@ export async function matchesContextFaithfulness(
   finalAnswer = finalAnswer.toLowerCase();
   let verdicts = resp.output.toLowerCase().trim();
   let score = 0;
-  if (statements.length > 0) {
-    if (verdicts.includes(finalAnswer)) {
-      verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
-      const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
-      if (parsedVerdicts.length > 0) {
-        const unsupportedVerdicts = parsedVerdicts.filter(
-          (answer) => !answer.includes('yes'),
-        ).length;
-        const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
-        score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
-      }
-    } else {
-      const noVerdictCount = verdicts.split('verdict: no').length - 1;
-      const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
-      if (noVerdictCount + yesVerdictCount > 0) {
-        const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
-        score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
-      }
+  let parsedVerdict = false;
+  if (verdicts.includes(finalAnswer)) {
+    verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
+    const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
+    if (
+      parsedVerdicts.length > 0 &&
+      parsedVerdicts.every((answer) => /\b(?:yes|no)\b/.test(answer))
+    ) {
+      parsedVerdict = true;
+      const unsupportedVerdicts = parsedVerdicts.filter((answer) => !answer.includes('yes')).length;
+      const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
+      score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
     }
+  } else {
+    const noVerdictCount = verdicts.split('verdict: no').length - 1;
+    const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
+    if (noVerdictCount + yesVerdictCount > 0) {
+      parsedVerdict = true;
+      const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
+      score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
+    }
+  }
+  if (!parsedVerdict) {
+    return graderFail('Could not parse context-faithfulness verdicts', tokensUsed);
   }
   score = Math.min(1, Math.max(0, score));
   const pass = score >= threshold - Number.EPSILON;

@@ -31,7 +31,7 @@ assert:
 
 - `query` - User's question (in test vars)
 - `context` - Reference text (in vars or via `contextTransform`)
-- `threshold` - Minimum score 0-1 (default: 0)
+- `threshold` - Minimum score 0-1 (default: 0.7)
 
 ### Full example
 

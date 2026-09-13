@@ -107,6 +107,37 @@ describe('matchesContextFaithfulness', () => {
     });
   });
 
+  it('should tag grading provider errors so inverse assertions preserve them', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValue({ error: 'grading provider failed' });
+
+    await expect(
+      matchesContextFaithfulness('Query text', 'Output text', 'Context text', 0.7),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'grading provider failed',
+      metadata: { graderError: true },
+    });
+  });
+
+  it('should tag empty statement extraction so inverse assertions preserve it', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValue({ output: '   ' });
+
+    await expect(
+      matchesContextFaithfulness('Query text', 'Output text', 'Context text', 0.7),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Could not extract context-faithfulness statements',
+      metadata: { graderError: true },
+    });
+    expect(callApiSpy).toHaveBeenCalledOnce();
+  });
+
   it('tracks token usage for multiple API calls', async () => {
     const query = 'Query text';
     const output = 'Output text';
@@ -215,8 +246,9 @@ describe('matchesContextFaithfulness', () => {
 
     await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
       pass: false,
-      reason: 'Faithfulness 0.00 is < 0.5',
+      reason: 'Could not parse context-faithfulness verdicts',
       score: 0,
+      metadata: { graderError: true },
       tokensUsed: {
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -225,6 +257,23 @@ describe('matchesContextFaithfulness', () => {
         completionDetails: expect.any(Object),
         numRequests: 0,
       },
+    });
+  });
+
+  it('should reject malformed verdicts after the final-answer header', async () => {
+    const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
+    callApiSpy.mockReset();
+    callApiSpy.mockResolvedValueOnce({ output: 'Statement 1' }).mockResolvedValueOnce({
+      output: 'Final verdict for each statement in order: Unable to determine.',
+    });
+
+    await expect(
+      matchesContextFaithfulness('Query text', 'Output text', 'Context text', 0.7),
+    ).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Could not parse context-faithfulness verdicts',
+      metadata: { graderError: true },
     });
   });
 
