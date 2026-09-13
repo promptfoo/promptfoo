@@ -54,21 +54,22 @@ export function formatTraceSummary(
   trace: TraceContextData,
   options: { maxSpans?: number } = {},
 ): string {
-  if (!trace || trace.spans.length === 0) {
+  const view = trace?.summary ?? trace;
+  if (!view || view.spans.length === 0) {
     return 'No trace spans recorded during this iteration.';
   }
 
   const maxSpans = options.maxSpans ?? DEFAULT_MAX_SPANS;
-  const spans = trace.spans.slice(0, maxSpans);
+  const spans = view.spans.slice(0, maxSpans);
 
-  const header = `Trace ${trace.traceId.slice(0, 8)} • ${trace.spans.length} span${
-    trace.spans.length === 1 ? '' : 's'
+  const header = `Trace ${trace.traceId.slice(0, 8)} • ${view.spans.length} span${
+    view.spans.length === 1 ? '' : 's'
   }`;
 
   const formattedSpans = spans.map((span, index) => `${index + 1}. ${formatSpan(span)}`).join('\n');
 
   const insights =
-    trace.insights.length > 0 ? trace.insights.map((i) => `• ${i}`).join('\n') : 'None';
+    view.insights.length > 0 ? view.insights.map((i) => `• ${i}`).join('\n') : 'None';
 
   return [header, '', 'Execution Flow:', formattedSpans, '', 'Key Observations:', insights].join(
     '\n',
@@ -76,10 +77,11 @@ export function formatTraceSummary(
 }
 
 export function formatTraceForMetadata(trace: TraceContextData): Record<string, unknown> {
+  const view = trace.summary ?? trace;
   return {
     traceId: trace.traceId,
     fetchedAt: trace.fetchedAt,
-    spanCount: trace.spans.length,
-    insights: trace.insights,
+    spanCount: view.spans.length,
+    insights: view.insights,
   };
 }

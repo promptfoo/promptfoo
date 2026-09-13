@@ -1,0 +1,9 @@
+{
+  "position": 61,
+  "label": "Agentic",
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "red-team/plugins/agentic/index"
+  }
+}

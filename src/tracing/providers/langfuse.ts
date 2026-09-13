@@ -434,7 +434,6 @@ export class LangfuseProvider implements TraceProvider {
 
     const normalizedTraceId = traceId.toLowerCase();
     const maxSpans = Math.min(Math.max(options?.maxSpans ?? MAX_SPANS, 1), MAX_SPANS);
-    const pageSize = Math.min(maxSpans, MAX_PAGE_SIZE);
     const timeoutSignal = AbortSignal.timeout(this.config.timeout ?? 10_000);
     const signal = options?.abortSignal
       ? AbortSignal.any([timeoutSignal, options.abortSignal])
@@ -450,7 +449,7 @@ export class LangfuseProvider implements TraceProvider {
       const url = new URL(`${this.baseUrl}/api/public/v2/observations`);
       url.searchParams.set('traceId', normalizedTraceId);
       url.searchParams.set('fields', 'core,basic,io,metadata,model,usage');
-      url.searchParams.set('limit', String(pageSize));
+      url.searchParams.set('limit', String(MAX_PAGE_SIZE));
       if (options?.earliestStartTime !== undefined) {
         url.searchParams.set('fromStartTime', new Date(options.earliestStartTime).toISOString());
       }
@@ -484,7 +483,9 @@ export class LangfuseProvider implements TraceProvider {
       const contentLength = Number(response.headers.get('content-length'));
       if (contentLength > remainingBytes) {
         await releaseResponse(response, 'Langfuse');
-        throw new TraceProviderError('Langfuse trace exceeds the maximum response size');
+        throw new TraceProviderError('Langfuse trace exceeds the maximum response size', {
+          limitExceeded: true,
+        });
       }
       const body = await readLimitedResponse(response, 'Langfuse', remainingBytes);
       remainingBytes -= new TextEncoder().encode(body).byteLength;
@@ -493,10 +494,15 @@ export class LangfuseProvider implements TraceProvider {
         throw new TraceProviderError('Langfuse returned an invalid observations response');
       }
 
-      addObservations(result.data, spans, seenSpanIds, normalizedTraceId, maxSpans, options);
+      addObservations(result.data, spans, seenSpanIds, normalizedTraceId, MAX_SPANS + 1, options);
+      if (spans.length > MAX_SPANS) {
+        throw new TraceProviderError('Langfuse trace exceeds the maximum span count', {
+          limitExceeded: true,
+        });
+      }
       page = getNextPage(result);
       cursor = page ? undefined : getNextCursor(result, seenCursors);
-    } while ((page || cursor) && spans.length < maxSpans);
+    } while (page || cursor);
 
     if (spans.length === 0) {
       return null;
@@ -510,6 +516,11 @@ export class LangfuseProvider implements TraceProvider {
       }
     }
 
-    return { traceId: normalizedTraceId, spans, services: [...services], fetchedAt: Date.now() };
+    return {
+      traceId: normalizedTraceId,
+      spans: spans.slice(0, maxSpans),
+      services: [...services],
+      fetchedAt: Date.now(),
+    };
   }
 }

@@ -125,6 +125,39 @@ describe('BraintrustProvider', () => {
     expect(body.query).toContain('created >= now() - INTERVAL 1 DAY');
   });
 
+  it.each([undefined, 1])(
+    'detects an oversized trace before applying maxSpans=%s',
+    async (maxSpans) => {
+      const oversized = Array.from({ length: 10_001 }, (_, index) => ({
+        ...rows[0],
+        span_id: `span-${index}`,
+      }));
+      mockedFetch.mockImplementation(async (_, options) => {
+        const query = JSON.parse(options?.body as string).query as string;
+        const limit = Number(query.match(/LIMIT (\d+)/)?.[1]);
+        return response({ rows: oversized.slice(0, limit) });
+      });
+
+      await expect(
+        new BraintrustProvider(config).fetchTrace(TRACE_ID, { maxSpans }),
+      ).rejects.toMatchObject({
+        limitExceeded: true,
+      });
+    },
+  );
+
+  it('accepts a complete trace at the span limit', async () => {
+    mockedFetch.mockResolvedValue(
+      response({
+        rows: Array.from({ length: 10_000 }, (_, index) => ({
+          ...rows[0],
+          span_id: `span-${index}`,
+        })),
+      }),
+    );
+    expect((await new BraintrustProvider(config).fetchTrace(TRACE_ID))?.spans).toHaveLength(10_000);
+  });
+
   it('links deeply nested spans to their immediate parent', async () => {
     mockedFetch.mockResolvedValue(
       response({
@@ -249,9 +282,10 @@ describe('BraintrustProvider', () => {
     const cancel = vi.spyOn(oversizedResponse.body!, 'cancel');
     mockedFetch.mockResolvedValue(oversizedResponse);
 
-    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-      'maximum response size',
-    );
+    await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
     expect(cancel).toHaveBeenCalledOnce();
   });
 
@@ -271,9 +305,10 @@ describe('BraintrustProvider', () => {
         }),
       );
 
-      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toThrow(
-        'maximum response size',
-      );
+      await expect(new BraintrustProvider(config).fetchTrace(TRACE_ID)).rejects.toMatchObject({
+        message: expect.stringContaining('maximum response size'),
+        limitExceeded: true,
+      });
       expect(cancel).toHaveBeenCalledOnce();
     },
   );

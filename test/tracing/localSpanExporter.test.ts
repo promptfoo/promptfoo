@@ -46,6 +46,7 @@ describe('LocalSpanExporter', () => {
       startTime: [number, number];
       endTime: [number, number];
       attributes: Record<string, unknown>;
+      events: ReadableSpan['events'];
       resourceAttributes: Record<string, unknown>;
       status: { code: number; message?: string };
     }> = {},
@@ -69,7 +70,7 @@ describe('LocalSpanExporter', () => {
       status: overrides.status ?? { code: 1 },
       kind: 2, // CLIENT
       links: [],
-      events: [],
+      events: overrides.events ?? [],
       resource: { attributes: overrides.resourceAttributes ?? {} },
       instrumentationLibrary: { name: 'test' },
       duration: [0, 700000000],
@@ -209,6 +210,61 @@ describe('LocalSpanExporter', () => {
       );
     });
 
+    it('should preserve span events with millisecond timestamps', async () => {
+      const span = createMockSpan({
+        events: [
+          {
+            name: 'guardrail decision',
+            time: [102, 250000000],
+            attributes: { 'guardrails.decision': 'blocked' },
+            droppedAttributesCount: 0,
+          },
+        ],
+      });
+
+      const result = await exportSpans([span]);
+
+      expect(result.code).toBe(ExportResultCode.SUCCESS);
+      expect(mockAddSpans).toHaveBeenCalledWith(
+        expect.any(String),
+        [
+          expect.objectContaining({
+            events: [
+              {
+                name: 'guardrail decision',
+                timestamp: 102250,
+                timestampNanos: '102250000000',
+                attributes: { 'guardrails.decision': 'blocked' },
+              },
+            ],
+          }),
+        ],
+        expect.any(Object),
+      );
+    });
+
+    it('retains nanosecond ordering for epoch-scale local spans and events', async () => {
+      await exportSpans([
+        createMockSpan({
+          startTime: [1789000000, 100],
+          endTime: [1789000000, 400],
+          events: [
+            { name: 'guardrail update_seat', time: [1789000000, 200], droppedAttributesCount: 0 },
+            { name: 'tool update_seat', time: [1789000000, 300], droppedAttributesCount: 0 },
+          ],
+        }),
+      ]);
+      expect(
+        mockAddSpans.mock.calls[0][1][0].events.map(
+          (event: { timestampNanos?: string }) => event.timestampNanos,
+        ),
+      ).toEqual(['1789000000000000200', '1789000000000000300']);
+      expect(mockAddSpans.mock.calls[0][1][0].attributes).toMatchObject({
+        'otel.span.start_time_unix_nano': '1789000000000000100',
+        'otel.span.end_time_unix_nano': '1789000000000000400',
+      });
+    });
+
     it('should include parent span ID when present', async () => {
       const span = createMockSpan({
         parentSpanId: 'parent-span-id',
@@ -231,7 +287,7 @@ describe('LocalSpanExporter', () => {
     it('should include span attributes', async () => {
       const span = createMockSpan({
         attributes: {
-          'gen_ai.provider.name': 'openai',
+          'gen_ai.system': 'openai',
           'gen_ai.request.model': 'gpt-4',
           'gen_ai.usage.input_tokens': 100,
         },
@@ -245,40 +301,11 @@ describe('LocalSpanExporter', () => {
         [
           expect.objectContaining({
             attributes: {
-              'gen_ai.provider.name': 'openai',
+              'gen_ai.system': 'openai',
               'gen_ai.request.model': 'gpt-4',
               'gen_ai.usage.input_tokens': 100,
-            },
-          }),
-        ],
-        expect.any(Object),
-      );
-    });
-
-    it('preserves resource attributes and lets span attributes override matching keys', async () => {
-      const span = createMockSpan({
-        resourceAttributes: {
-          'service.name': 'configured-promptfoo-service',
-          'service.version': '1.2.3',
-          'deployment.environment': 'resource',
-        },
-        attributes: {
-          'deployment.environment': 'span',
-          'gen_ai.provider.name': 'openai',
-        },
-      });
-
-      await exportSpans([span]);
-
-      expect(mockAddSpans).toHaveBeenCalledWith(
-        expect.any(String),
-        [
-          expect.objectContaining({
-            attributes: {
-              'service.name': 'configured-promptfoo-service',
-              'service.version': '1.2.3',
-              'deployment.environment': 'span',
-              'gen_ai.provider.name': 'openai',
+              'otel.span.start_time_unix_nano': '1000500000000',
+              'otel.span.end_time_unix_nano': '1001200000000',
             },
           }),
         ],

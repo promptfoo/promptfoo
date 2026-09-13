@@ -171,6 +171,13 @@ function assertionMayNeedTraceContext(assertion: AssertionOrSet): boolean {
     return true;
   }
 
+  if (
+    assertion.type.startsWith('promptfoo:redteam:agentic:') &&
+    assertion.type !== 'promptfoo:redteam:agentic:memory-poisoning'
+  ) {
+    return true;
+  }
+
   return typeof assertion.value === 'string'
     ? assertion.value.startsWith('file://') || isPackagePath(assertion.value)
     : false;
@@ -471,6 +478,10 @@ async function runAssertionInternal({
     } catch (error) {
       logger.debug(`Failed to fetch trace data for assertion: ${error}`);
     }
+  }
+
+  if (context.trace?.metadata?.promptfooTraceIncomplete) {
+    throw new Error('Cannot grade incomplete trace: collection exceeded the per-trace limit');
   }
 
   // Render assertion values

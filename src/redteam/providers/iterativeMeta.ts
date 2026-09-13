@@ -463,6 +463,7 @@ export async function runMetaAgentRedteam({
 
       if (traceId) {
         traceContext = await fetchTraceContext(traceId, {
+          requireComplete: tracingOptions.includeInGrading,
           abortSignal: options?.abortSignal,
           earliestStartTime: iterationStart,
           includeInternalSpans: tracingOptions.includeInternalSpans,

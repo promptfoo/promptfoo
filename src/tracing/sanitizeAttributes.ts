@@ -64,6 +64,7 @@ function isSensitiveAttributeKey(key: string): boolean {
 export function sanitizeTraceAttributes(
   attributes: Record<string, any> | null | undefined,
   options: AttributeSanitizationOptions = {},
+  depth = 0,
 ): Record<string, any> {
   if (!attributes) {
     return {};
@@ -82,15 +83,18 @@ export function sanitizeTraceAttributes(
     ),
   ];
 
-  const sanitizeValue = (value: any): any => {
+  const sanitizeValue = (value: any, valueDepth = depth): any => {
+    if (valueDepth >= 20) {
+      return '[TRUNCATED]';
+    }
     if (typeof value === 'string') {
       return truncateValues && value.length > 400 ? `${value.slice(0, 400)}…` : value;
     }
     if (Array.isArray(value)) {
-      return value.map(sanitizeValue);
+      return value.map((item) => sanitizeValue(item, valueDepth + 1));
     }
     if (value && typeof value === 'object') {
-      return sanitizeTraceAttributes(value as Record<string, any>, options);
+      return sanitizeTraceAttributes(value as Record<string, any>, options, valueDepth + 1);
     }
     return value;
   };
@@ -109,4 +113,112 @@ export function sanitizeTraceAttributes(
   }
 
   return sanitized;
+}
+
+export interface TraceTextRedactionState {
+  secrets: Set<string>;
+  length: number;
+  incomplete: boolean;
+}
+
+const textRedactionByStore = new WeakMap<object, Map<string, TraceTextRedactionState>>();
+
+export function clearTraceTextRedactionState(store: object): void {
+  textRedactionByStore.delete(store);
+}
+
+export function getTraceTextRedactionState(
+  store: object,
+  traceId: string | undefined,
+  evidence: unknown,
+): TraceTextRedactionState {
+  const states = textRedactionByStore.get(store) ?? new Map<string, TraceTextRedactionState>();
+  textRedactionByStore.set(store, states);
+  const existing = traceId ? states.get(traceId) : undefined;
+  const state = existing ?? {
+    secrets: new Set<string>(),
+    length: 0,
+    incomplete:
+      Array.isArray(evidence) &&
+      evidence.some((span) => span?.attributes?.['promptfoo.redaction.history'] === '[REDACTED]'),
+  };
+  if (traceId) {
+    states.delete(traceId);
+    if (states.size >= 1_024) {
+      states.delete(states.keys().next().value!);
+    }
+    states.set(traceId, state);
+  }
+  return state;
+}
+
+export function getTraceTextRedactor(
+  pairs: { original: unknown; sanitized: unknown }[],
+  replacement = '[REDACTED]',
+  state: TraceTextRedactionState = { secrets: new Set(), length: 0, incomplete: false },
+) {
+  const pending = [...pairs];
+  const secrets = state.secrets;
+  let incomplete = state.incomplete;
+  let visited = 0;
+  while (pending.length && !incomplete) {
+    const { original, sanitized } = pending.pop()!;
+    if (++visited > 10_000 || (sanitized === '[TRUNCATED]' && original !== sanitized)) {
+      incomplete = true;
+      break;
+    }
+    const redacted = sanitized === '[REDACTED]' || sanitized === '<redacted>';
+    // Serialized values can echo decoded fields that do not match the full string.
+    if (
+      redacted &&
+      typeof original === 'string' &&
+      original !== '[REDACTED]' &&
+      /^\s*(?:\[|\{|")/.test(original)
+    ) {
+      incomplete = true;
+      break;
+    }
+    if (!original || typeof original !== 'object') {
+      if (original !== undefined && original !== null && redacted && String(original)) {
+        const secret = String(original);
+        if (!secrets.has(secret)) {
+          state.length += secret.length;
+          if (state.length > 16_384 || secrets.size >= 1_000) {
+            incomplete = true;
+            break;
+          }
+          secrets.add(secret);
+        }
+      }
+      continue;
+    }
+    for (const [key, value] of Object.entries(original)) {
+      pending.push({
+        original: value,
+        sanitized: redacted ? sanitized : (sanitized as Record<string, unknown>)?.[key],
+      });
+    }
+  }
+  state.incomplete = incomplete;
+  if (incomplete) {
+    secrets.clear();
+  }
+  const pattern = secrets.size
+    ? new RegExp(
+        [...secrets]
+          .sort((a, b) => b.length - a.length)
+          .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('|'),
+        'g',
+      )
+    : undefined;
+  return <T extends string | undefined>(value: T): T => {
+    if (typeof value !== 'string') {
+      return value;
+    }
+    if (incomplete) {
+      return replacement as T;
+    }
+    return (pattern ? value.replace(pattern, replacement) : value) as T;
+  };
 }

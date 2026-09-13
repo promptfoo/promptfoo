@@ -161,7 +161,7 @@ export class BraintrustProvider implements TraceProvider {
       `    OR metadata.promptfoo_trace_id = '${normalizedTraceId}'`,
       `    OR metadata."promptfoo.trace_id" = '${normalizedTraceId}'`,
       `    OR root_span_id = '${normalizedTraceId}')`,
-      `LIMIT ${maxSpans}`,
+      `LIMIT ${MAX_SPANS + 1}`,
     ].join('\n');
 
     const timeoutSignal = AbortSignal.timeout(this.config.timeout ?? 10_000);
@@ -194,7 +194,9 @@ export class BraintrustProvider implements TraceProvider {
 
     if (Number(response.headers.get('content-length')) > MAX_TRACE_RESPONSE_BYTES) {
       await releaseResponse(response, 'Braintrust');
-      throw new TraceProviderError('Braintrust trace exceeds the maximum response size');
+      throw new TraceProviderError('Braintrust trace exceeds the maximum response size', {
+        limitExceeded: true,
+      });
     }
     const body = await readLimitedResponse(response, 'Braintrust');
 
@@ -202,6 +204,11 @@ export class BraintrustProvider implements TraceProvider {
     const rows = result.rows ?? result.data;
     if (!Array.isArray(rows)) {
       throw new TraceProviderError('Braintrust returned an invalid query response');
+    }
+    if (rows.length > MAX_SPANS) {
+      throw new TraceProviderError('Braintrust trace exceeds the maximum span count', {
+        limitExceeded: true,
+      });
     }
     if (rows.length === 0) {
       return null;

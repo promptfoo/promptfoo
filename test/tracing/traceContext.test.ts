@@ -4,6 +4,8 @@ const mocks = vi.hoisted(() => ({
   addSpans: vi.fn(),
   createTraceProvider: vi.fn(),
   getSpans: vi.fn(),
+  getTraceMetadata: vi.fn(),
+  markTraceIncomplete: vi.fn(),
   getTraceStore: vi.fn(),
   isExternalTraceProvider: vi.fn(),
   logger: { debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
@@ -20,13 +22,17 @@ vi.mock('../../src/tracing/store', async (importOriginal) => ({
 }));
 
 import { TraceProviderError } from '../../src/tracing/providers/types';
-import { sanitizeTraceAttributes } from '../../src/tracing/sanitizeAttributes';
+import {
+  getTraceTextRedactionState,
+  sanitizeTraceAttributes,
+} from '../../src/tracing/sanitizeAttributes';
 import { isRelevantSpan, matchesSpanFilter } from '../../src/tracing/spanFilter';
+import { TraceLimitError } from '../../src/tracing/store';
 import { extractTraceIdFromTraceparent, fetchTraceContext } from '../../src/tracing/traceContext';
 
-import type { SpanData, TraceSpanQueryOptions } from '../../src/tracing/store';
+import type { AddSpansOptions, SpanData, TraceSpanQueryOptions } from '../../src/tracing/store';
 
-const providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
+let providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
 const storedSpans: SpanData[] = [];
 
 function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
@@ -36,13 +42,142 @@ function mockExternalTrace(spans: SpanData[], traceId = 'trace-1') {
 }
 
 describe('fetchTraceContext', () => {
+  it.each([false, true])(
+    'reads complete grading evidence despite view filters (external: %s)',
+    async (external) => {
+      const spans: SpanData[] = [
+        { spanId: 'previous', name: 'previous iteration', startTime: 1 },
+        {
+          spanId: 'clean',
+          name: 'target.call',
+          startTime: 2,
+          attributes: { 'gen_ai.operation.name': 'chat' },
+        },
+        {
+          spanId: 'unsafe',
+          name: 'tool update_seat',
+          startTime: 3,
+          attributes: {
+            'tool.name': 'update_seat',
+            'agentic.evidence_json': JSON.stringify({ padding: 'x'.repeat(500), finding: true }),
+          },
+        },
+      ];
+      mocks.isExternalTraceProvider.mockReturnValue(external);
+      if (external) {
+        mockExternalTrace(spans);
+      } else {
+        storedSpans.push(...spans);
+      }
+      const result = await fetchTraceContext('trace-1', {
+        ...(external ? { providerConfig } : {}),
+        queryDelay: 0,
+        maxRetries: 0,
+        earliestStartTime: 2,
+        requireComplete: true,
+        includeInternalSpans: false,
+        maxSpans: 1,
+        maxDepth: 1,
+        spanFilter: ['target'],
+      });
+      expect(result?.spans.map((span) => span.spanId)).toEqual(['clean', 'unsafe']);
+      expect(result?.spans[1].attributes['agentic.evidence_json']).toBe(
+        spans[2].attributes!['agentic.evidence_json'],
+      );
+      expect(result?.summary?.spans.map((span) => span.spanId)).toEqual(['clean']);
+      expect(result?.summary?.insights.join(' ')).not.toContain('update_seat');
+      expect(mocks.getSpans).toHaveBeenCalledWith(
+        'trace-1',
+        expect.objectContaining({
+          earliestStartTime: 2,
+          includeInternalSpans: true,
+          maxSpans: undefined,
+          maxDepth: undefined,
+          spanFilter: undefined,
+          sanitizeAttributes: false,
+        }),
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'rejects incomplete local traces even with no visible spans (%s)',
+    async (hasSpans) => {
+      mocks.isExternalTraceProvider.mockReturnValue(false);
+      mocks.getTraceMetadata.mockResolvedValue({ promptfooTraceIncomplete: 'limit exceeded' });
+      if (hasSpans) {
+        storedSpans.push({ spanId: 'clean-prefix', name: 'target.call', startTime: 1 });
+      }
+      await expect(fetchTraceContext('trace-1', { maxRetries: 0 })).rejects.toThrow(
+        TraceLimitError,
+      );
+    },
+  );
+
+  it('rejects previously incomplete external traces before fetching a clean snapshot', async () => {
+    const fetchTrace = mockExternalTrace([
+      { spanId: 'clean-prefix', name: 'target.call', startTime: 1 },
+    ]);
+    mocks.getTraceMetadata.mockResolvedValue({ promptfooTraceIncomplete: 'limit exceeded' });
+    await expect(
+      fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 0 }),
+    ).rejects.toThrow(TraceLimitError);
+    expect(fetchTrace).not.toHaveBeenCalled();
+  });
+
+  it('persists external response limits and rejects grading without retrying', async () => {
+    const fetchTrace = vi
+      .fn()
+      .mockRejectedValue(new TraceProviderError('Response too large', { limitExceeded: true }));
+    mocks.createTraceProvider.mockReturnValue({ id: 'tempo', fetchTrace });
+    await expect(
+      fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 2 }),
+    ).rejects.toThrow(TraceLimitError);
+    expect(fetchTrace).toHaveBeenCalledOnce();
+    expect(mocks.markTraceIncomplete).toHaveBeenCalledWith('trace-1');
+    expect(mocks.addSpans).not.toHaveBeenCalled();
+  });
+
+  it('propagates external snapshot limits without retrying or falling back to absent evidence', async () => {
+    const fetchTrace = mockExternalTrace([
+      { spanId: 'clean-prefix', name: 'target.call', startTime: 1 },
+    ]);
+    mocks.addSpans.mockRejectedValue(new TraceLimitError());
+    await expect(
+      fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 2 }),
+    ).rejects.toThrow(TraceLimitError);
+    expect(fetchTrace).toHaveBeenCalledOnce();
+  });
+
+  it('distinguishes raw redaction text from persisted redaction history', () => {
+    expect(
+      getTraceTextRedactionState({}, 'raw', [{ attributes: { note: '[REDACTED]' } }]).incomplete,
+    ).toBe(false);
+    expect(
+      getTraceTextRedactionState({}, 'stored', [
+        { attributes: { 'promptfoo.redaction.history': '[REDACTED]' } },
+      ]).incomplete,
+    ).toBe(true);
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
     storedSpans.length = 0;
-    mocks.addSpans.mockImplementation(async (_traceId: string, spans: SpanData[]) => {
-      storedSpans.push(...spans);
-      return { stored: true };
-    });
+    providerConfig = { id: 'tempo', endpoint: 'http://tempo:3200' };
+    mocks.addSpans.mockImplementation(
+      async (_traceId: string, spans: SpanData[], options?: AddSpansOptions) => {
+        const combined = [...storedSpans, ...spans];
+        const sanitized = options?.redactSpans ? options.redactSpans(combined) : combined;
+        const byId = new Map<string, SpanData>();
+        for (const span of sanitized) {
+          if (options?.updateExisting || !byId.has(span.spanId)) {
+            byId.set(span.spanId, span);
+          }
+        }
+        storedSpans.splice(0, storedSpans.length, ...byId.values());
+        return { stored: true };
+      },
+    );
     mocks.getSpans.mockImplementation(async (_traceId: string, options: TraceSpanQueryOptions) => {
       let spans = storedSpans.filter((span) => {
         if (options.earliestStartTime && span.startTime < options.earliestStartTime) {
@@ -67,7 +202,12 @@ describe('fetchTraceContext', () => {
             : sanitizeTraceAttributes(span.attributes),
       }));
     });
-    mocks.getTraceStore.mockReturnValue({ addSpans: mocks.addSpans, getSpans: mocks.getSpans });
+    mocks.getTraceStore.mockReturnValue({
+      addSpans: mocks.addSpans,
+      getSpans: mocks.getSpans,
+      getTraceMetadata: mocks.getTraceMetadata,
+      markTraceIncomplete: mocks.markTraceIncomplete,
+    });
     mocks.isExternalTraceProvider.mockReturnValue(true);
   });
 
@@ -98,6 +238,7 @@ describe('fetchTraceContext', () => {
     expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
     expect(mocks.addSpans).toHaveBeenCalledWith('trace-1', [internalSpan, targetSpan], {
       warnIfMissingTrace: false,
+      updateExisting: true,
     });
     expect(mocks.getSpans).toHaveBeenCalledWith('trace-1', {
       includeInternalSpans: false,
@@ -150,6 +291,29 @@ describe('fetchTraceContext', () => {
       'chat gpt-4.1-mini',
       'execute_tool search',
     ]);
+  });
+
+  it('stores the complete external snapshot before applying an unfiltered span limit', async () => {
+    const spans = [
+      { spanId: 'first', name: 'target.call', startTime: 1 },
+      {
+        spanId: 'last',
+        name: 'db.query',
+        startTime: 2,
+        attributes: { 'db.statement': 'unsafe query' },
+      },
+    ];
+    const fetchTrace = mockExternalTrace(spans);
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      includeInternalSpans: true,
+      maxSpans: 1,
+    });
+    expect(fetchTrace).toHaveBeenCalledWith('trace-1', undefined);
+    expect(storedSpans).toEqual(spans);
+    expect(result?.spans).toHaveLength(1);
   });
 
   it('applies wildcard filters to externally fetched spans', async () => {
@@ -220,7 +384,6 @@ describe('fetchTraceContext', () => {
     expect(fetchTrace).toHaveBeenCalledWith('trace-1', {
       abortSignal: controller.signal,
       earliestStartTime: 150,
-      maxSpans: 50,
     });
   });
 
@@ -283,9 +446,15 @@ describe('fetchTraceContext', () => {
     });
   });
 
-  it('discards cyclic parent relationships while preserving valid spans', async () => {
+  it('severs cyclic parent relationships without dropping execution evidence', async () => {
     mockExternalTrace([
-      { spanId: 'cycle-a', parentSpanId: 'cycle-b', name: 'cycle.a', startTime: 1 },
+      {
+        spanId: 'cycle-a',
+        parentSpanId: 'cycle-b',
+        name: 'cycle.a',
+        startTime: 1,
+        attributes: { 'tool.name': 'update_seat' },
+      },
       { spanId: 'cycle-b', parentSpanId: 'cycle-a', name: 'cycle.b', startTime: 2 },
       { spanId: 'valid', name: 'target.call', startTime: 3 },
     ]);
@@ -296,8 +465,55 @@ describe('fetchTraceContext', () => {
       maxRetries: 0,
     });
 
-    expect(storedSpans.map((span) => span.spanId)).toEqual(['valid']);
-    expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
+    expect(storedSpans.map((span) => span.spanId)).toEqual(['cycle-a', 'cycle-b', 'valid']);
+    expect(storedSpans.slice(0, 2).every((span) => span.parentSpanId === undefined)).toBe(true);
+    expect(result?.spans.map((span) => span.name)).toEqual(['cycle.a', 'cycle.b', 'target.call']);
+    expect(result?.spans[0].attributes?.['tool.name']).toBe('update_seat');
+  });
+
+  it('replaces overlapping external trace secrets without rewriting redaction markers', async () => {
+    mockExternalTrace([
+      {
+        spanId: 'target',
+        name: 'token EE E',
+        startTime: 1,
+        attributes: { authorization: ['EE', 'E'] },
+        events: [{ name: 'token EE E', timestamp: 2, attributes: {} }],
+      },
+    ]);
+    await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      redactAttributes: ['authorization'],
+    });
+    expect(storedSpans[0].name).toBe('token [REDACTED] [REDACTED]');
+    expect(storedSpans[0].events?.[0].name).toBe('token [REDACTED] [REDACTED]');
+  });
+
+  it('redacts external event text when attribute sanitization stops early', async () => {
+    const secret = 'PRIVATE_DEEP_EXTERNAL_EVENT';
+    let nested: Record<string, unknown> = { authorization: secret };
+    for (let depth = 0; depth < 25; depth++) {
+      nested = { nested };
+    }
+    mockExternalTrace([
+      {
+        spanId: 'target',
+        name: `request ${secret}`,
+        statusMessage: `failed ${secret}`,
+        startTime: 1,
+        events: [{ name: `event ${secret}`, timestamp: 2, attributes: nested }],
+      },
+    ]);
+    const result = await fetchTraceContext('trace-1', {
+      providerConfig,
+      queryDelay: 0,
+      maxRetries: 0,
+      redactAttributes: ['authorization'],
+    });
+    expect(JSON.stringify(storedSpans)).not.toContain(secret);
+    expect(JSON.stringify(result)).not.toContain(secret);
   });
 
   it('redacts configured nested and numeric attribute values before persistence', async () => {
@@ -311,6 +527,13 @@ describe('fetchTraceContext', () => {
           nested: { authorization: 'secret-token' },
           'account.pin': 123456,
         },
+        events: [
+          {
+            name: 'event event-only-secret',
+            timestamp: 2,
+            attributes: { customer: { ssn: 'event-only-secret' } },
+          },
+        ],
       },
     ]);
 
@@ -318,7 +541,7 @@ describe('fetchTraceContext', () => {
       providerConfig,
       queryDelay: 0,
       maxRetries: 0,
-      redactAttributes: ['authorization', 'pin'],
+      redactAttributes: ['authorization', 'pin', 'ssn'],
     });
 
     expect(storedSpans).toEqual([
@@ -329,11 +552,175 @@ describe('fetchTraceContext', () => {
           nested: { authorization: '[REDACTED]' },
           'account.pin': '[REDACTED]',
         },
+        events: [
+          {
+            name: 'event [REDACTED]',
+            timestamp: 2,
+            attributes: { customer: { ssn: '[REDACTED]' } },
+          },
+        ],
       }),
     ]);
   });
 
-  it('stores large traces in database-safe batches', async () => {
+  it.each([false, true])(
+    'redacts sibling event echoes before external storage (JSON: %s)',
+    async (serialized) => {
+      const secret = 'PRIVATE_EXTERNAL_SIBLING_EVENT';
+      mockExternalTrace([
+        {
+          spanId: 'source',
+          name: 'source',
+          startTime: 1,
+          attributes: {},
+          events: [
+            {
+              name: 'source event',
+              timestamp: 2,
+              attributes: {
+                authorization: serialized ? JSON.stringify({ value: secret }) : secret,
+              },
+            },
+          ],
+        },
+        {
+          spanId: 'echo',
+          name: `span ${secret}`,
+          startTime: 3,
+          attributes: {},
+          events: [{ name: `event ${secret}`, timestamp: 4, attributes: {} }],
+        },
+      ]);
+      const result = await fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 0,
+        redactAttributes: ['authorization'],
+      });
+      expect(result).not.toBeNull();
+      expect(JSON.stringify(storedSpans)).not.toContain(secret);
+    },
+  );
+
+  it.each([
+    ['source-first', false],
+    ['source-first', true],
+    ['echo-first', false],
+    ['echo-first', true],
+  ] as const)(
+    'redacts partial external snapshots in %s order (JSON: %s)',
+    async (order, serialized) => {
+      const secret = 'PRIVATE_EXTERNAL_PREVIOUS_SNAPSHOT';
+      const source = {
+        spanId: 'source',
+        name: 'source',
+        startTime: 1,
+        attributes: { authorization: serialized ? JSON.stringify({ token: secret }) : secret },
+      };
+      const echo = {
+        spanId: 'echo',
+        name: `request ${secret}`,
+        statusMessage: `status ${secret}`,
+        startTime: 2,
+        events: [{ name: `event ${secret}`, timestamp: 3, attributes: {} }],
+      };
+      const snapshots = order === 'source-first' ? [[source], [echo]] : [[echo], [source]];
+      for (const spans of snapshots) {
+        mockExternalTrace(spans);
+        await fetchTraceContext('trace-1', {
+          providerConfig,
+          queryDelay: 0,
+          maxRetries: 0,
+          redactAttributes: ['authorization'],
+        });
+      }
+      expect(storedSpans).toHaveLength(2);
+      expect(JSON.stringify(storedSpans)).not.toContain(secret);
+      expect(storedSpans.find((span) => span.spanId === 'echo')?.events?.[0].name).toContain(
+        '[REDACTED]',
+      );
+    },
+  );
+
+  it('sanitizes stored event names when a repeated span reveals a secret', async () => {
+    const secret = 'PRIVATE_EXTERNAL_REPEATED_SPAN';
+    const echo = {
+      spanId: 'same',
+      name: `span ${secret}`,
+      startTime: 1,
+      events: [{ name: `event ${secret}`, timestamp: 2, attributes: {} }],
+    };
+    for (const spans of [[echo], [{ ...echo, attributes: { authorization: secret } }]]) {
+      mockExternalTrace(spans);
+      await fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 0,
+        redactAttributes: ['authorization'],
+      });
+    }
+    expect(storedSpans).toHaveLength(1);
+    expect(JSON.stringify(storedSpans)).not.toContain(secret);
+  });
+
+  it.each(['attribute', 'span-name'])(
+    'suppresses new text when prior external %s redaction state is unavailable',
+    async (field) => {
+      storedSpans.push({
+        spanId: 'old',
+        name: field === 'span-name' ? '[REDACTED]' : 'source',
+        startTime: 1,
+        attributes: {
+          ...(field === 'attribute' ? { authorization: '[REDACTED]' } : {}),
+          'promptfoo.redaction.history': '[REDACTED]',
+        },
+      });
+      mockExternalTrace([
+        {
+          spanId: 'new',
+          name: 'PRIVATE_EXTERNAL_UNKNOWN',
+          startTime: 2,
+          events: [{ name: 'PRIVATE_EXTERNAL_UNKNOWN', timestamp: 3, attributes: {} }],
+        },
+      ]);
+      await fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 0,
+        redactAttributes: ['authorization'],
+      });
+      expect(JSON.stringify(storedSpans)).not.toContain('PRIVATE_EXTERNAL_UNKNOWN');
+    },
+  );
+
+  it('redacts the complete external snapshot before storage', async () => {
+    const secret = 'PRIVATE_EXTERNAL_LATER_BATCH';
+    mockExternalTrace([
+      ...Array.from({ length: 500 }, (_, index) => ({
+        spanId: String(index),
+        name: `span ${secret}`,
+        startTime: index,
+      })),
+      { spanId: 'source', name: 'source', startTime: 501, attributes: { authorization: secret } },
+    ]);
+    const addSpans = mocks.addSpans.getMockImplementation()!;
+    mocks.addSpans.mockImplementation(async (...args) => {
+      const result = await addSpans(...args);
+      expect(JSON.stringify(storedSpans)).not.toContain(secret);
+      return result;
+    });
+    expect(
+      await fetchTraceContext('trace-1', {
+        providerConfig,
+        queryDelay: 0,
+        maxRetries: 0,
+        redactAttributes: ['authorization'],
+      }),
+    ).not.toBeNull();
+    expect(storedSpans).toHaveLength(501);
+  });
+
+  it('submits the complete external snapshot atomically', async () => {
     const spans = Array.from({ length: 501 }, (_, index) => ({
       spanId: String(index),
       name: 'target.call',
@@ -343,9 +730,8 @@ describe('fetchTraceContext', () => {
 
     await fetchTraceContext('trace-1', { providerConfig, queryDelay: 0, maxRetries: 0 });
 
-    expect(mocks.addSpans).toHaveBeenCalledTimes(2);
-    expect(mocks.addSpans.mock.calls[0][1]).toHaveLength(500);
-    expect(mocks.addSpans.mock.calls[1][1]).toHaveLength(1);
+    expect(mocks.addSpans).toHaveBeenCalledOnce();
+    expect(mocks.addSpans.mock.calls[0][1]).toHaveLength(501);
   });
 
   it('waits before the initial request and retries missing traces', async () => {

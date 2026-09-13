@@ -49,6 +49,16 @@ const traceResponse = {
                 },
               ],
               status: { code: 'STATUS_CODE_OK' },
+              events: [
+                {
+                  name: 'tool event',
+                  timeUnixNano: '1704067200500000000',
+                  attributes: [
+                    null as any,
+                    { key: 'command', value: { stringValue: 'echo fixture' } },
+                  ],
+                },
+              ],
             },
             {
               traceId: TRACE_ID,
@@ -69,6 +79,41 @@ describe('TempoProvider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockedFetch.mockImplementation(async () => response(traceResponse));
+  });
+
+  it('preserves exact span nanoseconds for guardrail ordering', async () => {
+    const data = structuredClone(traceResponse);
+    const span = data.batches[0].scopeSpans[0].spans[0];
+    span.startTimeUnixNano = '1700000000000000000';
+    span.endTimeUnixNano = '1700000000000000100';
+    mockedFetch.mockResolvedValue(response(data));
+    const result = await new TempoProvider({
+      id: 'tempo',
+      endpoint: 'http://tempo:3200',
+    }).fetchTrace(TRACE_ID);
+    expect(result?.spans[0].attributes).toMatchObject({
+      'otel.span.start_time_unix_nano': span.startTimeUnixNano,
+      'otel.span.end_time_unix_nano': span.endTimeUnixNano,
+    });
+  });
+
+  it('preserves sub-millisecond event order and drops events without a timestamp', async () => {
+    const data = structuredClone(traceResponse);
+    data.batches[0].scopeSpans[0].spans[0].events = [
+      { name: 'tool update_seat', timeUnixNano: '1704067200000000200', attributes: [] },
+      { name: 'guardrail update_seat', timeUnixNano: '1704067200000000300', attributes: [] },
+      { name: 'undated guardrail', attributes: [] } as any,
+    ];
+    mockedFetch.mockResolvedValue(response(data));
+    const result = await new TempoProvider({
+      id: 'tempo',
+      endpoint: 'http://tempo:3200',
+    }).fetchTrace(TRACE_ID);
+    expect(result?.spans[0].events).toHaveLength(2);
+    expect(result!.spans[0].events!.map((event) => event.timestampNanos)).toEqual([
+      '1704067200000000200',
+      '1704067200000000300',
+    ]);
   });
 
   it.each([
@@ -104,6 +149,14 @@ describe('TempoProvider', () => {
         'gen_ai.usage.total_tokens': 42,
         nested: { enabled: true },
       },
+      events: [
+        {
+          name: 'tool event',
+          timestamp: 1704067200500,
+          timestampNanos: '1704067200500000000',
+          attributes: { command: 'echo fixture' },
+        },
+      ],
     });
     expect(result?.spans[1]).toMatchObject({
       spanId: '1123456789abcdef',
@@ -120,6 +173,32 @@ describe('TempoProvider', () => {
       }),
     );
   });
+
+  it.each([{ kvlistValue: { values: [null] } }, { arrayValue: { values: [null] } }])(
+    'drops a malformed event while keeping its span and valid events: %j',
+    async (value) => {
+      const data = structuredClone(traceResponse);
+      data.batches[0].scopeSpans[0].spans[0].events!.unshift({
+        name: 'broken event',
+        timeUnixNano: '1704067200500000000',
+        attributes: [{ key: 'broken', value }],
+      });
+      mockedFetch.mockResolvedValueOnce(response(data));
+      const result = await new TempoProvider({
+        id: 'tempo',
+        endpoint: 'http://tempo:3200',
+      }).fetchTrace(TRACE_ID);
+      expect(result?.spans.map((span) => span.name)).toEqual(['target.call', 'internal.setup']);
+      expect(result?.spans[0].events).toEqual([
+        {
+          name: 'tool event',
+          timestamp: 1704067200500,
+          timestampNanos: '1704067200500000000',
+          attributes: { command: 'echo fixture' },
+        },
+      ]);
+    },
+  );
 
   it('accepts canonical base64 span identifiers', async () => {
     const encodedResponse = structuredClone(traceResponse);
@@ -253,6 +332,21 @@ describe('TempoProvider', () => {
     });
   });
 
+  it('preserves the full snapshot so storage can reject an oversized trace atomically', async () => {
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const spans = Array.from({ length: 10_001 }, (_, index) => ({
+      traceId: TRACE_ID,
+      spanId: (index + 1).toString(16).padStart(16, '0'),
+      name: 'tool execution',
+      startTimeUnixNano: '1000000',
+    }));
+    mockedFetch.mockResolvedValueOnce(response({ batches: [{ scopeSpans: [{ spans }] }] }));
+
+    const trace = await provider.fetchTrace(TRACE_ID);
+    expect(trace?.spans).toHaveLength(10_001);
+    expect(trace?.spans.at(-1)?.spanId).toBe(spans.at(-1)?.spanId);
+  });
+
   it('rejects invalid or oversized trace responses', async () => {
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
     mockedFetch.mockResolvedValueOnce(response({ unexpected: [] }));
@@ -261,7 +355,10 @@ describe('TempoProvider', () => {
     mockedFetch.mockResolvedValueOnce(
       new Response('{}', { headers: { 'content-length': '10485761' } }),
     );
-    await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('maximum response size');
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
   });
 
   it('cancels oversized streamed responses before buffering their contents', async () => {
@@ -275,7 +372,10 @@ describe('TempoProvider', () => {
     mockedFetch.mockResolvedValueOnce(new Response(body, { headers: { 'content-length': '1' } }));
     const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
 
-    await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('maximum response size');
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      message: expect.stringContaining('maximum response size'),
+      limitExceeded: true,
+    });
     expect(cancel).toHaveBeenCalledOnce();
   });
 

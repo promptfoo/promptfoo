@@ -17,6 +17,7 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
+import { AGENTIC_RUNTIME_PLUGINS } from '../constants/agentic';
 import { recordGenerationTokenUsage } from '../generationTokenUsage';
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
@@ -43,6 +44,7 @@ import {
 } from '../shared/promptLength';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
+import { AgenticRuntimePlugin } from './agentic';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
 import { ContractPlugin } from './contracts';
@@ -373,15 +375,16 @@ async function fetchRemoteTestCases(
   // Strip graderExamples before sending - they're not used during generation,
   // only during grading. The CLI re-attaches the full config to test case metadata after.
   const { graderExamples, ...configForRemote } = config ?? {};
+  const { targetManifest, ...remoteConfig } = configForRemote as Record<string, unknown>;
   const maxCharsModifier = getMaxCharsPerMessageModifierValue(config?.maxCharsPerMessage);
   if (maxCharsModifier) {
-    configForRemote.modifiers = {
-      ...((configForRemote.modifiers as Record<string, string> | undefined) ?? {}),
+    remoteConfig.modifiers = {
+      ...((remoteConfig.modifiers as Record<string, string> | undefined) ?? {}),
       [MAX_CHARS_PER_MESSAGE_MODIFIER_KEY]: maxCharsModifier,
     };
   }
   const body = JSON.stringify({
-    config: configForRemote,
+    config: remoteConfig,
     injectVar,
     // Send inputs at top level for server compatibility (server expects it there)
     inputs: config?.inputs,
@@ -391,6 +394,7 @@ async function fetchRemoteTestCases(
     ...remoteGenerationContextPayload(redteamGenerationContext),
     version: VERSION,
     email: getUserEmail(),
+    ...(targetManifest && typeof targetManifest === 'object' ? { targetManifest } : {}),
   });
 
   interface PluginGenerationResponse extends RemoteMaterializationResponse {
@@ -740,6 +744,11 @@ remotePlugins.push(
 
 export const Plugins: PluginFactory[] = [
   ...pluginFactories,
+  ...AGENTIC_RUNTIME_PLUGINS.map((key) => ({
+    key,
+    action: ({ provider, purpose, injectVar, n, config }: PluginActionParams) =>
+      new AgenticRuntimePlugin(provider, purpose, injectVar, config ?? {}, key).generateTests(n),
+  })),
   ...piiPlugins,
   ...biasPlugins,
   ...remotePlugins,

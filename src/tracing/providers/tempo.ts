@@ -35,6 +35,11 @@ interface TempoSpan {
   startTimeUnixNano: string;
   endTimeUnixNano?: string;
   attributes?: Array<{ key: string; value: TempoAttributeValue }>;
+  events?: Array<{
+    name: string;
+    timeUnixNano?: string;
+    attributes?: Array<{ key: string; value: TempoAttributeValue }>;
+  }>;
   status?: { code?: number | string; message?: string };
 }
 
@@ -48,18 +53,23 @@ interface TempoTraceResponse {
   }>;
 }
 
-const MAX_SPANS = 10_000;
 const SPAN_KIND_NAMES = ['unspecified', 'internal', 'server', 'client', 'producer', 'consumer'];
 const TRACE_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const BASE64_TRACE_ID_PATTERN = /^[A-Za-z0-9+/]{22}(?:==)?$/;
 const SPAN_ID_PATTERN = /^[0-9a-f]{16}$/i;
 const BASE64_SPAN_ID_PATTERN = /^[A-Za-z0-9+/]{11}=?$/;
 function nanoToMs(value: string): number {
-  const milliseconds = BigInt(value) / 1_000_000n;
-  if (milliseconds < 0n || milliseconds > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error('Span timestamp is outside the supported range');
+  if (
+    typeof value !== 'string' ||
+    !/^\d{1,20}$/.test(value) ||
+    BigInt(value) > 0xffffffffffffffffn
+  ) {
+    throw new Error('Span timestamp must be an unsigned 64-bit nanosecond value');
   }
-  return Number.parseInt(milliseconds.toString(), 10);
+  const nanos = BigInt(value);
+  const milliseconds = Number.parseInt((nanos / 1_000_000n).toString(), 10);
+  const remainder = Number.parseInt((nanos % 1_000_000n).toString(), 10);
+  return milliseconds + remainder / 1_000_000;
 }
 
 function extractAttributeValue(value: TempoAttributeValue): unknown {
@@ -215,6 +225,8 @@ function transformSpan(
     attributes: {
       ...resourceAttributes,
       ...attributesToRecord(span.attributes),
+      'otel.span.start_time_unix_nano': span.startTimeUnixNano,
+      'otel.span.end_time_unix_nano': endTimeUnixNano,
       ...(scopeName && { 'otel.scope.name': scopeName }),
       ...(typeof span.kind === 'number' && {
         'otel.span.kind': SPAN_KIND_NAMES[span.kind] ?? 'unspecified',
@@ -226,6 +238,37 @@ function transformSpan(
     },
     statusCode: normalizeStatusCode(span.status?.code),
     statusMessage: span.status?.message,
+    events: Array.isArray(span.events)
+      ? span.events.flatMap((event) => {
+          if (
+            !event ||
+            typeof event.name !== 'string' ||
+            !event.name.trim() ||
+            !event.timeUnixNano ||
+            /^0+$/.test(event.timeUnixNano)
+          ) {
+            return [];
+          }
+          try {
+            return [
+              {
+                name: event.name,
+                timestamp: nanoToMs(event.timeUnixNano),
+                timestampNanos: event.timeUnixNano,
+                attributes: attributesToRecord(
+                  event.attributes?.filter(
+                    (attribute) =>
+                      attribute && typeof attribute.key === 'string' && attribute.value,
+                  ),
+                ),
+              },
+            ];
+          } catch {
+            // A malformed event must not discard the span and its other verifier evidence.
+            return [];
+          }
+        })
+      : [],
   };
 }
 
@@ -291,10 +334,6 @@ export class TempoProvider implements TraceProvider {
           continue;
         }
         for (const span of scopeSpan.spans) {
-          if (spans.length >= MAX_SPANS) {
-            return spans;
-          }
-
           try {
             const normalizedSpan = transformSpan(
               span,
@@ -352,7 +391,9 @@ export class TempoProvider implements TraceProvider {
     const contentLength = Number(response.headers.get('content-length'));
     if (contentLength > MAX_TRACE_RESPONSE_BYTES) {
       await releaseResponse(response, 'Tempo');
-      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
+      throw new TraceProviderError('Tempo trace exceeds the maximum response size', {
+        limitExceeded: true,
+      });
     }
     const body = await readLimitedResponse(response, 'Tempo');
     const data = JSON.parse(body) as TempoTraceResponse;

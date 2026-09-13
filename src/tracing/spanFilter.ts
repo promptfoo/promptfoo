@@ -8,6 +8,7 @@ import {
 
 interface SpanRelevanceInput {
   attributes?: Record<string, unknown>;
+  name?: string;
   statusCode?: number;
 }
 
@@ -17,8 +18,20 @@ export function isRelevantSpan(span: SpanRelevanceInput): boolean {
     return false;
   }
 
+  const spanType = getFirstStringAttribute(span.attributes, [
+    'openai.agents.span_type',
+  ])?.toLowerCase();
+  const approvalRequired = span.attributes?.['approval.required'];
+
   if (
     span.statusCode === 2 ||
+    /^tool\s+\S/i.test(span.name?.trim() ?? '') ||
+    /(?:approval|guardrail)/i.test(span.name ?? '') ||
+    approvalRequired === true ||
+    (typeof approvalRequired === 'number' && approvalRequired !== 0) ||
+    (typeof approvalRequired === 'string' && /^(true|1|yes)$/i.test(approvalRequired.trim())) ||
+    spanType === 'guardrail' ||
+    spanType === 'approval' ||
     getToolNameFromAttributes(span.attributes) ||
     getFirstStringAttribute(span.attributes, COMMAND_ATTRIBUTE_KEYS) ||
     getFirstStringAttribute(span.attributes, SEARCH_ATTRIBUTE_KEYS)
@@ -34,6 +47,8 @@ export function isRelevantSpan(span: SpanRelevanceInput): boolean {
       normalizedAttribute.startsWith('llm.') ||
       normalizedAttribute.startsWith('guardrail.') ||
       normalizedAttribute.startsWith('guardrails.') ||
+      normalizedAttribute.startsWith('promptfoo.agentic.') ||
+      normalizedAttribute.startsWith('promptfoo.agent_sdk.') ||
       normalizedAttribute === 'ai.model.id'
     );
   });

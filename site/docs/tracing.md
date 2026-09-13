@@ -255,6 +255,39 @@ tests:
 
 Use trajectory assertions when your spans identify tools, commands, searches, reasoning steps, or messages. Promptfoo also normalizes common command-like tool spans, including OpenAI Agents SDK `exec_command` calls with `cmd` arguments and `shell` calls with `commands` arrays, into command trajectory steps. For traced tool calls, Promptfoo recognizes both generic attributes such as `tool.name` and `tool.arguments` and framework-specific ones such as Vercel AI SDK's `ai.toolCall.name`, `ai.toolCall.args`, `ai.toolCall.arguments`, and `ai.toolCall.input`. If you only need raw span counts, durations, or error detection, use [`trace-span-count`](/docs/configuration/expected-outputs/deterministic/#trace-span-count), [`trace-span-duration`](/docs/configuration/expected-outputs/deterministic/#trace-span-duration), or [`trace-error-spans`](/docs/configuration/expected-outputs/deterministic/#trace-error-spans).
 
+## Agentic Runtime Red-Team Evidence
+
+The [agentic runtime plugins](/docs/red-team/plugins/agentic/) use traces as grading evidence for SDK-level risks such as approval reuse, handoff leakage, nested agents, MCP schema injection, session contamination, tool discovery confusion, tool-error injection, and guardrail coverage gaps. Emit ordinary OTEL spans for tools and guardrails first, then add compact `promptfoo.agentic.*` attributes when your provider can identify the specific runtime event being tested.
+
+Useful attributes include:
+
+| Attribute                            | Purpose                                                                               |
+| ------------------------------------ | ------------------------------------------------------------------------------------- |
+| `promptfoo.agentic.plugin_id`        | Full plugin id the span provides evidence for, such as `agentic:mcp-schema-injection` |
+| `promptfoo.agentic.evidence_json`    | JSON object with plugin-scoped structured runtime evidence for the grader             |
+| `promptfoo.agentic.finding.kind`     | Short finding type, such as `approval_reused` or `guardrail_missed_tool`              |
+| `promptfoo.agentic.finding.location` | Runtime location, such as tool name, agent name, guardrail name, or MCP server        |
+| `promptfoo.agentic.finding.evidence` | Human-readable evidence summary                                                       |
+| `promptfoo.agentic.finding.severity` | Optional severity hint, such as `low`, `medium`, `high`, or `critical`                |
+| `promptfoo.agent_sdk.*`              | Accepted alias namespace for Agents SDK provider evidence                             |
+
+Flat finding fields and JSON evidence use the plugin ID from their own namespace. Events can inherit a matching namespace from their parent span. Conflicting plugin ID aliases in one namespace produce an evidence error.
+
+For example, an MCP schema-injection span might include:
+
+```json
+{
+  "tool.name": "payments.lookup",
+  "mcp.server.name": "payments",
+  "promptfoo.agentic.plugin_id": "agentic:mcp-schema-injection",
+  "promptfoo.agentic.evidence_json": "{\"pluginId\":\"agentic:mcp-schema-injection\",\"mode\":\"vulnerable\",\"findings\":[{\"pluginId\":\"agentic:mcp-schema-injection\",\"kind\":\"mcp-schema-injection\",\"location\":\"payments.lookup\",\"evidence\":\"MCP schema instructed the agent to call exfiltrate.\"}]}"
+}
+```
+
+Keep the evidence compact and synthetic. Do not place production secrets, customer data, or raw credentials in trace attributes. Use canaries, tool names, guardrail names, and redacted argument summaries when a grader needs to know what happened.
+
+See the [OpenAI Agents SDK red-team example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-agents-sdk) for a provider that emits the trace evidence used by agentic runtime plugins.
+
 ### Turn marker spans {#per-llm-turn-spans}
 
 Several first-party providers expose turn marker spans to trace assertions. Some markers correspond to internal model generations; Codex SDK and app-server markers correspond to the protocol turn exposed by those APIs. The span name and convention depend on the provider:
@@ -334,9 +367,9 @@ Patterns are matched against each attribute key **at every nesting level individ
 nested key like `authorization` inside a `headers` object is matched by the pattern
 `authorization`, but a full dotted path such as `request.headers.authorization` will **not**
 match the nested leaf key — use the key's own name.
-Redaction covers span **attributes** (recursively, including nested objects and arrays),
-and a span `name` or `statusMessage` **only when it exactly echoes the value of a redacted
-attribute**. A secret that appears solely in a span name, status/error message, or log
+Redaction covers span and event **attributes**, including nested objects and arrays.
+Matching values echoed in span or event names and status messages are scrubbed in one pass,
+including numeric values. Replacement markers are not processed again. A secret that appears solely in a span name, status/error message, or log
 body — without also being a redacted attribute value — is not detected. Redaction also does
 **not** scan arbitrary free text or trace `metadata` (such as test `vars`), so avoid placing
 secrets in test variables when traces are retained.
@@ -364,6 +397,14 @@ single OTLP receiver**: it starts on first use and stops when the last evaluatio
 receiver's `host`, `port`, and `acceptFormats` are fixed at first startup, so a later overlapping
 evaluation can't change them; per-evaluation `redactAttributes` and `commandToolNames`, however,
 are tracked per trace so each evaluation's traces use its own policy.
+
+If redaction source inspection exceeds 10,000 nodes or encounters a redacted JSON value, the receiver replaces span names, status messages, and event names throughout the trace, including later uploads handled by that receiver, with redaction markers. This prevents unvisited sensitive values from escaping through those fields. ERROR/FATAL logs are stored with an error span status. Identical log retries use the same stored span ID even when attribute keys arrive in a different order; array order and distinct observation timestamps identify separate records. OTLP, Tempo, and local SDK spans retain exact span start/end nanoseconds in `otel.span.start_time_unix_nano` and `otel.span.end_time_unix_nano` for ordering assertions.
+
+The HTTP receiver and external trace providers share redaction history for each trace and redact stored text again when later uploads reveal a sensitive value. Promptfoo keeps source history for the 1,024 most recently used traces, with at most 1,000 values or 16,384 characters per trace. If a trace resumes after its history was discarded, its free-text fields are hidden. Redaction history markers survive duplicate-span retries, including retries that first reveal a secret. Unrelated traces remain readable. Ingestion limits each upload and stored trace to 10,000 spans and 10 MiB, including when attribute redaction is disabled. Duplicate retries do not count as new spans, and external updates replace the previous payload when calculating the stored limit. An oversized trace is marked incomplete and cannot be graded. Adaptive strategies stop with an error when trace collection is incomplete, including when no spans remain visible after filtering. The receiver rejects only that trace from a mixed batch and reports the rejected count. External snapshots are stored atomically, so a rejected snapshot leaves earlier evidence unchanged. Split larger workloads across traces. External response limits, including streamed and paginated responses, also mark the trace incomplete and stop grading. Braintrust queries request one extra record and Langfuse follows pagination through the end to detect traces exceeding 10,000 spans. Display and grading span limits apply after the complete bounded snapshot is stored.
+
+Approval and guardrail spans retain their input/output evidence for secret and canary checks. This includes `tool.output`, `tool.result`, `gen_ai.tool.call.result`, `ai.toolCall.result`, and normalized Langfuse/Braintrust outputs. Their tool-name attributes identify the control's target and do not establish a tool execution.
+
+Adaptive strategies grade the complete stored trace for each turn, retaining untruncated attributes for local verification. Attacker summaries use a separate filtered and sanitized view, including its insights. Span-count, depth, and name filters therefore limit attacker visibility while preserving evidence for grading. The ingestion limits still apply to the complete trace.
 
 For traces created by an evaluation, Promptfoo stores the evaluation's redaction and
 `commandToolNames` policy with that trace so overlapping evaluations do not change one
@@ -460,7 +501,12 @@ Use environment variables for tokens, passwords, and authentication headers. Pro
 
 Set `endpoint` to Tempo's base URL, such as `https://tempo.example.com/tempo`. The URL cannot contain credentials, query parameters, or fragments because Promptfoo appends its trace lookup path to that address. Put credentials under `auth` and tenant settings in `headers` instead.
 
-Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in span names or error messages. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
+Tempo span events are retained alongside span attributes. Spans containing named tool or guardrail events are included in red team trace context. A malformed event is
+skipped without discarding its parent span or valid sibling events. OTLP JSON, protobuf, and Tempo events require nonzero uint64 timestamps. Events with missing or invalid timestamps are dropped. The stored `timestampNanos` string preserves exact ordering for these events and local SDK events when millisecond numbers cannot distinguish nearby records. OTLP logs use a nonzero uint64 timestamp (`timeUnixNano`, or `observedTimeUnixNano` when absent) when provided and are graded as point events; their display duration does not affect ordering. Linked logs without either timestamp are retained, but their receipt time cannot prove execution order. Invalid provided timestamps are dropped. Malformed nested event attributes do not discard valid sibling events.
+
+External spans with cyclic parent links retain their attributes, events, and execution status. Their malformed parent links are detached before storage and grading, so a cycle cannot hide an unsafe action.
+
+Your application must carry the `traceparent` header into its own traces so Promptfoo can find the right request. Attributes you list in `tracing.otlp.http.redactAttributes` are redacted before fetched traces are saved, including matching values echoed in sibling span names, event names, or error messages. If attribute traversal is incomplete or a redacted attribute contains serialized JSON, these text fields are hidden. Later external snapshots update span attributes, verifier events, completion times, and status, and rewrite previously stored text when they reveal a protected value. If prior redaction state is unavailable, imported text is hidden when the store recorded earlier redaction. Literal marker text supplied by the target does not establish redaction history. Default reads of stored traces use the same rule. Common credential-shaped attributes are masked when traces are displayed or exported; add them to `redactAttributes` if they must also be kept out of local storage.
 
 #### Braintrust
 
@@ -593,7 +639,7 @@ Click the expand icon on any span to reveal a detailed attributes panel showing:
 
 This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
 
-Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
+Trace reads redact credential-like attribute keys such as authorization headers, cookies, API keys, tokens, secrets, and passwords before displaying or exporting spans. Known secret values echoed in any span name, status message, or event name in the same trace are also redacted. GenAI token counters such as `gen_ai.usage.input_tokens` and application token counters such as `llm.usage.prompt_tokens` and `llm.usage.completion_tokens` remain visible. Avoid placing secrets in custom span attributes because raw attributes may still be retained in the local trace store for internal evaluation workflows.
 
 ### Exporting Traces
 
