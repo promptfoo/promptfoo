@@ -57,7 +57,6 @@ export function resolveVariables(
   varsResolvedFromSkipped?: Set<string>,
 ): Record<string, VarValue> {
   let resolved: boolean;
-  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
   let iterations = 0;
   do {
@@ -71,14 +70,17 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      const match = regex.exec(value);
+      const match = firstUnprotectedPlaceholder(value);
       if (match) {
-        const [placeholder, varName] = match;
+        const { placeholder, varName, index } = match;
         if (variables[varName] === undefined) {
           // Do nothing - final nunjucks render will fail if necessary.
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
-          variables[key] = value.replace(placeholder, variables[varName] as string);
+          variables[key] =
+            value.slice(0, index) +
+            (variables[varName] as string) +
+            value.slice(index + placeholder.length);
           if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
             varsResolvedFromSkipped?.add(key);
           }
@@ -90,6 +92,34 @@ export function resolveVariables(
   } while (!resolved && iterations < 5);
 
   return variables;
+}
+
+const RAW_BLOCK_REGEX = /\{%\s*raw\s*%\}.*?\{%\s*endraw\s*%\}/gs;
+const SIMPLE_PLACEHOLDER_REGEX = /\{\{\s*(\w+)\s*\}\}/g;
+
+// Regex substitution cannot see Nunjucks structure, so a placeholder inside a
+// {% raw %} block or nested in another {{ ... }} expression (say a quoted
+// string literal) must be left for the real render pass; replacing it here
+// would defeat the escape.
+function firstUnprotectedPlaceholder(
+  value: string,
+): { placeholder: string; varName: string; index: number } | null {
+  const rawSpans: Array<[number, number]> = [];
+  for (const match of value.matchAll(RAW_BLOCK_REGEX)) {
+    rawSpans.push([match.index, match.index + match[0].length]);
+  }
+  for (const match of value.matchAll(SIMPLE_PLACEHOLDER_REGEX)) {
+    const start = match.index;
+    if (rawSpans.some(([s, e]) => start >= s && start < e)) {
+      continue;
+    }
+    const before = value.slice(0, start);
+    if (before.lastIndexOf('{{') > before.lastIndexOf('}}')) {
+      continue;
+    }
+    return { placeholder: match[0], varName: match[1]!, index: start };
+  }
+  return null;
 }
 
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
