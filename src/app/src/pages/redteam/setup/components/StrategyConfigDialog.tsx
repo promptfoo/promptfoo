@@ -113,7 +113,12 @@ export default function StrategyConfigDialog({
   // Helper functions to check strategy types
   const isAgenticStrategy = React.useCallback((step: StepType): boolean => {
     const strategyId = getStepId(step);
-    return AGENTIC_STRATEGIES_SET.has(strategyId) && strategyId !== 'indirect-web-pwn';
+    return (
+      strategyId !== 'indirect-web-pwn' &&
+      (AGENTIC_STRATEGIES_SET.has(strategyId) ||
+        strategyId === 'best-of-n' ||
+        strategyId === 'authoritative-markup-injection')
+    );
   }, []);
 
   const isMultiModalStrategy = React.useCallback((step: StepType): boolean => {
@@ -126,14 +131,18 @@ export default function StrategyConfigDialog({
     const hasAgenticStrategy = steps.some(isAgenticStrategy);
     const hasMultiModalStrategy = steps.some(isMultiModalStrategy);
     const lastStepIsMultiModal = steps.length > 0 && isMultiModalStrategy(steps[steps.length - 1]);
+    const lastStepIsAuthoritative =
+      steps.length > 0 && getStepId(steps[steps.length - 1]) === 'authoritative-markup-injection';
 
     // If last step is multi-modal, no more steps can be added
-    if (lastStepIsMultiModal) {
+    if (lastStepIsMultiModal || lastStepIsAuthoritative) {
       return [];
     }
 
     const stepIds = new Set(steps.map(getStepId));
     const hasIndirectWebPwn = stepIds.has('indirect-web-pwn');
+    const hasProviderWrapper =
+      stepIds.has('best-of-n') || stepIds.has('authoritative-markup-injection');
 
     // Create a Map for O(1) lookup instead of O(n) find
     const strategyConfigMap = new Map(
@@ -153,7 +162,7 @@ export default function StrategyConfigDialog({
       if (
         ((hasAgenticStrategy || hasIndirectWebPwn) && isAgenticStrategy(strategy)) ||
         (strategy === 'indirect-web-pwn' &&
-          (stepIds.has('mischievous-user') || stepIds.has('custom')))
+          (hasProviderWrapper || stepIds.has('mischievous-user') || stepIds.has('custom')))
       ) {
         return false;
       }

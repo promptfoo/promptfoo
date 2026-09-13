@@ -1365,6 +1365,26 @@ describe('StrategyConfigDialog', () => {
       expect(screen.queryByRole('option', { name: 'indirect-web-pwn' })).not.toBeInTheDocument();
     });
 
+    it.each(['best-of-n', 'authoritative-markup-injection'])(
+      'should not allow indirect-web-pwn after %s',
+      async (step) => {
+        const user = userEvent.setup();
+        renderWithProviders(
+          <StrategyConfigDialog
+            open={true}
+            strategy="layer"
+            config={{ steps: [step] }}
+            onClose={mockOnClose}
+            onSave={mockOnSave}
+            strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          />,
+        );
+
+        await user.click(screen.getByRole('combobox'));
+        expect(screen.queryByRole('option', { name: 'indirect-web-pwn' })).not.toBeInTheDocument();
+      },
+    );
+
     it('should not allow an orchestrating attack strategy after indirect-web-pwn', async () => {
       const user = userEvent.setup();
       renderWithProviders(

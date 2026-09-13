@@ -750,6 +750,9 @@ describe('redteam validators', () => {
         ['transform after mischievous user', ['mischievous-user', 'audio']],
         ['multiple provider setters', ['best-of-n', 'jailbreak:hydra']],
         ['two wrapper providers', ['best-of-n', 'authoritative-markup-injection']],
+        ['wrapper with web pwn', ['best-of-n', 'indirect-web-pwn']],
+        ['web pwn with wrapper', ['indirect-web-pwn', 'best-of-n']],
+        ['transform after markup injection', ['authoritative-markup-injection', 'base64']],
         ['media before a later transform', ['audio', 'base64']],
         ['multiple media transforms', ['audio', 'image']],
       ])('rejects %s steps', (_name, steps) => {

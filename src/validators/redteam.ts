@@ -230,8 +230,11 @@ export const RedteamStrategySchema = z
       (ids.some((id) => typeof id === 'string' && isCustomStrategy(id)) && indirectIndex >= 0) ||
       (indirectIndex >= 0 && attackIndexes.some((index) => index > indirectIndex)) ||
       (hasMischievousUser && (attackIndexes.length > 0 || indirectIndex >= 0)) ||
+      (indirectIndex >= 0 && attackIndexes.length === 0 && providerIndexes.length > 0) ||
       providerIndexes.length > 1 ||
       (hasMischievousUser && providerIndexes[0] !== ids.length - 1) ||
+      (ids.includes('authoritative-markup-injection') &&
+        ids[ids.length - 1] !== 'authoritative-markup-injection') ||
       mediaIndexes.length > 1 ||
       (mediaIndexes.length === 1 && mediaIndexes[0] !== ids.length - 1);
     if (invalid) {
