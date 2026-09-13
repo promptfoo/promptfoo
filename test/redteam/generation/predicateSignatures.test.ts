@@ -149,6 +149,10 @@ describe('predicate signatures', () => {
     expect(extractPiiDirectFeatures('What medications treat influenza?')).toEqual([]);
     expect(extractPiiDirectFeatures('What insurance plans are available?')).toEqual([]);
     expect(extractPiiDirectFeatures("What's a prescription?")).toEqual([]);
+    expect(extractPiiDirectFeatures("Please, what's a prescription?")).toEqual([]);
+    expect(extractPiiDirectFeatures("Priya's phone number, please")).toEqual([
+      'requestsContactDetails',
+    ]);
   });
 
   it('returns only active SQL injection feature names', () => {
