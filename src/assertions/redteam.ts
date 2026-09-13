@@ -1,12 +1,18 @@
 import logger from '../logger';
 import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
+import { resolveTestTracingOptions } from '../redteam/providers/tracingOptions';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import invariant from '../util/invariant';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
-import type { AssertionParams, AtomicTestCase, GradingResult } from '../types/index';
+import type {
+  AssertionParams,
+  AtomicTestCase,
+  GradingResult,
+  RedteamFileConfig,
+} from '../types/index';
 
 /**
  * Analyzes grader errors in the redteam history.
@@ -49,17 +55,40 @@ function getRedteamPrompt(prompt: string | undefined, test: AtomicTestCase): str
 function createInitialGradingContext({
   assertionValueContext,
   providerResponse,
-}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'>): RedteamGradingContext {
+  includeRedteamTrace,
+}: Pick<
+  AssertionParams,
+  'assertionValueContext' | 'providerResponse' | 'includeRedteamTrace'
+>): RedteamGradingContext {
   const gradingContext: RedteamGradingContext = {
     providerResponse,
   };
 
-  if (assertionValueContext.trace) {
+  if (assertionValueContext.trace && includeRedteamTrace) {
     gradingContext.traceData = assertionValueContext.trace;
     gradingContext.traceSummary = summarizeTrajectoryForJudge(assertionValueContext.trace);
   }
 
   return gradingContext;
+}
+
+export function shouldIncludeRedteamTrace(
+  test: AtomicTestCase,
+  redteamConfig?: RedteamFileConfig,
+): boolean {
+  const tracing = resolveTestTracingOptions(test, redteamConfig);
+  return tracing.enabled && tracing.includeInGrading;
+}
+
+export function getRedteamTraceQueryOptions(
+  test: AtomicTestCase,
+  redteamConfig?: RedteamFileConfig,
+) {
+  const { includeInternalSpans, maxDepth, spanFilter } = resolveTestTracingOptions(
+    test,
+    redteamConfig,
+  );
+  return { includeInternalSpans, maxDepth, spanFilter };
 }
 
 /**
@@ -76,6 +105,7 @@ export const handleRedteam = async ({
   renderedValue,
   providerResponse,
   assertionValueContext,
+  includeRedteamTrace,
 }: AssertionParams): Promise<GradingResult> => {
   // Skip grading if stored result exists from strategy execution for this specific assertion
   if (
@@ -113,9 +143,13 @@ export const handleRedteam = async ({
 
   // Build grading context from provider response metadata, test metadata, and locally
   // captured assertion trace data. Keep raw trace data in-process for deterministic
-  // graders; pass only a compact trajectory summary into model-graded rubrics.
+  // graders; model-graded rubrics receive a compact summary and sanitized action fields.
   // This includes exfil tracking data from indirect-web-pwn strategy
-  let gradingContext = createInitialGradingContext({ assertionValueContext, providerResponse });
+  let gradingContext = createInitialGradingContext({
+    assertionValueContext,
+    providerResponse,
+    includeRedteamTrace: includeRedteamTrace ?? shouldIncludeRedteamTrace(test),
+  });
   const webPageUuid =
     (providerResponse.metadata?.webPageUuid as string | undefined) ||
     (test.metadata?.webPageUuid as string | undefined);

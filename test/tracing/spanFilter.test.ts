@@ -46,6 +46,13 @@ describe('trace span relevance', () => {
     expect(isRelevantSpan({ attributes: {}, statusCode: 2 })).toBe(true);
   });
 
+  it.each([{ 'url.full': 'https://example.com/chat' }, { 'file.path': '/tmp/result' }])(
+    'includes HTTP and file actions: %o',
+    (attributes) => {
+      expect(isRelevantSpan({ attributes })).toBe(true);
+    },
+  );
+
   it('excludes grader model activity and grading errors from target evidence', () => {
     expect(
       isRelevantSpan({
@@ -59,7 +66,6 @@ describe('trace span relevance', () => {
 
   it.each([
     { 'http.request.method': 'POST' },
-    { 'url.full': 'https://example.com/chat' },
     { 'otel.span.kind': 'internal' },
     { 'command.output': 'git status output' },
     { 'search.results': 'customer records' },

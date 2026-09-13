@@ -352,6 +352,11 @@ A built-in sanitizer masks common credential-shaped keys (`authorization`, `api_
 `token`, `password`, `cookie`, …) when traces are read, but does not prevent those values
 from being stored. Don't rely on `redactAttributes` alone to cover built-in provider spans.
 
+When red-team tracing uses `includeInGrading`, model graders receive a bounded trace summary
+plus sampled tool arguments, commands, paths, and request URLs. Promptfoo masks common
+credential forms in that grading evidence and omits excess actions, so keep sensitive data
+out of traces and use deterministic assertions when complete trajectory evidence is required.
+
 :::
 
 Trace retention (`storage.retentionDays`) prunes traces and spans older than the given number
@@ -455,6 +460,8 @@ tracing:
 ```
 
 After your application responds, Promptfoo waits for `queryDelay` before looking up its trace. Set this long enough for your application to send its spans and for Tempo to make them available. Both `queryDelay` and `timeout` are measured in milliseconds. Tempo supports bearer tokens, username and password authentication, and custom headers such as `X-Scope-OrgID`.
+
+When retries are configured, Promptfoo waits for the fetched span set to stabilize before using it for grading.
 
 Use environment variables for tokens, passwords, and authentication headers. Promptfoo keeps these references when it saves an eval, so it can resolve them again if you resume the run. Literal credentials are removed from saved evals and exported results.
 

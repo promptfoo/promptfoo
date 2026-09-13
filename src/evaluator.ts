@@ -8,10 +8,12 @@ import { globSync } from 'glob';
 import { LRUCache } from 'lru-cache';
 import {
   getAssertionBaseType,
+  getRedteamTraceQueryOptions,
   hasTraceAwareAssertions,
   MODEL_GRADED_ASSERTION_TYPES,
   runAssertions,
   runCompareAssertion,
+  shouldIncludeRedteamTrace,
 } from './assertions/index';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, withCacheNamespace } from './cache';
@@ -997,12 +999,20 @@ async function collectExternalTraceAfterProviderCall({
   }
 
   const tracingConfig = testSuite?.tracing;
+  const includeRedteamTrace = shouldIncludeRedteamTrace(
+    test,
+    testSuite ? (testSuite.redteam ?? {}) : undefined,
+  );
+  const redteamTraceOptions = getRedteamTraceQueryOptions(
+    test,
+    testSuite ? (testSuite.redteam ?? {}) : undefined,
+  );
   const needsTraceForGrading =
     !providerFailed &&
     !response?.error &&
     response?.output !== null &&
     response?.output !== undefined &&
-    hasTraceAwareAssertions(test.assert);
+    hasTraceAwareAssertions(test.assert, includeRedteamTrace);
 
   try {
     if (needsTraceForGrading) {
@@ -1013,9 +1023,10 @@ async function collectExternalTraceAfterProviderCall({
     const trace = await fetchTraceContext(traceId, {
       providerConfig: tracingConfig?.provider,
       queryDelay: tracingConfig?.queryDelay,
+      ...(includeRedteamTrace && redteamTraceOptions),
       maxRetries: needsTraceForGrading ? 5 : 0,
       retryDelayMs: 1000,
-      includeInternalSpans: true,
+      includeInternalSpans: includeRedteamTrace ? redteamTraceOptions.includeInternalSpans : true,
       sanitizeAttributes: true,
       redactAttributes: tracingConfig?.otlp?.http?.redactAttributes,
       abortSignal,
@@ -1430,9 +1441,17 @@ async function gradeRunEvalResponse({
     vars,
   });
   const traceId = getTraceId(traceContext);
+  const includeRedteamTrace = shouldIncludeRedteamTrace(
+    test,
+    testSuite ? (testSuite.redteam ?? {}) : undefined,
+  );
+  const redteamTraceOptions = getRedteamTraceQueryOptions(
+    test,
+    testSuite ? (testSuite.redteam ?? {}) : undefined,
+  );
   if (
     traceId &&
-    hasTraceAwareAssertions(test.assert) &&
+    hasTraceAwareAssertions(test.assert, includeRedteamTrace) &&
     !isExternalTraceProvider(testSuite?.tracing?.provider)
   ) {
     await flushOtel();
@@ -1461,6 +1480,8 @@ async function gradeRunEvalResponse({
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
+          includeRedteamTrace,
+          traceOptions: includeRedteamTrace ? redteamTraceOptions : undefined,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, abortSignal);
@@ -1481,6 +1502,8 @@ async function gradeRunEvalResponse({
         latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
+        includeRedteamTrace,
+        traceOptions: includeRedteamTrace ? redteamTraceOptions : undefined,
       }),
   );
   applyGradingResult(ret, checkResult);

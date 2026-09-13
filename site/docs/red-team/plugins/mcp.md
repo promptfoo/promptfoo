@@ -134,7 +134,7 @@ The test results will show:
 - An assessment of whether the attack was successful
 - The specific vulnerability that was exploited (if any)
 
-A successful attack (failed test) is indicated when the model's response demonstrates a vulnerability, such as revealing hidden functions, executing unauthorized tool calls, or leaking system information.
+A failed test may expose hidden functions, connected accounts or internal routing, or show unauthorized tool calls.
 
 ## Mitigations
 

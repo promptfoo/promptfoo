@@ -1,12 +1,129 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getAssertionBaseType, isAssertionInverse } from '../../src/assertions/index';
-import { handleRedteam } from '../../src/assertions/redteam';
+import { handleRedteam, shouldIncludeRedteamTrace } from '../../src/assertions/redteam';
+import cliState from '../../src/cliState';
 import { MULTI_INPUT_VAR } from '../../src/redteam/constants';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';
+import * as exfilTracking from '../../src/redteam/strategies/indirectWebPwn';
 
 describe('handleRedteam', () => {
+  const originalConfig = cliState.config;
   afterEach(() => {
+    cliState.config = originalConfig;
     vi.resetAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('keeps root tracing for coding-agent grading unless explicitly disabled', () => {
+    cliState.config = { ...originalConfig, tracing: { enabled: true }, redteam: { tracing: {} } };
+    const test = {
+      vars: {},
+      assert: [],
+      metadata: { pluginId: 'coding-agent:secret-env-read' },
+    };
+
+    expect(shouldIncludeRedteamTrace(test)).toBe(true);
+    expect(
+      shouldIncludeRedteamTrace({
+        ...test,
+        metadata: { ...test.metadata, tracing: { enabled: false } },
+      }),
+    ).toBe(false);
+  });
+
+  it.each([
+    { tracing: {}, metadata: {}, include: false },
+    { tracing: { enabled: true }, metadata: {}, include: true },
+    { tracing: { includeInGrading: false }, metadata: {}, include: false },
+    { tracing: {}, metadata: { tracing: { includeInGrading: false } }, include: false },
+    {
+      tracing: { strategies: { goat: { includeInGrading: false }, iterative: {} } },
+      metadata: { strategyId: 'goat' },
+      include: false,
+    },
+    {
+      tracing: { strategies: { goat: {}, iterative: { includeInGrading: false } } },
+      metadata: { strategyId: 'jailbreak' },
+      include: false,
+    },
+    {
+      tracing: {},
+      metadata: { strategyConfig: { tracing: { includeInGrading: false } } },
+      include: false,
+    },
+  ])('honors the effective trace grading setting: %j', async ({ tracing, metadata, include }) => {
+    cliState.config = { ...originalConfig, redteam: { tracing } };
+    const assertion = { type: 'promptfoo:redteam:rbac' as const };
+    const test = {
+      vars: {},
+      options: {},
+      assert: [],
+      metadata: { purpose: 'Document assistant', ...metadata },
+    };
+    const providerResponse = {
+      output: "I can't do that.",
+      metadata: {
+        webPageUuid: 'fixture-page',
+        webPageUrl: 'https://example.com/dynamic-pages/fixture-eval/fixture-page',
+      },
+    };
+    const tracking = { wasExfiltrated: true, exfilCount: 1, exfilRecords: [] };
+    const checkTracking = vi.spyOn(exfilTracking, 'checkExfilTracking').mockResolvedValue(tracking);
+    const trace = {
+      traceId: 'fixture-trace',
+      evaluationId: 'fixture-eval',
+      testCaseId: 'fixture-test',
+      spans: [
+        {
+          spanId: 'fixture-span',
+          name: 'read_private_document',
+          startTime: 0,
+          attributes: { 'tool.arguments': { path: '/private/fixture.txt' } },
+        },
+      ],
+    };
+    const getResult = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: false, score: 0, reason: 'Private document read' },
+      rubric: 'Fixture rubric',
+    });
+    const params = {
+      assertion,
+      baseType: getAssertionBaseType(assertion),
+      assertionValueContext: {
+        prompt: 'Read that document',
+        vars: {},
+        test,
+        trace,
+        logProbs: [],
+        provider: undefined,
+        providerResponse,
+      },
+      cost: 0,
+      inverse: false,
+      latencyMs: 0,
+      logProbs: [],
+      output: providerResponse.output,
+      outputString: providerResponse.output,
+      prompt: 'Read that document',
+      provider: undefined,
+      providerResponse,
+      renderedValue: undefined,
+      test,
+      valueFromScript: undefined,
+    };
+    const result = await handleRedteam(params);
+    const context = getResult.mock.calls[0][7];
+    if (include) {
+      expect(context?.traceData).toBe(trace);
+      expect(context?.traceSummary).toContain('read_private_document');
+    } else {
+      expect(context).not.toHaveProperty('traceData');
+      expect(context).not.toHaveProperty('traceSummary');
+    }
+    expect(context?.providerResponse).toBe(providerResponse);
+    expect(context).toMatchObject(tracking);
+    expect(checkTracking).toHaveBeenCalledWith('fixture-page', 'fixture-eval');
+    expect(result.pass).toBe(false);
   });
 
   it('returns pass with explanation when iterative strategy has SOME grader errors and re-grading fails', async () => {

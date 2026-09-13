@@ -796,6 +796,8 @@ export interface AssertionParams {
   prompt?: string;
   provider?: ApiProvider;
   providerResponse: ProviderResponse;
+  /** Effective request-scoped decision for including red-team traces in grading. */
+  includeRedteamTrace?: boolean;
   renderedValue?: AssertionValue;
   test: AtomicTestCase;
   valueFromScript?: string | boolean | number | GradingResult | object;
