@@ -8,8 +8,6 @@ import {
   type FrameworkComplianceId,
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
-  riskCategorySeverityMap,
-  Severity,
 } from '@promptfoo/redteam/constants';
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import {
@@ -17,6 +15,7 @@ import {
   categorizePlugins,
   expandPluginCollections,
   getPluginDisplayName,
+  getPluginSeverity,
 } from './FrameworkComplianceUtils';
 
 interface CSVExporterProps {
@@ -84,9 +83,7 @@ const CSVExporter = ({
             // Add tested plugins
             testedPlugins.forEach((plugin) => {
               const stats = categoryStats[plugin];
-              const pluginSeverity =
-                riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
-                Severity.Low;
+              const pluginSeverity = getPluginSeverity(plugin);
               const pluginName = getPluginDisplayName(plugin);
               const attacksSuccessful = stats.failCount;
               const asr = formatASRForDisplay(
@@ -108,9 +105,7 @@ const CSVExporter = ({
 
             // Add untested plugins
             untested.forEach((plugin) => {
-              const pluginSeverity =
-                riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
-                Severity.Low;
+              const pluginSeverity = getPluginSeverity(plugin);
               const pluginName = getPluginDisplayName(plugin);
 
               csvRows.push([
@@ -149,8 +144,7 @@ const CSVExporter = ({
         // Add tested plugins
         testedPlugins.forEach((plugin) => {
           const stats = categoryStats[plugin];
-          const pluginSeverity =
-            riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+          const pluginSeverity = getPluginSeverity(plugin);
           const pluginName = getPluginDisplayName(plugin);
           const attacksSuccessful = stats.failCount;
           const asr = formatASRForDisplay(calculateAttackSuccessRate(stats.total, stats.failCount));
@@ -170,8 +164,7 @@ const CSVExporter = ({
 
         // Add untested plugins
         untested.forEach((plugin) => {
-          const pluginSeverity =
-            riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+          const pluginSeverity = getPluginSeverity(plugin);
           const pluginName = getPluginDisplayName(plugin);
 
           csvRows.push([framework, 'N/A', pluginName, pluginSeverity, '0', '0', '0', 'Not Tested']);

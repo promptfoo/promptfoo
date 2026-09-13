@@ -1,4 +1,9 @@
-import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  riskCategorySeverityMap,
+  Severity,
+} from '@promptfoo/redteam/constants';
 
 export type TestResultStats = {
   // The count of successful defenses (tests that passed)
@@ -14,11 +19,18 @@ export type TestResultStats = {
 // Types for utility functions
 export type CategoryStats = Record<string, TestResultStats>;
 
-type PluginCategories = {
+export type PluginCategories = {
   compliant: string[];
   nonCompliant: string[];
   untested: string[];
 };
+
+export const getFrameworkPluginId = (pluginId: string): string =>
+  pluginId.replace(/^promptfoo:redteam:/, '');
+
+export const getPluginSeverity = (pluginId: string): Severity =>
+  riskCategorySeverityMap[getFrameworkPluginId(pluginId) as keyof typeof riskCategorySeverityMap] ||
+  Severity.Low;
 
 /**
  * Expands plugin collections like 'harmful' into their individual plugins
@@ -30,12 +42,27 @@ export const expandPluginCollections = (
   const expandedPlugins = new Set<string>();
   plugins.forEach((plugin) => {
     if (plugin === 'harmful') {
-      // Add all harmful:* plugins that have stats
-      Object.keys(categoryStats)
-        .filter((key) => key.startsWith('harmful:'))
-        .forEach((key) => expandedPlugins.add(key));
+      // Add all harmful:* plugins that have stats, keeping one stat key per logical
+      // plugin: prefer the exact short key over its prefixed alias, mirroring the
+      // ordinary-plugin branch below. Without this, a report containing both
+      // 'harmful:hate' and 'promptfoo:redteam:harmful:hate' would render, count, and
+      // export the same plugin twice.
+      const keyByFrameworkPluginId = new Map<string, string>();
+      Object.keys(categoryStats).forEach((key) => {
+        const frameworkPluginId = getFrameworkPluginId(key);
+        if (frameworkPluginId !== 'harmful' && !frameworkPluginId.startsWith('harmful:')) {
+          return;
+        }
+        if (!keyByFrameworkPluginId.has(frameworkPluginId) || key === frameworkPluginId) {
+          keyByFrameworkPluginId.set(frameworkPluginId, key);
+        }
+      });
+      keyByFrameworkPluginId.forEach((key) => expandedPlugins.add(key));
     } else {
-      expandedPlugins.add(plugin);
+      const categoryStatsKey = categoryStats[plugin]
+        ? plugin
+        : Object.keys(categoryStats).find((key) => getFrameworkPluginId(key) === plugin);
+      expandedPlugins.add(categoryStatsKey ?? plugin);
     }
   });
   return expandedPlugins;
@@ -81,10 +108,11 @@ export const categorizePlugins = (
  * Gets a display name for a plugin
  */
 export const getPluginDisplayName = (plugin: string): string => {
+  const shortPluginId = getFrameworkPluginId(plugin);
   return (
-    displayNameOverrides[plugin as keyof typeof displayNameOverrides] ||
-    categoryAliases[plugin as keyof typeof categoryAliases] ||
-    plugin
+    displayNameOverrides[shortPluginId as keyof typeof displayNameOverrides] ||
+    categoryAliases[shortPluginId as keyof typeof categoryAliases] ||
+    shortPluginId
   );
 };
 
