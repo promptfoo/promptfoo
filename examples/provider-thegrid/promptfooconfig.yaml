@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: The Grid capability tiers via the OpenAI-compatible provider
+
+prompts:
+  - 'Answer concisely: {{question}}'
+
+providers:
+  # The sentinel is load-bearing. `getApiKey()` resolves
+  # `config.apiKey || ... || OPENAI_API_KEY`, so an unset *or empty*
+  # THEGRID_API_KEY would fall through and send your OpenAI credential to
+  # api.thegrid.ai. `default(..., true)` substitutes on any falsy value, so a
+  # blank key fails closed with a 401 from The Grid instead.
+  - id: openai:chat:text-standard
+    label: The Grid text-standard
+    config:
+      apiBaseUrl: https://api.thegrid.ai/v1
+      apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
+      temperature: 0
+      # Use max_tokens: promptfoo only forwards max_completion_tokens for models
+      # it classifies as reasoning models, which Grid instrument names are not.
+      max_tokens: 1024
+
+  - id: openai:chat:text-prime
+    label: The Grid text-prime
+    config:
+      apiBaseUrl: https://api.thegrid.ai/v1
+      apiKey: '{{ env.THEGRID_API_KEY | default("THEGRID_API_KEY_NOT_SET", true) }}'
+      temperature: 0
+      max_tokens: 1024
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: contains
+        value: Paris
+
+  - vars:
+      question: Name the largest planet in the solar system.
+    assert:
+      - type: icontains
+        value: Jupiter
+
+  - vars:
+      question: What is 17 multiplied by 23?
+    assert:
+      - type: contains
+        value: '391'
