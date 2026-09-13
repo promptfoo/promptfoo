@@ -218,6 +218,7 @@ async function resolveGradingProvider(
 async function createRuntimeTestSuite(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
   loadedProviders: ApiProvider[],
+  onProviderConstructed: (provider: ApiProvider) => void,
 ): Promise<TestSuite> {
   const defaultTest =
     typeof testSuiteConfig.defaultTest === 'string' &&
@@ -230,7 +231,7 @@ async function createRuntimeTestSuite(
     defaultTest: defaultTest as TestSuite['defaultTest'],
     scenarios: testSuiteConfig.scenarios as Scenario[],
     providers: loadedProviders,
-    tests: await readTests(testSuiteConfig.tests),
+    tests: await readTests(testSuiteConfig.tests, '', onProviderConstructed),
     nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
     prompts: await processPrompts(testSuiteConfig.prompts),
   };
@@ -380,7 +381,11 @@ export async function evaluateWithSource(
   let evaluationError: unknown;
   try {
     const providerMap = buildConfiguredProviderMap(loadedProviders);
-    const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
+    const constructedTestSuite = await createRuntimeTestSuite(
+      testSuiteConfig,
+      loadedProviders,
+      (provider) => ownedProviders.add(provider),
+    );
     await resolveNestedProviders(
       testSuiteConfig,
       constructedTestSuite,

@@ -256,6 +256,40 @@ describe('ProviderPluginRegistry', () => {
     expect(cleanup).not.toHaveBeenCalled();
   });
 
+  it('cleans test-case providers when a later test provider fails to load', async () => {
+    const cleanup = vi.fn();
+    const dispose = registerProviderPlugin(
+      createManifest(
+        'test-case-cleanup',
+        (id) => id.startsWith('test-case-cleanup:'),
+        async () => [
+          {
+            test: () => true,
+            create: async (id) => {
+              if (id.endsWith(':fail')) {
+                throw new Error('test provider load failed');
+              }
+              return { id: () => id, callApi: async () => ({ output: 'ok' }), cleanup };
+            },
+          },
+        ],
+      ),
+    );
+
+    try {
+      await expect(
+        evaluateWithSource({
+          prompts: ['hello'],
+          providers: [{ id: 'echo' }],
+          tests: [{ provider: 'test-case-cleanup:ok' }, { provider: 'test-case-cleanup:fail' }],
+        }),
+      ).rejects.toThrow('test provider load failed');
+      expect(cleanup).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+    }
+  });
+
   it('cleans created providers when a later provider load fails', async () => {
     const cleanup = vi.fn();
     const dispose = registerProviderPlugin(
