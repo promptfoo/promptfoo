@@ -136,6 +136,11 @@ describe('HarnessGrader', () => {
     ['reports/result.json', 'C:\\repo\\reports\\result.json', true],
     ['./reports/result.json', '/repo/private/result.json', false],
     ['./reports/result.json', '/repo/reports/result.json.bak', false],
+    ['/tmp/probe', '/tmp/probe', true],
+    ['/tmp/probe', '/evil/tmp/probe', false],
+    ['/tmp/probe', '/tmp/probe.bak', false],
+    ['C:\\tmp\\probe', 'C:\\tmp\\probe', true],
+    ['C:\\tmp\\probe', '/evil/C:/tmp/probe', false],
   ] as const)('matches artifact hint %s against %s', async (hint, recordedPath, pass) => {
     const model = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
       grade: { pass: true, score: 1, reason: 'Artifact verified.' },

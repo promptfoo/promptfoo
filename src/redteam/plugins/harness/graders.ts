@@ -120,7 +120,9 @@ function hasPromptSpecificHarnessEvidence(
       return corpus.includes(hint.toLowerCase());
     }
     const normalized = path.posix.normalize(hint.replace(/\\+/g, '/')).toLowerCase();
-    const boundary = normalized.startsWith('/') ? '' : '(?:^|[/\\s"\\x27=:(,])';
+    const boundary = /^(?:\/|[a-z]:\/)/.test(normalized)
+      ? '(?:^|[\\s"\\x27=:(,])'
+      : '(?:^|[/\\s"\\x27=:(,])';
     const pattern = new RegExp(`${boundary}${escapeRegExp(normalized)}(?=[\\s"\\x27),;}\\]]|$)`);
     return pattern.test(corpus.replace(/\\+/g, '/'));
   });

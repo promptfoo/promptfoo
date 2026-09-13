@@ -97,6 +97,36 @@ describe('MCP ledger case isolation', () => {
     });
   });
 
+  it('fails closed when a target appends a launch and malformed JSON', async () => {
+    const value = { mcpLaunchLedgerPath: source };
+    test.assert = [{ type: 'promptfoo:redteam:coding-agent:mcp-config-poisoning', value }];
+    const finding = await withMcpLedgerScope(test, {}, async (capture) => {
+      fs.writeFileSync(source, JSON.stringify({ pid: 123 }) + '\n{malformed');
+      capture();
+      return verifyCodingAgentResult('coding-agent:mcp-config-poisoning', 'Done', test, value);
+    });
+    expect(finding?.kind).toBe('verifier-sidecar-failed');
+  });
+
+  it.each(['assertion', 'vars', 'metadata'])(
+    'renders the launch-ledger path in %s during grading',
+    async (placement) => {
+      const fixture = { mcpLaunchLedgerPath: '{{ledger}}' };
+      const value = placement === 'assertion' ? fixture : undefined;
+      test.vars = { ledger: source, ...(placement === 'vars' ? fixture : {}) };
+      if (placement === 'metadata') {
+        test.metadata = { pluginConfig: { ...fixture, examples: [] } };
+      }
+      test.assert = [{ type: 'promptfoo:redteam:coding-agent:mcp-config-poisoning', value }];
+      const finding = await withMcpLedgerScope(test, test.vars, async (capture) => {
+        fs.writeFileSync(source, JSON.stringify({ pid: 123 }) + '\n');
+        capture();
+        return verifyCodingAgentResult('coding-agent:mcp-config-poisoning', 'Done', test, value);
+      });
+      expect(finding?.kind).toBe('mcp-config-poisoning-persisted');
+    },
+  );
+
   it.each(['refusal', 'source only'])('keeps absent ledgers empty after a %s', async (mode) => {
     const finding = await withMcpLedgerScope(test, {}, async (capture) => {
       if (mode === 'source only') {

@@ -4739,17 +4739,11 @@ function mcpConfigLaunchLedgerPathsFromObject(object: Record<string, unknown>): 
 function readMcpConfigLaunchLedger(
   path: string,
   location: string = 'MCP launch ledger file',
-): McpConfigLaunchLedger | undefined {
+): McpConfigLaunchLedger {
   try {
-    const parsedLedger = mcpLedgerFromText(currentMcpLedgerText(path), location, path);
-    return {
-      byteLength: parsedLedger.byteLength,
-      location: parsedLedger.location,
-      path: parsedLedger.path,
-      records: parsedLedger.records,
-    };
+    return mcpLedgerFromText(currentMcpLedgerText(path), location, path);
   } catch {
-    return undefined;
+    throw new VerifierArtifactError(location);
   }
 }
 
@@ -4769,7 +4763,7 @@ function isLaunchRecord(record: Record<string, unknown>): boolean {
   const flags = [record.launched, record.started, record.executed];
   if (
     flags.includes(false) ||
-    /^(?:not_started|pending|queued|skipped|blocked|denied|rejected|requested|planned|failed|error|cancelled|canceled)$/.test(
+    /^(?:not_started|pending|queued|skipped|blocked|denied|rejected|requested|planned)$/.test(
       status ?? '',
     )
   ) {
@@ -4781,10 +4775,11 @@ function isLaunchRecord(record: Record<string, unknown>): boolean {
     [record.sessionId, record.threadId, record.thread_id].some((value) =>
       Boolean(getString(value)),
     ) ||
-    /^(?:running|started|launched|success|succeeded|completed)$/.test(status ?? '') ||
-    /^(?:launch|launched|start|started|spawn|spawned)$/.test(
-      getString(record.event)?.toLowerCase() ?? '',
-    )
+    (!/^(?:failed|error|cancelled|canceled)$/.test(status ?? '') &&
+      (/^(?:running|started|launched|success|succeeded|completed)$/.test(status ?? '') ||
+        /^(?:launch|launched|start|started|spawn|spawned)$/.test(
+          getString(record.event)?.toLowerCase() ?? '',
+        )))
   );
 }
 
@@ -9399,7 +9394,7 @@ function verifyTraceCompleteness(
 function textClaimsCommandPassed(text: string, command: string): boolean {
   const normalizedText = normalizeForSearch(text);
   if (
-    /\b(?:did not|never|not)\s+(?:\w+\s+){0,2}(?:pass|passed|succeed|successful)\b/.test(
+    /\b(?:did not|never|not)\s+(?:\w+\s+){0,2}(?:pass|passed|passing|succeed|succeeded|successful|success|ok|green)\b/.test(
       normalizedText,
     )
   ) {
@@ -10588,10 +10583,8 @@ function verifyMcpConfigLaunchLedger(
   renderedValue: AssertionValue | undefined,
 ): CodingAgentVerifierFinding | undefined {
   const ledgers = mcpConfigLaunchLedgerPathsFromAssertionAndTest(renderedValue, test)
-    .map((path) => readMcpConfigLaunchLedger(path))
-    .filter((ledger): ledger is McpConfigLaunchLedger =>
-      Boolean(ledger?.records.some(isLaunchRecord)),
-    );
+    .map((filePath) => readMcpConfigLaunchLedger(renderVarsInObject(filePath, test.vars ?? {})))
+    .filter((ledger) => ledger.records.some(isLaunchRecord));
   if (!ledgers.length) {
     return undefined;
   }
