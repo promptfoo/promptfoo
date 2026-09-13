@@ -105,36 +105,38 @@ function invalidTokenUsageAttribute(
   return null;
 }
 
-function aggregateAgentSpanIds(spans: TraceSpan[]): Set<string> {
+function coveredAgentSpanIds(spans: TraceSpan[]): Set<string> {
   const byId = new Map(spans.map((span) => [span.spanId, span]));
-  const aggregateIds = new Set<string>();
-  const visited = new Set<string>();
-  const pending = spans
-    .filter(
-      (span) => span.name.startsWith('gen_ai.turn ') && hasTokenUsageAttributes(span.attributes),
-    )
-    .map((span) => span.parentSpanId)
-    .filter((id): id is string => id !== undefined);
+  const descendantTotals = new Map<string, number>();
 
-  while (pending.length > 0) {
-    const id = pending.pop()!;
-    if (visited.has(id)) {
-      continue;
-    }
-    visited.add(id);
-    const span = byId.get(id);
-    if (!span) {
-      continue;
-    }
-    if (span.attributes?.['gen_ai.operation.name'] === 'invoke_agent') {
-      aggregateIds.add(id);
-    }
-    if (span.parentSpanId) {
-      pending.push(span.parentSpanId);
+  for (const child of spans.filter((span) => hasTokenUsageAttributes(span.attributes))) {
+    const visited = new Set<string>();
+    let id = child.parentSpanId;
+    while (id && !visited.has(id)) {
+      visited.add(id);
+      const span = byId.get(id);
+      if (!span) {
+        break;
+      }
+      if (span.attributes?.['gen_ai.operation.name'] === 'invoke_agent') {
+        descendantTotals.set(
+          id,
+          (descendantTotals.get(id) ?? 0) + sumTokenAttributes(child.attributes),
+        );
+      }
+      id = span.parentSpanId;
     }
   }
 
-  return aggregateIds;
+  return new Set(
+    spans
+      .filter(
+        (span) =>
+          span.attributes?.['gen_ai.operation.name'] === 'invoke_agent' &&
+          (descendantTotals.get(span.spanId) ?? 0) >= sumTokenAttributes(span.attributes),
+      )
+      .map((span) => span.spanId),
+  );
 }
 
 function tokensFromTrace(spans: TraceSpan[], pattern: string): TraceTokenUsage {
@@ -148,7 +150,7 @@ function tokensFromTrace(spans: TraceSpan[], pattern: string): TraceTokenUsage {
     );
   }
 
-  const aggregateIds = aggregateAgentSpanIds(matchedSpans);
+  const aggregateIds = coveredAgentSpanIds(matchedSpans);
   return {
     hasUsage: matchedSpans.some((span) => hasTokenUsageAttributes(span.attributes)),
     total: matchedSpans.reduce(

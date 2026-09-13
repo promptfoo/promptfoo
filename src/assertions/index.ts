@@ -39,6 +39,7 @@ import {
 } from '../types/index';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
+import { renderVarsInObject } from '../util/render';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
@@ -576,7 +577,7 @@ async function runAssertionInternal({
         if (v.startsWith('file://')) {
           return processFileReference(v);
         }
-        return nunjucks.renderString(v, resolvedVars);
+        return renderVarsInObject(v, resolvedVars);
       }
       return v;
     });

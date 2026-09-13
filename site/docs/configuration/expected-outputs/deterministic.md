@@ -1197,8 +1197,9 @@ The resolved value must still be a finite non-negative number. Quoted literal nu
 If `tokens-used` needs provider response usage and the provider does not return token
 usage metadata, the assertion throws instead of assuming zero tokens.
 
-For traced usage, Promptfoo sums every matching token-bearing operation span. Span parentage does
-not establish that one operation aggregates another, so nested operations are counted separately.
+For traced usage, Promptfoo sums every matching token-bearing operation span. Nested operations
+are counted separately unless an `invoke_agent` span's token-bearing descendants cover its total;
+in that case Promptfoo skips the aggregate span to avoid counting the same usage twice.
 Use `pattern` to select the instrumentation spans that belong in a budget. Within each span,
 Promptfoo uses the largest available aggregate or component total so incomplete or inconsistent
 token attributes do not undercount the budget.

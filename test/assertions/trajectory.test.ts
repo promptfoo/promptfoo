@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { runAssertion } from '../../src/assertions';
 import {
   handleTrajectoryStepCount,
   handleTrajectoryToolArgsMatch,
@@ -1435,6 +1436,23 @@ describe('trajectory assertions', () => {
       };
 
       expect(handleTrajectoryToolSet(params).pass).toBe(true);
+    });
+
+    it('preserves native matchers from full-expression array entries', async () => {
+      const result = await runAssertion({
+        assertion: {
+          type: 'trajectory:tool-set',
+          value: { tools: ['{{ expectedMatcher }}'] },
+        },
+        test: { vars: { expectedMatcher: { name: 'search_corpus' } } } as AtomicTestCase,
+        vars: { expectedMatcher: { name: 'search_corpus' } },
+        provider: mockProvider,
+        providerResponse: { output: 'test output' },
+        traceId: setTrace.traceId,
+        traceData: setTrace,
+      });
+
+      expect(result.pass).toBe(true);
     });
 
     it('inverts the result for not-trajectory:tool-set', () => {
