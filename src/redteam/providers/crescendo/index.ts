@@ -98,6 +98,7 @@ const DEFAULT_MAX_BACKTRACKS = 10;
  * Represents metadata for the Crescendo conversation process.
  */
 interface CrescendoMetadata extends BaseRedteamMetadata {
+  redactionMediaOmitted?: boolean;
   crescendoRoundsCompleted: number;
   crescendoBacktrackCount: number;
   crescendoResult: boolean;
@@ -325,6 +326,7 @@ export class CrescendoProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let mediaRedactionError: string | undefined;
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
@@ -474,6 +476,9 @@ export class CrescendoProvider implements ApiProvider {
           { inputMaterialization, materializationHandled, materializedVars },
         );
         lastResponse = response;
+        if (lastResponse.metadata?.redactionMediaOmitted === true) {
+          mediaRedactionError ??= lastResponse.error;
+        }
         lastTransformResult = transformResult;
         if (transformResult?.tokenUsage) {
           accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
@@ -552,6 +557,9 @@ export class CrescendoProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (lastResponse.metadata?.redactionMediaOmitted === true) {
+            mediaRedactionError ??= lastResponse.error;
+          }
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Crescendo] Target ended conversation during unblocking', {
               round: roundNum,
@@ -798,9 +806,12 @@ export class CrescendoProvider implements ApiProvider {
     const finalPrompt = getLastMessageContent(messages, 'user');
     return {
       output: lastResponse.output,
-      ...(lastResponse.error ? { error: lastResponse.error } : {}),
+      ...(mediaRedactionError || lastResponse.error
+        ? { error: mediaRedactionError || lastResponse.error }
+        : {}),
       prompt: finalPrompt,
       metadata: {
+        ...(mediaRedactionError && { redactionMediaOmitted: true }),
         sessionId: getSessionId(lastResponse, context),
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         redteamFinalPrompt: lastFinalAttackPrompt || finalPrompt,

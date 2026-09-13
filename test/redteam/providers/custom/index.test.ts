@@ -1438,66 +1438,74 @@ describe('CustomProvider', () => {
     });
 
     it.each([
-      undefined,
-      'promptfoo:redteam:coding-agent:trace-redaction',
-      'promptfoo:redteam:harness:artifact-redaction',
-    ] as const)('keeps only permitted history audio for %s', async (assertionType) => {
-      // Configure the hoisted mock to return audio/image data for this test
-      mockApplyRuntimeTransforms.mockResolvedValueOnce({
-        prompt: 'transformed prompt',
-        audio: { data: 'base64-audio-data', format: 'mp3' },
-        image: { data: 'base64-image-data', format: 'png' },
-      });
-
-      const provider = new CustomProvider({
-        injectVar: 'objective',
-        strategyText: 'Test strategy',
-        maxTurns: 1,
-        redteamProvider: mockRedTeamProvider,
-        _perTurnLayers: [{ id: 'audio' }],
-      });
-
-      mockRedTeamProvider.callApi.mockResolvedValue({
-        output: JSON.stringify({
-          generatedQuestion: 'test question',
-          rationaleBehindJailbreak: 'test rationale',
-          lastResponseSummary: 'test summary',
-        }),
-      });
-
-      mockTargetProvider.callApi.mockResolvedValue({
-        output: 'target response',
-        audio: { data: 'response-audio-data', format: 'wav' },
-      });
-
-      mockScoringProvider.callApi.mockResolvedValue({
-        output: JSON.stringify({
-          value: false,
-          metadata: 100,
-          rationale: 'Success',
-        }),
-      });
-
-      const context = {
-        originalProvider: mockTargetProvider,
-        vars: { objective: 'test objective' },
-        prompt: { raw: 'test prompt', label: 'test' },
-        test: { vars: {}, assert: assertionType ? [{ type: assertionType }] : [] },
-      };
-
-      const result = await provider.callApi('test prompt', context);
-
-      if (assertionType) {
-        expect(result.error).toMatch(/audio.*redaction.*verified/i);
-        expect(result.metadata.redteamHistory).toEqual([]);
-        expect(JSON.stringify(result)).not.toContain('response-audio-data');
-      } else {
-        expect(result.error).toBeUndefined();
-        expect(result.metadata.redteamHistory?.[0].outputAudio).toEqual({
-          data: 'response-audio-data',
-          format: 'wav',
+      [undefined, false],
+      ['promptfoo:redteam:coding-agent:trace-redaction', false],
+      ['promptfoo:redteam:harness:artifact-redaction', false],
+      ['promptfoo:redteam:coding-agent:trace-redaction', true],
+      ['promptfoo:redteam:harness:artifact-redaction', true],
+    ] as const)(
+      'keeps only permitted history audio for %s with ending=%s',
+      async (assertionType, ended) => {
+        // Configure the hoisted mock to return audio/image data for this test
+        mockApplyRuntimeTransforms.mockResolvedValueOnce({
+          prompt: 'transformed prompt',
+          audio: { data: 'base64-audio-data', format: 'mp3' },
+          image: { data: 'base64-image-data', format: 'png' },
         });
-      }
-    });
+
+        const provider = new CustomProvider({
+          injectVar: 'objective',
+          strategyText: 'Test strategy',
+          maxTurns: 2,
+          redteamProvider: mockRedTeamProvider,
+          _perTurnLayers: [{ id: 'audio' }],
+        });
+
+        mockRedTeamProvider.callApi.mockResolvedValue({
+          output: JSON.stringify({
+            generatedQuestion: 'test question',
+            rationaleBehindJailbreak: 'test rationale',
+            lastResponseSummary: 'test summary',
+          }),
+        });
+
+        mockTargetProvider.callApi
+          .mockResolvedValue({ output: 'Clean report' })
+          .mockResolvedValueOnce({
+            output: 'target response',
+            conversationEnded: ended,
+            audio: { data: 'response-audio-data', format: 'wav' },
+          });
+
+        mockScoringProvider.callApi.mockResolvedValue({
+          output: JSON.stringify({
+            value: false,
+            metadata: 100,
+            rationale: 'Success',
+          }),
+        });
+
+        const context = {
+          originalProvider: mockTargetProvider,
+          vars: { objective: 'test objective' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: { vars: {}, assert: assertionType ? [{ type: assertionType }] : [] },
+        };
+
+        const result = await provider.callApi('test prompt', context);
+
+        if (assertionType) {
+          expect(result.error).toMatch(/audio.*redaction.*verified/i);
+          expect(result.metadata.redactionMediaOmitted).toBe(true);
+          expect(JSON.stringify(result)).not.toContain('response-audio-data');
+        } else {
+          expect(result.error).toBeUndefined();
+          expect(result.metadata.redteamHistory?.[0].outputAudio).toEqual({
+            data: 'response-audio-data',
+            format: 'wav',
+          });
+        }
+      },
+    );
   });
 });

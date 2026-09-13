@@ -161,7 +161,7 @@ describe('RedteamIterativeProvider', () => {
       'keeps %s forensic traces out of the attacker and returned histories',
       async (pluginId, assertionSet, media) => {
         const canary = 'PRIVATE_ITERATIVE_FORENSIC_TRACE';
-        mockGetTargetResponse.mockResolvedValue({
+        mockGetTargetResponse.mockResolvedValue({ output: 'Public report' }).mockResolvedValueOnce({
           output: 'Public report',
           ...(media && {
             images: [{ data: canary + '_IMAGE', mimeType: 'image/png' }],
@@ -220,9 +220,10 @@ describe('RedteamIterativeProvider', () => {
             excludeTargetOutputFromAgenticAttackGeneration: false,
           });
           expect(mockGetTargetResponse).toHaveBeenCalledTimes(2);
-          expect(fetchTrace).toHaveBeenCalledTimes(media ? 0 : 2);
+          expect(fetchTrace).toHaveBeenCalledTimes(media ? 1 : 2);
           if (media) {
             expect(result.error).toMatch(/audio.*redaction.*verified/i);
+            expect(result.metadata?.redactionMediaOmitted).toBe(true);
           } else {
             expect(result.error).toBeUndefined();
           }

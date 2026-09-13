@@ -1405,7 +1405,7 @@ describe('RedteamIterativeMetaProvider', () => {
       'keeps %s forensic traces out of attacker requests and metadata',
       async (pluginId, assertionSet) => {
         const canary = 'SYNTHETIC_META_FORENSIC_SECRET';
-        mockGetTargetResponse.mockResolvedValue({
+        mockGetTargetResponse.mockResolvedValue({ output: 'Public report' }).mockResolvedValueOnce({
           output: 'Public report',
           image: { data: canary + '_IMAGE', format: 'png' },
           audio: { data: canary + '_AUDIO', format: 'wav' },
@@ -1468,7 +1468,9 @@ describe('RedteamIterativeMetaProvider', () => {
         });
         expect(requests).toHaveLength(2);
         expect(JSON.stringify(requests)).not.toContain(canary);
-        expect(result.metadata.redteamHistory).toHaveLength(2);
+        expect(result.metadata.redteamHistory).toHaveLength(1);
+        expect(result.error).toMatch(/audio.*redaction.*verified/i);
+        expect(result.metadata.redactionMediaOmitted).toBe(true);
         expect(JSON.stringify(result.metadata)).not.toContain(canary);
       },
     );

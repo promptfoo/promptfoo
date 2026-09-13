@@ -55,7 +55,15 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
         ([record.mimeType, record.mime_type, record.media_type].some(
           (mime) => typeof mime === 'string' && /^\s*(?:image|audio|video)\//i.test(mime),
         ) &&
-          [record.data, record.url, record.uri, record.fileUri, record.file_uri].some((payload) =>
+          [
+            record.data,
+            record.bytesBase64Encoded,
+            record.base64Data,
+            record.url,
+            record.uri,
+            record.fileUri,
+            record.file_uri,
+          ].some((payload) =>
             typeof payload === 'string'
               ? payload.length > 0
               : payload && typeof payload === 'object' && Object.keys(payload).length > 0,

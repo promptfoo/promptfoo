@@ -422,13 +422,15 @@ describe('RedteamIterativeProvider', () => {
     });
 
     it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
-      'omits audio from the final tree probe for %s',
+      'retains an earlier media error after the final clean tree probe for %s',
       async (pluginId) => {
         const data = Buffer.from('PRIVATE_FINAL_TREE_AUDIO').toString('base64');
         mockRedteamProvider.callApi.mockResolvedValue({ output: 'invalid attack JSON' });
         const gradingProvider = createMockProvider({ id: 'mock-grader' });
         const targetProvider = createMockProvider({ id: 'mock-target' });
-        targetProvider.callApi.mockResolvedValue({ output: data, audio: { data, format: 'wav' } });
+        targetProvider.callApi
+          .mockResolvedValue({ output: 'Clean report' })
+          .mockResolvedValueOnce({ output: data, audio: { data, format: 'wav' } });
         const remote = vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(false);
         const attacker = vi
           .spyOn(redteamProviderManager, 'getProvider')
@@ -455,6 +457,7 @@ describe('RedteamIterativeProvider', () => {
           expect(result.metadata?.stopReason).toBe('MAX_DEPTH');
           expect(JSON.stringify(result)).not.toContain(data);
           expect(result.metadata?.redactionMediaOmitted).toBe(true);
+          expect(result.error).toMatch(/audio.*redaction.*verified/i);
           expect(result.tokenUsage?.numRequests).toBe(2);
         } finally {
           remote.mockRestore();

@@ -100,6 +100,7 @@ const getIterativeGoalRubric = (goal: string | undefined): string => {
 type StopReason = 'Grader failed' | 'Max iterations reached';
 
 interface IterativeMetadata {
+  redactionMediaOmitted?: boolean;
   finalIteration: number;
   highestScore: number;
   redteamFinalPrompt?: string;
@@ -237,6 +238,7 @@ export async function runRedteamConversation({
   }[] = [];
 
   let lastResponse: TargetResponse | undefined = undefined;
+  let mediaRedactionError: string | undefined;
 
   const tracingOptions = resolveTracingOptions({
     strategyId: 'iterative',
@@ -457,6 +459,9 @@ export async function runRedteamConversation({
     );
     // Externalize blobs before they hit history/prompts
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+    if (targetResponse.metadata?.redactionMediaOmitted === true) {
+      mediaRedactionError ??= targetResponse.error;
+    }
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
@@ -827,10 +832,13 @@ export async function runRedteamConversation({
 
   return {
     output: bestResponse || lastResponse?.output || '',
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    ...(mediaRedactionError || lastResponse?.error
+      ? { error: mediaRedactionError || lastResponse?.error }
+      : {}),
     prompt: bestInjectVar,
     metadata: {
       finalIteration,
+      ...(mediaRedactionError && { redactionMediaOmitted: true }),
       highestScore,
       redteamHistory: previousOutputs,
       redteamFinalPrompt: bestInjectVar,

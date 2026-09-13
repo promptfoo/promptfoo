@@ -73,6 +73,7 @@ import type { RedteamGradingContext } from '../grading/types';
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
 
 interface IterativeMetaMetadata {
+  redactionMediaOmitted?: boolean;
   finalIteration: number;
   vulnerabilityAchieved: boolean;
   redteamFinalPrompt?: string;
@@ -229,6 +230,7 @@ export async function runMetaAgentRedteam({
   let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' =
     'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
+  let mediaRedactionError: string | undefined;
   let failClosedError: string | undefined;
 
   // Track the previous iteration's trace summary for attack generation
@@ -506,8 +508,11 @@ export async function runMetaAgentRedteam({
     );
     const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
       initialTargetResponse,
-      context,
+      { ...context, test },
     );
+    if (targetResponse.metadata?.redactionMediaOmitted === true) {
+      mediaRedactionError ??= targetResponse.error;
+    }
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
@@ -727,12 +732,13 @@ export async function runMetaAgentRedteam({
   return {
     output: bestResponse || lastResponse?.output || '',
     prompt: bestPrompt,
-    ...(failClosedError
-      ? { error: failClosedError }
+    ...(mediaRedactionError || failClosedError
+      ? { error: mediaRedactionError || failClosedError }
       : lastResponse?.error
         ? { error: lastResponse.error }
         : {}),
     metadata: {
+      ...(mediaRedactionError && { redactionMediaOmitted: true }),
       finalIteration,
       vulnerabilityAchieved,
       // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)

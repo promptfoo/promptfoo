@@ -278,7 +278,9 @@ describe('CrescendoProvider', () => {
         image: { data: canary + '_IMAGE', format: 'png' },
         audio: { data: canary + '_AUDIO', format: 'wav' },
       };
-      mockTargetProvider.callApi.mockResolvedValue(targetResponse);
+      mockTargetProvider.callApi
+        .mockResolvedValue({ output: 'Clean report' })
+        .mockResolvedValueOnce(targetResponse);
       const provider = new CrescendoProvider({
         injectVar: 'objective',
         maxTurns: 2,
@@ -303,6 +305,8 @@ describe('CrescendoProvider', () => {
       expect(fetchTrace).toHaveBeenCalledTimes(2);
       expect(JSON.stringify(mockRedTeamProvider.callApi.mock.calls)).not.toContain(canary);
       expect(JSON.stringify(result.metadata)).not.toContain(canary);
+      expect(result.error).toMatch(/audio.*redaction.*verified/i);
+      expect(result.metadata?.redactionMediaOmitted).toBe(true);
     },
   );
 

@@ -158,6 +158,19 @@ describe('sanitizeCodingAgentVerifierInputs', () => {
     ).not.toContain('PRIVATE_DEEP_METADATA');
   });
 
+  it('handles nested and cyclic assertion sets without changing ordinary vars', () => {
+    const assertionSet: Record<string, unknown> = { type: 'assert-set' };
+    assertionSet.assert = [assertionSet, null, { type: 42 }];
+    const ordinary = { assert: [assertionSet], vars: { rawReceipt: 'ordinary receipt' } };
+    expect(sanitizeCodingAgentVerifierInputs(ordinary).vars).toEqual(ordinary.vars);
+    (assertionSet.assert as unknown[]).push({
+      type: 'not-promptfoo:redteam:harness:artifact-redaction',
+    });
+    const sanitized = sanitizeCodingAgentVerifierInputs(ordinary);
+    expect(sanitized.vars.rawReceipt).toBe('[REDACTED]');
+    expect(ordinary.vars.rawReceipt).toBe('ordinary receipt');
+  });
+
   it('preserves ordinary deep provider schemas without recursive traversal', () => {
     let schema: Record<string, unknown> = { type: 'string' };
     for (let i = 0; i < 6000; i++) {

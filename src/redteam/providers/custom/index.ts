@@ -116,6 +116,7 @@ const CUSTOM_PARENT_TEMPLATE = dedent`
  * Represents metadata for the Custom conversation process.
  */
 export interface CustomMetadata extends BaseRedteamMetadata {
+  redactionMediaOmitted?: boolean;
   customRoundsCompleted: number;
   customBacktrackCount: number;
   customResult: boolean;
@@ -325,6 +326,7 @@ export class CustomProvider implements ApiProvider {
 
     let lastFeedback = '';
     let lastResponse: TargetResponse = { output: '' };
+    let mediaRedactionError: string | undefined;
     let evalFlag = false;
     let evalPercentage: number | null = null;
 
@@ -429,6 +431,9 @@ export class CustomProvider implements ApiProvider {
           options,
         );
         lastResponse = response;
+        if (lastResponse.metadata?.redactionMediaOmitted === true) {
+          mediaRedactionError ??= lastResponse.error;
+        }
         lastTransformResult = transformResult;
         if (transformResult?.tokenUsage) {
           accumulateAttackerTokenUsage(totalTokenUsage, transformResult);
@@ -499,6 +504,9 @@ export class CustomProvider implements ApiProvider {
           // Update lastResponse to the unblocking response and continue
           // Note: unblocking prompts don't use audio/image transforms
           lastResponse = unblockingResponse;
+          if (lastResponse.metadata?.redactionMediaOmitted === true) {
+            mediaRedactionError ??= lastResponse.error;
+          }
           if (isConversationEndedResponse(lastResponse)) {
             logger.info('[Custom] Target ended conversation during unblocking', {
               round: roundNum,
@@ -680,6 +688,7 @@ export class CustomProvider implements ApiProvider {
       output: lastResponse.output,
       prompt: finalPrompt,
       metadata: {
+        ...(mediaRedactionError && { redactionMediaOmitted: true }),
         redteamFinalPrompt: finalPrompt,
         messages: messages as Record<string, any>[],
         customRoundsCompleted: roundNum,
@@ -695,7 +704,9 @@ export class CustomProvider implements ApiProvider {
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastResponse?.guardrails,
-      ...(lastTargetError ? { error: lastTargetError } : {}),
+      ...(mediaRedactionError || lastTargetError
+        ? { error: mediaRedactionError || lastTargetError }
+        : {}),
     };
   }
 

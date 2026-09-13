@@ -19,6 +19,25 @@ export function sanitizeCodingAgentVerifierInputs<T>(input: T): T {
   const seen = [new WeakMap<object, unknown>(), new WeakMap<object, unknown>()];
   const isCodingAgentId = (id: unknown) =>
     typeof id === 'string' && /^(?:not-)?(?:promptfoo:redteam:)?(?:coding-agent|harness):/.test(id);
+  const hasCodingAgentAssertion = (assertions: unknown): boolean => {
+    const pending: unknown[] = Array.isArray(assertions) ? [...assertions] : [];
+    const visited = new Set<object>();
+    while (pending.length) {
+      const value = pending.pop();
+      if (!value || typeof value !== 'object' || visited.has(value)) {
+        continue;
+      }
+      visited.add(value);
+      const assertion = value as Record<string, unknown>;
+      if (isCodingAgentId(assertion.type)) {
+        return true;
+      }
+      if (assertion.type === 'assert-set' && Array.isArray(assertion.assert)) {
+        pending.push(...assertion.assert);
+      }
+    }
+    return false;
+  };
   const stack: {
     entries: [string, unknown][];
     result: Record<string, unknown> | unknown[];
@@ -32,12 +51,13 @@ export function sanitizeCodingAgentVerifierInputs<T>(input: T): T {
       return value;
     }
     const object = value as Record<string, unknown>;
-    const owned = [
-      object.id,
-      object.type,
-      object.pluginId,
-      (object.metadata as Record<string, unknown> | undefined)?.pluginId,
-    ].some(isCodingAgentId);
+    const owned =
+      [
+        object.id,
+        object.type,
+        object.pluginId,
+        (object.metadata as Record<string, unknown> | undefined)?.pluginId,
+      ].some(isCodingAgentId) || hasCodingAgentAssertion(object.assert);
     if (!verifier && owned) {
       depth = 0;
     }

@@ -617,6 +617,7 @@ async function runRedteamConversation({
   const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
   let bestResponse = '';
+  let mediaRedactionError: string | undefined;
 
   let stoppingReason: StopReason;
 
@@ -683,8 +684,9 @@ async function runRedteamConversation({
           return {
             output: bestResponse,
             prompt: bestNode.prompt,
-            error: error.message,
+            error: mediaRedactionError || error.message,
             metadata: {
+              ...(mediaRedactionError && { redactionMediaOmitted: true }),
               highestScore: maxScore,
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
@@ -837,6 +839,9 @@ async function runRedteamConversation({
           options,
         );
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
+        if (targetResponse.metadata?.redactionMediaOmitted === true) {
+          mediaRedactionError ??= targetResponse.error;
+        }
         // Count the target request even when the target returns an error.
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
         // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
@@ -1042,7 +1047,9 @@ async function runRedteamConversation({
           return {
             output: targetResponse.output,
             prompt: bestNode.prompt,
+            ...(mediaRedactionError && { error: mediaRedactionError }),
             metadata: {
+              ...(mediaRedactionError && { redactionMediaOmitted: true }),
               highestScore: maxScore,
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
@@ -1085,7 +1092,9 @@ async function runRedteamConversation({
           return {
             output: bestResponse,
             prompt: bestNode.prompt,
+            ...(mediaRedactionError && { error: mediaRedactionError }),
             metadata: {
+              ...(mediaRedactionError && { redactionMediaOmitted: true }),
               highestScore: maxScore,
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
@@ -1129,7 +1138,9 @@ async function runRedteamConversation({
           return {
             output: bestResponse,
             prompt: bestNode.prompt,
+            ...(mediaRedactionError && { error: mediaRedactionError }),
             metadata: {
+              ...(mediaRedactionError && { redactionMediaOmitted: true }),
               highestScore: maxScore,
               redteamFinalPrompt: bestFinalAttackPrompt || lastFinalAttackPrompt || bestNode.prompt,
               messages: treeOutputs as Record<string, any>[],
@@ -1249,6 +1260,9 @@ async function runRedteamConversation({
     options,
   );
   finalTargetResponse = await externalizeResponseForRedteamHistory(finalTargetResponse, context);
+  if (finalTargetResponse.metadata?.redactionMediaOmitted === true) {
+    mediaRedactionError ??= finalTargetResponse.error;
+  }
   accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
 
   logger.debug(
@@ -1278,7 +1292,7 @@ async function runRedteamConversation({
       (typeof finalTargetResponse.output === 'string' ? finalTargetResponse.output : ''),
     prompt: bestNode.prompt,
     metadata: {
-      ...(finalTargetResponse.metadata?.redactionMediaOmitted === true && {
+      ...(mediaRedactionError && {
         redactionMediaOmitted: true,
       }),
       highestScore: maxScore,
@@ -1295,7 +1309,9 @@ async function runRedteamConversation({
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse?.guardrails,
-    ...(finalTargetResponse.error ? { error: finalTargetResponse.error } : {}),
+    ...(mediaRedactionError || finalTargetResponse.error
+      ? { error: mediaRedactionError || finalTargetResponse.error }
+      : {}),
   };
 }
 
