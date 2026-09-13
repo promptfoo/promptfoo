@@ -256,6 +256,15 @@ describe('ESM utilities', () => {
       },
     );
 
+    it('normalizes missing entry modules inside paths containing apostrophes', async () => {
+      const missingPath = path.resolve(__dirname, "__fixtures__/O'Brien/missing.mjs");
+      await expect(importModule(missingPath)).rejects.toMatchObject({
+        code: 'ENOENT',
+        path: missingPath,
+      });
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
     it.each([
       {
         name: 'missing dependency',
@@ -281,7 +290,7 @@ describe('ESM utilities', () => {
         error: { message: 'config initialization failed' },
       },
     ])('preserves and logs a $name in an existing module', async ({ source, error }) => {
-      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-esm-error-test-'));
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "promptfoo-esm-O'Brien-"));
       const modulePath = path.join(tempDir, 'config.mjs');
       fs.writeFileSync(modulePath, source);
 
