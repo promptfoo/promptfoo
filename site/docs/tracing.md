@@ -352,6 +352,8 @@ A built-in sanitizer masks common credential-shaped keys (`authorization`, `api_
 `token`, `password`, `cookie`, …) when traces are read, but does not prevent those values
 from being stored. Don't rely on `redactAttributes` alone to cover built-in provider spans.
 
+Trace redaction applies to the paths described above. It does not cover unrelated diagnostics, derived fields, or sharing/export paths unless their documentation says otherwise.
+
 :::
 
 Trace retention (`storage.retentionDays`) prunes traces and spans older than the given number

@@ -89,6 +89,7 @@ redteam:
   contexts: Array<{ id: string, purpose?: string, vars?: Record<string, string> }>
   language: string | string[]
   testGenerationInstructions: string
+  excludeTargetOutputFromAgenticAttackGeneration: boolean
   graderExamples: Array<object>
   maxConcurrency: number
   delay: number
@@ -96,24 +97,29 @@ redteam:
 
 ### Configuration Fields
 
-| Field                        | Type                      | Description                                                                                             | Default                                          |
-| ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                                                              | Inferred from prompts                            |
-| `numTests`                   | `number`                  | Default number of tests to generate per plugin                                                          | 5                                                |
-| `maxCharsPerMessage`         | `number`                  | Maximum characters allowed in each generated user message                                               | None                                             |
-| `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                                                  | `default`                                        |
-| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs                                         | `openai:gpt-5`                                   |
-| `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation                                | Inferred from prompts                            |
-| `contexts`                   | `Array<object>`           | Test contexts for different app states; each generates separate test runs with context-specific grading | None                                             |
-| `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                                                    | `basic`, `jailbreak:meta`, `jailbreak:composite` |
-| `language`                   | `string\|string[]`        | Language(s) for generated tests (applies to all plugins/strategies)                                     | English                                          |
-| `frameworks`                 | `string[]`                | List of compliance frameworks to surface in reports and CLI commands                                    | All supported frameworks                         |
-| `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation                                    | Empty                                            |
-| `graderExamples`             | `Array<object>`           | Global grading examples applied to all plugins; merged before plugin-level `config.graderExamples`      | None                                             |
-| `maxConcurrency`             | `number`                  | Maximum number of concurrent plugin generation requests                                                 | 4                                                |
-| `delay`                      | `number`                  | Delay in milliseconds between plugin generation requests; forces concurrency to 1 when greater than 0   | 0                                                |
+| Field                                            | Type                      | Description                                                                                                   | Default                                          |
+| ------------------------------------------------ | ------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `injectVar`                                      | `string`                  | Variable to inject adversarial inputs into                                                                    | Inferred from prompts                            |
+| `numTests`                                       | `number`                  | Default number of tests to generate per plugin                                                                | 5                                                |
+| `maxCharsPerMessage`                             | `number`                  | Maximum characters allowed in each generated user message                                                     | None                                             |
+| `plugins`                                        | `Array<string\|object>`   | Plugins to use for red team generation                                                                        | `default`                                        |
+| `provider` or `targets`                          | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs                                               | `openai:gpt-5`                                   |
+| `purpose`                                        | `string`                  | Description of prompt templates' purpose to guide adversarial generation                                      | Inferred from prompts                            |
+| `contexts`                                       | `Array<object>`           | Test contexts for different app states; each generates separate test runs with context-specific grading       | None                                             |
+| `strategies`                                     | `Array<string\|object>`   | Strategies to apply to other plugins                                                                          | `basic`, `jailbreak:meta`, `jailbreak:composite` |
+| `language`                                       | `string\|string[]`        | Language(s) for generated tests (applies to all plugins/strategies)                                           | English                                          |
+| `frameworks`                                     | `string[]`                | List of compliance frameworks to surface in reports and CLI commands                                          | All supported frameworks                         |
+| `excludeTargetOutputFromAgenticAttackGeneration` | `boolean`                 | Remove target responses from main follow-up attack prompts; see [data handling](#target-output-data-handling) | `false`                                          |
+| `testGenerationInstructions`                     | `string`                  | Additional instructions for test generation to guide attack creation                                          | Empty                                            |
+| `graderExamples`                                 | `Array<object>`           | Global grading examples applied to all plugins; merged before plugin-level `config.graderExamples`            | None                                             |
+| `maxConcurrency`                                 | `number`                  | Maximum number of concurrent plugin generation requests                                                       | 4                                                |
+| `delay`                                          | `number`                  | Delay in milliseconds between plugin generation requests; forces concurrency to 1 when greater than 0         | 0                                                |
 
 For multi-input testing, define `inputs` on the target/provider rather than under `redteam`. Promptfoo automatically stores the combined payload in `__prompt` for internal use, so you should not set `injectVar` or create a manual `prompt` field just to support multi-input configs. See [Multi-Input Red Teaming](/docs/red-team/multi-input/) for end-to-end examples.
+
+### Target output data handling
+
+`excludeTargetOutputFromAgenticAttackGeneration` removes target responses from the main follow-up attack prompt across strategies. GOAT failure extraction, optional unblocking (`PROMPTFOO_ENABLE_UNBLOCKING=true`), and remote graders can still send target responses remotely. For sensitive targets, set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true`, disable unblocking, avoid GOAT, and configure a local `redteam.provider` and grader.
 
 ### Framework Filtering
 
