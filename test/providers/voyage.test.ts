@@ -100,6 +100,64 @@ describe('VoyageEmbeddingProvider', () => {
     },
   );
 
+  it.each([
+    {
+      name: 'provider environment',
+      providerKey: 'provider-custom',
+      expectedKey: 'provider-custom',
+    },
+    { name: 'suite environment', suiteKey: 'suite-custom', expectedKey: 'suite-custom' },
+    { name: 'ambient custom variable', expectedKey: 'ambient-custom' },
+    { name: 'empty scoped custom variable', providerKey: '', expectedKey: 'ambient-custom' },
+    {
+      name: 'explicit key',
+      providerKey: 'provider-custom',
+      apiKey: 'explicit-key',
+      expectedKey: 'explicit-key',
+    },
+  ])(
+    'uses $name for a custom API key variable in the embedding request',
+    async ({ providerKey, suiteKey, apiKey, expectedKey }) => {
+      mockedGetEnvString.mockImplementation((name) =>
+        name === 'CUSTOM_VOYAGE_KEY' ? 'ambient-custom' : '',
+      );
+      mockedFetchWithCache.mockResolvedValue({
+        data: { data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 2 } },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = await loadApiProvider('voyage:voyage-4-large', {
+        options: {
+          config: { apiKeyEnvar: 'CUSTOM_VOYAGE_KEY', apiKey },
+          env: {
+            VOYAGE_API_KEY: 'provider-default',
+            ...(providerKey !== undefined && { CUSTOM_VOYAGE_KEY: providerKey }),
+          },
+        },
+        env: {
+          VOYAGE_API_KEY: 'suite-default',
+          ...(suiteKey !== undefined && { CUSTOM_VOYAGE_KEY: suiteKey }),
+        },
+      });
+
+      await expect(provider.callEmbeddingApi!('custom key fixture')).resolves.toEqual({
+        embedding: [0.1, 0.2],
+        cached: false,
+        tokenUsage: { total: 2, numRequests: 1 },
+      });
+      expect(mockedFetchWithCache).toHaveBeenCalledExactlyOnceWith(
+        'https://api.voyageai.com/v1/embeddings',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${expectedKey}` },
+          body: JSON.stringify({ input: ['custom key fixture'], model: 'voyage-4-large' }),
+        },
+        expect.any(Number),
+      );
+    },
+  );
+
   it('returns cached responses with the cached flag preserved', async () => {
     mockedFetchWithCache.mockResolvedValue({
       data: {

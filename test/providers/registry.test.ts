@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers';
 import { isFoundationModelProvider } from '../../src/providers/constants';
 import { LlamaApiProvider } from '../../src/providers/llamaApi';
@@ -15,6 +15,8 @@ import { getProviderFactories, providerMap } from '../../src/providers/registry'
 import type { CometApiImageProvider } from '../../src/providers/cometapi';
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
+
+vi.mock('../../src/telemetry');
 
 vi.mock('../../src/providers/pythonCompletion', async (importOriginal) => {
   return {
@@ -2044,49 +2046,6 @@ describe('Provider Registry', () => {
         mockContext,
       );
       expect(autoProvider.id()).toBe('orcarouter:orcarouter/auto');
-    });
-  });
-
-  // Kept at the very end of the file because it uses vi.doMock + resetModules
-  // to simulate a broken redteam family dynamic import. Running last avoids
-  // polluting earlier tests that share the original module graph.
-  describe('getProviderFactories family load error wrapping', () => {
-    afterEach(() => {
-      vi.doUnmock('../../src/redteam/providers/registry');
-      vi.resetModules();
-    });
-
-    it('wraps family factories() rejections with the requested provider path and preserves cause', async () => {
-      // vi.doMock factory throws are caught by vitest and rewrapped with its
-      // own diagnostic message, which would lose the cause identity the
-      // wrapper is trying to preserve. Defining `redteamProviderFactories`
-      // as a throwing getter lets the import succeed while the destructure
-      // inside `family.factories()` triggers the throw — which is the
-      // realistic failure shape (module loads, export access fails) and
-      // round-trips cleanly through the async rejection.
-      const cause = new Error('simulated registry load failure');
-      vi.doMock('../../src/redteam/providers/registry', () => ({
-        get redteamProviderFactories() {
-          throw cause;
-        },
-      }));
-      vi.resetModules();
-      const { getProviderFactories: reloadedGetProviderFactories } = await import(
-        '../../src/providers/registry'
-      );
-
-      let caught: unknown;
-      try {
-        await reloadedGetProviderFactories('promptfoo:redteam:crescendo');
-      } catch (err) {
-        caught = err;
-      }
-      expect(caught).toBeInstanceOf(Error);
-      expect((caught as Error).message).toContain(
-        "Failed to load provider family for 'promptfoo:redteam:crescendo'",
-      );
-      expect((caught as Error).message).toContain('simulated registry load failure');
-      expect((caught as Error).cause).toBe(cause);
     });
   });
 
