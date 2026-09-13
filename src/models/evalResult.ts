@@ -593,7 +593,12 @@ export function sanitizeResultForJsonlArtifact<T extends object>(result: T): T {
     ...(artifactResult.vars === undefined
       ? {}
       : {
-          vars: shouldStripTestVars ? {} : sanitizeForDbWithSecrets(artifactResult.vars),
+          vars: shouldStripTestVars
+            ? {}
+            : sanitizeForDbWithSecrets({
+                ...(artifactResult.testCase as AtomicTestCase | undefined),
+                vars: artifactResult.vars,
+              }).vars,
         }),
     ...(artifactResult.prompt
       ? {
@@ -1029,7 +1034,7 @@ export default class EvalResult {
       testCase,
       testIdx: this.testIdx,
       tokenUsage,
-      vars: shouldStripTestVars ? {} : this.testCase.vars || {},
+      vars: testCase.vars || {},
       metadata: shouldStripMetadata ? {} : this.metadata,
       failureReason: this.failureReason,
     });

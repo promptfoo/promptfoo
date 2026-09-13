@@ -995,6 +995,9 @@ describe('coding-agent evidence regressions', () => {
         { output: [{ inlineData: { mimeType: 'image/png', data: 'PRIVATE_INLINE_IMAGE' } }] },
         { output: [{ inline_data: { mime_type: 'audio/wav', data: 'PRIVATE_INLINE_AUDIO' } }] },
         { output: [{ inlineData: { mimeType: 'video/mp4', data: 'PRIVATE_INLINE_VIDEO' } }] },
+        { output: { mimeType: 'image/png', data: 'PRIVATE_IMAGE_DATA' } },
+        { output: { mime_type: 'audio/wav', uri: 'https://example.invalid/private.wav' } },
+        { output: { media_type: 'video/mp4', fileUri: 'https://example.invalid/private.mp4' } },
         { output: '![report](https://example.invalid/private.png)' },
         { output: '![report][image]\n\n[image]: https://example.invalid/private.png' },
         { output: '<img src="https://example.invalid/private.png">' },
@@ -1021,6 +1024,23 @@ describe('coding-agent evidence regressions', () => {
           providerResponse: { output: 'https://example.invalid/report' },
         }),
       ).toBeUndefined();
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'accepts MIME-only artifact descriptors for %s',
+    (pluginId) => {
+      for (const descriptor of [
+        { filename: 'screenshot.png', mimeType: 'image/png' },
+        { filename: 'recording.wav', mime_type: 'audio/wav', data: '' },
+        { filename: 'clip.mp4', media_type: 'video/mp4', uri: '' },
+      ]) {
+        expect(
+          findDeterministicLeak(pluginId, 'Clean report', testCase, undefined, {
+            providerResponse: { output: { artifacts: [descriptor] } },
+          }),
+        ).toBeUndefined();
+      }
     },
   );
 

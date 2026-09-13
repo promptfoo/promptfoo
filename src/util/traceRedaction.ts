@@ -1,6 +1,6 @@
 import { BLOB_SCHEME } from '../blobs/constants';
 
-import type { AssertionOrSet, AtomicTestCase, ProviderResponse } from '../types';
+import type { AssertionOrSet, AtomicTestCase, GradingResult, ProviderResponse } from '../types';
 
 export const TRACE_REDACTION_ASSERTIONS = new Set([
   'promptfoo:redteam:coding-agent:trace-redaction',
@@ -52,9 +52,14 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
         record.isBase64 === true ||
         (typeof record.b64_json === 'string' && record.b64_json.length > 0) ||
         (Array.isArray(record.images) && record.images.length > 0) ||
-        [record.mimeType, record.mime_type, record.media_type].some(
+        ([record.mimeType, record.mime_type, record.media_type].some(
           (mime) => typeof mime === 'string' && /^\s*(?:image|audio|video)\//i.test(mime),
-        ) ||
+        ) &&
+          [record.data, record.url, record.uri, record.fileUri, record.file_uri].some((payload) =>
+            typeof payload === 'string'
+              ? payload.length > 0
+              : payload && typeof payload === 'object' && Object.keys(payload).length > 0,
+          )) ||
         (typeof record.type === 'string' &&
           /^(?:(?:input|output)_)?(?:image|audio|video)(?:_url)?$/.test(record.type)) ||
         record.image_url ||
@@ -77,11 +82,22 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
   return false;
 }
 
+function omitGradingPrompts(result: GradingResult): GradingResult {
+  return {
+    ...result,
+    ...(result.metadata && { metadata: { ...result.metadata, renderedGradingPrompt: undefined } }),
+    ...(result.componentResults && {
+      componentResults: result.componentResults.map(omitGradingPrompts),
+    }),
+  };
+}
+
 /** Keep privacy-check response bodies and their echoes out of public result copies. */
 export function sanitizeRedactionResult<T extends object>(input: T): T {
   const result = input as T & {
     testCase?: AtomicTestCase;
     response?: ProviderResponse | null;
+    gradingResult?: GradingResult | null;
     metadata?: Record<string, unknown>;
     error?: string | null;
     tokenUsage?: unknown;
@@ -115,14 +131,18 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
   delete metadata.errorContext;
   delete metadata.sessionId;
   const error = result.error ? 'Error details omitted for trace/artifact redaction.' : result.error;
+  const gradingResult = result.gradingResult
+    ? omitGradingPrompts(result.gradingResult)
+    : result.gradingResult;
   if (!response) {
-    return { ...input, ...accounting, error, metadata };
+    return { ...input, ...accounting, error, metadata, gradingResult };
   }
   return {
     ...input,
     ...accounting,
     error,
     metadata,
+    gradingResult,
     response: {
       output: mediaOmitted
         ? '[Media response omitted: image, audio, or video redaction could not be verified.]'

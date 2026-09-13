@@ -164,7 +164,9 @@ describe('EvalResult', () => {
       testCase: {
         assert: [{ type: `promptfoo:redteam:${pluginId}`, value }],
         metadata: { pluginId, pluginConfig: value } as AtomicTestCase['metadata'],
+        vars: { ...value, publicValue: 'original' },
       },
+      vars: { ...value, publicValue: 'streamed' },
       metadata: { pluginId, pluginConfig: value },
       gradingResult: {
         pass: true,
@@ -183,6 +185,7 @@ describe('EvalResult', () => {
     const artifact = sanitizeResultForJsonlArtifact(row);
     expect(JSON.stringify(artifact)).not.toContain(secret);
     expect(JSON.stringify(artifact)).toContain('fixtures/receipt.txt');
+    expect(artifact.vars?.publicValue).toBe('streamed');
     const saved = await EvalResult.createFromEvaluateResult('verifier-result-' + pluginId, row);
     const [bulk] = await EvalResult.createManyFromEvaluateResult(
       [row],
@@ -193,7 +196,51 @@ describe('EvalResult', () => {
       expect(JSON.stringify(persisted?.toEvaluateResult())).not.toContain(secret);
       expect(JSON.stringify(persisted?.gradingResult)).toContain('fixtures/receipt.txt');
     }
+    const legacy = new EvalResult({
+      ...saved,
+      testCase: row.testCase,
+      response: saved.response ?? null,
+    });
+    expect(JSON.stringify(legacy.toEvaluateResult())).not.toContain(secret);
+    expect(legacy.toEvaluateResult().vars?.publicValue).toBe('original');
     expect(JSON.stringify(row)).toContain(secret);
+  });
+
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      [false, true].map((hasResponse) => [pluginId, hasResponse] as const),
+    ),
+  )('omits saved grader prompts for %s with response=%s', async (pluginId, hasResponse) => {
+    const secret = 'PRIVATE_GRADER_PROMPT_RECEIPT';
+    const grade = {
+      pass: true,
+      score: 1,
+      reason: 'Public report checked.',
+      metadata: { renderedGradingPrompt: `Inspect the output: ${secret}`, cachedResponse: false },
+    };
+    const row = createEvaluateResult({
+      ...mockEvaluateResult,
+      testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+      response: { output: secret },
+      gradingResult: { ...grade, componentResults: [{ ...grade, componentResults: [grade] }] },
+    });
+    if (!hasResponse) {
+      delete row.response;
+    }
+    const saved = await EvalResult.createFromEvaluateResult('grader-prompt-' + pluginId, row);
+    const [bulk] = await EvalResult.createManyFromEvaluateResult([row], 'grader-bulk-' + pluginId);
+    for (const result of [sanitizeResultForJsonlArtifact(row), saved, bulk]) {
+      expect(JSON.stringify(result.gradingResult)).not.toContain(secret);
+      expect(result.gradingResult).toMatchObject({
+        pass: true,
+        score: 1,
+        reason: grade.reason,
+        metadata: { cachedResponse: false },
+      });
+    }
+    const ordinary = sanitizeResultForJsonlArtifact({ ...row, testCase: { assert: [] } });
+    expect(ordinary.gradingResult?.metadata?.renderedGradingPrompt).toContain(secret);
+    expect(row.gradingResult?.metadata?.renderedGradingPrompt).toContain(secret);
   });
 
   it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
