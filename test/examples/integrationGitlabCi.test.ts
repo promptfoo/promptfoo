@@ -295,10 +295,24 @@ exit "\${PROMPTFOO_TEST_EXIT_CODE:-0}"
     const kubeconfig = path.join(tempDir, 'agent-kubeconfig');
     fs.writeFileSync(kubeconfig, 'fixture-agent-token');
 
-    const result = await runEvaluation({ KUBECONFIG: kubeconfig });
+    const result = await runEvaluation({
+      KUBECONFIG: `${path.join(tempDir, 'missing')}:${kubeconfig}`,
+    });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('GitLab Agent CI access');
+    expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
+  });
+
+  it('rejects stale output artifacts before running eval code', async () => {
+    const outputDir = path.join(tempDir, job.variables.PROMPTFOO_OUTPUT_DIR);
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, 'results.json'), 'stale');
+
+    const result = await runEvaluation();
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('PROMPTFOO_OUTPUT_DIR must be empty');
     expect(fs.existsSync(path.join(tempDir, 'promptfoo-args'))).toBe(false);
   });
 

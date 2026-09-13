@@ -24,6 +24,10 @@
       export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
       : "${PROMPTFOO_OUTPUT_DIR:?PROMPTFOO_OUTPUT_DIR must not be empty}"
       mkdir -p "$PROMPTFOO_OUTPUT_DIR"
+      if find "$PROMPTFOO_OUTPUT_DIR" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+        echo 'PROMPTFOO_OUTPUT_DIR must be empty before running an eval.' >&2
+        exit 1
+      fi
 
       if [ -n "${PROMPTFOO_GITLAB_TOKEN:-}" ]; then
         echo 'Scope PROMPTFOO_GITLAB_TOKEN to the promptfoo-review environment, not the eval job.' >&2
@@ -58,9 +62,16 @@
         exit 1
       fi
 
-      if [ -n "\${KUBECONFIG:-}" ] && [ -r "$KUBECONFIG" ]; then
-        echo 'Disable GitLab Agent CI access before running executable eval code.' >&2
-        exit 1
+      if [ -n "\${KUBECONFIG:-}" ]; then
+        old_ifs=$IFS
+        IFS=:
+        for kubeconfig in $KUBECONFIG; do
+          if [ -r "$kubeconfig" ]; then
+            echo 'Disable GitLab Agent CI access before running executable eval code.' >&2
+            exit 1
+          fi
+        done
+        IFS=$old_ifs
       fi
 
       if ! env -i PATH="$PATH" node \

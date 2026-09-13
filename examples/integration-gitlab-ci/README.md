@@ -17,7 +17,7 @@ The local `.gitlab-ci.yml` extends the hidden `.promptfoo-eval` job from `gitlab
 ```yaml
 include:
   - remote: 'https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-gitlab-ci/gitlab-ci.yml'
-    integrity: 'sha256-X7v2mF0qGffhNGFu2Uo0cbFY3hmwaI/pX4s1jxoszr0='
+    integrity: 'sha256-g6zpBf/c6OI6L6FCLFT2CY+KWQXyK6vhHw2KkmL2OOU='
 
 promptfoo-eval:
   extends: .promptfoo-eval
