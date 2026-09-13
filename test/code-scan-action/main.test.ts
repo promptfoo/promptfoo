@@ -1349,17 +1349,19 @@ describe('code-scan-action main', () => {
       expect(mocks.core.setOutput).not.toHaveBeenCalledWith('sarif-path', expect.anything());
     });
 
-    it('does not write SARIF when an older scanner omits skippedFiles', async () => {
+    it('writes SARIF when a complete scan omits skippedFiles', async () => {
       mockPromptfooScanResponse({ success: true, comments: [], skippedFiles: undefined });
 
       await triggerSarifAction('reports/promptfoo-code-scan.sarif');
 
       await vi.waitFor(() => {
-        expect(mocks.core.setFailed).toHaveBeenCalledWith(
-          expect.stringContaining('SARIF was requested but withheld'),
-        );
+        expect(mocks.fs.writeFileSync).toHaveBeenCalled();
       });
-      expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.core.setOutput).toHaveBeenCalledWith(
+        'sarif-path',
+        '/test/workspace/reports/promptfoo-code-scan.sarif',
+      );
+      expect(mocks.core.setFailed).not.toHaveBeenCalled();
     });
 
     it('does not write SARIF when the scanner skipped changed files', async () => {

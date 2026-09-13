@@ -197,6 +197,7 @@ When using `--json`, the scan outputs a JSON object to stdout with the following
 | `comments`       | `Comment[]` | Array of findings (see below)                                                                                     |
 | `commentsPosted` | `boolean`   | Whether comments were posted to a PR                                                                              |
 | `skipReason`     | `string`    | Set when the scan was intentionally skipped (e.g. fork PR awaiting maintainer approval); `comments` will be empty |
+| `skippedFiles`   | `number`    | Number of changed files omitted from a partial scan; absent or `0` means no files were skipped                    |
 | `error`          | `string`    | Error message if the scan failed                                                                                  |
 
 ### Comment Object

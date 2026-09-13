@@ -1047,7 +1047,7 @@ async function handleScanResponse(
   // location-backed finding) uploaded under the same Code Scanning category can be treated
   // as authoritative and silently close prior real alerts that are merely absent from this
   // incomplete scan. Surviving findings are still surfaced through PR comments below.
-  if (!skipReason && skippedFiles === 0) {
+  if (!skipReason && (skippedFiles ?? 0) === 0) {
     emitConfiguredSarifOutput(scanResponse, inputs);
   } else if ((skippedFiles ?? 0) > 0) {
     core.warning(
@@ -1072,7 +1072,7 @@ async function handleScanResponse(
     core.info('✨ No vulnerabilities found!');
   }
 
-  if (inputs.sarifOutputPath && skippedFiles !== 0) {
+  if (inputs.sarifOutputPath && (skippedFiles ?? 0) !== 0) {
     throw new Error('SARIF was requested but withheld because changed files were skipped.');
   }
 }
