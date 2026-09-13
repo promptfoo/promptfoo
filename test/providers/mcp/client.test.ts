@@ -1226,6 +1226,33 @@ describe('MCPClient', () => {
   });
 
   describe('cleanup', () => {
+    it.each(['connect', 'ping', 'listTools'] as const)(
+      'closes the allocated client when %s initialization fails',
+      async (stage) => {
+        mockClient[stage].mockRejectedValueOnce(new Error('Initialization failed'));
+        mcpClient = new MCPClient({
+          enabled: true,
+          pingOnConnect: true,
+          server: { command: 'node' },
+        });
+        await expect(mcpClient.initialize()).rejects.toThrow('Initialization failed');
+        expect(mockClient.close).toHaveBeenCalledOnce();
+        expect(mcpClient.connectedServers).toEqual([]);
+        await mcpClient.cleanup();
+        expect(mockStdioTransport.close).toHaveBeenCalled();
+      },
+    );
+
+    it('closes the client even when its transport fails to close', async () => {
+      mcpClient = new MCPClient({ enabled: true, server: { command: 'node' } });
+      await mcpClient.initialize();
+      mockStdioTransport.close.mockRejectedValueOnce(new Error('Transport close failed'));
+      await mcpClient.cleanup();
+      expect(mockStdioTransport.close).toHaveBeenCalledOnce();
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      expect(mcpClient.connectedServers).toEqual([]);
+    });
+
     it.each(['connecting', 'listing'] as const)(
       'closes a transport while %s and prevents late initialization',
       async (stage) => {

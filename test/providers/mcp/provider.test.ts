@@ -48,6 +48,58 @@ describe('MCPProvider', () => {
     expect(MCPClient).toHaveBeenCalledWith({ ...provider.config, basePath: expect.any(String) });
   });
 
+  it.each(['callApi', 'callTool', 'getAvailableTools'] as const)(
+    'rejects a different environment through %s until cleanup',
+    async (method) => {
+      const provider = new MCPProvider({ config: { enabled: true } });
+      mcpClientMock.callTool.mockResolvedValue({ content: 'clean result' });
+      try {
+        await cliState.withEnv({ MCP_AUTH_TEST: 'first' }, () => provider.getAvailableTools());
+        const changed = () =>
+          cliState.withEnv({ MCP_AUTH_TEST: 'second' }, async () => {
+            if (method === 'getAvailableTools') {
+              return provider.getAvailableTools();
+            }
+            const response =
+              method === 'callApi'
+                ? await provider.callApi('{"tool":"echo"}')
+                : await provider.callTool('echo', {});
+            if (response.error) {
+              throw new Error(response.error);
+            }
+            return response;
+          });
+        await expect(changed()).rejects.toThrow('separate MCP provider instance');
+        expect(mcpClientMock.callTool).not.toHaveBeenCalled();
+        await cliState.withEnv({ MCP_AUTH_TEST: 'first' }, () => provider.getAvailableTools());
+        expect(mcpClientMock.initialize).toHaveBeenCalledOnce();
+        await provider.cleanup();
+        await cliState.withEnv({ MCP_AUTH_TEST: 'second' }, () => provider.getAvailableTools());
+        expect(mcpClientMock.initialize).toHaveBeenCalledTimes(2);
+      } finally {
+        await provider.cleanup();
+      }
+    },
+  );
+
+  it('rejects a different environment while initialization is pending', async () => {
+    const pending = createDeferred<void>();
+    mcpClientMock.initialize.mockReturnValueOnce(pending.promise);
+    const provider = new MCPProvider({ config: { enabled: true } });
+    const first = cliState.withEnv({ MCP_AUTH_TEST: 'first' }, () => provider.getAvailableTools());
+    try {
+      const second = cliState.withEnv({ MCP_AUTH_TEST: 'second' }, () =>
+        provider.getAvailableTools(),
+      );
+      pending.resolve(undefined);
+      await Promise.all([first, expect(second).rejects.toThrow('separate MCP provider instance')]);
+    } finally {
+      pending.resolve(undefined);
+      await first;
+      await provider.cleanup();
+    }
+  });
+
   it('binds a preconstructed provider before initialization and retains its directory on reuse', async () => {
     const provider = new MCPProvider({ config: { enabled: true, server: { path: 'server.js' } } });
     provider.setConfigBasePath('/config/first');

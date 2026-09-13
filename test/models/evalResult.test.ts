@@ -1,7 +1,10 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { runDbMigrations } from '../../src/migrate';
-import EvalResult, { sanitizeProvider } from '../../src/models/evalResult';
+import EvalResult, {
+  sanitizeProvider,
+  sanitizeResultForJsonlArtifact,
+} from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
 import {
@@ -54,6 +57,45 @@ describe('EvalResult', () => {
     promptId: hashPrompt(mockPrompt),
     response: undefined,
   });
+
+  it.each(['single', 'batch', 'artifact'])(
+    'redacts assertion provider credentials at the %s grading-result boundary',
+    async (boundary) => {
+      const credential = 'fixture-grading-provider-credential';
+      const assertion = {
+        type: 'equals' as const,
+        value: 'ok',
+        provider: {
+          id: 'echo',
+          label: 'retained-label',
+          config: { apiKey: credential, temperature: 0.4 },
+          env: { OPENAI_API_KEY: credential },
+        },
+      };
+      const grade = { pass: true, score: 1, reason: 'ok', assertion };
+      const input = {
+        ...mockEvaluateResult,
+        gradingResult: { ...grade, componentResults: [{ ...grade, componentResults: [grade] }] },
+      };
+      const original = JSON.stringify(input);
+      const result =
+        boundary === 'artifact'
+          ? sanitizeResultForJsonlArtifact(input)
+          : boundary === 'batch'
+            ? (await EvalResult.createManyFromEvaluateResult([input], 'grade-credential-batch'))[0]
+            : await EvalResult.createFromEvaluateResult('grade-credential-single', input);
+      expect(JSON.stringify(result.gradingResult)).not.toContain(credential);
+      expect(result.gradingResult?.assertion).toMatchObject({
+        value: 'ok',
+        provider: { label: 'retained-label', config: { temperature: 0.4 } },
+      });
+      if (boundary !== 'artifact') {
+        const stored = await EvalResult.findById(result.id!);
+        expect(JSON.stringify(stored?.gradingResult)).not.toContain(credential);
+      }
+      expect(JSON.stringify(input)).toBe(original);
+    },
+  );
 
   describe('sanitizeProvider', () => {
     it('should handle ApiProvider objects', () => {

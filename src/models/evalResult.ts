@@ -340,10 +340,9 @@ function redactHttpHeadersOnMetadata<T>(
   return nextMetadata as T;
 }
 
-// Walk a `GradingResult`-shaped value and redact `metadata.http` on the result and
-// every nested `componentResults[]`. Limits recursion to the documented schema
-// (`componentResults` only) — does not descend into arbitrary subtrees.
-function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
+// Redact transport metadata and assertion credentials at each grading-result level.
+// Descend only through the documented componentResults schema.
+function sanitizeGradingResultForDb<T>(gradingResult: T): T {
   if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
     return gradingResult;
   }
@@ -351,6 +350,11 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   const gr = gradingResult as Record<string, unknown>;
   let mutated = false;
   const next: Record<string, unknown> = { ...gr };
+
+  if (gr.assertion !== undefined) {
+    next.assertion = sanitizeForDbWithSecrets(gr.assertion);
+    mutated = true;
+  }
 
   if (gr.metadata !== undefined) {
     const redacted = redactHttpHeadersOnMetadata(gr.metadata);
@@ -363,7 +367,7 @@ function redactHttpHeadersOnGradingResult<T>(gradingResult: T): T {
   if (Array.isArray(gr.componentResults)) {
     let componentMutated = false;
     const nextComponents = gr.componentResults.map((component) => {
-      const redacted = redactHttpHeadersOnGradingResult(component);
+      const redacted = sanitizeGradingResultForDb(component);
       if (redacted !== component) {
         componentMutated = true;
       }
@@ -399,10 +403,6 @@ function sanitizeMetadataForDb<T>(metadata: T, responseMetadata?: unknown): T {
   return redactHttpHeadersOnMetadata(metadata, {
     legacyHeadersSource: sanitizeForDb(responseMetadata),
   });
-}
-
-function sanitizeGradingResultForDb<T>(gradingResult: T): T {
-  return redactHttpHeadersOnGradingResult(gradingResult);
 }
 
 // `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data

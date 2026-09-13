@@ -14,7 +14,7 @@ import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { Command } from 'commander';
 
-import type { CommandLineOptions, TestSuite } from '../../../types/index';
+import type { CommandLineOptions, TestSuite, UnifiedConfig } from '../../../types/index';
 import type { InternalEvaluateOptions } from '../../../types/internal';
 
 interface EvaluationFilterSummary {
@@ -458,21 +458,22 @@ export function registerRunEvaluationTool(server: McpServer) {
           resultOffset = 0,
         } = args;
 
-        // Load default config
-        let defaultConfig;
-        let defaultConfigPath;
-        try {
-          const result = await loadDefaultConfig();
-          defaultConfig = result.defaultConfig;
-          defaultConfigPath = result.defaultConfigPath;
-        } catch (error) {
-          logger.error('Failed to load default config for MCP evaluation', { error });
-          return createToolResponse(
-            'run_evaluation',
-            false,
-            undefined,
-            UNEXPECTED_EVALUATION_ERROR,
-          );
+        let defaultConfig: Partial<UnifiedConfig> = {};
+        let defaultConfigPath: string | undefined;
+        if (!configPath) {
+          try {
+            const result = await loadDefaultConfig();
+            defaultConfig = result.defaultConfig;
+            defaultConfigPath = result.defaultConfigPath;
+          } catch (error) {
+            logger.error('Failed to load default config for MCP evaluation', { error });
+            return createToolResponse(
+              'run_evaluation',
+              false,
+              undefined,
+              UNEXPECTED_EVALUATION_ERROR,
+            );
+          }
         }
 
         const promptFilterValidationError = getPromptFilterValidationError(promptFilter);

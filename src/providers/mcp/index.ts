@@ -1,3 +1,6 @@
+import { isDeepStrictEqual } from 'node:util';
+
+import { getRuntimeEnv } from '../../envOverrides';
 import logger from '../../logger';
 import { getTransformBasePath, loadTransformModule } from '../transformUtils';
 import { MCPClient } from './client';
@@ -25,6 +28,7 @@ export class MCPProvider implements ApiProvider {
   private configBasePath?: string;
   private defaultArgs?: Record<string, unknown>;
   private initializationPromise?: Promise<MCPClient>;
+  private initializedEnv?: NodeJS.ProcessEnv;
   private transformResponse: Promise<
     (
       result: unknown,
@@ -76,6 +80,15 @@ export class MCPProvider implements ApiProvider {
     return client;
   }
 
+  private getClient(): Promise<MCPClient> {
+    const env = getRuntimeEnv();
+    if (this.initializedEnv && !isDeepStrictEqual(this.initializedEnv, env)) {
+      throw new Error('Create a separate MCP provider instance for each execution environment.');
+    }
+    this.initializedEnv = env;
+    return (this.initializationPromise ??= this.initialize());
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
@@ -83,7 +96,7 @@ export class MCPProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     try {
       // Ensure initialization is complete
-      const client = await (this.initializationPromise ??= this.initialize());
+      const client = await this.getClient();
 
       // Parse the prompt as JSON to extract tool call information
       let toolCallData: any;
@@ -167,13 +180,14 @@ export class MCPProvider implements ApiProvider {
     } finally {
       this.mcpClient = undefined;
       this.initializationPromise = undefined;
+      this.initializedEnv = undefined;
     }
   }
 
   // Method to call specific MCP tools directly
   async callTool(toolName: string, args: Record<string, unknown>): Promise<ProviderResponse> {
     try {
-      const client = await (this.initializationPromise ??= this.initialize());
+      const client = await this.getClient();
 
       const result = await client.callTool(toolName, args);
 
@@ -197,7 +211,7 @@ export class MCPProvider implements ApiProvider {
 
   // Get all available tools
   async getAvailableTools() {
-    const client = await (this.initializationPromise ??= this.initialize());
+    const client = await this.getClient();
 
     return client.getAllTools();
   }

@@ -46,6 +46,33 @@ describe('processExecutableFile', () => {
   const describeUnix = process.platform === 'win32' ? describe.skip : describe;
 
   // Cross-platform tests
+  it('invalidates cached prompts when a script changes under config.basePath', async () => {
+    fs.mkdirSync('.local', { recursive: true });
+    const dir = fs.mkdtempSync(path.join('.local', 'pf-prompt-cache-base-'));
+    const script = path.join(dir, 'prompt.cjs');
+    const values = new Map<string, string>();
+    vi.mocked(getCache).mockReturnValue({
+      get: (key: string) => values.get(key),
+      set: (key: string, value: string) => values.set(key, value),
+    } as never);
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    try {
+      const [prompt] = await processExecutableFile(
+        `${JSON.stringify(process.execPath)} prompt.cjs`,
+        {
+          config: { basePath: dir },
+        },
+      );
+      for (const output of ['first', 'second']) {
+        fs.writeFileSync(script, `process.stdout.write(${JSON.stringify(output)});`);
+        expect(await prompt.function!({ vars: {}, provider: mockProvider })).toBe(output);
+      }
+      expect(values.size).toBe(2);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('passes each isolated env file to its executable prompt', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-prompt-env-'));
     const script = path.join(dir, 'prompt.cjs');

@@ -51,7 +51,7 @@ export const executablePromptFunction = async (
   };
 
   const scriptParts = parseScriptParts(scriptPath);
-  const fileHashes = getFileHashes(scriptParts);
+  const fileHashes = getFileHashes(scriptParts, context.config?.basePath);
 
   const cacheKey =
     fileHashes.length > 0

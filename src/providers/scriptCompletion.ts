@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvOverrides, getRuntimeEnv } from '../envOverrides';
@@ -41,16 +42,17 @@ export function parseScriptParts(scriptPath: string): string[] {
   return scriptParts;
 }
 
-export function getFileHashes(scriptParts: string[]): string[] {
+export function getFileHashes(scriptParts: string[], basePath?: string): string[] {
   const fileHashes: string[] = [];
 
   for (const part of scriptParts) {
     const cleanPart = part.replace(/^['"]|['"]$/g, '');
-    if (fs.existsSync(cleanPart) && fs.statSync(cleanPart).isFile()) {
-      const fileContent = fs.readFileSync(cleanPart);
+    const filePath = basePath ? path.resolve(basePath, cleanPart) : cleanPart;
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      const fileContent = fs.readFileSync(filePath);
       const fileHash = crypto.createHash('sha256').update(fileContent).digest('hex');
       fileHashes.push(fileHash);
-      logger.debug(`File hash for ${cleanPart}: ${fileHash}`);
+      logger.debug(`File hash for ${filePath}: ${fileHash}`);
     }
   }
 
@@ -102,7 +104,7 @@ export class ScriptCompletionProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const scriptParts = parseScriptParts(this.scriptPath);
-    const fileHashes = getFileHashes(scriptParts);
+    const fileHashes = getFileHashes(scriptParts, this.options?.config?.basePath);
 
     if (fileHashes.length === 0) {
       logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);

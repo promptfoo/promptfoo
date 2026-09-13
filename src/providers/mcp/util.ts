@@ -1,3 +1,5 @@
+import { createHmac, randomBytes } from 'node:crypto';
+
 import { getRuntimeEnv } from '../../envOverrides';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -72,6 +74,7 @@ interface OAuthTokenCache {
 }
 
 const oauthTokenCache = new Map<string, OAuthTokenCache>();
+const oauthCacheKey = randomBytes(32);
 
 /**
  * Get the cache key for an OAuth config
@@ -80,7 +83,19 @@ function getOAuthCacheKey(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   tokenUrl: string,
 ): string {
-  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${auth.scopes?.join(' ') ?? ''}`;
+  return createHmac('sha256', oauthCacheKey)
+    .update(
+      JSON.stringify([
+        tokenUrl,
+        auth.grantType,
+        auth.clientId,
+        auth.clientSecret,
+        'username' in auth ? auth.username : undefined,
+        'password' in auth ? auth.password : undefined,
+        auth.scopes?.join(' ') ?? '',
+      ]),
+    )
+    .digest('hex');
 }
 
 // Cache for discovered token endpoints

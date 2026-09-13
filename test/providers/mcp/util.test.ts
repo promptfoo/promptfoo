@@ -14,6 +14,7 @@ import {
 
 import type {
   MCPOAuthClientCredentialsAuth,
+  MCPOAuthPasswordAuth,
   MCPServerConfig,
 } from '../../../src/providers/mcp/types';
 
@@ -383,6 +384,35 @@ describe('getOAuthTokenWithExpiry', () => {
   afterEach(() => {
     vi.clearAllMocks();
   });
+
+  it.each(['clientSecret', 'password'] as const)(
+    'fetches a separate token when %s changes',
+    async (field) => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: 'first-token', expires_in: 3600 }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: 'second-token', expires_in: 3600 }),
+        });
+      const auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth = {
+        type: 'oauth',
+        tokenUrl: `https://auth.example.com/rotation/${field}`,
+        clientId: 'shared-client',
+        clientSecret: 'first-secret',
+        ...(field === 'password'
+          ? { grantType: 'password', username: 'shared-user', password: 'first-password' }
+          : { grantType: 'client_credentials' }),
+      };
+      const changed = { ...auth, [field]: 'second-credential' };
+      expect((await getOAuthTokenWithExpiry(auth)).accessToken).toBe('first-token');
+      expect((await getOAuthTokenWithExpiry(changed)).accessToken).toBe('second-token');
+      expect((await getOAuthTokenWithExpiry({ ...changed })).accessToken).toBe('second-token');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('scopes cached tokens by the discovered token endpoint', async () => {
     mockFetch.mockImplementation(async (url: string) => {

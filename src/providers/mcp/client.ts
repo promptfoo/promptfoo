@@ -345,6 +345,13 @@ export class MCPClient {
         );
       }
     } catch (error) {
+      try {
+        await client.close();
+      } catch (cleanupError) {
+        logger.debug('[MCP] Failed to close client after initialization error', {
+          error: cleanupError,
+        });
+      }
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (this.isDebugEnabled) {
         logger.error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
@@ -579,10 +586,9 @@ export class MCPClient {
 
   async cleanup(): Promise<void> {
     this.abortController.abort();
-    for (const [serverKey, transport] of this.transports.entries()) {
+    for (const connection of [...this.transports.values(), ...this.clients.values()]) {
       try {
-        await transport.close();
-        await this.clients.get(serverKey)?.close();
+        await connection.close();
       } catch (error) {
         if (this.isDebugEnabled) {
           logger.error(

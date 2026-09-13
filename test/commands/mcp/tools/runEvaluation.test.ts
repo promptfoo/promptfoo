@@ -214,7 +214,7 @@ describe('runEvaluation tool', () => {
           share: true,
         }),
         {},
-        'promptfooconfig.yaml',
+        undefined,
         expect.objectContaining({
           maxConcurrency: 2,
           timeoutMs: 1234,
@@ -259,7 +259,7 @@ describe('runEvaluation tool', () => {
       expect(doEval).toHaveBeenCalledWith(
         expect.any(Object),
         {},
-        'promptfooconfig.yaml',
+        undefined,
         expect.objectContaining({
           timeoutMs: 4321,
         }),
@@ -312,7 +312,7 @@ describe('runEvaluation tool', () => {
       expect(doEval).toHaveBeenCalledWith(
         expect.any(Object),
         {},
-        'promptfooconfig.yaml',
+        undefined,
         expect.objectContaining({
           timeoutMs: 30000,
         }),
@@ -718,8 +718,8 @@ describe('runEvaluation tool', () => {
       });
       expect(doEval).toHaveBeenCalledWith(
         expect.any(Object),
-        expect.any(Object),
-        expect.any(String),
+        {},
+        undefined,
         expect.any(Object),
         expect.objectContaining({
           evaluateOptionOverrides: expect.objectContaining({
@@ -1307,6 +1307,22 @@ describe('runEvaluation tool', () => {
       expect(result.content[0].text).toContain('No providers matched filter');
     });
 
+    it('loads only the explicit config when a default config is also present', async () => {
+      const { loadDefaultConfig } = await import('../../../../src/util/config/default');
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+      const result = await toolHandler({ configPath: 'test.yaml' });
+      expect(result.isError).not.toBe(true);
+      expect(loadDefaultConfig).not.toHaveBeenCalled();
+    });
+
     it('should redact unexpected default-config load errors', async () => {
       const { loadDefaultConfig } = await import('../../../../src/util/config/default');
       vi.mocked(loadDefaultConfig).mockRejectedValueOnce(
@@ -1323,7 +1339,7 @@ describe('runEvaluation tool', () => {
         }),
       } as any);
 
-      const result = await toolHandler({ configPath: 'test.yaml' });
+      const result = await toolHandler({});
 
       expect(result.isError).toBe(true);
       const payload = JSON.parse(result.content[0].text);

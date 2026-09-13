@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../src/cache';
@@ -91,54 +92,58 @@ describe('getFileHashes', () => {
     createHashMock = vi.mocked(crypto.createHash);
   });
 
-  it('should return file hashes for existing files', () => {
-    const scriptParts = ['file1.js', 'file2.js', 'nonexistent.js'];
-    const mockFileContent1 = 'content1';
-    const mockFileContent2 = 'content2';
-    const mockHash1 = 'hash1';
-    const mockHash2 = 'hash2';
+  it.each([undefined, '/configured/project'])(
+    'hashes existing files relative to %s',
+    (basePath) => {
+      const scriptParts = ['file1.js', 'file2.js', 'nonexistent.js'];
+      const filePaths = scriptParts.map((part) => (basePath ? path.resolve(basePath, part) : part));
+      const mockFileContent1 = 'content1';
+      const mockFileContent2 = 'content2';
+      const mockHash1 = 'hash1';
+      const mockHash2 = 'hash2';
 
-    existsSyncMock.mockImplementation(function (path: fs.PathLike) {
-      return normalizeFsPath(path) !== 'nonexistent.js';
-    });
-    statSyncMock.mockReturnValue({
-      isFile: () => true,
-      isDirectory: () => false,
-      isBlockDevice: () => false,
-      isCharacterDevice: () => false,
-      isSymbolicLink: () => false,
-      isFIFO: () => false,
-      isSocket: () => false,
-    } as fs.Stats);
-    readFileSyncMock.mockImplementation(function (path: fs.PathOrFileDescriptor) {
-      const normalizedPath = normalizeFsPath(path);
-      if (normalizedPath === 'file1.js') {
-        return mockFileContent1;
-      }
-      if (normalizedPath === 'file2.js') {
-        return mockFileContent2;
-      }
-      throw new Error('File not found');
-    });
+      existsSyncMock.mockImplementation(function (path: fs.PathLike) {
+        return filePaths.slice(0, 2).includes(normalizeFsPath(path));
+      });
+      statSyncMock.mockReturnValue({
+        isFile: () => true,
+        isDirectory: () => false,
+        isBlockDevice: () => false,
+        isCharacterDevice: () => false,
+        isSymbolicLink: () => false,
+        isFIFO: () => false,
+        isSocket: () => false,
+      } as fs.Stats);
+      readFileSyncMock.mockImplementation(function (path: fs.PathOrFileDescriptor) {
+        const normalizedPath = normalizeFsPath(path);
+        if (normalizedPath === filePaths[0]) {
+          return mockFileContent1;
+        }
+        if (normalizedPath === filePaths[1]) {
+          return mockFileContent2;
+        }
+        throw new Error('File not found');
+      });
 
-    const mockHashUpdate = {
-      update: vi.fn().mockReturnThis(),
-      digest: vi.fn(),
-    } as unknown as crypto.Hash;
-    vi.mocked(mockHashUpdate.digest)
-      .mockImplementationOnce(function () {
-        return mockHash1;
-      })
-      .mockReturnValueOnce(mockHash2);
-    createHashMock.mockReturnValue(mockHashUpdate);
+      const mockHashUpdate = {
+        update: vi.fn().mockReturnThis(),
+        digest: vi.fn(),
+      } as unknown as crypto.Hash;
+      vi.mocked(mockHashUpdate.digest)
+        .mockImplementationOnce(function () {
+          return mockHash1;
+        })
+        .mockReturnValueOnce(mockHash2);
+      createHashMock.mockReturnValue(mockHashUpdate);
 
-    const result = getFileHashes(scriptParts);
+      const result = getFileHashes(scriptParts, basePath);
 
-    expect(result).toEqual([mockHash1, mockHash2]);
-    expect(existsSyncMock).toHaveBeenCalledTimes(3);
-    expect(readFileSyncMock).toHaveBeenCalledTimes(2);
-    expect(createHashMock).toHaveBeenCalledTimes(2);
-  });
+      expect(result).toEqual([mockHash1, mockHash2]);
+      expect(existsSyncMock).toHaveBeenCalledTimes(3);
+      expect(readFileSyncMock).toHaveBeenCalledTimes(2);
+      expect(createHashMock).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('should return an empty array for non-existent files', () => {
     const scriptParts = ['nonexistent1.js', 'nonexistent2.js'];

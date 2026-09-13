@@ -19,7 +19,8 @@ import {
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
-import { readTests } from './util/testCaseReader';
+import { redactSecretLeaves } from './util/sanitizer';
+import { adoptExistingTestProviders, readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
 import type {
@@ -66,7 +67,12 @@ function toSerializableProviderRef(provider: unknown): unknown {
   if (Array.isArray(provider)) {
     return provider.map(toSerializableProviderRef);
   }
-  return provider;
+  if (isProviderTypeMap(provider)) {
+    return Object.fromEntries(
+      Object.entries(provider).map(([type, value]) => [type, toSerializableProviderRef(value)]),
+    );
+  }
+  return provider && typeof provider === 'object' ? redactSecretLeaves(provider) : provider;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -74,12 +80,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function withSerializableProvider<T extends Record<string, unknown>>(record: T): T {
-  if (!isApiProvider(record.provider)) {
+  if (record.provider === undefined) {
     return record;
   }
   return {
     ...record,
-    provider: sanitizeProvider(record.provider),
+    provider: toSerializableProviderRef(record.provider),
   };
 }
 
@@ -164,13 +170,14 @@ function toSerializableScenario(scenario: unknown, droppedRef: { value: boolean 
     return scenario;
   }
 
-  if (!Array.isArray(scenario.tests)) {
-    return scenario;
-  }
-
   return {
     ...scenario,
-    tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
+    ...(Array.isArray(scenario.config) && {
+      config: scenario.config.map((t) => toSerializableTestCase(t, droppedRef)),
+    }),
+    ...(Array.isArray(scenario.tests) && {
+      tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
+    }),
   };
 }
 
@@ -238,43 +245,6 @@ async function createRuntimeTestSuite(
     nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
     prompts: await processPrompts(testSuiteConfig.prompts),
   };
-}
-
-async function adoptExistingTestProviders(
-  testSuite: Partial<Pick<EvaluateTestSuite, 'providers' | 'defaultTest' | 'tests' | 'scenarios'>>,
-): Promise<void> {
-  const existingProviders: unknown[] = Array.isArray(testSuite.providers)
-    ? [...testSuite.providers]
-    : [testSuite.providers];
-  for (const test of [
-    testSuite.defaultTest,
-    ...(Array.isArray(testSuite.tests) ? testSuite.tests : []),
-    ...(testSuite.scenarios ?? []).flatMap((scenario) =>
-      typeof scenario === 'string' ? [] : [...scenario.config, ...(scenario.tests ?? [])],
-    ),
-  ]) {
-    if (!test || typeof test !== 'object' || 'path' in test) {
-      continue;
-    }
-    existingProviders.push(test.provider, test.options?.provider);
-    const assertions = [...(test.assert ?? [])];
-    while (assertions.length) {
-      const assertion = assertions.pop()!;
-      if (assertion.type === 'assert-set') {
-        assertions.push(...assertion.assert);
-      } else {
-        existingProviders.push(assertion.provider);
-      }
-    }
-  }
-  for (const provider of existingProviders) {
-    const instances = isProviderTypeMap(provider) ? Object.values(provider) : [provider];
-    for (const instance of instances) {
-      if (isApiProvider(instance)) {
-        await providerRegistry.adopt(instance);
-      }
-    }
-  }
 }
 
 async function resolveNestedProviders(

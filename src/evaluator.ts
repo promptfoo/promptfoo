@@ -2484,6 +2484,7 @@ function stableSerializeSelection(value: unknown, seen = new WeakSet<object>()):
     }
 
     const record = value as Record<string, unknown>;
+    // Variable key order determines Cartesian-product row order during replay.
     const keys = Object.keys(record);
     return `{${keys
       .map((key) => `${JSON.stringify(key)}:${stableSerializeSelection(record[key], seen)}`)

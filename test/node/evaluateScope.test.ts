@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import * as esm from '../../src/esm';
 import * as migrations from '../../src/migrate';
 import { evaluate } from '../../src/node/evaluate';
 import { providerRegistry } from '../../src/providers/providerRegistry';
@@ -72,6 +73,36 @@ describe('SDK provider lifecycle', () => {
     ).rejects.toThrow('Filters failed');
     expect(cleanup).toHaveBeenCalledOnce();
   });
+
+  it.each(['target', 'typed-grader', 'assertion-set'])(
+    'cleans up a generated %s provider when a later test cannot load',
+    async (location) => {
+      const cleanup = vi.fn();
+      const provider = { id: () => 'generated-test-provider', callApi: vi.fn(), cleanup };
+      const test: TestCase =
+        location === 'target'
+          ? { provider }
+          : location === 'typed-grader'
+            ? { options: { provider: { text: provider } } }
+            : {
+                assert: [
+                  {
+                    type: 'assert-set',
+                    assert: [{ type: 'llm-rubric', value: 'valid', provider }],
+                  },
+                ],
+              };
+      vi.spyOn(esm, 'importModule').mockResolvedValueOnce(() => [test]);
+      await expect(
+        evaluate(
+          { providers: ['echo'], prompts: ['ok'], tests: ['file://generated.js', {}] },
+          { cache: false },
+        ),
+      ).rejects.toThrow('Test case must contain');
+      expect(provider.callApi).not.toHaveBeenCalled();
+      expect(cleanup).toHaveBeenCalledOnce();
+    },
+  );
 
   it('adopts a provider from the default-test file before loading other tests', async () => {
     const cleanup = vi.fn();

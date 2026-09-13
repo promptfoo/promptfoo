@@ -1675,6 +1675,46 @@ describe('evaluate with external defaultTest', () => {
       resolveProviderSpy.mockRestore();
     });
 
+    it('redacts declarative provider references throughout the saved config without mutating input', async () => {
+      const secret = 'PRIVATE_DECLARATIVE_PROVIDER_CREDENTIAL';
+      const provider = {
+        id: 'echo',
+        label: 'declarative-provider',
+        env: { OPENAI_API_KEY: secret },
+        config: { apiKey: secret, temperature: 0.4 },
+      };
+      const assertion = { type: 'llm-rubric' as const, value: 'Valid answer', provider };
+      const suite = {
+        prompts: ['test prompt'],
+        providers: [provider],
+        defaultTest: { provider, options: { provider }, assert: [assertion] },
+        tests: [
+          {
+            provider,
+            options: { provider: { text: provider } },
+            assert: [{ type: 'assert-set' as const, assert: [assertion] }],
+          },
+        ],
+        scenarios: [
+          {
+            config: [{ provider, options: { provider: { embedding: provider } } }],
+            tests: [{ provider, assert: [assertion] }],
+          },
+        ],
+        writeLatestResults: true,
+      };
+      const original = JSON.stringify(suite);
+      const createEvalSpy = vi.spyOn(Eval, 'create');
+      await evaluate(suite);
+      const stored = createEvalSpy.mock.calls.at(-1)?.[0];
+      expect(stored).toBeDefined();
+      expect(JSON.stringify(stored)).not.toContain(secret);
+      expect(stored?.providers).toMatchObject([
+        { id: 'echo', label: 'declarative-provider', config: { temperature: 0.4 } },
+      ]);
+      expect(JSON.stringify(suite)).toBe(original);
+    });
+
     it('does not mutate testSuite.defaultTest.options.provider when resolving for the runtime suite', async () => {
       const rawProviderConfig = {
         id: 'bedrock:anthropic.claude-3-haiku-20240307-v1:0',
