@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import { InputsSchema } from '../redteam/types';
-import { ProviderEnvOverridesSchema } from '../types/env';
-import { StringOrFunctionSchema } from './shared';
+import { ProviderEnvOverridesSchema } from '../contracts/env';
+import { InputsSchema } from '../contracts/shared';
+import { StringOrFunctionSchema } from '../contracts/validators/shared';
 
 import type {
   CallApiFunction,
