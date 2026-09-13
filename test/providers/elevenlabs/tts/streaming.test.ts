@@ -69,3 +69,15 @@ it.each(['Hello. Goodbye', ' \tHello.\n Goodbye  ', 'Hello.'])(
     }
   },
 );
+
+it('closes the socket when connecting fails', async () => {
+  vi.mocked(ElevenLabsWebSocketClient.prototype.connect).mockRejectedValue(
+    new Error('connect failed'),
+  );
+  await expect(
+    createStreamingConnection('fixture-key', 'fixture-voice', {
+      modelId: 'eleven_multilingual_v2',
+    }),
+  ).rejects.toThrow('connect failed');
+  expect(ElevenLabsWebSocketClient.prototype.close).toHaveBeenCalledTimes(1);
+});

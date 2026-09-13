@@ -414,11 +414,12 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       // Create WebSocket connection
       const wsClient = await createStreamingConnection(apiKey, this.config.voiceId, streamConfig);
 
-      // Handle streaming
-      const session = await handleStreamingTTS(wsClient, prompt, undefined, startTime);
-
-      // Close connection
-      wsClient.close();
+      let session: Awaited<ReturnType<typeof handleStreamingTTS>>;
+      try {
+        session = await handleStreamingTTS(wsClient, prompt, undefined, startTime);
+      } finally {
+        wsClient.close();
+      }
 
       // Combine chunks into single audio buffer
       const combinedAudio = combineStreamingChunks(session.chunks);
