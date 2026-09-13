@@ -2358,7 +2358,7 @@ describe('evaluator', () => {
                 policy: {
                   id: 'policy-id',
                   name: 'Named policy',
-                  text: 'Named policy text',
+                  text: oversizedText,
                   apiKey: 'policy-object-secret',
                 },
               },
@@ -2505,7 +2505,11 @@ describe('evaluator', () => {
             {
               id: 'policy',
               config: {
-                policy: { id: 'policy-id', name: 'Named policy', text: 'Named policy text' },
+                policy: {
+                  id: 'policy-id',
+                  name: 'Named policy',
+                  text: oversizedText.slice(0, 10_240),
+                },
               },
             },
           ],
@@ -3327,6 +3331,24 @@ describe('evaluator', () => {
       expect(
         projectConfigForOutput({ prompts: { first: 'secret prompt' } } as any, flags).prompts,
       ).toEqual({ first: '[prompt stripped]' });
+      expect(
+        projectConfigForOutput(
+          {
+            tests: [
+              {
+                providerOutput: 'secret output',
+                metadata: { secret: 'metadata' },
+              },
+            ],
+          } as any,
+          {
+            ...flags,
+            shouldStripPromptText: false,
+            shouldStripResponseOutput: true,
+            shouldStripMetadata: true,
+          },
+        ).tests,
+      ).toEqual([{}]);
     });
 
     it('honors output strip flags in legacy compact projections', async () => {

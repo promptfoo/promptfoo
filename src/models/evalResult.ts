@@ -282,6 +282,9 @@ function stripAgentCallContent(entry: unknown, contentKeys: readonly string[]): 
 function stripResponseContentMetadata(metadata: Record<string, unknown>): void {
   delete metadata.audio;
   delete metadata.functionCallResults;
+  if ('trace' in metadata) {
+    metadata.trace = RESPONSE_OUTPUT_STRIPPED;
+  }
   if ('toolCalls' in metadata) {
     metadata.toolCalls = Array.isArray(metadata.toolCalls)
       ? metadata.toolCalls.map((entry) => stripAgentCallContent(entry, ['input', 'output']))

@@ -1819,6 +1819,7 @@ describe('EvalResult', () => {
             permissionDenials: [
               { tool_name: 'Write', tool_input: { path: 'PERMISSION_DENIAL_SECRET' } },
             ],
+            trace: { rationale: 'BEDROCK_TRACE_SECRET' },
             numTurns: 3,
           },
         },
@@ -1843,6 +1844,7 @@ describe('EvalResult', () => {
           expect(metadata.codexAppServer).toBe('[output stripped]');
           expect(metadata.permissionDenials[0]).toMatchObject({ tool_name: 'Write' });
           expect(metadata.permissionDenials[0].tool_input).toBe('[output stripped]');
+          expect(metadata.trace).toBe('[output stripped]');
           for (const secret of [
             'AGENT_OUTPUT_SECRET',
             'TOOL_INPUT_SECRET',
@@ -1854,6 +1856,7 @@ describe('EvalResult', () => {
             'REALTIME_TRANSCRIPT_SECRET',
             'REALTIME_FUNCTION_RESULT_SECRET',
             'PERMISSION_DENIAL_SECRET',
+            'BEDROCK_TRACE_SECRET',
           ]) {
             expect(JSON.stringify(result)).not.toContain(secret);
           }

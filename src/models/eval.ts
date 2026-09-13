@@ -198,14 +198,26 @@ function projectGradingResultForRedteamReport(gradingResult: GradingResult): Gra
   const assertion = projectAssertionForRedteamReport(gradingResult.assertion);
   const suggestions = projectSuggestionsForRedteamReport(gradingResult.suggestions);
 
-  const componentResults = Array.isArray(gradingResult.componentResults)
+  const components = Array.isArray(gradingResult.componentResults)
     ? gradingResult.componentResults
-        .slice(0, 25)
-        .filter(isRecord)
-        .map((componentResult) =>
-          projectGradingResultForRedteamReport(componentResult as unknown as GradingResult),
-        )
     : undefined;
+  const compactComponents = components?.slice(0, 25);
+  if (
+    compactComponents?.length === 25 &&
+    !compactComponents.some((result) => isRecord(result) && isRecord(result.assertion))
+  ) {
+    const identity = components
+      ?.slice(25)
+      .find((result) => isRecord(result) && isRecord(result.assertion));
+    if (identity !== undefined) {
+      compactComponents[24] = identity;
+    }
+  }
+  const componentResults = compactComponents
+    ?.filter(isRecord)
+    .map((componentResult) =>
+      projectGradingResultForRedteamReport(componentResult as unknown as GradingResult),
+    );
 
   return {
     pass: typeof gradingResult.pass === 'boolean' ? gradingResult.pass : false,
@@ -811,7 +823,9 @@ function projectPluginForRedteamReport(plugin: unknown): unknown {
     const projectedPolicy = {
       ...(typeof policy.id === 'string' && { id: policy.id }),
       ...(typeof policy.name === 'string' && { name: policy.name }),
-      ...(typeof policy.text === 'string' && { text: policy.text }),
+      ...(typeof policy.text === 'string' && {
+        text: policy.text.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
+      }),
     };
     if (Object.keys(projectedPolicy).length > 0) {
       projectedPlugin.config = { policy: projectedPolicy };
@@ -868,7 +882,7 @@ export function projectConfigForOutput(
   config: Partial<UnifiedConfig>,
   stripFlags: OutputStripFlags,
 ): Partial<UnifiedConfig> {
-  if (!stripFlags.shouldStripPromptText && !stripFlags.shouldStripTestVars) {
+  if (!Object.values(stripFlags).some(Boolean)) {
     return config;
   }
   const projectTest = (test: unknown) => {
@@ -880,8 +894,15 @@ export function projectConfigForOutput(
       delete options.prefix;
       delete options.suffix;
     }
+    const projectedTest = { ...test };
+    if (stripFlags.shouldStripResponseOutput) {
+      delete projectedTest.providerOutput;
+    }
+    if (stripFlags.shouldStripMetadata) {
+      delete projectedTest.metadata;
+    }
     return {
-      ...test,
+      ...projectedTest,
       ...(stripFlags.shouldStripPromptText && 'prompt' in test
         ? { prompt: '[prompt stripped]' }
         : {}),
