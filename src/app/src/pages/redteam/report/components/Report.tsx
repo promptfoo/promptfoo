@@ -706,7 +706,9 @@ const App = ({ evalId: requestedEvalId, embedded, onActionsReady }: ReportProps)
     (evalData.results.stats?.successes ?? 0) +
     (evalData.results.stats?.failures ?? 0) +
     (evalData.results.stats?.errors ?? 0);
-  const detailedResultCount = evalData.results.results.length;
+  const detailedResultCount = new Set(
+    evalData.results.results.map(({ testIdx, promptIdx }) => [testIdx, promptIdx].join(':')),
+  ).size;
   if (savedResultCount > detailedResultCount) {
     return (
       <div className="flex h-screen flex-col items-center justify-center p-6">

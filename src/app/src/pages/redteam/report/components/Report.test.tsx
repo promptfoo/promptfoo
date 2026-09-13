@@ -1011,6 +1011,21 @@ describe('App component report loading', () => {
     expect(status).toHaveTextContent(/only 1 detailed result row is available/);
     expect(screen.queryByTestId('overview-total')).not.toBeInTheDocument();
   });
+
+  it('rejects duplicate retry coordinates as incomplete report data', async () => {
+    const retry = createComponentMockResult(0, 'plugin1', true);
+    const evalData = createComponentMockEvalData(1, [retry, { ...retry, id: 'retry-2' }]);
+    evalData.results.stats = { successes: 2, failures: 0, errors: 0 } as any;
+    mockCallApi.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ data: evalData }),
+    });
+
+    renderWithProviders(<App evalId="eval-duplicate-retry" />);
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Report data incomplete');
+    expect(screen.queryByTestId('overview-total')).not.toBeInTheDocument();
+  });
 });
 
 describe('App component target selector rendering', () => {

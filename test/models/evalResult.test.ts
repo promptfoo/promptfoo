@@ -9,7 +9,11 @@ import EvalResult, {
 } from '../../src/models/evalResult';
 import { hashPrompt } from '../../src/prompts/utils';
 import { WebSocketProvider } from '../../src/providers/websocket';
-import { TOOL_ARGUMENT_ATTRIBUTE_KEYS } from '../../src/tracing/toolAttributes';
+import {
+  COMMAND_ATTRIBUTE_KEYS,
+  SEARCH_ATTRIBUTE_KEYS,
+  TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+} from '../../src/tracing/toolAttributes';
 import {
   type ApiProvider,
   type AtomicTestCase,
@@ -2008,8 +2012,12 @@ describe('EvalResult', () => {
                 'tool.output': 'sensitive tool output',
                 'tool.result': 'sensitive tool result',
                 'ai.toolCall.result': 'sensitive Vercel tool result',
-                'codex.command': 'sensitive command',
-                'codex.search.query': 'sensitive search query',
+                ...Object.fromEntries(
+                  COMMAND_ATTRIBUTE_KEYS.map((key) => [key, 'sensitive ' + key]),
+                ),
+                ...Object.fromEntries(
+                  SEARCH_ATTRIBUTE_KEYS.map((key) => [key, 'sensitive ' + key]),
+                ),
                 'codex.output': 'sensitive command output',
                 'codex.message': 'sensitive agent message',
                 'codex.reasoning': 'sensitive reasoning',
@@ -2085,8 +2093,8 @@ describe('EvalResult', () => {
           'ai.toolCall.result',
           'codex.output',
           ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
-          'codex.command',
-          'codex.search.query',
+          ...COMMAND_ATTRIBUTE_KEYS,
+          ...SEARCH_ATTRIBUTE_KEYS,
           'codex.message',
           'codex.reasoning',
           'codex.reasoning.summary',
@@ -2103,8 +2111,8 @@ describe('EvalResult', () => {
           'ai.toolCall.result',
           'codex.output',
           ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
-          'codex.command',
-          'codex.search.query',
+          ...COMMAND_ATTRIBUTE_KEYS,
+          ...SEARCH_ATTRIBUTE_KEYS,
           'codex.message',
           'codex.reasoning',
           'codex.reasoning.summary',

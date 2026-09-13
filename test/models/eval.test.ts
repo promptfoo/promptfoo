@@ -1670,6 +1670,7 @@ describe('evaluator', () => {
     });
 
     it('loads and sanitizes one legacy result without hydrating the evaluation', async () => {
+      const longPrompt = 'legacy prompt '.repeat(1_000);
       const legacyResult = createEvaluateResult({
         id: 'legacy-row-id',
         testIdx: 4,
@@ -1679,6 +1680,7 @@ describe('evaluator', () => {
           label: 'Legacy provider',
           config: { apiKey: 'legacy-provider-secret' },
         } as EvaluateResult['provider'],
+        prompt: { raw: longPrompt, label: longPrompt },
         response: {
           output: 'legacy output',
           metadata: { headers: { authorization: 'Bearer legacy-secret' } },
@@ -1698,6 +1700,7 @@ describe('evaluator', () => {
         provider: { id: 'legacy-provider', label: 'Legacy provider' },
         response: { output: 'legacy output' },
       });
+      expect(result?.prompt.raw).toBe(longPrompt);
       expect(result?.provider).not.toHaveProperty('config');
       expect(JSON.stringify(result)).not.toContain('legacy-provider-secret');
       expect(JSON.stringify(result)).not.toContain('Bearer legacy-secret');
@@ -3600,10 +3603,17 @@ describe('evaluator', () => {
       legacyEval.oldResults = createEvaluateSummaryV2({ results: [result] });
       const inMemoryEval = new Eval({});
       await inMemoryEval.addResult(result);
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_PROMPT_TEXT: 'true' });
 
-      for (const eval_ of [persistedEval, legacyEval, inMemoryEval]) {
-        const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
-        expect(compact.results.results[0].metadata?.redteamHistory).toHaveLength(25);
+      try {
+        for (const eval_ of [persistedEval, legacyEval, inMemoryEval]) {
+          const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+          expect(compact.results.results[0].metadata?.redteamHistory).toHaveLength(25);
+          const full = await eval_.toResultsFile();
+          expect(full.results.results[0].metadata?.redteamHistory).toHaveLength(30);
+        }
+      } finally {
+        restoreEnv();
       }
     });
 
@@ -3651,13 +3661,15 @@ describe('evaluator', () => {
       const db = await getDb();
       await db.run(sql`
         UPDATE ${evalResultsTable}
-        SET test_case = json('null')
+        SET test_case = json('null'), prompt = json('null'), provider = json('null')
         WHERE ${evalResultsTable.evalId} = ${eval1.id}
       `);
 
       const result = await Eval.getResultByIdAndIndices(eval1.id, 0, 0);
 
       expect(result?.testCase).toEqual({ vars: {} });
+      expect(result?.prompt).toEqual({ raw: '', label: '' });
+      expect(result?.provider).toEqual({ id: '' });
     });
 
     it('skips scalar persisted grading components in compact projections', async () => {
@@ -3968,6 +3980,11 @@ describe('evaluator', () => {
             pass: false,
             score: 0,
             reason: longText,
+            componentResults: Array.from({ length: 30 }, () => ({
+              pass: false,
+              score: 0,
+              reason: longText,
+            })),
             suggestions: Array.from({ length: 30 }, () => ({
               type: 'note',
               action: 'note',
@@ -3977,7 +3994,12 @@ describe('evaluator', () => {
         }),
       );
       const persisted = await EvalFactory.create({ numResults: 0 });
-      const inMemory = new Eval({});
+      const inMemory = new Eval(
+        {},
+        {
+          prompts: [createCompletedPrompt(longText, { label: longText, display: longText })],
+        },
+      );
       for (const result of cases) {
         await persisted.addResult(result);
         await inMemory.addResult(result);
@@ -3997,10 +4019,17 @@ describe('evaluator', () => {
           expect(result.prompt.display?.length).toBeLessThanOrEqual(10_240);
           expect(JSON.stringify(result.vars).length).toBeLessThanOrEqual(20_500);
           expect(result.gradingResult?.reason?.length).toBeLessThanOrEqual(10_240);
+          expect(result.gradingResult?.componentResults).toHaveLength(25);
+          expect(result.gradingResult?.componentResults?.[0].reason.length).toBeLessThanOrEqual(
+            10_240,
+          );
           expect(result.gradingResult?.suggestions).toHaveLength(25);
           expect(result.gradingResult?.suggestions?.[0].value.length).toBeLessThanOrEqual(10_240);
         }
         expect(compact.results.results[2].response?.prompt).toBe('');
+        if (eval_ === inMemory) {
+          expect(compact.prompts[0].raw.length).toBeLessThanOrEqual(10_240);
+        }
         const full = await eval_.toResultsFile({ includeTraces: false });
         expect(full.results.results.map((result) => result.response?.prompt)).toEqual(values);
         expect(full.results.results[0].response?.output).toBe(longText);

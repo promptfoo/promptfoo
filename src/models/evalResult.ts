@@ -9,6 +9,7 @@ import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { ProviderConfig } from '../providers/shared';
 import { PromptfooAttributes, TOOL_ARGUMENT_ATTRIBUTE_KEYS } from '../tracing/genaiTracer';
+import { COMMAND_ATTRIBUTE_KEYS, SEARCH_ATTRIBUTE_KEYS } from '../tracing/toolAttributes';
 import {
   type ApiProvider,
   type AtomicTestCase,
@@ -75,8 +76,8 @@ const TRACE_RESPONSE_OUTPUT_ATTRIBUTE_KEYS = [
   'ai.toolCall.result',
   'codex.output',
   ...TOOL_ARGUMENT_ATTRIBUTE_KEYS,
-  'codex.command',
-  'codex.search.query',
+  ...COMMAND_ATTRIBUTE_KEYS,
+  ...SEARCH_ATTRIBUTE_KEYS,
   'codex.message',
   'codex.message.text',
   'codex.command.output',
@@ -113,12 +114,15 @@ function projectTraceSpanName(
     return span.name;
   }
   if (
-    typeof span.attributes['codex.search.query'] === 'string' &&
+    SEARCH_ATTRIBUTE_KEYS.some((key) => typeof span.attributes?.[key] === 'string') &&
     span.name.startsWith('search "')
   ) {
     return 'search "[output stripped]"';
   }
-  if (typeof span.attributes['codex.command'] === 'string' && span.name.startsWith('exec ')) {
+  if (
+    COMMAND_ATTRIBUTE_KEYS.some((key) => typeof span.attributes?.[key] === 'string') &&
+    span.name.startsWith('exec ')
+  ) {
     return 'exec [output stripped]';
   }
   // A log-derived span with no event name echoes the (short) log body into the span
@@ -206,9 +210,8 @@ function projectRedteamHistoryForOutput(
     });
   }
 
-  return history
+  return (forceProjection ? history.slice(0, MAX_COMPACT_HISTORY_ENTRIES) : history)
     .filter(isRecord)
-    .slice(0, MAX_COMPACT_HISTORY_ENTRIES)
     .map((entry) => {
       const boundedPrompt = forceProjection ? boundHistoryText(entry.prompt) : entry.prompt;
       const boundedPromptAudio = forceProjection
@@ -1600,15 +1603,15 @@ export default class EvalResult {
     this.promptIdx = opts.promptIdx;
     this.testIdx = opts.testIdx;
     this.testCase = isRecord(opts.testCase) ? opts.testCase : ({ vars: {} } as AtomicTestCase);
-    this.prompt = opts.prompt;
-    this.promptId = opts.promptId || hashPrompt(opts.prompt);
+    this.prompt = isRecord(opts.prompt) ? opts.prompt : ({ raw: '', label: '' } as Prompt);
+    this.promptId = opts.promptId || hashPrompt(this.prompt);
     this.error = opts.error;
     this.score = opts.score;
     this.success = opts.success;
-    this.response = opts.response || undefined;
-    this.gradingResult = opts.gradingResult;
-    this.namedScores = opts.namedScores || {};
-    this.provider = opts.provider;
+    this.response = isRecord(opts.response) ? opts.response : undefined;
+    this.gradingResult = isRecord(opts.gradingResult) ? opts.gradingResult : null;
+    this.namedScores = isRecord(opts.namedScores) ? opts.namedScores : {};
+    this.provider = isRecord(opts.provider) ? opts.provider : { id: '' };
     this.latencyMs = opts.latencyMs || 0;
     this.cost = opts.cost || 0;
     ({

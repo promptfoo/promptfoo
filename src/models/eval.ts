@@ -200,6 +200,7 @@ function projectGradingResultForRedteamReport(gradingResult: GradingResult): Gra
 
   const componentResults = Array.isArray(gradingResult.componentResults)
     ? gradingResult.componentResults
+        .slice(0, 25)
         .filter(isRecord)
         .map((componentResult) =>
           projectGradingResultForRedteamReport(componentResult as unknown as GradingResult),
@@ -413,7 +414,7 @@ function projectPromptForRedteamReport<T extends Prompt>(
   prompt: T,
   shouldStripPromptText: boolean,
 ): T {
-  const { config: _config, function: _function, template: _template, ...reportPrompt } = prompt;
+  const reportPrompt = normalizePromptForRedteamReport(prompt);
 
   return {
     ...reportPrompt,
@@ -425,23 +426,23 @@ function projectPromptForRedteamReport<T extends Prompt>(
   } as T;
 }
 
-function normalizePromptForRedteamReport(prompt: unknown): Prompt {
+function normalizePromptForRedteamReport(prompt: unknown, bound = true): Prompt {
   if (!isRecord(prompt)) {
     return { raw: '', label: '' };
   }
 
-  const raw =
-    typeof prompt.raw === 'string' ? prompt.raw.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH) : '';
+  const text = (value: unknown) =>
+    typeof value === 'string'
+      ? bound
+        ? value.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
+        : value
+      : '';
+  const raw = text(prompt.raw);
   return {
     ...(typeof prompt.id === 'string' && { id: prompt.id }),
     raw,
-    label:
-      typeof prompt.label === 'string'
-        ? prompt.label.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
-        : raw,
-    ...(typeof prompt.display === 'string' && {
-      display: prompt.display.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
-    }),
+    label: typeof prompt.label === 'string' ? text(prompt.label) : raw,
+    ...(typeof prompt.display === 'string' && { display: text(prompt.display) }),
   };
 }
 
@@ -949,7 +950,7 @@ function normalizeLegacyResultForDetail(
     return undefined;
   }
 
-  const prompt = normalizePromptForRedteamReport(value.prompt);
+  const prompt = normalizePromptForRedteamReport(value.prompt, false);
   const testCase = isRecord(value.testCase) ? (value.testCase as AtomicTestCase) : {};
   const success = value.success === true;
   const failureReason =
@@ -2625,7 +2626,11 @@ export default class Eval {
                   json_object(
                     'pass', ${jsonBooleanOrNull(validReportComponentJson, '$.pass')},
                     'score', ${jsonNumberOrNull(validReportComponentJson, '$.score')},
-                    'reason', ${jsonTextOrNull(validReportComponentJson, '$.reason')}
+                    'reason', CASE
+                      WHEN json_type(${validReportComponentJson}, '$.reason') = 'text'
+                      THEN substr(json_extract(${validReportComponentJson}, '$.reason'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+                      ELSE NULL
+                    END
                   ),
                   CASE
                     WHEN json_type(${validReportComponentJson}, '$.assertion') = 'object'
@@ -2653,6 +2658,7 @@ export default class Eval {
               json_extract(${validGradingResultJson}, '$.componentResults')
             ) AS report_component
             WHERE report_component.type = 'object'
+              AND report_component.key < 25
           )
           ELSE NULL
         END`,
