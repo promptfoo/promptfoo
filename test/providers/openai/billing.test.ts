@@ -85,6 +85,10 @@ describe('OpenAI billing helpers', () => {
     expect(
       calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'premium' }),
     ).toBeUndefined();
+    expect(calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'auto' })).toBeCloseTo(
+      (600 * 5 + 400 * 0.5 + 100 * 30) / 1e6,
+      10,
+    );
 
     expect(
       calculateOpenAIUsageCost('chat-latest', { inputCost: 2e-6, outputCost: 3e-6 }, usage, {
@@ -99,13 +103,14 @@ describe('OpenAI billing helpers', () => {
   });
 
   it('applies explicit prices to custom chat-latest ids', () => {
+    const config = { inputCost: 2e-6, outputCost: 3e-6 };
+    const usage = { input_tokens: 1_000, output_tokens: 100 };
+    expect(calculateOpenAIUsageCost('vendor/chat-latest', config, usage)).toBeCloseTo(
+      1_000 * 2e-6 + 100 * 3e-6,
+    );
     expect(
-      calculateOpenAIUsageCost(
-        'vendor/chat-latest',
-        { inputCost: 2e-6, outputCost: 3e-6 },
-        { input_tokens: 1_000, output_tokens: 100 },
-      ),
-    ).toBeCloseTo(1_000 * 2e-6 + 100 * 3e-6);
+      calculateOpenAIUsageCost('vendor/chat-latest', config, usage, { cachedResponse: true }),
+    ).toBe(0);
   });
 
   it('uses non-reasoning web search preview pricing for chat-latest aliases', () => {

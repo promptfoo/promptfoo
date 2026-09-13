@@ -643,6 +643,7 @@ function normalizeServiceTier(
     case undefined:
     case 'default':
     case 'standard':
+    case 'auto':
       return 'standard';
     case 'fast':
       return 'priority';
@@ -985,16 +986,21 @@ export function calculateOpenAIUsageCost(
 
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
-  if (options.cachedResponse && getModelRates(modelName, 'standard', usage.totalInputTokens)) {
-    return 0;
-  }
-  const tier = normalizeServiceTier(options.serviceTier);
   const hasCustomTextCost =
     config.cost !== undefined || config.inputCost !== undefined || config.outputCost !== undefined;
   const hasCustomAudioCost =
     config.audioCost !== undefined ||
     config.audioInputCost !== undefined ||
     config.audioOutputCost !== undefined;
+  if (
+    options.cachedResponse &&
+    (hasCustomTextCost ||
+      hasCustomAudioCost ||
+      getModelRates(modelName, 'standard', usage.totalInputTokens))
+  ) {
+    return 0;
+  }
+  const tier = normalizeServiceTier(options.serviceTier);
   const modelRates =
     (tier && getModelRates(modelName, tier, usage.totalInputTokens)) ??
     (hasCustomTextCost || hasCustomAudioCost
