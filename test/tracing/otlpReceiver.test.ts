@@ -2011,13 +2011,18 @@ describe('OTLPReceiver', () => {
       },
     );
 
-    it.each(['body', 'event-name'])(
-      'retains untimed linked logs after serialization: %s',
-      async (nameSource) => {
+    it.each(
+      ['body', 'event-name'].flatMap((nameSource) =>
+        [false, true].map((observed) => ({ nameSource, observed })),
+      ),
+    )(
+      'retains untimed linked logs after serialization: $nameSource observed=$observed',
+      async ({ nameSource, observed }) => {
         const now = vi.spyOn(Date, 'now').mockReturnValue(1700000000000);
         const log = {
           traceId: hexTraceId,
           spanId: hexParentSpanId,
+          ...(observed ? { observedTimeUnixNano: '1700000000000000000' } : {}),
           ...(nameSource === 'body' ? { body: { stringValue: 'guardrail update_seat' } } : {}),
           attributes: [
             { key: 'event.name', value: { stringValue: 'guardrail update_seat' } },
@@ -2125,7 +2130,7 @@ describe('OTLPReceiver', () => {
       expect(ids[2]).not.toBe(ids[0]);
     });
 
-    it('uses the observed timestamp when the log timestamp is absent', async () => {
+    it('does not use the observed timestamp as execution time', async () => {
       await request(receiver.getApp())
         .post('/v1/logs')
         .send(
@@ -2139,9 +2144,9 @@ describe('OTLPReceiver', () => {
           ]),
         )
         .expect(200);
-      expect(persistSpans.mock.calls[0][1][0].attributes['otel.log.time_unix_nano']).toBe(
-        '1700000000000000200',
-      );
+      expect(
+        persistSpans.mock.calls[0][1][0].attributes['otel.log.time_unix_nano'],
+      ).toBeUndefined();
     });
 
     it('converts a Claude Code log into a child span with event.name attribute', async () => {

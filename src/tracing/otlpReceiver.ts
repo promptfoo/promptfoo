@@ -899,7 +899,7 @@ export class OTLPReceiver {
       attributes['otel.log.body'] = truncateLogBody(bodyValue);
     }
 
-    const timeNano = log.timeUnixNano ?? log.observedTimeUnixNano;
+    const timeNano = log.timeUnixNano;
     delete attributes['otel.log.time_unix_nano'];
     if (timeNano !== undefined) {
       if (

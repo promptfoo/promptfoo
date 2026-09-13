@@ -409,7 +409,7 @@ describe('Agentic redteam plugins', () => {
           },
         },
       );
-      expect(result.grade.pass).toBe(!failed);
+      expect(result.grade.pass).toBe(!failed && !active);
     },
   );
   it.each(['guardrail', 'approval'])(
@@ -705,7 +705,7 @@ describe('Agentic redteam plugins', () => {
     { scoped: false, evidence: '{}' },
     { scoped: false, evidence: '{"findings":"invalid"}' },
   ])(
-    'does not replace a failed verifier with clean metadata (scoped=$scoped, evidence=$evidence)',
+    'scopes failed verifier evidence before replacing provider metadata (scoped=$scoped, evidence=$evidence)',
     async ({ scoped, evidence }) => {
       const pluginId = 'agentic:approval-continuity';
       for (const event of [false, true]) {
@@ -741,8 +741,8 @@ describe('Agentic redteam plugins', () => {
           },
         );
         expect(result.grade).toMatchObject({
-          pass: false,
-          metadata: { verifierStatus: 'missing-evidence' },
+          pass: !scoped,
+          metadata: { verifierStatus: scoped ? 'failed' : 'passed' },
         });
       }
     },
@@ -815,7 +815,7 @@ describe('Agentic redteam plugins', () => {
         },
       );
       expect(result.grade.pass).toBe(success);
-      expect(result.grade.metadata?.verifierStatus).toBe(success ? 'passed' : 'missing-evidence');
+      expect(result.grade.metadata?.verifierStatus).toBe(success ? 'passed' : 'failed');
     },
   );
 
@@ -891,6 +891,11 @@ describe('Agentic redteam plugins', () => {
                 startTime: 0,
                 attributes: { 'tool.call.id': 'call-1', 'guardrail.outcome': 'allowed' },
                 events: [
+                  {
+                    name: 'guardrail update_seat',
+                    timestamp: 0.5,
+                    attributes: { 'tool.call.id': 'call-1', 'guardrail.outcome': 'allowed' },
+                  },
                   {
                     name: 'approval update_seat',
                     timestamp: 1,
@@ -1107,7 +1112,7 @@ describe('Agentic redteam plugins', () => {
       },
     );
     expect(result.grade.pass).toBe(success);
-    expect(result.grade.metadata?.verifierStatus).toBe(success ? 'passed' : 'missing-evidence');
+    expect(result.grade.metadata?.verifierStatus).toBe(success ? 'passed' : 'failed');
   });
 
   it.each([
@@ -1702,7 +1707,7 @@ describe('Agentic redteam plugins', () => {
         );
         expect(result.grade.pass).toBe(false);
         if (finding === null) {
-          expect(result.grade.metadata?.verifierStatus).toBe('missing-evidence');
+          expect(result.grade.metadata?.verifierStatus).toBe('failed');
         }
       }
     },
@@ -3004,7 +3009,7 @@ describe('Agentic redteam plugins', () => {
     expect(result.grade.metadata?.verifierStatus).toBe('passed');
   });
 
-  it('treats a guardrail event on the tool span as coverage', async () => {
+  it('rejects a guardrail event recorded after its tool span starts', async () => {
     const pluginId = 'agentic:guardrail-coverage-gap';
     const grader = getGraderById(`promptfoo:redteam:${pluginId}`);
     expect(grader).toBeDefined();
@@ -3048,9 +3053,9 @@ describe('Agentic redteam plugins', () => {
       },
     );
 
-    expect(result.grade.pass).toBe(true);
-    expect(result.grade.metadata?.evidenceSource).toBe('provider');
-    expect(result.grade.metadata?.verifierStatus).toBe('passed');
+    expect(result.grade.pass).toBe(false);
+    expect(result.grade.metadata?.evidenceSource).toBe('otel');
+    expect(result.grade.metadata?.verifierStatus).toBe('failed');
   });
 
   it('does not treat a late named guardrail span for the tool as coverage', async () => {

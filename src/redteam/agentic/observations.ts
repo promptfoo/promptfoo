@@ -434,17 +434,24 @@ export function getTraceEvidenceValues(
     const explicitIds = ownIds
       .map(([, value]) => normalizePluginId(value))
       .filter((id): id is string => id !== undefined);
-    const ids = explicitIds.length
-      ? explicitIds
-      : Object.entries(enclosingAttributes ?? {})
-          .filter(([key]) => idKeys.includes(key.toLowerCase()))
-          .map(([, value]) => normalizePluginId(value))
-          .filter((id): id is string => id !== undefined);
+    const inheritedIds = Object.entries(enclosingAttributes ?? {})
+      .filter(([key]) => idKeys.includes(key.toLowerCase()))
+      .map(([, value]) => normalizePluginId(value))
+      .filter((id): id is string => id !== undefined);
+    const ids = explicitIds.length ? explicitIds : inheritedIds;
     const pluginIds = [...new Set(ids)];
     if (pluginIds.length > 1) {
       throw new Error('Agentic trace evidence has conflicting plugin IDs and cannot be graded');
     }
     const pluginId = pluginIds[0];
+    if (explicitIds.length > 0 && ownIds.length > explicitIds.length) {
+      values.push(
+        ...[...new Set(inheritedIds.length ? inheritedIds : explicitIds)].map((pluginId) => ({
+          pluginId,
+          verifierFailed: true,
+        })),
+      );
+    }
     values.push(
       ...json.map(([, value]) =>
         pluginId === undefined ? value : { pluginId, agenticEvidence: value },

@@ -11,7 +11,10 @@ function parseJsonContainer(value: string, start: number, end: number): object |
   }
 }
 
-function scanJsonContainers(value: string): { values: object[]; malformed: boolean } {
+function scanJsonContainers(
+  value: string,
+  tagged = false,
+): { values: object[]; malformed: boolean } {
   value = value.slice(0, MAX_JSON_LENGTH);
 
   const objects: object[] = [];
@@ -39,21 +42,27 @@ function scanJsonContainers(value: string): { values: object[]; malformed: boole
       malformed = true;
     } else if (character === '"' && starts.length > 0) {
       inString = true;
-    } else if (
-      character === '{' ||
-      (character === '[' &&
-        (starts.length > 0 ||
-          /^\s*(?:$|[\[{"\]\d-]|(?:true|false|null)\b)/.test(value.slice(index + 1))))
-    ) {
+    } else if (character === '{' || character === '[') {
       starts.push(index);
-    } else if ((character === '}' || character === ']') && starts.length > 0) {
+    } else if (character === '}' || character === ']') {
+      if (starts.length === 0) {
+        malformed ||= tagged;
+        continue;
+      }
       const start = starts.pop()!;
       if (starts.length === 0) {
         const parsed = parseJsonContainer(value, start, index);
         if (parsed) {
           objects.push(parsed);
         } else {
-          malformed = true;
+          // Plain bracketed labels such as [INFO] are prose outside evidence tags.
+          malformed ||= tagged || !/^\[[\w .:/-]+\]$/.test(value.slice(start, index + 1));
+          for (const { start, end } of nestedObjects) {
+            const nested = parseJsonContainer(value, start, end);
+            if (nested) {
+              objects.push(nested);
+            }
+          }
         }
         nestedObjects.length = 0;
       } else {
@@ -104,23 +113,25 @@ export function parseEvidenceCandidates(
   { preserveInvalid = false }: { preserveInvalid?: boolean } = {},
 ): Record<string, unknown>[] {
   const candidates: Record<string, unknown>[] = [];
-  const pending: { value: unknown; pluginId?: string }[] = [{ value }];
+  const pending: { value: unknown; pluginId?: string; tagged?: boolean }[] = [{ value }];
   let visited = 0;
   let findings = 0;
   let records = 0;
   let characters = 0;
+  let decodedCharacters = 0;
+  let decodedNodes = 0;
 
   while (pending.length) {
     if (++visited > 4000) {
       throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
     }
-    const { value: next, pluginId: inheritedPluginId } = pending.pop()!;
+    const { value: next, pluginId: inheritedPluginId, tagged } = pending.pop()!;
     if (Array.isArray(next)) {
       if (next.length > 1000) {
         throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
       }
       if (preserveInvalid && next.length === 0) {
-        candidates.push({ pluginId: inheritedPluginId });
+        candidates.push({ pluginId: inheritedPluginId, verifierFailed: true });
       }
       pending.push(...[...next].reverse().map((value) => ({ value, pluginId: inheritedPluginId })));
     } else if (next && typeof next === 'object') {
@@ -137,6 +148,19 @@ export function parseEvidenceCandidates(
           /^(?:agentic|agentSdk)Evidence$/i.test(key) && (preserveInvalid || value != null),
       );
       if (record.findings !== undefined || nested.length === 0) {
+        try {
+          JSON.stringify(record, (key, value) => {
+            decodedCharacters += key.length + (typeof value === 'string' ? value.length : 0);
+            if (++decodedNodes > 4000 || decodedCharacters > MAX_JSON_LENGTH) {
+              throw new Error('Evidence scan limit');
+            }
+            return value;
+          });
+        } catch {
+          throw new Error(
+            'Agentic evidence exceeds scan limits or is not valid JSON and cannot be graded',
+          );
+        }
         candidates.push(
           pluginId !== undefined && record.pluginId !== pluginId ? { ...record, pluginId } : record,
         );
@@ -149,7 +173,7 @@ export function parseEvidenceCandidates(
       }
       if (!next.trim()) {
         if (preserveInvalid) {
-          candidates.push({ pluginId: inheritedPluginId });
+          candidates.push({ pluginId: inheritedPluginId, verifierFailed: true });
         }
         continue;
       }
@@ -171,19 +195,22 @@ export function parseEvidenceCandidates(
         }
         untagged = untagged.replace(pattern, '');
       }
-      const scanned = scanJsonContainers(untagged);
-      const extracted = [...scanned.values.reverse(), ...taggedValues.reverse()];
+      const scanned = scanJsonContainers(untagged, tagged);
+      const extracted = [
+        ...scanned.values.reverse().map((value) => ({ value })),
+        ...taggedValues.reverse().map((value) => ({ value, tagged: true })),
+      ];
       if (preserveInvalid && (scanned.malformed || extracted.length === 0)) {
-        candidates.push({ pluginId: inheritedPluginId });
+        candidates.push({ pluginId: inheritedPluginId, verifierFailed: true });
       }
       pending.push(
-        ...extracted.map((value) => ({
-          value,
+        ...extracted.map((entry) => ({
+          ...entry,
           pluginId: inheritedPluginId,
         })),
       );
     } else if (preserveInvalid) {
-      candidates.push({ pluginId: inheritedPluginId });
+      candidates.push({ pluginId: inheritedPluginId, verifierFailed: true });
     }
   }
 

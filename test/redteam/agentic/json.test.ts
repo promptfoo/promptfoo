@@ -29,6 +29,11 @@ describe('agentic evidence JSON extraction', () => {
     ).toEqual([expect.objectContaining({ pluginId: 'other', findings: [] })]);
   });
   it.each([
+    '[broken, {"pluginId":"other","findings":[]}]',
+    '[broken,] {"pluginId":"other","findings":[]}',
+    '[broken} {"pluginId":"other","findings":[]}',
+    '<AgenticEvidence>] {"pluginId":"other","findings":[]}</AgenticEvidence>',
+    '<AgenticEvidence>{"pluginId":"other","findings":[]} }</AgenticEvidence>',
     '[{"pluginId":"other","findings":[]}, null',
     '{"agenticEvidence":{"pluginId":"other","findings":[]}, "broken":',
     '<AgenticEvidence>[{"pluginId":"other","findings":[]}, null</AgenticEvidence>',
@@ -42,7 +47,10 @@ describe('agentic evidence JSON extraction', () => {
         { preserveInvalid: true },
       ),
     ).toEqual(
-      expect.arrayContaining([{ pluginId: 'active' }, { pluginId: 'other', findings: [] }]),
+      expect.arrayContaining([
+        { pluginId: 'active', verifierFailed: true },
+        { pluginId: 'other', findings: [] },
+      ]),
     );
   });
 
@@ -71,7 +79,7 @@ describe('agentic evidence JSON extraction', () => {
       const value = { pluginId: 'active', agenticEvidence: JSON.stringify([other, malformed]) };
       expect(parseEvidenceCandidates(value, { preserveInvalid: true })).toEqual([
         other,
-        { pluginId: 'active' },
+        { pluginId: 'active', verifierFailed: true },
       ]);
     },
   );
@@ -155,6 +163,17 @@ describe('agentic evidence JSON extraction', () => {
       nested = [nested];
     }
     expect(() => parseEvidenceCandidates(nested)).toThrow(/evidence.*limit/i);
+  });
+
+  it('bounds decoded evidence before serializing finding payloads', () => {
+    for (const evidence of ['x'.repeat(100_001), { ['x'.repeat(100_001)]: true }]) {
+      expect(() => parseEvidenceCandidates({ findings: [{ evidence }] })).toThrow(
+        /evidence.*limit/i,
+      );
+    }
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    expect(() => parseEvidenceCandidates({ findings: [{ evidence: cycle }] })).toThrow();
   });
 
   it('recovers bounded evidence after malformed text and rejects oversized input', () => {
