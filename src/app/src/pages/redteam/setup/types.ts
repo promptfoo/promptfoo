@@ -148,5 +148,4 @@ export interface LocalPluginConfig {
 export interface RedteamUITarget {
   value: string;
   label: string;
-  config?: ProviderOptions['config'];
 }

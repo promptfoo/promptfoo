@@ -41,27 +41,22 @@ export const predefinedTargets: RedteamUITarget[] = [
   {
     value: DEFAULT_VERTEX_TARGET_ID,
     label: 'Google Vertex AI Gemini 3.8 Flash',
-    config: { region: 'global' },
   },
   {
     value: 'vertex:gemini-3.7-flash',
     label: 'Google Vertex AI Gemini 3.7 Flash',
-    config: { region: 'global' },
   },
   {
     value: 'vertex:gemini-3.6-flash',
     label: 'Google Vertex AI Gemini 3.6 Flash',
-    config: { region: 'global' },
   },
   {
     value: 'vertex:gemini-3.5-flash-lite',
     label: 'Google Vertex AI Gemini 3.5 Flash-Lite',
-    config: { region: 'global' },
   },
   {
     value: 'vertex:gemini-3.1-pro-preview',
     label: 'Google Vertex AI Gemini 3.1 Pro',
-    config: { region: 'global' },
   },
   { value: 'vertex:gemini-2.5-pro', label: 'Google Vertex AI Gemini 2.5 Pro' },
 ];
