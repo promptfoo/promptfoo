@@ -10,6 +10,7 @@ import {
   CONTEXT_RELEVANCE_BAD,
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
+import { isAbortError } from '../util/fetch/errors';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import { callGradingProvider, callProviderWithContext, getAndCheckProvider } from './providers';
@@ -81,13 +82,21 @@ export async function matchesAnswerRelevance(
   );
 
   const callEmbeddingApi = embeddingProvider.callEmbeddingApi.bind(embeddingProvider);
-  const inputEmbeddingResp = await callGradingProvider(
-    embeddingProvider,
-    'answer-relevance.embedding',
-    (context, options) =>
-      options || context ? callEmbeddingApi(input, context, options) : callEmbeddingApi(input),
-    { callContext: providerCallContext, operationName: 'embeddings' },
-  );
+  let inputEmbeddingResp;
+  try {
+    inputEmbeddingResp = await callGradingProvider(
+      embeddingProvider,
+      'answer-relevance.embedding',
+      (context, options) =>
+        options || context ? callEmbeddingApi(input, context, options) : callEmbeddingApi(input),
+      { callContext: providerCallContext, operationName: 'embeddings' },
+    );
+  } catch (error) {
+    if (!isAbortError(error)) {
+      throw error;
+    }
+    return fail(error instanceof Error ? error.message : String(error), tokensUsed);
+  }
   accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
     return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
@@ -110,6 +119,9 @@ export async function matchesAnswerRelevance(
         { callContext: providerCallContext, operationName: 'embeddings' },
       );
     } catch (error) {
+      if (!isAbortError(error)) {
+        throw error;
+      }
       return fail(error instanceof Error ? error.message : String(error), tokensUsed);
     }
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
