@@ -23,6 +23,7 @@ import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
 import { loadApiProvider } from '../providers/index';
+import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
@@ -1336,14 +1337,11 @@ export async function doEval(
     } finally {
       const results = await Promise.allSettled(
         [...ownedProviders]
-          .filter(
-            (provider) =>
-              typeof (provider as ApiProvider & { shutdown?: unknown }).shutdown !== 'function',
-          )
+          .filter((provider) => !providerRegistry.has(provider))
           .map(async (provider) => provider.cleanup?.()),
       );
       const cleanupError = results.find((result) => result.status === 'rejected')?.reason;
-      if (cleanupError && evaluationError === undefined) {
+      if (cleanupError && evaluationError === undefined && process.exitCode === undefined) {
         throw cleanupError;
       }
       if (cleanupError) {
