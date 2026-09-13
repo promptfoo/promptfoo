@@ -104,13 +104,17 @@ describe('extractRuntimeModuleSpecifiers', () => {
         const fourth = makeRequire(import.meta.url);
         const fifth = nodeModule.createRequire(import.meta.url);
         const sixth = Module.createRequire(import.meta.url);
+        const commonJsModule = require('node:module');
+        const seventh = commonJsModule.createRequire(import.meta.url);
         third('zod');
         fourth('yaml');
         fifth('toml');
         sixth('lodash');
+        seventh('semver');
       `;
       expect(extract(source, 'fixture.ts')).toEqual([
         'yaml',
+        'node:module',
         'node:module',
         'node:module',
         'node:module',
@@ -118,6 +122,7 @@ describe('extractRuntimeModuleSpecifiers', () => {
         'yaml',
         'toml',
         'lodash',
+        'semver',
       ]);
     },
   );

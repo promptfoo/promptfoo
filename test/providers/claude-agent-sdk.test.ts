@@ -2029,6 +2029,18 @@ describe('ClaudeCodeSDKProvider', () => {
         );
       });
 
+      it('should let config.env override the host API key', async () => {
+        mockQuery.mockReturnValue(createMockResponse('ok'));
+        mockProcessEnv({ ANTHROPIC_API_KEY: 'host-key' });
+
+        const provider = new ClaudeCodeSDKProvider({
+          config: { env: { ANTHROPIC_API_KEY: 'config-key' } },
+        });
+        await provider.callApi('prompt');
+
+        expect(mockQuery.mock.calls.at(-1)?.[0].options.env.ANTHROPIC_API_KEY).toBe('config-key');
+      });
+
       it('should let EnvOverrides take precedence over config.env', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 

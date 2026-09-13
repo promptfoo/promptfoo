@@ -410,6 +410,13 @@ export async function getDb() {
 }
 
 export async function closeDb() {
+  if (!dbInstance && dbPromise) {
+    try {
+      await dbPromise;
+    } catch {
+      // Initialization already releases a failed client.
+    }
+  }
   if (sqliteInstance) {
     try {
       // Attempt to checkpoint WAL file before closing

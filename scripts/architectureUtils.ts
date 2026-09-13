@@ -393,6 +393,12 @@ function extractModuleReferences(
       if (node.id.type === 'Identifier' && node.init) {
         declarations.push({ name: node.id.name, init: node.init });
         if (
+          node.init.type === 'CallExpression' &&
+          isRuntimeLoader(node.init.callee, aliases) &&
+          ['node:module', 'module'].includes(getStaticModuleSpecifier(node.init.arguments[0]) ?? '')
+        ) {
+          moduleNamespaces.add(node.id.name);
+        } else if (
           node.init.type === 'MemberExpression' &&
           getMemberName(node.init) === 'createRequire' &&
           node.init.object.type === 'CallExpression' &&

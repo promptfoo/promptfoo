@@ -826,6 +826,15 @@ describe('database', () => {
       expect(loggerCloseIndex).toBeGreaterThan(warningIndex);
     });
 
+    it('waits for initialization before closing', async () => {
+      const opening = getDb();
+      const closing = closeDb();
+
+      await Promise.all([opening, closing]);
+
+      expect(isDbOpen()).toBe(false);
+    });
+
     it('should close database connection and reset instances', async () => {
       const _db = await getDb();
       expect(isDbOpen()).toBe(true);
