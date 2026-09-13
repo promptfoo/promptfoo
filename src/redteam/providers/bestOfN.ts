@@ -6,6 +6,7 @@ import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { isCallerAbortError } from '../../util/fetch/requestSignal';
 import invariant from '../../util/invariant';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
@@ -117,13 +118,20 @@ export default class BestOfNProvider implements ApiProvider {
       let successfulResponse: ProviderResponse | null = null;
       let lastResponse: ProviderResponse | null = null;
       let completedErrorResponse: ProviderResponse | null = null;
+      const completion: {
+        response: ProviderResponse | null;
+        cancellation?: { error: unknown };
+      } = { response: null };
       let currentStep = 0;
 
       await async.eachLimit(
         data.modifiedPrompts,
         this.config.maxConcurrency,
         async (candidatePrompt) => {
-          if (successfulResponse || completedErrorResponse) {
+          if (options?.abortSignal?.aborted) {
+            completion.cancellation ??= { error: options.abortSignal.reason };
+          }
+          if (successfulResponse || completedErrorResponse || completion.cancellation) {
             return;
           }
 
@@ -167,7 +175,10 @@ export default class BestOfNProvider implements ApiProvider {
             [this.config.injectVar], // Skip special loading and template rendering for the injection variable
           );
 
-          if (completedErrorResponse) {
+          if (options?.abortSignal?.aborted) {
+            completion.cancellation ??= { error: options.abortSignal.reason };
+          }
+          if (completedErrorResponse || completion.cancellation) {
             return;
           }
 
@@ -185,6 +196,7 @@ export default class BestOfNProvider implements ApiProvider {
             if (sessionId) {
               sessionIds.push(sessionId);
             }
+            completion.response = response;
             lastResponse = response;
             if (response.error && options?.abortSignal?.aborted) {
               completedErrorResponse ??= response;
@@ -208,6 +220,10 @@ export default class BestOfNProvider implements ApiProvider {
               return false; // Stop processing more candidates
             }
           } catch (err) {
+            if (isCallerAbortError(err, options?.abortSignal)) {
+              completion.cancellation ??= { error: err };
+              return;
+            }
             logger.debug(`[Best-of-N] Candidate failed: ${err}`);
             lastResponse = { error: String(err) };
             currentStep++;
@@ -215,9 +231,14 @@ export default class BestOfNProvider implements ApiProvider {
         },
       );
 
+      // eachLimit has drained already-started candidates, retaining their cost.
+      // A catch-generated error envelope is not a completed target response.
+      if (completion.cancellation && !completion.response) {
+        throw completion.cancellation.error;
+      }
       const aggregatedResponse = (successfulResponse ??
         completedErrorResponse ??
-        lastResponse) as ProviderResponse | null;
+        (completion.cancellation ? completion.response : lastResponse)) as ProviderResponse | null;
       if (aggregatedResponse) {
         aggregatedResponse.tokenUsage = targetTokenUsage;
         if (
@@ -252,7 +273,10 @@ export default class BestOfNProvider implements ApiProvider {
       };
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (
+        isCallerAbortError(err, options?.abortSignal) ||
+        (err instanceof Error && err.name === 'AbortError')
+      ) {
         throw err;
       }
       logger.error(`[Best-of-N] Error: ${err}`);

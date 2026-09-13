@@ -7,7 +7,6 @@ import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import { isCallerAbortError } from '../../providers/shared';
 import {
   composeResponseHeadersObservers,
   createProviderRateLimitOptions,
@@ -18,6 +17,7 @@ import {
   preserveResponseHeadersObserverError,
   preserveResponseHeadersObserverErrorResponse,
   type RateLimitRegistry,
+  sleepWithAbort,
   wrapProviderWithRateLimiting,
 } from '../../scheduler';
 import {
@@ -35,9 +35,9 @@ import {
   type TokenUsage,
   type VarValue,
 } from '../../types/index';
+import { isCallerAbortError } from '../../util/fetch/requestSignal';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
-import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateGradingResponseTokenUsage,
@@ -621,9 +621,22 @@ export async function getTargetResponse(
       },
     });
   }
-  if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
+  if (
+    !targetRespRaw.cached &&
+    targetProvider.delay &&
+    targetProvider.delay > 0 &&
+    !options?.abortSignal?.aborted
+  ) {
     logger.debug(`Sleeping for ${targetProvider.delay}ms`);
-    await sleep(targetProvider.delay);
+    try {
+      await sleepWithAbort(targetProvider.delay, options?.abortSignal);
+    } catch (error) {
+      // The target already completed. Only cancellation of this caller's delay
+      // may shorten pacing without replacing its response or accounting.
+      if (!isCallerAbortError(error, options?.abortSignal, { requireReasonMatch: true })) {
+        throw error;
+      }
+    }
   }
   const tokenUsage = { numRequests: 1, ...targetRespRaw.tokenUsage };
   const hasOutput = targetRespRaw && Object.prototype.hasOwnProperty.call(targetRespRaw, 'output');

@@ -1,6 +1,8 @@
 import { getEnvBool, getEnvInt } from '../envars';
 import { loadYaml } from '../util/yamlLoad';
 
+export { isCallerAbortError } from '../util/fetch/requestSignal';
+
 import type { ApiProvider } from '../types/index';
 
 function getCallerAbortError(signal: AbortSignal): Error {
@@ -24,24 +26,6 @@ export function throwIfAborted(signal?: AbortSignal | null): void {
   if (signal?.aborted) {
     throw getCallerAbortError(signal);
   }
-}
-
-/** Match caller cancellation, requiring a reason link outside owned transport calls. */
-export function isCallerAbortError(
-  error: unknown,
-  signal?: AbortSignal | null,
-  { requireReasonMatch = false }: { requireReasonMatch?: boolean } = {},
-): boolean {
-  if (!signal?.aborted) {
-    return false;
-  }
-  return (
-    error === signal.reason ||
-    (error instanceof Error &&
-      ((!requireReasonMatch && (error.name === 'AbortError' || error.name === 'AbortException')) ||
-        (signal.reason !== undefined &&
-          (error as Error & { cause?: unknown }).cause === signal.reason)))
-  );
 }
 
 /** Stop only this caller's wait; shared work keeps running and its rejection is observed. */

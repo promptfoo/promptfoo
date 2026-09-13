@@ -71,6 +71,140 @@ describe('fetchWithCache caller cancellation at cache boundaries', () => {
     return pending;
   }
 
+  it.each(['completed responses', 'caller cancellation'] as const)(
+    'six-P2 cache isolates a suffix-shaped user key during %s',
+    async (mode) => {
+      // beforeEach imports a fresh cache module. Its first signaled in-flight
+      // request therefore receives ID 1, without mutating private counter state.
+      const controller = new AbortController();
+      const reason = Object.assign(new Error('only the signaled cache caller stopped'), {
+        name: 'AbortError',
+      });
+      const unsignedUrl = 'https://cache.test/suffix-key-unsigned';
+      const signaledUrl = 'https://cache.test/suffix-key-signaled';
+      const request = new Request(signaledUrl, { signal: controller.signal });
+      const unsignedBody = deferred<Response>();
+      const signaledBody = deferred<Response>();
+      const pending: Promise<unknown>[] = [];
+      const transportSignals = new Map<string, AbortSignal | null | undefined>();
+      let unsignedSettled = false;
+
+      fetchWithRetries.mockImplementation((input: RequestInfo, options: RequestInit) => {
+        const url = input instanceof Request ? input.url : input;
+        const body = url === unsignedUrl ? unsignedBody : signaledBody;
+        expect([unsignedUrl, signaledUrl]).toContain(url);
+        transportSignals.set(url, options.signal);
+        const onAbort = () => body.reject(options.signal?.reason);
+        options.signal?.addEventListener('abort', onAbort, { once: true });
+        if (options.signal?.aborted) {
+          onAbort();
+        }
+        return body.promise.finally(() => options.signal?.removeEventListener('abort', onAbort));
+      });
+      const capture = (call: Promise<unknown>) => {
+        const result = call.then(
+          (value) => ({ status: 'fulfilled' as const, value }),
+          (error: unknown) => ({ status: 'rejected' as const, error }),
+        );
+        pending.push(result);
+        return result;
+      };
+      const startUnsigned = () =>
+        capture(
+          cacheModule.fetchWithCache(unsignedUrl, {}, 1000, 'json', {
+            cacheKey: 'foo:signal:1',
+          }),
+        ).then((result) => {
+          unsignedSettled = true;
+          return result;
+        });
+      const startSignaled = () =>
+        capture(cacheModule.fetchWithCache(request, {}, 1000, 'json', { cacheKey: 'foo' }));
+
+      try {
+        // Exercise both directions of the old collision: borrowing an unrelated
+        // response, and aborting a transport borrowed by an unsignaled caller.
+        let unsigned: ReturnType<typeof startUnsigned>;
+        let signaled: ReturnType<typeof startSignaled>;
+        if (mode === 'completed responses') {
+          unsigned = startUnsigned();
+          await vi.advanceTimersByTimeAsync(0);
+          expect(fetchWithRetries).toHaveBeenCalledOnce();
+          signaled = startSignaled();
+        } else {
+          signaled = startSignaled();
+          await vi.advanceTimersByTimeAsync(0);
+          expect(fetchWithRetries).toHaveBeenCalledOnce();
+          unsigned = startUnsigned();
+        }
+        // Inherited Request.signal and that exact explicit signal are the same
+        // effective owner, so these two callers must still share one transport.
+        const joined = capture(
+          cacheModule.fetchWithCache(request, { signal: request.signal }, 1000, 'json', {
+            cacheKey: 'foo',
+          }),
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(
+          fetchWithRetries.mock.calls.length,
+          'A suffix-shaped user key must not collide with a different signaled cache key',
+        ).toBe(2);
+        expect(transportSignals.get(unsignedUrl)).toBeUndefined();
+        expect(transportSignals.get(signaledUrl)).toBe(request.signal);
+
+        if (mode === 'caller cancellation') {
+          controller.abort(reason);
+          await vi.advanceTimersByTimeAsync(0);
+          for (const result of [await signaled, await joined]) {
+            expect(result.status).toBe('rejected');
+            if (result.status === 'rejected') {
+              expect(result.error).toBe(reason);
+            }
+          }
+          expect(unsignedSettled).toBe(false);
+          unsignedBody.resolve(new Response('{"owner":"unsigned"}'));
+          await vi.runAllTimersAsync();
+          expect(await unsigned).toMatchObject({
+            status: 'fulfilled',
+            value: { cached: false, data: { owner: 'unsigned' } },
+          });
+        } else {
+          unsignedBody.resolve(new Response('{"owner":"unsigned"}'));
+          signaledBody.resolve(new Response('{"owner":"signaled"}'));
+          await vi.runAllTimersAsync();
+          expect(await unsigned).toMatchObject({
+            status: 'fulfilled',
+            value: { cached: false, data: { owner: 'unsigned' } },
+          });
+          expect(await signaled).toMatchObject({
+            status: 'fulfilled',
+            value: { cached: false, data: { owner: 'signaled' } },
+          });
+          expect(await joined).toMatchObject({
+            status: 'fulfilled',
+            value: { cached: false, coalesced: true, data: { owner: 'signaled' } },
+          });
+          await expect(
+            cacheModule.fetchWithCache(request, {}, 1000, 'json', { cacheKey: 'foo' }),
+          ).resolves.toMatchObject({ cached: true, data: { owner: 'signaled' } });
+        }
+        await expect(
+          cacheModule.fetchWithCache(unsignedUrl, {}, 1000, 'json', {
+            cacheKey: 'foo:signal:1',
+          }),
+        ).resolves.toMatchObject({ cached: true, data: { owner: 'unsigned' } });
+        expect(fetchWithRetries).toHaveBeenCalledTimes(2);
+        expect(controller.signal.reason).toBe(mode === 'caller cancellation' ? reason : undefined);
+      } finally {
+        controller.abort(reason);
+        unsignedBody.resolve(new Response('{}'));
+        signaledBody.resolve(new Response('{}'));
+        await vi.runAllTimersAsync();
+        await Promise.all(pending);
+      }
+    },
+  );
+
   it('cancels an expired-entry cleanup wait before disk save completes or miss fetch starts', async () => {
     const url = 'https://cache.test/expired';
     await warmCache(url);

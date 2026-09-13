@@ -10,6 +10,8 @@ import EvalResult from '../../src/models/evalResult';
 import { doEval } from '../../src/node/doEval';
 import { EchoProvider } from '../../src/providers/echo';
 import { ProviderGroupedCallQueue } from '../../src/scheduler/providerCallQueue';
+import { isOtelInitialized, shutdownOtel } from '../../src/tracing/otelSdk';
+import * as traceContext from '../../src/tracing/traceContext';
 import { ResultFailureReason } from '../../src/types/index';
 import { writeMultipleOutputs } from '../../src/util/output';
 import { createDeferred, mockProcessEnv } from '../util/utils';
@@ -389,4 +391,240 @@ describe('persisted CLI pause drains completed deferred grading', () => {
       }
     },
   );
+
+  it('persists a completed target when installed SIGINT interrupts its external trace and resumes without rebilling', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-trace-pause-'));
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_DISABLE_TELEMETRY: 'true',
+      PROMPTFOO_DISABLE_SHARING: 'true',
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+      PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false',
+    });
+    const previousCliState = {
+      basePath: cliState.basePath,
+      config: cliState.config,
+      selectedProviderConfigs: cliState.selectedProviderConfigs,
+      maxConcurrency: cliState.maxConcurrency,
+      resume: cliState.resume,
+      retryMode: cliState.retryMode,
+      _retryErrorResultIds: cliState._retryErrorResultIds,
+    };
+    const previousExitCode = process.exitCode;
+    const cacheWasEnabled = isCacheEnabled();
+    const beforeSigint = process.listeners('SIGINT');
+    const beforeRawSigint = process.rawListeners('SIGINT');
+    const otelWasInitialized = isOtelInitialized();
+    const caller = new AbortController();
+    const entered = createDeferred<void>();
+    const release = createDeferred<null>();
+    const runs: Promise<Eval>[] = [];
+    const targetCalls: string[] = [];
+    let traceSignal: AbortSignal | undefined;
+    let resuming = false;
+    let watchdogFired = false;
+    const watchdog = setTimeout(() => {
+      watchdogFired = true;
+      caller.abort(new Error('trace pause entry did not settle'));
+      release.resolve(null);
+    }, 5_000);
+    const nativeEcho = EchoProvider.prototype.callApi;
+    const providerCalls = vi
+      .spyOn(EchoProvider.prototype, 'callApi')
+      .mockImplementation(async function (this: EchoProvider, input, context, options) {
+        if (this.config?.pauseFixtureRole !== 'trace-target') {
+          return nativeEcho.call(this, input, context, options);
+        }
+        targetCalls.push(input);
+        return {
+          output: 'Completed ' + input,
+          cost: 0.125,
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+        };
+      });
+    // Only the external trace transport boundary is held. The real evaluator,
+    // installed CLI handler, persisted rows, index tracking and exporters run.
+    const traces = vi
+      .spyOn(traceContext, 'fetchTraceContext')
+      .mockImplementation(async (_traceId, options) => {
+        if (resuming) {
+          return null;
+        }
+        traceSignal = options?.abortSignal;
+        expect(traceSignal).toBeDefined();
+        let onAbort: () => void = () => {};
+        const aborted = new Promise<never>((_resolve, reject) => {
+          onAbort = () => reject(traceSignal!.reason);
+          traceSignal!.addEventListener('abort', onAbort, { once: true });
+          if (traceSignal!.aborted) {
+            onAbort();
+          }
+        });
+        entered.resolve();
+        try {
+          return await Promise.race([release.promise, aborted]);
+        } finally {
+          traceSignal!.removeEventListener('abort', onAbort);
+        }
+      });
+    const deniedFetch = vi.fn<typeof fetch>(() => {
+      throw new Error('No HTTP transport is allowed in the local trace fixture');
+    });
+    vi.stubGlobal('fetch', deniedFetch);
+    const finalJson = path.join(directory, 'resumed.json');
+    const finalJsonl = path.join(directory, 'resumed.jsonl');
+    const config: UnifiedConfig = {
+      description: 'Completed target survives pause during external traces',
+      prompts: ['{{topic}}'],
+      providers: [
+        { echo: { id: 'trace-pause-target', config: { pauseFixtureRole: 'trace-target' } } },
+      ],
+      tests: ['alpha', 'beta'].map((topic) => ({ vars: { topic } })),
+      tracing: {
+        enabled: true,
+        provider: { id: 'tempo', endpoint: 'http://trace-fixture.invalid' },
+        otlp: {
+          http: {
+            enabled: false,
+            port: 4318,
+            host: '127.0.0.1',
+            acceptFormats: ['json', 'protobuf'],
+          },
+        },
+      },
+      outputPath: [finalJson, finalJsonl],
+    };
+    const command = { write: true, cache: false, share: false, table: false };
+    const readJsonl = (filename: string) =>
+      fs
+        .readFileSync(filename, 'utf8')
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+    const assertAccounting = (row: { response?: unknown; cost?: number; success: boolean }) => {
+      expect(row.success).toBe(true);
+      expect(row.cost).toBe(0.125);
+      expect(row.response).toMatchObject({
+        output: 'Completed alpha',
+        cost: 0.125,
+        tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+      });
+    };
+    try {
+      const pending = doEval(command, config, undefined, {
+        eventSource: 'cli',
+        maxConcurrency: 1,
+        timeoutMs: -1,
+        maxEvalTimeMs: 0,
+        showProgressBar: false,
+        abortSignal: caller.signal,
+      });
+      runs.push(pending);
+      await Promise.race([
+        entered.promise,
+        pending.then(() => {
+          throw new Error('Evaluation ended before its completed-target trace boundary');
+        }),
+      ]);
+      expect(targetCalls).toEqual(['alpha']);
+      expect(traceSignal?.aborted).toBe(false);
+      // OTel installs a once wrapper; doEval installs the direct handler for repeat Ctrl-C.
+      const installed = process
+        .rawListeners('SIGINT')
+        .filter((listener) => !beforeRawSigint.includes(listener) && !('listener' in listener));
+      expect(installed).toHaveLength(1);
+      installed[0]('SIGINT');
+      expect(traceSignal?.aborted).toBe(true);
+      expect(caller.signal.aborted).toBe(false);
+      const paused = await pending;
+      expect(watchdogFired).toBe(false);
+      expect(paused.persisted).toBe(true);
+      const saved = await Eval.findById(paused.id);
+      const pausedRows = await saved!.getResults();
+      expect(
+        pausedRows,
+        'A completed target must survive cancellation of external trace collection',
+      ).toHaveLength(1);
+      assertAccounting(pausedRows[0]);
+      expect(await EvalResult.getCompletedIndexPairs(paused.id)).toEqual(new Set(['0:0']));
+      const pausedJson = path.join(directory, 'paused.json');
+      const pausedJsonl = path.join(directory, 'paused.jsonl');
+      await writeMultipleOutputs([pausedJson, pausedJsonl], saved!, null);
+      for (const rows of [
+        JSON.parse(fs.readFileSync(pausedJson, 'utf8')).results.results,
+        readJsonl(pausedJsonl),
+      ]) {
+        expect(rows).toHaveLength(1);
+        assertAccounting(rows[0]);
+      }
+      resuming = true;
+      const resumeCommand = { ...command, resume: paused.id };
+      const resumedRun = doEval(resumeCommand, {}, undefined, {
+        eventSource: 'cli',
+        abortSignal: caller.signal,
+      });
+      runs.push(resumedRun);
+      const resumed = await resumedRun;
+      expect(resumed.id).toBe(paused.id);
+      const reloaded = await Eval.findById(paused.id);
+      const finalRows = await reloaded!.getResults();
+      expect(finalRows).toHaveLength(2);
+      expect(finalRows.every((row) => row.success)).toBe(true);
+      const alpha = finalRows.find((row) => row.testIdx === 0)!;
+      expect(alpha.id).toBe(pausedRows[0].id);
+      assertAccounting(alpha);
+      expect(targetCalls).toEqual(['alpha', 'beta']);
+      expect(finalRows.reduce((sum, row) => sum + (row.cost ?? 0), 0)).toBe(0.25);
+      for (const rows of [
+        JSON.parse(fs.readFileSync(finalJson, 'utf8')).results.results,
+        readJsonl(finalJsonl),
+      ]) {
+        expect(rows).toHaveLength(2);
+        expect(rows.every((row: { success: boolean }) => row.success)).toBe(true);
+        assertAccounting(rows.find((row: { testIdx: number }) => row.testIdx === 0));
+      }
+      expect(traces).toHaveBeenCalledTimes(2);
+      expect(deniedFetch.mock.calls.length).toBeLessThanOrEqual(1);
+      for (const [url, options] of deniedFetch.mock.calls) {
+        expect(url).toBe('https://r.promptfoo.app/');
+        expect(options).toMatchObject({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        expect(JSON.parse(String(options?.body))).toMatchObject({
+          event: 'feature_used',
+          meta: { feature: 'telemetry disabled' },
+        });
+      }
+      expect(watchdogFired).toBe(false);
+      if (!otelWasInitialized) {
+        await shutdownOtel();
+      }
+      expect(process.listeners('SIGINT')).toEqual(beforeSigint);
+    } finally {
+      caller.abort(new Error('trace pause fixture cleanup'));
+      release.resolve(null);
+      await Promise.allSettled(runs);
+      clearTimeout(watchdog);
+      if (!otelWasInitialized) {
+        await shutdownOtel();
+      }
+      for (const listener of process.listeners('SIGINT')) {
+        if (!beforeSigint.includes(listener)) {
+          process.removeListener('SIGINT', listener);
+        }
+      }
+      traces.mockRestore();
+      providerCalls.mockRestore();
+      vi.unstubAllGlobals();
+      if (cacheWasEnabled) {
+        enableCache();
+      } else {
+        disableCache();
+      }
+      Object.assign(cliState, previousCliState);
+      process.exitCode = previousExitCode;
+      restoreEnv();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });

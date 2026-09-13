@@ -1616,6 +1616,181 @@ describe('MCPClient', () => {
       );
     });
 
+    it.each(['token', 'reconnect', 'token failure'] as const)(
+      'finishes cleanup before an abandoned %s refresh settles',
+      async (boundary) => {
+        const oldClient = createMockClient();
+        const newClient = createMockClient(vi.fn().mockResolvedValue({ content: 'late result' }));
+        vi.mocked(Client)
+          .mockImplementationOnce(function () {
+            return oldClient as unknown as Client;
+          })
+          .mockImplementationOnce(function () {
+            return newClient as unknown as Client;
+          });
+        const started = createDeferred<void>();
+        const token = createDeferred<{ accessToken: string; expiresAt: number }>();
+        const connected = createDeferred<void>();
+        const freshToken = { accessToken: 'fresh-local-token', expiresAt: Date.now() + 3_600_000 };
+        mockGetOAuthTokenWithExpiry.mockResolvedValueOnce({
+          accessToken: 'initial-local-token',
+          expiresAt: Date.now() + 30_000,
+        });
+        if (boundary === 'reconnect') {
+          mockGetOAuthTokenWithExpiry.mockResolvedValueOnce(freshToken);
+          newClient.connect.mockImplementationOnce(() => {
+            started.resolve();
+            return connected.promise;
+          });
+        } else {
+          mockGetOAuthTokenWithExpiry.mockImplementationOnce(() => {
+            started.resolve();
+            return token.promise;
+          });
+        }
+        mcpClient = new MCPClient({
+          enabled: true,
+          server: {
+            url: 'http://localhost:3000',
+            auth: {
+              type: 'oauth',
+              grantType: 'client_credentials',
+              clientId: 'local-client',
+              clientSecret: 'local-secret',
+              tokenUrl: 'https://auth.example.com/token',
+            },
+          },
+        });
+        await mcpClient.initialize();
+        const caller = new AbortController();
+        const reason = new Error('caller abandoned refresh');
+        const call = mcpClient
+          .callTool('tool1', {}, caller.signal)
+          .catch((error: unknown) => error);
+        let cleanup: Promise<void> | undefined;
+        try {
+          await started.promise;
+          caller.abort(reason);
+          expect(await call).toMatchObject({ name: 'AbortError', cause: reason });
+          let cleaned = false;
+          cleanup = mcpClient.cleanup().then(() => {
+            cleaned = true;
+          });
+          // The refresh is still held. Only already-runnable promise continuations can finish.
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(cleaned, 'Abandoned refresh must not retain caller cleanup').toBe(true);
+          expect(newClient.callTool).not.toHaveBeenCalled();
+          expect(newClient.close).not.toHaveBeenCalled();
+          if (boundary === 'token failure') {
+            token.reject(new Error('late token refresh failure'));
+          } else {
+            token.resolve(freshToken);
+          }
+          connected.resolve();
+          await vi.waitFor(() => expect(newClient.close).toHaveBeenCalledTimes(1));
+          await mcpClient.cleanup();
+          expect(newClient.close).toHaveBeenCalledTimes(1);
+          expect(newClient.callTool).not.toHaveBeenCalled();
+        } finally {
+          caller.abort(reason);
+          token.resolve(freshToken);
+          connected.resolve();
+          await call;
+          await cleanup;
+          await mcpClient.cleanup();
+        }
+      },
+    );
+
+    it.each(['cancels', 'completes'] as const)(
+      'reconsiders abandoned cleanup when the surviving refresh waiter %s',
+      async (outcome) => {
+        const oldClient = createMockClient();
+        const newClient = createMockClient(
+          vi.fn().mockResolvedValue({ content: 'surviving result' }),
+        );
+        vi.mocked(Client)
+          .mockImplementationOnce(function () {
+            return oldClient as unknown as Client;
+          })
+          .mockImplementationOnce(function () {
+            return newClient as unknown as Client;
+          });
+        const started = createDeferred<void>();
+        const token = createDeferred<{ accessToken: string; expiresAt: number }>();
+        const freshToken = { accessToken: 'fresh-shared-token', expiresAt: Date.now() + 3_600_000 };
+        mockGetOAuthTokenWithExpiry
+          .mockResolvedValueOnce({ accessToken: 'initial-token', expiresAt: Date.now() + 30_000 })
+          .mockImplementationOnce(() => {
+            started.resolve();
+            return token.promise;
+          });
+        mcpClient = new MCPClient({
+          enabled: true,
+          server: {
+            url: 'http://localhost:3000',
+            auth: {
+              type: 'oauth',
+              grantType: 'client_credentials',
+              clientId: 'local-client',
+              clientSecret: 'local-secret',
+              tokenUrl: 'https://auth.example.com/token',
+            },
+          },
+        });
+        await mcpClient.initialize();
+        const callerA = new AbortController();
+        const callerB = new AbortController();
+        const waiterB = vi.spyOn(callerB.signal, 'addEventListener');
+        const reasonA = new Error('first refresh waiter canceled');
+        const reasonB = new Error('last refresh waiter canceled');
+        const callA = mcpClient
+          .callTool('tool1', {}, callerA.signal)
+          .catch((error: unknown) => error);
+        let callB: Promise<unknown> | undefined;
+        let cleanup: Promise<void> | undefined;
+        try {
+          await started.promise;
+          callB = mcpClient.callTool('tool1', {}, callerB.signal).catch((error: unknown) => error);
+          // Observe that B has reached the existing shared-refresh wait before canceling A.
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(waiterB).toHaveBeenCalledWith('abort', expect.any(Function), { once: true });
+          callerA.abort(reasonA);
+          expect(await callA).toMatchObject({ name: 'AbortError', cause: reasonA });
+          let cleaned = false;
+          cleanup = mcpClient.cleanup().then(() => {
+            cleaned = true;
+          });
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(cleaned).toBe(false);
+          expect(callerB.signal.aborted).toBe(false);
+          expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(2);
+          if (outcome === 'cancels') {
+            callerB.abort(reasonB);
+            expect(await callB).toMatchObject({ name: 'AbortError', cause: reasonB });
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            expect(cleaned, 'Abandoned refresh must not retain caller cleanup').toBe(true);
+            expect(newClient.close).not.toHaveBeenCalled();
+            token.resolve(freshToken);
+          } else {
+            token.resolve(freshToken);
+            expect(await callB).toMatchObject({ content: 'surviving result' });
+            expect(newClient.callTool).toHaveBeenCalledTimes(1);
+          }
+          await cleanup;
+          await vi.waitFor(() => expect(newClient.close).toHaveBeenCalledTimes(1));
+        } finally {
+          callerA.abort(reasonA);
+          callerB.abort(reasonB);
+          token.resolve(freshToken);
+          await Promise.all([callA, callB]);
+          waiterB.mockRestore();
+          await cleanup;
+          await mcpClient.cleanup();
+        }
+      },
+    );
+
     it('should proactively refresh token before callTool if close to expiration', async () => {
       // First call with valid token
       mockClient.connect.mockResolvedValue(undefined);

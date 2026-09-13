@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -79,16 +80,27 @@ describe('runPython preparation cancellation', () => {
 
     // Substitute only the process boundary; preparation and result files remain real.
     pythonShell.mockImplementation(function (_wrapper: string, options: { args: string[] }) {
-      return {
+      const childProcess = new EventEmitter();
+      return Object.assign(new EventEmitter(), {
+        childProcess,
         end(callback: (error?: Error) => void) {
           void fs
             .writeFile(
               options.args[3],
               JSON.stringify({ type: 'final_result', data: { output: 'prepared' } }),
             )
-            .then(() => callback(), callback);
+            .then(
+              () => {
+                callback();
+                childProcess.emit('close', 0, null);
+              },
+              (error: Error) => {
+                callback(error);
+                childProcess.emit('close', 1, null);
+              },
+            );
         },
-      };
+      });
     });
   });
 
@@ -190,6 +202,70 @@ describe('runPython preparation cancellation', () => {
       await pending;
     }
   });
+
+  it.each(['graceful close', 'forced close'] as const)(
+    'waits for actual child close after caller abort and %s',
+    async (outcome) => {
+      const started = deferred<void>();
+      const childProcess = Object.assign(new EventEmitter(), { kill: vi.fn(() => true) });
+      let ended!: (error?: Error) => void;
+      const shell = Object.assign(new EventEmitter(), {
+        childProcess,
+        end(callback: (error?: Error) => void) {
+          ended = callback;
+          started.resolve();
+        },
+      });
+      pythonShell.mockImplementationOnce(function () {
+        return shell;
+      });
+      const caller = new AbortController();
+      const reason = { owner: 'only this Python invocation' };
+      const removed = vi.spyOn(caller.signal, 'removeEventListener');
+      const pending = runPython(scriptPath, 'call_api', [], {
+        pythonExecutable: 'configured-python',
+        abortSignal: caller.signal,
+      }).catch((error: unknown) => error);
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      try {
+        await started.promise;
+        caller.abort(reason);
+        expect(
+          childProcess.kill,
+          'Active Python cancellation must signal its owned child',
+        ).toHaveBeenCalledWith('SIGTERM');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBe(false);
+        expect(createdDirectories).toHaveLength(1);
+        await expect(fs.stat(createdDirectories[0])).resolves.toBeDefined();
+        if (outcome === 'forced close') {
+          await vi.advanceTimersByTimeAsync(1000);
+          expect(childProcess.kill).toHaveBeenCalledWith('SIGKILL');
+          expect(settled).toBe(false);
+        }
+        // PythonShell end/close can precede the actual ChildProcess close.
+        ended();
+        shell.emit('close');
+        await vi.advanceTimersByTimeAsync(0);
+        expect(settled).toBe(false);
+        childProcess.emit('close', null, outcome === 'forced close' ? 'SIGKILL' : 'SIGTERM');
+        expect(await pending).toBe(reason);
+        expect(removed).toHaveBeenCalledWith('abort', expect.any(Function));
+        expect(childProcess.listenerCount('close')).toBe(0);
+        expect(vi.getTimerCount()).toBe(0);
+        await expect(fs.stat(createdDirectories[0])).rejects.toMatchObject({ code: 'ENOENT' });
+      } finally {
+        caller.abort(reason);
+        ended?.();
+        childProcess.emit('close', null, 'SIGTERM');
+        await pending;
+        removed.mockRestore();
+      }
+    },
+  );
 
   it.each([false, true])('runs normally with an optional live signal: %s', async (withSignal) => {
     const options = {

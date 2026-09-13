@@ -608,7 +608,7 @@ function getAbortSignalId(signal: AbortSignal) {
 
 function getInflightFetchCacheKey(cacheKey: string, url: RequestInfo, options: RequestInit) {
   const signal = getEffectiveRequestSignal(url, options);
-  return signal ? `${cacheKey}:signal:${getAbortSignalId(signal)}` : cacheKey;
+  return JSON.stringify([cacheKey, signal ? getAbortSignalId(signal) : null]);
 }
 
 /**

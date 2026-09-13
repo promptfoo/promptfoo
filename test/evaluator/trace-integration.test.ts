@@ -7,6 +7,7 @@ import { getProviderCallTracingContext } from '../../src/scheduler/providerCallE
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { getTraceStore } from '../../src/tracing/store';
 import { createMockProvider } from '../factories/provider';
+import { createDeferred } from '../util/utils';
 
 import type { EvaluatorRuntime } from '../../src/evaluator/runtime';
 import type Eval from '../../src/models/eval';
@@ -760,6 +761,92 @@ describe('evaluator trace integration', () => {
 
       expect(mockFetchTraceContext).not.toHaveBeenCalled();
     });
+
+    it.each(['success', 'completed error'] as const)(
+      'retains completed %s and accounting when CLI pause interrupts external traces',
+      async (outcome) => {
+        const caller = new AbortController();
+        const pause = new AbortController();
+        const reason = Object.assign(new Error('CLI paused during trace collection'), {
+          name: 'AbortError',
+        });
+        const entered = createDeferred<void>();
+        const release = createDeferred<void>();
+        const response = {
+          output: 'Completed target output',
+          ...(outcome === 'completed error' && {
+            error: 'Completed tool diagnostic',
+            metadata: { errorOrigin: 'tool' },
+          }),
+          cost: 0.125,
+          tokenUsage: { total: 7, prompt: 4, completion: 3, numRequests: 1 },
+        };
+        const provider = createMockProvider({ response });
+        let traceSignal: AbortSignal | undefined;
+        mockFetchTraceContext.mockImplementationOnce(
+          async (_traceId: string, options: { abortSignal?: AbortSignal }) => {
+            traceSignal = options.abortSignal;
+            expect(traceSignal).toBeDefined();
+            const signal = traceSignal!;
+            let onAbort!: () => void;
+            const aborted = new Promise<never>((_resolve, reject) => {
+              onAbort = () => reject(signal.reason);
+              signal.addEventListener('abort', onAbort, { once: true });
+            });
+            entered.resolve();
+            try {
+              await Promise.race([release.promise, aborted]);
+              return externalTrace;
+            } finally {
+              signal.removeEventListener('abort', onAbort);
+            }
+          },
+        );
+        const suite: TestSuite = {
+          ...tracingSuite,
+          providers: [provider],
+          prompts: [{ raw: 'Test prompt', label: 'test' }],
+          tests: [{ metadata: { tracingEnabled: true, evaluationId: 'test-eval-id' } }],
+        };
+        const pending = evaluate(suite, mockEval, {
+          abortSignal: caller.signal,
+          pauseSignal: pause.signal,
+          timeoutMs: -1,
+          maxEvalTimeMs: 0,
+          maxConcurrency: 1,
+          showProgressBar: false,
+        });
+        try {
+          await Promise.race([
+            entered.promise,
+            pending.then(() => {
+              throw new Error('Evaluation ended before the external trace boundary');
+            }),
+          ]);
+          expect(provider.callApi).toHaveBeenCalledTimes(1);
+          pause.abort(reason);
+          await pending;
+          expect(traceSignal?.reason).toBe(reason);
+          expect(caller.signal.aborted).toBe(false);
+          expect(
+            mockEval.addResult,
+            'Completed target must be recorded after CLI trace cancellation',
+          ).toHaveBeenCalledTimes(1);
+          const row = vi.mocked(mockEval.addResult).mock.calls[0][0];
+          expect(row.response).toMatchObject(response);
+          expect(row.cost).toBe(0.125);
+          expect(row.success).toBe(outcome === 'success');
+          if (outcome === 'completed error') {
+            expect(row.error).toContain('Completed tool diagnostic');
+          }
+          expect(provider.callApi).toHaveBeenCalledTimes(1);
+        } finally {
+          caller.abort(new Error('trace fixture cleanup'));
+          release.resolve();
+          await pending;
+        }
+      },
+    );
 
     it('propagates cancellation during external trace collection', async () => {
       const controller = new AbortController();

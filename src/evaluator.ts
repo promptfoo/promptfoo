@@ -974,14 +974,26 @@ async function callProviderForRunEval({
     throw error;
   } finally {
     if (providerInvoked && isExternalTraceProvider(testSuite?.tracing?.provider)) {
-      await collectExternalTraceAfterProviderCall({
-        abortSignal,
-        providerFailed,
-        response,
-        test,
-        testSuite,
-        traceContext,
-      });
+      try {
+        await collectExternalTraceAfterProviderCall({
+          abortSignal,
+          providerFailed,
+          response,
+          test,
+          testSuite,
+          traceContext,
+        });
+      } catch (error) {
+        // Trace collection must not discard a target response that completed
+        // before CLI pause. Real caller/deadline cancellation still propagates.
+        if (
+          providerFailed ||
+          !response ||
+          !isCliPauseCancellation(error, abortSignal, pauseSignal)
+        ) {
+          throw error;
+        }
+      }
     }
   }
 }
