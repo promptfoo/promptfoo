@@ -1,12 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-import { fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { isAbortError } from '../../util/fetch/errors';
-import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { appendOpenAiApiPath, getTokenUsage, OPENAI_TRANSCRIPTION_MODELS } from './util';
+import { callJsonCachedOpenAi, unwrapOpenAiTransportError } from './client';
+import { getTokenUsage, OPENAI_TRANSCRIPTION_MODELS } from './util';
+import type OpenAI from 'openai';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -184,68 +184,30 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       const fileName = path.basename(audioFilePath);
       const file = new File([fileBuffer], fileName);
 
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('model', this.modelName);
-
-      // Add optional parameters
-      if (config.language) {
-        formData.append('language', config.language);
-      }
-      for (const language of config.languages || []) {
-        formData.append('languages[]', language.trim());
-      }
-      for (const keyword of config.keywords || []) {
-        formData.append('keywords[]', keyword.trim());
-      }
-      if (config.prompt && !this.modelName.includes('diarize')) {
-        formData.append('prompt', config.prompt);
-      }
-      if (config.temperature !== undefined) {
-        formData.append('temperature', config.temperature.toString());
-      }
-      if (this.modelName === 'whisper-1' && config.timestamp_granularities) {
-        for (const granularity of config.timestamp_granularities) {
-          formData.append('timestamp_granularities[]', granularity);
-        }
-      }
-
       const isDiarizationModel = this.modelName.includes('diarize');
-      const chunkingStrategy =
-        config.chunking_strategy ?? (isDiarizationModel ? 'auto' : undefined);
-      if (typeof chunkingStrategy === 'string') {
-        formData.append('chunking_strategy', chunkingStrategy);
-      } else if (chunkingStrategy) {
-        for (const [key, value] of Object.entries(chunkingStrategy)) {
-          if (value !== undefined) {
-            formData.append(`chunking_strategy[${key}]`, String(value));
-          }
-        }
-      }
-
-      // Diarization-specific options (for gpt-4o-transcribe-diarize)
-      if (isDiarizationModel) {
-        formData.append('response_format', 'diarized_json');
-        for (const name of config.known_speaker_names || []) {
-          formData.append('known_speaker_names[]', name);
-        }
-        for (const reference of config.known_speaker_references || []) {
-          formData.append('known_speaker_references[]', reference);
-        }
-      } else if (!isGptTranscribe) {
-        // Use json for gpt-4o models (verbose_json not supported), verbose_json for others
-        const responseFormat = this.modelName.startsWith('gpt-4o-') ? 'json' : 'verbose_json';
-        formData.append('response_format', responseFormat);
-      }
-
-      const customHeaders = this.getOpenAiRequestHeaders(config.headers);
-      const hasAuthorizationOverride = Object.keys(customHeaders).some(
-        (header) => header.toLowerCase() === 'authorization',
-      );
-      const headers: Record<string, string> = {
-        ...(apiKey && !hasAuthorizationOverride ? { Authorization: `Bearer ${apiKey}` } : {}),
-        ...customHeaders,
+      const requestBody = {
+        file,
+        model: this.modelName,
+        ...(config.language ? { language: config.language } : {}),
+        ...(config.languages ? { languages: config.languages.map((value) => value.trim()) } : {}),
+        ...(config.keywords ? { keywords: config.keywords.map((value) => value.trim()) } : {}),
+        ...(config.prompt && !isDiarizationModel ? { prompt: config.prompt } : {}),
+        ...(config.temperature === undefined ? {} : { temperature: config.temperature }),
+        ...(this.modelName === 'whisper-1' && config.timestamp_granularities
+          ? { timestamp_granularities: config.timestamp_granularities }
+          : {}),
+        chunking_strategy: config.chunking_strategy ?? (isDiarizationModel ? 'auto' : undefined),
+        ...(isDiarizationModel
+          ? {
+              response_format: 'diarized_json',
+              known_speaker_names: config.known_speaker_names,
+              known_speaker_references: config.known_speaker_references,
+            }
+          : isGptTranscribe
+            ? {}
+            : { response_format: this.modelName.startsWith('gpt-4o-') ? 'json' : 'verbose_json' }),
       };
+      const headers = this.getOpenAiRequestHeaders(config.headers);
       for (const header of Object.keys(headers)) {
         if (header.toLowerCase() === 'content-type') {
           delete headers[header];
@@ -256,19 +218,29 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       let cached = false;
 
       try {
-        ({ data, cached, status, statusText } = await fetchWithCache(
-          appendOpenAiApiPath(this.getApiUrl(), 'audio/transcriptions'),
+        const request = await callJsonCachedOpenAi(
           {
-            method: 'POST',
+            apiKey,
+            allowMissingApiKey: !this.requiresApiKey(),
+            organization: this.getOrganization(),
+            baseURL: this.getApiUrl(),
             headers,
-            body: formData,
-            ...(abortSignal ? { signal: abortSignal } : {}),
+            bustCache: context?.bustCache ?? context?.debug,
+            maxRetries: config.maxRetries,
           },
-          getRequestTimeoutMs(),
-          'json',
-          context?.bustCache ?? context?.debug,
-          config.maxRetries,
-        ));
+          (client) =>
+            client.audio.transcriptions.create(
+              requestBody as OpenAI.Audio.TranscriptionCreateParamsNonStreaming,
+              { signal: abortSignal },
+            ),
+        );
+        cached = request.requestMetadata.cached;
+        status = request.requestMetadata.status ?? 200;
+        statusText = request.requestMetadata.statusText ?? 'OK';
+        data = request.ok ? request.data : request.requestMetadata.data;
+        if (!request.ok && status >= 200 && status < 300) {
+          throw unwrapOpenAiTransportError(request.error);
+        }
 
         if (status < 200 || status >= 300) {
           return {

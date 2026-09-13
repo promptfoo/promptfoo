@@ -82,6 +82,7 @@ interface OpenAIResponsesResponse {
     code?: string;
     message?: string;
   };
+  incomplete_details?: { reason?: string };
 }
 
 interface BackgroundResponseResult {
@@ -1526,12 +1527,28 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       suppressReasoningOutput: Boolean(body.stream),
     });
     const billedResult = this.applyBilling(result, data, config, cached);
+    const incompleteReason = data.incomplete_details?.reason;
+    const incompleteResult =
+      data.status === 'incomplete'
+        ? {
+            ...billedResult,
+            finishReason: incompleteReason === 'max_output_tokens' ? 'length' : incompleteReason,
+            ...(incompleteReason === 'content_filter'
+              ? {
+                  error: undefined,
+                  output: billedResult.output ?? '',
+                  isRefusal: true,
+                  guardrails: { flagged: true },
+                }
+              : {}),
+          }
+        : billedResult;
 
     // Merge HTTP metadata with any existing metadata from the processor
     return {
-      ...billedResult,
+      ...incompleteResult,
       metadata: {
-        ...billedResult.metadata,
+        ...incompleteResult.metadata,
         http: {
           status,
           statusText,

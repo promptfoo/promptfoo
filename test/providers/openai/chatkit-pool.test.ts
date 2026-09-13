@@ -22,6 +22,7 @@ const mockBrowser = vi.hoisted(() => ({
 const mockChromium = vi.hoisted(() => ({
   launch: vi.fn().mockResolvedValue(mockBrowser),
 }));
+const mockServerRequestHandler = vi.hoisted(() => vi.fn());
 
 // Mock playwright
 vi.mock('playwright', () => ({
@@ -30,11 +31,14 @@ vi.mock('playwright', () => ({
 
 // Mock http server
 vi.mock('http', () => ({
-  createServer: vi.fn().mockReturnValue({
-    listen: vi.fn((_port: number, callback: () => void) => callback()),
-    address: vi.fn().mockReturnValue({ port: 3000 }),
-    close: vi.fn(),
-    once: vi.fn(), // Error handler registration
+  createServer: vi.fn((handler: (...args: any[]) => void) => {
+    mockServerRequestHandler.mockImplementation(handler);
+    return {
+      listen: vi.fn((_port: number, _host: string, callback: () => void) => callback()),
+      address: vi.fn().mockReturnValue({ port: 3000 }),
+      close: vi.fn(),
+      once: vi.fn(), // Error handler registration
+    };
   }),
 }));
 
@@ -135,6 +139,25 @@ describe('ChatKitBrowserPool', () => {
       const key = ChatKitBrowserPool.generateTemplateKey('wf_abc123', '3', 'user@test.com');
       expect(key).toBe('wf_abc123:3:user@test.com');
     });
+
+    it('should isolate provider instances without embedding auth context', () => {
+      const firstKey = ChatKitBrowserPool.generateTemplateKey(
+        'wf_abc123',
+        '3',
+        'user@test.com',
+        'provider-1',
+      );
+      const secondKey = ChatKitBrowserPool.generateTemplateKey(
+        'wf_abc123',
+        '3',
+        'user@test.com',
+        'provider-2',
+      );
+
+      expect(firstKey).toBe('wf_abc123:3:user@test.com:provider-1');
+      expect(secondKey).toBe('wf_abc123:3:user@test.com:provider-2');
+      expect(firstKey).not.toBe(secondKey);
+    });
   });
 
   describe('setTemplate', () => {
@@ -144,7 +167,10 @@ describe('ChatKitBrowserPool', () => {
 
       instance.setTemplate(TEST_TEMPLATE_KEY, html);
 
-      expect((instance as any).templates.get(TEST_TEMPLATE_KEY)).toBe(html);
+      expect((instance as any).templates.get(TEST_TEMPLATE_KEY)).toEqual({
+        html,
+        createClientSecret: undefined,
+      });
     });
 
     it('should store multiple templates for different keys', () => {
@@ -156,8 +182,34 @@ describe('ChatKitBrowserPool', () => {
       instance.setTemplate(key2, '<html>workflow2</html>');
 
       expect((instance as any).templates.size).toBe(2);
-      expect((instance as any).templates.get(key1)).toBe('<html>workflow1</html>');
-      expect((instance as any).templates.get(key2)).toBe('<html>workflow2</html>');
+      expect((instance as any).templates.get(key1)).toEqual({
+        html: '<html>workflow1</html>',
+        createClientSecret: undefined,
+      });
+      expect((instance as any).templates.get(key2)).toEqual({
+        html: '<html>workflow2</html>',
+        createClientSecret: undefined,
+      });
+    });
+
+    it('should invalidate pooled pages when the session factory changes', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      const firstSessionFactory = vi.fn().mockResolvedValue('secret-1');
+      const secondSessionFactory = vi.fn().mockResolvedValue('secret-2');
+
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML, firstSessionFactory);
+      const pooledPage = await instance.acquirePage(TEST_TEMPLATE_KEY);
+      await instance.releasePage(pooledPage);
+
+      expect(pooledPage.ready).toBe(true);
+
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML, secondSessionFactory);
+
+      expect(pooledPage.ready).toBe(false);
+      expect((instance as any).templates.get(TEST_TEMPLATE_KEY)).toEqual({
+        html: TEST_HTML,
+        createClientSecret: secondSessionFactory,
+      });
     });
   });
 
@@ -190,6 +242,126 @@ describe('ChatKitBrowserPool', () => {
 
       // Should still only launch browser once
       expect(mockChromium.launch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return pooled client secrets through the template session route', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      instance.setTemplate(
+        TEST_TEMPLATE_KEY,
+        TEST_HTML,
+        vi.fn().mockResolvedValue('pooled-secret-123'),
+      );
+      await instance.initialize();
+
+      const writeHead = vi.fn();
+      const end = vi.fn();
+
+      mockServerRequestHandler(
+        {
+          method: 'POST',
+          url: `/template/${encodeURIComponent(TEST_TEMPLATE_KEY)}/session`,
+        },
+        {
+          writeHead,
+          end,
+        },
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(writeHead).toHaveBeenCalledWith(200, { 'Content-Type': 'application/json' });
+      expect(end).toHaveBeenCalledWith(JSON.stringify({ client_secret: 'pooled-secret-123' }));
+    });
+
+    it('should route namespaced templates to their own session factories', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      const firstKey = ChatKitBrowserPool.generateTemplateKey(
+        'wf_shared',
+        undefined,
+        'shared-user',
+        'provider-1',
+      );
+      const secondKey = ChatKitBrowserPool.generateTemplateKey(
+        'wf_shared',
+        undefined,
+        'shared-user',
+        'provider-2',
+      );
+      const firstFactory = vi.fn().mockResolvedValue('first-secret');
+      const secondFactory = vi.fn().mockResolvedValue('second-secret');
+      instance.setTemplate(firstKey, TEST_HTML, firstFactory);
+      instance.setTemplate(secondKey, TEST_HTML, secondFactory);
+      await instance.initialize();
+
+      const firstEnd = vi.fn();
+      mockServerRequestHandler(
+        {
+          method: 'POST',
+          url: `/template/${encodeURIComponent(firstKey)}/session`,
+        },
+        {
+          writeHead: vi.fn(),
+          end: firstEnd,
+        },
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(firstFactory).toHaveBeenCalledOnce();
+      expect(secondFactory).not.toHaveBeenCalled();
+      expect(firstEnd).toHaveBeenCalledWith(JSON.stringify({ client_secret: 'first-secret' }));
+
+      const secondEnd = vi.fn();
+      mockServerRequestHandler(
+        {
+          method: 'POST',
+          url: `/template/${encodeURIComponent(secondKey)}/session`,
+        },
+        {
+          writeHead: vi.fn(),
+          end: secondEnd,
+        },
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(firstFactory).toHaveBeenCalledOnce();
+      expect(secondFactory).toHaveBeenCalledOnce();
+      expect(secondEnd).toHaveBeenCalledWith(JSON.stringify({ client_secret: 'second-secret' }));
+    });
+
+    it('should redact pooled session minting failures in browser responses', async () => {
+      const instance = ChatKitBrowserPool.getInstance();
+      instance.setTemplate(
+        TEST_TEMPLATE_KEY,
+        TEST_HTML,
+        vi.fn().mockRejectedValue(new Error('upstream detail should stay server-side')),
+      );
+      await instance.initialize();
+
+      const writeHead = vi.fn();
+      const end = vi.fn();
+
+      mockServerRequestHandler(
+        {
+          method: 'POST',
+          url: `/template/${encodeURIComponent(TEST_TEMPLATE_KEY)}/session`,
+        },
+        {
+          writeHead,
+          end,
+        },
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(writeHead).toHaveBeenCalledWith(500, { 'Content-Type': 'application/json' });
+      expect(end).toHaveBeenCalledWith(
+        JSON.stringify({ error: 'Failed to create ChatKit session' }),
+      );
+      expect(end.mock.calls[0]?.[0]).not.toContain('upstream detail should stay server-side');
     });
   });
 
@@ -387,6 +559,94 @@ describe('ChatKitBrowserPool', () => {
   });
 
   describe('template isolation', () => {
+    it('reclaims an idle page for a waiting isolated template at capacity', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      const key1 = 'wf_workflow1:default:default';
+      const key2 = 'wf_workflow2:default:default';
+      instance.setTemplate(key1, '<html>workflow1</html>');
+      instance.setTemplate(key2, '<html>workflow2</html>');
+
+      const page1 = await instance.acquirePage(key1);
+      const pendingPage2 = instance.acquirePage(key2);
+      await instance.releasePage(page1);
+
+      await expect(pendingPage2).resolves.toMatchObject({ templateKey: key2 });
+    });
+
+    it('reserves reclaimed capacity while closing idle pages', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 2 });
+      for (const key of ['one', 'two', 'three', 'four']) {
+        instance.setTemplate(key, '<html></html>');
+      }
+      const page1 = await instance.acquirePage('one');
+      const page2 = await instance.acquirePage('two');
+      const pending = [instance.acquirePage('three'), instance.acquirePage('four')];
+      const releaseClose: Array<() => void> = [];
+      mockContext.close.mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseClose.push(resolve);
+          }),
+      );
+
+      const releases = [instance.releasePage(page1), instance.releasePage(page2)];
+      await Promise.resolve();
+      releaseClose.splice(0).forEach((resolve) => resolve());
+      mockContext.close.mockResolvedValue(undefined);
+      await Promise.all([...releases, ...pending]);
+
+      expect(instance.getStats().total).toBeLessThanOrEqual(2);
+    });
+
+    it('reserves reclaimed capacity while creating replacement pages', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      for (const key of ['one', 'two', 'three']) {
+        instance.setTemplate(key, '<html></html>');
+      }
+      const page1 = await instance.acquirePage('one');
+      const pendingPage2 = instance.acquirePage('two');
+      let resolveContext!: (context: typeof mockContext) => void;
+      mockBrowser.newContext.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveContext = resolve;
+          }),
+      );
+
+      const release = instance.releasePage(page1);
+      await vi.waitFor(() => expect(mockBrowser.newContext).toHaveBeenCalledTimes(2));
+      const pendingPage3 = instance.acquirePage('three');
+      await Promise.resolve();
+      expect(mockBrowser.newContext).toHaveBeenCalledTimes(2);
+
+      resolveContext(mockContext);
+      await release;
+      const page2 = await pendingPage2;
+      await instance.releasePage(page2);
+      await pendingPage3;
+      expect(instance.getStats().total).toBeLessThanOrEqual(1);
+    });
+
+    it('serves a queued caller after a reserved page creation fails', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 1 });
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
+      let rejectCreation!: (error: Error) => void;
+      mockBrowser.newContext.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectCreation = reject;
+          }),
+      );
+
+      const failed = instance.acquirePage(TEST_TEMPLATE_KEY);
+      await vi.waitFor(() => expect(mockBrowser.newContext).toHaveBeenCalledTimes(1));
+      const queued = instance.acquirePage(TEST_TEMPLATE_KEY);
+      rejectCreation(new Error('creation failed'));
+
+      await expect(failed).rejects.toThrow('creation failed');
+      await expect(queued).resolves.toMatchObject({ templateKey: TEST_TEMPLATE_KEY });
+    });
+
     it('should not reuse pages across different templates', async () => {
       const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 4 });
       const key1 = 'wf_workflow1:default:default';

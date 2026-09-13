@@ -556,6 +556,44 @@ describe('fetchWithCache', () => {
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
     });
 
+    it('should isolate in-flight requests with different transport policies', async () => {
+      let resolveShortRequest: (response: Response) => void = () => {};
+      let resolveLongRequest: (response: Response) => void = () => {};
+      let resolveRetryRequest: (response: Response) => void = () => {};
+      mockFetchWithRetries
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveShortRequest = resolve;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveLongRequest = resolve;
+            }),
+        )
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              resolveRetryRequest = resolve;
+            }),
+        );
+
+      const shortRequest = fetchWithCache(url, {}, 100);
+      const longRequest = fetchWithCache(url, {}, 1000);
+      const retryRequest = fetchWithCache(url, {}, 100, 'json', false, 2);
+
+      await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(3));
+      resolveShortRequest(mockFetchWithRetriesResponse(true, { data: 'short' }));
+      resolveLongRequest(mockFetchWithRetriesResponse(true, { data: 'long' }));
+      resolveRetryRequest(mockFetchWithRetriesResponse(true, { data: 'retry' }));
+
+      await expect(shortRequest).resolves.toMatchObject({ data: { data: 'short' } });
+      await expect(longRequest).resolves.toMatchObject({ data: { data: 'long' } });
+      await expect(retryRequest).resolves.toMatchObject({ data: { data: 'retry' } });
+    });
+
     it('should isolate in-flight fetch deduping by namespace', async () => {
       mockFetchWithRetries
         .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'repeat 0' }))
@@ -855,6 +893,151 @@ describe('fetchWithCache', () => {
         expect(signaledResult.reason.message).toBe('Aborted');
       }
       expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps caller-defined Stainless routing headers in cache keys', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { tenant: 'first' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { tenant: 'second' }));
+      const headers = { 'x-stainless-lang': 'js', 'user-agent': 'OpenAI/JS 6.37.0' };
+      const first = await fetchWithCache(
+        url,
+        {
+          headers: { ...headers, 'x-stainless-tenant': 'first' },
+        },
+        1000,
+      );
+      const second = await fetchWithCache(
+        url,
+        {
+          headers: { ...headers, 'x-stainless-tenant': 'second' },
+        },
+        1000,
+      );
+      expect(first.data).toEqual({ tenant: 'first' });
+      expect(second.data).toEqual({ tenant: 'second' });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    });
+
+    it('should safely deduplicate abortable requests while another caller remains active', async () => {
+      const firstController = new AbortController();
+      const secondController = new AbortController();
+      let sharedSignal: AbortSignal | undefined;
+      let resolveUpstreamRequest: (response: Response) => void = () => {};
+
+      mockFetchWithRetries.mockImplementation((_requestUrl, requestOptions) => {
+        sharedSignal = requestOptions?.signal ?? undefined;
+        return new Promise<Response>((resolve, reject) => {
+          resolveUpstreamRequest = resolve;
+          sharedSignal?.addEventListener(
+            'abort',
+            () => reject(sharedSignal?.reason ?? new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      });
+
+      const sdkHeaders = {
+        'user-agent': 'OpenAI/JS 6.37.0',
+        'x-stainless-lang': 'js',
+      };
+      const firstRequest = fetchWithCache(
+        url,
+        { headers: sdkHeaders, signal: firstController.signal },
+        1000,
+      );
+      const secondRequest = fetchWithCache(
+        url,
+        { headers: sdkHeaders, signal: secondController.signal },
+        1000,
+      );
+
+      await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(1));
+      expect(sharedSignal).toBeInstanceOf(AbortSignal);
+      expect(sharedSignal).not.toBe(firstController.signal);
+      expect(sharedSignal).not.toBe(secondController.signal);
+
+      firstController.abort();
+      await expect(firstRequest).rejects.toMatchObject({ name: 'AbortError' });
+      expect(sharedSignal?.aborted).toBe(false);
+
+      resolveUpstreamRequest(mockFetchWithRetriesResponse(true, { data: 'shared' }));
+      await expect(secondRequest).resolves.toMatchObject({
+        data: { data: 'shared' },
+        coalesced: true,
+      });
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should abort a deduplicated upstream request after every caller aborts', async () => {
+      const firstController = new AbortController();
+      const secondController = new AbortController();
+      let sharedSignal: AbortSignal | undefined;
+
+      mockFetchWithRetries.mockImplementation((_requestUrl, requestOptions) => {
+        sharedSignal = requestOptions?.signal ?? undefined;
+        return new Promise<Response>((_resolve, reject) => {
+          sharedSignal?.addEventListener(
+            'abort',
+            () => reject(sharedSignal?.reason ?? new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      });
+
+      const sdkHeaders = {
+        'user-agent': 'OpenAI/JS 6.37.0',
+        'x-stainless-lang': 'js',
+      };
+      const firstRequest = fetchWithCache(
+        url,
+        { headers: sdkHeaders, signal: firstController.signal },
+        1000,
+      );
+      const secondRequest = fetchWithCache(
+        url,
+        { headers: sdkHeaders, signal: secondController.signal },
+        1000,
+      );
+
+      await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(1));
+      firstController.abort();
+      await expect(firstRequest).rejects.toMatchObject({ name: 'AbortError' });
+      expect(sharedSignal?.aborted).toBe(false);
+
+      secondController.abort();
+      await expect(secondRequest).rejects.toMatchObject({ name: 'AbortError' });
+      expect(sharedSignal?.aborted).toBe(true);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+    });
+
+    it('should abort and forget shared requests when clearing the cache', async () => {
+      let sharedSignal: AbortSignal | undefined;
+      mockFetchWithRetries.mockImplementation((_requestUrl, requestOptions) => {
+        sharedSignal = requestOptions?.signal ?? undefined;
+        return new Promise<Response>((_resolve, reject) => {
+          sharedSignal?.addEventListener(
+            'abort',
+            () => reject(sharedSignal?.reason ?? new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      });
+
+      const request = fetchWithCache(
+        url,
+        {
+          headers: { 'user-agent': 'OpenAI/JS 6.37.0', 'x-stainless-lang': 'js' },
+          signal: new AbortController().signal,
+        },
+        1000,
+      );
+      await vi.waitFor(() => expect(mockFetchWithRetries).toHaveBeenCalledTimes(1));
+
+      await clearCache();
+
+      await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+      expect(sharedSignal?.aborted).toBe(true);
     });
 
     it('should handle request options in cache key', async () => {
@@ -1446,6 +1629,234 @@ describe('fetchWithCache', () => {
       for (const cacheKey of cacheKeys) {
         expect(cacheKey).not.toContain('request-token');
       }
+    });
+
+    it('should ignore SDK telemetry and transport headers in cache keys', async () => {
+      mockFetchWithRetries.mockResolvedValueOnce(
+        mockFetchWithRetriesResponse(true, { data: 'telemetry-ignored' }),
+      );
+
+      const baselineResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'Content-Type': 'application/json',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+      const telemetryResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'Content-Type': 'application/json',
+            'accept-encoding': 'gzip, deflate',
+            'user-agent': 'OpenAI/JS 6.37.0',
+            'x-stainless-arch': 'arm64',
+            'x-stainless-lang': 'js',
+            'x-stainless-os': 'MacOS',
+            'x-stainless-package-version': '6.37.0',
+            'x-stainless-retry-count': '0',
+            'x-stainless-runtime': 'node',
+            'x-stainless-runtime-version': 'v24.7.0',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(1);
+      expect(baselineResult.cached).toBe(false);
+      expect(telemetryResult).toMatchObject({
+        cached: true,
+        data: { data: 'telemetry-ignored' },
+      });
+    });
+
+    it('should isolate cached responses when Accept differs', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'json' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'csv' }));
+
+      const jsonResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            Accept: 'application/json',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+      const csvResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            Accept: 'text/csv',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(jsonResult.data).toEqual({ data: 'json' });
+      expect(csvResult.data).toEqual({ data: 'csv' });
+    });
+
+    it('should still isolate cached responses when semantic headers differ', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'org-a' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'org-b' }));
+
+      const orgAResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'OpenAI-Organization': 'org-a',
+            'user-agent': 'OpenAI/JS 6.37.0',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+      const orgBResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'OpenAI-Organization': 'org-b',
+            'user-agent': 'OpenAI/JS 6.37.0',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(orgAResult.data).toEqual({ data: 'org-a' });
+      expect(orgBResult.data).toEqual({ data: 'org-b' });
+    });
+
+    it('should isolate cached responses when caller-authored User-Agent headers differ', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'agent-a' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'agent-b' }));
+
+      const agentAResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'user-agent': 'CustomClient/1.0',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+      const agentBResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'user-agent': 'CustomClient/2.0',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(agentAResult.data).toEqual({ data: 'agent-a' });
+      expect(agentBResult.data).toEqual({ data: 'agent-b' });
+    });
+
+    it('should keep caller-authored User-Agent headers with SDK telemetry in cache keys', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'agent-a' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'agent-b' }));
+
+      const agentAResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'user-agent': 'CustomClient/1.0',
+            'x-stainless-lang': 'js',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+      const agentBResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'user-agent': 'CustomClient/2.0',
+            'x-stainless-lang': 'js',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(agentAResult.data).toEqual({ data: 'agent-a' });
+      expect(agentBResult.data).toEqual({ data: 'agent-b' });
+    });
+
+    it('should keep caller-authored JS User-Agent headers with SDK telemetry in cache keys', async () => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'agent-a' }))
+        .mockResolvedValueOnce(mockFetchWithRetriesResponse(true, { data: 'agent-b' }));
+
+      const agentAResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'user-agent': 'Gateway/JS 1.0',
+            'x-stainless-lang': 'js',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+      const agentBResult = await fetchWithCache(
+        url,
+        {
+          headers: {
+            Authorization: 'Bearer same-token',
+            'user-agent': 'Gateway/JS 2.0',
+            'x-stainless-lang': 'js',
+          },
+          method: 'POST',
+          body: JSON.stringify({ task: 'same' }),
+        },
+        1000,
+      );
+
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+      expect(agentAResult.data).toEqual({ data: 'agent-a' });
+      expect(agentBResult.data).toEqual({ data: 'agent-b' });
     });
 
     it('should normalize request method casing in cache keys', async () => {
