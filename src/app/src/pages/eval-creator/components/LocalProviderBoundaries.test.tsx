@@ -238,7 +238,7 @@ describe('local provider selection and execution boundaries', () => {
   it('retains an arbitrary custom route through redteam Next', async () => {
     const user = userEvent.setup();
     const provider = { ...localProvider('custom'), id: 'my-custom:opaque/model' };
-    prepareTarget(provider as Config['target'], 'custom');
+    prepareTarget(provider as unknown as Config['target'], 'custom');
     const onNext = vi.fn();
     renderWithProviders(
       <MemoryRouter>
