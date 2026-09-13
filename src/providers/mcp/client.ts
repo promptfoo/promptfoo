@@ -104,6 +104,7 @@ export class MCPClient {
   private clients: Map<string, Client> = new Map();
   private tools: Map<string, MCPTool[]> = new Map();
   private config: MCPConfig;
+  private abortController = new AbortController();
   private transports: Map<
     string,
     StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport
@@ -165,7 +166,10 @@ export class MCPClient {
     server: MCPServerConfig,
     serverKey = server.name || server.url || server.path || 'default',
   ): Promise<void> {
+    const signal = this.abortController.signal;
+    signal.throwIfAborted();
     const { Client } = await loadMcpClientSdk();
+    signal.throwIfAborted();
     const client = new Client({
       name: 'promptfoo-MCP',
       version: '1.0.0',
@@ -174,7 +178,13 @@ export class MCPClient {
 
     let transport: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport;
     try {
-      const requestOptions = getEffectiveRequestOptions(this.config);
+      const requestOptions = { ...getEffectiveRequestOptions(this.config), signal };
+      const connect = async (nextTransport: typeof transport) => {
+        signal.throwIfAborted();
+        this.transports.set(serverKey, nextTransport);
+        await client.connect(nextTransport, requestOptions);
+        signal.throwIfAborted();
+      };
 
       if (server.command) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
@@ -184,7 +194,7 @@ export class MCPClient {
           args: server.args ?? [],
           env: getStdioEnv(server),
         });
-        await client.connect(transport, requestOptions);
+        await connect(transport);
       } else if (server.path) {
         // Local server file
         const isJs = server.path.endsWith('.js');
@@ -208,7 +218,7 @@ export class MCPClient {
           args: [serverPath],
           env: getStdioEnv(server),
         });
-        await client.connect(transport, requestOptions);
+        await connect(transport);
       } else if (server.url) {
         // Render environment variables in auth config
         const renderedServer = renderAuthVars(server);
@@ -225,6 +235,7 @@ export class MCPClient {
           // This avoids SDK's OAuth discovery which requires authorization_endpoint
           logger.debug('[MCP] Fetching OAuth token');
           const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(oauthAuth, server.url);
+          signal.throwIfAborted();
           authHeaders = { Authorization: `Bearer ${accessToken}` };
 
           // Store config and expiration for proactive token refresh
@@ -268,9 +279,11 @@ export class MCPClient {
             new URL(serverUrl),
             hasOptions ? transportOptions : undefined,
           );
-          await client.connect(transport, requestOptions);
+          await connect(transport);
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
+          signal.throwIfAborted();
+          await this.transports.get(serverKey)?.close();
           logger.debug(
             `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
           );
@@ -279,7 +292,7 @@ export class MCPClient {
             new URL(serverUrl),
             hasOptions ? transportOptions : undefined,
           );
-          await client.connect(transport, requestOptions);
+          await connect(transport);
           logger.debug('Connected using SSE transport');
         }
       } else {
@@ -303,6 +316,7 @@ export class MCPClient {
         undefined, // no pagination params
         requestOptions,
       );
+      signal.throwIfAborted();
       const serverTools =
         toolsResult?.tools?.map((tool) => ({
           name: tool.name,
@@ -321,7 +335,6 @@ export class MCPClient {
         );
       }
 
-      this.transports.set(serverKey, transport);
       this.clients.set(serverKey, client);
       this.tools.set(serverKey, filteredTools);
 
@@ -565,13 +578,11 @@ export class MCPClient {
   }
 
   async cleanup(): Promise<void> {
-    for (const [serverKey, client] of this.clients.entries()) {
+    this.abortController.abort();
+    for (const [serverKey, transport] of this.transports.entries()) {
       try {
-        const transport = this.transports.get(serverKey);
-        if (transport) {
-          await transport.close();
-        }
-        await client.close();
+        await transport.close();
+        await this.clients.get(serverKey)?.close();
       } catch (error) {
         if (this.isDebugEnabled) {
           logger.error(

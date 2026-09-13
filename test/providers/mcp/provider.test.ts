@@ -15,6 +15,8 @@ vi.mock('../../../src/providers/mcp/client', () => ({
 }));
 
 import { MCPProvider } from '../../../src/providers/mcp';
+import { MCPClient } from '../../../src/providers/mcp/client';
+import { createDeferred } from '../../util/utils';
 
 function createContext(payload: Record<string, unknown>) {
   return {
@@ -29,6 +31,42 @@ describe('MCPProvider', () => {
     mcpClientMock.getAllTools.mockReset().mockReturnValue([]);
     mcpClientMock.callTool.mockReset();
     mcpClientMock.cleanup.mockReset().mockResolvedValue(undefined);
+  });
+
+  it('initializes from the current configuration on first use', async () => {
+    const provider = new MCPProvider({
+      config: { enabled: true, server: { url: '{{ env.MCP_URL }}' } },
+    });
+    expect(MCPClient).not.toHaveBeenCalled();
+    provider.config = { enabled: true, server: { url: 'http://localhost:1234/mcp' } };
+    await provider.getAvailableTools();
+    expect(MCPClient).toHaveBeenCalledWith(provider.config);
+  });
+
+  it('loads the response transform from the current configuration', async () => {
+    const provider = new MCPProvider({ config: { enabled: true } });
+    provider.config = { enabled: true, responseParser: 'content.toUpperCase()' };
+    mcpClientMock.callTool.mockResolvedValue({ content: 'current config' });
+    expect((await provider.callTool('echo', {})).output).toBe('CURRENT CONFIG');
+  });
+
+  it('cleans up while initialization is still pending', async () => {
+    const pending = createDeferred<void>();
+    mcpClientMock.initialize.mockReturnValueOnce(pending.promise);
+    const provider = new MCPProvider({ config: { enabled: true } });
+    const initialized = provider.getAvailableTools();
+    let cleaned = false;
+    const cleanup = provider.cleanup().then(() => {
+      cleaned = true;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    try {
+      expect(cleaned).toBe(true);
+      expect(mcpClientMock.cleanup).toHaveBeenCalledOnce();
+    } finally {
+      pending.resolve(undefined);
+      await Promise.allSettled([initialized, cleanup]);
+    }
   });
 
   it('reopens a cleaned provider once when concurrent calls reuse it', async () => {
