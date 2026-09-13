@@ -95,24 +95,8 @@ function getH1Lines(content: string): Array<{ line: number; text: string }> {
  * Extract backtick-quoted filenames that look like local file references.
  * Only captures references OUTSIDE of code blocks to avoid false positives
  * from illustrative YAML/code examples.
- *
- * Keep this list in sync with file types used by examples/READMEs.
  */
-const RECOGNIZED_FILE_EXTENSIONS = [
-  'yaml',
-  'yml',
-  'json',
-  'js',
-  'ts',
-  'py',
-  'txt',
-  'csv',
-  'xlsx',
-] as const;
-const FILE_REFERENCE_PATTERN = new RegExp(
-  String.raw`\`([\w][\w.-]*\.(${RECOGNIZED_FILE_EXTENSIONS.join('|')}))\``,
-  'g',
-);
+const FILE_REFERENCE_PATTERN = /`([\w][\w.-]*\.(yaml|yml|json|js|ts|py|txt|csv|xlsx))`/g;
 
 function getFileReferences(content: string): string[] {
   const refs = new Set<string>();
