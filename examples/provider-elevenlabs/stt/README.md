@@ -11,6 +11,8 @@ export ELEVENLABS_API_KEY=your_api_key_here
 npx promptfoo@latest eval
 ```
 
+The bundled `audio-path.mjs` variable transform resolves relative `vars.audioFile` paths from this example directory before prompt rendering, so the config also works when invoked from the repository root. Absolute paths remain unchanged. Config-level `audioFile` paths remain relative to the working directory unless absolute.
+
 ## Features
 
 - **Audio Transcription**: Convert speech to text with high accuracy
@@ -41,13 +43,15 @@ npx promptfoo@latest eval
 
 ## Configuration
 
+Use `scribe_v2` for file transcription. [ElevenLabs scheduled Scribe v1 for removal on July 9, 2026](https://elevenlabs.io/docs/changelog/2026/6/8). The realtime Scribe model uses a separate API.
+
 ### Basic Transcription
 
 ```yaml
 providers:
   - id: elevenlabs:stt:basic
     config:
-      modelId: eleven_speech_to_text_v1
+      modelId: scribe_v2
       language: en # ISO 639-1 language code
 ```
 
@@ -59,30 +63,23 @@ Identify and label different speakers in your audio:
 providers:
   - id: elevenlabs:stt:diarization
     config:
-      modelId: eleven_speech_to_text_v1
+      modelId: scribe_v2
       diarization: true
       maxSpeakers: 3 # Optional: hint for expected number of speakers
 ```
 
-The response will include speaker segments:
+Speaker labels are available in `context.providerResponse.metadata.transcription.words`. For example:
 
 ```json
 {
-  "text": "Full transcription...",
-  "diarization": [
+  "text": "Hello, how are you?",
+  "words": [
     {
+      "text": "Hello,",
+      "type": "word",
       "speaker_id": "speaker_0",
-      "text": "Hello, how are you?",
-      "start_time_ms": 0,
-      "end_time_ms": 2500,
-      "confidence": 0.95
-    },
-    {
-      "speaker_id": "speaker_1",
-      "text": "I'm doing well, thanks!",
-      "start_time_ms": 2500,
-      "end_time_ms": 5000,
-      "confidence": 0.92
+      "start": 0,
+      "end": 0.5
     }
   ]
 }
@@ -96,7 +93,7 @@ Word Error Rate (WER) measures transcription accuracy. Lower is better (0 = perf
 providers:
   - id: elevenlabs:stt:accuracy
     config:
-      modelId: eleven_speech_to_text_v1
+      modelId: scribe_v2
       calculateWER: true
       referenceText: The quick brown fox jumps over the lazy dog
 ```
@@ -153,10 +150,21 @@ providers:
 
 ### Method 2: Prompt-level
 
+Use the bundled variable transform so the prompt and vars fallback receive the same resolved audio path. Missing or empty `vars.audioFile` values leave config-level audio input available:
+
 ```yaml
 prompts:
-  - audio/sample1.mp3
-  - audio/sample2.wav
+  - '{{audioFile}}'
+
+defaultTest:
+  options:
+    transformVars: file://audio-path.mjs
+
+tests:
+  - vars:
+      audioFile: audio/sample1.mp3
+  - vars:
+      audioFile: audio/sample2.wav
 ```
 
 ### Method 3: Vars-level
@@ -171,12 +179,7 @@ tests:
 
 ### Cost Threshold
 
-```yaml
-tests:
-  - assert:
-      - type: cost
-        threshold: 0.05 # Max $0.05 per transcription
-```
+STT cost estimates require an API response with a known audio duration (`duration_ms`). When that field is unavailable, the provider omits `cost`, and a `cost` assertion reports an unsupported-provider error. Omit cost assertions for native Scribe responses without duration; missing cost does not mean the transcription was free.
 
 ### Latency Threshold
 
@@ -206,8 +209,8 @@ tests:
   - assert:
       - type: javascript
         value: |
-          const wer = context.vars.metadata?.wer?.wer || 1;
-          wer < 0.1  // Less than 10% error
+          const wer = context.providerResponse.metadata?.wer?.wer ?? 1;
+          return wer < 0.1; // Less than 10% error
 ```
 
 ### Speaker Count
@@ -217,9 +220,9 @@ tests:
   - assert:
       - type: javascript
         value: |
-          const diarization = context.vars.metadata?.transcription?.diarization || [];
-          const uniqueSpeakers = new Set(diarization.map(s => s.speaker_id));
-          uniqueSpeakers.size === 2  // Expect 2 speakers
+          const words = context.providerResponse.metadata?.transcription?.words || [];
+          const uniqueSpeakers = new Set(words.map(word => word.speaker_id).filter(Boolean));
+          return uniqueSpeakers.size === 2; // Expect 2 speakers
 ```
 
 ## Language Support
@@ -243,12 +246,7 @@ config:
 
 ## Cost Information
 
-STT pricing is based on audio duration:
-
-- **Free tier**: 1 hour/month
-- **Paid tiers**: ~$0.10 per minute (~$0.00167 per second)
-
-The provider automatically tracks and reports costs in the evaluation results.
+When the API supplies audio duration, the provider reports an estimated cost using its built-in duration-based rate. This estimate is not a billing quote. Consult [ElevenLabs pricing](https://elevenlabs.io/pricing) and your account usage for actual charges. Responses without duration have no cost estimate.
 
 ## Advanced Usage
 
@@ -256,27 +254,34 @@ The provider automatically tracks and reports costs in the evaluation results.
 
 ```yaml
 prompts:
-  - audio/batch1.mp3
-  - audio/batch2.mp3
-  - audio/batch3.mp3
+  - '{{audioFile}}'
 
 providers:
   - id: elevenlabs:stt
     config:
-      modelId: eleven_speech_to_text_v1
+      modelId: scribe_v2
 
 # Test all files with consistent assertions
+defaultTest:
+  assert:
+    - type: latency
+      threshold: 15000
+
 tests:
-  - assert:
-      - type: cost
-        threshold: 0.10
-      - type: latency
-        threshold: 15000
+  - vars:
+      audioFile: audio/batch1.mp3
+  - vars:
+      audioFile: audio/batch2.mp3
+  - vars:
+      audioFile: audio/batch3.mp3
 ```
 
 ### Multi-language Testing
 
 ```yaml
+prompts:
+  - '{{audioFile}}'
+
 providers:
   - id: elevenlabs:stt:english
     config:
@@ -287,12 +292,13 @@ providers:
       language: es
 
   - id: elevenlabs:stt:autodetect
-    config:
-      # No language specified = auto-detect
+    # No language specified = auto-detect
 
-prompts:
-  - audio/english_sample.mp3
-  - audio/spanish_sample.mp3
+tests:
+  - vars:
+      audioFile: audio/english_sample.mp3
+  - vars:
+      audioFile: audio/spanish_sample.mp3
 ```
 
 ### Accuracy Comparison
@@ -301,9 +307,7 @@ Compare transcription accuracy across different audio qualities:
 
 ```yaml
 prompts:
-  - audio/high_quality_48khz.wav
-  - audio/medium_quality_16khz.mp3
-  - audio/low_quality_8khz.mp3
+  - '{{audioFile}}'
 
 providers:
   - id: elevenlabs:stt
@@ -317,14 +321,14 @@ tests:
       audioFile: audio/high_quality_48khz.wav
     assert:
       - type: javascript
-        value: (context.vars.metadata?.wer?.wer || 1) < 0.05
+        value: (context.providerResponse.metadata?.wer?.wer ?? 1) < 0.05
 
   - description: Medium quality should have WER < 10%
     vars:
       audioFile: audio/medium_quality_16khz.mp3
     assert:
       - type: javascript
-        value: (context.vars.metadata?.wer?.wer || 1) < 0.10
+        value: (context.providerResponse.metadata?.wer?.wer ?? 1) < 0.10
 ```
 
 ## Troubleshooting
@@ -345,12 +349,13 @@ ELEVENLABS_API_KEY=your_key promptfoo eval
 Error: Failed to read audio file: ENOENT: no such file or directory
 ```
 
-**Solution**: Use absolute paths or paths relative to the config file:
+**Solution**: Use an absolute path or a path relative to the directory where you run promptfoo:
 
 ```yaml
-prompts:
-  - /absolute/path/to/audio.mp3
-  - ./relative/path/to/audio.mp3
+providers:
+  - id: elevenlabs:stt
+    config:
+      audioFile: /absolute/path/to/audio.mp3
 ```
 
 ### Unsupported Format
@@ -380,7 +385,7 @@ If you're getting unexpectedly high WER:
 
 | Option          | Type    | Default                        | Description                    |
 | --------------- | ------- | ------------------------------ | ------------------------------ |
-| `modelId`       | string  | `eleven_speech_to_text_v1`     | STT model to use               |
+| `modelId`       | string  | `scribe_v2`                    | STT model to use               |
 | `language`      | string  | auto-detect                    | ISO 639-1 language code        |
 | `diarization`   | boolean | `false`                        | Enable speaker identification  |
 | `maxSpeakers`   | number  | -                              | Expected number of speakers    |

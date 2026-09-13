@@ -1,4 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Archived: Azure OpenAI Assistants retired on August 26, 2026. See README.md for migration guidance.
 description: Azure OpenAI Assistant with Multiple Tools
 
 prompts:

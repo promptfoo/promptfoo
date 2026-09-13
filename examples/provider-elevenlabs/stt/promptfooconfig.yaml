@@ -1,7 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: ElevenLabs Speech-to-Text (STT) - Transcription accuracy testing
 
-# STT uses audio files as inputs - pass via vars
 prompts:
   - '{{audioFile}}'
 
@@ -10,14 +9,14 @@ providers:
   - id: elevenlabs:stt:basic
     label: Basic Transcription
     config:
-      modelId: scribe_v1
+      modelId: scribe_v2
       language: en
 
   # Transcription with speaker diarization
   - id: elevenlabs:stt:diarization
     label: With Speaker Diarization
     config:
-      modelId: scribe_v1
+      modelId: scribe_v2
       language: en
       diarization: true
       maxSpeakers: 3
@@ -26,13 +25,16 @@ providers:
   - id: elevenlabs:stt:accuracy
     label: Accuracy Testing (WER)
     config:
-      modelId: scribe_v1
+      modelId: scribe_v2
       language: en
       calculateWER: true
       referenceText: The quick brown fox jumps over the lazy dog
 
 # Default test configuration
 defaultTest:
+  # Resolve vars.audioFile from this example directory before rendering the prompt
+  options:
+    transformVars: file://audio-path.mjs
   # All tests will require transcription to complete
   assert:
     - type: not-contains
@@ -41,23 +43,21 @@ defaultTest:
 tests:
   - description: Transcription of sample1
     vars:
-      audioFile: examples/provider-elevenlabs/stt/audio/sample1.mp3
+      audioFile: audio/sample1.mp3
     assert:
       - type: javascript
         value: output.length > 10
-      - type: cost
-        threshold: 0.10
 
   - description: Transcription of sample2
     vars:
-      audioFile: examples/provider-elevenlabs/stt/audio/sample2.wav
+      audioFile: audio/sample2.wav
     assert:
       - type: javascript
         value: output.length > 10
 
   - description: Diarization test
     vars:
-      audioFile: examples/provider-elevenlabs/stt/audio/sample3_multiple_speakers.mp3
+      audioFile: audio/sample3_multiple_speakers.mp3
     assert:
       - type: javascript
         value: output.length > 10

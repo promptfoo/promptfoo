@@ -281,6 +281,8 @@ export class ElevenLabsClient {
     const mimeTypes: Record<string, string> = {
       // Audio formats
       mp3: 'audio/mpeg',
+      mpeg: 'audio/mpeg',
+      mpga: 'audio/mpeg',
       wav: 'audio/wav',
       flac: 'audio/flac',
       ogg: 'audio/ogg',

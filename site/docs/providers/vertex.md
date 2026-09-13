@@ -228,15 +228,13 @@ The legacy [Imagen adapter](/docs/providers/google#image-generation-models) uses
 
 Use the `vertex:video:` prefix for Veo on Vertex AI:
 
-- `vertex:video:veo-3.1-generate-preview`
-- `vertex:video:veo-3.1-fast-preview`
-- `vertex:video:veo-3-generate`
-- `vertex:video:veo-3-fast`
-- `vertex:video:veo-2-generate`
+- `vertex:video:veo-3.1-generate-001` (GA)
+- `vertex:video:veo-3.1-fast-generate-001` (GA)
+- `vertex:video:veo-3.1-lite-generate-001` (Preview)
 
 ```yaml
 providers:
-  - id: vertex:video:veo-3.1-generate-preview
+  - id: vertex:video:veo-3.1-generate-001
     config:
       projectId: your-project-id
       region: us-central1
@@ -244,6 +242,25 @@ providers:
       resolution: '1080p'
       durationSeconds: 8
 ```
+
+#### Video Extension
+
+The current Vertex AI Veo 3.1 models listed above support extending an existing video. Set `sourceVideo` to a Cloud Storage URI, base64-encoded video, or a local `file://` path:
+
+```yaml
+providers:
+  - id: vertex:video:veo-3.1-generate-001
+    config:
+      projectId: your-project-id
+      region: us-central1
+      sourceVideo: gs://your-bucket/source-video.mp4
+      durationSeconds: 8
+
+prompts:
+  - 'Continue the camera movement toward the mountains'
+```
+
+Vertex video extension adds 7 seconds to the source video. Promptfoo omits `durationSeconds` from extension requests and warns when a configured duration differs from 8; the configured duration does not change the extension length. For Cloud Storage input, promptfoo sends `video.gcsUri`. For base64 and `file://` input, it sends `video.bytesBase64Encoded`. Operation names such as `projects/.../operations/...` are not video inputs; promptfoo rejects them with instructions to supply the actual video.
 
 ## Model Capabilities
 
@@ -254,8 +271,38 @@ providers:
 Current Gemini models on Vertex AI (2.5 and 3.x):
 
 - Input context: up to 1M tokens
+- Output context: up to 65K tokens for Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
 - Supports: Text, code, images, audio, video, and PDF inputs
-- Features: System instructions, structured JSON output, function calling, thinking, and grounding with Google Search
+- Features: System instructions, structured JSON output, function calling, thinking, code execution, URL context, and grounding with Google Search or Google Maps
+
+Gemini 3.6 Flash and Gemini 3.5 Flash-Lite support standard, Flex, Priority, and Batch inference plus context caching. Computer Use is available in preview for Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite. Promptfoo forwards tool declarations and responses; the application supplies the action loop. See Google's [supported models and Computer Use guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/computer-use).
+
+Native Gemini prompts can reference multimodal content stored in Google Cloud Storage. For example, to evaluate a PDF:
+
+```yaml
+prompts:
+  - |
+    [
+      {
+        "role": "user",
+        "parts": [
+          {"fileData": {"mimeType": "application/pdf", "fileUri": "gs://my-bucket/example.pdf"}},
+          {"text": "Summarize this document."}
+        ]
+      }
+    ]
+
+providers:
+  - id: vertex:gemini-3.6-flash
+    config:
+      region: global
+```
+
+Image, audio, and video variables loaded with `file://` are converted to Gemini inline data. Supported image inputs include PNG, JPEG, WEBP, HEIC, and HEIF; audio includes WAV, MP3, AIFF/AIFC, AAC, OGG, FLAC, and M4A; video includes MP4, MPEG/MPG, MOV, AVI, FLV, WEBM, WMV, and 3GPP. See the [Google AI Studio multimodal example](/docs/providers/google) for a runnable configuration.
+
+:::note
+SVG, GIF, BMP, TIFF, and ICO images are unsupported. Ogg/Theora and Matroska are not among Gemini's [supported video formats](https://ai.google.dev/gemini-api/docs/video-understanding#supported-video-formats), and WMA audio is unsupported. Promptfoo leaves unsupported media variables as text instead of sending invalid inline data. Convert unsupported images to PNG or JPEG, video to MP4 or WEBM, and audio to WAV or MP3 before evaluation; OGG audio is supported.
+:::
 
 ### Language Support
 
@@ -469,12 +516,16 @@ The following environment variables can be used to configure the Vertex AI provi
 
 Different models are available in different regions. Common regions include:
 
+- `global` - Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
+- `us`, `eu` - Multi-region endpoints supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite (10% pricing premium)
 - `us-central1` - Default, most models available
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
 - `europe-west1` - EU region, Claude models available
 - `europe-west4` - EU region
 - `asia-southeast1` - Asia region, Claude models available
+
+Promptfoo maps the `us` and `eu` multi-region locations to `aiplatform.us.rep.googleapis.com` and `aiplatform.eu.rep.googleapis.com`, respectively; regional locations such as `us-central1` continue to use `<region>-aiplatform.googleapis.com`.
 
 Example configuration with specific region:
 
@@ -718,6 +769,7 @@ defaultTest:
 | `cost`                             | Legacy per-token override applied to both input and output pricing | None                                 |
 | `inputCost`                        | Override input token pricing in promptfoo cost estimates           | None                                 |
 | `outputCost`                       | Override output token pricing in promptfoo cost estimates          | None                                 |
+| `service_tier`                     | Gemini inference tier: `standard`, `flex`, or `priority`           | `standard`                           |
 | `examples`                         | Few-shot examples                                                  | None                                 |
 | `safetySettings`                   | Content filtering                                                  | None                                 |
 | `generationConfig.temperature`     | Randomness control                                                 | None                                 |
@@ -828,6 +880,33 @@ providers:
   - id: vertex:gemini-2.5-pro
     config:
       tools: 'file://tools.json' # Supports variable substitution
+```
+
+Vertex AI also supports [streaming function-call arguments](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/tools/function-calling#streaming-function-call-arguments) in preview. Enable both streaming and `streamFunctionCallArguments`; promptfoo assembles the streamed argument parts before invoking a configured callback. Callbacks, including JSON-encoded model-output calls, run as trusted, unsandboxed local code; isolate evals that use untrusted models or content.
+
+```yaml
+providers:
+  - id: vertex:gemini-3.6-flash
+    config:
+      streaming: true
+      toolConfig:
+        functionCallingConfig:
+          mode: 'ANY'
+          streamFunctionCallArguments: true
+```
+
+Function parameters containing spaces or hyphens are supported. Vertex can emit these paths as `$.first name` or `$.postal-code` during streaming; promptfoo reconstructs them alongside quoted JSONPath properties and nested array values.
+
+Returned thought signatures are available in `metadata.thoughtSignatures` without changing normal text or JSON output. For a subsequent model turn, preserve the returned `thoughtSignature` and provide the matching `functionResponse`. Gemini 3 and later also support multimodal function responses, such as an image referenced from Cloud Storage:
+
+```yaml
+prompts:
+  - |
+    [
+      {"role":"user","parts":[{"text":"What is shown in the latest photo?"}]},
+      {"role":"model","parts":[{"functionCall":{"name":"get_photo","args":{"album":"latest"}},"thoughtSignature":"{{signature}}"}]},
+      {"role":"user","parts":[{"functionResponse":{"name":"get_photo","response":{"image_ref":{"$ref":"photo.jpg"}},"parts":[{"fileData":{"mimeType":"image/jpeg","fileUri":"gs://my-bucket/photo.jpg","displayName":"photo.jpg"}}]}}]}
+    ]
 ```
 
 For practical examples of function calling with Vertex AI models, see the [google-vertex-tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-vertex-tools) which demonstrates both basic tool declarations and callback execution.
@@ -983,12 +1062,21 @@ Gemini 3 models use `thinkingLevel` instead of `thinkingBudget`:
 
 ```yaml
 providers:
-  # Gemini 3 Flash supports: MINIMAL, LOW, MEDIUM, HIGH
-  - id: vertex:gemini-3-flash-preview
+  # Gemini 3.6 Flash supports: MINIMAL, LOW, MEDIUM, HIGH
+  - id: vertex:gemini-3.6-flash
     config:
+      region: global
       generationConfig:
         thinkingConfig:
           thinkingLevel: MEDIUM # Balanced approach for moderate complexity
+
+  # Gemini 3.5 Flash-Lite supports: MINIMAL, LOW, MEDIUM, HIGH
+  - id: vertex:gemini-3.5-flash-lite
+    config:
+      region: global
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MINIMAL # Default for low-latency agentic tasks
 
   # Gemini 3.1 Pro supports: LOW, HIGH
   - id: vertex:gemini-3.1-pro-preview
@@ -1000,12 +1088,14 @@ providers:
 
 Thinking levels for Gemini 3 Flash:
 
-| Level   | Description                                                  |
-| ------- | ------------------------------------------------------------ |
-| MINIMAL | Fewest tokens for thinking. Best for low-complexity tasks.   |
-| LOW     | Fewer tokens. Suitable for simpler tasks, high-throughput.   |
-| MEDIUM  | Balanced approach for moderate complexity.                   |
-| HIGH    | More tokens for deep reasoning. Default for complex prompts. |
+| Level   | Description                                                |
+| ------- | ---------------------------------------------------------- |
+| MINIMAL | Fewest tokens for thinking. Best for low-complexity tasks. |
+| LOW     | Fewer tokens. Suitable for simpler tasks, high-throughput. |
+| MEDIUM  | Balanced approach for moderate complexity.                 |
+| HIGH    | More tokens for deep reasoning.                            |
+
+Gemini 3.8 Flash, 3.7 Flash, and 3.6 Flash default to `MEDIUM`; Gemini 3.5 Flash-Lite defaults to `MINIMAL`. Use `MEDIUM` or `HIGH` for Flash-Lite tool-heavy, multi-step tasks. These Flash models ignore `temperature`, `topP`, and `topK`, and Promptfoo omits those fields and `candidateCount`. Prompts must not end with a prefilled `model` turn; preserve matching function names, function-call IDs when returned, and thought signatures when evaluating multi-turn tool use. See Google's [latest-model migration guide](https://ai.google.dev/gemini-api/docs/generate-content/latest-model).
 
 Thinking levels for Gemini 3 Pro:
 
@@ -1013,6 +1103,46 @@ Thinking levels for Gemini 3 Pro:
 | ----- | ----------------------------------------- |
 | LOW   | Minimizes latency and cost. Simple tasks. |
 | HIGH  | Maximizes reasoning depth. Default.       |
+
+#### Inference tiers and cached-token pricing
+
+Promptfoo converts `service_tier` to Vertex's required enum and includes cached-input and reasoning tokens in cost estimates. When Google reports a Priority-to-standard downgrade, `metadata.serviceTier` reflects the actual tier and standard pricing is used. Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite have a 10% premium on the `us` and `eu` multi-region endpoints. These Flash models reject frequency and presence penalties.
+
+```yaml
+providers:
+  - id: vertex:gemini-3.5-flash-lite
+    config:
+      projectId: '{{ env.GOOGLE_CLOUD_PROJECT }}'
+      region: global # global, us, or eu
+      service_tier: flex # standard, flex, or priority
+      generationConfig:
+        maxOutputTokens: 4096
+        thinkingConfig:
+          thinkingLevel: MINIMAL
+```
+
+| Model                        | Tier       | Input / 1M | Output and reasoning / 1M | Cached input / 1M |
+| ---------------------------- | ---------- | ---------: | ------------------------: | ----------------: |
+| Gemini 3.8 / 3.7 / 3.6 Flash | Standard   |      $0.75 |                     $3.75 |            $0.075 |
+| Gemini 3.8 / 3.7 / 3.6 Flash | Flex/Batch |     $0.375 |                    $1.875 |           $0.0375 |
+| Gemini 3.8 / 3.7 / 3.6 Flash | Priority   |      $1.35 |                     $6.75 |            $0.135 |
+| Gemini 3.5 Flash-Lite        | Standard   |      $0.30 |                     $2.50 |             $0.03 |
+| Gemini 3.5 Flash-Lite        | Flex/Batch |      $0.15 |                     $1.25 |            $0.015 |
+| Gemini 3.5 Flash-Lite        | Priority   |      $0.54 |                     $4.50 |            $0.054 |
+
+Gemini 3.8, 3.7, and 3.6 Flash rates above include introductory pricing through December 31, 2026; those rates double on January 1, 2027. Promptfoo applies that scheduled change automatically. All rates above are for `global`; multiply them by 1.1 for `us` or `eu`. Cache-storage and grounding-query charges are separate. See [Vertex AI pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing).
+
+Promptfoo can reference an existing explicit Vertex cache with `passthrough`; cache creation and lifecycle management remain outside the provider:
+
+```yaml
+providers:
+  - id: vertex:gemini-3.6-flash
+    config:
+      projectId: '{{ env.GOOGLE_CLOUD_PROJECT }}'
+      region: global
+      passthrough:
+        cachedContent: projects/my-project/locations/global/cachedContents/example-cache
+```
 
 #### Gemini 2.5 Models (thinkingBudget)
 
@@ -1101,6 +1231,27 @@ When using Search grounding, the API response includes additional metadata:
 - Search will only be performed when the model determines it's necessary
 
 For more details, see the [Google documentation on Grounding with Google Search](https://ai.google.dev/docs/gemini_api/grounding).
+
+### Maps Grounding
+
+Gemini 3.6 Flash and Gemini 3.5 Flash-Lite support Google Maps grounding for location-aware, text-only queries. Optional coordinates and language can be supplied through `toolConfig.retrievalConfig`:
+
+```yaml
+providers:
+  - id: vertex:gemini-3.5-flash-lite
+    config:
+      region: global
+      tools:
+        - googleMaps: {}
+      toolConfig:
+        retrievalConfig:
+          latLng:
+            latitude: 42.3601
+            longitude: -71.0589
+          languageCode: en-US
+```
+
+Maps queries can incur separate charges and applications must display the returned Maps sources and attribution. See [Grounding with Google Maps](https://cloud.google.com/vertex-ai/generative-ai/docs/grounding/grounding-with-google-maps).
 
 ### Code Execution
 
@@ -1205,20 +1356,21 @@ For more details, see:
 
 The Vertex AI provider supports core functionality for LLM evaluation:
 
-| Feature                  | Supported | Notes                                                                                |
-| ------------------------ | --------- | ------------------------------------------------------------------------------------ |
-| Chat completions         | ✅        | Full support for Gemini, Claude, Llama                                               |
-| Embeddings               | ✅        | Text embeddings via `vertex:embedding:`                                              |
-| Function calling / Tools | ✅        | Including MCP tools                                                                  |
-| Search grounding         | ✅        | Google Search integration                                                            |
-| Safety settings          | ✅        | Full configuration                                                                   |
-| Structured output        | ✅        | JSON schema support                                                                  |
-| Streaming                | ✅        | Optional via `streaming: true`                                                       |
-| Files API                | ❌        | Upload/manage files not supported                                                    |
-| Caching API              | ❌        | Context caching not supported                                                        |
-| Live/Realtime API        | ❌        | No Live WebSocket adapter in this provider                                           |
-| Video generation         | ✅        | Use `vertex:video:` provider                                                         |
-| Image generation         | ⚠️        | [Gemini image and Imagen adapters](#image-generation-models) with `config.projectId` |
+| Feature                  | Supported | Notes                                                                                     |
+| ------------------------ | --------- | ----------------------------------------------------------------------------------------- |
+| Chat completions         | ✅        | Full support for Gemini, Claude, Llama                                                    |
+| Embeddings               | ✅        | Text embeddings via `vertex:embedding:`                                                   |
+| Function calling / Tools | ✅        | Including MCP tools                                                                       |
+| Search grounding         | ✅        | Google Search integration                                                                 |
+| Safety settings          | ✅        | Full configuration                                                                        |
+| Structured output        | ✅        | JSON schema support                                                                       |
+| Streaming                | ✅        | Optional via `streaming: true`                                                            |
+| Files API                | ❌        | Upload/manage files not supported                                                         |
+| Caching API              | ⚠️        | Reference existing caches with `passthrough.cachedContent`; creation/manage not supported |
+| Implicit cache usage     | ✅        | Cached tokens and their cost are tracked                                                  |
+| Live/Realtime API        | ❌        | No Live WebSocket adapter in this provider                                                |
+| Video generation         | ✅        | Use `vertex:video:` provider                                                              |
+| Image generation         | ⚠️        | [Gemini image and Imagen adapters](#image-generation-models) with `config.projectId`      |
 
 These are promptfoo provider capabilities. Google Cloud offers a separate [Gemini Live API](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/live-api); the `vertex:` provider does not currently implement its WebSocket protocol. Embedding support here covers the [text embedding request format](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/embeddings/get-text-embeddings), not every model or modality in the cloud catalog. See [image generation models](#image-generation-models) for the Imagen adapter and native Gemini image routes.
 
