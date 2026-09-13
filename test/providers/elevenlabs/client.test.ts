@@ -36,6 +36,18 @@ describe('ElevenLabsClient', () => {
     vi.useRealTimers();
   });
 
+  it.each(['mpeg', 'mpga', 'MPEG', 'MPGA'])('uploads %s files as audio/mpeg', async (extension) => {
+    mockFetch.mockResolvedValue(
+      new Response(JSON.stringify({ text: 'transcribed' }), {
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    await client.upload('/speech-to-text', Buffer.from('fixture audio'), `recording.${extension}`);
+    const form = mockFetch.mock.calls[0][1]?.body as FormData;
+    expect((form.get('file') as File).type).toBe('audio/mpeg');
+    expect(await (form.get('file') as File).text()).toBe('fixture audio');
+  });
+
   describe('constructor', () => {
     it('should initialize with correct defaults', () => {
       const defaultClient = new ElevenLabsClient({ apiKey: 'test-key' });
