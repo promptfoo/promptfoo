@@ -106,7 +106,7 @@ describe('EchoProvider', () => {
       const input = 'Test input';
       const context = { metadata: { test: 'value' } };
       const provider = new EchoProvider();
-      const result = await provider.callApi(input, {}, context);
+      const result = await provider.callApi(input, context);
 
       expect(result.metadata).toEqual({
         test: 'value',

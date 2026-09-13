@@ -167,6 +167,14 @@ it('recognizes a LiteLLM subclass operation with its own capability declaration'
   expect(await getAndCheckProvider('embedding', provider, null, 'rubric')).toBe(provider);
 });
 
+it('constructs LiteLLM subclasses with getter-only capability declarations', () => {
+  class RestrictedLiteLLMProvider extends LiteLLMProvider {}
+  Object.defineProperty(RestrictedLiteLLMProvider.prototype, 'promptfooCapabilities', {
+    get: () => ['callEmbeddingApi'],
+  });
+  expect(() => new RestrictedLiteLLMProvider('fixture')).not.toThrow();
+});
+
 it('recognizes an instance-owned implementation that replaces an inherited text stub', async () => {
   class TextEmbeddingProvider extends OpenAiEmbeddingProvider {
     override callApi = async () => ({ output: 'implemented on instance' });
