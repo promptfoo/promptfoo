@@ -824,8 +824,22 @@ describe('createShareableUrl', () => {
 
     it('redacts Azure Blob SAS tokens from the shared eval config', async () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      mockEval.prompts = [
+        {
+          provider: 'openai:gpt-4',
+          raw: 'prompt1',
+          label: 'prompt1',
+          config: { apiKey: 'prompt-secret' },
+        },
+      ];
       mockEval.config = {
         tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
+        providers: [
+          {
+            id: 'openai:gpt-4',
+            config: { apiKey: 'provider-secret', mcp: { servers: [{ url: 'http://local' }] } },
+          },
+        ],
       };
 
       mockFetch
@@ -845,6 +859,11 @@ describe('createShareableUrl', () => {
         'az://account/container/tests.yaml?sp=r&sig=%5BREDACTED%5D',
       );
       expect(mockFetch.mock.calls[0][1].body).not.toContain('azure-secret');
+      expect(requestBody.config.providers[0].config.apiKey).toBe('[REDACTED]');
+      expect(requestBody.config.providers[0].config.mcp.servers).toEqual([{ url: 'http://local' }]);
+      expect(mockFetch.mock.calls[0][1].body).not.toContain('provider-secret');
+      expect(requestBody.prompts[0].config.apiKey).toBe('[REDACTED]');
+      expect(mockFetch.mock.calls[0][1].body).not.toContain('prompt-secret');
     });
 
     it.each([false, true])(
@@ -1117,6 +1136,30 @@ describe('adaptive chunk retry', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('sanitizes in-memory result headers before sharing', async () => {
+    const results = [
+      {
+        id: '1',
+        response: { metadata: { headers: { Authorization: 'Bearer result-secret' } } },
+      },
+    ] as unknown as EvalResult[];
+    mockEval = {
+      ...buildMockEval(),
+      results,
+      getTotalResultRowCount: vi.fn().mockResolvedValue(1),
+      fetchResultsBatched: vi.fn().mockImplementation(async function* () {
+        yield results;
+      }),
+    };
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ id: 'mock-eval-id' }) })
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+
+    await createShareableUrl(mockEval as Eval);
+
+    expect(mockFetch.mock.calls[1][1].body).not.toContain('result-secret');
   });
 
   it('splits chunk on 413 Payload Too Large and retries', async () => {

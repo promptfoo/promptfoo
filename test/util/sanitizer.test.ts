@@ -375,6 +375,49 @@ describe('sanitizeObject', () => {
       expect(sanitizeObject(invalidJson)).toBe(invalidJson);
     });
 
+    it('redacts credential-shaped URLs, auth values, and raw HTTP payloads', () => {
+      expect(
+        sanitizeObject({
+          env: { SERVICE_TOKEN: 'https://hooks.example.test/opaque-value' },
+          auth: { type: 'api_key', value: 'xyz789', label: 'public' },
+          websocketUrl: 'wss://gateway.example/ws?token=secret',
+        }),
+      ).toEqual({
+        env: { SERVICE_TOKEN: '[REDACTED]' },
+        auth: { type: 'api_key', value: '[REDACTED]', label: 'public' },
+        websocketUrl: 'wss://gateway.example/ws?token=%5BREDACTED%5D',
+      });
+      expect(
+        sanitizeObject({
+          endpoint: 'webhook:https://hooks.example.test/hook?token=tiny',
+          value: 'https://example.test',
+        }),
+      ).toEqual({
+        endpoint: 'webhook:https://hooks.example.test/hook?token=%5BREDACTED%5D',
+        value: 'https://example.test',
+      });
+      expect(
+        sanitizeObject(
+          'POST /v1 HTTP/1.1\nX-Client-Secret: header-secret\n\n{"apiKey":"body-secret"}',
+        ),
+      ).toBe('POST /v1 HTTP/1.1\nX-Client-Secret: [REDACTED]\n\n{"apiKey":"[REDACTED]"}');
+      expect(sanitizeObject('X-Session-Token: header-secret')).toBe('X-Session-Token: [REDACTED]');
+      expect(sanitizeObject('POST /v1?api_key=tiny HTTP/1.1\n\nbody')).toBe(
+        'POST /v1?api_key=%5BREDACTED%5D HTTP/1.1\n\nbody',
+      );
+      expect(
+        sanitizeObject(
+          'POST /v1 HTTP/1.1\nContent-Type: multipart/form-data; boundary=x\n\n--x\nContent-Disposition: form-data; name="api_key"\n\ntiny\n--x--',
+        ),
+      ).toContain('name="api_key"\n\n[REDACTED]\n--x--');
+      expect(sanitizeObject('ordinary text\n\n'.repeat(1000))).toBe(
+        'ordinary text\n\n'.repeat(1000),
+      );
+      expect(
+        sanitizeObject('Content-Disposition: form-data; name="api_key"\n\n'.repeat(1000)),
+      ).toBe('Content-Disposition: form-data; name="api_key"\n\n'.repeat(1000));
+    });
+
     it('should redact SAS tokens embedded in Azure Blob test URIs', () => {
       const result = sanitizeObject({
         tests: 'az://account/container/tests.yaml?sp=r&sig=azure-secret',
@@ -819,6 +862,17 @@ describe('sanitizeObject', () => {
         expect(sanitizeObject({ 'x-auth': 'token123' })).toEqual({ 'x-auth': '[REDACTED]' });
       });
 
+      it('should redact generic credential header suffixes in header maps', () => {
+        expect(
+          sanitizeObject({ headers: { 'X-Vendor-Token': 'tiny', 'Proxy-Authorization': 'tiny' } }),
+        ).toEqual({
+          headers: {
+            'X-Vendor-Token': '[REDACTED]',
+            'Proxy-Authorization': '[REDACTED]',
+          },
+        });
+      });
+
       it('should redact cookie', () => {
         expect(sanitizeObject({ cookie: 'session=abc123' })).toEqual({ cookie: '[REDACTED]' });
       });
@@ -1044,6 +1098,32 @@ describe('sanitizeObject', () => {
       const result = sanitizeObject(input, { maxDepth: Number.POSITIVE_INFINITY });
       expect(result.l1.l2.l3.l4.l5.l6.data).toBe('reachable');
       expect(result.l1.l2.l3.l4.l5.l6.token).toBe('[REDACTED]');
+    });
+
+    it('redacts the remainder after bounding nested raw HTTP', () => {
+      const raw = 'GET / HTTP/1.1\n\n'.repeat(100) + '{"apiKey":"body-secret"}';
+      const result = sanitizeObject(raw, { maxDepth: Number.POSITIVE_INFINITY });
+      expect(result).not.toContain('body-secret');
+    });
+
+    it('redacts structured credential maps without hiding ordinary keys', () => {
+      expect(
+        sanitizeObject({
+          apiKey: { raw: 'tiny' },
+          headers: { 'X-Client-Secret': 'tiny', 'X-Session-Token': 'tiny' },
+          auth_password: 'tiny',
+          device_token: 'paired-token',
+          tls: { key: '-----BEGIN PRIVATE KEY-----\ntiny', cert: 'public' },
+          key: 'public',
+        }),
+      ).toEqual({
+        apiKey: '[REDACTED]',
+        headers: { 'X-Client-Secret': '[REDACTED]', 'X-Session-Token': '[REDACTED]' },
+        auth_password: '[REDACTED]',
+        device_token: '[REDACTED]',
+        tls: { key: '[REDACTED]', cert: 'public' },
+        key: 'public',
+      });
     });
 
     it('should sanitize at all depth levels within limit', () => {
@@ -1376,6 +1456,42 @@ describe('sanitizeObject', () => {
       expect(result.url).not.toContain('secret123');
       expect(result.url).not.toContain('bearer-token');
       expect(result.url).toContain('data=public');
+    });
+
+    it('sanitizes credentials in URL-valued config fields', () => {
+      const result = sanitizeObject({
+        apiBaseUrl: 'https://user:pass@example.test/v1?api_key=secret',
+      });
+
+      expect(result.apiBaseUrl).not.toContain('user:pass');
+      expect(result.apiBaseUrl).not.toContain('secret');
+    });
+
+    it('preserves non-secret fields inside structured auth config', () => {
+      const result = sanitizeObject({
+        auth: { type: 'oauth2', clientSecret: 'secret', scopes: ['read'] },
+      });
+
+      expect(result.auth).toEqual({
+        type: 'oauth2',
+        clientSecret: '[REDACTED]',
+        scopes: ['read'],
+      });
+    });
+
+    it('sanitizes credential headers in raw HTTP requests', () => {
+      const result = sanitizeObject({
+        request:
+          'POST / HTTP/1.1\r\nAuthorization: Bearer secret\r\nCookie: sid=secret\r\n\r\nbody',
+      });
+
+      expect(result.request).not.toContain('Bearer secret');
+      expect(result.request).not.toContain('sid=secret');
+    });
+
+    it('sanitizes form bodies with trailing HTTP whitespace', () => {
+      const result = sanitizeObject({ request: 'POST / HTTP/1.1\r\n\r\napi_key=tiny\r\n' });
+      expect(result.request).not.toContain('tiny');
     });
 
     it('should sanitize URLs with basic auth credentials in url field', () => {

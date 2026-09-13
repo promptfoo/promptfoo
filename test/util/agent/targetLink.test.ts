@@ -2,6 +2,9 @@ import { EventEmitter } from 'events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TargetLinkEvents } from '../../../src/types/targetLink';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
+
+vi.mock('../../../src/util/fetch/index', () => ({ fetchWithProxy: vi.fn() }));
 
 vi.mock('../../../src/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -224,5 +227,61 @@ describe('attachTargetLink', () => {
       expect(results).toHaveLength(1);
       expect((results[0].args[0] as any).tokenUsage).toBeUndefined();
     });
+  });
+
+  it('follows same-host HTTPS upgrade redirects', async () => {
+    vi.mocked(fetchWithProxy)
+      .mockResolvedValueOnce(
+        new Response('', { status: 307, headers: { location: 'https://example.test/next' } }),
+      )
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+    const { attachTargetLink } = await import('../../../src/util/agent/targetLink');
+    attachTargetLink(fakeClient as any, { id: () => 'test', callApi: vi.fn() as any });
+
+    fakeClient._simulateEvent(TargetLinkEvents.PROBE_HTTP, {
+      requestId: 'https-upgrade',
+      url: 'http://example.test/start',
+      headers: { Authorization: 'Bearer sentinel' },
+      body: 'payload',
+    });
+
+    await vi.waitFor(() => {
+      const result = fakeClient._emittedToServer.find(
+        (event) => event.event === TargetLinkEvents.PROBE_HTTP_RESULT,
+      );
+      expect(result?.args[0]).toMatchObject({
+        requestId: 'https-upgrade',
+        success: true,
+        finalUrl: 'https://example.test/next',
+      });
+    });
+    expect(fetchWithProxy).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects cross-origin HTTP redirects before forwarding credentials', async () => {
+    vi.mocked(fetchWithProxy).mockResolvedValueOnce(
+      new Response('', { status: 307, headers: { location: 'https://other.test/next' } }),
+    );
+    const { attachTargetLink } = await import('../../../src/util/agent/targetLink');
+    attachTargetLink(fakeClient as any, { id: () => 'test', callApi: vi.fn() as any });
+
+    fakeClient._simulateEvent(TargetLinkEvents.PROBE_HTTP, {
+      requestId: 'cross-origin',
+      url: 'https://example.test/start',
+      headers: { Authorization: 'Bearer sentinel' },
+      body: 'payload',
+    });
+
+    await vi.waitFor(() => {
+      const result = fakeClient._emittedToServer.find(
+        (event) => event.event === TargetLinkEvents.PROBE_HTTP_RESULT,
+      );
+      expect(result?.args[0]).toMatchObject({
+        requestId: 'cross-origin',
+        success: false,
+        error: 'TargetLink HTTP probes do not follow cross-origin redirects',
+      });
+    });
+    expect(fetchWithProxy).toHaveBeenCalledOnce();
   });
 });

@@ -10,6 +10,7 @@ import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
 import logger, { isDebugEnabled } from './logger';
+import { type default as EvalResult, sanitizeResultForJsonlArtifact } from './models/evalResult';
 import {
   checkCloudPermissions,
   getOrgContext,
@@ -17,10 +18,13 @@ import {
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { redactAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './util/sanitizer';
+import {
+  redactAzureBlobSasTokens,
+  sanitizeObject,
+  sanitizeTracingConfigForPersistence,
+} from './util/sanitizer';
 
 import type Eval from './models/eval';
-import type EvalResult from './models/evalResult';
 import type ModelAudit from './models/modelAudit';
 
 interface ShareDomainResult {
@@ -142,7 +146,9 @@ async function sendEvalRecord(
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
   const redactedConfig = redactAzureBlobSasTokens(
-    sanitizeTracingConfigForPersistence(evalRecord.config),
+    sanitizeObject(sanitizeTracingConfigForPersistence(evalRecord.config), {
+      maxDepth: Number.POSITIVE_INFINITY,
+    }),
   );
 
   // Preserve the verified runtime team on server-issued unified configs. For
@@ -150,6 +156,7 @@ async function sendEvalRecord(
   let evalData: Record<string, unknown> = {
     ...evalRecord,
     config: redactedConfig,
+    prompts: sanitizeObject(evalRecord.prompts, { maxDepth: Number.POSITIVE_INFINITY }),
     results: [],
     traces,
   };
@@ -410,7 +417,7 @@ async function prepareChunkForShare(
     );
   }
 
-  return chunkToSend;
+  return chunkToSend.map(sanitizeResultForJsonlArtifact);
 }
 
 async function sendChunkedResults(
