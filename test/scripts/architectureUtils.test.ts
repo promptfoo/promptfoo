@@ -202,6 +202,14 @@ describe('resolveInternalModule', () => {
       );
     });
 
+    it('resolves declaration-only runtime imports for report reach', () => {
+      write('src/types.d.ts');
+      write('src/module.d.mts');
+
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', './types.js')).toBe('src/types.d.ts');
+      expect(resolveInternalModule(repoRoot, 'src/index.ts', './module')).toBe('src/module.d.mts');
+    });
+
     it('returns undefined for non-existent internal paths', () => {
       expect(resolveInternalModule(repoRoot, 'src/foo.ts', './missing')).toBeUndefined();
     });
@@ -275,6 +283,9 @@ describe('getSourceFiles', () => {
 
   it('ignores nested node_modules and configured roots', () => {
     write('src/core/a.ts');
+    write('src/core/types.d.ts');
+    write('src/core/module.d.mts');
+    write('src/core/common.d.cts');
     write('src/app/node_modules/pkg/index.ts');
     write('src/__mocks__/database.ts');
 

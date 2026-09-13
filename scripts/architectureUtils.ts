@@ -48,11 +48,12 @@ export interface LayerConfig {
 }
 
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
+const DECLARATION_EXTENSIONS = ['.d.ts', '.d.mts', '.d.cts'];
 const DIRECTORY_INDEXES = TYPESCRIPT_EXTENSIONS.map((extension) => `index${extension}`);
 const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
-  '.js': ['.ts', '.tsx'],
-  '.mjs': ['.mts'],
-  '.cjs': ['.cts'],
+  '.js': ['.ts', '.tsx', '.d.ts'],
+  '.mjs': ['.mts', '.d.mts'],
+  '.cjs': ['.cts', '.d.cts'],
 };
 const BUILTIN_MODULES = new Set(
   builtinModules.flatMap((moduleName) => [moduleName, moduleName.replace(/^node:/, '')]),
@@ -243,7 +244,7 @@ export function getSourceFiles(
   return globSync('src/**/*.{ts,tsx,mts,cts}', {
     cwd: repoRoot,
     ignore: [
-      'src/**/*.d.ts',
+      'src/**/*.d.{ts,mts,cts}',
       'src/**/node_modules/**',
       ...(includeApp ? [] : ['src/app/**']),
       ...ignoredRoots.map((root) => `${normalizePath(root)}/**`),
@@ -443,6 +444,7 @@ export function resolveInternalModule(
   const candidates = [
     unresolvedPath,
     ...runtimeSourceCandidates,
+    ...DECLARATION_EXTENSIONS.map((extension) => unresolvedPath + extension),
     ...TYPESCRIPT_EXTENSIONS.map((extension) => `${unresolvedPath}${extension}`),
     ...DIRECTORY_INDEXES.map((indexFile) => path.join(unresolvedPath, indexFile)),
   ];
