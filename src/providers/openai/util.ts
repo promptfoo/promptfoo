@@ -902,7 +902,7 @@ export function calculateOpenAICost(
   audioPromptTokens?: number,
   audioCompletionTokens?: number,
 ): number | undefined {
-  if (!audioPromptTokens && !audioCompletionTokens) {
+  if (audioPromptTokens === undefined && audioCompletionTokens === undefined) {
     return calculateCost(modelName, config, promptTokens, completionTokens, OPENAI_BILLING_MODELS);
   }
 
@@ -925,11 +925,17 @@ export function calculateOpenAICost(
     return undefined;
   }
 
-  let totalCost = 0;
-
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-  totalCost += inputCost * promptTokens + outputCost * completionTokens;
+  const textCost = calculateCost(
+    modelName,
+    config,
+    promptTokens,
+    completionTokens,
+    OPENAI_BILLING_MODELS,
+  );
+  if (textCost === undefined) {
+    return undefined;
+  }
+  let totalCost = textCost;
 
   if ('audioInput' in model.cost || 'audioOutput' in model.cost) {
     const modelAudioInputCost: number =

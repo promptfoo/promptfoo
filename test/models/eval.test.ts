@@ -221,6 +221,21 @@ describe('evaluator', () => {
     });
   });
 
+  describe('setResults replacement', () => {
+    it('replaces persisted rows and clears them when given an empty set', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1 });
+      const [existing] = await EvalResult.findManyByEvalId(eval_.id);
+      expect(existing).toBeDefined();
+
+      await eval_.setResults([existing]);
+      expect(await EvalResult.findManyByEvalId(eval_.id)).toHaveLength(1);
+
+      await eval_.setResults([]);
+      expect(await EvalResult.findManyByEvalId(eval_.id)).toHaveLength(0);
+      expect(await getCachedResultsCount(eval_.id)).toBe(0);
+    });
+  });
+
   describe('fetchResultsBatched', () => {
     it('returns in-memory results in batches for non-persisted evals', async () => {
       const eval_ = new Eval({});
@@ -1763,6 +1778,21 @@ describe('evaluator', () => {
         );
         expect(hasMetric).toBe(true);
       }
+    });
+
+    it('ignores malformed filter entries while applying valid filters', async () => {
+      const validFilter = JSON.stringify({
+        logicOperator: 'and',
+        type: 'metric',
+        operator: 'equals',
+        value: 'accuracy',
+      });
+      const valid = await evalWithResults.getTablePage({ filters: [validFilter] });
+      const mixed = await evalWithResults.getTablePage({
+        filters: ['{bad json', 'null', '[]', validFilter],
+      });
+      expect(mixed.filteredCount).toBe(valid.filteredCount);
+      expect(mixed.body).toEqual(valid.body);
     });
 
     it('should combine multiple filter types', async () => {

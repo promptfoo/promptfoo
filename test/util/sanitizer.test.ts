@@ -370,6 +370,21 @@ describe('sanitizeObject', () => {
       expect(parsed).toEqual({ password: '[REDACTED]', data: 'public' });
     });
 
+    it('redacts a JSON-encoded secret string', () => {
+      const secret = 'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890';
+      expect(sanitizeObject(JSON.stringify(secret))).toBe('"[REDACTED]"');
+    });
+
+    it('bounds nested JSON-encoded string sanitization', () => {
+      const nested = Array.from({ length: 10 }, () => '"').reduce(
+        (value) => JSON.stringify(value),
+        'sk-proj-abcdefghijklmnopqrstuvwxyz1234567890',
+      );
+      const sanitized = sanitizeObject(nested, { maxDepth: 3 });
+      expect(sanitized).not.toContain('sk-proj-');
+      expect(sanitized).toContain('[REDACTED]');
+    });
+
     it('should return invalid JSON strings unchanged', () => {
       const invalidJson = '{invalid json}';
       expect(sanitizeObject(invalidJson)).toBe(invalidJson);
@@ -441,6 +456,32 @@ describe('sanitizeObject', () => {
           'inline test case',
           'az://account/container/b.yaml?sp=r&sig=secret-b',
           'az://account/container/a.yaml?sp=r&sig=secret-a',
+        ],
+      });
+    });
+
+    it('does not restore ambiguous signatures for the same Azure Blob URI', () => {
+      const redacted = 'az://account/container/a.yaml?sp=r&sig=%5BREDACTED%5D';
+      const stored = {
+        tests: [
+          { label: 'first', uri: 'az://account/container/a.yaml?sp=r&sig=secret-a' },
+          { label: 'second', uri: 'az://account/container/a.yaml?sp=r&sig=secret-b' },
+        ],
+      };
+      expect(
+        restoreAzureBlobSasTokens(
+          {
+            tests: [
+              { label: 'second', uri: redacted },
+              { label: 'first', uri: redacted },
+            ],
+          },
+          stored,
+        ),
+      ).toEqual({
+        tests: [
+          { label: 'second', uri: redacted },
+          { label: 'first', uri: redacted },
         ],
       });
     });
@@ -1309,7 +1350,17 @@ describe('sanitizeObject', () => {
       });
 
       const result = sanitizeObject(input, { throwOnError: false });
-      expect(result).toEqual(input);
+      expect(result).toBe('[REDACTED]');
+    });
+
+    it('does not return raw input when an enumerable getter throws', () => {
+      const input = {
+        password: 'secret-value',
+        get broken() {
+          throw new Error('Getter failed');
+        },
+      };
+      expect(sanitizeObject(input)).toBe('[REDACTED]');
     });
 
     it('should throw errors when throwOnError is true', () => {
