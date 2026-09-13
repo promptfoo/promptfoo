@@ -8,7 +8,7 @@ import { globSync } from 'glob';
 import ora from 'ora';
 import { z } from 'zod';
 import { disableCache } from '../cache';
-import cliState from '../cliState';
+import cliState, { withGradingProviderTracker } from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
@@ -803,6 +803,7 @@ export async function doEval(
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
         basePath: cliState.basePath,
       });
+      trackProvider?.(testSuite.defaultTest.options.provider);
       // Also update cliState.config so redteam providers can access the grader
       if (cliState.config) {
         // Normalize string shorthand to object
@@ -1323,10 +1324,31 @@ export async function doEval(
 
   const runEvaluation = async (initialization?: boolean) => {
     const ownedProviders = new Set<ApiProvider>();
+    let evaluationError: unknown;
     try {
-      return await runEvaluationBody(initialization, (provider) => ownedProviders.add(provider));
+      return await withGradingProviderTracker(
+        (provider) => ownedProviders.add(provider),
+        () => runEvaluationBody(initialization, (provider) => ownedProviders.add(provider)),
+      );
+    } catch (error) {
+      evaluationError = error;
+      throw error;
     } finally {
-      await Promise.allSettled([...ownedProviders].map(async (provider) => provider.cleanup?.()));
+      const results = await Promise.allSettled(
+        [...ownedProviders]
+          .filter(
+            (provider) =>
+              typeof (provider as ApiProvider & { shutdown?: unknown }).shutdown !== 'function',
+          )
+          .map(async (provider) => provider.cleanup?.()),
+      );
+      const cleanupError = results.find((result) => result.status === 'rejected')?.reason;
+      if (cleanupError && evaluationError === undefined) {
+        throw cleanupError;
+      }
+      if (cleanupError) {
+        logger.warn('Provider cleanup failed after evaluation error', { error: cleanupError });
+      }
     }
   };
 

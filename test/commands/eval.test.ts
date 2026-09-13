@@ -6,7 +6,7 @@ import { Command } from 'commander';
 import { globSync } from 'glob';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
-import cliState from '../../src/cliState';
+import cliState, { trackGradingProvider } from '../../src/cliState';
 import {
   doEval as commandDoEval,
   EvalCommandSchema as commandEvalCommandSchema,
@@ -2145,6 +2145,74 @@ describe('evalCommand', () => {
     );
 
     expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('should track lazy grading providers and surface cleanup failures', async () => {
+    const cleanupError = new Error('cleanup failed');
+    const provider = {
+      id: () => 'lazy-grader',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn().mockRejectedValue(cleanupError),
+    } as ApiProvider;
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      trackGradingProvider(provider);
+      return evalRecord as Eval;
+    });
+
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(cleanupError);
+    expect(provider.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('should preserve evaluation failures after grading cleanup fails', async () => {
+    const provider = {
+      id: () => 'lazy-grader',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn().mockRejectedValue(new Error('cleanup failed')),
+    } as ApiProvider;
+    // Keep the module-level warning spy intact for the randomized suite order.
+    const warnSpy = vi.spyOn(logger, 'warn');
+    vi.mocked(evaluate).mockImplementationOnce(async () => {
+      trackGradingProvider(provider);
+      throw new Error('evaluation failed');
+    });
+
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      'evaluation failed',
+    );
+    expect(warnSpy).toHaveBeenCalledWith('Provider cleanup failed after evaluation error', {
+      error: expect.any(Error),
+    });
+  });
+
+  it('should track direct CLI graders without double-cleaning registry providers', async () => {
+    const grader = {
+      id: () => 'cli-grader',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn(),
+    } as ApiProvider;
+    const registryProvider = {
+      id: () => 'registry-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn(),
+      shutdown: vi.fn(),
+    } as ApiProvider & { shutdown: () => void };
+    vi.mocked(loadApiProvider).mockResolvedValueOnce(grader);
+    vi.mocked(resolveConfigs).mockImplementationOnce(async (_cmd, _config, _type, track) => {
+      track?.(registryProvider);
+      return {
+        config: {} as UnifiedConfig,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+      };
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval({ grader: 'plugin:grader' }, defaultConfig, defaultConfigPath, {});
+
+    expect(grader.cleanup).toHaveBeenCalledOnce();
+    expect(registryProvider.cleanup).not.toHaveBeenCalled();
   });
 
   it('should handle redteam config', async () => {
