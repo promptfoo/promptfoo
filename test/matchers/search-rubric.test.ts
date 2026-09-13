@@ -171,6 +171,9 @@ describe('matchesSearchRubric', () => {
         pass: false,
         score: 0,
         reason: 'Search rubric evaluation failed: search unavailable',
+        // Tagged so inverse-aware callers propagate the failure verbatim
+        // instead of flipping a transport error into a spurious pass.
+        metadata: { graderError: true },
       }),
     );
   });
