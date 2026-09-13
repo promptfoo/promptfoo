@@ -250,6 +250,44 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('Tokens used: 400');
   });
 
+  it('does not count aggregate agent usage with token-bearing turn descendants', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 100, source: 'trace' } },
+      renderedValue: { max: 100, source: 'trace' },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [
+            {
+              spanId: 'agent',
+              name: 'invoke_agent Codex',
+              startTime: 0,
+              endTime: 100,
+              attributes: {
+                'gen_ai.operation.name': 'invoke_agent',
+                'gen_ai.usage.total_tokens': 100,
+              },
+            },
+            {
+              spanId: 'turn',
+              parentSpanId: 'agent',
+              name: 'gen_ai.turn 1',
+              startTime: 10,
+              endTime: 90,
+              attributes: { 'gen_ai.usage.total_tokens': 100 },
+            },
+          ],
+        },
+      },
+    };
+
+    const result = handleTokensUsed(params);
+    expect(result.pass).toBe(true);
+    expect(result.reason).toContain('Tokens used: 100');
+  });
+
   it('counts cyclic malformed span hierarchies without failing open', () => {
     const params: AssertionParams = {
       ...baseParams,

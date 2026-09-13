@@ -105,6 +105,38 @@ function invalidTokenUsageAttribute(
   return null;
 }
 
+function aggregateAgentSpanIds(spans: TraceSpan[]): Set<string> {
+  const byId = new Map(spans.map((span) => [span.spanId, span]));
+  const aggregateIds = new Set<string>();
+  const visited = new Set<string>();
+  const pending = spans
+    .filter(
+      (span) => span.name.startsWith('gen_ai.turn ') && hasTokenUsageAttributes(span.attributes),
+    )
+    .map((span) => span.parentSpanId)
+    .filter((id): id is string => id !== undefined);
+
+  while (pending.length > 0) {
+    const id = pending.pop()!;
+    if (visited.has(id)) {
+      continue;
+    }
+    visited.add(id);
+    const span = byId.get(id);
+    if (!span) {
+      continue;
+    }
+    if (span.attributes?.['gen_ai.operation.name'] === 'invoke_agent') {
+      aggregateIds.add(id);
+    }
+    if (span.parentSpanId) {
+      pending.push(span.parentSpanId);
+    }
+  }
+
+  return aggregateIds;
+}
+
 function tokensFromTrace(spans: TraceSpan[], pattern: string): TraceTokenUsage {
   const matchedSpans = spans.filter((span) => matchesPattern(span.name, pattern));
   const invalidAttribute = matchedSpans
@@ -116,11 +148,14 @@ function tokensFromTrace(spans: TraceSpan[], pattern: string): TraceTokenUsage {
     );
   }
 
+  const aggregateIds = aggregateAgentSpanIds(matchedSpans);
   return {
     hasUsage: matchedSpans.some((span) => hasTokenUsageAttributes(span.attributes)),
-    // OpenTelemetry usage belongs to the individual GenAI operation span. Parentage alone
-    // does not establish that one span aggregates another, so summing is the only safe budget.
-    total: matchedSpans.reduce((sum, span) => sum + sumTokenAttributes(span.attributes), 0),
+    total: matchedSpans.reduce(
+      (sum, span) =>
+        aggregateIds.has(span.spanId) ? sum : sum + sumTokenAttributes(span.attributes),
+      0,
+    ),
   };
 }
 
