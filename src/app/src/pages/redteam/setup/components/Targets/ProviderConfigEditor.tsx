@@ -504,6 +504,12 @@ function ProviderConfigEditor({
         errors.push('Provider ID is required');
       }
       if (
+        providerType === 'bedrock-agent' &&
+        (typeof provider.config?.agentAliasId !== 'string' || !provider.config.agentAliasId.trim())
+      ) {
+        errors.push('Agent Alias ID is required');
+      }
+      if (
         providerType === 'openinterpreter' &&
         provider.id?.trim() &&
         provider.id !== 'openinterpreter' &&

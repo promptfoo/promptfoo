@@ -112,6 +112,64 @@ describe('eval provider configuration round trips', () => {
   });
 
   it.each([
+    { aliasCase: 'missing', agentAliasId: undefined, valid: false },
+    { aliasCase: 'null', agentAliasId: null, valid: false },
+    { aliasCase: 'empty', agentAliasId: '', valid: false },
+    { aliasCase: 'whitespace', agentAliasId: ' \t ', valid: false },
+    { aliasCase: 'number', agentAliasId: 123, valid: false },
+    { aliasCase: 'array', agentAliasId: ['ALIAS456'], valid: false },
+    { aliasCase: 'valid', agentAliasId: 'ALIAS456', valid: true },
+  ])(
+    'validates a $aliasCase Bedrock alias before Save and Run',
+    async ({ agentAliasId, valid }) => {
+      const user = userEvent.setup();
+      const initialProvider = {
+        id: 'bedrock:agents:AGENT123',
+        label: 'Bedrock agent',
+        config: { agentAliasId: 'ORIGINAL', region: 'eu-west-1', enableTrace: true },
+      };
+      act(() =>
+        useStore.getState().setConfig({
+          providers: [initialProvider],
+          prompts: ['Hello'],
+          tests: [{}],
+        }),
+      );
+      mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: 'bedrock-job' } }]);
+      renderWithProviders(<EvalProviderSetup />);
+      await user.click(screen.getByRole('button', { name: 'Edit Bedrock agent' }));
+      const editor = screen.getByRole('textbox', { name: 'Provider configuration JSON' });
+      await replaceText(user, editor, JSON.stringify({ ...initialProvider.config, agentAliasId }));
+      await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+      const expected = {
+        ...initialProvider,
+        config: { ...initialProvider.config, agentAliasId: 'ALIAS456' },
+      };
+      if (!valid) {
+        expect(useStore.getState().config.providers).toEqual([initialProvider]);
+        expect(screen.getAllByText('Agent Alias ID is required').length).toBeGreaterThan(0);
+        expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
+        expect(getCallApiMock().mock.calls.filter(([path]) => path === '/eval/job')).toHaveLength(
+          0,
+        );
+        await replaceText(user, editor, JSON.stringify(expected.config));
+        expect(screen.getByRole('button', { name: 'Save Changes' })).toBeEnabled();
+        await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+      }
+
+      expect(useStore.getState().config.providers).toEqual([expected]);
+      expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual([
+        expected,
+      ]);
+      await user.click(screen.getByRole('button', { name: 'Run Eval' }));
+      const jobs = getCallApiMock().mock.calls.filter(([path]) => path === '/eval/job');
+      expect(jobs).toHaveLength(1);
+      expect(JSON.parse(jobs[0][1]!.body as string).providers).toEqual([expected]);
+    },
+  );
+
+  it.each([
     { type: 'vllm', apiBaseUrl: 'http://localhost:8000/v1' },
     { type: 'llamafile', apiBaseUrl: 'http://localhost:8080/v1' },
     { type: 'text-generation-webui', apiBaseUrl: 'http://localhost:5000/v1' },

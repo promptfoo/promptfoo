@@ -1,5 +1,5 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { act, screen } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as yaml from 'js-yaml';
 import { MemoryRouter } from 'react-router-dom';
@@ -9,6 +9,7 @@ import { useRedTeamTargetConfigValidation } from '../../hooks/useRedTeamTargetCo
 import { generateOrderedYaml } from '../../utils/yamlHelpers';
 import ProviderConfigEditor from './ProviderConfigEditor';
 import ProviderTypeSelector from './ProviderTypeSelector';
+import TargetConfiguration from './TargetConfiguration';
 import TargetTypeSelection from './TargetTypeSelection';
 
 import type { ProviderOptions } from '../../types';
@@ -98,6 +99,58 @@ describe('generated target configuration round trips', () => {
     passthrough: { chat_template_kwargs: { enable_thinking: false } },
   };
   const localId = 'openai:chat:tenant/served-model:Q4_K_M';
+
+  it.each([
+    { aliasCase: 'missing', agentAliasId: undefined, valid: false },
+    { aliasCase: 'null', agentAliasId: null, valid: false },
+    { aliasCase: 'empty', agentAliasId: '', valid: false },
+    { aliasCase: 'whitespace', agentAliasId: ' \t ', valid: false },
+    { aliasCase: 'number', agentAliasId: 123, valid: false },
+    { aliasCase: 'array', agentAliasId: ['ALIAS456'], valid: false },
+    { aliasCase: 'valid', agentAliasId: 'ALIAS456', valid: true },
+  ])('validates a $aliasCase Bedrock alias before Next', async ({ agentAliasId, valid }) => {
+    const user = userEvent.setup();
+    const target = {
+      id: 'bedrock-agent:AGENT123',
+      label: 'Bedrock agent',
+      config: { agentAliasId: 'ORIGINAL', region: 'eu-west-1', enableTrace: true },
+    };
+    act(() =>
+      useRedTeamConfig.setState({
+        config: { ...useRedTeamConfig.getState().config, target, prompts: ['{{prompt}}'] },
+        providerType: 'bedrock-agent',
+      }),
+    );
+    const onNext = vi.fn(() => useRedTeamConfig.getState().config.target);
+    renderWithProviders(
+      <MemoryRouter>
+        <TargetConfiguration onNext={onNext} onBack={vi.fn()} />
+      </MemoryRouter>,
+    );
+    const editor = screen.getByRole('textbox', { name: 'Target configuration JSON' });
+    await replaceText(user, editor, JSON.stringify({ ...target.config, agentAliasId }));
+    const next = within(screen.getByTestId('page-navigation')).getByRole('button', {
+      name: /Next/,
+    });
+    await user.click(next);
+
+    const expected = { ...target, config: { ...target.config, agentAliasId: 'ALIAS456' } };
+    if (!valid) {
+      expect(onNext).not.toHaveBeenCalled();
+      expect(screen.getAllByText('Agent Alias ID is required').length).toBeGreaterThan(0);
+      expect(next).toBeDisabled();
+      await replaceText(user, editor, JSON.stringify(expected.config));
+      expect(next).toBeEnabled();
+      await user.click(next);
+    }
+
+    expect(onNext).toHaveBeenCalledTimes(1);
+    expect(onNext).toHaveLastReturnedWith(expected);
+    expect(useRedTeamConfig.getState().config.target).toEqual(expected);
+    expect(JSON.parse(localStorage.getItem('redTeamConfig')!).state.config.target).toEqual(
+      expected,
+    );
+  });
 
   it.each(['llamafile', 'vllm', 'text-generation-webui', 'custom'] as const)(
     'restores the %s editor when a saved target has no provider type',
