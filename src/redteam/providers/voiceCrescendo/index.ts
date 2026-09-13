@@ -560,10 +560,10 @@ export class VoiceCrescendoProvider implements ApiProvider {
           mediaRedactionError ??= targetResponse.error;
         }
         for (const { assertion: redactionAssertion, index } of redactionAssertions) {
-          if (!test || targetResponse.error) {
+          if (!test || targetResponse.metadata?.redactionMediaOmitted === true) {
             break;
           }
-          const grader = getGraderById(redactionAssertion.type)!;
+          const grader = getGraderById(redactionAssertion.type.replace(/^not-/, ''))!;
           const { grade, rubric } = await runRedteamGrader(
             grader,
             voicePrompt,

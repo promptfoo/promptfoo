@@ -262,7 +262,7 @@ describeEvaluator('evaluator assertions', () => {
   );
 
   it.each(
-    ['receipt', 'static plan'].flatMap((source) =>
+    ['receipt', 'static plan', 'vars'].flatMap((source) =>
       ['repeat', 'prompts', 'providers'].map((expansion) => ({ source, expansion })),
     ),
   )(
@@ -280,9 +280,13 @@ describeEvaluator('evaluator assertions', () => {
           }
           if (phase === 'beforeEach' && 'test' in context) {
             expect(extensions).toEqual(['file://prepared-hook.js']);
-            const secret = secrets[hookCalls++];
+            const id = hookCalls++;
+            const secret = secrets[id];
+            if (source === 'vars') {
+              context.test.vars!.id = id;
+            }
             fs.writeFileSync(
-              receipt,
+              source === 'vars' ? path.join(directory, `receipt-${id}`) : receipt,
               source === 'static plan' ? JSON.stringify({ rawReceipt: secret }) : secret,
             );
           }
@@ -305,11 +309,17 @@ describeEvaluator('evaluator assertions', () => {
           extensions: ['file://original-hook.js'],
           tests: [
             {
+              vars: { id: 'initial' },
               assert: [
                 {
                   type: 'promptfoo:redteam:coding-agent:trace-redaction',
                   value:
-                    source === 'static plan' ? `file://${receipt}` : { rawReceiptPath: receipt },
+                    source === 'static plan'
+                      ? `file://${receipt}`
+                      : {
+                          rawReceiptPath:
+                            source === 'vars' ? path.join(directory, 'receipt-{{id}}') : receipt,
+                        },
                 },
               ],
             },

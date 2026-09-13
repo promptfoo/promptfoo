@@ -141,6 +141,48 @@ describe('runEval', () => {
   );
 
   it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'does not reuse a singular %s pass for different receipts',
+    async (plugin) => {
+      const type = `promptfoo:redteam:${plugin}` as const;
+      const results = await runEval({
+        ...defaultOptions,
+        prompt: { raw: 'Inspect report', label: 'report' },
+        provider: {
+          id: () => 'adaptive-target',
+          async callApi() {
+            return {
+              output: '[Response omitted for trace/artifact redaction.]',
+              metadata: {
+                redactionContentOmitted: true,
+                storedGraderResult: {
+                  pass: true,
+                  score: 1,
+                  reason: 'First receipt was not disclosed.',
+                  assertion: { type },
+                },
+              },
+            };
+          },
+        },
+        test: {
+          assert: ['FIRST_PRIVATE_ADAPTIVE_RECEIPT', 'SECOND_PRIVATE_ADAPTIVE_RECEIPT'].map(
+            (rawReceipt) => ({
+              type,
+              value: { rawReceipt },
+            }),
+          ),
+        },
+        conversations: {},
+        registers: {},
+      });
+      expect(results[0].success).toBe(false);
+      expect(results[0].gradingResult?.reason ?? results[0].error).toMatch(
+        /original response is unavailable|protected receipt/,
+      );
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
     'retains a singular adaptive failure for a direct %s assertion',
     async (plugin) => {
       const type = `promptfoo:redteam:${plugin}` as const;
@@ -172,6 +214,40 @@ describe('runEval', () => {
       expect(results[0].gradingResult?.reason).toContain('earlier turn');
     },
   );
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
+      ['complete', 'gradingIncomplete', 'graderError'].map((state) => ({ plugin, state })),
+    ),
+  )('negates only complete $plugin verdicts (state=$state)', async ({ plugin, state }) => {
+    const type = `not-promptfoo:redteam:${plugin}` as const;
+    const results = await runEval({
+      ...defaultOptions,
+      prompt: { raw: 'Inspect report', label: 'report' },
+      provider: {
+        id: () => 'adaptive-target',
+        async callApi() {
+          return {
+            output: '[Response omitted for trace/artifact redaction.]',
+            metadata: {
+              redactionContentOmitted: true,
+              storedGraderResult: {
+                pass: false,
+                score: 0,
+                reason: 'Stored grading result.',
+                metadata: state === 'complete' ? {} : { [state]: true },
+                assertion: { type },
+              },
+            },
+          };
+        },
+      },
+      test: { assert: [{ type, value: { rawReceipt: 'PRIVATE_ADAPTIVE_RECEIPT' } }] },
+      conversations: {},
+      registers: {},
+    });
+    expect(results[0].success).toBe(state === 'complete');
+    expect(results[0].gradingResult?.score).toBe(state === 'complete' ? 1 : 0);
+  });
 
   it.each(
     (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>

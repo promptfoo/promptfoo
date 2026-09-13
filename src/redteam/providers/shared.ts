@@ -29,6 +29,7 @@ import {
 } from '../../types/index';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
+import { sanitizeCodingAgentVerifierInputs } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
@@ -665,6 +666,31 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
         ? privateResponse.output
         : (safeJsonStringify(privateResponse.output) ?? '');
     args = [...args.slice(0, -1), { ...context, providerResponse: privateResponse }] as TArgs;
+  }
+  if (requiresTraceRedaction(test.assert) && !TRACE_REDACTION_ASSERTIONS.has(grader.id)) {
+    const response = sanitizeRedactionResult({
+      response: context?.providerResponse ?? { output },
+      testCase: test,
+    }).response;
+    output = String(response.output ?? '');
+    if (context) {
+      args = [
+        ...args.slice(0, -1),
+        {
+          ...context,
+          providerResponse: response,
+          traceData: undefined,
+          traceContext: undefined,
+          traceSummary: undefined,
+        },
+      ] as TArgs;
+    }
+    const { gradingArguments, ...publicTest } = sanitizeCodingAgentVerifierInputs({
+      ...test,
+      gradingArguments: args,
+    });
+    test = publicTest;
+    args = gradingArguments;
   }
   const invoke = () => grader.getResult(prompt, output, test, ...args);
   const tracingContext = getProviderCallTracingContext();

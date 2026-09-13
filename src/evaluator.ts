@@ -3617,7 +3617,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         continue;
       }
       // Timeout execution copies RunEvalOptions but retains this per-case test object.
-      evalStep.test = { ...evalStep.test };
+      evalStep.test = { ...evalStep.test, vars: structuredClone(evalStep.test.vars ?? {}) };
       const startedAt = Date.now();
       const timeoutMs = this.options.timeoutMs || getEvalTimeoutMs();
       let timeoutId: NodeJS.Timeout | undefined;

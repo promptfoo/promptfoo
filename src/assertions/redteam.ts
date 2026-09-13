@@ -70,6 +70,7 @@ function createInitialGradingContext({
 export const handleRedteam = async ({
   assertion,
   baseType,
+  inverse,
   test,
   prompt,
   outputString,
@@ -78,18 +79,36 @@ export const handleRedteam = async ({
   providerResponse,
   assertionValueContext,
 }: AssertionParams): Promise<GradingResult> => {
-  const assertionIndex = assertionValueContext.test.assert
-    ?.flatMap((item) => (item.type === 'assert-set' ? item.assert : [item]))
-    .indexOf(assertion);
+  const applyInverse = (result: GradingResult): GradingResult => {
+    if (!inverse) {
+      return result;
+    }
+    const incomplete = result.metadata?.graderError || result.metadata?.gradingIncomplete;
+    return {
+      ...result,
+      pass: !incomplete && !result.pass,
+      score: incomplete
+        ? 0
+        : Math.min(1, Math.max(0, 1 - (Number.isFinite(result.score) ? result.score : 0))),
+    };
+  };
+  const originalAssertions = assertionValueContext.test.assert?.flatMap((item) =>
+    item.type === 'assert-set' ? item.assert : [item],
+  );
+  const assertionIndex = originalAssertions?.indexOf(assertion);
+  const canReuseSingularResult =
+    !TRACE_REDACTION_ASSERTIONS.has(baseType) ||
+    originalAssertions?.filter((item) => item.type.replace(/^not-/, '') === baseType).length === 1;
   const indexedResults = providerResponse.metadata?.storedGraderResults;
   const singularResult = providerResponse.metadata?.storedGraderResult;
   const directPrivacyMatch =
     !test.metadata?.pluginId &&
-    TRACE_REDACTION_ASSERTIONS.has(assertion.type) &&
+    TRACE_REDACTION_ASSERTIONS.has(baseType) &&
     singularResult?.assertion?.type === assertion.type;
   const storedResult =
     (assertionIndex !== undefined && indexedResults?.[assertionIndex]) ||
     (!indexedResults &&
+      canReuseSingularResult &&
       (directPrivacyMatch ||
         (test.metadata?.pluginId && assertion.type.includes(test.metadata.pluginId))) &&
       singularResult);
@@ -100,7 +119,7 @@ export const handleRedteam = async ({
       | undefined;
     const { hasAnyErrors } = analyzeGraderErrors(redteamHistory);
 
-    return {
+    return applyInverse({
       ...storedResult,
       assertion: {
         ...(storedResult.assertion ?? assertion),
@@ -112,10 +131,15 @@ export const handleRedteam = async ({
         // Propagate gradingIncomplete if any turns had grader errors
         ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
       },
-    };
+    });
   }
 
-  const grader = getGraderById(assertion.type);
+  invariant(
+    !TRACE_REDACTION_ASSERTIONS.has(baseType) ||
+      providerResponse.metadata?.redactionContentOmitted !== true,
+    'The original response is unavailable for local redaction verification.',
+  );
+  const grader = getGraderById(baseType);
   invariant(grader, `Unknown grader: ${baseType}`);
   const effectivePrompt = getRedteamPrompt(prompt, test);
   invariant(effectivePrompt, `Grader ${baseType} must have a prompt`);
@@ -167,7 +191,7 @@ export const handleRedteam = async ({
       gradingContext,
     );
 
-    return {
+    return applyInverse({
       ...grade,
       ...(grade.assertion || assertion
         ? {
@@ -183,7 +207,7 @@ export const handleRedteam = async ({
         ...test.metadata,
         ...grade.metadata,
       },
-    };
+    });
   } catch (error) {
     // For iterative strategies, check if only SOME turns had grader errors (not all).
     // If only some failed, we can be lenient. If ALL failed, we should still ERROR.
@@ -201,7 +225,7 @@ export const handleRedteam = async ({
         pluginId: test.metadata.pluginId,
       });
 
-      return {
+      return applyInverse({
         pass: true,
         score: 0,
         reason: `Some grading calls failed during iterative testing. Check the Messages tab for details.`,
@@ -211,7 +235,7 @@ export const handleRedteam = async ({
           gradingIncomplete: true,
           gradingError: errorMessage,
         },
-      };
+      });
     }
 
     // For non-iterative tests, tests without grader errors, or tests where ALL turns failed, re-throw

@@ -1960,6 +1960,39 @@ describe('redteam history blob storage', () => {
     },
   );
 
+  it('withholds private verifier inputs and traces from an adaptive sibling grader', async () => {
+    const secret = 'PRIVATE_SIBLING_RECEIPT';
+    const test: AtomicTestCase = {
+      vars: { rawReceipt: secret },
+      assert: [
+        { type: 'promptfoo:redteam:coding-agent:trace-redaction', value: { rawReceipt: secret } },
+      ],
+    };
+    const history = await externalizeResponseForRedteamHistory({ output: secret }, { test });
+    const grader = {
+      id: 'promptfoo:redteam:politics',
+      getResult: vi.fn().mockResolvedValue({ pass: true }),
+    };
+    await runRedteamGrader(
+      grader,
+      'Inspect',
+      history.output,
+      test,
+      undefined,
+      { rawReceipt: secret },
+      undefined,
+      undefined,
+      {
+        providerResponse: history,
+        traceData: { spans: [{ name: secret }] },
+        traceContext: { spans: [{ name: secret }] },
+        traceSummary: secret,
+      },
+    );
+    expect(JSON.stringify(grader.getResult.mock.calls)).not.toContain(secret);
+    expect(test.vars?.rawReceipt).toBe(secret);
+  });
+
   it('preserves eval-scoped blob storage for ordinary responses', async () => {
     const blobs = await import('../../../src/blobs/extractor');
     vi.spyOn(blobs, 'isBlobStorageEnabled').mockReturnValue(true);
