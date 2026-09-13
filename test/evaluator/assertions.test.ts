@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import * as blobExtractor from '../../src/blobs/extractor';
 import { evaluate } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
 import {
@@ -20,9 +21,13 @@ import { describeEvaluator } from './lifecycle';
 
 describeEvaluator('evaluator assertions', () => {
   it.each(
-    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
-      [1, 2].map((maxConcurrency) => ({ plugin, maxConcurrency })),
-    ),
+    (
+      [
+        'coding-agent:trace-redaction',
+        'harness:artifact-redaction',
+        'coding-agent:trace-log-exfil',
+      ] as const
+    ).flatMap((plugin) => [1, 2].map((maxConcurrency) => ({ plugin, maxConcurrency }))),
   )(
     'snapshots all $plugin receipts before targets run at concurrency $maxConcurrency',
     async ({ plugin, maxConcurrency }) => {
@@ -57,9 +62,11 @@ describeEvaluator('evaluator assertions', () => {
                   {
                     type: `promptfoo:redteam:${plugin}`,
                     value:
-                      index === 0
-                        ? { rawReceiptPaths: [receipt], redactedArtifactPath: artifacts[index] }
-                        : { redactedArtifact: { receiptPath: receipt, path: artifacts[index] } },
+                      plugin === 'coding-agent:trace-log-exfil'
+                        ? { traceLogReceiptPath: receipt, traceLogArtifactPath: artifacts[index] }
+                        : index === 0
+                          ? { rawReceiptPaths: [receipt], redactedArtifactPath: artifacts[index] }
+                          : { redactedArtifact: { receiptPath: receipt, path: artifacts[index] } },
                   },
                 ],
               },
@@ -84,6 +91,211 @@ describeEvaluator('evaluator assertions', () => {
       } finally {
         fs.rmSync(directory, { recursive: true, force: true });
       }
+    },
+  );
+
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
+      [1, 2].flatMap((maxConcurrency) =>
+        ['missing', 'existing'].map((initial) => ({ plugin, maxConcurrency, initial })),
+      ),
+    ),
+  )(
+    'captures $initial receipts initialized by beforeEach for $plugin at concurrency $maxConcurrency',
+    async ({ plugin, maxConcurrency, initial }) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-receipts-'));
+      try {
+        const secrets = ['PRIVATE_HOOK_FIRST_RECEIPT', 'PRIVATE_HOOK_SECOND_RECEIPT'];
+        const receipts = secrets.map((_, index) => path.join(directory, `receipt-${index}`));
+        if (initial === 'existing') {
+          receipts.forEach((file) => fs.writeFileSync(file, 'PRIVATE_INITIAL_RECEIPT'));
+        }
+        const events: string[] = [];
+        vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+          if (phase === 'beforeEach' && 'test' in context) {
+            const index = Number(context.test.vars?.index);
+            fs.writeFileSync(receipts[index], secrets[index]);
+            events.push(`hook-${index}`);
+          }
+          return context;
+        });
+        vi.mocked(mockApiProvider.callApi).mockImplementation(async (_prompt, context) => {
+          const index = Number(context?.vars.index);
+          events.push(`target-${index}`);
+          receipts.forEach((file) => fs.writeFileSync(file, 'DECOY_FROM_TARGET'));
+          return { output: secrets[index] };
+        });
+        const suite: TestSuite = {
+          providers: [mockApiProvider],
+          prompts: [toPrompt('Inspect protected receipts')],
+          extensions: ['file://initialize-receipts.js'],
+          tests: receipts.map((receipt, index) => ({
+            vars: { index },
+            assert: [{ type: `promptfoo:redteam:${plugin}`, value: { rawReceiptPath: receipt } }],
+          })),
+        };
+        const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+        await evaluate(suite, evalRecord, { maxConcurrency, timeoutMs: 10000 });
+        const summary = await evalRecord.toEvaluateSummary();
+        expect(summary.results).toHaveLength(2);
+        expect(
+          summary.results.every(
+            (row) => !row.success && row.failureReason === ResultFailureReason.ASSERT,
+          ),
+        ).toBe(true);
+        expect(
+          summary.results.every((row) => row.gradingResult?.reason.includes('raw sensitive value')),
+        ).toBe(true);
+        expect(events.slice(0, 2)).toEqual(['hook-0', 'hook-1']);
+        expect(events.filter((event) => event.startsWith('hook-'))).toEqual(['hook-0', 'hook-1']);
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it('captures each repeated hook value in a shared file and uses beforeAll extensions', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'repeat-hook-receipt-'));
+    try {
+      const receipt = path.join(directory, 'receipt');
+      let hookCalls = 0;
+      let targetCalls = 0;
+      const secrets = ['PRIVATE_FIRST_REPEAT_RECEIPT', 'PRIVATE_SECOND_REPEAT_RECEIPT'];
+      vi.mocked(runExtensionHook).mockImplementation(async (extensions, phase, context) => {
+        if (phase === 'beforeAll' && 'suite' in context) {
+          return { suite: { ...context.suite, extensions: ['file://prepared-hook.js'] } };
+        }
+        if (phase === 'beforeEach' && 'test' in context) {
+          expect(extensions).toEqual(['file://prepared-hook.js']);
+          fs.writeFileSync(receipt, secrets[hookCalls++]);
+        }
+        return context;
+      });
+      vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+        expect(hookCalls).toBe(2);
+        fs.writeFileSync(receipt, 'PRIVATE_TARGET_DECOY_RECEIPT');
+        return { output: secrets[targetCalls++] };
+      });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect receipts')],
+        extensions: ['file://original-hook.js'],
+        tests: [
+          {
+            assert: [
+              {
+                type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                value: { rawReceiptPath: receipt },
+              },
+            ],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, { repeat: 2, maxConcurrency: 2, timeoutMs: 10000 });
+      const summary = await record.toEvaluateSummary();
+      expect(hookCalls).toBe(2);
+      expect(targetCalls).toBe(2);
+      expect(
+        summary.results.every(
+          (result) =>
+            !result.success && result.gradingResult?.reason.includes('raw sensitive value'),
+        ),
+      ).toBe(true);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each([false, true])(
+    'preserves hook errors for file receipt tests: %s',
+    async (protectedReceipt) => {
+      const error = new Error('Fixture setup failed');
+      let hookCalls = 0;
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+        if (phase === 'beforeEach') {
+          hookCalls++;
+          throw error;
+        }
+        return context;
+      });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect receipts')],
+        extensions: ['file://hook.js'],
+        tests: [
+          {
+            assert: protectedReceipt
+              ? [
+                  {
+                    type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                    value: { rawReceiptPath: 'missing-receipt' },
+                  },
+                ]
+              : [{ type: 'equals', value: 'Clean' }],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await expect(
+        evaluate(suite, record, { maxConcurrency: 1, timeoutMs: 10000 }),
+      ).rejects.toThrow(error);
+      expect(hookCalls).toBe(1);
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([false, true])(
+    'preserves hook timeouts for file receipt tests: %s',
+    async (protectedReceipt) => {
+      let hookCalls = 0;
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, phase, context) => {
+        if (phase === 'beforeEach') {
+          hookCalls++;
+          await new Promise(() => {});
+        }
+        return context;
+      });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Inspect receipts')],
+        extensions: ['file://hook.js'],
+        tests: [
+          {
+            assert: protectedReceipt
+              ? [
+                  {
+                    type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                    value: { rawReceiptPath: 'missing-receipt' },
+                  },
+                ]
+              : [{ type: 'equals', value: 'Clean' }],
+          },
+        ],
+      };
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const pending = evaluate(suite, record, { maxConcurrency: 1, timeoutMs: 25 });
+        await vi.waitFor(() => expect(hookCalls).toBe(1));
+        await vi.advanceTimersByTimeAsync(25);
+        await pending;
+      } finally {
+        vi.useRealTimers();
+      }
+      const summary = await record.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]).toMatchObject({
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+      });
+      expect(summary.results[0].error).toContain(
+        protectedReceipt
+          ? 'Error details omitted for trace/artifact redaction.'
+          : 'Evaluation timed out after 25ms',
+      );
+      expect(hookCalls).toBe(1);
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
     },
   );
 

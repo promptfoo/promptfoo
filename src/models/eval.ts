@@ -1,4 +1,4 @@
-import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, or, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -1463,6 +1463,75 @@ export default class Eval {
     };
   }
 
+  private async getPrivateTraceIds(trace?: TraceData) {
+    // Redaction graders need local forensic evidence; exports and sharing must omit it.
+    const privateTraceIds = new Set<string>();
+    const privateTestCaseIds = new Set<string>();
+    const excludePrivateTrace = (
+      result: Pick<EvaluateResult, 'testCase' | 'testIdx' | 'promptIdx'> & {
+        traceId?: string | null;
+      },
+    ) => {
+      if (!requiresTraceRedaction(result.testCase.assert)) {
+        return;
+      }
+      if (result.traceId) {
+        privateTraceIds.add(result.traceId);
+      }
+      privateTestCaseIds.add(`${result.testIdx}-${result.promptIdx}`);
+      const testCaseId = result.testCase.metadata?.testCaseId;
+      if (typeof testCaseId === 'string') {
+        privateTestCaseIds.add(testCaseId);
+      }
+      if ('id' in result.testCase && typeof result.testCase.id === 'string') {
+        privateTestCaseIds.add(result.testCase.id);
+      }
+    };
+    for (const result of this.failedResults.values()) {
+      excludePrivateTrace(result);
+    }
+    const traceIdColumn = sql<string | null>`CASE WHEN json_valid(${evalResultsTable.metadata})
+      THEN json_extract(${evalResultsTable.metadata}, '$.__promptfoo.traceLinkage.traceId') END`;
+    const batches =
+      trace && this.persisted
+        ? [
+            await (await getDb())
+              .select({
+                testCase: evalResultsTable.testCase,
+                traceId: traceIdColumn,
+                testIdx: evalResultsTable.testIdx,
+                promptIdx: evalResultsTable.promptIdx,
+              })
+              .from(evalResultsTable)
+              .where(
+                and(
+                  eq(evalResultsTable.evalId, this.id),
+                  or(
+                    eq(traceIdColumn, trace.traceId),
+                    sql`${evalResultsTable.testIdx} || '-' || ${evalResultsTable.promptIdx} = ${trace.testCaseId}`,
+                    sql`CASE WHEN json_valid(${evalResultsTable.testCase}) THEN
+              json_extract(${evalResultsTable.testCase}, '$.metadata.testCaseId') END = ${trace.testCaseId}`,
+                    sql`CASE WHEN json_valid(${evalResultsTable.testCase}) THEN
+              json_extract(${evalResultsTable.testCase}, '$.id') END = ${trace.testCaseId}`,
+                  ),
+                ),
+              ),
+          ]
+        : this.fetchResultsBatched();
+    for await (const batch of batches) {
+      batch.forEach(excludePrivateTrace);
+    }
+    return { privateTraceIds, privateTestCaseIds };
+  }
+
+  async isTracePrivate(trace: TraceData): Promise<boolean> {
+    if (trace.metadata?.privateForensicEvidence === true) {
+      return true;
+    }
+    const { privateTraceIds, privateTestCaseIds } = await this.getPrivateTraceIds(trace);
+    return privateTraceIds.has(trace.traceId) || privateTestCaseIds.has(trace.testCaseId);
+  }
+
   async getTraces(
     options: { normalizeSpans?: boolean; throwOnError?: boolean } = {},
   ): Promise<TraceData[]> {
@@ -1472,33 +1541,7 @@ export default class Eval {
       if (!tracesData.length) {
         return [];
       }
-      // Redaction graders need local forensic evidence; exports and sharing must omit it.
-      const privateTraceIds = new Set<string>();
-      const privateTestCaseIds = new Set<string>();
-      const excludePrivateTrace = (
-        result: Pick<EvaluateResult, 'testCase' | 'traceId' | 'testIdx' | 'promptIdx'>,
-      ) => {
-        if (!requiresTraceRedaction(result.testCase.assert)) {
-          return;
-        }
-        if (result.traceId) {
-          privateTraceIds.add(result.traceId);
-        }
-        privateTestCaseIds.add(`${result.testIdx}-${result.promptIdx}`);
-        const testCaseId = result.testCase.metadata?.testCaseId;
-        if (typeof testCaseId === 'string') {
-          privateTestCaseIds.add(testCaseId);
-        }
-        if ('id' in result.testCase && typeof result.testCase.id === 'string') {
-          privateTestCaseIds.add(result.testCase.id);
-        }
-      };
-      for (const result of this.failedResults.values()) {
-        excludePrivateTrace(result);
-      }
-      for await (const batch of this.fetchResultsBatched()) {
-        batch.forEach(excludePrivateTrace);
-      }
+      const { privateTraceIds, privateTestCaseIds } = await this.getPrivateTraceIds();
 
       const publicTraces = tracesData.filter(
         (trace) =>

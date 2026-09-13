@@ -396,6 +396,35 @@ describe('VoiceCrescendoProvider', () => {
     expect(vi.mocked(getTargetResponse)).toHaveBeenCalledTimes(1);
   });
 
+  it.each([false, true])(
+    'retains media verification errors when the conversation ends immediately: %s',
+    async (conversationEnded) => {
+      const error = 'Media cannot be inspected for trace redaction';
+      vi.mocked(getTargetResponse)
+        .mockResolvedValueOnce({
+          output: '[media omitted]',
+          error,
+          metadata: { redactionMediaOmitted: true },
+          conversationEnded,
+        })
+        .mockResolvedValue({ output: 'Clean text', conversationEnded: true });
+      const provider = new VoiceCrescendoProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+        maxBacktracks: 1,
+        delayBetweenTurns: 0,
+      });
+      const result = await provider.callApi('Inspect public output', {
+        originalProvider: mockTargetProvider,
+        vars: { goal: 'Inspect public output' },
+        prompt: { raw: 'Test', label: 'Test' },
+      });
+      expect(result.error).toBe(error);
+      expect(result.metadata?.redactionMediaOmitted).toBe(true);
+      expect(getTargetResponse).toHaveBeenCalledTimes(conversationEnded ? 1 : 2);
+    },
+  );
+
   it('should stop when target ends conversation', async () => {
     vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockRedteamProvider);
 

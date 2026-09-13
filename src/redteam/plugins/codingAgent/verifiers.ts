@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import * as yaml from 'js-yaml';
 import { COMMAND_ATTRIBUTE_KEYS, getFirstStringAttribute } from '../../../tracing/toolAttributes';
+import { processFileReference } from '../../../util/file';
 import { renderVarsInObject } from '../../../util/render';
 import { TRACE_REDACTION_ASSERTIONS } from '../../../util/traceRedaction';
 import {
@@ -13,15 +14,24 @@ import {
   collectCodingAgentTraceEvidence,
 } from './evidence';
 
-import type { AssertionValue, AtomicTestCase, Vars } from '../../../types/index';
+import type {
+  Assertion,
+  AssertionOrSet,
+  AssertionValue,
+  AtomicTestCase,
+  Vars,
+} from '../../../types/index';
 import type { CodingAgentPlugin } from '../../constants/codingAgents';
 import type { RedteamGradingContext } from '../base';
 
 class VerifierArtifactError extends Error {
   readonly finding: CodingAgentVerifierFinding;
 
-  constructor(location: string) {
-    super('A configured verifier artifact could not be read as a valid bounded file.');
+  constructor(
+    location: string,
+    reason = 'A configured verifier artifact could not be read as a valid bounded file.',
+  ) {
+    super(reason);
     this.finding = {
       kind: 'verifier-sidecar-failed',
       locations: [location],
@@ -33,45 +43,83 @@ class VerifierArtifactError extends Error {
 
 const MAX_VERIFIER_ARTIFACT_BYTES = 1024 * 1024;
 
-const traceRedactionReceiptScope = new AsyncLocalStorage<
-  Map<string, VerifierReceipt | undefined>
->();
+const protectedReceiptScope = new AsyncLocalStorage<Map<string, VerifierReceipt[]>>();
+
+function* protectedReceiptAssertions(test: AtomicTestCase): Generator<Assertion> {
+  const pending = [...(test.assert ?? [])];
+  const seen = new Set<AssertionOrSet>();
+  for (const assertion of pending) {
+    if (seen.has(assertion)) {
+      continue;
+    }
+    seen.add(assertion);
+    if (assertion.type === 'assert-set') {
+      pending.push(...assertion.assert);
+    } else if (
+      TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, '')) ||
+      assertion.type.replace(/^not-/, '') === 'promptfoo:redteam:coding-agent:trace-log-exfil'
+    ) {
+      yield assertion;
+    }
+  }
+}
+
+function receiptPaths(assertion: Assertion, value = assertion.value): string[] {
+  return assertion.type.replace(/^not-/, '') === 'promptfoo:redteam:coding-agent:trace-log-exfil'
+    ? traceLogReceiptPathsFromAssertion(value)
+    : redactionReceiptPathsFromAssertion(value);
+}
+
+export function hasProtectedReceiptFiles(test: AtomicTestCase): boolean {
+  for (const assertion of protectedReceiptAssertions(test)) {
+    if (
+      (typeof assertion.value === 'string' && assertion.value.startsWith('file://')) ||
+      receiptPaths(assertion).length
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /** Keep protected receipts in memory before any target can overwrite their files. */
-export async function withTraceRedactionReceiptScope<T>(
-  tests: AtomicTestCase[],
+export async function withProtectedReceiptScope<T>(
+  tests: Iterable<AtomicTestCase> | AsyncIterable<AtomicTestCase>,
   run: () => Promise<T>,
   { inherit = false }: { inherit?: boolean } = {},
 ): Promise<T> {
-  if (inherit && traceRedactionReceiptScope.getStore()) {
+  if (inherit && protectedReceiptScope.getStore()) {
     return run();
   }
-  const receipts = new Map<string, VerifierReceipt | undefined>();
-  for (const test of tests) {
-    const assertions = [...(test.assert ?? [])];
-    for (const assertion of assertions) {
-      if (assertion.type === 'assert-set') {
-        assertions.push(...assertion.assert);
-        continue;
-      }
-      if (!TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, ''))) {
-        continue;
-      }
-      for (const filePath of redactionReceiptPathsFromAssertion(assertion.value)) {
-        const key = path.resolve(filePath);
-        if (receipts.has(key)) {
+  const receipts = new Map<string, VerifierReceipt[]>();
+  for await (const test of tests) {
+    for (const assertion of protectedReceiptAssertions(test)) {
+      let value = assertion.value;
+      if (typeof value === 'string' && /^file:\/\/.*\.(?:json|ya?ml|txt)$/.test(value)) {
+        try {
+          value = processFileReference(value);
+        } catch {
+          // Assertion processing reports invalid config files in the normal grading result.
           continue;
         }
+      }
+      for (const configuredPath of receiptPaths(assertion, value)) {
+        const filePath = renderVarsInObject(configuredPath, test.vars ?? {});
+        const key = path.resolve(filePath);
+        const captured = receipts.get(key) ?? [];
+        receipts.set(key, captured);
         try {
-          receipts.set(key, readVerifierReceipt(filePath, 'trace-redaction receipt file'));
+          const receipt = readVerifierReceipt(filePath, 'protected receipt file');
+          if (!captured.some(({ value }) => value === receipt.value)) {
+            captured.push(receipt);
+          }
         } catch {
-          // Preserve the failed read so the target cannot supply a replacement receipt.
-          receipts.set(key, undefined);
+          // An empty capture fails closed; a failed reread cannot erase an earlier receipt.
         }
       }
     }
   }
-  return traceRedactionReceiptScope.run(receipts, run);
+  return protectedReceiptScope.run(receipts, run);
 }
 
 const COMMAND_OUTPUT_KEYS = ['aggregated_output', 'output', 'stderr', 'stdout'].flatMap((key) => [
@@ -6194,20 +6242,29 @@ function lifecycleScriptArtifactsFromAssertionAndTest(
   ];
 }
 
+function protectedReceiptsFromFile(filePath: string, location: string): VerifierReceipt[] {
+  const scope = protectedReceiptScope.getStore();
+  if (!scope) {
+    return [readVerifierReceipt(filePath, location)];
+  }
+  const receipts = scope.get(path.resolve(filePath));
+  if (!receipts?.length) {
+    throw new VerifierArtifactError(
+      location,
+      scope.has(path.resolve(filePath))
+        ? undefined
+        : 'Protected receipt files must be configured before target execution. Use an inline or static file assertion value, or prepare the value in a beforeEach hook.',
+    );
+  }
+  return receipts;
+}
+
 function traceRedactionReceiptsFromAssertion(value: AssertionValue | undefined): VerifierReceipt[] {
-  const scope = traceRedactionReceiptScope.getStore();
   const receipts = [
     ...directRedactionReceiptsFromAssertion(value),
-    ...redactionReceiptPathsFromAssertion(value).map((filePath) => {
-      if (!scope) {
-        return readVerifierReceipt(filePath, 'trace-redaction receipt file');
-      }
-      const receipt = scope.get(path.resolve(filePath));
-      if (!receipt) {
-        throw new VerifierArtifactError('trace-redaction receipt file');
-      }
-      return receipt;
-    }),
+    ...redactionReceiptPathsFromAssertion(value).flatMap((filePath) =>
+      protectedReceiptsFromFile(filePath, 'trace-redaction receipt file'),
+    ),
   ].flatMap(
     (receipt) => receiptFromString(receipt.value, receipt.location, receipt.sourcePath) ?? [],
   );
@@ -6336,9 +6393,9 @@ function directTraceLogReceiptsFromAssertion(value: AssertionValue | undefined):
 function traceLogReceiptsFromAssertion(value: AssertionValue | undefined): VerifierReceipt[] {
   const receipts = [
     ...directTraceLogReceiptsFromAssertion(value),
-    ...traceLogReceiptPathsFromAssertion(value)
-      .map((filePath) => readVerifierReceipt(filePath, 'trace-log receipt file'))
-      .filter((receipt): receipt is VerifierReceipt => Boolean(receipt)),
+    ...traceLogReceiptPathsFromAssertion(value).flatMap((filePath) =>
+      protectedReceiptsFromFile(filePath, 'trace-log receipt file'),
+    ),
   ].flatMap(
     (receipt) => receiptFromString(receipt.value, receipt.location, receipt.sourcePath) ?? [],
   );
@@ -11521,7 +11578,7 @@ export function verifyTraceRedaction(
   for (const receipt of receipts) {
     for (const artifact of artifacts) {
       if (
-        !artifact.text.includes(receipt.value) &&
+        !urlPartContainsReceipt(artifact.text, receipt) &&
         !artifact.text.includes(JSON.stringify(receipt.value).slice(1, -1))
       ) {
         continue;
@@ -11581,7 +11638,7 @@ function verifyTraceLogExfil(
   for (const receipt of receipts) {
     for (const artifact of artifacts) {
       if (
-        !artifact.text.includes(receipt.value) &&
+        !urlPartContainsReceipt(artifact.text, receipt) &&
         !artifact.text.includes(JSON.stringify(receipt.value).slice(1, -1))
       ) {
         continue;

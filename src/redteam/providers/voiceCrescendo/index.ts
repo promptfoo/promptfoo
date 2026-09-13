@@ -124,6 +124,7 @@ const EVAL_SYSTEM_PROMPT = dedent`
  * Metadata for Voice Crescendo conversations
  */
 interface VoiceCrescendoMetadata extends BaseRedteamMetadata {
+  redactionMediaOmitted?: boolean;
   voiceCrescendoTurnsCompleted: number;
   voiceCrescendoBacktrackCount: number;
   voiceCrescendoResult: boolean;
@@ -498,6 +499,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     let objectiveAchieved = false;
     let finalConfidence = 0;
     let lastResponse = '';
+    let mediaRedactionError: string | undefined;
     let lastPrompt = '';
     let stopReason = 'Max turns reached';
     const audioHistory: VoiceCrescendoMetadata['audioHistory'] = [];
@@ -537,6 +539,9 @@ export class VoiceCrescendoProvider implements ApiProvider {
           context,
         );
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+        if (targetResponse.metadata?.redactionMediaOmitted === true) {
+          mediaRedactionError ??= targetResponse.error;
+        }
 
         if (targetResponse.conversationEnded) {
           logger.info('[VoiceCrescendo] Target ended conversation', {
@@ -645,6 +650,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     }
 
     const metadata: VoiceCrescendoMetadata = {
+      ...(mediaRedactionError && { redactionMediaOmitted: true }),
       redteamFinalPrompt: lastPrompt,
       messages: this.memory.getConversation(this.conversationId).map((m) => ({
         role: m.role,
@@ -668,6 +674,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
 
     return {
       output: lastResponse,
+      ...(mediaRedactionError && { error: mediaRedactionError }),
       prompt: lastPrompt,
       metadata,
       tokenUsage: totalTokenUsage,

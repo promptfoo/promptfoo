@@ -4,8 +4,9 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  hasProtectedReceiptFiles,
   verifyTraceRedaction,
-  withTraceRedactionReceiptScope,
+  withProtectedReceiptScope,
 } from '../../../src/redteam/plugins/codingAgent/verifiers';
 
 import type { AtomicTestCase } from '../../../src/types';
@@ -35,7 +36,7 @@ describe('protected redaction receipts', () => {
   it.each(['replaced', 'deleted'])(
     'checks the original receipt after its file is %s',
     async (mode) => {
-      await withTraceRedactionReceiptScope([test], async () => {
+      await withProtectedReceiptScope([test], async () => {
         if (mode === 'replaced') {
           fs.writeFileSync(receipt, replacement);
         } else {
@@ -50,9 +51,9 @@ describe('protected redaction receipts', () => {
   );
 
   it('keeps a fresh nested evaluation separate from its parent', async () => {
-    await withTraceRedactionReceiptScope([test], async () => {
+    await withProtectedReceiptScope([test], async () => {
       fs.writeFileSync(receipt, replacement);
-      await withTraceRedactionReceiptScope([test], async () => {
+      await withProtectedReceiptScope([test], async () => {
         expect(verifyTraceRedaction({ rawReceiptPath: receipt }, replacement)?.kind).toBe(
           'redacted-artifact-sensitive-value',
         );
@@ -66,7 +67,7 @@ describe('protected redaction receipts', () => {
   });
 
   it('rejects receipt paths introduced after the snapshot', async () => {
-    await withTraceRedactionReceiptScope([test], async () => {
+    await withProtectedReceiptScope([test], async () => {
       const late = path.join(directory, 'late-receipt');
       fs.writeFileSync(late, replacement);
       expect(verifyTraceRedaction({ rawReceiptPath: late }, 'Clean')?.kind).toBe(
@@ -74,4 +75,35 @@ describe('protected redaction receipts', () => {
       );
     });
   });
+
+  it('visits shared and cyclic assertion sets once', async () => {
+    const group: Record<string, unknown> = { type: 'assert-set' };
+    group.assert = [...test.assert!, group];
+    test = { assert: [group, group] } as unknown as AtomicTestCase;
+    expect(hasProtectedReceiptFiles(test)).toBe(true);
+    await withProtectedReceiptScope([test], async () => {
+      fs.writeFileSync(receipt, replacement);
+      expect(verifyTraceRedaction({ rawReceiptPath: receipt }, original)?.kind).toBe(
+        'redacted-artifact-sensitive-value',
+      );
+    });
+  });
+
+  it.each(['json', 'yaml', 'yml'])(
+    'snapshots receipts in a static %s assertion file',
+    async (extension) => {
+      const config = path.join(directory, `assertion.${extension}`);
+      fs.writeFileSync(config, JSON.stringify({ rawReceiptPath: receipt }));
+      test.assert = [
+        { type: 'promptfoo:redteam:coding-agent:trace-redaction', value: `file://${config}` },
+      ];
+      await withProtectedReceiptScope([test], async () => {
+        fs.writeFileSync(receipt, replacement);
+        expect(verifyTraceRedaction({ rawReceiptPath: receipt }, 'Clean report')).toBeUndefined();
+        expect(verifyTraceRedaction({ rawReceiptPath: receipt }, original)?.kind).toBe(
+          'redacted-artifact-sensitive-value',
+        );
+      });
+    },
+  );
 });

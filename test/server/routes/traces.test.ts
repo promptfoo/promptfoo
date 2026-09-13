@@ -19,6 +19,7 @@ describe('Traces Routes', () => {
   let mockGetTracesByEvaluation: ReturnType<typeof vi.fn<() => Promise<unknown[]>>>;
   let mockGetTrace: ReturnType<typeof vi.fn<() => Promise<unknown>>>;
   let mockPublicTraces: ReturnType<typeof vi.fn>;
+  let mockIsTracePrivate: ReturnType<typeof vi.fn>;
 
   beforeAll(async () => {
     await new Promise<void>((resolve, reject) => {
@@ -48,8 +49,10 @@ describe('Traces Routes', () => {
       const trace = await mockGetTrace();
       return trace ? [trace] : await mockGetTracesByEvaluation();
     });
+    mockIsTracePrivate = vi.fn().mockResolvedValue(false);
     vi.spyOn(Eval, 'findById').mockResolvedValue({
       getTraces: mockPublicTraces,
+      isTracePrivate: mockIsTracePrivate,
     } as unknown as Eval);
 
     mockedGetTraceStore.mockReturnValue({
@@ -63,6 +66,25 @@ describe('Traces Routes', () => {
   });
 
   describe('GET /api/traces/evaluation/:evaluationId', () => {
+    it('returns public standalone traces without an eval record', async () => {
+      const publicTrace = {
+        traceId: 'public',
+        evaluationId: 'standalone',
+        testCaseId: '0-0',
+        spans: [],
+      };
+      const privateTrace = {
+        ...publicTrace,
+        traceId: 'private',
+        metadata: { privateForensicEvidence: true },
+      };
+      vi.mocked(Eval.findById).mockResolvedValue(undefined);
+      mockGetTracesByEvaluation.mockResolvedValue([publicTrace, privateTrace]);
+      const response = await api.get('/api/traces/evaluation/standalone');
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ traces: [publicTrace] });
+      expect(mockGetTracesByEvaluation).toHaveBeenCalledWith('standalone');
+    });
     it('uses the same public trace projection as exports', async () => {
       mockGetTracesByEvaluation.mockResolvedValue([
         { traceId: 'private', spans: [{ name: 'PRIVATE_FORENSIC_RECEIPT' }] },
@@ -156,6 +178,7 @@ describe('Traces Routes', () => {
         spans: [{ name: 'PRIVATE_FORENSIC_RECEIPT' }],
       });
       mockPublicTraces.mockResolvedValue([]);
+      mockIsTracePrivate.mockResolvedValue(true);
       const response = await api.get('/api/traces/private');
       expect(response.status).toBe(404);
       expect(JSON.stringify(response.body)).not.toContain('PRIVATE_FORENSIC_RECEIPT');
@@ -187,6 +210,9 @@ describe('Traces Routes', () => {
         trace: mockTrace,
       });
       expect(mockGetTrace).toHaveBeenCalledWith('trace-abc');
+      expect(mockIsTracePrivate).toHaveBeenCalledWith(mockTrace);
+      expect(mockPublicTraces).not.toHaveBeenCalled();
+      expect(mockGetTracesByEvaluation).not.toHaveBeenCalled();
     });
 
     it('should return 404 when trace not found', async () => {

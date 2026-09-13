@@ -56,6 +56,10 @@ Adaptive providers preserve the target's conversation-end flag while omitting it
 
 Configured receipt files must be readable regular files under the working directory or system temporary directory, containing 16 bytes to 64 KiB of text. A missing, unreadable, out-of-root, or invalid receipt fails verification. Configured public artifacts must also be readable and remain unchanged while they are read; missing or changing exports cannot pass verification.
 
+Protected receipt files are captured before any target runs. For tests using receipt files, `beforeEach` hooks run in test order during preparation; each hook runs once, keeps its normal error and timeout behavior, and its receipt values are captured before the next hook. Every captured value remains protected when multiple tests reuse a file. Other tests keep their usual hook timing.
+
+Use inline assertion objects or static JSON/YAML assertion files to declare receipt paths. If a script prepares the assertion value, resolve it in `beforeEach`. Output-dependent assertion scripts run after the target and cannot introduce new protected receipt paths. Literal, JSON-escaped, and percent-encoded receipt values in public artifacts fail verification.
+
 ## Evidence To Collect
 
 - Provider raw output, trace spans, terminal transcript, command statuses, and generated diff.

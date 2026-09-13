@@ -30,8 +30,9 @@ import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import {
+  hasProtectedReceiptFiles,
   withMcpLedgerScope,
-  withTraceRedactionReceiptScope,
+  withProtectedReceiptScope,
 } from './redteam/plugins/codingAgent/verifiers';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
@@ -1612,7 +1613,7 @@ export async function runEval(options: RunEvalOptions): Promise<EvaluateResult[]
   return withCacheNamespace(
     getRepeatCacheNamespace(options.repeatIndex, options.evaluateOptions),
     () =>
-      withTraceRedactionReceiptScope([options.test], () => runEvalInternal(options), {
+      withProtectedReceiptScope([options.test], () => runEvalInternal(options), {
         inherit: true,
       }),
   );
@@ -3355,6 +3356,11 @@ function usesExampleProvider(testSuite: TestSuite) {
   });
 }
 
+type PreparedReceiptHook = { elapsedMs: number } & (
+  | { status: 'ready' }
+  | { status: 'failed' | 'timed-out'; error: unknown }
+);
+
 class Evaluator<TEvaluation extends EvaluationRecord, TResult extends EvaluationStoreResult> {
   store: EvaluationStore<TEvaluation, TResult>;
   testSuite: TestSuite;
@@ -3364,6 +3370,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private preparedReceiptHooks = new WeakMap<AtomicTestCase, PreparedReceiptHook>();
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3587,6 +3594,60 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     );
   }
 
+  private async *prepareProtectedReceiptTests(evalSteps: RunEvalOptions[], testSuite: TestSuite) {
+    // Capture every existing receipt before a hook can replace a shared file.
+    for (const { test } of evalSteps) {
+      yield test;
+    }
+    if (!testSuite.extensions?.length) {
+      return;
+    }
+    for (const evalStep of evalSteps) {
+      if (!hasProtectedReceiptFiles(evalStep.test)) {
+        continue;
+      }
+      // Timeout execution copies RunEvalOptions but retains this per-case test object.
+      evalStep.test = { ...evalStep.test };
+      const startedAt = Date.now();
+      const timeoutMs = this.options.timeoutMs || getEvalTimeoutMs();
+      let timeoutId: NodeJS.Timeout | undefined;
+      let timedOut = false;
+      try {
+        const hook = withCacheNamespace(
+          getRepeatCacheNamespace(evalStep.repeatIndex, evalStep.evaluateOptions),
+          () => runExtensionHook(testSuite.extensions, 'beforeEach', { test: evalStep.test }),
+        );
+        const prepared =
+          timeoutMs > 0
+            ? await Promise.race([
+                hook,
+                new Promise<never>((_, reject) => {
+                  timeoutId = setTimeout(() => {
+                    timedOut = true;
+                    reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
+                  }, timeoutMs);
+                }),
+              ])
+            : await hook;
+        evalStep.test = { ...prepared.test };
+        this.preparedReceiptHooks.set(evalStep.test, {
+          status: 'ready',
+          elapsedMs: Date.now() - startedAt,
+        });
+        // Preserve each hook's value before another hook or target can replace it.
+        yield evalStep.test;
+      } catch (error) {
+        this.preparedReceiptHooks.set(evalStep.test, {
+          status: timedOut ? 'timed-out' : 'failed',
+          error,
+          elapsedMs: Date.now() - startedAt,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+  }
+
   private async runEvalStepAfterBeforeEach(
     evalStep: RunEvalOptions,
     {
@@ -3601,10 +3662,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite: TestSuite;
     },
   ) {
-    const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
-      test: evalStep.test,
-    });
-    evalStep.test = beforeEachOut.test;
+    const prepared = this.preparedReceiptHooks.get(evalStep.test);
+    if (prepared && prepared.status !== 'ready') {
+      throw prepared.error;
+    }
+    if (prepared === undefined) {
+      const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
+        test: evalStep.test,
+      });
+      evalStep.test = beforeEachOut.test;
+    }
 
     const rows = await runEvalInternal({
       ...evalStep,
@@ -3745,6 +3812,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   ) {
     const { deferGrading = false, providerCallQueue } = processOptions;
     const timeoutMs = context.options.timeoutMs || getEvalTimeoutMs();
+    const prepared = this.preparedReceiptHooks.get(evalStep.test);
+    if (prepared?.status === 'timed-out') {
+      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, prepared.error, context);
+      return;
+    }
 
     if (timeoutMs <= 0) {
       return await this.processEvalStep(
@@ -3786,11 +3858,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           context,
         ),
         new Promise<void>((_, reject) => {
-          timeoutId = setTimeout(() => {
-            didTimeout = true;
-            abortController.abort();
-            reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
-          }, timeoutMs);
+          timeoutId = setTimeout(
+            () => {
+              didTimeout = true;
+              abortController.abort();
+              reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
+            },
+            Math.max(0, timeoutMs - (prepared?.elapsedMs ?? 0)),
+          );
         }),
       ]);
     } catch (error) {
@@ -4989,8 +5064,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       progressBarManager.installLogInterceptor();
     }
 
-    const interruptedEval = await withTraceRedactionReceiptScope(
-      runEvalOptions.map(({ test }) => test),
+    const interruptedEval = await withProtectedReceiptScope(
+      this.prepareProtectedReceiptTests(
+        [...serialRunEvalOptions, ...concurrentRunEvalOptions],
+        testSuite,
+      ),
       () =>
         this.executeEvalSteps({
           checkAbort,

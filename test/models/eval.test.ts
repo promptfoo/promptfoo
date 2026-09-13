@@ -2704,6 +2704,85 @@ describe('evaluator', () => {
       vi.doUnmock('../../src/tracing/store');
     });
 
+    it.each([false, true])(
+      'checks one trace without fetching all traces or result batches (persisted: %s)',
+      async (persisted) => {
+        const evaluation = persisted ? await Eval.create({}, []) : new Eval({});
+        const type = 'promptfoo:redteam:coding-agent:trace-redaction' as const;
+        const cases = [
+          {
+            traceId: 'private-by-trace',
+            testCaseId: 'other-case',
+            testIdx: 0,
+            testCase: { assert: [{ type }] },
+          },
+          { traceId: undefined, testCaseId: '1-0', testIdx: 1, testCase: { assert: [{ type }] } },
+          {
+            traceId: undefined,
+            testCaseId: 'custom-case',
+            testIdx: 2,
+            testCase: { assert: [{ type }], metadata: { testCaseId: 'custom-case' } },
+          },
+          {
+            traceId: undefined,
+            testCaseId: 'explicit-case',
+            testIdx: 3,
+            testCase: { id: 'explicit-case', assert: [{ type }] },
+          },
+          { traceId: 'public-trace', testCaseId: '4-0', testIdx: 4, testCase: { assert: [] } },
+        ];
+        for (const entry of cases) {
+          await evaluation.addResult(
+            createEvaluateResult({
+              traceId: entry.traceId,
+              testIdx: entry.testIdx,
+              testCase: entry.testCase,
+            }),
+          );
+        }
+        evaluation.recordResultPersistenceFailure(
+          createEvaluateResult({
+            traceId: 'failed-private-trace',
+            testIdx: 5,
+            testCase: { assert: [{ type }] },
+          }),
+        );
+        const batches = persisted ? vi.spyOn(evaluation, 'fetchResultsBatched') : undefined;
+        const bulk = vi.spyOn(evaluation, 'getTraces');
+        for (const entry of cases) {
+          expect(
+            await evaluation.isTracePrivate({
+              traceId: entry.traceId ?? `unlinked-${entry.testIdx}`,
+              evaluationId: evaluation.id,
+              testCaseId: entry.testCaseId,
+              spans: [],
+            }),
+          ).toBe(entry.testIdx < 4);
+        }
+        expect(
+          await evaluation.isTracePrivate({
+            traceId: 'failed-private-trace',
+            evaluationId: evaluation.id,
+            testCaseId: '5-0',
+            spans: [],
+          }),
+        ).toBe(true);
+        expect(
+          await evaluation.isTracePrivate({
+            traceId: 'flagged',
+            evaluationId: evaluation.id,
+            testCaseId: 'unlinked',
+            spans: [],
+            metadata: { privateForensicEvidence: true },
+          }),
+        ).toBe(true);
+        expect(bulk).not.toHaveBeenCalled();
+        if (batches) {
+          expect(batches).not.toHaveBeenCalled();
+        }
+      },
+    );
+
     it('should return traces with properly formatted data', async () => {
       const eval_ = await EvalFactory.create();
 
