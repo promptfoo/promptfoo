@@ -63,6 +63,9 @@ export class AzureGenericProvider implements ApiProvider {
   }
 
   async initialize() {
+    if (this.authInitializationPromise) {
+      return this.authInitializationPromise;
+    }
     this.authHeaders = await this.getAuthHeaders();
   }
 

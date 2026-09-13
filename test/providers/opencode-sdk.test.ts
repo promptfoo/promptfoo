@@ -1958,6 +1958,19 @@ describe('OpenCodeSDKProvider', () => {
         sessionID: 'test-session-123',
       });
     });
+
+    it('bounds stalled persistent session deletion', async () => {
+      mockSessionDelete.mockReturnValueOnce(new Promise(() => undefined));
+      const provider = new OpenCodeSDKProvider({
+        config: { persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      await provider.callApi('Test prompt');
+      vi.useFakeTimers();
+      const cleanup = provider.cleanup();
+      await vi.advanceTimersByTimeAsync(5000);
+      await cleanup;
+    });
   });
 
   describe('buildToolsConfig', () => {

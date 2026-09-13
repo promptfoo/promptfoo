@@ -3873,7 +3873,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         ),
         new Promise<void>((_, reject) => {
           timeoutId = setTimeout(() => {
-            const error = new Error(`Evaluation timed out after ${timeoutMs}ms`);
+            const error = new DOMException(
+              `Evaluation timed out after ${timeoutMs}ms`,
+              'AbortError',
+            );
             abortController.abort(error);
             // Allow cancellation-aware providers to return completed billing before the
             // fallback for legacy providers that never settle after abort.
