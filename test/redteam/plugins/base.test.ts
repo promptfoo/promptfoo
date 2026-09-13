@@ -84,6 +84,7 @@ describe('RedteamPluginBase', () => {
           vars: { testVar: 'another prompt' },
           assert: [{ type: 'contains', value: 'another prompt' }],
           metadata: {
+            injectVar: 'testVar',
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
@@ -92,6 +93,7 @@ describe('RedteamPluginBase', () => {
           vars: { testVar: 'test prompt' },
           assert: [{ type: 'contains', value: 'test prompt' }],
           metadata: {
+            injectVar: 'testVar',
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
@@ -120,6 +122,7 @@ describe('RedteamPluginBase', () => {
           assert: [{ type: 'contains', value: 'another prompt' }],
           vars: { testVar: 'another prompt' },
           metadata: {
+            injectVar: 'testVar',
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
@@ -128,6 +131,7 @@ describe('RedteamPluginBase', () => {
           assert: [{ type: 'contains', value: 'test prompt' }],
           vars: { testVar: 'test prompt' },
           metadata: {
+            injectVar: 'testVar',
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
@@ -182,6 +186,7 @@ describe('RedteamPluginBase', () => {
           vars: { testVar: 'duplicate' },
           assert: expect.any(Array),
           metadata: {
+            injectVar: 'testVar',
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
@@ -190,6 +195,7 @@ describe('RedteamPluginBase', () => {
           vars: { testVar: 'unique' },
           assert: expect.any(Array),
           metadata: {
+            injectVar: 'testVar',
             pluginId: 'test-plugin-id',
             pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
@@ -796,12 +802,12 @@ Prompt:
       ]);
     });
 
-    it('should not return empty prompts when Prompt marker has no content', () => {
+    it('should preserve empty prompts for retry validation', () => {
       const input = `Prompt:
 Plan: No prompt was generated`;
 
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([]);
+      expect(result).toEqual([{ __prompt: '' }]);
     });
 
     it('should handle prompts with multiple lines', () => {

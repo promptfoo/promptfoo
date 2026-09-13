@@ -51,6 +51,9 @@ import { CyberSecEvalPlugin } from './cyberseceval';
 import { DebugAccessPlugin } from './debugAccess';
 import { DivergentRepetitionPlugin } from './divergentRepetition';
 import { DoNotAnswerPlugin } from './donotanswer';
+import { EcommerceComplianceBypassPlugin } from './ecommerce/ecommerceComplianceBypass';
+import { EcommerceOrderFraudPlugin } from './ecommerce/ecommerceOrderFraud';
+import { EcommercePriceManipulationPlugin } from './ecommerce/ecommercePriceManipulation';
 import { ExcessiveAgencyPlugin } from './excessiveAgency';
 import { HallucinationPlugin } from './hallucination';
 import { HarmbenchPlugin } from './harmbench';
@@ -525,6 +528,9 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(DivergentRepetitionPlugin, 'divergent-repetition'),
   createPluginFactory(DoNotAnswerPlugin, 'donotanswer'),
   createPluginFactory(ExcessiveAgencyPlugin, 'excessive-agency'),
+  createPluginFactory(EcommerceComplianceBypassPlugin, 'ecommerce:compliance-bypass'),
+  createPluginFactory(EcommerceOrderFraudPlugin, 'ecommerce:order-fraud'),
+  createPluginFactory(EcommercePriceManipulationPlugin, 'ecommerce:price-manipulation'),
   createPluginFactory(XSTestPlugin, 'xstest'),
   createPluginFactory(ToolDiscoveryPlugin, 'tool-discovery'),
   createPluginFactory(HarmbenchPlugin, 'harmbench'),
@@ -713,7 +719,14 @@ function createRemotePlugin<T extends PluginConfig>(
   };
 }
 const remotePlugins: PluginFactory[] = REMOTE_ONLY_PLUGIN_IDS.filter(
-  (id) => id !== 'indirect-prompt-injection' && id !== 'rag-poisoning',
+  (id) =>
+    ![
+      'indirect-prompt-injection',
+      'rag-poisoning',
+      'ecommerce:compliance-bypass',
+      'ecommerce:order-fraud',
+      'ecommerce:price-manipulation',
+    ].includes(id),
 ).map((key) => createRemotePlugin(key));
 
 remotePlugins.push(

@@ -1,9 +1,18 @@
-import { type categoryAliases, categoryAliasesReverse } from '@promptfoo/redteam/constants';
+import {
+  type categoryAliases,
+  categoryAliasesReverse,
+  displayNameOverrides,
+} from '@promptfoo/redteam/constants';
 import {
   deserializePolicyIdFromMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
+import {
+  type EvaluateResult,
+  type GradingResult,
+  type SemanticFrontierDiagnostic,
+  summarizeSemanticFrontierDiagnosticsFromTests,
+} from '@promptfoo/types';
 
 // TODO(ian): Need a much easier way to get the pluginId (and strategyId) from a result
 
@@ -21,6 +30,8 @@ export interface TestWithMetadata {
     [key: string]: unknown;
   };
 }
+
+export type { SemanticFrontierDiagnostic };
 
 export function getStrategyIdFromTest(test: TestWithMetadata): string {
   // Check metadata directly on test
@@ -73,6 +84,16 @@ export function getPluginIdFromResult(result: EvaluateResult): string | null {
   }
 
   return null;
+}
+
+export function summarizeSemanticFrontierDiagnosticsFromResults(
+  results: readonly EvaluateResult[],
+): SemanticFrontierDiagnostic[] {
+  return summarizeSemanticFrontierDiagnosticsFromTests(results.map((result) => result.testCase));
+}
+
+export function getPluginDisplayName(pluginId: string): string {
+  return displayNameOverrides[pluginId as keyof typeof displayNameOverrides] || pluginId;
 }
 
 export const getPassRateStyles = (passRate: number): { bg: string; text: string } => {

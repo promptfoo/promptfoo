@@ -72,6 +72,7 @@ export * from '../redteam/types';
 export * from './agent';
 export * from './prompts';
 export * from './providers';
+export * from './semanticFrontierDiagnostics';
 export * from './shared';
 export * from './tracing';
 
