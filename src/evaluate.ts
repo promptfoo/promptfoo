@@ -237,11 +237,47 @@ async function createRuntimeTestSuite(
   };
 }
 
+async function adoptExistingTestProviders(testSuite: TestSuite): Promise<void> {
+  const existingProviders: unknown[] = [];
+  for (const test of [
+    testSuite.defaultTest,
+    ...(testSuite.tests ?? []),
+    ...(testSuite.scenarios ?? []).flatMap((scenario) => [
+      ...scenario.config,
+      ...(scenario.tests ?? []),
+    ]),
+  ]) {
+    if (!test || typeof test !== 'object') {
+      continue;
+    }
+    existingProviders.push(test.provider, test.options?.provider);
+    const assertions = [...(test.assert ?? [])];
+    while (assertions.length) {
+      const assertion = assertions.pop()!;
+      if (assertion.type === 'assert-set') {
+        assertions.push(...assertion.assert);
+      } else {
+        existingProviders.push(assertion.provider);
+      }
+    }
+  }
+  for (const provider of existingProviders) {
+    const instances = isProviderTypeMap(provider) ? Object.values(provider) : [provider];
+    for (const instance of instances) {
+      if (isApiProvider(instance)) {
+        await providerRegistry.adopt(instance);
+      }
+    }
+  }
+}
+
 async function resolveNestedProviders(
   testSuiteConfig: Omit<EvaluateTestSuite, 'author'>,
   constructedTestSuite: TestSuite,
   providerMap: Record<string, ApiProvider>,
 ): Promise<void> {
+  await adoptExistingTestProviders(constructedTestSuite);
+
   if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
     constructedTestSuite.defaultTest = cloneTestForResolve(constructedTestSuite.defaultTest);
 
