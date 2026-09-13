@@ -160,7 +160,11 @@ function isInlineCommentInDiff(comment: Comment, validRanges: FileLineRanges): b
   // is absent or not strictly less than line, toReviewComment posts it single-line, so the
   // end line is the only anchor that must be present.
   if (comment.startLine != null && comment.startLine < comment.line) {
-    return isLineInDiff(comment.file, comment.startLine, validRanges);
+    return (
+      validRanges
+        .get(comment.file)
+        ?.some((range) => comment.startLine! >= range.start && comment.line! <= range.end) ?? false
+    );
   }
 
   return true;

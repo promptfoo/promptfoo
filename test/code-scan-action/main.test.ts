@@ -546,7 +546,10 @@ describe('code-scan-action main', () => {
 
       expectCliArg(args, '--base', 'feat/openai-sora-video-provider');
       const fetchCall = mocks.exec.exec.mock.calls.find(
-        ([command, callArgs]) => command === 'git' && callArgs?.[0] === 'fetch',
+        ([, callArgs]) => callArgs?.[0] === 'fetch',
+      );
+      expect(fetchCall?.[0]).toBe(
+        process.platform === 'win32' ? 'C:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git',
       );
       expect(fetchCall?.[2]?.env).toMatchObject({
         GIT_CONFIG_COUNT: '1',
