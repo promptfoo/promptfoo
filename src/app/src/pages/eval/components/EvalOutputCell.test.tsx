@@ -2415,6 +2415,10 @@ describe('isVideoProvider helper function', () => {
     expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
   });
 
+  it('should return true for Google Veo on Vertex AI', () => {
+    expect(isVideoProvider('vertex:video:veo-3.1-generate-001')).toBe(true);
+  });
+
   it('should return true for Google Veo 3.1 Fast provider', () => {
     expect(isVideoProvider('google:video:veo-3.1-fast-generate-preview')).toBe(true);
   });

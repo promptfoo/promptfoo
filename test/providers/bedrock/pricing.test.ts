@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateBedrockCost,
   calculateBedrockInvokeModelCost,
@@ -9,7 +9,40 @@ const OUTPUT_TOKENS = 5_000;
 const costAtRates = (input: number, output: number) =>
   (INPUT_TOKENS / 1e6) * input + (OUTPUT_TOKENS / 1e6) * output;
 
+describe('Grok 4.6 AWS profile pricing', () => {
+  it.each([
+    ['us.xai.grok-4.6', 2.2, 6.6, 0.55],
+    ['global.xai.grok-4.6', 2, 6, 0.5],
+    ['arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.xai.grok-4.6', 2.2, 6.6, 0.55],
+  ])('prices %s with its AWS cached-input rate', (model, input, output, cached) => {
+    const expected = (800 * input + 200 * cached + 500 * output) / 1e6;
+    expect(calculateBedrockCost(model, 800, 500, 200)).toBeCloseTo(expected, 12);
+    expect(calculateBedrockInvokeModelCost(model, 800, 500, 200)).toBeCloseTo(expected, 12);
+  });
+  it.each(['xai.grok-4.6', 'us.xai.grok-4.6-future', 'global.xai.grok-4.5'])(
+    'does not infer an AWS price for %s',
+    (model) => {
+      expect(calculateBedrockInvokeModelCost(model, 800, 500, 200)).toBeUndefined();
+    },
+  );
+  it.each(['priority', 'flex', 'reserved'] as const)(
+    'leaves unpublished %s rates unknown',
+    (type) => {
+      expect(
+        calculateBedrockCost('us.xai.grok-4.6', 800, 500, 200, 0, 'us-east-1', { type }),
+      ).toBeUndefined();
+    },
+  );
+  it('does not invent a cache-write price', () => {
+    expect(calculateBedrockCost('global.xai.grok-4.6', 800, 500, 200, 100)).toBeUndefined();
+  });
+});
+
 describe('calculateBedrockCost', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe('Amazon Nova prompt caching', () => {
     // AWS Price List (us-east-1, 2026-09-01): every Nova `-cache-read-input-token-count`
     // meter is exactly 25% of the model's input rate, and every cache-write meter is $0.
@@ -113,11 +146,23 @@ describe('calculateBedrockCost', () => {
       input: 0.18,
       output: 0.78,
     },
+    {
+      id: 'us-gov.anthropic.claude-opus-4-8',
+      region: 'us-gov-west-1',
+      input: 6,
+      output: 30,
+    },
   ])('uses the published regional rate for $id in $region', ({ id, region, input, output }) => {
     expect(calculateBedrockCost(id, INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, region)).toBeCloseTo(
       costAtRates(input, output),
       6,
     );
+  });
+
+  it('infers GovCloud pricing from the Claude inference profile ID', () => {
+    expect(
+      calculateBedrockCost('us-gov.anthropic.claude-opus-4-8', INPUT_TOKENS, OUTPUT_TOKENS),
+    ).toBeCloseTo(costAtRates(6, 30), 6);
   });
 
   it('applies service tier pricing multipliers', () => {
@@ -126,6 +171,14 @@ describe('calculateBedrockCost', () => {
         type: 'priority',
       }),
     ).toBeCloseTo(costAtRates(0.3, 1.2) * 1.75, 6);
+  });
+
+  it('does not report on-demand token cost for reserved throughput', () => {
+    expect(
+      calculateBedrockCost('minimax.minimax-m2', INPUT_TOKENS, OUTPUT_TOKENS, 0, 0, 'us-east-1', {
+        type: 'reserved',
+      }),
+    ).toBeUndefined();
   });
 
   it('uses newly published London pricing for GLM 4.7', () => {
@@ -239,8 +292,37 @@ describe('calculateBedrockCost', () => {
     );
   });
 
-  it('bills Claude Sonnet 5 at the standard rate above 200k tokens (no long-context tier)', () => {
-    // Sonnet 5 bills its full 1M context at the standard rate. Use the global endpoint to
+  it('bills one-hour Claude cache writes at 2x the input rate', () => {
+    const expectedCost =
+      (100 / 1e6) * 3 + (500 / 1e6) * 0.3 + (60 / 1e6) * 3.75 + (40 / 1e6) * 6 + (50 / 1e6) * 15;
+
+    expect(
+      calculateBedrockCost(
+        'global.anthropic.claude-sonnet-5',
+        100,
+        50,
+        500,
+        100,
+        'us-east-1',
+        undefined,
+        40,
+      ),
+    ).toBeCloseTo(expectedCost, 10);
+    expect(
+      calculateBedrockInvokeModelCost(
+        'global.anthropic.claude-sonnet-5',
+        100,
+        50,
+        500,
+        100,
+        'us-east-1',
+        40,
+      ),
+    ).toBeCloseTo(expectedCost, 10);
+  });
+
+  it('bills Claude Sonnet 5 at the AWS base rate above 200k tokens', () => {
+    // Sonnet 5 bills its full 1M context at the same rate. Use the global endpoint to
     // isolate this from the regional premium.
     expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 300_000, 20_000)).toBeCloseTo(
       (300_000 / 1e6) * 3 + (20_000 / 1e6) * 15,
@@ -257,6 +339,10 @@ describe('calculateBedrockCost', () => {
       6,
     );
     expect(calculateBedrockCost('eu.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
+      sonnet5Base * 1.1,
+      6,
+    );
+    expect(calculateBedrockCost('au.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
       sonnet5Base * 1.1,
       6,
     );

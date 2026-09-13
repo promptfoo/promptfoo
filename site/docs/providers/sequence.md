@@ -1,6 +1,6 @@
 ---
 sidebar_label: Sequence
-description: 'Chain multiple AI providers sequentially to create sophisticated evaluation workflows with data transformation and routing'
+description: 'Chain multiple AI providers sequentially to create evaluation workflows with data transformation and routing'
 ---
 
 # Sequence Provider
@@ -9,17 +9,22 @@ The Sequence Provider allows you to send a series of prompts to another provider
 
 ## Configuration
 
-To use the Sequence Provider, set the provider `id` to `sequence` and provide a configuration object with an array of inputs:
+Configure the underlying model in `providers`, then set the test provider `id` to `sequence` and supply an array of inputs:
 
 ```yaml
 providers:
-  - id: sequence
-    config:
-      inputs:
-        - 'First question: {{prompt}}'
-        - 'Follow up: Can you elaborate on that?'
-        - 'Finally: Can you summarize your thoughts?'
-      separator: "\n---\n" # Optional, defaults to "\n---\n"
+  - openai:chat:gpt-5-mini
+prompts:
+  - 'Explain artificial intelligence.'
+tests:
+  - provider:
+      id: sequence
+      config:
+        inputs:
+          - 'First question: {{prompt}}'
+          - 'Follow up: Can you elaborate on that?'
+          - 'Finally: Can you summarize your thoughts?'
+        separator: "\n---\n" # Optional, defaults to "\n---\n"
 ```
 
 ## How It Works
@@ -36,23 +41,23 @@ The Sequence Provider:
 
 Here's a complete example showing how to use the Sequence Provider to create a multi-turn conversation:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - openai:chat:gpt-4
-  - id: sequence
-    config:
-      inputs:
-        - 'What is {{prompt}}?'
-        - 'What are the potential drawbacks of {{prompt}}?'
-        - 'Can you summarize the pros and cons of {{prompt}}?'
-      separator: "\n\n=== Next Response ===\n\n"
+  - openai:chat:gpt-5-mini
 
 prompts:
   - 'artificial intelligence'
 
 tests:
-  - vars:
-      prompt: artificial intelligence
+  - provider:
+      id: sequence
+      config:
+        inputs:
+          - 'What is {{prompt}}?'
+          - 'What are the potential drawbacks of {{prompt}}?'
+          - 'Can you summarize the pros and cons of {{prompt}}?'
+        separator: "\n\n=== Next Response ===\n\n"
     assert:
       - type: contains
         value: drawbacks
@@ -72,16 +77,20 @@ For example:
 
 ```yaml
 providers:
-  - id: sequence
-    config:
-      inputs:
-        - 'Question about {{topic}}: {{prompt}}'
-        - 'Follow up: How does {{topic}} relate to {{industry}}?'
+  - openai:chat:gpt-5-mini
+prompts:
+  - '{{question}}'
 tests:
   - vars:
       topic: AI
       industry: healthcare
-      prompt: What are the main applications?
+      question: What are the main applications?
+    provider:
+      id: sequence
+      config:
+        inputs:
+          - 'Question about {{topic}}: {{prompt}}'
+          - 'Follow up: How does {{topic}} relate to {{industry}}?'
 ```
 
 ## Configuration Options

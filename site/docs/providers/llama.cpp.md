@@ -5,7 +5,7 @@ description: "Execute quantized LLMs efficiently on CPUs using llama.cpp's optim
 
 # Llama.cpp
 
-The `llama` provider is compatible with the HTTP server bundled with [llama.cpp](https://github.com/ggerganov/llama.cpp). This allows you to leverage the power of `llama.cpp` models within Promptfoo.
+The `llama` provider is compatible with the HTTP server bundled with [llama.cpp](https://github.com/ggerganov/llama.cpp). This allows you to use `llama.cpp` models within Promptfoo.
 
 ## Configuration
 

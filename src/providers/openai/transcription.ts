@@ -6,7 +6,12 @@ import logger from '../../logger';
 import { isAbortError } from '../../util/fetch/errors';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from './';
-import { appendOpenAiApiPath, getTokenUsage, OPENAI_TRANSCRIPTION_MODELS } from './util';
+import {
+  appendOpenAiApiPath,
+  assertOpenAiApiModel,
+  getTokenUsage,
+  OPENAI_TRANSCRIPTION_MODELS,
+} from './util';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -59,6 +64,9 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
     }
     super(modelName, options);
     this.config = options.config || {};
+    assertOpenAiApiModel(modelName, this.getApiUrl(), {
+      allowTranscription: true,
+    });
   }
 
   id(): string {
@@ -127,15 +135,46 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
+    const promptConfig = context?.prompt?.config as Partial<OpenAiTranscriptionOptions> | undefined;
     const config = {
       ...this.config,
-      ...context?.prompt?.config,
+      ...promptConfig,
     } as OpenAiTranscriptionOptions;
-
     const isGptTranscribe = this.modelName === 'gpt-transcribe';
-    if (isGptTranscribe && config.language !== undefined) {
-      return { error: 'gpt-transcribe uses languages (an array) instead of language.' };
+    if (isGptTranscribe) {
+      const hasOption = (
+        options: Partial<OpenAiTranscriptionOptions> | undefined,
+        key: 'language' | 'languages',
+      ) =>
+        options != null &&
+        Object.prototype.hasOwnProperty.call(options, key) &&
+        options[key] !== undefined;
+      const providerHasLanguage = hasOption(this.config, 'language');
+      const providerHasLanguages = hasOption(this.config, 'languages');
+      const promptHasLanguage = hasOption(promptConfig, 'language');
+      const promptHasLanguages = hasOption(promptConfig, 'languages');
+
+      if (
+        (providerHasLanguage && providerHasLanguages) ||
+        (promptHasLanguage && promptHasLanguages)
+      ) {
+        return {
+          error:
+            'gpt-transcribe accepts either config.language or config.languages, not both. Use config.languages for multilingual audio.',
+        };
+      }
+
+      if (promptHasLanguage) {
+        config.languages = undefined;
+      } else if (promptHasLanguages) {
+        config.language = undefined;
+      }
+      if (config.language !== undefined) {
+        config.languages = [config.language];
+        config.language = undefined;
+      }
     }
+
     if (config.languages !== undefined || config.keywords !== undefined) {
       if (!isGptTranscribe) {
         return {
@@ -209,7 +248,6 @@ export class OpenAiTranscriptionProvider extends OpenAiGenericProvider {
           formData.append('timestamp_granularities[]', granularity);
         }
       }
-
       const isDiarizationModel = this.modelName.includes('diarize');
       const chunkingStrategy =
         config.chunking_strategy ?? (isDiarizationModel ? 'auto' : undefined);

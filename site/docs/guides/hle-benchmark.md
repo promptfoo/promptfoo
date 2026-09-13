@@ -208,8 +208,15 @@ tests:
 providers:
   - anthropic:claude-sonnet-4-6
   - openai:o4-mini
-  - deepseek:deepseek-reasoner
+  - id: deepseek:deepseek-flash
+    config:
+      max_tokens: 8192
+      passthrough:
+        thinking:
+          type: enabled
 ```
+
+Set `DEEPSEEK_API_KEY` to use DeepSeek V4.1 Flash. This config enables [thinking mode](https://api-docs.deepseek.com/guides/thinking_mode/) with an [8192-token completion limit](https://api-docs.deepseek.com/api/create-chat-completion/).
 
 **Increase reasoning budget:**
 

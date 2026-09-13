@@ -7,7 +7,7 @@ description: Configure Cloudflare Workers AI chat and embedding models for evals
 
 This provider connects to Cloudflare Workers AI [text-generation and embedding models](https://developers.cloudflare.com/workers-ai/models/) through its OpenAI-compatible API.
 
-The provider uses Cloudflare's OpenAI-compatible API endpoints, making it easy to migrate between OpenAI and Cloudflare AI or use them interchangeably.
+The provider uses Cloudflare's OpenAI-compatible API endpoints, so you can migrate between OpenAI and Cloudflare AI or use them interchangeably.
 
 ## Required Configuration
 
@@ -21,6 +21,7 @@ export CLOUDFLARE_API_KEY=your_api_key_here
 The Cloudflare account ID is not secret and can be included in your promptfoo configuration file. The API key is secret, so use environment variables instead of hardcoding it in config files.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - Tell me a funny joke about {{topic}}
 
@@ -93,43 +94,16 @@ providers:
 
 ## Current Model Examples
 
-Here are some of the latest models available on Cloudflare Workers AI:
+### Model Catalog {#state-of-the-art-models-2025}
 
-### State-of-the-Art Models (2025)
-
-**Latest OpenAI Models:**
-
-- `@cf/openai/gpt-oss-120b` - OpenAI's production, general purpose, high reasoning model
-- `@cf/openai/gpt-oss-20b` - OpenAI's lower latency model for specialized use-cases
-
-**Advanced Multimodal Models:**
-
-- `@cf/meta/llama-4-scout-17b-16e-instruct` - Meta's Llama 4 Scout with native multimodal capabilities and mixture-of-experts architecture
-- `@cf/meta/llama-3.3-70b-instruct-fp8-fast` - Llama 3.3 70B optimized for speed with fp8 quantization
-- `@cf/meta/llama-3.2-11b-vision-instruct` - Optimized for visual recognition and image reasoning
-
-**Enhanced Reasoning & Problem Solving:**
-
-- `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` - Advanced reasoning model distilled from DeepSeek R1
-- `@cf/qwen/qwq-32b` - Medium-sized reasoning model competitive with o1-mini
-
-**Code Generation:**
-
-- `@cf/qwen/qwen2.5-coder-32b-instruct` - Current state-of-the-art open-source code model
-
-**Advanced Language Models:**
-
-- `@cf/mistralai/mistral-small-3.1-24b-instruct` - MistralAI's model with enhanced vision understanding and 128K context
-- `@cf/google/gemma-3-12b-it` - Latest Gemma model with 128K context and multilingual support
-- `@hf/nousresearch/hermes-2-pro-mistral-7b` - Function calling and JSON mode support
-
-**High-Quality Embeddings:**
-
-- `@cf/google/embeddinggemma-300m` - Google's state-of-the-art embedding model trained on 100+ languages
+Verify each exact model ID and its supported endpoints and capabilities in Cloudflare's current
+catalog. Features documented for the Responses API are not automatically available through
+`cloudflare-ai:chat:`.
 
 :::tip
 
-Cloudflare is constantly adding new models. See their [official model catalog](https://developers.cloudflare.com/workers-ai/models/) for the complete list of available models.
+See Cloudflare's [official model catalog](https://developers.cloudflare.com/workers-ai/models/)
+for current model IDs and capabilities.
 
 :::
 
@@ -137,7 +111,7 @@ Cloudflare is constantly adding new models. See their [official model catalog](h
 
 ### Basic Chat Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b
     config:
@@ -148,7 +122,7 @@ providers:
 
 ### Advanced Configuration with Multiple Models
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: cloudflare-ai:chat:@cf/meta/llama-4-scout-17b-16e-instruct
     config:
@@ -168,7 +142,7 @@ providers:
 
 ### Embedding Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: cloudflare-ai:embedding:@cf/google/embeddinggemma-300m
     config:

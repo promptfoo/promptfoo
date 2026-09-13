@@ -1,8 +1,6 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs, parseChatPrompt } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
@@ -25,6 +23,7 @@ import {
   normalizeGeminiAudio,
   normalizeGoogleServiceTier,
   normalizeSafetySettings,
+  parseConfigResponseSchema,
   removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -38,7 +37,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/index';
-import type { CompletionOptions } from './types';
+import type { CompletionOptions, GoogleProviderConfig } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -317,16 +316,19 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     // Merge configs from the provider and the prompt
-    const config = mergeGoogleCompletionOptions(
-      this.config,
-      context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    );
+    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+    const config = mergeGoogleCompletionOptions(this.config, promptConfig);
+    const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       config.systemInstruction,
-      { useAssistantRole: config.useAssistantRole },
+      {
+        basePath:
+          promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
+        useAssistantRole: config.useAssistantRole,
+      },
     );
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
@@ -398,8 +400,10 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         );
       }
 
-      const schema = maybeLoadFromExternalFile(
-        renderVarsInObject(config.responseSchema, context?.vars),
+      const schema = parseConfigResponseSchema(
+        config.responseSchema,
+        context?.vars,
+        promptConfig?.responseSchema === undefined ? this.config.basePath : promptBasePath,
       );
 
       body.generationConfig.response_schema = schema;

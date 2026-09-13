@@ -27,6 +27,7 @@ import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getRequestTimeoutMs, transformTools } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
+import { getVertexModelDefaultRegion } from './shared';
 import {
   normalizeTools,
   resolveGoogleToolConfig,
@@ -453,7 +454,10 @@ export abstract class GoogleGenericProvider implements ApiProvider {
    */
   getRegion(): string {
     const hasApiKey = Boolean(this.getApiKey());
-    return GoogleAuthManager.resolveRegion(this.config, this.env, hasApiKey);
+    const modelDefaultRegion = this.isVertexMode
+      ? getVertexModelDefaultRegion(this.modelName)
+      : undefined;
+    return GoogleAuthManager.resolveRegion(this.config, this.env, hasApiKey, modelDefaultRegion);
   }
 
   /**

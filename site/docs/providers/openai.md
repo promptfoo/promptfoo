@@ -74,6 +74,8 @@ Use an explicit endpoint in each provider ID. This makes the request format pred
 
 For file transcription, see [audio transcription](#audio-transcription). For Agents SDK, ChatKit, and Codex workflows, see [agent providers](#agentic-providers).
 
+Daybreak models require separate approval and use Responses, not Chat Completions. Use `openai:responses:gpt-daybreak-blue-latest` or `openai:responses:gpt-daybreak-red-latest`. Their shorthand IDs also select Responses on native OpenAI endpoints, preserving the alias in the request. See the [Blue](https://developers.openai.com/api/docs/models/gpt-daybreak-blue-latest) and [Red](https://developers.openai.com/api/docs/models/gpt-daybreak-red-latest) model cards.
+
 <Link id="gpt-51" />
 <Link id="available-models" />
 <Link id="key-features" />
@@ -218,7 +220,7 @@ For non-reasoning requests, Promptfoo defaults to `temperature: 0` and an output
 | `functionToolCallbacks`                    | Map function names to local callbacks. See [callbacks](#automatically-handling-function-tool-calls).                                                                  |
 | `passthrough`                              | Add fields directly to the request body, or override generated fields. Model-specific validation still applies. Supported by Chat, Responses, embeddings, and speech. |
 | `prompt_cache_key`, `prompt_cache_options` | Configure [OpenAI prompt caching](#prompt-caching-and-included-tool-results).                                                                                         |
-| `service_tier`                             | Request a service tier supported by your model and account.                                                                                                           |
+| `service_tier`                             | Request a service tier supported by your model and account. On OpenAI endpoints, `fast` is sent as `priority`; either value selects Fast mode.                        |
 | `maxRetries`                               | Retry count for HTTP requests; defaults to 4. Set to 0 to disable retries. Hard quota failures are not retried.                                                       |
 
 For endpoint-specific fields, see the [Chat Completions reference](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) and [Responses reference](https://developers.openai.com/api/reference/resources/responses/methods/create). Promptfoo's [configuration types](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts) describe the named provider options. An API field without a named option may need `passthrough`.
@@ -251,6 +253,8 @@ Use the model name and endpoint supported by your gateway. `apiBaseUrl` includes
 | `headers`          | Add request headers, such as `OpenAI-Project`.                                                                                                                                      |
 | `organization`     | Set the OpenAI organization ID.                                                                                                                                                     |
 
+OpenAI regional hosts (`us`, `eu`, `au`, `ca`, `jp`, `in`, `sg`, `kr`, `gb`, and `ae` under `*.api.openai.com`) receive the same lifecycle, endpoint compatibility, and service-tier handling as `api.openai.com`.
+
 Provider `env` overrides take precedence over the corresponding process environment variables. For [Azure OpenAI](/docs/providers/azure/), use the Azure provider and its deployment-specific configuration.
 
 <details>
@@ -278,6 +282,10 @@ Current standard rates in USD per million tokens, for requests with up to 272,00
 Above 272,000 input tokens, input, cached-input, and cache-write rates double; output rates increase by 50%. Batch and Flex cost half the standard rates. Fast mode (`fast` or `priority`) costs twice the standard rates. Regional processing adds 10%; Astra Fast mode is unavailable with EU data residency. Sol's promotional pricing runs at least through November 21, 2026. Rates verified September 9, 2026; see [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
 
 For Chat Completions and Responses, set `inputCost` and `outputCost` to override rates in **dollars per token**, not per million tokens. For audio, use `audioInputCost` and `audioOutputCost`. The older `cost` and `audioCost` options are shared input/output fallbacks. These settings affect Promptfoo's estimates, not API billing.
+
+Cost estimates follow the published rates for the selected model, service tier, and region. GPT-5.6 costs remain unset when cache-write usage is missing. GPT-5.5 Pro Batch and Flex costs above 272,000 input tokens also remain unset because OpenAI has not published those rates. Fine-tuned models use their published fine-tuned inference rates; Promptfoo does not infer Flex or Fast discounts for them.
+
+For Daybreak on `api.openai.com`, standard estimates follow the [current alias pricing](https://developers.openai.com/api/docs/pricing): Blue uses Sol's rates above; Red uses $12.50 input, $1.25 cached input, $15.625 cache writes, and $75 output per million tokens. Red's model card limits input to 272,000 tokens; its pricing table has no long-context rates. Estimates require cache-write usage and remain unset for other tiers, regional endpoints, gateways, or unsupported usage unless complete explicit rates apply. These alias relationships were verified September 11, 2026 and may change as the aliases move.
 
 ### Generating multiple responses
 
@@ -888,7 +896,7 @@ providers:
       prompt: A customer support call.
 ```
 
-`gpt-transcribe` uses `languages` instead of `language`. Keywords must be non-empty, single-line strings without `<` or `>`. Detected languages appear in `metadata.languages`; cost uses the API's duration when available. See the [complete transcription example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-audio-transcription).
+`gpt-transcribe` uses `languages` instead of `language`; Promptfoo maps a lone legacy `language` value to a one-element `languages` array. Keywords must be non-empty, single-line strings without `<` or `>`. Detected languages appear in `metadata.languages`; cost uses the API's duration when available. See the [complete transcription example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-audio-transcription).
 
 Keep `gpt-4o-transcribe-diarize` for speaker labels and `whisper-1` for word timestamps. `gpt-live-transcribe` uses a dedicated Realtime transcription session, which this file-upload provider does not implement. See the [OpenAI transcription guide](https://developers.openai.com/api/docs/guides/transcription) and [deprecation schedule](https://developers.openai.com/api/docs/deprecations#2026-08-26-transcription-models) for migration details.
 
@@ -918,6 +926,8 @@ providers:
 For audio output, set `modalities: [text, audio]` and a top-level `voice`, such as `marin`. Promptfoo sends the current Realtime API schema; if the requested modalities include audio, it selects audio output with a transcript.
 
 The legacy `gpt-4o-mini-realtime-preview-2024-12-17` selector still routes to Realtime. Check [OpenAI's lifecycle notices](https://developers.openai.com/api/docs/deprecations) and its [model card](https://developers.openai.com/api/docs/models/gpt-4o-mini-realtime-preview) before using this preview model.
+
+Standalone `gpt-live-transcribe`, `gpt-realtime-whisper`, and `gpt-realtime-translate` sessions use different endpoints and event flows that this conversational provider does not implement. `gpt-realtime-whisper` remains supported as input transcription within a conversational session.
 
 The result includes audio for playback and a transcript for text assertions. To grade tone, pacing, or pronunciation, select an audio-capable Chat Completions grader:
 
@@ -1042,13 +1052,15 @@ For these long-running Responses requests, `REQUEST_TIMEOUT_MS` does not overrid
 
 Use [OpenAI's deprecation schedule](https://developers.openai.com/api/docs/deprecations) as the source for shutdown dates and replacements. These migrations require more than changing a model name:
 
-| Existing configuration                          | Migration                                                                                                                                                                                                                             |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `openai:assistant:<id>`                         | The native Assistants API shut down on August 26, 2026. Move instructions, tools, and state to Responses; assistant IDs are not response IDs. See the [migration guide](https://developers.openai.com/api/docs/assistants/migration). |
-| `openai:completion:*`                           | Native Babbage, Davinci, and GPT-3.5 Turbo Instruct models retire on September 28, 2026. Use Chat Completions or Responses with compatible prompts and options.                                                                       |
-| `openai:video:*`                                | The native Videos API and Sora 2 models retire on September 24, 2026. OpenAI lists no replacement API.                                                                                                                                |
-| `functions` and `function_call`                 | Replace them with `tools` and `tool_choice`, using the selected endpoint's schema.                                                                                                                                                    |
-| Retired deep-research, Codex, or chat snapshots | Select an available model and re-run representative evals. Built-in research tools require the Responses endpoint.                                                                                                                    |
+| Existing configuration                                      | Migration                                                                                                                                                                                                                             |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `openai:assistant:<id>`                                     | The native Assistants API shut down on August 26, 2026. Move instructions, tools, and state to Responses; assistant IDs are not response IDs. See the [migration guide](https://developers.openai.com/api/docs/assistants/migration). |
+| `openai:completion:*`                                       | Native Babbage, Davinci, and GPT-3.5 Turbo Instruct models retire on September 28, 2026. Use Chat Completions or Responses with compatible prompts and options.                                                                       |
+| `openai:video:*`                                            | The native Videos API and Sora 2 models retire on September 24, 2026. OpenAI lists no replacement API.                                                                                                                                |
+| `gpt-image-1.5`, `gpt-image-1-mini`, `chatgpt-image-latest` | These native image models retire on December 1, 2026. Select a current GPT Image model and its supported generation options.                                                                                                          |
+| Original `gpt-audio` and `gpt-realtime` families            | These native families retire on January 20, 2027. Use `gpt-audio-1.5` or `gpt-realtime-2.1` for new evals.                                                                                                                            |
+| `functions` and `function_call`                             | Replace them with `tools` and `tool_choice`, using the selected endpoint's schema.                                                                                                                                                    |
+| Retired deep-research, Codex, or chat snapshots             | Select an available model and re-run representative evals. Built-in research tools require the Responses endpoint.                                                                                                                    |
 
 OpenAI-compatible services have their own lifecycle and API contracts. A provider implementation remaining in Promptfoo does not mean its model is still available from OpenAI.
 

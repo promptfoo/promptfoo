@@ -1,4 +1,4 @@
-# compare-deepseek-r1-vs-openai-o1 (DeepSeek-R1 vs OpenAI o1 Comparison)
+# compare-deepseek-r1-vs-openai-o1 (DeepSeek V4.1 Flash vs OpenAI GPT-5.6)
 
 You can run this example with:
 
@@ -7,7 +7,9 @@ npx promptfoo@latest init --example compare-deepseek-r1-vs-openai-o1
 cd compare-deepseek-r1-vs-openai-o1
 ```
 
-This example demonstrates how to benchmark DeepSeek's R1 model against OpenAI's o1 model using the Massive Multitask Language Understanding (MMLU) benchmark, focusing on reasoning-heavy subjects.
+This example benchmarks DeepSeek V4.1 Flash (`deepseek:deepseek-flash`) against OpenAI GPT-5.6 using the Massive Multitask Language Understanding (MMLU) benchmark, focusing on reasoning-heavy subjects. Flash uses explicit thinking mode and an 8192-token completion limit. See DeepSeek's [release notes](https://api-docs.deepseek.com/updates/#date-2026-09-10) and [Chat API token limits](https://api-docs.deepseek.com/api/create-chat-completion/).
+
+The folder keeps its original R1/o1 name. Historical results retain their original model identities and do not describe this updated comparison.
 
 ## Prerequisites
 

@@ -13,21 +13,19 @@ Here's a basic example of configuring providers in your promptfoo YAML config:
 
 ```yaml
 providers:
-  - anthropic:messages:claude-opus-4-6
-  - openai:gpt-5
-  - openai:gpt-5-mini
-  - google:gemini-3.6-flash
-  - id: vertex:gemini-3.6-flash
-    config:
-      region: global
+  - anthropic:messages:claude-sonnet-5
+  - openai:gpt-5.6
+  - openai:gpt-5.4-mini
+  - google:gemini-2.5-pro
+  - vertex:gemini-2.5-pro
 ```
 
 ## Available Providers
 
 | API Providers                                           | Description                                                      | Syntax & Example                                                                                                      |
 | ------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| [OpenAI](./openai.md)                                   | GPT models including GPT-5.1 and reasoning models                | `openai:gpt-5.1` or `openai:o4-mini`                                                                                  |
-| [Anthropic](./anthropic.md)                             | Claude models                                                    | `anthropic:messages:claude-opus-4-6`                                                                                  |
+| [OpenAI](./openai.md)                                   | GPT models including GPT-5.6 and reasoning models                | `openai:gpt-5.6` or `openai:o4-mini`                                                                                  |
+| [Anthropic](./anthropic.md)                             | Claude models                                                    | `anthropic:messages:claude-sonnet-5`                                                                                  |
 | [Claude Agent SDK](./claude-agent-sdk.md)               | Claude Agent SDK                                                 | `anthropic:claude-agent-sdk`                                                                                          |
 | [HTTP](./http.md)                                       | Generic HTTP-based providers                                     | `https://api.example.com/v1/chat/completions`                                                                         |
 | [A2A](./a2a.md)                                         | Agent2Agent HTTP+JSON agents                                     | `a2a:https://agent.example.com/a2a/v1`                                                                                |
@@ -50,22 +48,22 @@ providers:
 | [AWS Bedrock Agents](./bedrock-agents.md)               | Amazon Bedrock Agents for orchestrating AI workflows             | `bedrock-agent:YOUR_AGENT_ID`                                                                                         |
 | [Amazon SageMaker](./sagemaker.md)                      | Models deployed on SageMaker endpoints                           | `sagemaker:my-endpoint-name`                                                                                          |
 | [Azure OpenAI](./azure.md)                              | Azure-hosted OpenAI models                                       | `azureopenai:gpt-4o-custom-deployment-name`                                                                           |
-| [Cerebras](./cerebras.md)                               | High-performance inference API for Llama models                  | `cerebras:llama-4-scout-17b-16e-instruct`                                                                             |
-| [Cloudflare AI](./cloudflare-ai.md)                     | Cloudflare's OpenAI-compatible AI platform                       | `cloudflare-ai:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`                                                          |
+| [Cerebras](./cerebras.md)                               | High-performance inference API for open models                   | `cerebras:gpt-oss-120b`                                                                                               |
+| [Cloudflare AI](./cloudflare-ai.md)                     | Cloudflare's OpenAI-compatible AI platform                       | `cloudflare-ai:chat:@cf/deepseek-ai/deepseek-r1-distill-qwen-32b`                                                     |
 | [Cloudflare AI Gateway](./cloudflare-gateway.md)        | Route requests through Cloudflare AI Gateway                     | `cloudflare-gateway:openai:gpt-5.2`                                                                                   |
 | [Cloudera](./cloudera.md)                               | Cloudera AI Inference Service                                    | `cloudera:llama-2-13b-chat`                                                                                           |
 | [CometAPI](./cometapi.md)                               | 500+ AI models from multiple providers via unified API           | `cometapi:chat:gpt-5-mini` or `cometapi:image:dall-e-3`                                                               |
 | [Cohere](./cohere.md)                                   | Cohere's language models                                         | `cohere:command-a-03-2025`                                                                                            |
 | [Databricks](./databricks.md)                           | Databricks Foundation Model APIs                                 | `databricks:databricks-meta-llama-3-3-70b-instruct`                                                                   |
-| [DeepSeek](./deepseek.md)                               | DeepSeek's language models                                       | `deepseek:deepseek-r1`                                                                                                |
+| [DeepSeek](./deepseek.md)                               | DeepSeek's language models                                       | `deepseek:deepseek-flash`                                                                                             |
 | [Docker Model Runner](./docker.md)                      | Evaluate with local models                                       | `docker:ai/llama3.2:3B-Q4_K_M`                                                                                        |
 | [Envoy AI Gateway](./envoy.md)                          | OpenAI-compatible AI Gateway proxy                               | `envoy:my-model`                                                                                                      |
 | [ElevenLabs](./elevenlabs.md)                           | Speech, transcription, agents, and audio utilities               | `elevenlabs:tts`, `elevenlabs:stt`, `elevenlabs:agents`                                                               |
 | [F5](./f5.md)                                           | OpenAI-compatible AI Gateway interface                           | `f5:path-name`                                                                                                        |
 | [fal.ai](./fal.md)                                      | Image Generation Provider                                        | `fal:image:fal-ai/fast-sdxl`                                                                                          |
 | [Fireworks AI](./fireworks.md)                          | Various hosted models                                            | `fireworks:accounts/fireworks/models/gpt-oss-120b`                                                                    |
-| [Google AI Studio](./google.md)                         | Gemini models, Live API, image generation, and Veo video         | `google:gemini-3.8-flash`, `google:gemini-3.1-flash-image`, `google:video:veo-3.1-generate-preview`                   |
-| [Google Vertex AI](./vertex.md)                         | Google Cloud's AI platform, including explicit Veo video routing | `vertex:gemini-3.8-flash`, `vertex:gemini-3.5-flash-lite`, `vertex:video:veo-3.1-generate-001`                        |
+| [Google AI Studio](./google.md)                         | Gemini models, Live API, image generation, and Veo video         | `google:gemini-2.5-pro`, `google:gemini-3.1-flash-image`, `google:video:veo-3.1-generate-preview`                     |
+| [Google Vertex AI](./vertex.md)                         | Google Cloud's AI platform, including explicit Veo video routing | `vertex:gemini-2.5-pro`, `vertex:gemini-2.5-flash`, `vertex:video:veo-3.1-generate-001`                               |
 | [Groq](./groq.md)                                       | High-performance inference API                                   | `groq:openai/gpt-oss-120b`                                                                                            |
 | [Helicone AI Gateway](./helicone.md)                    | Self-hosted AI gateway for unified provider access               | `helicone:openai/gpt-5`, `helicone:anthropic/claude-sonnet-4`                                                         |
 | [Hyperbolic](./hyperbolic.md)                           | OpenAI-compatible Llama 3 provider                               | `hyperbolic:meta-llama/Llama-3.3-70B-Instruct`                                                                        |
@@ -85,7 +83,7 @@ providers:
 | [OpenClaw](./openclaw.md)                               | Personal AI assistant framework with agent tools                 | `openclaw:main`                                                                                                       |
 | [OpenCode SDK](./opencode-sdk.md)                       | OpenCode agent using its configured model                        | `opencode:sdk`                                                                                                        |
 | [OpenLLM](./openllm.md)                                 | BentoML's model serving framework                                | Compatible with OpenAI syntax                                                                                         |
-| [OpenRouter](./openrouter.md)                           | Unified API for multiple providers                               | `openrouter:openai/gpt-5.4`                                                                                           |
+| [OpenRouter](./openrouter.md)                           | Unified API for multiple providers                               | `openrouter:openai/gpt-5.6-sol`                                                                                       |
 | [OrcaRouter](./orcarouter.md)                           | Adaptive multi-provider router with workload-aware routing       | `orcarouter:openai/gpt-5.5`, `orcarouter:orcarouter/auto`                                                             |
 | [Perplexity AI](./perplexity.md)                        | Search-augmented chat with citations                             | `perplexity:sonar-pro`                                                                                                |
 | [Portkey](../integrations/portkey.md)                   | OpenAI-compatible gateway with Portkey configuration headers     | `portkey:<model>`                                                                                                     |
@@ -115,7 +113,7 @@ providers:
 | [Sequence](./sequence.md)                               | Custom - Multi-prompt sequencing                                 | `sequence` with config.inputs array                                                                                   |
 | [Simulated User](./simulated-user.md)                   | Custom - Conversation simulator                                  | `promptfoo:simulated-user`                                                                                            |
 | [WatsonX](./watsonx.md)                                 | IBM's WatsonX                                                    | `watsonx:ibm/granite-4-h-small`                                                                                       |
-| [X.AI](./xai.md)                                        | X.AI's models (text, image, video, voice)                        | `xai:grok-4.3`, `xai:image:grok-imagine-image`, `xai:video:grok-imagine-video`, `xai:voice:grok-voice-think-fast-1.0` |
+| [X.AI](./xai.md)                                        | X.AI's models (text, image, video, voice)                        | `xai:grok-4.3`, `xai:image:grok-imagine-image`, `xai:video:grok-imagine-video`, `xai:voice:grok-voice-think-fast-2.0` |
 
 ## Provider Syntax
 
@@ -143,8 +141,7 @@ Providers are specified using various syntax options:
    ```yaml
    - id: openai:gpt-5
      config:
-       temperature: 0.7
-       max_tokens: 150
+       max_completion_tokens: 150
    ```
 
 3. File-based configuration:
@@ -153,16 +150,12 @@ Providers are specified using various syntax options:
 
    ```yaml title="provider.yaml"
    id: openai:chat:gpt-5
-   config:
-     temperature: 0.7
    ```
 
    Or multiple providers:
 
    ```yaml title="providers.yaml"
    - id: openai:gpt-5
-     config:
-       temperature: 0.7
    - id: anthropic:messages:claude-opus-4-6
      config:
        max_tokens: 1000
@@ -269,6 +262,7 @@ Many providers support these common configuration options:
 
 - `temperature`: Controls randomness (0.0 to 1.0)
 - `max_tokens`: Maximum number of tokens to generate
+- `max_completion_tokens`: Output token cap for OpenAI reasoning models such as GPT-5
 - `top_p`: Nucleus sampling parameter
 - `frequency_penalty`: Penalizes frequent tokens
 - `presence_penalty`: Penalizes new tokens based on presence in text
@@ -280,8 +274,7 @@ Example:
 providers:
   - id: openai:gpt-5
     config:
-      temperature: 0.7
-      max_tokens: 150
+      max_completion_tokens: 150
       top_p: 0.9
       frequency_penalty: 0.5
       presence_penalty: 0.5
@@ -300,7 +293,6 @@ Enable MCP for a provider by adding the `mcp` block to your provider's configura
 providers:
   - id: openai:gpt-5
     config:
-      temperature: 0.7
       mcp:
         enabled: true
         server:

@@ -1,6 +1,6 @@
 # provider-cerebras (Cerebras Example (High-Performance LLM Inference))
 
-This example demonstrates how to use the Cerebras provider with promptfoo to evaluate Cerebras Inference API models, which offer high-performance inference for Llama and other LLM models.
+This example demonstrates how to use the Cerebras provider with promptfoo to evaluate models on the high-performance Cerebras Inference API.
 
 You can run this example with:
 
@@ -90,20 +90,17 @@ promptfoo eval -c promptfooconfig-tools.yaml
 
 ## Model Capabilities
 
-Cerebras supports several powerful models:
+The public model catalog lists `gpt-oss-120b` and `qwen-3.8-27b`. Context limits depend on the account tier: GPT-OSS 120B allows about 65K tokens on free accounts and 131K on paid accounts; Qwen 3.8 27B allows 64K and 128K respectively.
 
-- `llama-4-scout-17b-16e-instruct` - Llama 4 Scout 17B model with 16 expert MoE (featured in examples)
-- `llama3.1-8b` - Llama 3.1 8B model
-- `llama-3.3-70b` - Llama 3.3 70B model
-- `deepSeek-r1-distill-llama-70B` (private preview)
+Check the [official model catalog](https://inference-docs.cerebras.ai/models/overview) for current availability. Dedicated deployments have a separate catalog, so a model's absence from this public list does not establish its dedicated availability.
 
 ## Pricing & Usage
 
-Cerebras Inference API offers competitive pricing compared to other inference services. Check the [official pricing page](https://docs.cerebras.ai) for the most current rates. Usage is billed based on input and output tokens.
+Check [Cerebras pricing](https://www.cerebras.ai/pricing) for the rates that apply to your model and account. The example compares both public models without assuming that they share prices or account limits.
 
 ## Learn More
 
 - [Cerebras Provider Documentation](https://promptfoo.dev/docs/providers/cerebras)
-- [Cerebras API Reference](https://docs.cerebras.ai/)
-- [Cerebras Structured Outputs Guide](https://docs.cerebras.ai/capabilities/structured-outputs/)
-- [Cerebras Tool Use Guide](https://docs.cerebras.ai/capabilities/tool-use/)
+- [Cerebras API Reference](https://inference-docs.cerebras.ai/)
+- [Cerebras Structured Outputs Guide](https://inference-docs.cerebras.ai/capabilities/structured-outputs/)
+- [Cerebras Tool Use Guide](https://inference-docs.cerebras.ai/capabilities/tool-use/)

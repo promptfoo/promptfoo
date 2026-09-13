@@ -718,6 +718,7 @@ export class GoogleProvider extends GoogleGenericProvider {
             this.isVertexMode,
             lastData.usageMetadata,
             actualServiceTier,
+            this.isVertexMode ? this.getRegion() : undefined,
           );
       const audio = normalizeGeminiAudio(output);
       const thoughtSignatures = collectThoughtSignatures(dataWithResponse);

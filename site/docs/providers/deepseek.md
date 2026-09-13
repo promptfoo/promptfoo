@@ -1,6 +1,6 @@
 ---
 sidebar_label: DeepSeek
-description: Configure DeepSeek's OpenAI-compatible API with V4 chat and reasoning models, 1M context windows, and prompt caching for cost-effective LLM testing
+description: Configure DeepSeek's OpenAI-compatible API with V4.1 Flash, thinking controls, 1M context windows, and prompt caching
 ---
 
 # DeepSeek
@@ -18,65 +18,78 @@ Basic configuration example:
 
 ```yaml
 providers:
-  - id: deepseek:deepseek-chat
+  - id: deepseek:deepseek-flash
     config:
-      temperature: 0.7
       max_tokens: 4000
       apiKey: YOUR_DEEPSEEK_API_KEY
+      passthrough:
+        thinking:
+          type: disabled
 
-  - id: deepseek:deepseek-reasoner # Legacy alias for V4 Flash thinking mode
+  - id: deepseek:deepseek-flash
     config:
-      max_tokens: 8000
+      max_tokens: 8192
+      showThinking: true
+      passthrough:
+        thinking:
+          type: enabled
+        reasoning_effort: high
 ```
 
 ### Configuration Options
 
 - `temperature`
 - `max_tokens`
-- `cost`, `inputCost`, `outputCost` - Override promptfoo's pricing estimates (`inputCost` and `outputCost` take precedence over `cost`)
+- `cost`, `inputCost`, `outputCost`, `cacheReadCost` - Set applicable per-token prices. `inputCost` and `outputCost` take precedence over `cost`; cached input uses `cacheReadCost`, falling back to `inputCost` or `cost`.
 - `top_p`, `presence_penalty`, `frequency_penalty`
 - `stream`
-- `showThinking` - Control whether reasoning content is included in the output (default: `true`, applies to deepseek-reasoner model)
+- `showThinking` - Control whether returned reasoning content is included in promptfoo's output (default: `true`); this does not select the API's thinking mode
+- `passthrough.thinking` - Select the API mode with `{ type: enabled }` or `{ type: disabled }`
 
 ## Available Models
 
+DeepSeek uses [peak and off-peak pricing](https://api-docs.deepseek.com/quick_start/pricing/). Promptfoo leaves cost unknown unless you configure the applicable rates for the tokens used; it does not infer a request's billing period from the current clock.
+
 :::note
 
-The current primary API model names are `deepseek-v4-flash` and `deepseek-v4-pro`. The legacy aliases `deepseek-chat` and `deepseek-reasoner` remain available until July 24, 2026 and currently map to the non-thinking and thinking modes of `deepseek-v4-flash`, respectively.
+The current canonical Flash ID is `deepseek-flash`. The bare `deepseek:` provider defaults to it and explicitly disables thinking to preserve the old bare-provider behavior. Explicit model IDs use DeepSeek's upstream thinking-enabled default unless you override `passthrough.thinking`.
+
+DeepSeek [retired the legacy `deepseek-chat` and `deepseek-reasoner` aliases](https://api-docs.deepseek.com/news/news260424/#api-is-available-today) on July 24, 2026. Promptfoo still recognizes both IDs for backward-compatible configuration, but upstream requests using them are rejected.
 
 :::
 
+### deepseek-flash
+
+- Serves DeepSeek-V4.1-Flash, [released September 10, 2026](https://api-docs.deepseek.com/updates/#date-2026-09-10), with native vision support
+- Supports thinking and non-thinking modes and the Responses API
+- 1M context window, up to 384K output tokens
+
 ### deepseek-v4-flash
 
-- General purpose V4 model for conversations and reasoning
-- 1M context window, up to 384K output tokens
-- Input: $0.0028/1M (cache hit), $0.14/1M (cache miss)
-- Output: $0.28/1M
+`deepseek-v4-flash` and `deepseek-v4-flash-vision-exp` are [temporary compatibility aliases](https://api-docs.deepseek.com/) that serve V4.1 Flash and use Flash billing. Their original models are retired. Use `deepseek-flash` for new configs; no alias expiry date is announced.
 
 ### deepseek-v4-pro
 
 - Higher-capability V4 model with thinking and non-thinking modes
+- As of September 11, 2026, serves V4-Pro-0813, released August 13. DeepSeek's native [Responses API](https://api-docs.deepseek.com/guides/responses_api/) supports this model. The `deepseek:` provider uses Chat Completions.
+- DeepSeek [schedules this ID to route to V4.1 Flash](https://api-docs.deepseek.com/updates/#date-2026-09-10) from September 14, 2026 at 04:00 UTC, with Flash billing, until a future V4.1 Pro release. No release date is announced.
 - 1M context window, up to 384K output tokens
-- Input: $0.003625/1M (cache hit), $0.435/1M (cache miss)
-- Output: $0.87/1M
-- Promotional pricing is documented through May 31, 2026
 
 ### Legacy aliases
 
 ### deepseek-chat
 
-- Legacy alias that currently maps to non-thinking `deepseek-v4-flash`
-- Scheduled for retirement on July 24, 2026
+- Retained by Promptfoo for backward-compatible configuration, but retired upstream
+- Use `deepseek-flash` for active configs
 
 ### deepseek-reasoner
 
-- Legacy alias that currently maps to thinking `deepseek-v4-flash`
-- Scheduled for retirement on July 24, 2026
-- Supports showing or hiding reasoning content through the `showThinking` parameter
+- Retained by Promptfoo for backward-compatible configuration, but retired upstream
+- Use `deepseek-flash` with thinking enabled
 
 :::warning
 
-Thinking mode does not support `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`, `logprobs`, or `top_logprobs` parameters. Setting these parameters will not trigger an error but will have no effect.
+In [thinking mode](https://api-docs.deepseek.com/guides/thinking_mode/), `top_p` applies, but values below `0.95` are raised to `0.95`; `temperature` has no effect. Non-thinking mode fixes `top_p` at `1.0` and ignores supplied values. The [Chat API](https://api-docs.deepseek.com/api/create-chat-completion/) ignores `presence_penalty` and `frequency_penalty` in both modes.
 
 :::
 
@@ -84,15 +97,17 @@ Thinking mode does not support `temperature`, `top_p`, `presence_penalty`, `freq
 
 Here's an example comparing DeepSeek with OpenAI on reasoning tasks:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: deepseek:deepseek-reasoner
+  - id: deepseek:deepseek-flash
     config:
-      max_tokens: 8000
-      showThinking: true # Include reasoning content in output (default)
-  - id: openai:o-1
-    config:
-      temperature: 0.0
+      max_tokens: 8192
+      showThinking: true # Include reasoning content in promptfoo's output (default)
+      passthrough:
+        thinking:
+          type: enabled
+  - id: openai:chat:gpt-5.6
 
 prompts:
   - 'Solve this step by step: {{math_problem}}'
@@ -104,15 +119,18 @@ tests:
 
 ### Controlling Reasoning Output
 
-The legacy `deepseek-reasoner` alias uses V4 Flash thinking mode and includes detailed
-reasoning steps in its output. You can control whether this reasoning content is shown
-using the `showThinking` parameter:
+DeepSeek models include detailed reasoning steps in their output when thinking mode is
+enabled. You can control whether this reasoning content is shown using the `showThinking`
+parameter:
 
 ```yaml
 providers:
-  - id: deepseek:deepseek-reasoner
+  - id: deepseek:deepseek-flash
     config:
       showThinking: false # Hide reasoning content from output
+      passthrough:
+        thinking:
+          type: enabled
 ```
 
 When `showThinking` is set to `true` (default), the output includes both reasoning and the final answer in a standardized format:
@@ -125,15 +143,15 @@ Thinking: <reasoning content>
 
 When set to `false`, only the final answer is included in the output. This is useful when you want better reasoning quality but don't want to expose the reasoning process to end users or in your assertions.
 
-See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
+See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) that benchmarks DeepSeek V4.1 Flash against OpenAI GPT-5.6 on the MMLU reasoning tasks.
 
 ## API Details
 
 - Base URL: `https://api.deepseek.com/v1`
 - OpenAI-compatible API format
-- Full [API documentation](https://platform.deepseek.com/docs)
+- Full [API documentation](https://api-docs.deepseek.com/)
 
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai/) - Compatible configuration options
-- [Complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) - Benchmark against OpenAI's o1 model
+- [Complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-deepseek-r1-vs-openai-o1) - Benchmark DeepSeek V4.1 Flash against OpenAI GPT-5.6

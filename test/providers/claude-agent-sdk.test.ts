@@ -1797,6 +1797,16 @@ describe('ClaudeCodeSDKProvider', () => {
     });
 
     describe('config.env passthrough (OTEL / subprocess env)', () => {
+      let restoreEnv: () => void;
+
+      beforeEach(() => {
+        restoreEnv = mockProcessEnv({ OTEL_RESOURCE_ATTRIBUTES: undefined });
+      });
+
+      afterEach(() => {
+        restoreEnv();
+      });
+
       it('preserves the previous five-level subagent nesting default', async () => {
         mockQuery.mockReturnValue(createMockResponse('ok'));
 

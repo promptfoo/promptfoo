@@ -148,6 +148,15 @@ describe('GoogleProvider', () => {
       expect((provider as any).isVertexMode).toBe(true);
     });
 
+    it('should detect Vertex mode from provider-scoped GOOGLE_CLOUD_PROJECT', () => {
+      const provider = new GoogleProvider('gemini-pro', {
+        env: { GOOGLE_CLOUD_PROJECT: 'provider-project' },
+      });
+
+      expect(provider.id()).toBe('vertex:gemini-pro');
+      expect((provider as any).isVertexMode).toBe(true);
+    });
+
     it('should detect Vertex mode from credentials presence', () => {
       const provider = new GoogleProvider('gemini-pro', {
         config: {

@@ -44,7 +44,8 @@ end
 
 ### Step 2: Configure Promptfoo
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 # promptfooconfig.yaml
 providers:
   - id: 'file://echo_provider.rb'

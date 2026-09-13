@@ -74,10 +74,11 @@ the same `not_found_error` a retired model returns.
 
 ### Retired on the Anthropic API
 
-These IDs return `404 not_found_error` from Anthropic. Promptfoo still accepts them — they
-remain valid on AWS Bedrock, GCP Vertex, and OpenAI-compatible gateways, which set their own
-lifecycle dates, and cost attribution for historical evals needs the rates — but a direct
-`anthropic:messages:` call will fail.
+These IDs return `404 not_found_error` from Anthropic, so direct `anthropic:messages:` calls
+fail. Promptfoo retains the IDs and rates for historical cost attribution. Model namespaces,
+availability, and retirement dates differ on [AWS Bedrock](/docs/providers/aws-bedrock),
+[Vertex AI](/docs/providers/vertex), and OpenAI-compatible gateways; consult the relevant
+platform's model catalog before selecting a model.
 
 | Model ID                     | Description            | Suggested replacement |
 | ---------------------------- | ---------------------- | --------------------- |
@@ -98,39 +99,15 @@ Anthropic does not publish `-latest` aliases — `claude-sonnet-4-5-latest` retu
 parentheses above: `claude-sonnet-4-5` resolves to `claude-sonnet-4-5-20250929`.
 Claude 4.6 and newer are already unversioned IDs, so there is nothing to shorten.
 
-Rows without a parenthetical have no alias. Availability differs by platform — see
-[Retired on the Anthropic API](#retired-on-the-anthropic-api) for the IDs that only work
-through Bedrock, Vertex, and gateways.
+Rows without a parenthetical have no alias.
+[Retired on the Anthropic API](#retired-on-the-anthropic-api) lists retirements from the
+direct Anthropic API. Check the platform guides below for availability through other providers.
 
 :::
 
 ### Cross-Platform Model Availability
 
-Claude models are available across multiple platforms. Here's how the model names map across different providers:
-
-| Model             | Anthropic API                                  | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
-| ----------------- | ---------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
-| Claude Fable 5.1  | claude-fable-5-1                               | claude-fable-5-1                                                      | anthropic.claude-fable-5-1                        | claude-fable-5-1                               |
-| Claude Mythos 5.1 | claude-mythos-5-1                              | claude-mythos-5-1 (limited)                                           | anthropic.claude-mythos-5-1 (limited)             | claude-mythos-5-1 (limited)                    |
-| Claude Fable 5    | claude-fable-5                                 | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
-| Claude Mythos 5   | claude-mythos-5                                | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
-| Claude Opus 5     | claude-opus-5                                  | claude-opus-5                                                         | anthropic.claude-opus-5                           | claude-opus-5                                  |
-| Claude 4.8 Opus   | claude-opus-4-8                                | claude-opus-4-8                                                       | anthropic.claude-opus-4-8                         | claude-opus-4-8                                |
-| Claude 4.7 Opus   | claude-opus-4-7                                | claude-opus-4-7                                                       | anthropic.claude-opus-4-7                         | claude-opus-4-7                                |
-| Claude Sonnet 5   | claude-sonnet-5                                | claude-sonnet-5                                                       | anthropic.claude-sonnet-5                         | claude-sonnet-5                                |
-| Claude 4.6 Sonnet | claude-sonnet-4-6                              | claude-sonnet-4-6                                                     | anthropic.claude-sonnet-4-6                       | claude-sonnet-4-6                              |
-| Claude 4.6 Opus   | claude-opus-4-6                                | claude-opus-4-6-20260205                                              | anthropic.claude-opus-4-6-v1                      | claude-opus-4-6                                |
-| Claude 4.5 Opus   | claude-opus-4-5-20251101 (claude-opus-4-5)     | claude-opus-4-5-20251101                                              | anthropic.claude-opus-4-5-20251101-v1:0           | claude-opus-4-5@20251101                       |
-| Claude 4.5 Sonnet | claude-sonnet-4-5-20250929 (claude-sonnet-4-5) | claude-sonnet-4-5-20250929                                            | anthropic.claude-sonnet-4-5-20250929-v1:0         | claude-sonnet-4-5@20250929                     |
-| Claude 4.5 Haiku  | claude-haiku-4-5-20251001 (claude-haiku-4-5)   | claude-haiku-4-5-20251001                                             | anthropic.claude-haiku-4-5-20251001-v1:0          | claude-haiku-4-5@20251001                      |
-| Claude 4.1 Opus   | Retired on the direct API                      | claude-opus-4-1-20250805                                              | anthropic.claude-opus-4-1-20250805-v1:0           | claude-opus-4-1@20250805                       |
-| Claude 4 Opus     | Retired on the direct API                      | claude-opus-4-20250514                                                | anthropic.claude-opus-4-20250514-v1:0             | claude-opus-4@20250514                         |
-| Claude 4 Sonnet   | Retired on the direct API                      | claude-sonnet-4-20250514                                              | anthropic.claude-sonnet-4-20250514-v1:0           | claude-sonnet-4@20250514                       |
-| Claude 3.7 Sonnet | Retired on the direct API                      | claude-3-7-sonnet-20250219                                            | anthropic.claude-3-7-sonnet-20250219-v1:0         | claude-3-7-sonnet@20250219                     |
-| Claude 3.5 Sonnet | Retired on the direct API                      | claude-3-5-sonnet-20241022                                            | anthropic.claude-3-5-sonnet-20241022-v2:0         | claude-3-5-sonnet-v2@20241022                  |
-| Claude 3.5 Haiku  | Retired on the direct API                      | claude-3-5-haiku-20241022                                             | anthropic.claude-3-5-haiku-20241022-v1:0          | claude-3-5-haiku@20241022                      |
-| Claude 3 Opus     | Retired on the direct API                      | claude-3-opus-20240229                                                | anthropic.claude-3-opus-20240229-v1:0             | claude-3-opus@20240229                         |
-| Claude 3 Haiku    | Retired on the direct API                      | claude-3-haiku-20240307                                               | anthropic.claude-3-haiku-20240307-v1:0            | claude-3-haiku@20240307                        |
+Model IDs, provider namespaces, and retirement dates differ across platforms. See [Azure AI Foundry](/docs/providers/azure/#using-claude-models), [AWS Bedrock](/docs/providers/aws-bedrock), and [Vertex AI](/docs/providers/vertex) for platform-specific availability and configuration. On Azure, configure the deployment name rather than assuming it matches the model ID.
 
 ### Supported Parameters
 
@@ -202,6 +179,7 @@ The Anthropic provider supports several options to customize the behavior of the
 Example configuration with options and prompts:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -260,7 +238,7 @@ providers:
 
 The Anthropic provider supports tool calling (function calling). Here's an example configuration for defining tools.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -371,7 +349,7 @@ providers:
 
 ##### Combined Web Search and Web Fetch
 
-You can use both tools together for comprehensive web information gathering:
+You can use both tools together for web information gathering:
 
 ```yaml
 providers:
@@ -430,7 +408,7 @@ providers:
 
 The Anthropic Messages provider can connect to any [MCP server](https://modelcontextprotocol.io) — stdio, SSE, or streamable HTTP — and execute the model's `tool_use` blocks against that server, feeding the `tool_result` back into the conversation until Claude produces a final reply.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-6
     config:
@@ -482,6 +460,7 @@ Claude supports prompt caching to optimize API usage and reduce costs for repeti
 Supported on all Claude 3, 3.5, and 4 models. Basic example:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
 prompts:
@@ -529,6 +508,7 @@ See [Anthropic's Prompt Caching Guide](https://docs.anthropic.com/claude/docs/pr
 Claude can provide detailed citations when answering questions about documents. Basic example:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
 prompts:
@@ -649,7 +629,7 @@ is a separate research-preview rate that promptfoo does not encode. To track it,
 `inputCost: 10 / 1e6` and `outputCost: 50 / 1e6` — a single `cost` cannot express asymmetric
 rates, because it is applied as both the input and the output per-token price.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-opus-5
     config:
@@ -672,12 +652,17 @@ controls at the model level:
 - **Manual thinking budgets convert to adaptive.** A legacy
   `thinking: { type: 'enabled', budget_tokens: N }` config is converted to
   `thinking: { type: 'adaptive' }`; use `effort` to control reasoning depth.
+- **Adaptive thinking is on by default.** Requests without a `thinking` field still use
+  adaptive thinking. Pass `thinking: { type: 'disabled' }` to turn it off, and leave enough
+  `max_tokens` headroom for thinking plus the visible response.
 
 Sonnet 5 uses a 1M-token context window billed at **$2 per million input / $10 per million output**, with no long-context surcharge above 200K tokens. Anthropic made these rates permanent on August 10, 2026, canceling the planned September increase. See [Anthropic's pricing documentation](https://platform.claude.com/docs/en/about-claude/pricing). The newer tokenizer can produce more tokens for the same text, so compare total request costs when migrating from Sonnet 4.6.
 
 ### Claude Opus 4.8 notes
 
-Opus 4.8 is Anthropic's most capable model and builds directly on Opus 4.7 — it supports the same feature set, so the Opus 4.7 guidance below applies unchanged. Promptfoo handles the model-level differences automatically:
+Opus 4.8 is a previous-generation Opus model that builds directly on Opus 4.7. For current
+Opus-tier workloads, use Opus 5. Opus 4.8 supports the same feature set as Opus 4.7, so the guidance below applies
+unchanged. Promptfoo handles the model-level differences automatically:
 
 - **Sampling controls are managed for you.** Like Opus 4.7, Opus 4.8 samples adaptively and rejects `temperature`, `top_p`, and `top_k` (any of them returns a 400); promptfoo omits all three from every request. Setting any of them in config or `ANTHROPIC_TEMPERATURE` logs a one-time heads-up so you can clean the values out of your eval.
 - **Adaptive thinking is opt-in.** Set `thinking: { type: 'adaptive' }` to let the model decide how much to reason per request. Without an explicit `thinking` block the model runs **without** extended thinking, even at high effort. Manual budget-based thinking (`thinking: { type: 'enabled', budget_tokens: N }`) is rejected with a 400.
@@ -700,7 +685,7 @@ The same guidance applies when you reach Opus 4.7 through AWS Bedrock, GCP Verte
 
 Claude supports an extended thinking capability that allows you to see the model's internal reasoning process before it provides the final answer. This can be configured using the `thinking` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   # Adaptive thinking (recommended for Claude Opus 4.7)
   - id: anthropic:messages:claude-opus-4-7
@@ -790,7 +775,7 @@ Example response with thinking enabled:
 
 By default, thinking content is included in the response output. You can control this behavior using the `showThinking` parameter:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-4-5-20250929
     config:
@@ -985,7 +970,7 @@ You can override the grading provider in several ways:
 
 1. For all test cases using `defaultTest`:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider: anthropic:messages:claude-sonnet-4-5-20250929
