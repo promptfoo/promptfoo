@@ -161,6 +161,23 @@ describe('persisted CLI pause drains completed deferred grading', () => {
         throw new Error('This local doEval integration fixture must not issue HTTP');
       });
       vi.stubGlobal('fetch', unexpectedFetch);
+      const expectOnlyDisabledTelemetry = () => {
+        // The shared telemetry instance records its opt-out notification once,
+        // so either case can observe it first when Vitest shuffles test order.
+        // Every fetch is still rejected before transport, including this one.
+        expect(unexpectedFetch.mock.calls.length).toBeLessThanOrEqual(1);
+        for (const [deniedUrl, deniedOptions] of unexpectedFetch.mock.calls) {
+          expect(deniedUrl).toBe('https://r.promptfoo.app/');
+          expect(deniedOptions).toMatchObject({
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          expect(JSON.parse(String(deniedOptions?.body))).toMatchObject({
+            event: 'feature_used',
+            meta: { feature: 'telemetry disabled' },
+          });
+        }
+      };
       const finalJson = path.join(directory, 'resumed.json');
       const finalJsonl = path.join(directory, 'resumed.jsonl');
       const config: UnifiedConfig = {
@@ -290,7 +307,7 @@ describe('persisted CLI pause drains completed deferred grading', () => {
             expect(rows[0].failureReason).toBe(ResultFailureReason.ERROR);
             expect(rows[0].error).toContain(callerReason.message);
           }
-          expect(unexpectedFetch).not.toHaveBeenCalled();
+          expectOnlyDisabledTelemetry();
           return;
         }
 
@@ -342,19 +359,7 @@ describe('persisted CLI pause drains completed deferred grading', () => {
           expect(rows.every((row: { success: boolean }) => row.success)).toBe(true);
           assertAlphaAccounting(rows.find((row: { testIdx: number }) => row.testIdx === 0));
         }
-        // Successful reporting attempts one opt-out notification even with telemetry disabled.
-        // The fetch stub still rejects it before transport; every other request fails this oracle.
-        expect(unexpectedFetch).toHaveBeenCalledTimes(1);
-        const [deniedUrl, deniedOptions] = unexpectedFetch.mock.calls[0];
-        expect(deniedUrl).toBe('https://r.promptfoo.app/');
-        expect(deniedOptions).toMatchObject({
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        expect(JSON.parse(String(deniedOptions?.body))).toMatchObject({
-          event: 'feature_used',
-          meta: { feature: 'telemetry disabled' },
-        });
+        expectOnlyDisabledTelemetry();
         expect(watchdogFired).toBe(false);
         expect(process.listeners('SIGINT')).toEqual(beforeSigint);
       } finally {
