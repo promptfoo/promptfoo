@@ -644,7 +644,9 @@ export class MCPClient {
   async cleanup(): Promise<void> {
     this.shuttingDown = true;
     this.oauthAbortController.abort();
-    await Promise.all([...this.pendingConnections].map((close) => close()));
+    const pendingConnections = [...this.pendingConnections];
+    this.pendingConnections.clear();
+    await Promise.all(pendingConnections.map((close) => close()));
     await Promise.allSettled([...this.tokenRefreshLocks.values()].map(({ promise }) => promise));
     for (const [serverKey, client] of this.clients.entries()) {
       await this.closeConnection(client, this.transports.get(serverKey));

@@ -1274,6 +1274,7 @@ describe('MCPClient', () => {
       const rejection = expect(initialization).rejects.toThrow('MCP connection closed');
       await entered.promise;
       await mcpClient.cleanup();
+      expect((mcpClient as any).pendingConnections.size).toBe(0);
       expect(mockStdioTransport.close).toHaveBeenCalledOnce();
       expect(mockClient.close).toHaveBeenCalledOnce();
       handshake.resolve();
