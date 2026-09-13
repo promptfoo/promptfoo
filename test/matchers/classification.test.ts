@@ -120,18 +120,60 @@ describe('matchesClassification', () => {
     });
   });
 
-  it('should fail cleanly when expected is undefined and no scores are returned', async () => {
+  it.each([undefined, 'harmful'])(
+    'tags an empty classification as a grader failure with expected %s',
+    async (expected) => {
+      const grading: GradingConfig = {
+        provider: Object.assign(createMockProvider({ id: 'empty-classification-provider' }), {
+          callClassificationApi: vi.fn().mockResolvedValue({ classification: {} }),
+        }),
+      };
+
+      await expect(matchesClassification(expected, 'Sample output', 0.5, grading)).resolves.toEqual(
+        {
+          pass: false,
+          reason: 'No classification scores returned',
+          score: 0,
+          metadata: { graderError: true },
+          tokensUsed: {
+            cached: 0,
+            completion: 0,
+            completionDetails: {
+              acceptedPrediction: 0,
+              reasoning: 0,
+              rejectedPrediction: 0,
+            },
+            numRequests: 0,
+            prompt: 0,
+            total: 0,
+          },
+        },
+      );
+    },
+  );
+
+  it('treats an absent label in a nonempty classification as a valid negative verdict', async () => {
+    await expect(
+      matchesClassification('harmful', 'Sample output', 0.5, { provider: new TestGrader() }),
+    ).resolves.toEqual({
+      pass: false,
+      score: 0,
+      reason: 'Classification harmful has score 0.00 < 0.5',
+    });
+  });
+
+  it('tags a transport error as a grader failure, never invertible into a pass', async () => {
     const grading: GradingConfig = {
-      provider: Object.assign(createMockProvider({ id: 'empty-classification-provider' }), {
-        callClassificationApi: vi.fn().mockResolvedValue({ classification: {} }),
+      provider: Object.assign(createMockProvider({ id: 'broken-classification-provider' }), {
+        callClassificationApi: vi.fn().mockResolvedValue({ error: 'Simulated timeout' }),
       }),
     };
 
-    await expect(matchesClassification(undefined, 'Sample output', 0.5, grading)).resolves.toEqual({
-      pass: false,
-      reason: 'No classification scores returned',
-      score: 0,
-    });
+    const result = await matchesClassification('harmful', 'Sample output', 0.5, grading);
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('Simulated timeout');
+    expect(result.metadata?.graderError).toBe(true);
   });
 
   it('should use the overridden classification grading config', async () => {
