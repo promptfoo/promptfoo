@@ -222,6 +222,7 @@ describe('isHardQuotaCode', () => {
     ['billing_not_active', true],
     ['access_terminated', true],
     ['quota_exceeded', true],
+    ['credit_balance_exhausted', true],
     ['rate_limit_exceeded', false],
     ['tokens_per_min', false],
     ['', false],
@@ -281,6 +282,17 @@ describe('HttpRateLimitError', () => {
     expect(err.message).toContain('Quota exceeded');
     expect(err.message).toContain('429');
     expect(err.message).toContain('insufficient_quota');
+  });
+
+  it('classifies credit_balance_exhausted as kind="quota" (fixes #10855)', () => {
+    // OpenAI returns HTTP 429 with code "credit_balance_exhausted" when a prepaid
+    // account has no credits left. Previously this code was missing from
+    // HARD_QUOTA_ERROR_CODES so the error fell through to the retry loop and a
+    // single test took ~20 minutes before failing.
+    const err = new HttpRateLimitError({ status: 429, code: 'credit_balance_exhausted' });
+    expect(err.kind).toBe('quota');
+    expect(err.message).toContain('Quota exceeded');
+    expect(err.message).toContain('credit_balance_exhausted');
   });
 
   it('classifies unknown / per-window codes as kind="rate_limit"', () => {
