@@ -281,6 +281,23 @@ describe('matchesSimilarity', () => {
     }).rejects.toThrow('API call failed');
   });
 
+  it('retains fulfilled embedding usage when the other embedding aborts', async () => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi')
+      .mockResolvedValueOnce({
+        embedding: [1, 0, 0],
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      })
+      .mockRejectedValueOnce(new DOMException('cancelled output embedding', 'AbortError'));
+
+    await expect(matchesSimilarity('Expected output', 'Sample output', 0.5)).resolves.toMatchObject(
+      {
+        pass: false,
+        reason: 'cancelled output embedding',
+        tokensUsed: { total: 5, prompt: 2, completion: 3 },
+      },
+    );
+  });
+
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     try {
