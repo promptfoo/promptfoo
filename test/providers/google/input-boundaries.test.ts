@@ -239,7 +239,9 @@ describe('Google media and tool-policy input boundaries', () => {
         .toString('base64');
       const provider = await load(route);
 
-      const response = await withCacheEnabled(false, () => provider.callApi(encoded, { vars: {} }));
+      const response = await withCacheEnabled(false, () =>
+        provider.callApi(encoded, { vars: { media: encoded } }),
+      );
 
       expect(response.error).toBeUndefined();
       expect(response.output).toBe('ok');
