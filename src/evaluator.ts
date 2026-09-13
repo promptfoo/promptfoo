@@ -4857,13 +4857,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     let progressBarManager: ProgressBarManager | null = null;
 
     // Create abort signals:
-    // - providerAbortSignal: passed to providers (user signal + timeout, but NOT target error)
+    // - providerAbortSignal: target calls use caller + CLI pause + timeout, but NOT target error
+    // Deferred grading keeps options.abortSignal so completed targets can drain during CLI pause.
     // - combinedAbortSignal: used internally for checkAbort (includes target error signal)
     // Target error signal is not passed to providers because by the time we detect a 403 etc,
     // the provider call has already completed - it's only used to stop the evaluator loop.
-    let providerAbortSignal: AbortSignal | undefined = options.abortSignal;
-    let combinedAbortSignal: AbortSignal = options.abortSignal
-      ? AbortSignal.any([options.abortSignal, targetErrorAbortController.signal])
+    let providerAbortSignal = options.pauseSignal
+      ? options.abortSignal
+        ? AbortSignal.any([options.abortSignal, options.pauseSignal])
+        : options.pauseSignal
+      : options.abortSignal;
+    let combinedAbortSignal: AbortSignal = providerAbortSignal
+      ? AbortSignal.any([providerAbortSignal, targetErrorAbortController.signal])
       : targetErrorAbortController.signal;
 
     if (maxEvalTimeMs > 0) {
