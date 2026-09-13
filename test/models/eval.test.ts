@@ -4028,7 +4028,7 @@ describe('evaluator', () => {
         }
         expect(compact.results.results[2].response?.prompt).toBe('');
         if (eval_ === inMemory) {
-          expect(compact.prompts[0].raw.length).toBeLessThanOrEqual(10_240);
+          expect(compact.prompts?.[0].raw.length).toBeLessThanOrEqual(10_240);
         }
         const full = await eval_.toResultsFile({ includeTraces: false });
         expect(full.results.results.map((result) => result.response?.prompt)).toEqual(values);
