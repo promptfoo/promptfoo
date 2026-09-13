@@ -200,6 +200,8 @@ describe('VVAH example provider', () => {
     'src/app.py ',
     '\ud800.py',
     'NUL.txt',
+    'CONIN$',
+    'CONOUT$.txt',
   ])('rejects unsafe fixture path %s before spawning', async (name) => {
     vi.mocked(spawn).mockImplementation(() => {
       throw new Error('Unexpected scan');
@@ -213,6 +215,7 @@ describe('VVAH example provider', () => {
     ['src/app.py', 'src\\app.py'],
     ['src/app.py', 'SRC/App.py'],
     ['caf\u00e9.py', 'cafe\u0301.py'],
+    ['σ.py', 'ς.py'],
   ])('rejects source aliases %s and %s before writing', async (first, second) => {
     vi.mocked(spawn).mockImplementation(() => {
       throw new Error('Unexpected scan');
@@ -269,6 +272,17 @@ describe('VVAH example provider', () => {
     });
     await expect(access(cwd)).rejects.toThrow();
   });
+
+  it.each([undefined, -1, 0.5, Number.NaN])(
+    'omits token usage for invalid request count %s',
+    async (calls) => {
+      const resultPromise = provider().callApi(prompt);
+      const run = manifest();
+      run.totals.calls = calls as number;
+      await finish({ findings: [] }, run);
+      expect((await resultPromise).tokenUsage).toBeUndefined();
+    },
+  );
 
   it('rejects missing scan artifacts even after a zero exit code', async () => {
     const resultPromise = provider().callApi(prompt);
