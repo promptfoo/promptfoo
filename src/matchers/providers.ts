@@ -52,7 +52,7 @@ export function getGradingProviderCallOptions(): CallApiOptionsParams | undefine
 export function callGradingProvider<T extends ProviderResponse>(
   provider: ApiProvider,
   label: string,
-  invoke: (context: CallApiContextParams | undefined) => Promise<T>,
+  invoke: (context: CallApiContextParams | undefined, options?: CallApiOptionsParams) => Promise<T>,
   options: {
     callContext?: CallApiContextParams;
     operationName?: 'embeddings';
@@ -61,20 +61,27 @@ export function callGradingProvider<T extends ProviderResponse>(
   const { callContext, operationName } = options;
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
+  const callOptions = executionContext?.abortSignal
+    ? { abortSignal: executionContext.abortSignal }
+    : undefined;
+  const invokeWithOptions = (context: CallApiContextParams | undefined): Promise<T> => {
+    callOptions?.abortSignal?.throwIfAborted();
+    return invoke(context, callOptions);
+  };
   const callProvider = (): Promise<T> =>
     tracingContext
       ? (tracingContext.withProviderSpan(
           { provider, callContext, operationName, role: 'grader', promptLabel: label },
-          invoke,
+          invokeWithOptions,
         ) as Promise<T>)
-      : invoke(callContext);
+      : invokeWithOptions(callContext);
 
   const executeCall = () => {
     if (executionContext?.rateLimitRegistry && !isRateLimitWrapped(provider)) {
       return executionContext.rateLimitRegistry.execute(
         provider,
         callProvider,
-        createProviderRateLimitOptions(),
+        createProviderRateLimitOptions(callOptions?.abortSignal),
       );
     }
 
@@ -82,7 +89,11 @@ export function callGradingProvider<T extends ProviderResponse>(
   };
 
   if (executionContext?.providerCallQueue) {
-    return executionContext.providerCallQueue.enqueue(provider.id(), executeCall);
+    return executionContext.providerCallQueue.enqueue(
+      provider.id(),
+      executeCall,
+      callOptions?.abortSignal,
+    );
   }
 
   return executeCall();

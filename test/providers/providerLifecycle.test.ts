@@ -94,6 +94,46 @@ describe.each(providers)('%s MCP lifecycle', (_name, createProvider) => {
     expect(mcp.cleanup).toHaveBeenCalledTimes(2);
   });
 
+  it('cancels one startup waiter while preserving another evaluation', async () => {
+    const startup = createDeferred<void>();
+    const otherStarted = createDeferred<void>();
+    mcp.initialize.mockReturnValue(startup.promise);
+    const provider = createProvider();
+    const prompt = provider instanceof MCPProvider ? '{"tool":"hello"}' : 'hello';
+    const controller = new AbortController();
+    const cancelled = providerRegistry
+      .withScope([provider], () =>
+        provider.callApi(prompt, undefined, { abortSignal: controller.signal }),
+      )
+      .catch((error: Error) => ({ error: error.message }));
+    const other = providerRegistry.withScope([provider], () => {
+      otherStarted.resolve();
+      return provider.callApi(prompt);
+    });
+    await otherStarted.promise;
+    controller.abort(new Error('cancelled waiter'));
+    expect((await cancelled).error).toContain('cancelled waiter');
+    expect(mcp.cleanup).not.toHaveBeenCalled();
+    startup.resolve();
+    expect((await other).error).toBeUndefined();
+  });
+
+  it('finishes evaluation cleanup after cancelling stalled startup', async () => {
+    const startup = createDeferred<void>();
+    mcp.initialize.mockReturnValue(startup.promise);
+    const provider = createProvider();
+    const controller = new AbortController();
+    const cancelled = providerRegistry
+      .withScope([provider], () =>
+        provider.callApi('hello', undefined, { abortSignal: controller.signal }),
+      )
+      .catch((error: Error) => ({ error: error.message }));
+    controller.abort(new Error('cancelled startup'));
+    expect((await cancelled).error).toContain('cancelled startup');
+    expect(mcp.cleanup).toHaveBeenCalledOnce();
+    startup.resolve();
+  });
+
   it('cleans up partial connections when eager startup fails', async () => {
     mcp.initialize.mockRejectedValue(new Error('server initialization failed'));
     const provider = createProvider();

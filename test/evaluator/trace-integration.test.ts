@@ -7,6 +7,7 @@ import { getProviderCallTracingContext } from '../../src/scheduler/providerCallE
 import * as evaluatorTracing from '../../src/tracing/evaluatorTracing';
 import { getTraceStore } from '../../src/tracing/store';
 import { createMockProvider } from '../factories/provider';
+import { createDeferred } from '../util/utils';
 
 import type { EvaluatorRuntime } from '../../src/evaluator/runtime';
 import type Eval from '../../src/models/eval';
@@ -383,7 +384,7 @@ describe('evaluator trace integration', () => {
     expect(mockShutdownOtel).not.toHaveBeenCalled();
   });
 
-  describe('external trace collection after provider calls', () => {
+  describe('trace collection after provider calls', () => {
     const traceId = 'abcdef1234567890abcdef1234567890';
     const providerConfig = { id: 'tempo' as const, endpoint: 'http://tempo:3200' };
     const externalTrace = {
@@ -479,6 +480,43 @@ describe('evaluator trace integration', () => {
         mockTraceStore.getTrace.mock.invocationCallOrder[0],
       );
     });
+
+    it.each(['internal', 'external'])(
+      'cancels a stalled %s trace flush before grading',
+      async (mode) => {
+        const controller = new AbortController();
+        const started = createDeferred<void>();
+        const finishFlush = createDeferred<void>();
+        mockFlushOtel.mockImplementationOnce(() => {
+          started.resolve();
+          return finishFlush.promise;
+        });
+        const options = createRunOptions(
+          createMockProvider({ response: { output: 'Target output' } }),
+          { abortSignal: controller.signal },
+        );
+        options.test.assert = [{ type: 'trace-error-spans' }];
+        if (mode === 'internal') {
+          options.testSuite = { ...tracingSuite, tracing: { enabled: true } };
+        }
+        let finished = false;
+        const pending = runEval(options).then((rows) => {
+          finished = true;
+          return rows;
+        });
+        try {
+          await started.promise;
+          controller.abort(new Error('fixture cancellation'));
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(finished).toBe(true);
+          expect((await pending)[0].error).toContain('fixture cancellation');
+          expect(mockFetchTraceContext).not.toHaveBeenCalled();
+        } finally {
+          finishFlush.resolve();
+          await pending;
+        }
+      },
+    );
 
     it('attributes the trace to the provider override that handles the test', async () => {
       const configuredProvider = createMockProvider({ id: 'configured-provider' });
@@ -761,7 +799,7 @@ describe('evaluator trace integration', () => {
       expect(mockFetchTraceContext).not.toHaveBeenCalled();
     });
 
-    it('propagates cancellation during external trace collection', async () => {
+    it('preserves a completed response when external trace collection is cancelled', async () => {
       const controller = new AbortController();
       const provider = createMockProvider({ response: { output: 'Target output' } });
       mockFetchTraceContext.mockImplementationOnce(async () => {
@@ -773,7 +811,7 @@ describe('evaluator trace integration', () => {
         createRunOptions(provider, { abortSignal: controller.signal }),
       );
 
-      expect(result.error).toContain('cancelled by user');
+      expect(result.response?.output).toBe('Target output');
       expect(mockFetchTraceContext).toHaveBeenCalledWith(
         traceId,
         expect.objectContaining({ abortSignal: controller.signal }),

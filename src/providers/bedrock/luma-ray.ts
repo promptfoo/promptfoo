@@ -11,12 +11,18 @@ import * as path from 'path';
 import { storeBlob } from '../../blobs';
 import logger from '../../logger';
 import { ellipsize } from '../../util/text';
-import { sleep } from '../../util/time';
+import { sleep, sleepWithAbort } from '../../util/time';
+import { awaitProviderOperation } from '../shared';
 import { AwsBedrockGenericProvider } from './base';
 
 import type { BlobRef } from '../../blobs';
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/providers';
 import type {
   LumaRayInvocationResponse,
   LumaRayKeyframe,
@@ -214,13 +220,16 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
   private async startVideoGeneration(
     modelInput: object,
     s3OutputUri: string,
+    options?: CallApiOptionsParams,
   ): Promise<{ invocationArn?: string; error?: string }> {
     try {
-      const { BedrockRuntimeClient, StartAsyncInvokeCommand } = await import(
-        '@aws-sdk/client-bedrock-runtime'
+      const { BedrockRuntimeClient, StartAsyncInvokeCommand } = await awaitProviderOperation(
+        import('@aws-sdk/client-bedrock-runtime'),
+        options?.abortSignal,
       );
 
-      const credentials = await this.getCredentials();
+      const credentials = await awaitProviderOperation(this.getCredentials(), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
@@ -238,7 +247,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
         },
       });
 
-      const response = await client.send(command);
+      const response = await client.send(command, { abortSignal: options?.abortSignal });
 
       return { invocationArn: response.invocationArn };
     } catch (err) {
@@ -255,15 +264,18 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
     invocationArn: string,
     pollIntervalMs: number,
     maxPollTimeMs: number,
+    options?: CallApiOptionsParams,
   ): Promise<{ response?: LumaRayInvocationResponse; error?: string }> {
     const startTime = Date.now();
 
     try {
-      const { BedrockRuntimeClient, GetAsyncInvokeCommand } = await import(
-        '@aws-sdk/client-bedrock-runtime'
+      const { BedrockRuntimeClient, GetAsyncInvokeCommand } = await awaitProviderOperation(
+        import('@aws-sdk/client-bedrock-runtime'),
+        options?.abortSignal,
       );
 
-      const credentials = await this.getCredentials();
+      const credentials = await awaitProviderOperation(this.getCredentials(), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
 
       const client = new BedrockRuntimeClient({
         region: this.getRegion(),
@@ -271,8 +283,9 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
       });
 
       while (Date.now() - startTime < maxPollTimeMs) {
+        options?.abortSignal?.throwIfAborted();
         const command = new GetAsyncInvokeCommand({ invocationArn });
-        const invocation = await client.send(command);
+        const invocation = await client.send(command, { abortSignal: options?.abortSignal });
 
         logger.debug(`[Luma Ray] Job status: ${invocation.status}`, {
           invocationArn,
@@ -297,7 +310,11 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
         }
 
         // Still in progress
-        await sleep(pollIntervalMs);
+        if (options?.abortSignal) {
+          await sleepWithAbort(pollIntervalMs, options.abortSignal);
+        } else {
+          await sleep(pollIntervalMs);
+        }
       }
 
       return { error: `Video generation timed out after ${maxPollTimeMs / 1000} seconds` };
@@ -314,6 +331,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
   private async downloadAndStoreVideo(
     s3Uri: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<{ blobRef?: BlobRef; error?: string }> {
     try {
       // Parse S3 URI
@@ -325,8 +343,12 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
       const [, bucket, keyPrefix] = match;
 
       // Download from S3
-      const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
-      const credentials = await this.getCredentials();
+      const { S3Client, GetObjectCommand } = await awaitProviderOperation(
+        import('@aws-sdk/client-s3'),
+        options?.abortSignal,
+      );
+      const credentials = await awaitProviderOperation(this.getCredentials(), options?.abortSignal);
+      options?.abortSignal?.throwIfAborted();
 
       const s3 = new S3Client({
         region: this.getRegion(),
@@ -345,26 +367,36 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
           Bucket: bucket,
           Key: videoKey,
         }),
+        { abortSignal: options?.abortSignal },
       );
 
       if (!response.Body) {
         return { error: 'Empty response from S3' };
       }
 
-      const buffer = Buffer.from(await response.Body.transformToByteArray());
+      const buffer = Buffer.from(
+        await awaitProviderOperation(response.Body.transformToByteArray(), options?.abortSignal),
+      );
+
+      options?.abortSignal?.throwIfAborted();
 
       // Store to blob storage
-      const { ref } = await storeBlob(buffer, 'video/mp4', {
-        evalId: context?.evaluationId,
-        kind: 'video',
-        location: 'response.video',
-        promptIdx: context?.promptIdx,
-        testIdx: context?.testIdx,
-      });
+      const { ref } = await awaitProviderOperation(
+        storeBlob(buffer, 'video/mp4', {
+          evalId: context?.evaluationId,
+          kind: 'video',
+          location: 'response.video',
+          promptIdx: context?.promptIdx,
+          testIdx: context?.testIdx,
+        }),
+        options?.abortSignal,
+      );
+      options?.abortSignal?.throwIfAborted();
 
       logger.debug('[Luma Ray] Stored video to blob storage', { uri: ref.uri, hash: ref.hash });
       return { blobRef: ref };
     } catch (err) {
+      options?.abortSignal?.throwIfAborted();
       const error = err as { message?: string; name?: string };
       logger.error('[Luma Ray] S3 download error', { error, s3Uri });
 
@@ -397,7 +429,12 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
     return duration === '9s' ? 9 : 5;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Validate S3 output URI
     const s3OutputUri = this.videoConfig.s3OutputUri;
     if (!s3OutputUri) {
@@ -446,6 +483,7 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
     const { invocationArn, error: startError } = await this.startVideoGeneration(
       modelInput,
       s3OutputUri,
+      options,
     );
 
     if (startError || !invocationArn) {
@@ -454,82 +492,98 @@ export class LumaRayVideoProvider extends AwsBedrockGenericProvider implements A
 
     logger.info('[Luma Ray] Job started', { invocationArn });
 
-    // Poll for completion
-    const pollIntervalMs = config.pollIntervalMs || DEFAULT_POLL_INTERVAL_MS;
-    const maxPollTimeMs = config.maxPollTimeMs || DEFAULT_MAX_POLL_TIME_MS;
+    const metadata = { invocationArn, model: this.modelName, s3OutputUri };
+    try {
+      // Poll for completion
+      const pollIntervalMs = config.pollIntervalMs || DEFAULT_POLL_INTERVAL_MS;
+      const maxPollTimeMs = config.maxPollTimeMs || DEFAULT_MAX_POLL_TIME_MS;
 
-    const { response, error: pollError } = await this.pollForCompletion(
-      invocationArn,
-      pollIntervalMs,
-      maxPollTimeMs,
-    );
-
-    if (pollError || !response) {
-      return { error: pollError || 'Polling failed' };
-    }
-
-    // Get S3 output location
-    const outputS3Uri = response.outputDataConfig?.s3OutputDataConfig?.s3Uri;
-    if (!outputS3Uri) {
-      return { error: 'No output location in response' };
-    }
-
-    // Download and store video (if enabled)
-    let blobRef: BlobRef | undefined;
-    const outputUrl = `${outputS3Uri}/output.mp4`;
-
-    if (config.downloadFromS3 !== false) {
-      const { blobRef: ref, error: downloadError } = await this.downloadAndStoreVideo(
-        outputS3Uri,
-        context,
-      );
-      if (downloadError) {
-        logger.warn(`[Luma Ray] Failed to download video: ${downloadError}. Using S3 URL.`);
-      } else {
-        blobRef = ref;
-      }
-    }
-
-    const latencyMs = Date.now() - startTime;
-    const duration = config.duration || DEFAULT_DURATION;
-    const resolution = config.resolution || DEFAULT_RESOLUTION;
-    const aspectRatio = config.aspectRatio || DEFAULT_ASPECT_RATIO;
-    const durationSeconds = this.getDurationSeconds(duration);
-    const dimensions = this.getVideoDimensions(aspectRatio, resolution);
-
-    // Format output
-    const sanitizedPrompt = prompt
-      .replace(/\r?\n|\r/g, ' ')
-      .replace(/\[/g, '(')
-      .replace(/\]/g, ')');
-    const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-    const videoUrl = blobRef?.uri || outputUrl;
-    const output = `[Video: ${ellipsizedPrompt}](${videoUrl})`;
-
-    return {
-      output,
-      cached: false,
-      latencyMs,
-      video: {
-        id: invocationArn,
-        blobRef,
-        url: blobRef ? undefined : outputUrl,
-        format: 'mp4',
-        size: dimensions,
-        duration: durationSeconds,
-        model: this.modelName,
-        resolution: dimensions,
-      },
-      metadata: {
+      const { response, error: pollError } = await this.pollForCompletion(
         invocationArn,
-        model: this.modelName,
-        duration,
-        resolution,
-        aspectRatio,
-        loop: config.loop,
-        s3OutputUri: outputS3Uri,
-        ...(blobRef && { blobHash: blobRef.hash }),
-      },
-    };
+        pollIntervalMs,
+        maxPollTimeMs,
+        options,
+      );
+
+      if (pollError || !response) {
+        return { error: pollError || 'Polling failed', metadata };
+      }
+
+      // Get S3 output location
+      const outputS3Uri = response.outputDataConfig?.s3OutputDataConfig?.s3Uri;
+      if (!outputS3Uri) {
+        return { error: 'No output location in response', metadata };
+      }
+
+      metadata.s3OutputUri = outputS3Uri;
+      options?.abortSignal?.throwIfAborted();
+
+      // Download and store video (if enabled)
+      let blobRef: BlobRef | undefined;
+      const outputUrl = `${outputS3Uri}/output.mp4`;
+
+      if (config.downloadFromS3 !== false) {
+        const { blobRef: ref, error: downloadError } = await this.downloadAndStoreVideo(
+          outputS3Uri,
+          context,
+          options,
+        );
+        options?.abortSignal?.throwIfAborted();
+        if (downloadError) {
+          logger.warn(`[Luma Ray] Failed to download video: ${downloadError}. Using S3 URL.`);
+        } else {
+          blobRef = ref;
+        }
+      }
+
+      const latencyMs = Date.now() - startTime;
+      const duration = config.duration || DEFAULT_DURATION;
+      const resolution = config.resolution || DEFAULT_RESOLUTION;
+      const aspectRatio = config.aspectRatio || DEFAULT_ASPECT_RATIO;
+      const durationSeconds = this.getDurationSeconds(duration);
+      const dimensions = this.getVideoDimensions(aspectRatio, resolution);
+
+      // Format output
+      const sanitizedPrompt = prompt
+        .replace(/\r?\n|\r/g, ' ')
+        .replace(/\[/g, '(')
+        .replace(/\]/g, ')');
+      const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+      const videoUrl = blobRef?.uri || outputUrl;
+      const output = `[Video: ${ellipsizedPrompt}](${videoUrl})`;
+
+      return {
+        output,
+        cached: false,
+        latencyMs,
+        video: {
+          id: invocationArn,
+          blobRef,
+          url: blobRef ? undefined : outputUrl,
+          format: 'mp4',
+          size: dimensions,
+          duration: durationSeconds,
+          model: this.modelName,
+          resolution: dimensions,
+        },
+        metadata: {
+          ...metadata,
+          duration,
+          resolution,
+          aspectRatio,
+          loop: config.loop,
+          ...(blobRef && { blobHash: blobRef.hash }),
+        },
+      };
+    } catch (error) {
+      if (!options?.abortSignal?.aborted) {
+        throw error;
+      }
+      return {
+        error: error instanceof Error ? error.message : String(error),
+        metadata,
+        latencyMs: Date.now() - startTime,
+      };
+    }
   }
 }

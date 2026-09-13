@@ -120,6 +120,19 @@ describe('GoogleProvider', () => {
     });
   });
 
+  it('cancels a pending tool factory before dispatch', async () => {
+    mockMaybeLoadToolsFromExternalFile.mockImplementationOnce(() => new Promise(() => {}));
+    const provider = new GoogleProvider('gemini-pro', {
+      config: { apiKey: 'test-key', tools: [] },
+    });
+    const controller = new AbortController();
+    const tools = (provider as any).getAllTools(undefined, { abortSignal: controller.signal });
+    await vi.waitFor(() => expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledOnce());
+    controller.abort(new Error('cancelled tool factory'));
+    await expect(tools).rejects.toThrow('cancelled tool factory');
+    expect(cache.fetchWithCache).not.toHaveBeenCalled();
+  });
+
   describe('constructor and mode determination', () => {
     it('should default to AI Studio mode (vertexai: false)', () => {
       const provider = new GoogleProvider('gemini-pro', {
@@ -1232,7 +1245,7 @@ describe('GoogleProvider', () => {
           "Function callback 'fail' failed after 1 completed callback(s)",
         );
         expect(response.error).toContain('Check for side effects before retrying');
-        expect(response.output).toBeUndefined();
+        expect(response.output).toBe('completed');
         expect(response.cached).toBe(cached);
         expect(response.tokenUsage).toMatchObject({
           total: 15,

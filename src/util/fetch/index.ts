@@ -188,11 +188,13 @@ export async function fetchWithProxy(
   }
 
   // Combine abort signals: incoming abortSignal parameter + any signal in options
+  const requestSignal =
+    options.signal === undefined && url instanceof Request ? url.signal : options.signal;
   const combinedSignal = abortSignal
-    ? options.signal
-      ? AbortSignal.any([options.signal, abortSignal])
+    ? requestSignal
+      ? AbortSignal.any([requestSignal, abortSignal])
       : abortSignal
-    : options.signal;
+    : requestSignal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const finalOptions: FetchOptions & { dispatcher?: any } = {
@@ -237,14 +239,19 @@ export async function fetchWithProxy(
   };
 
   // Support custom CA certificates
+  combinedSignal?.throwIfAborted();
   const caCertPath = getEnvString('PROMPTFOO_CA_CERT_PATH');
   if (caCertPath) {
     try {
       const resolvedPath = path.resolve(cliState.basePath || '', caCertPath);
-      const ca = await fsPromises.readFile(resolvedPath, 'utf8');
+      const ca = await fsPromises.readFile(resolvedPath, {
+        encoding: 'utf8',
+        signal: combinedSignal ?? undefined,
+      });
       tlsOptions.ca = ca;
       logger.debug(`Using custom CA certificate from ${resolvedPath}`);
     } catch (e) {
+      combinedSignal?.throwIfAborted();
       logger.warn(`Failed to read CA certificate from ${caCertPath}: ${e}`);
     }
   }
@@ -268,6 +275,7 @@ export async function fetchWithProxy(
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
+    combinedSignal?.throwIfAborted();
     const response = await monkeyPatchFetch(finalUrl, finalOptions);
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
@@ -275,7 +283,10 @@ export async function fetchWithProxy(
       logger.debug(
         `Transient error (${response.status} ${response.statusText}), retry ${attempt + 1}/${maxTransientRetries} after ${backoffMs}ms`,
       );
-      await sleep(backoffMs);
+      await sleepWithAbort(backoffMs, combinedSignal).catch((error: unknown) => {
+        combinedSignal?.throwIfAborted();
+        throw error;
+      });
       continue;
     }
 

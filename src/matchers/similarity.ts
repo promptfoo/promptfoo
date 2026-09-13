@@ -1,6 +1,7 @@
 import cliState from '../cliState';
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
+import { isAbortError } from '../util/fetch/errors';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callGradingProvider,
@@ -109,8 +110,13 @@ async function calculateProviderSimilarity(
   tokensUsed: TokenUsage,
 ): Promise<number | Omit<GradingResult, 'assertion'>> {
   if (metric === 'cosine' && 'callSimilarityApi' in finalProvider) {
-    const similarityResp = await callGradingProvider(finalProvider, 'similarity', () =>
-      finalProvider.callSimilarityApi(expected, output),
+    const similarityResp = await callGradingProvider(
+      finalProvider,
+      'similarity',
+      (context, options) =>
+        options || context
+          ? finalProvider.callSimilarityApi(expected, output, context, options)
+          : finalProvider.callSimilarityApi(expected, output),
     );
     accumulateTokenUsage(tokensUsed, similarityResp.tokenUsage);
     if (similarityResp.error) {
@@ -137,25 +143,44 @@ async function calculateProviderSimilarity(
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
 
-  const [expectedEmbedding, outputEmbedding] = await Promise.all([
+  const results = await Promise.allSettled([
     callGradingProvider(
       finalProvider,
       'similarity.embedding',
-      () => callEmbeddingApi.call(finalProvider, expected),
+      (context, options) =>
+        options || context
+          ? callEmbeddingApi.call(finalProvider, expected, context, options)
+          : callEmbeddingApi.call(finalProvider, expected),
       { operationName: 'embeddings' },
     ),
     callGradingProvider(
       finalProvider,
       'similarity.embedding',
-      () => callEmbeddingApi.call(finalProvider, output),
+      (context, options) =>
+        options || context
+          ? callEmbeddingApi.call(finalProvider, output, context, options)
+          : callEmbeddingApi.call(finalProvider, output),
       { operationName: 'embeddings' },
     ),
   ]);
-
-  const mergedUsage = normalizeMatcherTokenUsage(undefined);
-  accumulateTokenUsage(mergedUsage, expectedEmbedding.tokenUsage);
-  accumulateTokenUsage(mergedUsage, outputEmbedding.tokenUsage);
-  accumulateTokenUsage(tokensUsed, mergedUsage);
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      accumulateTokenUsage(tokensUsed, result.value.tokenUsage);
+    }
+  }
+  const [expectedResult, outputResult] = results;
+  if (expectedResult.status === 'rejected' || outputResult.status === 'rejected') {
+    const reasons = [expectedResult, outputResult]
+      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      .map((result) => result.reason);
+    const reason = reasons.find((error) => !isAbortError(error)) ?? reasons[0];
+    if (!isAbortError(reason)) {
+      throw reason;
+    }
+    return fail(reason instanceof Error ? reason.message : String(reason), tokensUsed);
+  }
+  const expectedEmbedding = expectedResult.value;
+  const outputEmbedding = outputResult.value;
 
   if (expectedEmbedding.error || outputEmbedding.error) {
     return fail(

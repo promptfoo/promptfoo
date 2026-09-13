@@ -115,15 +115,24 @@ export interface CallApiContextParams {
 export interface CallApiOptionsParams {
   includeLogProbs?: boolean;
   /**
-   * Signal that can be used to abort the request
+   * Request-scoped cancellation, forwarded to supported transports, retries, and polling.
+   * Legacy/custom providers may ignore this optional option; it does not cancel an accepted remote job.
    */
   abortSignal?: AbortSignal;
 }
 
 export interface ApiProvider extends MinimalApiProvider {
   callApi: CallApiFunction;
-  callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
-  callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
+  callClassificationApi?: (
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderClassificationResponse>;
+  callEmbeddingApi?: (
+    input: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
   getSessionId?: () => string;
@@ -142,15 +151,28 @@ export interface ApiProvider extends MinimalApiProvider {
 }
 
 export interface ApiEmbeddingProvider extends ApiProvider {
-  callEmbeddingApi: (input: string) => Promise<ProviderEmbeddingResponse>;
+  callEmbeddingApi: (
+    input: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderEmbeddingResponse>;
 }
 
 export interface ApiSimilarityProvider extends ApiProvider {
-  callSimilarityApi: (reference: string, input: string) => Promise<ProviderSimilarityResponse>;
+  callSimilarityApi: (
+    reference: string,
+    input: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderSimilarityResponse>;
 }
 
 export interface ApiClassificationProvider extends ApiProvider {
-  callClassificationApi: (prompt: string) => Promise<ProviderClassificationResponse>;
+  callClassificationApi: (
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ) => Promise<ProviderClassificationResponse>;
 }
 
 export interface ApiModerationProvider extends ApiProvider {

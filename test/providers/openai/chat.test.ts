@@ -7,6 +7,7 @@ import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import * as util from '../../../src/util/index';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
 
@@ -89,6 +90,30 @@ describe('OpenAI Provider', () => {
         } as any),
       ).rejects.toThrow('only available through openai:codex-sdk');
       expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('stops waiting for external tools when the call is cancelled', async () => {
+      let resolveTools: (tools: never[]) => void = () => {};
+      const stalledTools = new Promise<never[]>((resolve) => {
+        resolveTools = resolve;
+      });
+      const loadTools = vi
+        .spyOn(util, 'maybeLoadToolsFromExternalFile')
+        .mockImplementationOnce(() => stalledTools);
+      const controller = new AbortController();
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { tools: [] },
+      });
+      try {
+        const call = provider.callApi('hello', undefined, { abortSignal: controller.signal });
+        await vi.waitFor(() => expect(loadTools).toHaveBeenCalledOnce());
+        controller.abort(new Error('cancelled while loading tools'));
+        await expect(call).rejects.toThrow('cancelled while loading tools');
+        expect(mockFetchWithCache).not.toHaveBeenCalled();
+      } finally {
+        resolveTools([]);
+        loadTools.mockRestore();
+      }
     });
 
     it('should call API successfully', async () => {
@@ -1072,9 +1097,13 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
         const result = await provider.callApi('Read the file');
 
-        expect(mcpClient.callTool).toHaveBeenCalledWith('read_file', {
-          path: '../../../etc/passwd',
-        });
+        expect(mcpClient.callTool).toHaveBeenCalledWith(
+          'read_file',
+          {
+            path: '../../../etc/passwd',
+          },
+          undefined,
+        );
         expect(result.output).toBe(expectedOutput);
       },
     );
@@ -1257,6 +1286,86 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('11\n6');
       expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8, numRequests: 1 });
+    });
+
+    it('finishes cancelled callbacks without waiting for stalled cache eviction', async () => {
+      const controller = new AbortController();
+      let releaseEviction!: () => void;
+      const deleteFromCache = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseEviction = resolve;
+          }),
+      );
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            { message: { content: null, function_call: { name: 'tool', arguments: '{}' } } },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        deleteFromCache,
+      });
+      const callback = vi.fn(() => {
+        controller.abort(new Error('cancelled callback'));
+        return Promise.reject(controller.signal.reason);
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: { functionToolCallbacks: { tool: callback } },
+      });
+      const completed = provider.callApi('Run tool', undefined, { abortSignal: controller.signal });
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledOnce());
+      const settled = await Promise.race([
+        completed.then(() => true),
+        new Promise<boolean>((resolve) => setImmediate(() => resolve(false))),
+      ]);
+      releaseEviction();
+      const result = await completed;
+      expect(settled).toBe(true);
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+      expect(result.error).toContain('cancelled callback');
+    });
+
+    it('retains completed callback results when a later callback is cancelled', async () => {
+      const controller = new AbortController();
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [
+            {
+              message: {
+                content: null,
+                tool_calls: [
+                  { id: 'first', function: { name: 'first', arguments: '{}' } },
+                  { id: 'second', function: { name: 'second', arguments: '{}' } },
+                ],
+              },
+            },
+          ],
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          functionToolCallbacks: {
+            first: async () => 'first result',
+            second: () => {
+              controller.abort(new Error('cancelled second callback'));
+              return Promise.reject(controller.signal.reason);
+            },
+          },
+        },
+      });
+
+      const result = await provider.callApi('Run tools', undefined, {
+        abortSignal: controller.signal,
+      });
+
+      expect(result.output).toBe('first result');
+      expect(result.error).toContain('cancelled second callback');
     });
 
     it('should handle errors in function tool callbacks', async () => {

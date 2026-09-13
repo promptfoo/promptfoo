@@ -1,4 +1,5 @@
 import { providerRegistry } from '../providerRegistry';
+import { awaitProviderOperation } from '../shared';
 import { MCPClient } from './client';
 
 import type { MCPConfig } from './types';
@@ -9,6 +10,7 @@ export class McpClientSession {
   private initializationPromise: Promise<void> | null = null;
   private startupPending = false;
   private cleanupPromise?: Promise<void>;
+  private startupController = new AbortController();
 
   constructor(
     private readonly config: MCPConfig,
@@ -22,9 +24,10 @@ export class McpClientSession {
   }
 
   private start(): void {
+    this.startupController = new AbortController();
     this.currentClient = new MCPClient(this.config);
     providerRegistry.register(this.owner);
-    const initialization = this.currentClient.initialize();
+    const initialization = this.currentClient.initialize(this.startupController.signal);
     this.initializationPromise = initialization;
     this.startupPending = true;
     const markSettled = () => {
@@ -37,9 +40,10 @@ export class McpClientSession {
     void this.initializationPromise.catch(() => undefined);
   }
 
-  async initialize(): Promise<MCPClient> {
+  async initialize(signal?: AbortSignal): Promise<MCPClient> {
+    signal?.throwIfAborted();
     if (this.cleanupPromise) {
-      await this.cleanupPromise;
+      await awaitProviderOperation(this.cleanupPromise, signal);
     }
     if (!this.currentClient) {
       this.start();
@@ -47,7 +51,11 @@ export class McpClientSession {
     // Repeated use claims the connection for the calling evaluation, including shared instances.
     providerRegistry.register(this.owner);
     const client = this.currentClient!;
-    await this.initializationPromise;
+    const startupSignal = this.startupController.signal;
+    await awaitProviderOperation(
+      this.initializationPromise!,
+      signal ? AbortSignal.any([signal, startupSignal]) : startupSignal,
+    );
     return client;
   }
 
@@ -59,6 +67,7 @@ export class McpClientSession {
     if (!client) {
       return Promise.resolve();
     }
+    this.startupController.abort();
     this.cleanupPromise = (async () => {
       try {
         await client.cleanup();

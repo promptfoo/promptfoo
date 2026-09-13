@@ -30,11 +30,10 @@ describe('oauth utils', () => {
             });
           }),
       );
-      const token = fetchOAuthToken({
-        tokenUrl: 'https://auth.example.com/token',
-        grantType: 'client_credentials',
-        signal: controller.signal,
-      });
+      const token = fetchOAuthToken(
+        { tokenUrl: 'https://auth.example.com/token', grantType: 'client_credentials' },
+        controller.signal,
+      );
       controller.abort(new Error('fixture cleanup'));
       await expect(token).rejects.toThrow('fixture cleanup');
     });

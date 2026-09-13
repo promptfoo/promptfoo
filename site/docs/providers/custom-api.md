@@ -49,10 +49,12 @@ module.exports = class OpenAIProvider {
   }
 
   async callApi(prompt, context, options) {
+    options?.abortSignal?.throwIfAborted();
     const { data } = await promptfoo.cache.fetchWithCache(
       'https://api.openai.com/v1/chat/completions',
       {
         method: 'POST',
+        signal: options?.abortSignal,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -100,6 +102,22 @@ module.exports = class OpenAIProvider {
   ...
 }
 ```
+
+### Cancellation
+
+The optional request options include `abortSignal`. Check it before starting work and pass it to HTTP/SDK requests, retries, and polling waits. Cancelling a local request does not necessarily cancel a job that the remote service has already accepted.
+
+The same optional context and options arguments are available for specialized operations:
+
+```typescript
+callApi(prompt, context?, options?);
+callEmbeddingApi(input, context?, options?);
+callClassificationApi(prompt, context?, options?);
+callSimilarityApi(reference, input, context?, options?);
+callModerationApi(prompt, response, context?, options?);
+```
+
+For example, a caller can pass `{ abortSignal: controller.signal }` as the final argument. Existing calls that omit context and options continue to work. Keep per-request signals in request options, rather than storing them on a shared provider instance.
 
 ### Guardrail Responses
 

@@ -5,6 +5,7 @@ import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { TOKEN_REFRESH_BUFFER_MS, type TokenRefreshLock } from '../../util/oauth';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
+import { awaitProviderOperation } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
 import {
   applyQueryParams,
@@ -116,7 +117,7 @@ export class MCPClient {
   private tokenRefreshLocks: Map<string, TokenRefreshLock> = new Map();
   private shuttingDown = false;
   private generation = 0;
-  private oauthAbortController = new AbortController();
+  private lifecycleController = new AbortController();
 
   get hasInitialized(): boolean {
     return this.clients.size > 0;
@@ -150,12 +151,16 @@ export class MCPClient {
     }
   }
 
-  async initialize(): Promise<void> {
+  async initialize(signal?: AbortSignal): Promise<void> {
     const generation = this.generation;
-    this.shuttingDown = false;
-    if (this.oauthAbortController.signal.aborted) {
-      this.oauthAbortController = new AbortController();
+    signal?.throwIfAborted();
+    if (this.lifecycleController.signal.aborted) {
+      this.lifecycleController = new AbortController();
     }
+    const startupSignal = signal
+      ? AbortSignal.any([signal, this.lifecycleController.signal])
+      : this.lifecycleController.signal;
+    this.shuttingDown = false;
     if (!this.config.enabled) {
       return;
     }
@@ -171,17 +176,25 @@ export class MCPClient {
       }
       usedKeys.add(serverKey);
       logger.info(`connecting to server ${serverKey}`);
-      await this.connectToServer(server, serverKey, generation);
+      startupSignal.throwIfAborted();
+      await awaitProviderOperation(
+        this.connectToServer(server, serverKey, startupSignal, generation),
+        startupSignal,
+      );
     }
   }
 
   private async connectToServer(
     server: MCPServerConfig,
     serverKey = server.name || server.url || server.path || 'default',
+    signal?: AbortSignal,
     generation = this.generation,
   ): Promise<void> {
+    const operationSignal = signal ?? this.lifecycleController.signal;
+    operationSignal.throwIfAborted();
     this.assertActive(generation);
     const { Client } = await loadMcpClientSdk();
+    operationSignal.throwIfAborted();
     this.assertActive(generation);
     const clientInfo = {
       name: 'promptfoo-MCP',
@@ -202,18 +215,33 @@ export class MCPClient {
       if (!closePromise || closingClient !== client || closingTransport !== transport) {
         closingClient = client;
         closingTransport = transport;
-        closePromise = this.closeConnection(client, transport);
+        closePromise = awaitProviderOperation(
+          this.closeConnection(client, transport),
+          operationSignal,
+        ).catch((error) => {
+          if (!operationSignal.aborted) {
+            throw error;
+          }
+        });
       }
       return closePromise;
     };
     this.pendingConnections.add(closePendingConnection);
+    const onAbort = () => {
+      void closePendingConnection();
+    };
+    operationSignal.addEventListener('abort', onAbort, { once: true });
     try {
-      const requestOptions = getEffectiveRequestOptions(this.config);
+      const requestOptions = {
+        ...getEffectiveRequestOptions(this.config),
+        signal: operationSignal,
+      };
 
       if (server.command) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         this.assertActive(generation);
         // NPM package or other command execution
+        signal?.throwIfAborted();
         transport = new StdioClientTransport({
           command: server.command,
           args: server.args ?? [],
@@ -239,6 +267,7 @@ export class MCPClient {
 
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         this.assertActive(generation);
+        signal?.throwIfAborted();
         transport = new StdioClientTransport({
           command,
           args: [serverPath],
@@ -260,11 +289,11 @@ export class MCPClient {
           // Fetch token using configured tokenUrl or OAuth discovery
           // This avoids SDK's OAuth discovery which requires authorization_endpoint
           logger.debug('[MCP] Fetching OAuth token');
-          const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(
-            oauthAuth,
-            server.url,
-            this.oauthAbortController.signal,
+          const { accessToken, expiresAt } = await awaitProviderOperation(
+            getOAuthTokenWithExpiry(oauthAuth, server.url, operationSignal),
+            operationSignal,
           );
+          signal?.throwIfAborted();
           this.assertActive(generation);
           authHeaders = { Authorization: `Bearer ${accessToken}` };
 
@@ -292,13 +321,17 @@ export class MCPClient {
 
         // Build transport options with headers
         const transportOptions: {
-          requestInit?: { headers: Record<string, string> };
+          requestInit?: { headers?: Record<string, string>; signal?: AbortSignal };
         } = {};
 
         if (Object.keys(headers).length > 0) {
           transportOptions.requestInit = { headers };
         }
 
+        if (signal) {
+          transportOptions.requestInit = { ...transportOptions.requestInit, signal };
+        }
+        signal?.throwIfAborted();
         const hasOptions = Object.keys(transportOptions).length > 0;
 
         try {
@@ -306,6 +339,7 @@ export class MCPClient {
             '@modelcontextprotocol/sdk/client/streamableHttp.js'
           );
           this.assertActive(generation);
+          signal?.throwIfAborted();
           transport = new StreamableHTTPClientTransport(
             new URL(serverUrl),
             hasOptions ? transportOptions : undefined,
@@ -313,16 +347,19 @@ export class MCPClient {
           await client.connect(transport, requestOptions);
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
+          signal?.throwIfAborted();
           logger.debug(
             `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
           );
           await closePendingConnection();
+          signal?.throwIfAborted();
           if (this.shuttingDown || generation !== this.generation) {
             throw error;
           }
           client = new Client(clientInfo);
           transport = undefined;
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
+          operationSignal.throwIfAborted();
           this.assertActive(generation);
           transport = new SSEClientTransport(
             new URL(serverUrl),
@@ -335,6 +372,7 @@ export class MCPClient {
         throw new Error('Either command or path or url must be specified for MCP server');
       }
 
+      signal?.throwIfAborted();
       // Ping server to verify connection if configured
       if (this.config.pingOnConnect) {
         try {
@@ -370,6 +408,7 @@ export class MCPClient {
         );
       }
 
+      signal?.throwIfAborted();
       if (this.shuttingDown || generation !== this.generation) {
         throw new Error('MCP connection closed during initialization');
       }
@@ -386,12 +425,14 @@ export class MCPClient {
     } catch (error) {
       // Failed handshakes/tool discovery have not entered the connection maps yet.
       await closePendingConnection();
+      signal?.throwIfAborted();
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (this.isDebugEnabled) {
         logger.error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
       }
       throw new Error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
     } finally {
+      operationSignal.removeEventListener('abort', onAbort);
       this.pendingConnections.delete(closePendingConnection);
     }
   }
@@ -481,39 +522,46 @@ export class MCPClient {
     serverKey: string,
     oauthConfig: OAuthServerConfig,
   ): Promise<void> {
+    const signal = this.lifecycleController.signal;
     // Close existing connection
     const existingTransport = this.transports.get(serverKey);
     const existingClient = this.clients.get(serverKey);
-    if (existingTransport) {
-      await existingTransport.close().catch(() => {});
-    }
-    if (existingClient) {
-      await existingClient.close().catch(() => {});
-    }
-
     // Remove old entries (keep tools and oauthConfig)
     this.clients.delete(serverKey);
     this.transports.delete(serverKey);
+    if (existingTransport || existingClient) {
+      await awaitProviderOperation(this.closeConnection(existingClient, existingTransport), signal);
+    }
 
     // Reconnect with fresh token
     if (this.shuttingDown) {
       return;
     }
-    await this.connectToServer(oauthConfig.serverConfig, serverKey);
+    await awaitProviderOperation(
+      this.connectToServer(oauthConfig.serverConfig, serverKey, signal),
+      signal,
+    );
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
 
-  async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
+  async callTool(
+    name: string,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<MCPToolResult> {
     return await withGenAIToolSpan({ name, arguments: args, resultFormat: 'mcp' }, () =>
-      this.callToolInternal(name, args),
+      this.callToolInternal(name, args, signal),
     );
   }
 
   private async callToolInternal(
     name: string,
     args: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<MCPToolResult> {
-    const requestOptions = getEffectiveRequestOptions(this.config);
+    signal?.throwIfAborted();
+    const configuredOptions = getEffectiveRequestOptions(this.config);
+    const requestOptions = signal ? { ...configuredOptions, signal } : configuredOptions;
     const disconnectedServers: string[] = [];
 
     // Find which server has this tool
@@ -521,8 +569,9 @@ export class MCPClient {
       if (serverTools.some((tool) => tool.name === name)) {
         // Proactively refresh token if close to expiration (with locking)
         try {
-          await this.refreshOAuthTokenIfNeeded(serverKey);
+          await awaitProviderOperation(this.refreshOAuthTokenIfNeeded(serverKey), signal);
         } catch (error) {
+          signal?.throwIfAborted();
           const errorMessage = error instanceof Error ? error.message : String(error);
           logger.debug(
             `[MCP] Failed to refresh OAuth token for ${serverKey}, trying the next matching server: ${errorMessage}`,
@@ -545,10 +594,14 @@ export class MCPClient {
         // one retry; all other failures return an error after the catch block.
         while (true) {
           try {
-            const result = await currentClient.callTool(
-              { name, arguments: args },
-              undefined, // use default result schema
-              requestOptions,
+            signal?.throwIfAborted();
+            const result = await awaitProviderOperation(
+              currentClient.callTool(
+                { name, arguments: args },
+                undefined, // use default result schema
+                requestOptions,
+              ),
+              signal,
             );
 
             // Handle different content types appropriately
@@ -575,6 +628,7 @@ export class MCPClient {
               raw: result,
             };
           } catch (error) {
+            signal?.throwIfAborted();
             const errorMessage = error instanceof Error ? error.message : String(error);
 
             // Check if this is an auth error and we have OAuth config for this server
@@ -590,7 +644,10 @@ export class MCPClient {
               logger.debug(`[MCP] Auth error for ${serverKey}, attempting reactive token refresh`);
               retried = true;
               try {
-                await this.refreshOAuthToken(serverKey, oauthConfig, true);
+                await awaitProviderOperation(
+                  this.refreshOAuthToken(serverKey, oauthConfig, true),
+                  signal,
+                );
                 // Get the new client after reconnection
                 const newClient = this.clients.get(serverKey);
                 if (newClient) {
@@ -598,6 +655,7 @@ export class MCPClient {
                   continue; // Retry with new token
                 }
               } catch (refreshError) {
+                signal?.throwIfAborted();
                 const refreshErrorMsg =
                   refreshError instanceof Error ? refreshError.message : String(refreshError);
                 logger.error(`[MCP] Token refresh failed for ${serverKey}: ${refreshErrorMsg}`);
@@ -627,33 +685,36 @@ export class MCPClient {
   }
 
   private async closeConnection(
-    client: Client,
+    client?: Client,
     transport?: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport,
   ): Promise<void> {
-    // Always attempt both closes, even if transport teardown fails.
-    for (const resource of [transport, client]) {
-      try {
-        await resource?.close();
-      } catch (error) {
-        if (this.isDebugEnabled) {
-          logger.error(
-            `Error during cleanup: ${error instanceof Error ? error.message : String(error)}`,
-          );
+    // Start both closes so a stalled transport cannot prevent client teardown.
+    await Promise.all(
+      [transport, client].map(async (resource) => {
+        try {
+          await resource?.close();
+        } catch (error) {
+          if (this.isDebugEnabled) {
+            logger.error(
+              `Error during cleanup: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
         }
-      }
-    }
+      }),
+    );
   }
 
   async cleanup(): Promise<void> {
     this.generation++;
     this.shuttingDown = true;
-    this.oauthAbortController.abort();
-    const pendingConnections = [...this.pendingConnections];
-    this.pendingConnections.clear();
-    await Promise.all(pendingConnections.map((close) => close()));
+    this.lifecycleController.abort();
+    await Promise.all([...this.pendingConnections].map((close) => close()));
     await Promise.allSettled([...this.tokenRefreshLocks.values()].map(({ promise }) => promise));
     for (const [serverKey, client] of this.clients.entries()) {
-      await this.closeConnection(client, this.transports.get(serverKey));
+      await awaitProviderOperation(
+        this.closeConnection(client, this.transports.get(serverKey)),
+        this.lifecycleController.signal,
+      ).catch(() => {});
     }
     this.clients.clear();
     this.transports.clear();

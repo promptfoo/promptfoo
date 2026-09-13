@@ -226,6 +226,26 @@ describe('RateLimitRegistry', () => {
   });
 
   describe('execute - calls function directly when disabled', () => {
+    it('retains a completed response when cancellation happens during the call', async () => {
+      mockGetEnvBool.mockReturnValue(true);
+      const registry = new RateLimitRegistry({ maxConcurrency: 10 });
+      const controller = new AbortController();
+      await expect(
+        registry.execute(
+          mockProvider,
+          async () => {
+            controller.abort(new Error('cancelled'));
+            return { error: 'callback cancelled', cost: 0.03, tokenUsage: { total: 11 } };
+          },
+          { abortSignal: controller.signal },
+        ),
+      ).resolves.toMatchObject({
+        error: 'callback cancelled',
+        cost: 0.03,
+        tokenUsage: { total: 11 },
+      });
+    });
+
     it('should bypass rate limiting when disabled', async () => {
       mockGetEnvBool.mockReturnValue(true);
       const registry = new RateLimitRegistry({ maxConcurrency: 10 });

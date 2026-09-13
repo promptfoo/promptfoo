@@ -27,7 +27,7 @@ import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
-import { isPromptfooSampleTarget } from './providers/shared';
+import { awaitProviderOperation, isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
 import { redteamProviderManager } from './redteam/providers/shared';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
@@ -99,7 +99,7 @@ import {
 } from './util/provider';
 import { promptYesNo } from './util/readline';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
-import { sleep } from './util/time';
+import { sleep, sleepWithAbort } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
@@ -1007,7 +1007,7 @@ async function collectExternalTraceAfterProviderCall({
 
   try {
     if (needsTraceForGrading) {
-      await flushOtel();
+      await awaitProviderOperation(flushOtel(), abortSignal);
     }
 
     logger.debug(`[Evaluator] Fetching traces from external provider for traceId=${traceId}`);
@@ -1029,9 +1029,6 @@ async function collectExternalTraceAfterProviderCall({
     }
   } catch (error) {
     if (abortSignal?.aborted) {
-      if (!providerFailed) {
-        throw error;
-      }
       return;
     }
     logger.warn(`[Evaluator] Failed to fetch external traces: ${error}`);
@@ -1105,7 +1102,11 @@ async function callActiveProvider({
       : invoke();
   };
   const response = rateLimitRegistry
-    ? await rateLimitRegistry.execute(activeProvider, callApi, createProviderRateLimitOptions())
+    ? await rateLimitRegistry.execute(
+        activeProvider,
+        callApi,
+        createProviderRateLimitOptions(abortSignal),
+      )
     : await callApi();
 
   logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
@@ -1201,10 +1202,14 @@ function getConversationLastInput(renderedJson: unknown) {
   return lastElt?.content || lastElt;
 }
 
-async function applyProviderDelayIfNeeded(provider: ApiProvider, response: ProviderResponse) {
+async function applyProviderDelayIfNeeded(
+  provider: ApiProvider,
+  response: ProviderResponse,
+  abortSignal?: AbortSignal,
+) {
   if (!response.cached && provider.delay && provider.delay > 0) {
     logger.debug(`Sleeping for ${provider.delay}ms`);
-    await sleep(provider.delay);
+    await (abortSignal ? sleepWithAbort(provider.delay, abortSignal) : sleep(provider.delay));
   } else if (response.cached) {
     logger.debug(`Skipping delay because response is cached`);
   }
@@ -1421,6 +1426,7 @@ async function gradeRunEvalResponse({
   vars: Vars;
 }) {
   const { processedResponse, providerTransformedOutput } = await transformRunEvalResponse({
+    abortSignal,
     evalId,
     prompt,
     promptIdx,
@@ -1436,7 +1442,7 @@ async function gradeRunEvalResponse({
     hasTraceAwareAssertions(test.assert) &&
     !isExternalTraceProvider(testSuite?.tracing?.provider)
   ) {
-    await flushOtel();
+    await awaitProviderOperation(flushOtel(), abortSignal);
   }
 
   const assertionProviderResponse = {
@@ -1490,6 +1496,7 @@ async function gradeRunEvalResponse({
 }
 
 async function transformRunEvalResponse({
+  abortSignal,
   evalId,
   prompt,
   promptIdx,
@@ -1499,6 +1506,7 @@ async function transformRunEvalResponse({
   testIdx,
   vars,
 }: {
+  abortSignal?: AbortSignal;
   evalId?: string;
   prompt: Prompt;
   promptIdx: number;
@@ -1513,28 +1521,32 @@ async function transformRunEvalResponse({
 }> {
   const processedResponse = { ...response };
   if (provider.transform) {
-    processedResponse.output = await transform(provider.transform, processedResponse.output, {
-      vars,
-      prompt,
-    });
+    abortSignal?.throwIfAborted();
+    processedResponse.output = await awaitProviderOperation(
+      transform(provider.transform, processedResponse.output, { vars, prompt }),
+      abortSignal,
+    );
   }
   const providerTransformedOutput = processedResponse.output;
 
   const testTransform = test.options?.transform || test.options?.postprocess;
   if (testTransform) {
-    processedResponse.output = await transform(testTransform, processedResponse.output, {
-      vars,
-      prompt,
-      ...(response && response.metadata && { metadata: response.metadata }),
-    });
+    abortSignal?.throwIfAborted();
+    processedResponse.output = await awaitProviderOperation(
+      transform(testTransform, processedResponse.output, {
+        vars,
+        prompt,
+        ...(response && response.metadata && { metadata: response.metadata }),
+      }),
+      abortSignal,
+    );
   }
 
   invariant(processedResponse.output != null, 'Response output should not be null');
-  const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
-    evalId,
-    testIdx,
-    promptIdx,
-  });
+  const blobbedResponse = await awaitProviderOperation(
+    extractAndStoreBinaryData(processedResponse, { evalId, testIdx, promptIdx }),
+    abortSignal,
+  );
 
   return {
     processedResponse: blobbedResponse || processedResponse,
@@ -1625,11 +1637,15 @@ async function runEvalInternal({
   registers,
   isRedteam,
   abortSignal,
+  gradingAbortSignal,
   deferGrading,
   evalId,
   providerCallQueue,
   rateLimitRegistry,
-}: RunEvalOptions): Promise<EvaluateResult[]> {
+  onTargetResponse,
+}: RunEvalOptions & { onTargetResponse?: (row: EvaluateResult) => void }): Promise<
+  EvaluateResult[]
+> {
   provider.delay ??= delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
   invariant(
     typeof provider.delay === 'number',
@@ -1726,8 +1742,6 @@ async function runEvalInternal({
             `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
           );
 
-          await applyProviderDelayIfNeeded(provider, response);
-
           // The __eval* runtime vars were exposed to prompt/provider rendering above.
           // Build a copy without them for the persisted result, assertions, and
           // graders. state.vars itself is left intact — it is shared by reference
@@ -1752,30 +1766,52 @@ async function runEvalInternal({
           invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
           trackProviderUsage(provider, response);
-          await applyRunEvalResponseOutcome({
-            abortSignal,
-            deferGrading,
-            evalId,
-            isRedteam,
-            latencyMs,
-            prompt,
-            promptIdx: promptIndex,
-            provider,
-            providerCallQueue,
-            rateLimitRegistry,
-            renderedPrompt: rendered.renderedPrompt,
-            response,
-            ret,
-            test,
-            testIdx: testIndex,
-            testSuite,
-            traceContext: executionTraceContext,
-            vars: persistedVars,
-          });
-
-          // Update token usage stats
           if (response.tokenUsage) {
             accumulateResponseTokenUsage(ret.tokenUsage, response);
+          }
+          onTargetResponse?.({ ...ret, tokenUsage: structuredClone(ret.tokenUsage) });
+          // Row timeouts do not cancel deferred grading; the evaluation deadline does.
+          const outcomeSignal =
+            deferGrading && evaluateOptions
+              ? (gradingAbortSignal ?? evaluateOptions.abortSignal)
+              : abortSignal;
+          try {
+            await applyRunEvalResponseOutcome({
+              abortSignal: outcomeSignal,
+              deferGrading,
+              evalId,
+              isRedteam,
+              latencyMs,
+              prompt,
+              promptIdx: promptIndex,
+              provider,
+              providerCallQueue,
+              rateLimitRegistry,
+              renderedPrompt: rendered.renderedPrompt,
+              response,
+              ret,
+              test,
+              testIdx: testIndex,
+              testSuite,
+              traceContext: executionTraceContext,
+              vars: persistedVars,
+            });
+          } catch (err) {
+            if (!abortSignal?.aborted && !outcomeSignal?.aborted) {
+              throw err;
+            }
+            ret.error = err instanceof Error ? err.message : String(err);
+            ret.failureReason = ResultFailureReason.ERROR;
+            return [ret];
+          }
+
+          try {
+            await applyProviderDelayIfNeeded(provider, response, abortSignal);
+          } catch (error) {
+            if (!abortSignal?.aborted) {
+              throw error;
+            }
+            // The row is already graded; pausing an inter-test delay does not invalidate it.
           }
 
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
@@ -2927,6 +2963,7 @@ function createRunEvalOption({
     isRedteam: testSuite.redteam != null,
     concurrency,
     abortSignal: providerAbortSignal,
+    gradingAbortSignal: providerAbortSignal,
     evalId,
     rateLimitRegistry,
   };
@@ -3073,6 +3110,7 @@ function adjustConcurrencyForSerialFeatures({
 interface ProcessEvalStepOptions {
   deferGrading?: boolean;
   onRowsReady?: () => void;
+  onTargetResponse?: (row: EvaluateResult) => void;
   precomputedRows?: EvaluateResult[];
   providerCallQueue?: ProviderCallQueue;
   shouldSkipStaleRows?: () => boolean;
@@ -3589,6 +3627,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     {
       deferGrading = false,
       onRowsReady,
+      onTargetResponse,
       precomputedRows,
       providerCallQueue,
       shouldSkipStaleRows,
@@ -3603,6 +3642,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           (await this.runEvalStepAfterBeforeEach(evalStep, {
             deferGrading,
             onRowsReady,
+            onTargetResponse,
             providerCallQueue,
             testSuite: context.testSuite,
           }));
@@ -3620,11 +3660,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     {
       deferGrading,
       onRowsReady,
+      onTargetResponse,
       providerCallQueue,
       testSuite,
     }: {
       deferGrading: boolean;
       onRowsReady?: () => void;
+      onTargetResponse?: (row: EvaluateResult) => void;
       providerCallQueue?: ProviderCallQueue;
       testSuite: TestSuite;
     },
@@ -3637,6 +3679,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const rows = await runEvalInternal({
       ...evalStep,
       deferGrading,
+      onTargetResponse,
       providerCallQueue: deferGrading ? providerCallQueue : undefined,
     });
     onRowsReady?.();
@@ -3651,7 +3694,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     context: EvalProcessingContext,
   ) {
     for (const row of rows) {
-      if (shouldSkipStaleRows?.()) {
+      if (
+        shouldSkipStaleRows?.() ||
+        (this.store.persisted && context.options.abortSignal?.aborted && !row.response)
+      ) {
         return;
       }
 
@@ -3792,8 +3838,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     };
 
     let timeoutId: NodeJS.Timeout | undefined;
+    let timeoutFallback: NodeJS.Immediate | undefined;
     let didTimeout = false;
+    let completedTarget: EvaluateResult | undefined;
     const clearEvalStepTimeout = () => {
+      if (timeoutFallback) {
+        clearImmediate(timeoutFallback);
+        timeoutFallback = undefined;
+      }
       if (timeoutId) {
         clearTimeout(timeoutId);
         timeoutId = undefined;
@@ -3801,31 +3853,68 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     };
 
     try {
-      return await Promise.race([
+      const rows = await Promise.race([
         this.processEvalStep(
           evalStepWithSignal,
           index,
           {
             deferGrading,
             onRowsReady: clearEvalStepTimeout,
+            onTargetResponse: (row) => {
+              if (!didTimeout) {
+                completedTarget = row;
+              }
+            },
             providerCallQueue,
-            shouldSkipStaleRows: () => didTimeout,
+            shouldSkipStaleRows: () =>
+              didTimeout || (abortController.signal.aborted && !completedTarget),
           },
           context,
         ),
         new Promise<void>((_, reject) => {
           timeoutId = setTimeout(() => {
-            didTimeout = true;
-            abortController.abort();
-            reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
+            const error = new DOMException(
+              `Evaluation timed out after ${timeoutMs}ms`,
+              'AbortError',
+            );
+            abortController.abort(error);
+            // Allow cancellation-aware providers to return completed billing before the
+            // fallback for legacy providers that never settle after abort.
+            timeoutFallback = setImmediate(() => {
+              didTimeout = true;
+              reject(error);
+            });
           }, timeoutMs);
         }),
       ]);
+      if (abortController.signal.aborted && !completedTarget) {
+        didTimeout = true;
+        throw abortController.signal.reason;
+      }
+      return rows;
     } catch (error) {
       if (!didTimeout) {
         throw error;
       }
-      await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      if (completedTarget) {
+        await this.processEvalRows(
+          evalStep,
+          index,
+          [
+            {
+              ...completedTarget,
+              error: `Evaluation timed out after ${timeoutMs}ms`,
+              success: false,
+              score: 0,
+              failureReason: ResultFailureReason.ERROR,
+            },
+          ],
+          undefined,
+          context,
+        );
+      } else {
+        await this.addEvalStepTimeoutResult(evalStep, index, timeoutMs, error, context);
+      }
     } finally {
       clearEvalStepTimeout();
     }
@@ -5032,17 +5121,19 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       return interruptedEval;
     }
 
-    await this.processComparisonAssertions({
-      ciProgressReporter,
-      isWebUI,
-      progressBarManager,
-      prompts,
-      providerAbortSignal,
-      repeatCacheContextByTestIdx,
-      rowsWithMaxScoreAssertion,
-      rowsWithSelectBestAssertion,
-      runEvalOptions,
-    });
+    if (!evalTimedOut && !providerAbortSignal?.aborted) {
+      await this.processComparisonAssertions({
+        ciProgressReporter,
+        isWebUI,
+        progressBarManager,
+        prompts,
+        providerAbortSignal,
+        repeatCacheContextByTestIdx,
+        rowsWithMaxScoreAssertion,
+        rowsWithSelectBestAssertion,
+        runEvalOptions,
+      });
+    }
 
     await this.finalizeEvaluation({
       assertionTypes,

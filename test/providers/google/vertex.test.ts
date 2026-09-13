@@ -6,6 +6,7 @@ import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
+import { createDeferred } from '../../util/utils';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Hoisted mocks for cache
@@ -196,6 +197,50 @@ describe('VertexChatProvider.callGeminiApi', () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
   });
+
+  it.each([null, JSON.stringify({ output: 'cached' })])(
+    'does not accept a cache lookup result after cancellation: %s',
+    async (cachedValue) => {
+      let finishCacheLookup!: (value: string | null) => void;
+      mockCacheGet.mockImplementationOnce(
+        () =>
+          new Promise<string | null>((resolve) => {
+            finishCacheLookup = resolve;
+          }),
+      );
+      const auth = vi.spyOn(provider, 'getClientWithCredentials');
+      const controller = new AbortController();
+      const reason = new Error('cancelled while reading cache');
+      const call = provider.callGeminiApi('hello', undefined, { abortSignal: controller.signal });
+      const rejection = expect(call).rejects.toBe(reason);
+      await vi.waitFor(() => expect(mockCacheGet).toHaveBeenCalledOnce());
+      controller.abort(reason);
+      finishCacheLookup(cachedValue);
+      await rejection;
+      expect(auth).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['gemini-2.5-flash', 'claude-sonnet-4', 'llama-3', 'chat-bison'])(
+    'rejects a settled cache hit when cancellation precedes its continuation: %s',
+    async (model) => {
+      const started = createDeferred<void>();
+      const cached = createDeferred<string>();
+      mockCacheGet.mockImplementationOnce(() => {
+        started.resolve();
+        return cached.promise;
+      });
+      const target = new VertexChatProvider(model, { config: { projectId: 'fixture-project' } });
+      const controller = new AbortController();
+      const reason = new Error('cancelled after cache settled');
+      const call = target.callApi('hello', undefined, { abortSignal: controller.signal });
+      const rejection = expect(call).rejects.toBe(reason);
+      await started.promise;
+      cached.resolve(JSON.stringify({ output: 'cached' }));
+      queueMicrotask(() => controller.abort(reason));
+      await rejection;
+    },
+  );
 
   it('should call the Gemini API and return the response', async () => {
     const mockResponse = {

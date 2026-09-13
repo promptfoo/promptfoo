@@ -3,11 +3,17 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
-import { getRequestTimeoutMs, parseChatPrompt, transformTools } from './shared';
+import {
+  awaitProviderOperation,
+  getRequestTimeoutMs,
+  parseChatPrompt,
+  transformTools,
+} from './shared';
 
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
@@ -154,7 +160,12 @@ export class OllamaCompletionProvider implements ApiProvider {
     return `[Ollama Completion Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'ollama',
@@ -184,10 +195,13 @@ export class OllamaCompletionProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, options), resultExtractor);
   }
 
-  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
+  private async callApiInternal(
+    prompt: string,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const params = {
       model: this.modelName,
       prompt,
@@ -220,6 +234,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/generate`,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(getEnvString('OLLAMA_API_KEY')
@@ -307,7 +322,12 @@ export class OllamaChatProvider implements ApiProvider {
     return `[Ollama Chat Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    options?.abortSignal?.throwIfAborted();
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'ollama',
@@ -337,12 +357,17 @@ export class OllamaChatProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, options),
+      resultExtractor,
+    );
   }
 
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
@@ -362,7 +387,10 @@ export class OllamaChatProvider implements ApiProvider {
 
     // Handle tools if configured
     if (this.config.tools) {
-      const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
+      const loadedTools = await awaitProviderOperation(
+        maybeLoadToolsFromExternalFile(this.config.tools, context?.vars),
+        options?.abortSignal,
+      );
       if (loadedTools !== undefined) {
         // Transform tools to OpenAI format if needed (Ollama uses OpenAI format)
         params.tools = transformTools(loadedTools, 'openai');
@@ -377,6 +405,7 @@ export class OllamaChatProvider implements ApiProvider {
         `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/chat`,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(getEnvString('OLLAMA_API_KEY')
@@ -495,7 +524,12 @@ export class OllamaChatProvider implements ApiProvider {
 }
 
 export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
-  async callEmbeddingApi(text: string): Promise<ProviderEmbeddingResponse> {
+  async callEmbeddingApi(
+    text: string,
+    _context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    options?.abortSignal?.throwIfAborted();
     const params = {
       model: this.modelName,
       prompt: text,
@@ -513,6 +547,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
         `${getEnvString('OLLAMA_BASE_URL') || 'http://localhost:11434'}/api/embeddings`,
         {
           method: 'POST',
+          signal: options?.abortSignal,
           headers: {
             'Content-Type': 'application/json',
             ...(getEnvString('OLLAMA_API_KEY')

@@ -208,7 +208,10 @@ describe('MCPClient', () => {
         args: ['start'],
         env: process.env as Record<string, string>,
       });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(
+        mockStdioTransport,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
       await mcpClient.cleanup();
       expect(mcpClient.hasInitialized).toBe(false);
     });
@@ -297,7 +300,10 @@ describe('MCPClient', () => {
           CUSTOM_MCP_VAR: 'custom_value',
         },
       });
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStdioTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(
+        mockStdioTransport,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
       await mcpClient.cleanup();
     });
 
@@ -432,8 +438,16 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, undefined);
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({
+          requestInit: expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        }),
+      );
+      expect(mockClient.connect).toHaveBeenCalledWith(
+        mockStreamableHTTPTransport,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
 
     it('should initialize with remote server using StreamableHTTPClientTransport with headers', async () => {
@@ -466,7 +480,10 @@ describe('MCPClient', () => {
           }),
         }),
       );
-      expect(mockClient.connect).toHaveBeenCalledWith(mockStreamableHTTPTransport, undefined);
+      expect(mockClient.connect).toHaveBeenCalledWith(
+        mockStreamableHTTPTransport,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
 
     it('should fall back to SSEClientTransport if StreamableHTTPClientTransport fails', async () => {
@@ -490,10 +507,20 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({
+          requestInit: expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        }),
+      );
       expect(mockStreamableHTTPTransport.close).toHaveBeenCalledOnce();
       expect(mockClient.close).toHaveBeenCalledOnce();
-      expect(SSEClientTransport).toHaveBeenCalledWith(expect.any(URL), undefined);
+      expect(SSEClientTransport).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({
+          requestInit: expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        }),
+      );
       expect(mockClient.connect).toHaveBeenCalledTimes(2);
     });
 
@@ -512,7 +539,10 @@ describe('MCPClient', () => {
 
       expect(first.close).toHaveBeenCalledOnce();
       expect(first.connect).toHaveBeenCalledOnce();
-      expect(fallback.connect).toHaveBeenCalledWith(mockSSETransport, undefined);
+      expect(fallback.connect).toHaveBeenCalledWith(
+        mockSSETransport,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
       expect(fallback.listTools).toHaveBeenCalledOnce();
       await mcpClient.cleanup();
       expect(fallback.close).toHaveBeenCalledOnce();
@@ -531,7 +561,7 @@ describe('MCPClient', () => {
       });
 
       mcpClient = new MCPClient({ enabled: true, server: { url: 'http://localhost:3000' } });
-      await expect(mcpClient.initialize()).rejects.toThrow(/shutting down|closed/);
+      await expect(mcpClient.initialize()).rejects.toMatchObject({ name: 'AbortError' });
       await cleaned.promise;
 
       expect(fallback.connect).not.toHaveBeenCalled();
@@ -708,7 +738,10 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(mockClient.listTools).toHaveBeenCalledWith(undefined, { timeout: 900000 });
+      expect(mockClient.listTools).toHaveBeenCalledWith(
+        undefined,
+        expect.objectContaining({ timeout: 900000, signal: expect.any(AbortSignal) }),
+      );
     });
 
     it('should pass timeout options to connect()', async () => {
@@ -729,7 +762,10 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(mockClient.connect).toHaveBeenCalledWith(expect.anything(), { timeout: 300000 });
+      expect(mockClient.connect).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ timeout: 300000, signal: expect.any(AbortSignal) }),
+      );
     });
 
     it('should ping server when pingOnConnect is true', async () => {
@@ -1224,75 +1260,8 @@ describe('MCPClient', () => {
   });
 
   describe('cleanup', () => {
-    it('aborts an in-flight OAuth refresh before waiting for teardown', async () => {
+    it('aborts a stalled OAuth refresh before waiting for it', async () => {
       const refreshStarted = createDeferred<void>();
-      let refreshSignal: AbortSignal | undefined;
-      mockGetOAuthTokenWithExpiry
-        .mockResolvedValueOnce({ accessToken: 'expiring', expiresAt: Date.now() + 30_000 })
-        .mockImplementationOnce((_auth, _url, signal: AbortSignal) => {
-          refreshSignal = signal;
-          refreshStarted.resolve();
-          return new Promise((_resolve, reject) => {
-            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-          });
-        });
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          url: 'http://localhost:3000',
-          auth: {
-            type: 'oauth',
-            grantType: 'client_credentials',
-            clientId: 'fixture-client',
-            clientSecret: 'fixture-secret',
-            tokenUrl: 'https://auth.example.com/token',
-          },
-        },
-      });
-      await mcpClient.initialize();
-      const call = mcpClient.callTool('tool1', {}).catch(() => undefined);
-      await refreshStarted.promise;
-      await mcpClient.cleanup();
-      expect(refreshSignal?.aborted).toBe(true);
-      expect(mcpClient.connectedServers).toEqual([]);
-      await call;
-    });
-
-    it('closes a pending handshake and rejects a late connection', async () => {
-      const entered = createDeferred<void>();
-      const handshake = createDeferred<void>();
-      mockClient.connect.mockImplementationOnce(() => {
-        entered.resolve();
-        return handshake.promise;
-      });
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: { command: 'node', args: ['fixture-server.js'] },
-      });
-
-      const initialization = mcpClient.initialize();
-      const rejection = expect(initialization).rejects.toThrow('MCP connection closed');
-      await entered.promise;
-      await mcpClient.cleanup();
-      expect((mcpClient as any).pendingConnections.size).toBe(0);
-      expect(mockStdioTransport.close).toHaveBeenCalledOnce();
-      expect(mockClient.close).toHaveBeenCalledOnce();
-      handshake.resolve();
-      await rejection;
-      expect(mcpClient.connectedServers).toEqual([]);
-    });
-
-    it('waits for a pending token refresh without reopening a closed connection', async () => {
-      const closeStarted = createDeferred<void>();
-      const closeContinue = createDeferred<void>();
-      const oldClient = createMockClient();
-      oldClient.close.mockImplementationOnce(() => {
-        closeStarted.resolve();
-        return closeContinue.promise;
-      });
-      vi.mocked(Client).mockImplementationOnce(function () {
-        return oldClient as unknown as Client;
-      });
       mockGetOAuthTokenWithExpiry.mockResolvedValueOnce({
         accessToken: 'expiring-token',
         expiresAt: Date.now() + 30_000,
@@ -1311,22 +1280,171 @@ describe('MCPClient', () => {
         },
       });
       await mcpClient.initialize();
+      mockGetOAuthTokenWithExpiry.mockImplementationOnce(async (...args: unknown[]) => {
+        const signal = args[2] as AbortSignal;
+        refreshStarted.resolve();
+        await new Promise<void>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        });
+        throw new Error('refresh unexpectedly completed');
+      });
 
       const call = mcpClient.callTool('tool1', {}).catch(() => undefined);
-      await closeStarted.promise;
-      const completed = vi.fn();
-      const cleanup = mcpClient.cleanup().then(completed);
-      await Promise.resolve();
-      expect(completed).not.toHaveBeenCalled();
-      closeContinue.resolve();
-      await Promise.all([call, cleanup]);
-      expect(vi.mocked(Client)).toHaveBeenCalledTimes(1);
+      await refreshStarted.promise;
+      await mcpClient.cleanup();
+      await call;
       expect(mcpClient.connectedServers).toEqual([]);
+      expect(vi.mocked(Client)).toHaveBeenCalledTimes(2);
 
       await mcpClient.initialize();
       expect(mcpClient.connectedServers).toEqual(['http://localhost:3000']);
       await mcpClient.cleanup();
     });
+
+    it('closes a pending handshake and rejects a late connection', async () => {
+      const entered = createDeferred<void>();
+      const handshake = createDeferred<void>();
+      mockClient.connect.mockImplementationOnce(() => {
+        entered.resolve();
+        return handshake.promise;
+      });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { command: 'node', args: ['fixture-server.js'] },
+      });
+
+      const initialization = mcpClient.initialize();
+      const rejection = expect(initialization).rejects.toThrow(/aborted/i);
+      await entered.promise;
+      const startupSignal = mockClient.connect.mock.calls[0][1]?.signal;
+      expect(startupSignal).toBeInstanceOf(AbortSignal);
+      await mcpClient.cleanup();
+      expect(startupSignal?.aborted).toBe(true);
+      expect(mockStdioTransport.close).toHaveBeenCalledOnce();
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      handshake.resolve();
+      await rejection;
+      expect(mcpClient.connectedServers).toEqual([]);
+    });
+
+    it.each(['transport', 'client'])(
+      'finishes cancelled startup cleanup when %s close stalls',
+      async (resource) => {
+        const entered = createDeferred<void>();
+        const handshake = createDeferred<void>();
+        const closeContinue = createDeferred<void>();
+        mockClient.connect.mockImplementationOnce(() => {
+          entered.resolve();
+          return handshake.promise;
+        });
+        const close = resource === 'transport' ? mockStdioTransport.close : mockClient.close;
+        close.mockReturnValueOnce(closeContinue.promise);
+        mcpClient = new MCPClient({
+          enabled: true,
+          server: { command: 'node', args: ['fixture-server.js'] },
+        });
+        const controller = new AbortController();
+        const initialization = mcpClient.initialize(controller.signal);
+        const rejection = expect(initialization).rejects.toThrow('cancelled startup');
+        await entered.promise;
+        controller.abort(new Error('cancelled startup'));
+        const cleanup = mcpClient.cleanup();
+        const settled = await Promise.race([
+          cleanup.then(() => true),
+          new Promise<boolean>((resolve) => setImmediate(() => resolve(false))),
+        ]);
+        const bothClosesStarted =
+          mockStdioTransport.close.mock.calls.length === 1 &&
+          mockClient.close.mock.calls.length === 1;
+        closeContinue.resolve();
+        handshake.resolve();
+        await Promise.all([cleanup, rejection]);
+        expect(settled).toBe(true);
+        expect(bothClosesStarted).toBe(true);
+        expect(mcpClient.connectedServers).toEqual([]);
+      },
+    );
+
+    it.each(['transport', 'client'])(
+      'aborts a pending token refresh stalled in %s close without reopening',
+      async (resource) => {
+        const closeStarted = createDeferred<void>();
+        const closeContinue = createDeferred<void>();
+        const oldClient = createMockClient();
+        const close =
+          resource === 'transport' ? mockStreamableHTTPTransport.close : oldClient.close;
+        close.mockImplementationOnce(() => {
+          closeStarted.resolve();
+          return closeContinue.promise;
+        });
+        vi.mocked(Client).mockImplementationOnce(function () {
+          return oldClient as unknown as Client;
+        });
+        mockGetOAuthTokenWithExpiry.mockResolvedValueOnce({
+          accessToken: 'expiring-token',
+          expiresAt: Date.now() + 30_000,
+        });
+        mcpClient = new MCPClient({
+          enabled: true,
+          server: {
+            url: 'http://localhost:3000',
+            auth: {
+              type: 'oauth',
+              grantType: 'client_credentials',
+              clientId: 'test-client',
+              clientSecret: 'test-secret',
+              tokenUrl: 'https://auth.example.com/token',
+            },
+          },
+        });
+        await mcpClient.initialize();
+
+        const call = mcpClient.callTool('tool1', {}).catch(() => undefined);
+        await closeStarted.promise;
+        const completed = vi.fn();
+        const cleanup = mcpClient.cleanup().then(completed);
+        const settled = await Promise.race([
+          cleanup.then(() => true),
+          new Promise<boolean>((resolve) => setImmediate(() => resolve(false))),
+        ]);
+        closeContinue.resolve();
+        await Promise.all([call, cleanup]);
+        expect(settled).toBe(true);
+        expect(vi.mocked(Client)).toHaveBeenCalledTimes(1);
+        expect(mcpClient.connectedServers).toEqual([]);
+
+        await mcpClient.initialize();
+        expect(mcpClient.connectedServers).toEqual(['http://localhost:3000']);
+        await mcpClient.cleanup();
+      },
+    );
+
+    it.each(['transport', 'client'])(
+      'does not wait for an established %s close after cleanup aborts lifecycle',
+      async (resource) => {
+        const closeContinue = createDeferred<void>();
+        const close = resource === 'transport' ? mockStdioTransport.close : mockClient.close;
+        close.mockReturnValueOnce(closeContinue.promise);
+        mcpClient = new MCPClient({
+          enabled: true,
+          server: { command: 'node', args: ['fixture-server.js'] },
+        });
+        await mcpClient.initialize();
+
+        const cleanup = mcpClient.cleanup();
+        const settled = await Promise.race([
+          cleanup.then(() => true),
+          new Promise<boolean>((resolve) => setImmediate(() => resolve(false))),
+        ]);
+        closeContinue.resolve();
+        await cleanup;
+
+        expect(settled).toBe(true);
+        expect(mockStdioTransport.close).toHaveBeenCalledOnce();
+        expect(mockClient.close).toHaveBeenCalledOnce();
+        expect(mcpClient.connectedServers).toEqual([]);
+      },
+    );
 
     it('closes a connection whose tool discovery failed before registration', async () => {
       mockClient.listTools.mockRejectedValueOnce(new Error('tool discovery failed'));
@@ -1831,6 +1949,10 @@ describe('MCPClient', () => {
 
       // Should have called getOAuthTokenWithExpiry twice (initial + refresh)
       expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(2);
+      expect(mockClient.connect).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
 
     it('should call the reconnected client after a proactive token refresh', async () => {
@@ -2103,6 +2225,41 @@ describe('MCPClient', () => {
       expect(mockGetOAuthTokenWithExpiry).toHaveBeenCalledTimes(2);
       expect(oldClient.callTool).toHaveBeenCalledTimes(2);
       expect(refreshedClient.callTool).toHaveBeenCalledTimes(2);
+    });
+
+    it('propagates cancellation during reactive OAuth refresh', async () => {
+      mockClient.callTool.mockRejectedValueOnce(new Error('401 Unauthorized'));
+      mockGetOAuthTokenWithExpiry.mockResolvedValueOnce({
+        accessToken: 'initial-token',
+        expiresAt: Date.now() + 3_600_000,
+      });
+      const refreshStarted = createDeferred<void>();
+      const refreshToken = createDeferred<{ accessToken: string; expiresAt: number }>();
+      mockGetOAuthTokenWithExpiry.mockImplementationOnce(() => {
+        refreshStarted.resolve();
+        return refreshToken.promise;
+      });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          url: 'http://localhost:3000',
+          auth: {
+            type: 'oauth',
+            grantType: 'client_credentials',
+            clientId: 'test-client',
+            clientSecret: 'test-secret',
+            tokenUrl: 'https://auth.example.com/token',
+          },
+        },
+      });
+      await mcpClient.initialize();
+
+      const controller = new AbortController();
+      const call = mcpClient.callTool('tool1', {}, controller.signal);
+      await refreshStarted.promise;
+      controller.abort(new Error('cancelled refresh'));
+      await expect(call).rejects.toThrow('cancelled refresh');
+      refreshToken.reject(new Error('refresh stopped'));
     });
 
     it('should not refresh token if still valid', async () => {
