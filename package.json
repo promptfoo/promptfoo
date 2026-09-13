@@ -24,6 +24,16 @@
         "types": "./dist/src/contracts.d.cts",
         "default": "./dist/src/contracts.cjs"
       }
+    },
+    "./assertions/pure": {
+      "import": {
+        "types": "./dist/src/assertions/pure.d.ts",
+        "default": "./dist/src/assertions/pure.js"
+      },
+      "require": {
+        "types": "./dist/src/assertions/pure.d.cts",
+        "default": "./dist/src/assertions/pure.cjs"
+      }
     }
   },
   "workspaces": [
@@ -36,6 +46,9 @@
     "*": {
       "contracts": [
         "dist/src/contracts.d.ts"
+      ],
+      "assertions/pure": [
+        "dist/src/assertions/pure.d.ts"
       ]
     }
   },

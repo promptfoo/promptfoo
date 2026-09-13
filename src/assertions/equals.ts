@@ -1,6 +1,42 @@
-import util from 'util';
-
 import type { AssertionParams, GradingResult } from '../types/index';
+
+function getEnumerableOwnKeys(value: object): Array<string | symbol> {
+  return Reflect.ownKeys(value).filter(
+    (key) => Object.getOwnPropertyDescriptor(value, key)?.enumerable,
+  );
+}
+
+// The right operand comes from JSON.parse, so recursive comparisons cannot cycle.
+function isJsonDeepEqual(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+  if (Array.isArray(left) || Array.isArray(right)) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+      return false;
+    }
+  }
+  if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object') {
+    return false;
+  }
+
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  if (Object.getPrototypeOf(leftRecord) !== Object.getPrototypeOf(rightRecord)) {
+    return false;
+  }
+
+  const leftKeys = getEnumerableOwnKeys(leftRecord);
+  const rightKeys = getEnumerableOwnKeys(rightRecord);
+  const rightKeySet = new Set(rightKeys);
+  if (leftKeys.length !== rightKeys.length || !leftKeys.every((key) => rightKeySet.has(key))) {
+    return false;
+  }
+
+  return leftKeys.every((key) =>
+    isJsonDeepEqual(Reflect.get(leftRecord, key), Reflect.get(rightRecord, key)),
+  );
+}
 
 export const handleEquals = async ({
   assertion,
@@ -14,7 +50,7 @@ export const handleEquals = async ({
   let pass: boolean;
   if (typeof renderedValue === 'object') {
     try {
-      pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
+      pass = isJsonDeepEqual(renderedValue, JSON.parse(outputString)) !== inverse;
     } catch {
       // The output is not valid JSON, so it cannot deep-equal the object value (the "equal"
       // result is false). Respect `inverse` (false !== inverse) so `not-equals` passes here

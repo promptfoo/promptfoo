@@ -56,6 +56,8 @@ export default defineConfig([
   {
     ...sharedBuildOptions,
     entry: { 'server/index': 'src/server/index.ts' },
+    // Executable builds must not overwrite the library's index.d.ts.
+    dts: false,
     format: ['esm'],
     shims: true,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
@@ -69,6 +71,7 @@ export default defineConfig([
   {
     ...sharedBuildOptions,
     entry: ['src/entrypoint.ts', 'src/main.ts'],
+    dts: false,
     format: ['esm'],
     shims: true, // Provides __dirname, __filename shims automatically
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module
@@ -80,6 +83,18 @@ export default defineConfig([
     outputOptions: {
       banner: '#!/usr/bin/env node',
     },
+  },
+  // Keep pure assertions out of the host library's shared chunks and Node shims.
+  {
+    ...sharedBuildOptions,
+    entry: { pure: 'src/assertions/pure.ts' },
+    outDir: 'dist/src/assertions',
+    platform: 'neutral',
+    target: 'es2022',
+    format: ['esm', 'cjs'],
+    fixedExtension: false,
+    shims: false,
+    dts: true,
   },
   // Library ESM build
   {

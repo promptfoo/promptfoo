@@ -9,7 +9,10 @@ import { loadYaml } from '../util/yamlLoad';
 
 const clone = Clone();
 
-export function getFinalTest(test: TestCase, assertion: Assertion) {
+export function getFinalTest(
+  test: TestCase,
+  assertion: Pick<Assertion, 'provider' | 'rubricPrompt'>,
+) {
   // Deep copy
   const ret = clone({
     ...test,

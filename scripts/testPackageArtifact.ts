@@ -46,6 +46,10 @@ const requiredPackagedPaths = [
   'dist/src/app/index.html',
   'dist/src/entrypoint.js',
   'dist/src/golang/wrapper.go',
+  'dist/src/assertions/pure.js',
+  'dist/src/assertions/pure.cjs',
+  'dist/src/assertions/pure.d.ts',
+  'dist/src/assertions/pure.d.cts',
   'dist/src/contracts.cjs',
   'dist/src/contracts.d.cts',
   'dist/src/contracts.d.ts',
@@ -337,6 +341,112 @@ function runInstalledBinVersion(consumerDir: string, configDir: string, binName:
   return run(binPath, ['--version'], consumerDir, envOverrides);
 }
 
+function writeAssertionConsumerScripts(consumerDir: string): void {
+  fs.writeFileSync(
+    path.join(consumerDir, 'pure-assertions.mjs'),
+    `
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { createRequire, registerHooks } from 'node:module';
+import { runInNewContext } from 'node:vm';
+const require = createRequire(import.meta.url);
+const packageRoot = new URL('./node_modules/promptfoo/', import.meta.url).href;
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    const resolved = nextResolve(specifier, context);
+    assert.ok(resolved.url.startsWith(packageRoot), 'Pure assertions imported ' + resolved.url);
+    return resolved;
+  },
+});
+for (const api of [await import('promptfoo/assertions/pure'), require('promptfoo/assertions/pure')]) {
+  const result = await api.runPureAssertion({
+    assertion: { type: 'not-contains', value: 'missing' },
+    providerResponse: { output: 'expected output' },
+  });
+  assert.equal(result.pass, true);
+  assert.equal(result.score, 1);
+  await assert.rejects(api.runPureAssertion({
+    assertion: { type: 'latency', threshold: 100 },
+    providerResponse: { output: 'expected output' },
+  }), /latency/i);
+}
+// The standalone CJS bundle must also run without Node globals or a module loader.
+const module = { exports: {} };
+runInNewContext(fs.readFileSync(require.resolve('promptfoo/assertions/pure'), 'utf8'), { module, exports: module.exports });
+const result = await module.exports.runPureAssertion({
+  assertion: { type: 'contains', value: 'portable' },
+  providerResponse: { output: 'portable runtime' },
+});
+assert.equal(result.pass, true);
+`,
+  );
+  const pureConsumer = `
+const result: Promise<pure.PureGradingResult> = pure.runPureAssertion({
+  assertion: { type: 'contains', value: 'expected' },
+  providerResponse: { output: 'expected' },
+});
+void result;
+// @ts-expect-error Model graders are not available in the pure runner.
+pure.runPureAssertion({ assertion: { type: 'llm-rubric' }, providerResponse: { output: 'expected' } });
+`;
+  fs.writeFileSync(
+    path.join(consumerDir, 'import-pure.mts'),
+    "import * as pure from 'promptfoo/assertions/pure';\n" + pureConsumer,
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'require-pure.cts'),
+    "import pure = require('promptfoo/assertions/pure');\n" + pureConsumer,
+  );
+  // The full host entry still exposes upstream Drizzle declarations that need skipLibCheck.
+  // Keep the dependency-light contracts/pure consumers above on strict declaration checks.
+  fs.writeFileSync(
+    path.join(consumerDir, 'tsconfig.host-assertions.json'),
+    JSON.stringify({
+      compilerOptions: {
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        noEmit: true,
+        strict: true,
+        skipLibCheck: true,
+      },
+      include: ['import-assertions.mts', 'require-assertions.cts'],
+    }),
+  );
+  const customAssertionConsumer = `
+type CustomType = 'custom-check' | 'not-custom-check';
+const registry = new promptfoo.AssertionRegistry<promptfoo.AssertionParams<CustomType>, promptfoo.GradingResult<CustomType>>([
+  { name: 'custom', handlers: {
+    'custom-check': ({ assertion, outputString, renderedValue, inverse }) => {
+      const pass = (outputString === renderedValue) !== inverse;
+      return { pass, score: pass ? 1 : 0, reason: 'custom comparison', assertion };
+    },
+  } },
+]);
+const result: Promise<promptfoo.GradingResult<CustomType>> = promptfoo.assertions.runAssertion({
+  assertion: { type: 'custom-check', value: '{{ expected }}' },
+  registry,
+  providerResponse: { output: 'expected' },
+  test: { vars: { expected: 'expected' } },
+});
+void result;
+// @ts-expect-error Custom assertion names need a registry.
+promptfoo.assertions.runAssertion({ assertion: { type: 'custom-check' }, test: {}, providerResponse: { output: 'expected' } });
+pure.runPureAssertion({ assertion: { type: 'contains', value: 'expected' }, providerResponse: { output: 'expected' } });
+// @ts-expect-error Model graders are not available in the pure runner.
+pure.runPureAssertion({ assertion: { type: 'llm-rubric' }, providerResponse: { output: 'expected' } });
+`;
+  fs.writeFileSync(
+    path.join(consumerDir, 'import-assertions.mts'),
+    "import * as promptfoo from 'promptfoo';\nimport * as pure from 'promptfoo/assertions/pure';\n" +
+      customAssertionConsumer,
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'require-assertions.cts'),
+    "import promptfoo = require('promptfoo');\nimport pure = require('promptfoo/assertions/pure');\n" +
+      customAssertionConsumer,
+  );
+}
+
 function writeConsumerScripts(consumerDir: string): void {
   fs.writeFileSync(
     path.join(consumerDir, 'import-package.mjs'),
@@ -403,7 +513,7 @@ function writeConsumerScripts(consumerDir: string): void {
         noEmit: true,
         strict: true,
       },
-      include: ['import-contracts.ts'],
+      include: ['import-contracts.ts', 'import-pure.mts'],
     }),
   );
   fs.writeFileSync(
@@ -434,7 +544,7 @@ function writeConsumerScripts(consumerDir: string): void {
         noEmit: true,
         strict: true,
       },
-      include: ['require-contracts.cts'],
+      include: ['require-contracts.cts', 'require-pure.cts'],
     }),
   );
 }
@@ -645,10 +755,16 @@ async function main(): Promise<void> {
     assertInstalledRefParserTransport(installedPackageDir);
 
     writeConsumerScripts(consumerDir);
+    writeAssertionConsumerScripts(consumerDir);
+    run(process.execPath, ['pure-assertions.mjs'], consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json']) {
+    for (const tsconfig of [
+      'tsconfig.json',
+      'tsconfig.node16-cjs.json',
+      'tsconfig.host-assertions.json',
+    ]) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
