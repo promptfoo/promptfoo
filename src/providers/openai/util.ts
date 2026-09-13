@@ -1017,8 +1017,8 @@ export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
       const completionDetails = getOpenAICompletionTokenDetails(data.usage);
       return {
         total: data.usage.total_tokens,
-        prompt: data.usage.prompt_tokens || 0,
-        completion: data.usage.completion_tokens || 0,
+        prompt: data.usage.prompt_tokens ?? data.usage.input_tokens ?? 0,
+        completion: data.usage.completion_tokens ?? data.usage.output_tokens ?? 0,
         numRequests: 1,
         ...(completionDetails ? { completionDetails } : {}),
       };

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'fs/promises';
 import path from 'path';
 
+import OpenAI from 'openai';
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
 import { fetchWithProxy } from '../../util/fetch/index';
@@ -17,8 +18,8 @@ import {
   storeCacheMapping,
 } from '../video';
 import { OpenAiGenericProvider } from '.';
+import { createOpenAiClient, unwrapOpenAiTransportError } from './client';
 import {
-  appendOpenAiApiPath,
   assertOpenAiApiModel,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
@@ -291,94 +292,62 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     };
   }
 
-  /**
-   * Create a new video generation job
-   */
-  private async createVideoJob(
-    prompt: string,
-    config: OpenAiVideoOptions,
-  ): Promise<{ job: OpenAiVideoJob; error?: string }> {
-    const url = appendOpenAiApiPath(
-      this.getApiUrl(),
-      config.remix_video_id
-        ? `videos/${encodeURIComponent(config.remix_video_id)}/remix`
-        : 'videos',
-    );
-
-    const headers = this.getAuthHeaders(config.headers);
-    let body: string | FormData;
-
+  private createClient(customHeaders?: Record<string, string>) {
+    const headers = this.getAuthHeaders(customHeaders);
     for (const header of Object.keys(headers)) {
       if (header.toLowerCase() === 'content-type') {
         delete headers[header];
       }
     }
+    return createOpenAiClient({
+      apiKey: this.getApiKey(),
+      allowMissingApiKey: !this.requiresApiKey(),
+      organization: this.getOrganization(),
+      baseURL: this.getApiUrl(),
+      headers,
+      maxRetries: 0,
+      fetch: (url, init) => fetchWithProxy(url instanceof URL ? url.toString() : url, init),
+    });
+  }
 
-    if (config.remix_video_id) {
-      headers['Content-Type'] = 'application/json';
-      body = JSON.stringify({ prompt });
-    } else if (config.input_reference || config.characters?.length) {
-      const requestBody: Record<string, unknown> = {
-        model: config.model || this.modelName,
-        prompt,
-        size: config.size || DEFAULT_SIZE,
-        seconds: String(config.seconds || DEFAULT_SECONDS),
-        ...(config.characters?.length ? { characters: config.characters } : {}),
-      };
-
-      if (config.input_reference) {
-        try {
-          requestBody.input_reference = await normalizeInputReference(config.input_reference);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-            throw error;
-          }
-          return {
-            job: {} as OpenAiVideoJob,
-            error: `Input reference file not found: ${String(config.input_reference).slice(7)}`,
-          };
-        }
-      }
-
-      headers['Content-Type'] = 'application/json';
-      body = JSON.stringify(requestBody);
-    } else {
-      // Match the OpenAI SDK's multipart form for basic creation requests.
-      // Leave Content-Type unset so fetch can include the multipart boundary.
-      const formData = new FormData();
-      formData.set('prompt', prompt);
-      formData.set('model', config.model || this.modelName);
-      formData.set('size', config.size || DEFAULT_SIZE);
-      formData.set('seconds', String(config.seconds || DEFAULT_SECONDS));
-
-      body = formData;
-    }
-
+  private async createVideoJob(
+    prompt: string,
+    config: OpenAiVideoOptions,
+  ): Promise<{ job: OpenAiVideoJob; error?: string }> {
+    const client = this.createClient(config.headers);
     try {
-      logger.debug('[OpenAI Video] Creating video job', { url, model: this.modelName });
-
-      const response = await fetchWithProxy(url, {
-        method: 'POST',
-        headers,
-        body,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage =
-          (errorData as { error?: { message?: string } }).error?.message || response.statusText;
-        return {
-          job: {} as OpenAiVideoJob,
-          error: `API error ${response.status}: ${errorMessage}`,
+      let job: OpenAiVideoJob;
+      if (config.remix_video_id) {
+        job = (await client.videos.remix(config.remix_video_id, { prompt })) as OpenAiVideoJob;
+      } else {
+        const body = {
+          model: config.model || this.modelName,
+          prompt,
+          size: config.size || DEFAULT_SIZE,
+          seconds: String(config.seconds || DEFAULT_SECONDS),
+          ...(config.characters?.length ? { characters: config.characters } : {}),
+          ...(config.input_reference
+            ? { input_reference: await normalizeInputReference(config.input_reference) }
+            : {}),
         };
+        // Reference objects and reusable characters use the JSON API contract.
+        // The SDK's generated create helper currently always encodes multipart.
+        job =
+          config.input_reference || config.characters?.length
+            ? await client.post<OpenAiVideoJob>('/videos', { body })
+            : ((await client.videos.create(body as OpenAI.VideoCreateParams)) as OpenAiVideoJob);
       }
-
-      const job = (await response.json()) as OpenAiVideoJob;
       return { job };
     } catch (err: unknown) {
+      const error = unwrapOpenAiTransportError(err);
       return {
         job: {} as OpenAiVideoJob,
-        error: `Failed to create video job: ${String(err)}`,
+        error:
+          error instanceof OpenAI.APIError
+            ? `API error ${error.status}: ${error.error?.message ?? error.message}`
+            : (error as NodeJS.ErrnoException)?.code === 'ENOENT'
+              ? `Input reference file not found: ${String(config.input_reference).slice(7)}`
+              : `Failed to create video job: ${String(error)}`,
       };
     }
   }
@@ -393,24 +362,11 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     customHeaders?: Record<string, string>,
   ): Promise<{ job: OpenAiVideoJob; error?: string }> {
     const startTime = Date.now();
-    const url = appendOpenAiApiPath(this.getApiUrl(), `videos/${encodeURIComponent(videoId)}`);
-    const headers = this.getAuthHeaders(customHeaders);
+    const client = this.createClient(customHeaders);
 
     while (Date.now() - startTime < maxPollTimeMs) {
       try {
-        const response = await fetchWithProxy(url, { method: 'GET', headers });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          const errorMessage =
-            (errorData as { error?: { message?: string } }).error?.message || response.statusText;
-          return {
-            job: {} as OpenAiVideoJob,
-            error: `Status check failed: ${errorMessage}`,
-          };
-        }
-
-        const job: OpenAiVideoJob = (await response.json()) as OpenAiVideoJob;
+        const job = (await client.videos.retrieve(videoId)) as OpenAiVideoJob;
 
         logger.debug(
           `[OpenAI Video] Job ${videoId} status: ${job.status}, progress: ${job.progress}%`,
@@ -432,7 +388,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       } catch (err: unknown) {
         return {
           job: {} as OpenAiVideoJob,
-          error: `Polling error: ${String(err)}`,
+          error:
+            err instanceof OpenAI.APIError
+              ? `Status check failed: ${err.error?.message ?? err.message}`
+              : `Polling error: ${String(unwrapOpenAiTransportError(err))}`,
         };
       }
     }
@@ -453,21 +412,13 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     evalId?: string,
     customHeaders?: Record<string, string>,
   ): Promise<{ storageRef?: MediaStorageRef; error?: string }> {
-    const url = appendOpenAiApiPath(
-      this.getApiUrl(),
-      `videos/${encodeURIComponent(soraVideoId)}/content`,
-      variant === 'video' ? undefined : `variant=${variant}`,
-    );
-    const headers = this.getAuthHeaders(customHeaders);
+    const client = this.createClient(customHeaders);
 
     try {
-      const response = await fetchWithProxy(url, { method: 'GET', headers });
-
-      if (!response.ok) {
-        return {
-          error: `Failed to download ${variant}: ${response.status} ${response.statusText}`,
-        };
-      }
+      const response = await client.videos.downloadContent(
+        soraVideoId,
+        variant === 'video' ? {} : { variant },
+      );
 
       const buffer = Buffer.from(await response.arrayBuffer());
       const mimeType = VARIANT_MIME_TYPES[variant];
@@ -486,7 +437,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       return { storageRef: ref };
     } catch (err: unknown) {
       return {
-        error: `Download error for ${variant}: ${String(err)}`,
+        error:
+          err instanceof OpenAI.APIError
+            ? `Failed to download ${variant}: ${err.status} ${err.error?.message ?? err.message}`
+            : `Download error for ${variant}: ${String(unwrapOpenAiTransportError(err))}`,
       };
     }
   }

@@ -896,20 +896,35 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       !config.cli_config &&
       !config.collaboration_mode &&
       !config.model_provider &&
-      !config.deep_tracing
+      !config.deep_tracing &&
+      config.model !== 'gpt-5.2-codex'
     ) {
       return undefined;
     }
 
-    const cliConfig = {
+    const cliConfig: Record<string, unknown> = {
       ...(config.cli_config ?? {}),
       // The first-class `model_provider` option takes precedence over any value
       // supplied through raw `cli_config`.
       ...(config.model_provider ? { model_provider: config.model_provider } : {}),
-      ...(config.collaboration_mode ? { collaboration_mode: config.collaboration_mode } : {}),
     };
 
-    return withCodexTraceExporter(cliConfig, env, config.deep_tracing === true);
+    if (config.model === 'gpt-5.2-codex' && cliConfig.model_verbosity === undefined) {
+      cliConfig.model_verbosity = 'medium';
+    }
+
+    if (!Object.keys(cliConfig).length && !config.collaboration_mode && !config.deep_tracing) {
+      return undefined;
+    }
+
+    return withCodexTraceExporter(
+      {
+        ...cliConfig,
+        ...(config.collaboration_mode ? { collaboration_mode: config.collaboration_mode } : {}),
+      },
+      env,
+      config.deep_tracing === true,
+    );
   }
 
   private getSkillRootPrefixes(env: Record<string, string>, workingDir?: string): string[] {

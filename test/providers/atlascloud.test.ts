@@ -135,9 +135,9 @@ describe('AtlasCloud', () => {
 
       const [url, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
       expect(url).toBe(`${ATLASCLOUD_API_BASE}/chat/completions`);
-      expect((init as RequestInit | undefined)?.headers).toMatchObject({
-        Authorization: 'Bearer atlas-test-key',
-      });
+      expect(new Headers((init as RequestInit | undefined)?.headers).get('authorization')).toBe(
+        'Bearer atlas-test-key',
+      );
       expect(result.output).toBe('Atlas output');
       expect(result.tokenUsage).toEqual({
         total: 12,

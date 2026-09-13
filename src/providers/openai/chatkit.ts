@@ -35,8 +35,11 @@ import * as http from 'http';
 
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 import logger from '../../logger';
+import { fetchWithRetries } from '../../util/fetch/index';
 import { providerRegistry } from '../providerRegistry';
+import { getRequestTimeoutMs } from '../shared';
 import { ChatKitBrowserPool } from './chatkit-pool';
+import { createOpenAiClient, unwrapOpenAiTransportError } from './client';
 import { OpenAiGenericProvider } from './index';
 
 import type { EnvOverrides } from '../../types/env';
@@ -154,25 +157,7 @@ function cleanAssistantResponse(text: string): string {
 /**
  * Generate the HTML page that hosts the ChatKit component
  */
-function generateChatKitHTML(
-  apiKey: string,
-  workflowId: string,
-  version?: string,
-  userId?: string,
-): string {
-  // Validate inputs to prevent script injection
-  validateWorkflowId(workflowId);
-  if (version) {
-    validateVersion(version);
-  }
-  // userId is required - caller must provide it (constructor ensures this)
-  if (!userId) {
-    throw new Error('userId is required for ChatKit HTML generation');
-  }
-  validateUserId(userId);
-
-  const versionClause = version ? `, version: '${version}'` : '';
-
+export function generateChatKitHTML(sessionEndpoint: string): string {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -210,18 +195,12 @@ function generateChatKitHTML(
             if (existing) return existing;
             if (cachedSecret) return cachedSecret;
 
-            const res = await fetch('https://api.openai.com/v1/chatkit/sessions', {
+            const res = await fetch('${sessionEndpoint}', {
               method: 'POST',
               headers: {
-                'Authorization': 'Bearer ${apiKey}',
-                'Content-Type': 'application/json',
-                'OpenAI-Beta': 'chatkit_beta=v1',
-                'X-OpenAI-Originator': 'promptfoo'
+                'Content-Type': 'application/json'
               },
-              body: JSON.stringify({
-                workflow: { id: '${workflowId}'${versionClause} },
-                user: '${userId}'
-              })
+              body: JSON.stringify({})
             });
 
             if (!res.ok) {
@@ -733,6 +712,10 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
   private server: http.Server | null = null;
   private serverPort: number = 0;
   private initialized: boolean = false;
+  // Keep pooled session factories isolated per provider without including
+  // API keys, headers, or endpoint details in the template key.
+  private readonly poolTemplateNamespace = crypto.randomUUID();
+  private readonly pooledClientSecretFactory = () => this.createChatKitClientSecret();
 
   // Static userId for consistent template keys across concurrent evaluations
   private static defaultUserId: string | null = null;
@@ -781,6 +764,58 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     return `[OpenAI ChatKit Provider ${this.chatKitConfig.workflowId}]`;
   }
 
+  private async createChatKitClientSecret(): Promise<string> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('OpenAI API key is required for ChatKit provider');
+    }
+    const workflowId = this.chatKitConfig.workflowId;
+    if (!workflowId) {
+      throw new Error('ChatKit workflowId is required');
+    }
+    const userId = this.chatKitConfig.userId;
+    if (!userId) {
+      throw new Error('ChatKit userId is required');
+    }
+    validateWorkflowId(workflowId);
+    if (this.chatKitConfig.version) {
+      validateVersion(this.chatKitConfig.version);
+    }
+    validateUserId(userId);
+
+    const timeout = getRequestTimeoutMs();
+    const client = createOpenAiClient({
+      apiKey,
+      organization: this.getOrganization(),
+      baseURL: this.getApiUrl(),
+      headers: this.getOpenAiRequestHeaders(this.config.headers),
+      // Keep ChatKit session minting on Promptfoo's proxy-aware transport.
+      // The pre-SDK browser fetch had no implicit retries, so preserve that unless configured.
+      maxRetries: 0,
+      timeout,
+      fetch: (url, init = {}) =>
+        fetchWithRetries(
+          url instanceof URL ? url.toString() : url,
+          init,
+          timeout,
+          this.config.maxRetries ?? 0,
+        ),
+    });
+
+    try {
+      const session = await client.beta.chatkit.sessions.create({
+        workflow: {
+          id: workflowId,
+          ...(this.chatKitConfig.version ? { version: this.chatKitConfig.version } : {}),
+        },
+        user: userId,
+      });
+      return session.client_secret;
+    } catch (err) {
+      throw unwrapOpenAiTransportError(err);
+    }
+  }
+
   /**
    * Initialize the browser and ChatKit page
    */
@@ -798,6 +833,15 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     if (!workflowId) {
       throw new Error('ChatKit workflowId is required');
     }
+    const userId = this.chatKitConfig.userId;
+    if (!userId) {
+      throw new Error('ChatKit userId is required');
+    }
+    validateWorkflowId(workflowId);
+    if (this.chatKitConfig.version) {
+      validateVersion(this.chatKitConfig.version);
+    }
+    validateUserId(userId);
 
     logger.debug('[ChatKitProvider] Initializing', {
       workflowId,
@@ -805,14 +849,23 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     });
 
     // Create HTTP server to serve the ChatKit HTML
-    const html = generateChatKitHTML(
-      apiKey,
-      workflowId,
-      this.chatKitConfig.version,
-      this.chatKitConfig.userId,
-    );
+    const html = generateChatKitHTML('/api/chatkit/session');
 
-    this.server = http.createServer((_req, res) => {
+    this.server = http.createServer((req, res) => {
+      if (req.method === 'POST' && req.url === '/api/chatkit/session') {
+        void this.createChatKitClientSecret()
+          .then((clientSecret) => {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ client_secret: clientSecret }));
+          })
+          .catch((error) => {
+            logger.error('[ChatKitProvider] Failed to create ChatKit client secret', { error });
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Failed to create ChatKit session' }));
+          });
+        return;
+      }
+
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(html);
     });
@@ -821,7 +874,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       this.server!.once('error', (err: NodeJS.ErrnoException) => {
         reject(new Error(`Failed to start ChatKit server: ${err.message}`));
       });
-      this.server!.listen(this.chatKitConfig.serverPort, () => {
+      this.server!.listen(this.chatKitConfig.serverPort, '127.0.0.1', () => {
         const address = this.server!.address();
         this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
         logger.debug('[ChatKitProvider] Server started', { port: this.serverPort });
@@ -866,7 +919,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     });
 
     // Navigate to our HTML page
-    await this.page.goto(`http://localhost:${this.serverPort}`, {
+    await this.page.goto(`http://127.0.0.1:${this.serverPort}`, {
       waitUntil: 'domcontentloaded',
     });
 
@@ -1122,6 +1175,17 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         error: 'ChatKit workflowId is required',
       };
     }
+    const userId = this.chatKitConfig.userId;
+    if (!userId) {
+      return {
+        error: 'ChatKit userId is required',
+      };
+    }
+    validateWorkflowId(workflowId);
+    if (this.chatKitConfig.version) {
+      validateVersion(this.chatKitConfig.version);
+    }
+    validateUserId(userId);
 
     // Get or create the pool
     const pool = ChatKitBrowserPool.getInstance({
@@ -1134,17 +1198,14 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     const templateKey = ChatKitBrowserPool.generateTemplateKey(
       workflowId,
       this.chatKitConfig.version,
-      this.chatKitConfig.userId,
+      userId,
+      this.poolTemplateNamespace,
     );
 
     // Register the HTML template for this workflow
-    const html = generateChatKitHTML(
-      apiKey,
-      workflowId,
-      this.chatKitConfig.version,
-      this.chatKitConfig.userId,
-    );
-    pool.setTemplate(templateKey, html);
+    const sessionEndpoint = `/template/${encodeURIComponent(templateKey)}/session`;
+    const html = generateChatKitHTML(sessionEndpoint);
+    pool.setTemplate(templateKey, html, this.pooledClientSecretFactory);
 
     let pooledPage: Awaited<ReturnType<typeof pool.acquirePage>> | null = null;
     const startTime = Date.now();
