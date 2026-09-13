@@ -32,6 +32,30 @@ it.each(['plain', 'class'])('preserves %s provider identity while rendering conf
   expect(rendered.providers[0].label).toBe('rendered');
 });
 
+it.each(['frozen', 'getter'])('preserves an already-rendered %s provider', (kind) => {
+  const config = { url: 'https://target.invalid', headers: { 'x-purpose': 'fixture' } };
+  const provider =
+    kind === 'frozen'
+      ? Object.freeze({
+          config,
+          label: 'fixture',
+          id: () => 'shared',
+          callApi: async () => ({ output: 'ok' }),
+        })
+      : {
+          get config() {
+            return config;
+          },
+          get label() {
+            return 'fixture';
+          },
+          id: () => 'shared',
+          callApi: async () => ({ output: 'ok' }),
+        };
+  expect(renderEnvOnlyInObject({ providers: [provider] }).providers[0]).toBe(provider);
+  expect(provider.config).toBe(config);
+});
+
 describe('renderVarsInObject', () => {
   beforeEach(() => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });

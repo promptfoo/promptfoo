@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { isApiProvider } from '../types/providers';
@@ -41,7 +43,10 @@ export function renderEnvOnlyInObject<T>(
   if (isApiProvider(obj)) {
     for (const key of ['config', 'label'] as const) {
       if (obj[key] !== undefined) {
-        obj[key] = renderEnvOnlyInObject(obj[key], envOverrides, replaceBase);
+        const rendered = renderEnvOnlyInObject(obj[key], envOverrides, replaceBase);
+        if (!isDeepStrictEqual(rendered, obj[key])) {
+          obj[key] = rendered;
+        }
       }
     }
     return obj;
