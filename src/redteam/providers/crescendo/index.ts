@@ -189,6 +189,7 @@ export class CrescendoProvider implements ApiProvider {
   private maxTurns: number;
   private maxBacktracks: number;
   private stateful: boolean;
+  private sessionId?: string;
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
   private successfulAttacks: Array<{
@@ -317,6 +318,8 @@ export class CrescendoProvider implements ApiProvider {
     logger.debug(
       `[Crescendo] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
     );
+
+    this.sessionId = undefined;
 
     // Reset successful attacks array for each new attack
     this.successfulAttacks = [];
@@ -1215,6 +1218,7 @@ export class CrescendoProvider implements ApiProvider {
           vars: {
             ...vars,
             ...(currentRenderInputVars || {}),
+            ...(this.sessionId && { sessionId: this.sessionId }),
             [this.config.injectVar]: finalTargetPrompt,
           },
         }
@@ -1225,6 +1229,9 @@ export class CrescendoProvider implements ApiProvider {
       targetContext,
       options,
     );
+    if (this.stateful && targetResponse.sessionId) {
+      this.sessionId = targetResponse.sessionId;
+    }
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
     logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
 

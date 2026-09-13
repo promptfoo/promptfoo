@@ -187,6 +187,7 @@ export class CustomProvider implements ApiProvider {
   private maxTurns: number;
   private maxBacktracks: number;
   private stateful: boolean;
+  private sessionId?: string;
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
   private successfulAttacks: Array<{
@@ -317,6 +318,8 @@ export class CustomProvider implements ApiProvider {
     logger.debug(
       `[Custom] Starting attack with: prompt=${JSON.stringify(prompt)}, filtersPresent=${!!filters}, varsKeys=${Object.keys(vars)}, providerType=${provider.constructor.name}`,
     );
+
+    this.sessionId = undefined;
 
     // Reset successful attacks array for each new attack
     this.successfulAttacks = [];
@@ -948,7 +951,19 @@ export class CustomProvider implements ApiProvider {
     );
     logger.debug(finalTargetPrompt);
 
-    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    const targetContext =
+      context && this.sessionId
+        ? { ...context, vars: { ...context.vars, sessionId: this.sessionId } }
+        : context;
+    let targetResponse = await getTargetResponse(
+      provider,
+      finalTargetPrompt,
+      targetContext,
+      options,
+    );
+    if (this.stateful && targetResponse.sessionId) {
+      this.sessionId = targetResponse.sessionId;
+    }
     targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
     logger.debug('[Custom] Target response', { response: targetResponse });
 

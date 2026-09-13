@@ -45,6 +45,7 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
     } else if (value && typeof value === 'object' && !seen.has(value)) {
       seen.add(value);
       const record = value as Record<string, unknown>;
+      const image = record.image as Record<string, unknown> | undefined;
       const audio = record.audio as ProviderResponse['audio'];
       const video = record.video as ProviderResponse['video'];
       if (
@@ -61,6 +62,8 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
             record.base64Data,
             record.url,
             record.uri,
+            record.fileWithBytes,
+            record.fileWithUri,
             record.fileUri,
             record.file_uri,
           ].some((payload) =>
@@ -70,6 +73,9 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
           )) ||
         (typeof record.type === 'string' &&
           /^(?:(?:input|output)_)?(?:image|audio|video)(?:_url)?$/.test(record.type)) ||
+        image?.data ||
+        image?.url ||
+        image?.blobRef ||
         record.image_url ||
         record.audio_url ||
         record.video_url ||

@@ -996,6 +996,14 @@ describe('coding-agent evidence regressions', () => {
         { output: [{ inline_data: { mime_type: 'audio/wav', data: 'PRIVATE_INLINE_AUDIO' } }] },
         { output: [{ inlineData: { mimeType: 'video/mp4', data: 'PRIVATE_INLINE_VIDEO' } }] },
         { output: { mimeType: 'image/png', data: 'PRIVATE_IMAGE_DATA' } },
+        { output: { mimeType: 'image/png', fileWithBytes: 'PRIVATE_A2A_IMAGE' } },
+        {
+          output: JSON.stringify({
+            mimeType: 'video/mp4',
+            fileWithUri: 'https://example.invalid/private.mp4',
+          }),
+        },
+        { output: 'Clean report', image: { data: 'PRIVATE_IMAGE_ONLY', format: 'png' } },
         { output: { mimeType: 'image/png', bytesBase64Encoded: 'PRIVATE_ENCODED_IMAGE' } },
         { output: { mimeType: 'video/mp4', base64Data: 'PRIVATE_ENCODED_VIDEO' } },
         { output: { mime_type: 'audio/wav', uri: 'https://example.invalid/private.wav' } },
@@ -1034,6 +1042,9 @@ describe('coding-agent evidence regressions', () => {
     (pluginId) => {
       for (const descriptor of [
         { filename: 'screenshot.png', mimeType: 'image/png' },
+        { image: { data: '', format: 'png' } },
+        { mimeType: 'image/png', fileWithBytes: '' },
+        { mimeType: 'image/png', fileWithUri: '' },
         { filename: 'screenshot.png', mimeType: 'image/png', bytesBase64Encoded: '' },
         { filename: 'recording.wav', mime_type: 'audio/wav', data: '' },
         { filename: 'clip.mp4', media_type: 'video/mp4', uri: '' },

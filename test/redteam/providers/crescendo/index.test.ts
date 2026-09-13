@@ -209,6 +209,69 @@ describe('CrescendoProvider', () => {
     vi.restoreAllMocks();
   });
 
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'keeps %s sessions private through normal and unblocking turns',
+    async (pluginId) => {
+      const provider = new CrescendoProvider({
+        injectVar: 'objective',
+
+        maxTurns: 2,
+        maxBacktracks: 0,
+        stateful: true,
+        redteamProvider: mockRedTeamProvider,
+      });
+      vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+        generatedQuestion: 'Inspect report',
+      });
+      vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+      vi.spyOn(provider as any, 'getEvalScore').mockResolvedValue({
+        value: false,
+        metadata: 0,
+        rationale: '',
+      });
+      vi.mocked(tryUnblocking)
+        .mockResolvedValue({ success: false })
+        .mockResolvedValueOnce({ success: true, unblockingPrompt: 'Continue report' });
+      mockGetGraderById.mockReturnValue({
+        getResult: vi
+          .fn()
+          .mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean report' }),
+      });
+      const receivedSessions: unknown[] = [];
+      let calls = 0;
+      mockTargetProvider.callApi.mockImplementation(async (_prompt, targetContext) => {
+        receivedSessions.push(targetContext?.vars.sessionId);
+        return { output: 'Clean report', sessionId: `PRIVATE_SESSION_${++calls}` };
+      });
+      const context = {
+        originalProvider: mockTargetProvider,
+        vars: { objective: 'Inspect report' },
+        prompt: { raw: 'Inspect report', label: 'fixture' },
+        test: { vars: {}, assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
+      };
+      const first = await provider.callApi('Inspect report', context);
+      expect(receivedSessions).toEqual([undefined, 'PRIVATE_SESSION_1', 'PRIVATE_SESSION_2']);
+      const second = await provider.callApi('Inspect report', context);
+      expect(receivedSessions).toEqual([
+        undefined,
+        'PRIVATE_SESSION_1',
+        'PRIVATE_SESSION_2',
+        undefined,
+        'PRIVATE_SESSION_4',
+      ]);
+      expect(
+        JSON.stringify([
+          first,
+          second,
+          context.vars,
+          mockRedTeamProvider.callApi.mock.calls,
+          mockScoringProvider.callApi.mock.calls,
+          vi.mocked(tryUnblocking).mock.calls,
+        ]),
+      ).not.toContain('PRIVATE_SESSION_');
+    },
+  );
+
   it('should initialize with default config values', () => {
     const provider = new CrescendoProvider({
       injectVar: 'objective',
