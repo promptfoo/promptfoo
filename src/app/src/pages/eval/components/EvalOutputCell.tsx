@@ -4,6 +4,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import {
+  type EvalResultDetailResponse,
+  fetchEvalResultDetail,
+  prefetchEvalResultDetail,
+} from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import {
   normalizeMediaText,
@@ -16,7 +21,9 @@ import {
   type EvaluateTableOutput,
   type GradingResult,
   type ImageOutput,
+  type ProviderResponse,
   ResultFailureReason,
+  type Vars,
 } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
@@ -24,6 +31,7 @@ import {
   ClipboardCopy,
   Hash,
   Link,
+  Loader2,
   Pencil,
   Search,
   Star,
@@ -231,18 +239,21 @@ function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): stri
   return undefined;
 }
 
-function getFailAndPassReasons(output: EvaluateTableOutput): {
+function getFailAndPassReasons(
+  output: EvaluateTableOutput,
+  gradingResult = output.gradingResult,
+): {
   failReasons: string[];
   passReasons: string[];
 } {
   const failReasons =
-    output.gradingResult?.componentResults
+    gradingResult?.componentResults
       ?.filter((result) => (result ? !result.pass : false))
       .map((result) => result.reason)
       .filter((reason) => reason) ?? [];
 
   const passReasons =
-    output.gradingResult?.componentResults
+    gradingResult?.componentResults
       ?.filter((result) => (result ? result.pass : false))
       .map((result) => result.reason)
       .filter((reason) => reason) ?? [];
@@ -258,6 +269,9 @@ function getFailAndPassReasons(output: EvaluateTableOutput): {
 }
 
 function renderDiffNode(firstOutputText: string, text: string): React.ReactNode {
+  if ([firstOutputText, text].some((value) => value.startsWith('[content omitted:'))) {
+    return <span>Diff unavailable because an output is too large for the table.</span>;
+  }
   let diffResult;
   try {
     JSON.parse(firstOutputText);
@@ -633,8 +647,7 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   };
 }
 
-function getDialogGradingResults(output: EvaluateTableOutput): GradingResult[] | undefined {
-  const gradingResult = output.gradingResult;
+function getDialogGradingResults(gradingResult?: GradingResult): GradingResult[] | undefined {
   if (!gradingResult) {
     return undefined;
   }
@@ -992,19 +1005,44 @@ function renderPromptBlock({
   showPrompts,
   firstOutput,
   prompt,
+  loading,
+  error,
+  detailAvailable,
+  onLoadDetail,
 }: {
   showPrompts: boolean;
   firstOutput?: EvaluateTableOutput | null;
-  prompt: EvaluateTableOutput['prompt'];
+  prompt?: EvaluateTableOutput['prompt'];
+  loading: boolean;
+  error: string | null;
+  detailAvailable: boolean;
+  onLoadDetail: () => void;
 }): React.ReactNode {
-  if (!showPrompts || !firstOutput?.prompt) {
+  if (!showPrompts || (!firstOutput?.prompt && !prompt && !loading && !error && !detailAvailable)) {
     return null;
+  }
+
+  let body: React.ReactNode = '';
+  if (loading) {
+    body = 'Loading...';
+  } else if (error) {
+    body = error;
+  } else if (typeof prompt === 'string') {
+    body = prompt;
+  } else if (prompt !== undefined) {
+    body = JSON.stringify(prompt, null, 2);
+  } else if (detailAvailable) {
+    body = (
+      <button type="button" className="action underline" onClick={onLoadDetail}>
+        Load prompt
+      </button>
+    );
   }
 
   return (
     <div className="prompt">
       <span className="pill">Prompt</span>
-      {typeof prompt === 'string' ? prompt : JSON.stringify(prompt, null, 2)}
+      {body}
     </div>
   );
 }
@@ -1036,6 +1074,10 @@ function renderOutputActions({
   openPrompt,
   output,
   text,
+  cellDetail,
+  detailLoading,
+  detailError,
+  detailAvailable,
   rowIndex,
   promptIndex,
   evaluationId,
@@ -1052,6 +1094,8 @@ function renderOutputActions({
   handleSetScore,
   handleCommentOpen,
   handlePromptOpen,
+  prefetchCellDetail,
+  cancelPrefetch,
   handlePromptClose,
   setActionsHovered,
 }: {
@@ -1064,6 +1108,10 @@ function renderOutputActions({
   openPrompt: boolean;
   output: EvaluateTableOutput;
   text: string;
+  cellDetail: EvalResultDetailResponse | null;
+  detailLoading: boolean;
+  detailError: string | null;
+  detailAvailable: boolean;
   rowIndex: number;
   promptIndex: number;
   evaluationId?: string;
@@ -1080,9 +1128,16 @@ function renderOutputActions({
   handleSetScore: () => void;
   handleCommentOpen: () => void;
   handlePromptOpen: () => void;
+  prefetchCellDetail: () => void;
+  cancelPrefetch: () => void;
   handlePromptClose: () => void;
   setActionsHovered: (hovered: boolean) => void;
 }): React.ReactNode {
+  const displayPrompt = cellDetail?.prompt || output.prompt || '';
+  const detailResponse = cellDetail?.response as ProviderResponse | undefined;
+  const detailVariables = (cellDetail?.testCase?.vars as Vars | undefined) ?? output.testCase?.vars;
+  const detailGradingResult = cellDetail?.gradingResult as GradingResult | undefined;
+  const gradingResult = detailGradingResult ?? output.gradingResult ?? undefined;
   const passActionLabel = isRedteam ? 'Mark as safe' : 'Mark test passed';
   const failActionLabel = isRedteam ? 'Mark as vulnerable' : 'Mark test failed';
 
@@ -1209,17 +1264,26 @@ function renderOutputActions({
         </TooltipTrigger>
         <TooltipContent>Edit comment</TooltipContent>
       </Tooltip>
-      {output.prompt && (
+      {(output.prompt || detailAvailable) && (
         <>
           <Tooltip disableHoverableContent>
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="action p-1 rounded hover:bg-muted transition-colors"
+                className={`action p-1 rounded hover:bg-muted transition-colors ${detailError ? 'text-red-600 dark:text-red-400' : ''}`}
                 onClick={handlePromptOpen}
+                onFocus={prefetchCellDetail}
+                onBlur={cancelPrefetch}
+                onMouseEnter={prefetchCellDetail}
+                onMouseLeave={cancelPrefetch}
                 aria-label="View output and test details"
+                aria-busy={detailLoading}
               >
-                <Search className="size-4" />
+                {detailLoading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Search className="size-4" />
+                )}
               </button>
             </TooltipTrigger>
             <TooltipContent>View output and test details</TooltipContent>
@@ -1228,22 +1292,29 @@ function renderOutputActions({
             <EvalOutputPromptDialog
               open={openPrompt}
               onClose={handlePromptClose}
-              prompt={output.prompt}
+              prompt={displayPrompt}
               provider={output.provider}
-              gradingResults={getDialogGradingResults(output)}
-              output={text}
-              metadata={output.metadata}
-              providerPrompt={getActualPrompt(output.response, { formatted: true })}
+              gradingResults={getDialogGradingResults(gradingResult)}
+              output={cellDetail?.text || text}
+              metadata={cellDetail?.metadata || output.metadata}
+              providerPrompt={getActualPrompt(detailResponse || output.response, {
+                formatted: true,
+              })}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}
               promptIndex={promptIndex}
-              variables={output.metadata?.inputVars || output.testCase?.vars}
+              variables={
+                (cellDetail?.metadata?.inputVars as Vars | undefined) ??
+                (output.metadata?.inputVars as Vars | undefined) ??
+                detailVariables
+              }
               onAddFilter={addFilter}
               onResetFilters={resetFilters}
               onReplay={replayEvaluation}
               fetchTraces={fetchTraces}
               cloudConfig={cloudConfig}
+              readOnly={!displayPrompt}
             />
           )}
         </>
@@ -1260,7 +1331,7 @@ export interface EvalOutputCellProps {
   promptIndex: number;
   showStats: boolean;
   isRedteam?: boolean;
-  onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
+  onRating: (isPass?: boolean | null, score?: number, comment?: string) => void | Promise<void>;
   evaluationId?: string;
   testCaseId?: string;
 }
@@ -1323,12 +1394,140 @@ function EvalOutputCell({
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
     getHumanRating(output)?.pass ?? null,
   );
+  const [cellDetail, setCellDetail] = React.useState<EvalResultDetailResponse | null>(null);
+  const [detailLoading, setDetailLoading] = React.useState(false);
+  const [detailError, setDetailError] = React.useState<string | null>(null);
+  const detailRevisionRef = React.useRef(0);
+  const detailRequestRef = React.useRef<AbortController | null>(null);
+  const prefetchTimerRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  const isMountedRef = React.useRef(true);
+
+  const detailEvalId = output.evalId || evaluationId || '';
+  const detailAvailable = Boolean(detailEvalId && output.id && output.detail?.available === true);
 
   // Update activeRating when output changes
   React.useEffect(() => {
     const humanRating = getHumanRating(output)?.pass;
     setActiveRating(humanRating ?? null);
   }, [output]);
+
+  const resetCellDetail = useCallback(() => {
+    detailRevisionRef.current += 1;
+    detailRequestRef.current?.abort();
+    detailRequestRef.current = null;
+    if (prefetchTimerRef.current !== null) {
+      globalThis.clearTimeout(prefetchTimerRef.current);
+      prefetchTimerRef.current = null;
+    }
+    setCellDetail(null);
+    setDetailLoading(false);
+    setDetailError(null);
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset detail when its result or rating changes
+  React.useEffect(resetCellDetail, [
+    resetCellDetail,
+    detailEvalId,
+    output.id,
+    output.gradingResult,
+  ]);
+
+  const saveRating = async (...args: Parameters<typeof onRating>) => {
+    try {
+      await onRating(...args);
+      if (isMountedRef.current) {
+        resetCellDetail();
+      }
+    } catch (error) {
+      logger.error('Failed to save rating', { error: getErrorMessage(error) });
+    }
+  };
+
+  React.useEffect(() => {
+    return () => {
+      detailRequestRef.current?.abort();
+      if (prefetchTimerRef.current !== null) {
+        globalThis.clearTimeout(prefetchTimerRef.current);
+        prefetchTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const loadCellDetail = useCallback(async () => {
+    if (!detailAvailable || cellDetail || detailRequestRef.current) {
+      return cellDetail;
+    }
+
+    const controller = new AbortController();
+    detailRequestRef.current = controller;
+    setDetailLoading(true);
+    setDetailError(null);
+
+    try {
+      const detail = await fetchEvalResultDetail(detailEvalId, output.id, controller.signal);
+      if (controller.signal.aborted) {
+        return null;
+      }
+      setCellDetail(detail);
+      return detail;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return null;
+      }
+      const message = getErrorMessage(error);
+      setDetailError(message);
+      logger.error('Failed to fetch eval result detail', { error: message, detailEvalId });
+      return null;
+    } finally {
+      if (detailRequestRef.current === controller) {
+        detailRequestRef.current = null;
+        setDetailLoading(false);
+      }
+    }
+  }, [cellDetail, detailAvailable, detailEvalId, output.id]);
+
+  // Debounce so sweeping the mouse across many cells does not fire a request per cell.
+  const PREFETCH_DEBOUNCE_MS = 150;
+
+  const cancelPrefetch = useCallback(() => {
+    if (prefetchTimerRef.current !== null) {
+      globalThis.clearTimeout(prefetchTimerRef.current);
+      prefetchTimerRef.current = null;
+    }
+  }, []);
+
+  const prefetchCellDetail = useCallback(() => {
+    if (!detailAvailable || cellDetail || detailLoading || detailError) {
+      return;
+    }
+
+    if (prefetchTimerRef.current !== null) {
+      return;
+    }
+
+    const requestedRevision = detailRevisionRef.current;
+    const requestedEvalId = detailEvalId;
+    const requestedResultId = output.id;
+    prefetchTimerRef.current = globalThis.setTimeout(() => {
+      prefetchTimerRef.current = null;
+      if (!isMountedRef.current) {
+        return;
+      }
+      void Promise.resolve(prefetchEvalResultDetail(requestedEvalId, requestedResultId)).then(
+        (detail) => {
+          if (
+            detail &&
+            isMountedRef.current &&
+            detailRevisionRef.current === requestedRevision &&
+            detail.evalId === requestedEvalId &&
+            detail.resultId === requestedResultId
+          ) {
+            setCellDetail((currentDetail) => currentDetail ?? detail);
+          }
+        },
+      );
+    }, PREFETCH_DEBOUNCE_MS);
+  }, [cellDetail, detailAvailable, detailError, detailEvalId, detailLoading, output.id]);
 
   React.useEffect(() => {
     const hashTarget = parseEvalOutputPromptHash(locationHash);
@@ -1337,13 +1536,31 @@ function EvalOutputCell({
       return;
     }
 
-    setOpen(hashTarget.rowIndex === rowIndex && hashTarget.promptIndex === promptIndex);
-  }, [locationHash, rowIndex, promptIndex]);
+    const hashTargetsCell =
+      hashTarget.rowIndex === rowIndex && hashTarget.promptIndex === promptIndex;
+    setOpen(hashTargetsCell);
+    if (hashTargetsCell && !output.prompt && !cellDetail && !detailLoading && !detailError) {
+      void loadCellDetail();
+    }
+  }, [
+    cellDetail,
+    detailError,
+    detailLoading,
+    loadCellDetail,
+    locationHash,
+    output.prompt,
+    rowIndex,
+    promptIndex,
+  ]);
 
   const promptDetailsHash = buildEvalOutputPromptHash(rowIndex, promptIndex);
 
   const handlePromptOpen = () => {
+    cancelPrefetch();
     setOpen(true);
+    if (!cellDetail && !detailLoading) {
+      void loadCellDetail();
+    }
     setEvalDetailsHash(promptDetailsHash, rowPositionIndex);
   };
   const handlePromptClose = () => {
@@ -1385,17 +1602,19 @@ function EvalOutputCell({
   );
 
   const [commentDialogOpen, setCommentDialogOpen] = React.useState(false);
-  const [commentText, setCommentText] = React.useState(output.gradingResult?.comment || '');
+  const hydratedGradingResult =
+    (cellDetail?.gradingResult as GradingResult | undefined) ?? output.gradingResult;
+  const [commentText, setCommentText] = React.useState(hydratedGradingResult?.comment || '');
   const [commentDraftText, setCommentDraftText] = React.useState(
-    output.gradingResult?.comment || '',
+    hydratedGradingResult?.comment || '',
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Reset local draft state when switching outputs that share the same stored comment value.
   React.useEffect(() => {
-    const persistedComment = output.gradingResult?.comment || '';
+    const persistedComment = hydratedGradingResult?.comment || '';
     setCommentText(persistedComment);
     setCommentDraftText(persistedComment);
-  }, [output.id, output.gradingResult?.comment]);
+  }, [hydratedGradingResult?.comment, output.id]);
 
   const handleCommentOpen = () => {
     setCommentDraftText(commentText);
@@ -1409,7 +1628,7 @@ function EvalOutputCell({
 
   const handleCommentSave = () => {
     setCommentText(commentDraftText);
-    onRating(undefined, undefined, commentDraftText);
+    void saveRating(undefined, undefined, commentDraftText);
     setCommentDialogOpen(false);
   };
 
@@ -1417,24 +1636,38 @@ function EvalOutputCell({
     let newCommentText;
     if (commentText.startsWith('!highlight')) {
       newCommentText = commentText.slice('!highlight'.length).trim();
-      onRating(undefined, undefined, newCommentText);
+      void saveRating(undefined, undefined, newCommentText);
     } else {
       newCommentText = ('!highlight ' + commentText).trim();
-      onRating(undefined, undefined, newCommentText);
+      void saveRating(undefined, undefined, newCommentText);
     }
     setCommentText(newCommentText);
     setCommentDraftText(newCommentText);
   };
 
-  const text = stringifyOutputText(output.text);
+  const detailResponse = cellDetail?.response as ProviderResponse | undefined;
+  const renderedOutput = detailResponse
+    ? {
+        ...output,
+        audio: detailResponse.audio ?? output.audio,
+        video: detailResponse.video ?? output.video,
+        images: detailResponse.images ?? output.images,
+      }
+    : output;
+  const text = stringifyOutputText(cellDetail?.text ?? output.text);
   const normalizedText = normalizeMediaText(text);
   const inlineImageSrc = resolveImageSource(text);
   const primaryRenderedImageSrc = getPrimaryRenderedImageSrc(text, inlineImageSrc);
-  const outputAudioSource = resolveAudioSource(output.audio);
-  const { failReasons, passReasons } = getFailAndPassReasons(output);
+  const outputAudioSource = resolveAudioSource(renderedOutput.audio);
+  const { failReasons, passReasons } = getFailAndPassReasons(output, hydratedGradingResult);
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
-  const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
+  const detailMetadata = cellDetail?.metadata as EvaluateTableOutput['metadata'] | undefined;
+  const redteamHistory =
+    detailMetadata?.redteamHistory ||
+    detailMetadata?.redteamTreeHistory ||
+    output.metadata?.redteamHistory ||
+    output.metadata?.redteamTreeHistory;
   const lastTurn = redteamHistory?.[redteamHistory.length - 1];
   const responseAudio = lastTurn?.outputAudio as
     | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
@@ -1442,7 +1675,7 @@ function EvalOutputCell({
   const responseAudioSource = resolveAudioSource(responseAudio);
 
   const node = renderOutputNode({
-    output,
+    output: renderedOutput,
     firstOutput,
     showDiffs,
     searchText,
@@ -1462,7 +1695,7 @@ function EvalOutputCell({
     setActiveRating(newRating);
     // Defer the API call to allow the UI to update first
     queueMicrotask(() => {
-      onRating(newRating, undefined, commentText);
+      void saveRating(newRating, undefined, commentText);
     });
   };
 
@@ -1473,13 +1706,12 @@ function EvalOutputCell({
   };
 
   const handleScoreSave = (score: number) => {
-    onRating(undefined, score, commentText);
+    void saveRating(undefined, score, commentText);
     setScoreDialogOpen(false);
   };
 
   const [linked, setLinked] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
-  const isMountedRef = React.useRef(true);
   const linkedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
   const copiedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
 
@@ -1551,22 +1783,25 @@ function EvalOutputCell({
       });
   };
 
-  const handleCopy = () => {
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        if (!isMountedRef.current) {
-          return;
-        }
+  const handleCopy = async () => {
+    try {
+      const detail =
+        detailAvailable && !cellDetail && text.startsWith('[content omitted:')
+          ? await fetchEvalResultDetail(detailEvalId, output.id)
+          : cellDetail;
+      if (!isMountedRef.current) {
+        return;
+      }
+      await navigator.clipboard.writeText(detail?.text ?? text);
+      if (isMountedRef.current) {
         setCopied(true);
         scheduleCopiedReset();
-      })
-      .catch((error) => {
-        if (!isMountedRef.current) {
-          return;
-        }
+      }
+    } catch (error) {
+      if (isMountedRef.current) {
         logger.error('Failed to copy output to clipboard', { error: getErrorMessage(error) });
-      });
+      }
+    }
   };
 
   const latencyDisplay = getLatencyDisplay(output);
@@ -1611,7 +1846,15 @@ function EvalOutputCell({
         showPassReasons,
         passReasons,
       })}
-      {renderPromptBlock({ showPrompts, firstOutput, prompt: output.prompt })}
+      {renderPromptBlock({
+        showPrompts,
+        firstOutput,
+        prompt: cellDetail?.prompt ?? (output.prompt || undefined),
+        loading: detailLoading,
+        error: detailError,
+        detailAvailable,
+        onLoadDetail: () => void loadCellDetail(),
+      })}
       {renderResponseAudioPlayer(responseAudioSource)}
       <div
         className={!showPassFail && !showPrompts ? 'content-needs-action-clearance' : undefined}
@@ -1648,6 +1891,10 @@ function EvalOutputCell({
         openPrompt,
         output,
         text,
+        cellDetail,
+        detailLoading,
+        detailError,
+        detailAvailable,
         rowIndex,
         promptIndex,
         evaluationId,
@@ -1664,6 +1911,8 @@ function EvalOutputCell({
         handleSetScore,
         handleCommentOpen,
         handlePromptOpen,
+        prefetchCellDetail,
+        cancelPrefetch,
         handlePromptClose,
         setActionsHovered,
       })}

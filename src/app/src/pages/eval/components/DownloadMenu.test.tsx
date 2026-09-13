@@ -45,6 +45,14 @@ const { downloadBlobMock, useDownloadEvalMock } = vi.hoisted(() => ({
   useDownloadEvalMock: vi.fn(),
 }));
 
+const { fetchEvalConfigMock, fetchEvalResultDetailMock, prefetchEvalConfigMock } = vi.hoisted(
+  () => ({
+    fetchEvalConfigMock: vi.fn(),
+    fetchEvalResultDetailMock: vi.fn(),
+    prefetchEvalConfigMock: vi.fn(),
+  }),
+);
+
 vi.mock('../../../hooks/useDownloadEval', () => ({
   downloadBlob: downloadBlobMock,
   DownloadFormat: {
@@ -52,6 +60,12 @@ vi.mock('../../../hooks/useDownloadEval', () => ({
     JSON: 'json',
   },
   useDownloadEval: useDownloadEvalMock,
+}));
+
+vi.mock('../../../utils/api', () => ({
+  fetchEvalConfig: fetchEvalConfigMock,
+  fetchEvalResultDetail: fetchEvalResultDetailMock,
+  prefetchEvalConfig: prefetchEvalConfigMock,
 }));
 
 const { yamlDumpMock } = vi.hoisted(() => ({
@@ -105,6 +119,16 @@ describe('DownloadMenu', () => {
 
     yamlDumpMock.mockClear();
     yamlDumpMock.mockReturnValue('mocked yaml');
+    fetchEvalConfigMock.mockReset();
+    fetchEvalConfigMock.mockResolvedValue({ config: mockConfig });
+    prefetchEvalConfigMock.mockReset();
+    prefetchEvalConfigMock.mockResolvedValue(null);
+    fetchEvalResultDetailMock.mockReset();
+    fetchEvalResultDetailMock.mockResolvedValue({
+      testCase: { vars: { prompt: 'detail prompt', testVar: 'detail value' } },
+      text: 'detail output',
+      metadata: { redteamFinalPrompt: 'detail final prompt' },
+    });
 
     downloadBlobMock.mockReset();
     downloadBlobMock.mockImplementation((blob: Blob, fileName: string) => {
@@ -173,6 +197,51 @@ describe('DownloadMenu', () => {
     });
   });
 
+  it('does not finish a config download after unmount', async () => {
+    let resolveConfig: ((value: { config: typeof mockConfig }) => void) | undefined;
+    fetchEvalConfigMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveConfig = resolve;
+      }),
+    );
+
+    const { unmount } = renderDownloadDialog();
+    await userEvent.click(screen.getByText('Download YAML Config'));
+    unmount();
+    resolveConfig?.({ config: mockConfig });
+    await Promise.resolve();
+
+    expect(downloadBlobMock).not.toHaveBeenCalled();
+    expect(showToastMock).not.toHaveBeenCalledWith(
+      'Configuration downloaded successfully',
+      'success',
+    );
+  });
+
+  it('drops a config download when the mounted dialog switches evaluations', async () => {
+    let resolveConfig: ((value: { config: typeof mockConfig }) => void) | undefined;
+    fetchEvalConfigMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveConfig = resolve;
+      }),
+    );
+
+    const view = renderDownloadDialog();
+    await userEvent.click(screen.getByText('Download YAML Config'));
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: mockTable,
+      config: mockConfig,
+      evalId: 'eval-2',
+    });
+    view.rerender(<DownloadDialog open={true} onClose={view.onClose} />);
+
+    expect(screen.getByText('Download YAML Config')).toBeEnabled();
+    resolveConfig?.({ config: mockConfig });
+    await Promise.resolve();
+
+    expect(downloadBlobMock).not.toHaveBeenCalled();
+  });
+
   it('downloads CSV when clicking the button', async () => {
     renderDownloadDialog();
     // Hook options should be set after component renders
@@ -223,7 +292,348 @@ describe('DownloadMenu', () => {
     });
   });
 
+  it('hydrates DPO exports from result detail when table rows are lean', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: {
+          vars: ['prompt'],
+          prompts: [{ provider: 'provider1', raw: '[content omitted: 120000 characters]' }],
+        },
+        body: [
+          {
+            test: { description: 'lean row' },
+            vars: ['lean prompt'],
+            outputs: [
+              { id: 'output-1', pass: false, text: '[content omitted: 120000 characters]' },
+            ],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalConfigMock.mockResolvedValueOnce({
+      config: { ...mockConfig, prompts: 'full prompt template' },
+    });
+    fetchEvalResultDetailMock.mockResolvedValueOnce({
+      testCase: { vars: { prompt: 'full prompt from detail' } },
+      text: 'full output from detail',
+      metadata: {},
+    });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+
+    await waitFor(() => {
+      expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), `${mockEvalId}-dpo.json`);
+    });
+
+    expect(fetchEvalResultDetailMock).toHaveBeenCalledWith(mockEvalId, 'output-1');
+    const blob = downloadBlobMock.mock.calls[0][0] as Blob;
+    const exported = JSON.parse(await blob.text());
+    expect(exported).toEqual([
+      {
+        chosen: [],
+        rejected: ['full output from detail'],
+        vars: { prompt: 'full prompt from detail' },
+        providers: ['provider1'],
+        prompts: ['full prompt template'],
+      },
+    ]);
+  });
+
+  it('hydrates the same oversized prompt across multiple providers', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: {
+          vars: [],
+          prompts: ['a', 'b'].map((provider) => ({
+            provider,
+            raw: '[content omitted: 120000 characters]',
+          })),
+        },
+        body: [{ test: {}, vars: [], outputs: [{ pass: true, text: 'ok' }] }],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalConfigMock.mockResolvedValueOnce({
+      config: { ...mockConfig, prompts: ['full prompt'] },
+    });
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+    await waitFor(() => expect(downloadBlobMock).toHaveBeenCalled());
+    expect(fetchEvalConfigMock).toHaveBeenCalledWith(mockEvalId);
+    const blob = downloadBlobMock.mock.calls[0][0] as Blob;
+    expect(JSON.parse(await blob.text())[0].prompts).toEqual(['full prompt', 'full prompt']);
+  });
+
+  it('hydrates comparison DPO prompts by owner-local index', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: {
+          vars: [],
+          prompts: [
+            {
+              provider: 'base-1',
+              raw: '[content omitted: 120000 characters]',
+              originalPromptIndex: 0,
+            },
+            {
+              provider: 'base-2',
+              raw: '[content omitted: 120000 characters]',
+              originalPromptIndex: 1,
+            },
+            {
+              provider: 'comparison-1',
+              raw: '[content omitted: 120000 characters]',
+              evalId: 'eval-2',
+              originalPromptIndex: 0,
+            },
+            {
+              provider: 'comparison-2',
+              raw: '[content omitted: 120000 characters]',
+              evalId: 'eval-2',
+              originalPromptIndex: 1,
+            },
+            {
+              provider: 'comparison-3',
+              raw: '[content omitted: 120000 characters]',
+              evalId: 'eval-2',
+              originalPromptIndex: 2,
+            },
+          ],
+        },
+        body: [
+          {
+            test: {},
+            vars: [],
+            outputs: [
+              { evalId: mockEvalId, pass: true, text: 'base' },
+              { evalId: mockEvalId, pass: true, text: 'base' },
+              { evalId: 'eval-2', pass: true, text: 'comparison' },
+              { evalId: 'eval-2', pass: true, text: 'comparison' },
+              { evalId: 'eval-2', pass: true, text: 'comparison' },
+            ],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalConfigMock
+      .mockResolvedValueOnce({ config: { ...mockConfig, prompts: ['base 1', 'base 2'] } })
+      .mockResolvedValueOnce({
+        config: { ...mockConfig, prompts: ['comparison 1', 'comparison 2', 'comparison 3'] },
+      });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+    await waitFor(() => expect(downloadBlobMock).toHaveBeenCalled());
+
+    expect(fetchEvalConfigMock).toHaveBeenCalledWith(mockEvalId);
+    expect(fetchEvalConfigMock).toHaveBeenCalledWith('eval-2');
+    const blob = downloadBlobMock.mock.calls[0][0] as Blob;
+    expect(JSON.parse(await blob.text())[0].prompts).toEqual([
+      'base 1',
+      'base 2',
+      'comparison 1',
+      'comparison 2',
+      'comparison 3',
+    ]);
+  });
+
+  it('does not toast a stale advanced export rejection after unmount', async () => {
+    let rejectConfig: ((error: Error) => void) | undefined;
+    fetchEvalConfigMock.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectConfig = reject;
+      }),
+    );
+
+    const { unmount } = renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+    unmount();
+    rejectConfig?.(new Error('stale config'));
+    await Promise.resolve();
+
+    expect(showToastMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('Failed to export dpo'),
+      'error',
+    );
+  });
+
+  it('limits in-flight detail requests across all columns of a wide row', async () => {
+    const outputs = Array.from({ length: 24 }, (_, index) => ({
+      id: `output-${index}`,
+      pass: index % 2 === 0,
+      text: '[content omitted: 120000 characters]',
+    }));
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: { head: { vars: [], prompts: [] }, body: [{ test: {}, vars: [], outputs }] },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    let inFlight = 0;
+    let peakInFlight = 0;
+    fetchEvalResultDetailMock.mockImplementation(async () => {
+      peakInFlight = Math.max(peakInFlight, ++inFlight);
+      await Promise.resolve();
+      inFlight--;
+      return { text: 'full output', testCase: { vars: {} } };
+    });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+    await waitFor(() => expect(downloadBlobMock).toHaveBeenCalled());
+    expect(fetchEvalResultDetailMock).toHaveBeenCalledTimes(outputs.length);
+    expect(peakInFlight).toBeLessThanOrEqual(8);
+  });
+
+  it('stops advanced export hydration after unmount', async () => {
+    const outputs = Array.from({ length: 24 }, (_, index) => ({
+      id: `output-${index}`,
+      pass: true,
+      text: '[content omitted: 120000 characters]',
+    }));
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: { head: { vars: [], prompts: [] }, body: [{ test: {}, vars: [], outputs }] },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    const resolvers: Array<(value: unknown) => void> = [];
+    fetchEvalResultDetailMock.mockImplementation(
+      () => new Promise((resolve) => resolvers.push(resolve)),
+    );
+
+    const { unmount } = renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+    await waitFor(() => expect(fetchEvalResultDetailMock).toHaveBeenCalledTimes(8));
+    unmount();
+    resolvers.forEach((resolve) => resolve({ text: 'full output', testCase: { vars: {} } }));
+    await Promise.resolve();
+
+    expect(fetchEvalResultDetailMock).toHaveBeenCalledTimes(8);
+    expect(downloadBlobMock).not.toHaveBeenCalled();
+  });
+
+  it('omits incomplete DPO entries when detail hydration fails', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: {
+          vars: ['prompt'],
+          prompts: [{ provider: 'provider1', label: 'label1' }],
+        },
+        body: [
+          {
+            test: { vars: { prompt: 'lean prompt from test' } },
+            vars: ['lean prompt from vars'],
+            outputs: [
+              {
+                id: 'output-1',
+                pass: false,
+                text: '[content omitted: 120000 characters]',
+              },
+            ],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalResultDetailMock.mockRejectedValueOnce(new Error('Detail unavailable'));
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+
+    await waitFor(() => {
+      expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), `${mockEvalId}-dpo.json`);
+    });
+
+    const blob = downloadBlobMock.mock.calls[0][0] as Blob;
+    const exported = JSON.parse(await blob.text());
+    expect(exported).toEqual([]);
+    expect(showToastMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('Failed to export'),
+      'error',
+    );
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Full details unavailable for 1 result; incomplete entries may be omitted.',
+      'warning',
+    );
+  });
+
+  it('hydrates typed DPO vars even when displayed output text is intact', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: {
+          vars: ['count', 'enabled'],
+          prompts: [{ provider: 'provider1', label: 'label1' }],
+        },
+        body: [
+          {
+            test: {},
+            vars: ['7', 'true'],
+            outputs: [{ id: 'output-1', pass: false, text: 'full lean output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalResultDetailMock.mockResolvedValueOnce({
+      testCase: { vars: { count: 7, enabled: true } },
+      text: 'detail output that is not needed for intact text',
+      metadata: {},
+    });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('DPO JSON'));
+
+    await waitFor(() => {
+      expect(downloadBlobMock).toHaveBeenCalledWith(expect.any(Blob), `${mockEvalId}-dpo.json`);
+    });
+    expect(fetchEvalResultDetailMock).toHaveBeenCalledWith(mockEvalId, 'output-1');
+
+    const blob = downloadBlobMock.mock.calls[0][0] as Blob;
+    const exported = JSON.parse(await blob.text());
+    expect(exported).toEqual([
+      {
+        chosen: [],
+        rejected: ['full lean output'],
+        vars: { count: 7, enabled: true },
+        providers: ['provider1'],
+        prompts: ['label1'],
+      },
+    ]);
+  });
+
   it('downloads Human Eval Test YAML when clicking the button', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        ...mockTable,
+        body: [
+          {
+            ...mockTable.body[0],
+            outputs: [
+              {
+                id: 'output-1',
+                pass: false,
+                text: 'short',
+                gradingResult: { comment: '[content omitted: 120000 characters]' },
+              },
+            ],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalResultDetailMock.mockResolvedValueOnce({
+      text: 'full output',
+      gradingResult: { comment: 'full reviewer comment' },
+      testCase: { vars: {} },
+    });
     renderDownloadDialog();
     await userEvent.click(screen.getByText('Human Eval YAML'));
 
@@ -231,6 +641,181 @@ describe('DownloadMenu', () => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     });
+    expect(yamlDumpMock).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          vars: expect.objectContaining({ comment: 'full reviewer comment' }),
+        }),
+      ]),
+    );
+  });
+
+  it('omits human-eval rows whose full details fail to hydrate', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: { vars: ['prompt'], prompts: [{ provider: 'provider1', label: 'label1' }] },
+        body: [
+          {
+            test: { vars: { prompt: '[content omitted: 120000 characters]' } },
+            vars: ['[content omitted: 120000 characters]'],
+            outputs: [
+              { id: 'output-1', pass: false, text: '[content omitted: 120000 characters]' },
+            ],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalResultDetailMock.mockRejectedValueOnce(new Error('Detail unavailable'));
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('Human Eval YAML'));
+    await waitFor(() => expect(yamlDumpMock).toHaveBeenCalledWith([]));
+    expect(showToastMock).toHaveBeenCalledWith(expect.stringContaining('unavailable'), 'warning');
+  });
+
+  it('hydrates failed-test configs from full config and result detail', async () => {
+    const fullConfig = {
+      ...mockConfig,
+      defaultTest: { options: { provider: 'full-default' } },
+      tests: [{ vars: { prompt: 'original test' } }],
+    };
+    const fullFailedTest = {
+      vars: { prompt: 'full failed prompt' },
+      assert: [{ type: 'contains', value: 'expected' }],
+      metadata: { id: 'full-test' },
+    };
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: {
+          vars: ['prompt'],
+          prompts: [{ provider: 'provider1', label: 'label1' }],
+        },
+        body: [
+          {
+            test: { description: 'lean failed test' },
+            vars: ['lean prompt'],
+            outputs: [{ id: 'failed-output', pass: false, text: 'failed output' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalConfigMock.mockResolvedValueOnce({ config: fullConfig });
+    fetchEvalResultDetailMock.mockResolvedValueOnce({
+      testCase: fullFailedTest,
+      text: 'full failed output',
+      metadata: {},
+    });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('Download Failed Tests'));
+
+    await waitFor(() => {
+      expect(yamlDumpMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          defaultTest: fullConfig.defaultTest,
+          tests: [fullFailedTest],
+        }),
+        { skipInvalid: true },
+      );
+    });
+    expect(fetchEvalConfigMock).toHaveBeenCalledWith(mockEvalId);
+    expect(fetchEvalResultDetailMock).toHaveBeenCalledWith(mockEvalId, 'failed-output');
+  });
+
+  it('exports a row when a later base prompt fails', async () => {
+    const config = { ...mockConfig, prompts: ['first', 'second'] };
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: { vars: [], prompts: [{}, {}] },
+        body: [
+          {
+            test: { description: 'failed test' },
+            vars: [],
+            outputs: [
+              { id: 'comparison-failure', evalId: 'comparison-eval', pass: false },
+              { id: 'passed-output', evalId: mockEvalId, pass: true },
+              { id: 'failed-output', evalId: mockEvalId, pass: false },
+            ],
+          },
+        ],
+      },
+      config,
+      evalId: mockEvalId,
+    });
+    fetchEvalConfigMock.mockResolvedValueOnce({ config });
+    fetchEvalResultDetailMock.mockResolvedValueOnce({ testCase: { description: 'failed test' } });
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('Download Failed Tests'));
+
+    await waitFor(() =>
+      expect(fetchEvalResultDetailMock).toHaveBeenCalledWith(mockEvalId, 'failed-output'),
+    );
+  });
+
+  it('does not substitute raw config tests when failed-test detail hydration fails', async () => {
+    const fullConfig = {
+      ...mockConfig,
+      defaultTest: { options: { provider: 'full-default' } },
+      tests: [
+        {
+          vars: { prompt: 'original test' },
+          assert: [{ type: 'contains', value: 'original expected' }],
+        },
+      ],
+    };
+    const leanFailedTest = {
+      description: 'lean failed prompt',
+    };
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: {
+          vars: ['prompt'],
+          prompts: [{ provider: 'provider1', label: 'label1' }],
+        },
+        body: [
+          {
+            test: leanFailedTest,
+            vars: ['lean failed prompt'],
+            testIdx: 0,
+            outputs: [
+              {
+                id: 'failed-output',
+                pass: false,
+                text: 'failed output',
+                detail: { available: true },
+              },
+            ],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalConfigMock.mockResolvedValueOnce({ config: fullConfig });
+    fetchEvalResultDetailMock.mockRejectedValueOnce(new Error('Detail unavailable'));
+
+    renderDownloadDialog();
+    await userEvent.click(screen.getByText('Download Failed Tests'));
+
+    await waitFor(() => {
+      expect(showToastMock).toHaveBeenCalledWith(
+        'No complete failed tests available to export',
+        'warning',
+      );
+    });
+    expect(yamlDumpMock).not.toHaveBeenCalled();
+    expect(showToastMock).not.toHaveBeenCalledWith(
+      expect.stringContaining('Failed to export'),
+      'error',
+    );
+    expect(showToastMock).toHaveBeenCalledWith(
+      'Full details unavailable for 1 result; incomplete entries may be omitted.',
+      'warning',
+    );
   });
 
   it('handles malformed output structures in DPO JSON export without crashing', async () => {
@@ -334,6 +919,22 @@ describe('DownloadMenu', () => {
   });
 
   it('downloads Burp Suite Payloads when clicking the button', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        head: { vars: ['prompt'], prompts: [] },
+        body: [
+          { test: {}, vars: ['safe'], outputs: [{ id: 'available' }] },
+          {
+            test: {},
+            vars: ['[content omitted: 120000 characters]'],
+            outputs: [{ id: 'missing' }],
+          },
+        ],
+      },
+      config: mockConfig,
+      evalId: mockEvalId,
+    });
+    fetchEvalResultDetailMock.mockRejectedValueOnce(new Error('Detail unavailable'));
     renderDownloadDialog();
     await userEvent.click(screen.getByText('Burp Payloads'));
 
@@ -341,6 +942,7 @@ describe('DownloadMenu', () => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     });
+    expect(await (downloadBlobMock.mock.calls[0][0] as Blob).text()).toBe('safe');
   });
 
   it('properly categorizes download options into sections', async () => {
@@ -475,6 +1077,29 @@ describe('DownloadMenu', () => {
 
       const button = screen.getByRole('button', { name: /Download Failed Tests/i });
       expect(button).not.toBeDisabled();
+    });
+
+    it('disables failed-test export for comparison-only failures', () => {
+      vi.mocked(useResultsViewStore).mockReturnValue({
+        table: {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [
+                { id: 'base-pass', evalId: mockEvalId, pass: true },
+                { id: 'comparison-fail', evalId: 'comparison-eval', pass: false },
+              ],
+            },
+          ],
+        },
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      renderDownloadDialog();
+
+      expect(screen.getByRole('button', { name: /Download Failed Tests/i })).toBeDisabled();
     });
 
     it('handles edge case with empty body array', async () => {

@@ -7,6 +7,8 @@ import {
   getHumanRating,
   getNamedMetricTotal,
   getNamedMetricTotals,
+  getPromptEvalId,
+  getPromptIndex,
   hasHumanRating,
   hashVarSchema,
   parseEvalOutputPromptHash,
@@ -45,6 +47,35 @@ describe('eval output prompt hashes', () => {
     expect(parseEvalOutputPromptHash('#details-row-0-prompt-1')).toBeNull();
     expect(parseEvalOutputPromptHash('#details-row-1-prompt-0')).toBeNull();
     expect(parseEvalOutputPromptHash('#other-fragment')).toBeNull();
+  });
+});
+
+describe('comparison prompt ownership', () => {
+  it('uses header ownership when filtered tables have no output rows', () => {
+    expect(
+      getPromptEvalId(
+        {
+          head: { prompts: [{ evalId: 'comparison-eval' } as any], vars: [] },
+          body: [],
+        },
+        0,
+        'base-eval',
+      ),
+    ).toBe('comparison-eval');
+  });
+
+  it('uses the owner-local index retained on comparison prompts', () => {
+    expect(
+      getPromptIndex(
+        {
+          head: {
+            prompts: [{}, {}, {}, {}, { originalPromptIndex: 2 }] as any,
+            vars: [],
+          },
+        },
+        4,
+      ),
+    ).toBe(2);
   });
 });
 

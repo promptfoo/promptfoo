@@ -1,13 +1,14 @@
 import { act, StrictMode } from 'react';
 
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
+import { fetchEvalConfig, prefetchEvalResultDetail } from '@app/utils/api';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import ResultsTable from './ResultsTable';
+import ResultsTable, { HydratedText } from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 
 vi.mock('./store', () => ({
@@ -47,7 +48,10 @@ vi.mock('@app/hooks/useShiftKey', () => {
 });
 
 vi.mock('@app/utils/api', () => ({
+  clearEvalApiResponseCache: vi.fn(),
   callApi: vi.fn(() => Promise.resolve({ ok: true })),
+  fetchEvalConfig: vi.fn(),
+  prefetchEvalResultDetail: vi.fn(),
 }));
 
 const mockNavigate = vi.fn();
@@ -392,6 +396,95 @@ describe('ResultsTable Metrics Display', () => {
     );
   });
 
+  it('hydrates an omitted prompt header when opened', async () => {
+    vi.mocked(fetchEvalConfig).mockResolvedValue({
+      config: { prompts: ['full prompt header'] },
+    } as any);
+    const store = vi.mocked(useTableStore)();
+    vi.mocked(useTableStore).mockReturnValue({
+      ...store,
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              raw: '[content omitted: 120000 characters]',
+            },
+          ],
+        },
+      },
+    });
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await userEvent.click(screen.getByText('[content omitted: 120000 characters]'));
+
+    expect(await screen.findByText('full prompt header')).toBeInTheDocument();
+  });
+
+  it('hydrates repeated prompt headers by prompt identity', async () => {
+    vi.mocked(fetchEvalConfig).mockResolvedValue({
+      config: { prompts: [{ label: 'shared-prompt', raw: 'full shared prompt' }] },
+    } as any);
+    const store = vi.mocked(useTableStore)();
+    vi.mocked(useTableStore).mockReturnValue({
+      ...store,
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              label: 'shared-prompt',
+              raw: '[content omitted: 120000 characters]',
+              provider: 'provider-a',
+            },
+            {
+              ...mockTable.head.prompts[0],
+              label: 'shared-prompt',
+              raw: '[content omitted: 120000 characters]',
+              provider: 'provider-b',
+            },
+          ],
+        },
+      },
+    });
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await userEvent.click(screen.getAllByText('shared-prompt')[1]);
+
+    expect(await screen.findByText('full shared prompt')).toBeInTheDocument();
+  });
+
+  it('hydrates a comparison prompt header from its owning evaluation', async () => {
+    vi.mocked(fetchEvalConfig).mockResolvedValue({
+      config: { prompts: ['comparison prompt'] },
+    } as any);
+    const store = vi.mocked(useTableStore)();
+    vi.mocked(useTableStore).mockReturnValue({
+      ...store,
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [{ ...mockTable.head.prompts[0], raw: '[content omitted: 120000 characters]' }],
+        },
+        body: mockTable.body.map((row) => ({
+          ...row,
+          outputs: row.outputs.map((output: any) => ({ ...output, evalId: 'comparison-eval' })),
+        })),
+      },
+    });
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    await userEvent.click(screen.getByText('[content omitted: 120000 characters]'));
+
+    expect(await screen.findByText('comparison prompt')).toBeInTheDocument();
+    expect(fetchEvalConfig).toHaveBeenCalledWith('comparison-eval');
+  });
+
   it('keeps the header/body boundary border visible with sticky headers', () => {
     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
       inComparisonMode: false,
@@ -657,6 +750,7 @@ describe('ResultsTable Metrics Display', () => {
     };
 
     beforeEach(() => {
+      vi.mocked(prefetchEvalResultDetail).mockReset();
       vi.mocked(useTableStore).mockImplementation(() => ({
         config: {},
         evalId: '123',
@@ -842,6 +936,147 @@ describe('ResultsTable Metrics Display', () => {
         'src',
         'data:image/png;base64,encodedImage',
       );
+    });
+
+    it('loads omitted media only when requested', async () => {
+      const store = vi.mocked(useTableStore)();
+      vi.mocked(useTableStore).mockReturnValue({
+        ...store,
+        table: {
+          ...mockTableWithMedia,
+          body: [
+            {
+              ...mockTableWithMedia.body[0],
+              vars: ['[content omitted: 120000 characters]'],
+              outputs: [
+                {
+                  ...mockTableWithMedia.body[0].outputs[0],
+                  id: 'image-1',
+                  metadata: {
+                    [FILE_METADATA_KEY]: {
+                      imageVar: { path: '/path/to/image.jpg', type: 'image', format: 'jpeg' },
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      vi.mocked(prefetchEvalResultDetail)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          evalId: '123',
+          resultId: 'image-1',
+          prompt: '',
+          text: '',
+          testCase: { vars: { imageVar: 'data:image/jpeg;base64,fullImage' } },
+        });
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      expect(prefetchEvalResultDetail).not.toHaveBeenCalled();
+      await userEvent.click(screen.getByRole('button', { name: 'Load imageVar' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Could not load media');
+      await userEvent.click(screen.getByRole('button', { name: 'Load imageVar' }));
+      await waitFor(() => expect(prefetchEvalResultDetail).toHaveBeenCalledWith('123', 'image-1'));
+      await waitFor(() =>
+        expect(screen.getByRole('img', { name: 'Input image' })).toHaveAttribute(
+          'src',
+          'data:image/jpeg;base64,fullImage',
+        ),
+      );
+      expect(prefetchEvalResultDetail).toHaveBeenCalledWith('123', 'image-1');
+    });
+
+    it('loads omitted actual and transformed variables only when requested', async () => {
+      const store = vi.mocked(useTableStore)();
+      vi.mocked(useTableStore).mockReturnValue({
+        ...store,
+        config: { redteam: { injectVar: 'inject' } },
+        table: {
+          ...mockTableWithMedia,
+          head: { prompts: [{}], vars: ['inject', 'ordinary'] },
+          body: [
+            {
+              ...mockTableWithMedia.body[0],
+              vars: [
+                '[content omitted: 120000 characters]',
+                '[content omitted: 120000 characters]',
+              ],
+              outputs: [
+                null,
+                {
+                  id: 'result-1',
+                  pass: true,
+                  score: 1,
+                  text: 'output',
+                  response: { prompt: '[content omitted: 120000 characters]' },
+                  metadata: {
+                    transformDisplayVars: {
+                      __attack: '[content omitted: 120000 characters]',
+                    },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      vi.mocked(prefetchEvalResultDetail).mockResolvedValue({
+        evalId: '123',
+        resultId: 'result-1',
+        prompt: '',
+        text: '',
+        testCase: { vars: { ordinary: { nested: 'full ordinary value' } } },
+        response: { prompt: 'full actual prompt' },
+        metadata: { transformDisplayVars: { __attack: 'full transform' } },
+      });
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      expect(prefetchEvalResultDetail).not.toHaveBeenCalled();
+      const buttons = screen.getAllByRole('button', { name: 'Load value' });
+      await userEvent.click(buttons[0]);
+      await userEvent.click(buttons[1]);
+      await userEvent.click(buttons[2]);
+      expect(await screen.findByText('full actual prompt')).toBeInTheDocument();
+      expect(await screen.findByText(/"nested": "full ordinary value"/)).toBeInTheDocument();
+      expect(await screen.findByText('full transform')).toBeInTheDocument();
+    });
+
+    it('does not show hydrated text after a reused row changes identity', async () => {
+      let resolveDetail: (value: any) => void = () => {};
+      let detailPromise: Promise<any>;
+      const loadValue = vi.fn(
+        () => (detailPromise = new Promise((resolve) => (resolveDetail = resolve))),
+      );
+      const view = renderWithProviders(
+        <HydratedText
+          value="[content omitted: 120000 characters]"
+          loadValue={loadValue}
+          maxLength={100}
+          identity="result-a"
+        />,
+      );
+      const button = screen.getByRole('button', { name: 'Load value' });
+      await userEvent.click(button);
+      expect(loadValue).toHaveBeenCalledTimes(1);
+      view.rerender(
+        <HydratedText
+          value="[content omitted: 120000 characters]"
+          loadValue={loadValue}
+          maxLength={100}
+          identity="result-b"
+        />,
+      );
+      expect(screen.getByRole('button', { name: 'Load value' })).toBe(button);
+      await act(async () => {
+        resolveDetail('full prompt a');
+        await detailPromise;
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(screen.queryByText('full prompt a')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Load value' })).toBe(button);
     });
 
     it('renders variable video from file metadata', () => {
@@ -4204,6 +4439,139 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     const apiModule = await import('@app/utils/api');
     mockCallApi = vi.mocked(apiModule.callApi);
     mockCallApi.mockResolvedValue({ ok: true });
+  });
+
+  it('rejects the cell rating callback when persistence fails', async () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: createMockTableWithHumanAssertion(),
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+    const failure = new Error('Fixture rating save failed');
+    mockCallApi.mockRejectedValueOnce(failure);
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    const { default: Cell } = await import('./EvalOutputCell');
+    const calls = vi.mocked(Cell).mock.calls;
+    const props = calls[calls.length - 1][0];
+
+    await act(async () => {
+      await expect(props.onRating(true, 1, 'new comment')).rejects.toBe(failure);
+    });
+  });
+
+  it('rolls back only the failed cell when rating saves overlap', async () => {
+    const table = createMockTableWithHumanAssertion();
+    table.body.push({
+      ...table.body[0],
+      outputs: [{ ...table.body[0].outputs[0], id: 'test-output-2' }],
+    });
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 2,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+    let rejectFirst: ((error: Error) => void) | undefined;
+    mockCallApi
+      .mockReturnValueOnce(
+        new Promise((_, reject) => {
+          rejectFirst = reject;
+        }),
+      )
+      .mockResolvedValueOnce({ ok: true });
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    const { default: Cell } = await import('./EvalOutputCell');
+    const [first, second] = vi
+      .mocked(Cell)
+      .mock.calls.slice(-2)
+      .map(([props]) => props);
+    const firstSave = first.onRating(true, 1, 'first');
+    await second.onRating(true, 1, 'second');
+    rejectFirst?.(new Error('first failed'));
+    await expect(firstSave).rejects.toThrow('first failed');
+
+    const finalTable = mockSetTable.mock.calls[mockSetTable.mock.calls.length - 1][0];
+    expect(finalTable.body[0].outputs[0].gradingResult.comment).not.toBe('first');
+    expect(finalTable.body[1].outputs[0].gradingResult.comment).toBe('second');
+  });
+
+  it('rolls back overlapping failed saves for one cell to the persisted rating', async () => {
+    const table = createMockTableWithHumanAssertion();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+    let rejectFirst: ((error: Error) => void) | undefined;
+    let rejectSecond: ((error: Error) => void) | undefined;
+    mockCallApi
+      .mockReturnValueOnce(new Promise((_, reject) => (rejectFirst = reject)))
+      .mockReturnValueOnce(new Promise((_, reject) => (rejectSecond = reject)));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    const { default: Cell } = await import('./EvalOutputCell');
+    const calls = vi.mocked(Cell).mock.calls;
+    const props = calls[calls.length - 1][0];
+    const firstSave = props.onRating(true, 1, 'first');
+    const secondSave = props.onRating(false, 0, 'second');
+    rejectFirst?.(new Error('first failed'));
+    rejectSecond?.(new Error('second failed'));
+    await expect(firstSave).rejects.toThrow('first failed');
+    await expect(secondSave).rejects.toThrow('second failed');
+
+    const finalCalls = mockSetTable.mock.calls;
+    const finalTable = finalCalls[finalCalls.length - 1][0];
+    expect(finalTable.body[0].outputs[0]).toEqual(table.body[0].outputs[0]);
+  });
+
+  it('reconciles an older save that succeeds after a newer save rolls back', async () => {
+    const table = createMockTableWithHumanAssertion();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filteredResultsCount: 1,
+      filters: { values: {}, appliedCount: 0, options: { metric: [] } },
+    }));
+    let resolveFirst: ((value: { ok: boolean }) => void) | undefined;
+    mockCallApi
+      .mockReturnValueOnce(new Promise((resolve) => (resolveFirst = resolve)))
+      .mockRejectedValueOnce(new Error('second failed'));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    const { default: Cell } = await import('./EvalOutputCell');
+    const calls = vi.mocked(Cell).mock.calls;
+    const props = calls[calls.length - 1][0];
+    const firstSave = props.onRating(true, 1, 'first');
+    await expect(props.onRating(false, 0, 'second')).rejects.toThrow('second failed');
+    resolveFirst?.({ ok: true });
+    await firstSave;
+
+    const tableCalls = mockSetTable.mock.calls;
+    const finalTable = tableCalls[tableCalls.length - 1][0];
+    expect(finalTable.body[0].outputs[0].gradingResult.comment).toBe('first');
   });
 
   it('should remove human assertion and recalculate pass/score when isPass is null', () => {

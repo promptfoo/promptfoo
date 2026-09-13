@@ -1,5 +1,6 @@
 import { mockClipboard } from '@app/tests/browserMocks';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
+import { fetchEvalResultDetail, prefetchEvalResultDetail } from '@app/utils/api';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
 import {
   type AssertionType,
@@ -16,11 +17,14 @@ import type { EvalOutputCellProps } from './EvalOutputCell';
 
 // Mock the EvalOutputPromptDialog component to check what props are passed to it
 vi.mock('./EvalOutputPromptDialog', () => ({
-  default: vi.fn(({ gradingResults, metadata, onClose }) => (
+  default: vi.fn(({ gradingResults, metadata, onClose, prompt, output, variables }) => (
     <div
       data-testid="dialog-component"
       data-grading-results={JSON.stringify(gradingResults)}
       data-metadata={JSON.stringify(metadata)}
+      data-output={output}
+      data-prompt={prompt}
+      data-variables={JSON.stringify(variables)}
     >
       Mocked Dialog Component
       <button type="button" onClick={onClose}>
@@ -28,6 +32,12 @@ vi.mock('./EvalOutputPromptDialog', () => ({
       </button>
     </div>
   )),
+}));
+
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
+  fetchEvalResultDetail: vi.fn(),
+  prefetchEvalResultDetail: vi.fn(),
 }));
 
 const renderWithProviders = (ui: React.ReactElement) => {
@@ -174,6 +184,7 @@ describe('EvalOutputCell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockStoreState();
+    vi.mocked(prefetchEvalResultDetail).mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -295,6 +306,44 @@ describe('EvalOutputCell', () => {
     expect(window.location.hash).toBe('#details-row-1-prompt-1');
   });
 
+  it('hydrates stripped prompt detail when a matching details hash opens the dialog', async () => {
+    window.history.replaceState({}, '', '/#details-row-1-prompt-1');
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Hydrated hash prompt',
+      text: 'Hydrated hash output',
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(fetchEvalResultDetail).toHaveBeenCalledWith(
+        'eval-1',
+        'test-id',
+        expect.any(AbortSignal),
+      );
+    });
+    expect(fetchEvalResultDetail).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId('dialog-component')).toHaveAttribute(
+      'data-prompt',
+      'Hydrated hash prompt',
+    );
+  });
+
   it('clears the row hint when closing a deep-linked prompt dialog', async () => {
     const user = userEvent.setup();
     window.history.replaceState({}, '', '/?rowId=51#details-row-1-prompt-1');
@@ -355,6 +404,632 @@ describe('EvalOutputCell', () => {
     expect(passedMetadata.citations).toEqual([
       { source: 'metadata source', content: 'metadata content' },
     ]);
+  });
+
+  it('loads stripped inline prompts only after explicit user intent', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Full prompt from detail',
+      text: 'Full output from detail',
+      metadata: { detailKey: 'detailValue' },
+      testCase: { vars: { topic: 'details' } },
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Load prompt' }));
+
+    await waitFor(() => {
+      expect(fetchEvalResultDetail).toHaveBeenCalledWith(
+        'eval-1',
+        'test-id',
+        expect.any(AbortSignal),
+      );
+    });
+    expect(await screen.findByText('Full prompt from detail')).toBeInTheDocument();
+    expect(screen.queryByTestId('dialog-component')).not.toBeInTheDocument();
+  });
+
+  it('does not auto-load details when the table already includes a prompt', () => {
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Full prompt from detail',
+      text: 'Full output from detail',
+    });
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} evaluationId="eval-1" />);
+
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    expect(screen.getByText('Test prompt')).toBeInTheDocument();
+  });
+
+  it('opens legacy full prompt cells without requesting unavailable detail', async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<EvalOutputCell {...defaultProps} evaluationId="eval-1" />);
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    expect(screen.getByTestId('dialog-component')).toHaveAttribute('data-prompt', 'Test prompt');
+  });
+
+  it('does not render detail action or fetch when detail is unavailable for stripped prompts', () => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: false,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /view output and test details/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Load prompt' })).toBeNull();
+  });
+
+  it('treats legacy stripped cells without detail metadata as unavailable', () => {
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: undefined,
+        }}
+      />,
+    );
+
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /view output and test details/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Load prompt' })).toBeNull();
+  });
+
+  it('loads stripped prompt detail from the action when inline prompts are hidden', async () => {
+    const user = userEvent.setup();
+    mockResultsViewSettings.showPrompts = false;
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Full prompt from detail',
+      text: 'Full output from detail',
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    await waitFor(() => {
+      expect(fetchEvalResultDetail).toHaveBeenCalledWith(
+        'eval-1',
+        'test-id',
+        expect.any(AbortSignal),
+      );
+    });
+    expect(await screen.findByTestId('dialog-component')).toHaveAttribute(
+      'data-prompt',
+      'Full prompt from detail',
+    );
+  });
+
+  it('prefetches stripped prompt detail on action intent', async () => {
+    const user = userEvent.setup();
+    mockResultsViewSettings.showPrompts = false;
+    vi.mocked(prefetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Prefetched prompt',
+      text: 'Prefetched output',
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    const detailButton = screen.getByRole('button', { name: /view output and test details/i });
+    await user.hover(detailButton);
+
+    await waitFor(() => {
+      expect(prefetchEvalResultDetail).toHaveBeenCalledWith('eval-1', 'test-id');
+    });
+    await act(async () => {});
+
+    await user.click(detailButton);
+    expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('dialog-component')).toHaveAttribute(
+      'data-prompt',
+      'Prefetched prompt',
+    );
+  });
+
+  it('cancels the debounced prefetch when the hover ends before firing', async () => {
+    const user = userEvent.setup();
+    mockResultsViewSettings.showPrompts = false;
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    const detailButton = screen.getByRole('button', { name: /view output and test details/i });
+    await user.hover(detailButton);
+    await user.unhover(detailButton);
+
+    // Wait past the 150ms debounce and confirm no prefetch fired.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(prefetchEvalResultDetail).not.toHaveBeenCalled();
+  });
+
+  it('ignores stale prefetched detail after the rendered output changes', async () => {
+    const user = userEvent.setup();
+    mockResultsViewSettings.showPrompts = false;
+
+    let resolvePrefetch:
+      | ((detail: Awaited<ReturnType<typeof prefetchEvalResultDetail>>) => void)
+      | undefined;
+    vi.mocked(prefetchEvalResultDetail).mockReturnValue(
+      new Promise((resolve) => {
+        resolvePrefetch = resolve;
+      }),
+    );
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'new-id',
+      prompt: 'Fresh prompt from detail',
+      text: 'Fresh output from detail',
+    });
+
+    const { rerender } = renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          id: 'old-id',
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    await user.hover(screen.getByRole('button', { name: /view output and test details/i }));
+    await waitFor(() => expect(prefetchEvalResultDetail).toHaveBeenCalledWith('eval-1', 'old-id'));
+
+    rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell
+          {...defaultProps}
+          evaluationId="eval-1"
+          output={{
+            ...defaultProps.output,
+            id: 'new-id',
+            prompt: '',
+            detail: {
+              available: true,
+              omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+            },
+          }}
+        />
+      </ShiftKeyProvider>,
+    );
+
+    await act(async () => {
+      resolvePrefetch?.({
+        evalId: 'eval-1',
+        resultId: 'old-id',
+        prompt: 'Stale prefetched prompt',
+        text: 'Stale prefetched output',
+      });
+    });
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    await waitFor(() => {
+      expect(fetchEvalResultDetail).toHaveBeenCalledWith(
+        'eval-1',
+        'new-id',
+        expect.any(AbortSignal),
+      );
+    });
+    expect(await screen.findByTestId('dialog-component')).toHaveAttribute(
+      'data-prompt',
+      'Fresh prompt from detail',
+    );
+  });
+
+  it.each(['current', 'reference', 'both'])(
+    'does not compute a diff from omitted %s output',
+    (omitted) => {
+      const placeholder = '[content omitted: 120000 characters]';
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          showDiffs
+          firstOutput={{
+            ...defaultProps.output,
+            id: 'reference',
+            text: omitted === 'current' ? 'Reference output' : placeholder,
+          }}
+          output={{
+            ...defaultProps.output,
+            text: omitted === 'reference' ? 'Current output' : placeholder,
+          }}
+        />,
+      );
+      expect(
+        screen.getByText('Diff unavailable because an output is too large for the table.'),
+      ).toBeInTheDocument();
+      expect(container.querySelector('del, ins')).toBeNull();
+      expect(fetchEvalResultDetail).not.toHaveBeenCalled();
+    },
+  );
+
+  it('copies the full output when table text is omitted', async () => {
+    const user = userEvent.setup();
+    const clipboard = mockClipboardWriteText();
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: '',
+      text: 'Full copied output',
+    });
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          text: '[content omitted: 120000 characters]',
+          detail: { available: true, omittedFields: ['response'] },
+        }}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Copy output to clipboard' }));
+    await waitFor(() => expect(clipboard.writeText).toHaveBeenCalledWith('Full copied output'));
+  });
+
+  it('does not copy an omission marker when loading the full output fails', async () => {
+    const user = userEvent.setup();
+    const clipboard = mockClipboardWriteText();
+    vi.mocked(fetchEvalResultDetail).mockRejectedValue(new Error('Detail unavailable'));
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          text: '[content omitted: 120000 characters]',
+          detail: { available: true, omittedFields: ['response'] },
+        }}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: 'Copy output to clipboard' }));
+    expect(fetchEvalResultDetail).toHaveBeenCalled();
+    expect(clipboard.writeText).not.toHaveBeenCalled();
+  });
+
+  it('uses lazy-loaded detail in the prompt dialog', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Full prompt from detail',
+      text: 'Full output from detail',
+      metadata: { detailKey: 'detailValue', inputVars: { topic: 'metadata' } },
+      testCase: { vars: { topic: 'details' } },
+      gradingResult: {
+        pass: false,
+        score: 0,
+        reason: 'Full grading reason from detail',
+        componentResults: [
+          {
+            pass: false,
+            score: 0,
+            reason: 'Full component reason from detail',
+          },
+        ],
+      },
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          gradingResult: {
+            pass: false,
+            score: 0,
+            reason: '[content omitted: 120000 characters]',
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: '[content omitted: 120000 characters]',
+              },
+            ],
+          },
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    await waitFor(() => {
+      expect(fetchEvalResultDetail).toHaveBeenCalledWith(
+        'eval-1',
+        'test-id',
+        expect.any(AbortSignal),
+      );
+    });
+    const dialogComponent = await screen.findByTestId('dialog-component');
+    expect(dialogComponent).toHaveAttribute('data-prompt', 'Full prompt from detail');
+    expect(dialogComponent).toHaveAttribute('data-output', 'Full output from detail');
+    expect(JSON.parse(dialogComponent.getAttribute('data-metadata') || '{}')).toEqual({
+      detailKey: 'detailValue',
+      inputVars: { topic: 'metadata' },
+    });
+    expect(JSON.parse(dialogComponent.getAttribute('data-variables') || '{}')).toEqual({
+      topic: 'metadata',
+    });
+    expect(JSON.parse(dialogComponent.getAttribute('data-grading-results') || '[]')).toEqual([
+      { pass: false, score: 0, reason: 'Full component reason from detail' },
+    ]);
+    expect(screen.getByText('Full component reason from detail')).toBeInTheDocument();
+    expect(screen.queryByText('[content omitted: 120000 characters]')).not.toBeInTheDocument();
+  });
+
+  it('reloads detail after a rating save finishes', async () => {
+    const user = userEvent.setup();
+    let finishSave!: () => void;
+    const onRating = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    const output: MockEvalOutputCellProps['output'] = {
+      ...defaultProps.output,
+      prompt: '',
+      detail: { available: true, omittedFields: ['prompt', 'gradingResult'] },
+    };
+    const oldDetail = {
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'prompt',
+      text: 'output',
+      gradingResult: { pass: false, score: 0, reason: 'old rating' },
+    };
+    vi.mocked(fetchEvalResultDetail)
+      .mockResolvedValueOnce(oldDetail)
+      .mockResolvedValueOnce(oldDetail)
+      .mockResolvedValueOnce({
+        ...oldDetail,
+        gradingResult: { pass: true, score: 1, reason: 'saved rating' },
+      });
+    const view = renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={output}
+        onRating={onRating}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+    await waitFor(() => expect(fetchEvalResultDetail).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('button', { name: 'Mark test passed' }));
+    expect(onRating).toHaveBeenCalledOnce();
+    view.rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell
+          {...defaultProps}
+          evaluationId="eval-1"
+          output={{
+            ...output,
+            gradingResult: { pass: true, score: 1, reason: 'optimistic rating' },
+          }}
+          onRating={onRating}
+        />
+      </ShiftKeyProvider>,
+    );
+    await waitFor(() => expect(fetchEvalResultDetail).toHaveBeenCalledTimes(2));
+    await act(async () => finishSave());
+    await waitFor(() => expect(fetchEvalResultDetail).toHaveBeenCalledTimes(3));
+    expect(screen.getByTestId('dialog-component').getAttribute('data-grading-results')).toContain(
+      'saved rating',
+    );
+  });
+
+  it('shows an updated rating comment after an earlier detail was loaded', async () => {
+    const user = userEvent.setup();
+    const output: MockEvalOutputCellProps['output'] = {
+      ...defaultProps.output,
+      detail: { available: true, omittedFields: ['gradingResult'] },
+      gradingResult: {
+        ...defaultProps.output.gradingResult,
+        pass: true,
+        score: 1,
+        reason: 'rated',
+        comment: 'old comment',
+      },
+    };
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'prompt',
+      text: 'output',
+      gradingResult: { comment: 'old comment' },
+    });
+    const view = renderWithProviders(
+      <EvalOutputCell {...defaultProps} evaluationId="eval-1" output={output} />,
+    );
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+    await screen.findByTestId('dialog-component');
+    await user.keyboard('{Escape}');
+
+    view.rerender(
+      <ShiftKeyProvider>
+        <EvalOutputCell
+          {...defaultProps}
+          evaluationId="eval-1"
+          output={{
+            ...output,
+            gradingResult: {
+              ...output.gradingResult,
+              pass: true,
+              score: 1,
+              reason: 'rated',
+              comment: 'new comment',
+            },
+          }}
+        />
+      </ShiftKeyProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: /edit comment/i }));
+    expect(screen.getByRole('textbox')).toHaveValue('new comment');
+  });
+
+  it('restores oversized redteam response audio from hydrated detail', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Hydrated prompt',
+      text: 'Hydrated output',
+      response: { audio: { data: 'fulltopaudio', format: 'wav' } },
+      metadata: {
+        redteamHistory: [
+          {
+            outputAudio: {
+              data: 'data:audio/wav;base64,full-audio',
+              format: 'wav',
+            },
+          },
+        ],
+      },
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          metadata: {
+            redteamHistory: [{ outputAudio: { format: 'wav' } }],
+          },
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'response', 'testCase', 'metadata', 'gradingResult', 'media'],
+          },
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Load prompt' }));
+
+    const player = await screen.findByTestId('response-audio-player');
+    expect(screen.getByTestId('audio-player').querySelector('source')).toHaveAttribute(
+      'src',
+      'data:audio/wav;base64,fulltopaudio',
+    );
+    expect(player.querySelector('source')).toHaveAttribute(
+      'src',
+      'data:audio/wav;base64,full-audio',
+    );
+  });
+
+  it('shows detail load errors for stripped prompts', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchEvalResultDetail).mockRejectedValue(new Error('Detail unavailable'));
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'testCase', 'metadata', 'response'],
+          },
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /view output and test details/i }));
+
+    expect(await screen.findByText('Detail unavailable')).toBeInTheDocument();
   });
 
   it('displays pass/fail status correctly', () => {
@@ -639,6 +1314,52 @@ describe('EvalOutputCell', () => {
 
     const sourceElement = responseAudioElement.querySelector('source');
     expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64treeaudio');
+  });
+
+  it('renders response audio from lazy-loaded detail metadata', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchEvalResultDetail).mockResolvedValue({
+      evalId: 'eval-1',
+      resultId: 'test-id',
+      prompt: 'Hydrated prompt',
+      text: 'Hydrated output',
+      metadata: {
+        redteamHistory: [
+          {
+            prompt: 'Attack prompt',
+            output: 'Target response',
+            outputAudio: {
+              data: 'hydratedresponseaudio',
+              format: 'mp3',
+            },
+          },
+        ],
+      },
+    });
+
+    renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        evaluationId="eval-1"
+        output={{
+          ...defaultProps.output,
+          prompt: '',
+          metadata: {},
+          detail: {
+            available: true,
+            omittedFields: ['prompt', 'metadata'],
+          },
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Load prompt' }));
+
+    const responseAudioElement = await screen.findByTestId('response-audio-player');
+    expect(responseAudioElement.querySelector('source')).toHaveAttribute(
+      'src',
+      'data:audio/mp3;base64,hydratedresponseaudio',
+    );
   });
 
   it('does not render response audio when redteamHistory has no audio in last turn', () => {

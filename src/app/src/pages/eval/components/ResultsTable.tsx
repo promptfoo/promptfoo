@@ -15,7 +15,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tool
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import {
+  callApi,
+  clearEvalApiResponseCache,
+  fetchEvalConfig,
+  prefetchEvalResultDetail,
+} from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
@@ -72,6 +77,8 @@ import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 import {
   getNamedMetricTotals,
+  getPromptEvalId,
+  getPromptIndex,
   parseEvalOutputPromptHash,
   setEvalDetailsHash,
   useEvalDetailsHash,
@@ -80,6 +87,8 @@ import {
 const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
   (size) => size <= EVAL_TABLE_MAX_PAGE_SIZE,
 );
+const isOmittedText = (value: unknown): value is string =>
+  typeof value === 'string' && value.startsWith('[content omitted:');
 
 /**
  * Renders an audio player for evaluation outputs that may be stored in different representations.
@@ -232,11 +241,24 @@ function TableHeader({
   text,
   maxLength,
   expandedText,
+  loadExpandedText,
   resourceId,
   className,
-}: TruncatedTextProps & { expandedText?: string; resourceId?: string; className?: string }) {
+}: TruncatedTextProps & {
+  expandedText?: string;
+  loadExpandedText?: () => Promise<string | undefined>;
+  resourceId?: string;
+  className?: string;
+}) {
   const [promptOpen, setPromptOpen] = React.useState(false);
-  const handlePromptOpen = () => {
+  const [fullExpandedText, setFullExpandedText] = React.useState<string>();
+  const handlePromptOpen = async () => {
+    if (loadExpandedText && isOmittedText(expandedText ?? '')) {
+      const loaded = await loadExpandedText();
+      if (loaded) {
+        setFullExpandedText(loaded);
+      }
+    }
     setPromptOpen(true);
   };
   const handlePromptClose = () => {
@@ -265,7 +287,7 @@ function TableHeader({
             <EvalOutputPromptDialog
               open={promptOpen}
               onClose={handlePromptClose}
-              prompt={expandedText}
+              prompt={fullExpandedText ?? expandedText}
             />
           )}
           {resourceId && (
@@ -287,6 +309,53 @@ function TableHeader({
         </>
       )}
     </div>
+  );
+}
+
+export function HydratedText({
+  value,
+  loadValue,
+  maxLength,
+  identity,
+}: {
+  value: string;
+  loadValue: () => Promise<string | undefined>;
+  maxLength: number;
+  identity: string;
+}) {
+  const [fullValue, setFullValue] = React.useState<{ identity: string; value: string }>();
+  const [loadingIdentity, setLoadingIdentity] = React.useState<string>();
+  const identityRef = React.useRef(identity);
+  identityRef.current = identity;
+  const hydratedValue = fullValue?.identity === identity ? fullValue.value : undefined;
+  const loading = loadingIdentity === identity;
+
+  if (hydratedValue || !isOmittedText(value)) {
+    return <TruncatedText text={hydratedValue ?? value} maxLength={maxLength} />;
+  }
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      disabled={loading}
+      onClick={async () => {
+        setLoadingIdentity(identity);
+        try {
+          const loaded = await loadValue();
+          if (loaded && identityRef.current === identity) {
+            setFullValue({ identity, value: loaded });
+          }
+        } catch {
+        } finally {
+          if (identityRef.current === identity) {
+            setLoadingIdentity(undefined);
+          }
+        }
+      }}
+    >
+      {loading ? 'Loading...' : 'Load value'}
+    </Button>
   );
 }
 
@@ -410,6 +479,70 @@ function renderMediaVariableCell({
   );
 }
 
+function HydratedMediaVariableCell({
+  evalId,
+  output,
+  varName,
+  value,
+  ...props
+}: {
+  evalId: string;
+  output: EvaluateTableOutput;
+  varName: string;
+  value: string;
+  mediaMetadata: { path: string; type: string; format?: string };
+  lightboxOpen: boolean;
+  lightboxImage: string | null;
+  maxTextLength: number;
+  toggleLightbox: (url?: string) => void;
+}) {
+  const resultKey = `${output.evalId || evalId}/${output.id}`;
+  const [media, setMedia] = React.useState<{ key: string; value: string } | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
+
+  const loadMedia = async () => {
+    setLoading(true);
+    setFailed(false);
+    const detail = await prefetchEvalResultDetail(output.evalId || evalId, output.id);
+    const fullValue = (detail?.testCase?.vars as Record<string, unknown> | undefined)?.[varName];
+    if (typeof fullValue === 'string') {
+      setMedia({ key: resultKey, value: fullValue });
+    } else {
+      setFailed(true);
+    }
+    setLoading(false);
+  };
+
+  if (media?.key !== resultKey) {
+    return (
+      <div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={loading}
+          onClick={loadMedia}
+          aria-label={`Load ${varName}`}
+        >
+          {loading ? 'Loading...' : `Load ${varName}`}
+        </Button>
+        {failed && (
+          <p className="text-sm text-muted-foreground" role="alert">
+            Could not load media. Try again.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  const fullValue = media?.key === resultKey ? media.value : value;
+  return (
+    renderMediaVariableCell({ output, value: fullValue, ...props }) ?? (
+      <TruncatedText text={value} maxLength={props.maxTextLength} />
+    )
+  );
+}
+
 function renderDecodedVariableCell({
   value,
   varName,
@@ -486,6 +619,7 @@ function renderDecodedVariableCell({
 
 function renderVariableCell({
   info,
+  evalId,
   varName,
   injectVarName,
   maxTextLength,
@@ -495,6 +629,7 @@ function renderVariableCell({
   toggleLightbox,
 }: {
   info: CellContext<EvaluateTableRow, string>;
+  evalId: string;
   varName: string;
   injectVarName: string;
   maxTextLength: number;
@@ -511,10 +646,54 @@ function renderVariableCell({
     fallbackValue: info.getValue(),
   });
 
-  const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
+  const output = row.outputs?.find((output) => output) ?? null;
   const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
     | Record<string, { path: string; type: string; format?: string }>
     | undefined;
+  if (
+    typeof value === 'string' &&
+    value.startsWith('[content omitted:') &&
+    fileMetadata?.[varName] &&
+    output?.id
+  ) {
+    return (
+      <HydratedMediaVariableCell
+        key={`${output.evalId || evalId}/${output.id}/${varName}`}
+        evalId={evalId}
+        output={output}
+        varName={varName}
+        value={value}
+        mediaMetadata={fileMetadata[varName]}
+        lightboxOpen={lightboxOpen}
+        lightboxImage={lightboxImage}
+        maxTextLength={maxTextLength}
+        toggleLightbox={toggleLightbox}
+      />
+    );
+  }
+  if (isOmittedText(value) && output?.id) {
+    return (
+      <HydratedText
+        value={value}
+        maxLength={maxTextLength}
+        identity={`${output.evalId || evalId}/${output.id}/${varName}`}
+        loadValue={async () => {
+          const detail = await prefetchEvalResultDetail(output.evalId || evalId, output.id);
+          if (varName === injectVarName) {
+            return getActualPrompt(detail?.response as Parameters<typeof getActualPrompt>[0]);
+          }
+          const hydratedValue = (detail?.testCase?.vars as Record<string, unknown> | undefined)?.[
+            varName
+          ];
+          return typeof hydratedValue === 'string'
+            ? hydratedValue
+            : hydratedValue && typeof hydratedValue === 'object'
+              ? JSON.stringify(hydratedValue, null, 2)
+              : undefined;
+        }}
+      />
+    );
+  }
   const mediaCell = renderMediaVariableCell({
     output,
     mediaMetadata: fileMetadata?.[varName],
@@ -1142,6 +1321,9 @@ function PromptColumnHeader({
   filterMode,
   headPromptCount,
   maxTextLength,
+  evalId,
+  promptEvalId,
+  ownerPromptIndex,
   onFailureFilterToggle,
   setFilterMode,
   setCustomMetricsDialogOpen,
@@ -1162,6 +1344,9 @@ function PromptColumnHeader({
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
   maxTextLength: number;
+  evalId: string | null;
+  promptEvalId: string | null;
+  ownerPromptIndex: number;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
   setFilterMode: (mode: EvalResultsFilterMode) => void;
   setCustomMetricsDialogOpen: (open: boolean) => void;
@@ -1227,9 +1412,39 @@ function PromptColumnHeader({
         ) : null}
       </div>
       <TableHeader
+        key={`${evalId}/${prompt.id ?? prompt.label ?? idx}`}
         className="prompt-container collapse-font-small"
         text={prompt.label || prompt.display || prompt.raw}
         expandedText={prompt.raw}
+        loadExpandedText={
+          isOmittedText(prompt.raw) && evalId
+            ? async () => {
+                const { config } = await fetchEvalConfig(promptEvalId ?? evalId);
+                const prompts = Array.isArray(config.prompts)
+                  ? config.prompts
+                  : typeof config.prompts === 'string'
+                    ? [config.prompts]
+                    : config.prompts
+                      ? Object.values(config.prompts)
+                      : [];
+                const fullPrompt =
+                  prompts.find((candidate) =>
+                    typeof candidate === 'string'
+                      ? candidate === prompt.label || candidate === prompt.display
+                      : candidate &&
+                        typeof candidate === 'object' &&
+                        ((prompt.id && candidate.id === prompt.id) ||
+                          candidate.label === prompt.label),
+                  ) ?? prompts[ownerPromptIndex % prompts.length];
+                if (typeof fullPrompt === 'string') {
+                  return fullPrompt;
+                }
+                if (fullPrompt && typeof fullPrompt === 'object') {
+                  return fullPrompt.raw || fullPrompt.display || fullPrompt.label;
+                }
+              }
+            : undefined
+        }
         maxLength={maxTextLength}
         resourceId={prompt.id}
       />
@@ -1685,6 +1900,10 @@ function ResultsTable({
   const locationHash = useEvalDetailsHash();
 
   invariant(table, 'Table should be defined');
+  const ratingTableRef = React.useRef(table);
+  ratingTableRef.current = table;
+  const ratingRevisionRef = React.useRef(new Map<string, number>());
+  const persistedRatingRef = React.useRef(new Map<string, EvaluateTableOutput>());
   const { head, body } = table;
 
   const isRedteam = React.useMemo(() => {
@@ -1733,7 +1952,13 @@ function ResultsTable({
       score?: number,
       comment?: string,
     ) => {
-      const existingOutput = body[rowIndex].outputs[promptIndex];
+      const currentTable = ratingTableRef.current;
+      const existingOutput = currentTable.body[rowIndex].outputs[promptIndex];
+      if (!persistedRatingRef.current.has(resultId)) {
+        persistedRatingRef.current.set(resultId, existingOutput);
+      }
+      const revision = (ratingRevisionRef.current.get(resultId) ?? 0) + 1;
+      ratingRevisionRef.current.set(resultId, revision);
       const ratingUpdate = getManualRatingUpdate({
         existingOutput,
         isPass,
@@ -1748,15 +1973,19 @@ function ResultsTable({
         comment,
       });
       const newTable = buildRatingTableUpdate({
-        head,
-        body,
+        head: currentTable.head,
+        body: currentTable.body,
         rowIndex,
         promptIndex,
         ratingUpdate,
         gradingResult,
       });
 
+      ratingTableRef.current = newTable;
       setTable(newTable);
+      if (evalId) {
+        clearEvalApiResponseCache(evalId);
+      }
       if (inComparisonMode) {
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {
@@ -1768,8 +1997,45 @@ function ResultsTable({
             gradingResult,
             table: newTable,
           });
+          const previousPersisted = persistedRatingRef.current.get(resultId);
+          const savedOutput = newTable.body[rowIndex].outputs[promptIndex]!;
+          persistedRatingRef.current.set(resultId, savedOutput);
+          const latestTable = ratingTableRef.current;
+          if (
+            ratingRevisionRef.current.get(resultId) !== revision &&
+            latestTable.body[rowIndex]?.outputs[promptIndex] === previousPersisted
+          ) {
+            const updatedBody = [...latestTable.body];
+            const updatedRow = { ...updatedBody[rowIndex] };
+            const updatedOutputs = [...updatedRow.outputs];
+            updatedOutputs[promptIndex] = savedOutput;
+            updatedRow.outputs = updatedOutputs;
+            updatedBody[rowIndex] = updatedRow;
+            ratingTableRef.current = { ...latestTable, body: updatedBody };
+            setTable(ratingTableRef.current);
+          }
+          if (evalId) {
+            clearEvalApiResponseCache(evalId);
+          }
         } catch (error) {
+          if (ratingRevisionRef.current.get(resultId) === revision) {
+            const latestTable = ratingTableRef.current;
+            const currentOutput = latestTable.body[rowIndex]?.outputs[promptIndex];
+            if (currentOutput?.id === resultId) {
+              const updatedBody = [...latestTable.body];
+              const updatedRow = { ...updatedBody[rowIndex] };
+              const updatedOutputs = [...updatedRow.outputs];
+              updatedOutputs[promptIndex] =
+                persistedRatingRef.current.get(resultId) ?? existingOutput;
+              updatedRow.outputs = updatedOutputs;
+              updatedBody[rowIndex] = updatedRow;
+              ratingTableRef.current = { ...latestTable, body: updatedBody };
+              setTable(ratingTableRef.current);
+            }
+          }
           console.error('Failed to update table:', error);
+          showToast('Failed to save rating', 'error');
+          throw error;
         }
       }
     },
@@ -2073,6 +2339,7 @@ function ResultsTable({
               cell: (info: CellContext<EvaluateTableRow, string>) =>
                 renderVariableCell({
                   info,
+                  evalId: evalId || '',
                   varName,
                   injectVarName,
                   maxTextLength,
@@ -2090,6 +2357,7 @@ function ResultsTable({
     return [];
   }, [
     columnHelper,
+    evalId,
     head,
     head.vars,
     maxTextLength,
@@ -2114,7 +2382,7 @@ function ResultsTable({
           columnHelper.accessor(
             (row: EvaluateTableRow) => {
               // Get the value from the first output's transformDisplayVars
-              const output = row.outputs?.[0];
+              const output = row.outputs?.find((output) => output);
               const transformVars = output?.metadata?.transformDisplayVars as
                 | Record<string, string>
                 | undefined;
@@ -2131,6 +2399,27 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 const value = info.getValue();
+                const output = info.row.original.outputs?.find((output) => output);
+                if (isOmittedText(value) && output?.id) {
+                  return (
+                    <HydratedText
+                      value={value}
+                      maxLength={maxTextLength}
+                      identity={`${output.evalId || evalId}/${output.id}/${varName}`}
+                      loadValue={async () => {
+                        const detailEvalId = output.evalId || evalId;
+                        if (!detailEvalId) {
+                          return undefined;
+                        }
+                        const detail = await prefetchEvalResultDetail(detailEvalId, output.id);
+                        const vars = detail?.metadata?.transformDisplayVars as
+                          | Record<string, unknown>
+                          | undefined;
+                        return typeof vars?.[varName] === 'string' ? vars[varName] : undefined;
+                      }}
+                    />
+                  );
+                }
                 return (
                   <div className="cell">
                     <TruncatedText text={value} maxLength={maxTextLength} />
@@ -2143,7 +2432,13 @@ function ResultsTable({
         ),
       }),
     ];
-  }, [columnHelper, maxTextLength, transformDisplayVarColumnSizes, transformDisplayVarKeys]);
+  }, [
+    columnHelper,
+    evalId,
+    maxTextLength,
+    transformDisplayVarColumnSizes,
+    transformDisplayVarKeys,
+  ]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -2214,6 +2509,9 @@ function ResultsTable({
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
                 maxTextLength={maxTextLength}
+                evalId={evalId}
+                promptEvalId={evalId ? getPromptEvalId({ head, body }, idx, evalId) : null}
+                ownerPromptIndex={getPromptIndex({ head }, idx)}
                 onFailureFilterToggle={onFailureFilterToggle}
                 setFilterMode={setFilterMode}
                 setCustomMetricsDialogOpen={setCustomMetricsDialogOpen}

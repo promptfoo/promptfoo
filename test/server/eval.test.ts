@@ -6,7 +6,6 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
-import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
 
@@ -63,36 +62,6 @@ describe('eval routes', () => {
     testEvalIds.clear();
     vi.resetAllMocks();
   });
-
-  function mockTablePayloadRangeError(shouldThrow: (attempt: number) => boolean) {
-    const originalStringify = JSON.stringify;
-    let tablePayloadAttempts = 0;
-
-    return vi
-      .spyOn(JSON, 'stringify')
-      .mockImplementation((...args: Parameters<typeof JSON.stringify>) => {
-        const value = args[0];
-        if (value && typeof value === 'object' && 'table' in value && 'totalCount' in value) {
-          tablePayloadAttempts += 1;
-          if (shouldThrow(tablePayloadAttempts)) {
-            throw new RangeError('Invalid string length');
-          }
-        }
-        return originalStringify.apply(JSON, args);
-      });
-  }
-
-  async function setResultPromptRaws(eval_: Eval, raws: string[]) {
-    const results = await eval_.getResults();
-    await Promise.all(
-      raws.map(async (raw, index) => {
-        const result = results[index];
-        invariant(result instanceof EvalResult, 'EvalResult is required');
-        result.prompt = { ...result.prompt, raw };
-        await result.save();
-      }),
-    );
-  }
 
   function createManualRatingPayload(originalResult: any, pass: boolean) {
     const payload = { ...originalResult.gradingResult };
@@ -217,6 +186,52 @@ describe('eval routes', () => {
       expect(res.body.gradingResult?.pass).toBe(true);
       expect(res.body.gradingResult?.score).toBe(1);
       expect(res.body.gradingResult?.reason).toContain('Manual result');
+    });
+
+    it('keeps stored grader evidence when a lean-table rating contains placeholders', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+      const storedComponent = result.gradingResult?.componentResults?.[0];
+      invariant(storedComponent, 'Stored grader component is required');
+      const storedResult = await EvalResult.findById(result.id);
+      invariant(storedResult?.gradingResult, 'Stored grading result is required');
+      storedResult.gradingResult.comment = 'full stored comment';
+      await storedResult.save();
+
+      const payload = createManualRatingPayload(result, false);
+      payload.comment = '[content omitted: 120000 characters]';
+      payload.componentResults[0] = {
+        ...storedComponent,
+        reason: '[content omitted: 120000 characters]',
+      };
+
+      const res = await api.post(`/api/eval/${eval_.id}/results/${result.id}/rating`).send(payload);
+
+      expect(res.status).toBe(200);
+      const updatedResult = await EvalResult.findById(result.id);
+      expect(updatedResult?.gradingResult?.comment).toBe('full stored comment');
+      expect(updatedResult?.gradingResult?.componentResults?.[0]).toEqual(storedComponent);
+      expect(updatedResult?.gradingResult?.componentResults?.[1]?.assertion?.type).toBe('human');
+
+      const leanPayload = createManualRatingPayload(updatedResult?.toEvaluateResult(), true);
+      for (const component of leanPayload.componentResults) {
+        if (component.assertion?.type === 'human') {
+          component.assertion.type = '[content omitted: 120000 characters]';
+        }
+      }
+      const leanRes = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(leanPayload);
+
+      expect(leanRes.status).toBe(200);
+      const reratedResult = await EvalResult.findById(result.id);
+      expect(
+        reratedResult?.gradingResult?.componentResults?.find(
+          (component) => component.assertion?.type === 'human',
+        ),
+      ).toMatchObject({ pass: true, score: 1, assertion: { type: 'human' } });
     });
 
     it('persists the rated result before notifying through the eval save', async () => {
@@ -397,27 +412,35 @@ describe('eval routes', () => {
   });
 
   describe('GET /:id/table - large payload handling', () => {
-    it('preserves config tests returned from the table endpoint when saved back', async () => {
+    it('preserves full stored config when applying a lightweight config patch', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
+      const originalTests = structuredClone(eval_.config.tests);
 
-      const res = await api.get(`/api/eval/${eval_.id}/table`);
+      const res = await api.get(`/api/eval/${eval_.id}/table?lean=true`);
 
       expect(res.status).toBe(200);
-      expect(res.body.config.tests).toHaveLength(2);
+      expect(res.body.config.tests).toBeUndefined();
+      expect(res.body.configDetail).toEqual(
+        expect.objectContaining({
+          available: true,
+          omittedFields: expect.arrayContaining(['tests']),
+        }),
+      );
 
       const patchRes = await api
         .patch(`/api/eval/${eval_.id}`)
-        .send({ config: { ...res.body.config, description: 'renamed eval' } });
+        .send({ configPatch: { description: 'renamed eval' } });
 
       expect(patchRes.status).toBe(200);
 
       const updatedEval = await Eval.findById(eval_.id);
       invariant(updatedEval, 'Eval is required');
-      expect(updatedEval.config.tests).toHaveLength(2);
+      expect(updatedEval.config.description).toBe('renamed eval');
+      expect(updatedEval.config.tests).toEqual(originalTests);
     });
 
-    it('preserves Azure Blob SAS tokens when a redacted table config is saved back', async () => {
+    it('preserves Azure Blob SAS tokens when a redacted full config is saved back', async () => {
       const sasUri =
         'az://{{ account }}/container/{{ suite }}.yaml?sp=r&sig=azure-secret&sv={{ version }}';
       const eval_ = await EvalFactory.create();
@@ -425,7 +448,7 @@ describe('eval routes', () => {
       eval_.config.tests = sasUri;
       await eval_.save();
 
-      const res = await api.get(`/api/eval/${eval_.id}/table`);
+      const res = await api.get(`/api/eval/${eval_.id}/config`);
 
       expect(res.status).toBe(200);
       expect(res.body.config.tests).toBe(
@@ -442,64 +465,12 @@ describe('eval routes', () => {
       invariant(updatedEval, 'Eval is required');
       expect(updatedEval.config.tests).toBe(sasUri);
       expect(updatedEval.config.description).toBe('renamed eval');
-    });
 
-    it('returns table data with only the largest per-cell prompt stripped when possible', async () => {
-      const eval_ = await EvalFactory.create({ numResults: 3 });
-      testEvalIds.add(eval_.id);
-      await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
-
-      mockTablePayloadRangeError((attempt) => attempt === 1);
-
-      const res = await api.get(`/api/eval/${eval_.id}/table`);
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('table');
-      expect(res.body.table.body.length).toBeGreaterThan(0);
-      expect(res.body.config.tests).toHaveLength(2);
-
-      const prompts: Array<string | undefined> = res.body.table.body.flatMap(
-        (row: { outputs: Array<{ prompt?: string }> }) =>
-          row.outputs.map((output) => output?.prompt),
-      );
-      expect(prompts.filter((prompt) => prompt === STRIPPED_TABLE_CELL_PROMPT)).toHaveLength(1);
-      expect(prompts).toContain('small prompt');
-      expect(prompts).toContain('x'.repeat(50));
-    });
-
-    it('strips per-cell prompts largest first until the response serializes', async () => {
-      const eval_ = await EvalFactory.create({ numResults: 3 });
-      testEvalIds.add(eval_.id);
-      await setResultPromptRaws(eval_, ['small prompt', 'x'.repeat(100), 'x'.repeat(50)]);
-
-      mockTablePayloadRangeError((attempt) => attempt <= 2);
-
-      const res = await api.get(`/api/eval/${eval_.id}/table`);
-
-      expect(res.status).toBe(200);
-      expect(res.body).toHaveProperty('table');
-      expect(res.body.config.tests).toHaveLength(2);
-
-      const prompts: Array<string | undefined> = res.body.table.body.flatMap(
-        (row: { outputs: Array<{ prompt?: string }> }) =>
-          row.outputs.map((output) => output?.prompt),
-      );
-      expect(prompts.filter((prompt) => prompt === STRIPPED_TABLE_CELL_PROMPT)).toHaveLength(2);
-      expect(prompts).toContain('small prompt');
-    });
-
-    it('returns 413 when the table response is still too large after stripping prompts', async () => {
-      const eval_ = await EvalFactory.create();
-      testEvalIds.add(eval_.id);
-
-      mockTablePayloadRangeError(() => true);
-
-      const res = await api.get(`/api/eval/${eval_.id}/table`);
-
-      expect(res.status).toBe(413);
-      expect(res.body).toEqual({
-        error: 'Eval too large to display. Try reducing the page size.',
-      });
+      const partial = await api
+        .patch(`/api/eval/${eval_.id}`)
+        .send({ configPatch: { tests: res.body.config.tests } });
+      expect(partial.status).toBe(200);
+      expect((await Eval.findById(eval_.id))?.config.tests).toBe(sasUri);
     });
   });
 
