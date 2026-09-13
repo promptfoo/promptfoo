@@ -1195,7 +1195,21 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (!session) {
       return;
     }
-    await this.client?.session?.delete?.(this.buildDeleteSessionParameters(session));
+    const deletion = this.client?.session?.delete?.(this.buildDeleteSessionParameters(session));
+    if (!deletion) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        deletion,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('OpenCode session deletion timed out')), 5000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private buildAbortSessionParameters(

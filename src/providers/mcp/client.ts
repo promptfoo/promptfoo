@@ -116,6 +116,7 @@ export class MCPClient {
   // Lock mechanism to prevent concurrent token refresh per server
   private tokenRefreshLocks: Map<string, TokenRefreshLock> = new Map();
   private shuttingDown = false;
+  private generation = 0;
   private lifecycleController = new AbortController();
 
   get hasInitialized(): boolean {
@@ -144,13 +145,14 @@ export class MCPClient {
     this.config = config;
   }
 
-  private assertActive(): void {
-    if (this.shuttingDown) {
+  private assertActive(generation = this.generation): void {
+    if (this.shuttingDown || generation !== this.generation) {
       throw new Error('MCP client is shutting down');
     }
   }
 
   async initialize(signal?: AbortSignal): Promise<void> {
+    const generation = this.generation;
     signal?.throwIfAborted();
     if (this.lifecycleController.signal.aborted) {
       this.lifecycleController = new AbortController();
@@ -176,7 +178,7 @@ export class MCPClient {
       logger.info(`connecting to server ${serverKey}`);
       startupSignal.throwIfAborted();
       await awaitProviderOperation(
-        this.connectToServer(server, serverKey, startupSignal),
+        this.connectToServer(server, serverKey, startupSignal, generation),
         startupSignal,
       );
     }
@@ -186,13 +188,14 @@ export class MCPClient {
     server: MCPServerConfig,
     serverKey = server.name || server.url || server.path || 'default',
     signal?: AbortSignal,
+    generation = this.generation,
   ): Promise<void> {
     const operationSignal = signal ?? this.lifecycleController.signal;
     operationSignal.throwIfAborted();
-    this.assertActive();
+    this.assertActive(generation);
     const { Client } = await loadMcpClientSdk();
     operationSignal.throwIfAborted();
-    this.assertActive();
+    this.assertActive(generation);
     const clientInfo = {
       name: 'promptfoo-MCP',
       version: '1.0.0',
@@ -236,7 +239,7 @@ export class MCPClient {
 
       if (server.command) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
-        this.assertActive();
+        this.assertActive(generation);
         // NPM package or other command execution
         signal?.throwIfAborted();
         transport = new StdioClientTransport({
@@ -263,7 +266,7 @@ export class MCPClient {
           : server.path;
 
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
-        this.assertActive();
+        this.assertActive(generation);
         signal?.throwIfAborted();
         transport = new StdioClientTransport({
           command,
@@ -291,7 +294,7 @@ export class MCPClient {
             operationSignal,
           );
           signal?.throwIfAborted();
-          this.assertActive();
+          this.assertActive(generation);
           authHeaders = { Authorization: `Bearer ${accessToken}` };
 
           // Store config and expiration for proactive token refresh
@@ -335,7 +338,7 @@ export class MCPClient {
           const { StreamableHTTPClientTransport } = await import(
             '@modelcontextprotocol/sdk/client/streamableHttp.js'
           );
-          this.assertActive();
+          this.assertActive(generation);
           signal?.throwIfAborted();
           transport = new StreamableHTTPClientTransport(
             new URL(serverUrl),
@@ -350,14 +353,14 @@ export class MCPClient {
           );
           await closePendingConnection();
           signal?.throwIfAborted();
-          if (this.shuttingDown) {
+          if (this.shuttingDown || generation !== this.generation) {
             throw error;
           }
           client = new Client(clientInfo);
           transport = undefined;
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
           operationSignal.throwIfAborted();
-          this.assertActive();
+          this.assertActive(generation);
           transport = new SSEClientTransport(
             new URL(serverUrl),
             hasOptions ? transportOptions : undefined,
@@ -406,7 +409,7 @@ export class MCPClient {
       }
 
       signal?.throwIfAborted();
-      if (this.shuttingDown) {
+      if (this.shuttingDown || generation !== this.generation) {
         throw new Error('MCP connection closed during initialization');
       }
       this.transports.set(serverKey, transport);
@@ -702,6 +705,7 @@ export class MCPClient {
   }
 
   async cleanup(): Promise<void> {
+    this.generation++;
     this.shuttingDown = true;
     this.lifecycleController.abort();
     await Promise.all([...this.pendingConnections].map((close) => close()));

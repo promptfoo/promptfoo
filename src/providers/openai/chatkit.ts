@@ -726,6 +726,7 @@ async function processApprovals(
 }
 
 export class OpenAiChatKitProvider extends OpenAiGenericProvider {
+  private cleanupGeneration = 0;
   private chatKitConfig: OpenAiChatKitOptions;
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
@@ -788,6 +789,15 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     if (this.initialized) {
       return;
     }
+    const generation = this.cleanupGeneration;
+    const cancelled = () => generation !== this.cleanupGeneration;
+    const assertCurrent = async (resource?: { close: () => Promise<void> }) => {
+      if (!cancelled()) {
+        return;
+      }
+      await resource?.close();
+      throw new Error('ChatKit initialization cancelled during cleanup');
+    };
 
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -822,6 +832,11 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
         reject(new Error(`Failed to start ChatKit server: ${err.message}`));
       });
       this.server!.listen(this.chatKitConfig.serverPort, () => {
+        if (cancelled()) {
+          this.server?.close();
+          reject(new Error('ChatKit initialization cancelled during cleanup'));
+          return;
+        }
         const address = this.server!.address();
         this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
         logger.debug('[ChatKitProvider] Server started', { port: this.serverPort });
@@ -831,9 +846,11 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
 
     // Launch browser with helpful error for missing Playwright
     try {
-      this.browser = await chromium.launch({
+      const browser = await chromium.launch({
         headless: this.chatKitConfig.headless,
       });
+      await assertCurrent(browser);
+      this.browser = browser;
     } catch (launchError) {
       const errorMessage = launchError instanceof Error ? launchError.message : String(launchError);
       if (
@@ -848,11 +865,15 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
       throw launchError;
     }
 
-    this.context = await this.browser.newContext({
+    const context = await this.browser.newContext({
       viewport: { width: 800, height: 600 },
     });
+    await assertCurrent(context);
+    this.context = context;
 
-    this.page = await this.context.newPage();
+    const page = await this.context.newPage();
+    await assertCurrent(this.context);
+    this.page = page;
 
     // Capture console logs for debugging
     this.page.on('console', (msg) => {
@@ -875,6 +896,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
     await this.page.waitForFunction(() => (window as any).__state?.ready === true, {
       timeout: CHATKIT_READY_TIMEOUT_MS,
     });
+    await assertCurrent();
 
     this.initialized = true;
 
@@ -898,6 +920,7 @@ export class OpenAiChatKitProvider extends OpenAiGenericProvider {
    * Clean up browser resources
    */
   async cleanup(): Promise<void> {
+    this.cleanupGeneration++;
     if (this.context) {
       await this.context.close();
       this.context = null;
