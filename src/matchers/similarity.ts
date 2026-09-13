@@ -170,12 +170,10 @@ async function calculateProviderSimilarity(
   }
   const [expectedResult, outputResult] = results;
   if (expectedResult.status === 'rejected' || outputResult.status === 'rejected') {
-    const reason =
-      expectedResult.status === 'rejected'
-        ? expectedResult.reason
-        : outputResult.status === 'rejected'
-          ? outputResult.reason
-          : undefined;
+    const reasons = [expectedResult, outputResult]
+      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      .map((result) => result.reason);
+    const reason = reasons.find((error) => !isAbortError(error)) ?? reasons[0];
     if (!isAbortError(reason)) {
       throw reason;
     }
