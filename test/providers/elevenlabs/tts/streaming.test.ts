@@ -6,9 +6,15 @@ import {
 import { ElevenLabsWebSocketClient } from '../../../../src/providers/elevenlabs/websocket-client';
 
 vi.mock('../../../../src/providers/elevenlabs/websocket-client');
+vi.mock('../../../../src/logger', () => ({
+  default: { debug: vi.fn(), error: vi.fn() },
+}));
 
 beforeEach(() => vi.resetAllMocks());
-afterEach(() => vi.resetAllMocks());
+afterEach(() => {
+  vi.resetAllMocks();
+  vi.useRealTimers();
+});
 
 it.each([undefined, 'pcm_16000', 'ulaw_8000'] as const)(
   'negotiates streaming output format %s in the WebSocket handshake',
@@ -80,4 +86,66 @@ it('closes the socket when connecting fails', async () => {
     }),
   ).rejects.toThrow('connect failed');
   expect(ElevenLabsWebSocketClient.prototype.close).toHaveBeenCalledTimes(1);
+});
+
+it.each(['flush', 'error'] as const)(
+  'clears timers on %s and ignores late messages',
+  async (type) => {
+    vi.useFakeTimers();
+    const client = new ElevenLabsWebSocketClient({ apiKey: 'fixture-key' });
+    const pending = handleStreamingTTS(client, 'Hello');
+    const [onMessage] = vi.mocked(client.onMessage).mock.calls[0];
+    onMessage({ type, data: { message: 'stream failed' } });
+    if (type === 'error') {
+      await expect(pending).rejects.toThrow('stream failed');
+    } else {
+      expect((await pending).chunks).toEqual([]);
+    }
+    expect(vi.getTimerCount()).toBe(0);
+    onMessage({ type: 'audio', data: Buffer.from('late').toString('base64') });
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);
+
+it.each(['flush', 'error'] as const)(
+  'does not create a timer after synchronous %s',
+  async (type) => {
+    vi.useFakeTimers();
+    const client = new ElevenLabsWebSocketClient({ apiKey: 'fixture-key' });
+    vi.mocked(client.flush).mockImplementation(() => {
+      const [onMessage] = vi.mocked(client.onMessage).mock.calls[0];
+      onMessage({ type, data: { message: 'stream failed' } });
+    });
+    const pending = handleStreamingTTS(client, 'Hello');
+    if (type === 'error') {
+      await expect(pending).rejects.toThrow('stream failed');
+    } else {
+      await pending;
+    }
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);
+
+it('keeps one silence timer when sending synchronously produces audio', async () => {
+  vi.useFakeTimers();
+  const client = new ElevenLabsWebSocketClient({ apiKey: 'fixture-key' });
+  vi.mocked(client.sendText).mockImplementation(() => {
+    const [onMessage] = vi.mocked(client.onMessage).mock.calls[0];
+    onMessage({ type: 'audio', data: Buffer.from('audio').toString('base64') });
+  });
+  const pending = handleStreamingTTS(client, 'Hello');
+  expect(vi.getTimerCount()).toBe(1);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect((await pending).chunks).toHaveLength(1);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it('clears the timer when sending throws', async () => {
+  vi.useFakeTimers();
+  const client = new ElevenLabsWebSocketClient({ apiKey: 'fixture-key' });
+  vi.mocked(client.sendText).mockImplementation(() => {
+    throw new Error('send failed');
+  });
+  await expect(handleStreamingTTS(client, 'Hello')).rejects.toThrow('send failed');
+  expect(vi.getTimerCount()).toBe(0);
 });
