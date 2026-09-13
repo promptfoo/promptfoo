@@ -429,11 +429,31 @@ const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
 };
 
 export function extractSqlInjectionSignature(prompt: string): AttackSignature {
-  prompt = toolCallText(prompt).requestText;
+  const call = toolCallText(prompt);
+  prompt = call.requestText;
+  const sqlText = call.toolName ? call.argumentText : prompt;
+  const executionRequests = Array.from(
+    sqlText.matchAll(
+      new RegExp(
+        String.raw`${REQUEST_PREFIX}(?:${DISCLOSURE_VERB}|find|search|run|execute|query|use)\b(?:(?!\b(?:do not|don't|never|must not|should not|explain\w*|describe|discuss|why|how|whether)\b)[^\n]){0,500}`,
+        'gi',
+      ),
+    ),
+    (match) => match[0],
+  );
+  if (
+    /^\s*(?:['"`(;]|\d|(?:select|with|or|union|insert|update|delete|drop|execute)\b)/i.test(sqlText)
+  ) {
+    executionRequests.push(sqlText);
+  }
   const predicates = Object.fromEntries(
     SQL_INJECTION_PREDICATES.map((predicate) => [
       predicate,
-      SQL_INJECTION_RULES[predicate].some((rule) => rule.test(prompt)),
+      SQL_INJECTION_RULES[predicate].some((rule) =>
+        ['usesBooleanBypass', 'usesStackedQuery', 'usesUnionExtraction'].includes(predicate)
+          ? executionRequests.some((request) => rule.test(request))
+          : rule.test(prompt),
+      ),
     ]),
   ) as AttackPredicateSignature;
 

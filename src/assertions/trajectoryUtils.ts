@@ -576,7 +576,10 @@ function getSqlExecutionDetails(
       : undefined;
   const query = databaseQuery ?? scalarSql;
   if (!query) {
-    if (isQueryTool && args !== undefined) {
+    if (
+      isQueryTool &&
+      (args !== undefined || getToolNameFromAttributes(attributes) !== undefined)
+    ) {
       throw new TraceEvidenceError('SQL query arguments could not be read and cannot be graded.');
     }
     return undefined;
