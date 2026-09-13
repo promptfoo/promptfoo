@@ -1,3 +1,4 @@
+import { chromium } from 'playwright';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
 import {
@@ -280,6 +281,24 @@ describe('OpenAiChatKitProvider', () => {
 
       // Should not throw when cleaning up uninitialized provider
       await expect(provider.cleanup()).resolves.toBeUndefined();
+    });
+
+    it('closes a browser that arrives after cleanup', async () => {
+      let finishLaunch!: (browser: any) => void;
+      const launching = new Promise<any>((resolve) => {
+        finishLaunch = resolve;
+      });
+      const browser = { close: vi.fn().mockResolvedValue(undefined) };
+      vi.mocked(chromium.launch).mockReturnValueOnce(launching);
+      const provider = new OpenAiChatKitProvider('wf_test', {
+        config: { apiKey: 'test-key', usePool: false },
+      });
+      const initialization = (provider as any).initialize();
+      await vi.waitFor(() => expect(chromium.launch).toHaveBeenCalledOnce());
+      await provider.cleanup();
+      finishLaunch(browser);
+      await expect(initialization).rejects.toThrow('cancelled during cleanup');
+      expect(browser.close).toHaveBeenCalledOnce();
     });
   });
 
