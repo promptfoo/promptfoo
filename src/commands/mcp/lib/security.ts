@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 
 import { parse as parseCsv } from 'csv-parse/sync';
 import { globSync } from 'glob';
@@ -276,9 +277,7 @@ function renderConfigFileReferenceForValidation(value: string, state: ProviderVa
 
 function validateConfigFileReference(value: string, state: ProviderValidationState): void {
   const rendered = renderConfigFileReferenceForValidation(value, state);
-  const withoutProtocol = rendered.startsWith(FILE_PROVIDER_PREFIX)
-    ? rendered.slice(FILE_PROVIDER_PREFIX.length)
-    : rendered;
+  const withoutProtocol = stripFileUrlForValidation(rendered);
   const filePath = stripConfigFileExport(withoutProtocol);
   const matches = globSync(filePath, {
     absolute: true,
@@ -293,12 +292,21 @@ function validateConfigFileReference(value: string, state: ProviderValidationSta
 
 function resolveConfigFileReference(value: string, state: ProviderValidationState): string {
   const rendered = renderConfigFileReferenceForValidation(value, state);
-  const withoutProtocol = rendered.startsWith(FILE_PROVIDER_PREFIX)
-    ? rendered.slice(FILE_PROVIDER_PREFIX.length)
-    : rendered;
+  const withoutProtocol = stripFileUrlForValidation(rendered);
   const filePath = stripConfigFileExport(withoutProtocol);
   validateStateFilePath(filePath, state);
   return path.resolve(state.basePath, filePath);
+}
+
+function stripFileUrlForValidation(value: string): string {
+  if (!value.startsWith(FILE_PROVIDER_PREFIX)) {
+    return value;
+  }
+  // Preserve Promptfoo's relative file://config.yaml convention, while matching
+  // the runtime's absolute normalization for the standard localhost authority.
+  return /^file:\/\/localhost(?:\/|$)/i.test(value)
+    ? fileURLToPath(value)
+    : value.slice(FILE_PROVIDER_PREFIX.length);
 }
 
 function validateJsonSchemaRef(
@@ -423,6 +431,10 @@ function validateFileReferencesInValue(
 
   const object = getObject(value);
   if (object) {
+    if (providerConfigContext) {
+      validateProviderConfigCodeReferences(object, state);
+      validateMultipartPaths(object, state);
+    }
     if (assertionContext && typeof object.type === 'string') {
       validateCodeReference(object.transform, 'assertion transform', state);
       validateCodeReference(object.contextTransform, 'assertion contextTransform', state);
@@ -446,7 +458,7 @@ function validateFileReferencesInValue(
     }
     for (const [key, entry] of Object.entries(object)) {
       if (key === 'vars') {
-        validateLocalConfigFileReferences(entry, state, true, true);
+        validateLocalConfigFileReferences(entry, state, true, true, true);
       }
       if (key === '$ref') {
         validateJsonSchemaRef(entry, state, assertionContext, providerConfigContext);
@@ -485,6 +497,7 @@ function validateLocalConfigFileReferences(
   state: ProviderValidationState,
   recurseObjectValues = false,
   inspectContents = false,
+  varsContext = false,
 ): void {
   if (typeof value === 'string') {
     const renderedValue = renderEnvOnlyInObject(value, state.env);
@@ -511,7 +524,7 @@ function validateLocalConfigFileReferences(
               match,
             );
           }
-          validateStaticConfigFile(match, state);
+          validateStaticConfigFile(match, state, false, false, false, varsContext);
         }
       }
     }
@@ -520,7 +533,13 @@ function validateLocalConfigFileReferences(
 
   if (Array.isArray(value)) {
     value.forEach((entry) =>
-      validateLocalConfigFileReferences(entry, state, recurseObjectValues, inspectContents),
+      validateLocalConfigFileReferences(
+        entry,
+        state,
+        recurseObjectValues,
+        inspectContents,
+        varsContext,
+      ),
     );
     return;
   }
@@ -542,7 +561,13 @@ function validateLocalConfigFileReferences(
     }
     if (recurseObjectValues) {
       Object.values(object).forEach((entry) =>
-        validateLocalConfigFileReferences(entry, state, recurseObjectValues, inspectContents),
+        validateLocalConfigFileReferences(
+          entry,
+          state,
+          recurseObjectValues,
+          inspectContents,
+          varsContext,
+        ),
       );
     }
   }
@@ -563,7 +588,7 @@ function validateStaticConfigLocalReferences(
   }
   validateLocalConfigFileReferences(rootConfig.tests, state, false, true);
   validateLocalConfigFileReferences(rootConfig.defaultTest, state, false, true);
-  validateLocalConfigFileReferences(rootConfig.scenarios, state, false, true);
+  validateLocalConfigFileReferences(rootConfig.scenarios, state, true, true);
   validateLocalConfigFileReferences(rootConfig.outputPath, state);
   for (const envPath of [getObject(rootConfig.commandLineOptions)?.envPath].flat()) {
     if (typeof envPath === 'string') {
@@ -630,6 +655,17 @@ function validateProviderConfigCodeReferences(
   ]) {
     validateCodeReference(configObject?.[key], key, state);
   }
+  const runOptions = getObject(configObject?.runOptions);
+  for (const key of ['sessionInputCallback', 'callModelInputFilter', 'toolErrorFormatter']) {
+    validateCodeReference(runOptions?.[key], `runOptions ${key}`, state);
+  }
+  const errorHandlers = getObject(runOptions?.errorHandlers);
+  Object.values(errorHandlers ?? {}).forEach((handler) =>
+    validateCodeReference(handler, 'runOptions error handler', state),
+  );
+  Object.values(getObject(configObject?.functionToolCallbacks) ?? {}).forEach((callback) =>
+    validateCodeReference(callback, 'function tool callback', state),
+  );
 }
 
 function validateMultipartPaths(
@@ -668,7 +704,12 @@ function validateProviderConfigPaths(
       validateStateFilePath(config[key], state);
     }
   }
-  if (providerId !== 'openai:codex-security' && !providerId.startsWith('openai:codex-security:')) {
+  const isAgenticProvider = [
+    'openai:codex-security',
+    'openai:codex-sdk',
+    'openai:codex-app-server',
+  ].some((id) => providerId === id || providerId.startsWith(`${id}:`));
+  if (!isAgenticProvider) {
     return;
   }
   for (const key of [
@@ -681,6 +722,13 @@ function validateProviderConfigPaths(
   ]) {
     if (typeof config?.[key] === 'string') {
       validateStateFilePath(config[key], state);
+    }
+  }
+  for (const directory of Array.isArray(config?.additional_directories)
+    ? config.additional_directories
+    : []) {
+    if (typeof directory === 'string') {
+      validateStateFilePath(directory, state);
     }
   }
   for (const filePath of Array.isArray(config?.knowledge_base_paths)
@@ -714,6 +762,10 @@ function validateProviderReferenceWithState(
     : mergeProviderEnv(state.env, descriptor.loadOptions.env);
   const providerState = { ...state, env };
 
+  if (typeof providerState.env?.OPENCLAW_CONFIG_PATH === 'string') {
+    validateConfigFileReference(providerState.env.OPENCLAW_CONFIG_PATH, providerState);
+  }
+
   validateFileReferencesInValue(descriptor.loadOptions, providerState);
   const renderedProviderId = renderProviderIdForValidation(
     descriptor.loadProviderPath,
@@ -743,12 +795,6 @@ function validateProviderReferenceWithState(
         validateConfigFileReference(container[key], providerState);
       }
     }
-  }
-  const functionToolCallbacks = getObject(configObject?.functionToolCallbacks);
-  if (functionToolCallbacks) {
-    Object.values(functionToolCallbacks).forEach((callback) =>
-      validateCodeReference(callback, 'function tool callback', providerState),
-    );
   }
   validateCodeReference(
     getObject(configObject?.session)?.responseParser,
@@ -878,8 +924,12 @@ function validateStaticConfigContents(
   state: ProviderValidationState,
   assertionContext = false,
   providerConfigContext = false,
+  varsContext = false,
 ): void {
   validateFileReferencesInValue(value, state, assertionContext, providerConfigContext);
+  if (varsContext) {
+    validateVarsPathValues(value, state);
+  }
 
   if (Array.isArray(value)) {
     return;
@@ -917,6 +967,7 @@ function validateStaticConfigFile(
   preserveBasePath = false,
   assertionContext = false,
   providerConfigContext = false,
+  varsContext = false,
 ): void {
   const extension = path.extname(configPath).toLowerCase();
   if (!STATIC_CONFIG_EXTENSIONS.has(extension) || !fs.existsSync(configPath)) {
@@ -950,13 +1001,38 @@ function validateStaticConfigFile(
     configState.env,
     assertionContext,
     providerConfigContext,
+    varsContext,
   ]);
   if (state.validatedConfigFiles.has(cacheKey)) {
     return;
   }
   state.validatedConfigFiles.add(cacheKey);
 
-  validateStaticConfigContents(rawConfig, configState, assertionContext, providerConfigContext);
+  validateStaticConfigContents(
+    rawConfig,
+    configState,
+    assertionContext,
+    providerConfigContext,
+    varsContext,
+  );
+}
+
+function validateVarsPathValues(value: unknown, state: ProviderValidationState): void {
+  if (Array.isArray(value)) {
+    value.forEach((entry) => validateVarsPathValues(entry, state));
+    return;
+  }
+  const object = getObject(value);
+  if (!object) {
+    return;
+  }
+  for (const [key, entry] of Object.entries(object)) {
+    if (['audioFile', 'audioOutputPath'].includes(key) && typeof entry === 'string') {
+      validateStateFilePath(entry, state);
+    } else {
+      validateVarsPathValues(entry, state);
+    }
+  }
 }
 
 function validateProviderIdWithState(providerId: string, state: ProviderValidationState): void {
@@ -1045,13 +1121,14 @@ export function validateMcpProviderPrompt(
   prompt: string,
   requestedProviderId?: string,
 ): void {
-  const providerId =
-    requestedProviderId ?? (typeof provider.id === 'function' ? provider.id() : provider.id);
-  if (
-    providerId.startsWith('openai:transcription:') ||
-    providerId.startsWith('elevenlabs:stt:') ||
-    providerId === 'elevenlabs:isolation'
-  ) {
+  const resolvedProviderId = typeof provider.id === 'function' ? provider.id() : provider.id;
+  const isAudioProvider = (providerId: string | undefined) =>
+    providerId === 'openai:transcription' ||
+    providerId?.startsWith('openai:transcription:') ||
+    providerId === 'elevenlabs:stt' ||
+    providerId?.startsWith('elevenlabs:stt:') ||
+    providerId === 'elevenlabs:isolation';
+  if (isAudioProvider(requestedProviderId) || isAudioProvider(resolvedProviderId)) {
     validateMcpFilePath(prompt.trim());
   }
 }

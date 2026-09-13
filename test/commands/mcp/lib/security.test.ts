@@ -281,7 +281,9 @@ describe('MCP Security', () => {
     });
 
     it.each([
+      'openai:transcription',
       'openai:transcription:gpt-transcribe',
+      'elevenlabs:stt',
       'elevenlabs:stt:fixture',
       'elevenlabs:isolation',
     ])('guards file prompts for %s', (id) => {
@@ -296,6 +298,13 @@ describe('MCP Security', () => {
           { id: 'friendly label' },
           path.join(root, 'outside.wav'),
           'elevenlabs:stt:fixture',
+        ),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateMcpProviderPrompt(
+          { id: 'openai:transcription' },
+          path.join(root, 'outside.wav'),
+          'file://provider.yaml',
         ),
       ).toThrow(ConfigurationError);
     });
@@ -319,6 +328,17 @@ describe('MCP Security', () => {
           config: { knowledge_base_paths: [path.join(root, 'outside')] },
         }),
       ).toThrow(ConfigurationError);
+      for (const id of ['openai:codex-sdk', 'openai:codex-app-server']) {
+        expect(() =>
+          validateProviderReference({ id, config: { working_dir: path.join(root, 'outside') } }),
+        ).toThrow(ConfigurationError);
+        expect(() =>
+          validateProviderReference({
+            id,
+            config: { additional_directories: [path.join(root, 'outside')] },
+          }),
+        ).toThrow(ConfigurationError);
+      }
     });
   });
 
@@ -739,6 +759,28 @@ describe('MCP Security', () => {
           ConfigurationError,
         );
       }
+      expect(() =>
+        validateProviderReference({
+          id: 'http://localhost:8080',
+          config: {
+            multipart: {
+              parts: [{ source: { type: 'path', path: 'file://localhost/etc/passwd' } }],
+            },
+          },
+        }),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderReference({
+          id: 'openai:agents',
+          config: { runOptions: { sessionInputCallback: '../outside.js' } },
+        }),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderReference({
+          id: 'openclaw',
+          env: { OPENCLAW_CONFIG_PATH: outside },
+        }),
+      ).toThrow(ConfigurationError);
     });
 
     it('should validate nested MCP configs on other providers', () => {
@@ -804,6 +846,16 @@ describe('MCP Security', () => {
           );
           expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);
         }
+        fs.writeFileSync(path.join(workspace, 'vars.yaml'), 'audioFile: /tmp/outside.wav\n');
+        fs.writeFileSync(
+          path.join(workspace, 'config.json'),
+          JSON.stringify({
+            prompts: ['{{audioFile}}'],
+            providers: ['echo'],
+            tests: [{ vars: 'vars.yaml' }],
+          }),
+        );
+        expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);
       } finally {
         fs.rmSync(root, { force: true, recursive: true });
       }
@@ -850,6 +902,7 @@ describe('MCP Security', () => {
       try {
         for (const config of [
           { prompts: ['hello'], providers: ['echo'], scenarios: 'scenarios.yaml' },
+          { prompts: ['hello'], providers: ['echo'], scenarios: [{ tests: '../outside.yaml' }] },
           { prompts: ['hello'], providers: ['echo'], tests: 'tests.jsonl' },
         ]) {
           fs.writeFileSync(path.join(workspace, 'config.json'), JSON.stringify(config));
@@ -857,6 +910,24 @@ describe('MCP Security', () => {
         }
       } finally {
         fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('checks executable prompt config overrides before resolution', () => {
+      const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      try {
+        fs.writeFileSync(
+          path.join(workspace, 'prompt-config.json'),
+          JSON.stringify({
+            prompts: [{ raw: 'hello', config: { functionToolCallbacks: { tool: '() => 1' } } }],
+            providers: ['echo'],
+          }),
+        );
+        expect(() => validateMcpConfigFile('prompt-config.json', workspace)).toThrow(
+          ConfigurationError,
+        );
+      } finally {
+        fs.rmSync(workspace, { force: true, recursive: true });
       }
     });
 
@@ -937,7 +1008,9 @@ describe('MCP Security', () => {
             'providers:',
             '  - $ref: "#/defs/provider"',
             'defs:',
-            '  provider: { id: "exec:node ' + path.join(tempRoot, 'outside.js') + '" }',
+            '  provider: { id: ' +
+              JSON.stringify(`exec:node ${path.join(tempRoot, 'outside.js')}`) +
+              ' }',
             '',
           ].join('\n'),
         );
