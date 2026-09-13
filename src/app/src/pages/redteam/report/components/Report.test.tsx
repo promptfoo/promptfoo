@@ -937,6 +937,7 @@ describe('App component target selector rendering', () => {
   });
 
   it('scrolls to a report section from the initial URL hash', async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus').mockImplementation(() => {});
     const scrollIntoView = vi
       .spyOn(Element.prototype, 'scrollIntoView')
       .mockImplementation(() => {});
@@ -948,7 +949,9 @@ describe('App component target selector rendering', () => {
     renderWithProviders(<App />);
 
     await screen.findByTestId('report-section-nav');
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
     expect(scrollIntoView).toHaveBeenCalled();
+    focus.mockRestore();
     scrollIntoView.mockRestore();
     window.location.hash = '';
   });

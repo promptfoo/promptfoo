@@ -170,7 +170,9 @@ const App = ({ evalId: evalIdProp, embedded, onActionsReady }: ReportProps = {})
 
   useEffect(() => {
     if (evalData && location.hash) {
-      document.getElementById(location.hash.slice(1))?.scrollIntoView();
+      const target = document.getElementById(location.hash.slice(1));
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView();
     }
   }, [evalData, location.hash]);
 
