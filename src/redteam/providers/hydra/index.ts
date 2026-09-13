@@ -691,7 +691,9 @@ export class HydraProvider implements ApiProvider {
       const targetSessionId = targetResponse.sessionId;
       if (redactTrace) {
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
-        redactionError ??= targetResponse.error;
+        if (targetResponse.metadata?.redactionMediaOmitted === true) {
+          redactionError ??= targetResponse.error;
+        }
       }
       lastTargetResponse = targetResponse;
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);

@@ -156,6 +156,9 @@ describe('RedteamGoatProvider', () => {
         ),
       );
       expect(target.callApi).toHaveBeenCalled();
+      if (conversationEnded) {
+        expect(target.callApi).toHaveBeenCalledTimes(1);
+      }
       if (isMedia) {
         expect(result.error).toContain('redaction cannot be verified');
       } else {

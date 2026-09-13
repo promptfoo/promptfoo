@@ -1920,6 +1920,23 @@ describe('redteam history blob storage', () => {
     expect(response.raw.secret).toBe('PRIVATE_RAW_HISTORY_8964');
   });
 
+  it('preserves conversation termination without its private reason', async () => {
+    const history = await externalizeResponseForRedteamHistory(
+      {
+        output: 'Clean report',
+        conversationEnded: true,
+        conversationEndReason: 'PRIVATE_CONVERSATION_END_REASON',
+      },
+      {
+        test: {
+          assert: [{ type: 'promptfoo:redteam:coding-agent:trace-redaction' }],
+        } as AtomicTestCase,
+      },
+    );
+    expect(history.conversationEnded).toBe(true);
+    expect(history).not.toHaveProperty('conversationEndReason');
+  });
+
   it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'])(
     'retains %s text only for its local grading call',
     async (plugin) => {

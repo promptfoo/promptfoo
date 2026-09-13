@@ -992,6 +992,20 @@ describe('coding-agent evidence regressions', () => {
         { video: { id: 'private-video' } },
         { audio: { id: 'private-audio' } },
         { output: 'data:video/mp4;base64,PRIVATE_VIDEO' },
+        { output: '![report](https://example.invalid/private.png)' },
+        { output: '![report][image]\n\n[image]: https://example.invalid/private.png' },
+        { output: '<img src="https://example.invalid/private.png">' },
+        {
+          output: [
+            { type: 'image_url', image_url: { url: 'https://example.invalid/private.png' } },
+          ],
+        },
+        { output: [{ type: 'input_image', image_url: 'https://example.invalid/private.png' }] },
+        {
+          output: JSON.stringify({
+            content: [{ type: 'image', source: { url: 'https://example.invalid/private.png' } }],
+          }),
+        },
       ]) {
         expect(() =>
           findDeterministicLeak(pluginId, 'Clean report', testCase, undefined, {
@@ -999,6 +1013,11 @@ describe('coding-agent evidence regressions', () => {
           }),
         ).toThrow(/video.*redaction.*verified/i);
       }
+      expect(
+        findDeterministicLeak(pluginId, 'https://example.invalid/report', testCase, undefined, {
+          providerResponse: { output: 'https://example.invalid/report' },
+        }),
+      ).toBeUndefined();
     },
   );
 

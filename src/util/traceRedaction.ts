@@ -29,7 +29,9 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
     if (typeof value === 'string') {
       if (
         value.includes(BLOB_SCHEME) ||
-        /data:(?:audio|image|video)\/|<svg(?:\s|\/?>)/i.test(value)
+        /data:(?:audio|image|video)\/|<(?:svg|img|audio|video|picture|source)(?:\s|\/?>)|!\[[^\]\n]*\]/i.test(
+          value,
+        )
       ) {
         return true;
       }
@@ -50,6 +52,11 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
         record.isBase64 === true ||
         (typeof record.b64_json === 'string' && record.b64_json.length > 0) ||
         (Array.isArray(record.images) && record.images.length > 0) ||
+        (typeof record.type === 'string' &&
+          /^(?:(?:input|output)_)?(?:image|audio|video)(?:_url)?$/.test(record.type)) ||
+        record.image_url ||
+        record.audio_url ||
+        record.video_url ||
         audio?.id ||
         audio?.data ||
         audio?.blobRef ||
@@ -118,6 +125,7 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
         ? '[Media response omitted: image, audio, or video redaction could not be verified.]'
         : '[Response omitted for trace/artifact redaction.]',
       ...(response.error && { error: 'Error details omitted for trace/artifact redaction.' }),
+      ...(response.conversationEnded === true && { conversationEnded: true }),
       cached: typeof response.cached === 'boolean' ? response.cached : undefined,
       metadata: mediaOmitted ? { redactionMediaOmitted: true } : { redactionContentOmitted: true },
     },

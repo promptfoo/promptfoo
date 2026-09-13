@@ -1478,6 +1478,54 @@ describe('HydraProvider', () => {
     );
 
     it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+      'recovers from a transient target error for %s',
+      async (pluginId) => {
+        mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+        mockTargetProvider.callApi
+          .mockResolvedValueOnce({ error: 'PRIVATE_TRANSIENT_TARGET_ERROR' })
+          .mockResolvedValueOnce({ output: 'Clean report' });
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: {
+            assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+            metadata: { goal: 'test goal', pluginId },
+          } as AtomicTestCase,
+        });
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(result.error).toBeUndefined();
+        expect(JSON.stringify(result)).not.toContain('PRIVATE_TRANSIENT_TARGET_ERROR');
+      },
+    );
+
+    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+      'stops at a private conversation end for %s',
+      async (pluginId) => {
+        mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+        mockTargetProvider.callApi.mockResolvedValue({
+          output: 'Clean report',
+          conversationEnded: true,
+          conversationEndReason: 'PRIVATE_CONVERSATION_END_REASON',
+        });
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: {
+            assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+            metadata: { goal: 'test goal', pluginId },
+          } as AtomicTestCase,
+        });
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+        expect(result.metadata?.stopReason).toBe('Target ended conversation');
+        expect(JSON.stringify(result)).not.toContain('PRIVATE_CONVERSATION_END_REASON');
+      },
+    );
+
+    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
       'retains an earlier unverifiable media error for %s',
       async (pluginId) => {
         mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
