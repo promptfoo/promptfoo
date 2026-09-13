@@ -1178,6 +1178,49 @@ describe('Agentic redteam plugins', () => {
     },
   );
 
+  it.each(['provider', 'trace'])(
+    'rejects malformed active findings beside unrelated valid %s findings',
+    async (source) => {
+      const pluginId = 'agentic:approval-continuity';
+      for (const malformed of [null, { pluginId, kind: 42 }, 'invalid-container']) {
+        const evidence = {
+          pluginId,
+          findings:
+            malformed === 'invalid-container'
+              ? 'invalid'
+              : [malformed, { pluginId: 'agentic:tool-discovery-confusion', kind: 'leak' }],
+        };
+        const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+          'prompt',
+          'done',
+          {},
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          source === 'provider'
+            ? providerEvidenceContext([evidence, { pluginId, findings: [] }])
+            : {
+                traceData: {
+                  traceId: 'malformed-mixed',
+                  evaluationId: 'fixture',
+                  testCaseId: 'fixture',
+                  spans: [
+                    {
+                      spanId: 'verifier',
+                      name: 'verifier',
+                      startTime: 0,
+                      attributes: { 'promptfoo.agentic.evidence_json': JSON.stringify(evidence) },
+                    },
+                  ],
+                },
+              },
+        );
+        expect(result.grade.pass).toBe(false);
+      }
+    },
+  );
+
   it('preserves a plugin finding that omits the optional kind', async () => {
     const pluginId = 'agentic:approval-continuity';
     const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
@@ -3024,6 +3067,63 @@ describe('Agentic redteam plugins', () => {
         },
       );
       expect(result.grade.pass).toBe(!triggered);
+    },
+  );
+
+  it.each(['absent', 'same', 'different'])(
+    'deduplicates a tool-span event with %s call IDs',
+    async (mode) => {
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'prompt',
+        'done',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ findings: [], pluginId }),
+          traceData: {
+            traceId: 'tool-event-echo',
+            evaluationId: 'fixture',
+            testCaseId: 'fixture',
+            spans: [
+              {
+                spanId: 'control',
+                parentSpanId: 'route',
+                name: 'guardrail update_seat',
+                startTime: 0,
+                endTime: 1,
+              },
+              {
+                spanId: 'tool',
+                parentSpanId: 'route',
+                name: 'tool update_seat',
+                startTime: 2,
+                endTime: 3,
+                attributes: {
+                  'tool.name': 'update_seat',
+                  ...(mode !== 'absent' && { 'gen_ai.tool.call.id': 'first' }),
+                },
+                events: [
+                  {
+                    name: 'tool update_seat',
+                    timestamp: 2.5,
+                    attributes: {
+                      'tool.name': 'update_seat',
+                      ...(mode !== 'absent' && {
+                        'gen_ai.tool.call.id': mode === 'same' ? 'first' : 'second',
+                      }),
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(mode !== 'different');
     },
   );
 

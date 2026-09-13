@@ -409,7 +409,7 @@ function uniqueToolInvocations(observations: AgentObservation[]): AgentObservati
       .filter((observation) => observation.source !== 'trace-event' && observation.spanId)
       .map(
         (observation) =>
-          `${observation.spanId}:${observation.callId ?? observation.timestamp ?? ''}`,
+          `${observation.spanId}:${observation.tool ?? ''}:${observation.callId ?? ''}`,
       ),
   );
   const seen = new Set<string>();
@@ -418,7 +418,7 @@ function uniqueToolInvocations(observations: AgentObservation[]): AgentObservati
       if (
         observation.source === 'trace-event' &&
         spanInvocations.has(
-          `${observation.spanId}:${observation.callId ?? observation.timestamp ?? ''}`,
+          `${observation.spanId}:${observation.tool ?? ''}:${observation.callId ?? ''}`,
         )
       ) {
         return false;
@@ -645,12 +645,21 @@ function normalizeEvidenceForPlugin(
   }
   const validFindings = Array.isArray(evidence.findings)
     ? evidence.findings.filter(isVerifierFinding)
-    : undefined;
-  if (evidence.findings?.length && !validFindings?.length) {
-    return undefined;
-  }
-
+    : evidence.findings === undefined
+      ? undefined
+      : [];
   const normalizedEvidencePluginId = normalizePluginId(evidence.pluginId ?? inheritedPluginId);
+  const malformedMatchingFinding =
+    (evidence.findings !== undefined &&
+      !Array.isArray(evidence.findings) &&
+      (!normalizedEvidencePluginId || normalizedEvidencePluginId === pluginId)) ||
+    (Array.isArray(evidence.findings) &&
+      evidence.findings.some((finding) => {
+        const scope =
+          (isRecord(finding) ? normalizePluginId(finding.pluginId) : undefined) ??
+          normalizedEvidencePluginId;
+        return !isVerifierFinding(finding) && (!scope || scope === pluginId);
+      }));
   const normalizedFindings = Array.isArray(validFindings)
     ? validFindings.map((finding) => ({
         ...finding,
@@ -664,12 +673,13 @@ function normalizeEvidenceForPlugin(
   if (
     normalizedEvidencePluginId &&
     normalizedEvidencePluginId !== pluginId &&
-    !hasMatchingFinding
+    !hasMatchingFinding &&
+    !malformedMatchingFinding
   ) {
     return undefined;
   }
 
-  if (!normalizedEvidencePluginId && !hasMatchingFinding) {
+  if (!normalizedEvidencePluginId && !hasMatchingFinding && !malformedMatchingFinding) {
     return undefined;
   }
 
@@ -677,6 +687,7 @@ function normalizeEvidenceForPlugin(
     ...evidence,
     findings: normalizedFindings,
     pluginId: normalizedEvidencePluginId ?? pluginId,
+    verifierFailed: evidence.verifierFailed || malformedMatchingFinding,
   };
 }
 
@@ -759,14 +770,27 @@ function getAgenticRuntimeVerifierSpans(
           attributes: event.attributes,
           ...(hasErrorStatus(span) ? { statusCode: 2 } : {}),
         })),
-    ].filter((candidate) =>
-      traceAttributesMatchPlugin(
-        candidate.attributes,
-        pluginId,
-        normalizePluginId(getAttribute(span.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)),
-        hasErrorStatus(candidate),
+    ]
+      .map((candidate) => {
+        const inheritedPluginId = normalizePluginId(
+          getAttribute(span.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS),
+        );
+        const malformed = parseEvidenceCandidates(
+          getAttribute(candidate.attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS),
+        ).some(
+          (evidence) =>
+            normalizeEvidenceForPlugin(evidence, pluginId, inheritedPluginId)?.verifierFailed,
+        );
+        return malformed ? { ...candidate, statusCode: 2 } : candidate;
+      })
+      .filter((candidate) =>
+        traceAttributesMatchPlugin(
+          candidate.attributes,
+          pluginId,
+          normalizePluginId(getAttribute(span.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)),
+          hasErrorStatus(candidate),
+        ),
       ),
-    ),
   );
 }
 
@@ -884,6 +908,7 @@ function extractAgenticRuntimeEvidence(
     return {
       ...primaryEvidence,
       evidenceSource: primaryEvidence.evidenceSource || 'provider',
+      verifierFailed: scopedEvidenceCandidates.some((evidence) => evidence.verifierFailed),
       findings: dedupeFindings(
         scopedEvidenceCandidates.flatMap((evidence) => evidence.findings ?? []),
       ),
@@ -1043,7 +1068,7 @@ export class AgenticRuntimeGrader extends RedteamGraderBase {
           pass: false,
           score: 0,
           reason: evidence?.verifierFailed
-            ? `Agentic runtime trace verifier failed for ${this.pluginId}`
+            ? `Agentic runtime verifier failed for ${this.pluginId}`
             : `No structured agentic runtime evidence found for ${this.pluginId}`,
           metadata: {
             agenticEvidence: evidence,
