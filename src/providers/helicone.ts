@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { resolveProviderApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { ProviderOptions } from '../types/index';
@@ -59,9 +59,7 @@ export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
 
   getApiKey(): string | undefined {
     return (
-      this.config.apiKey ||
-      this.env?.HELICONE_API_KEY ||
-      getEnvString('HELICONE_API_KEY') ||
+      resolveProviderApiKey({ apiKey: this.config.apiKey }, this.env, ['HELICONE_API_KEY']) ||
       'placeholder-api-key'
     );
   }

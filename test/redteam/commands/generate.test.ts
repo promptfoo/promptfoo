@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
+import { getEnvOverrides } from '../../../src/envOverrides';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -324,6 +325,77 @@ describe('doGenerateRedteam', () => {
         redteam: {},
       },
     });
+  });
+
+  it.each([
+    { mode: 'single-purpose', contexts: undefined, expectedCalls: 1 },
+    { mode: 'multiple-context', contexts: [{ id: 'first' }, { id: 'second' }], expectedCalls: 2 },
+  ])(
+    'keeps the request environment during $mode generation despite another config load',
+    async ({ contexts, expectedCalls }) => {
+      const env = { ANTHROPIC_API_KEY: 'fixture-request-key' };
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [],
+          tests: [],
+          defaultTest: { options: { provider: 'request-default-provider' } },
+        },
+        config: { env, redteam: { contexts } },
+      });
+      vi.mocked(synthesize).mockImplementation(async (options) => {
+        cliState.config = { env: { OPENAI_API_KEY: 'fixture-other-request' } };
+        await Promise.resolve();
+        expect(getEnvOverrides()).toEqual(env);
+        expect(options.requestScoped).toBe(true);
+        expect(options.fallbackProvider).toBe('request-default-provider');
+        return {
+          testCases: [],
+          purpose: 'hello',
+          entities: [],
+          injectVar: 'input',
+          failedPlugins: [],
+        };
+      });
+      mockReadFileSync({ prompts: [], providers: [], tests: [] });
+      await doGenerateRedteam({ config: 'config.yaml', output: 'isolated.yaml', force: true });
+      expect(synthesize).toHaveBeenCalledTimes(expectedCalls);
+    },
+  );
+
+  it('uses the resolved relative default provider as the request-owned generation fallback', async () => {
+    const resolvedProvider = createMockProvider({ id: 'request-owned-file-provider' });
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/nested/config',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [],
+        tests: [],
+        defaultTest: { provider: 'file://grader.mjs' },
+      },
+      config: { redteam: {}, defaultTest: { provider: resolvedProvider } },
+    });
+    vi.mocked(synthesize).mockImplementationOnce(async (options) => {
+      cliState.config = { defaultTest: { provider: 'unrelated-provider' } };
+      await Promise.resolve();
+      expect(options.requestScoped).toBe(true);
+      expect(options.fallbackProvider).toBe(resolvedProvider);
+      return {
+        testCases: [],
+        purpose: 'hello',
+        entities: [],
+        injectVar: 'input',
+        failedPlugins: [],
+      };
+    });
+    mockReadFileSync({ prompts: [], providers: [], tests: [] });
+    await doGenerateRedteam({
+      config: '/nested/config/config.yaml',
+      output: 'isolated.yaml',
+      force: true,
+    });
+    expect(synthesize).toHaveBeenCalledOnce();
   });
 
   it('should generate redteam tests and write to output file', async () => {

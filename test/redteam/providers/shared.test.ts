@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import {
+  getEnvOverrides,
+  setEnvOverridesProvider,
+  withEnvOverrides,
+} from '../../../src/envOverrides';
 import { PromptfooChatCompletionProvider } from '../../../src/providers/promptfoo';
 import {
   ATTACKER_MODEL,
@@ -45,6 +50,7 @@ import type {
 // Hoisted mocks for class constructor and loadApiProviders
 const mockLoadApiProviders = vi.hoisted(() => vi.fn());
 const mockCheckServerFeatureSupport = vi.hoisted(() => vi.fn());
+const mockGetDefaultProviders = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 // Create a hoisted mock class that can be instantiated with `new`
 const mockOpenAiInstances: any[] = [];
 const MockOpenAiChatCompletionProvider = vi.hoisted(() => {
@@ -99,6 +105,9 @@ vi.mock('../../../src/providers/openai/chat', () => ({
 vi.mock('../../../src/providers/index', () => ({
   loadApiProviders: mockLoadApiProviders,
 }));
+vi.mock('../../../src/providers/defaults', () => ({
+  getDefaultProviders: mockGetDefaultProviders,
+}));
 vi.mock('../../../src/util/server', () => ({
   checkServerFeatureSupport: mockCheckServerFeatureSupport,
 }));
@@ -106,6 +115,7 @@ vi.mock('../../../src/util/server', () => ({
 const mockedSleep = vi.mocked(sleep);
 const mockedLoadApiProviders = mockLoadApiProviders;
 const mockedCheckServerFeatureSupport = mockCheckServerFeatureSupport;
+const mockedGetDefaultProviders = mockGetDefaultProviders;
 
 function setCliStateConfig(config: typeof cliState.config) {
   cliState.config = config;
@@ -163,6 +173,7 @@ describe('shared redteam provider utilities', () => {
   });
 
   afterEach(() => {
+    setEnvOverridesProvider(undefined);
     resetRedteamProviderLoader();
     vi.resetAllMocks();
   });
@@ -175,6 +186,8 @@ describe('shared redteam provider utilities', () => {
     mockedSleep.mockReset();
     mockedLoadApiProviders.mockReset();
     mockedCheckServerFeatureSupport.mockReset();
+    mockedGetDefaultProviders.mockReset();
+    mockedGetDefaultProviders.mockResolvedValue({});
 
     // Clear the instances array
     mockOpenAiInstances.length = 0;
@@ -192,6 +205,7 @@ describe('shared redteam provider utilities', () => {
         provider: undefined,
       },
     });
+    setEnvOverridesProvider(() => cliState.config?.env);
   });
 
   describe('RedteamProviderManager', () => {
@@ -207,6 +221,17 @@ describe('shared redteam provider utilities', () => {
         temperature: TEMPERATURE,
         response_format: undefined,
       });
+    });
+
+    it('uses runtime-configured redteam temperature for the OpenAI fallback', async () => {
+      setCliStateConfig({
+        env: { PROMPTFOO_JAILBREAK_TEMPERATURE: '0' },
+        redteam: { provider: undefined },
+      });
+
+      await redteamProviderManager.getProvider({});
+
+      expect(mockOpenAiInstances[0].config.temperature).toBe(0);
     });
 
     it('clears cached providers', async () => {
@@ -472,6 +497,19 @@ describe('shared redteam provider utilities', () => {
       expect(mockedLoadApiProviders).not.toHaveBeenCalled();
     });
 
+    it('bypasses a preloaded provider for an independent generation request', async () => {
+      mockedLoadApiProviders.mockResolvedValue([mockApiProvider]);
+      await redteamProviderManager.setProvider('unrelated-cached-provider');
+      const expected = createMockProvider({ id: 'request-default' });
+      mockedGetDefaultProviders.mockResolvedValue({ redteamProvider: expected });
+      const selection = await redteamProviderManager.getProviderSelection({
+        ignoreCliState: true,
+        ignoreCache: true,
+      });
+      expect(selection.source).toBe('default');
+      expect(selection.provider).toBe(expected);
+    });
+
     it('keeps the cache ahead of ignoreCliState preview defaults', async () => {
       const cachedProvider = createMockProvider({ id: 'cached-provider' });
       mockedLoadApiProviders.mockResolvedValue([cachedProvider]);
@@ -644,11 +682,121 @@ describe('shared redteam provider utilities', () => {
         expect(mockedLoadApiProviders).toHaveBeenCalledWith(['redteam-explicit-provider']);
       });
 
+      it('uses provider defaults when no redteam.provider or defaultTest provider is set', async () => {
+        redteamProviderManager.clearProvider();
+        const defaultRedteamProvider = createMockProvider({ id: 'defaults-redteam-provider' });
+        mockedGetDefaultProviders.mockResolvedValue({
+          redteamProvider: defaultRedteamProvider,
+        });
+        const env = { ANTHROPIC_API_KEY: 'config-anthropic-key' };
+
+        setCliStateConfig({
+          env,
+          redteam: {
+            provider: undefined,
+          },
+        });
+
+        const got = await redteamProviderManager.getProvider({});
+        expect(got).toBe(defaultRedteamProvider);
+        expect(mockedGetDefaultProviders).toHaveBeenCalledWith(env);
+        expect(mockOpenAiInstances.length).toBe(0);
+      });
+
+      it('keeps automatic selection isolated across interleaved request environments', async () => {
+        // Initialize the dynamic-import mock before interleaving calls through its factory.
+        await import('../../../src/providers/defaults');
+        let enterFirst!: () => void;
+        const firstEntered = new Promise<void>((resolve) => {
+          enterFirst = resolve;
+        });
+        let releaseFirst!: () => void;
+        const firstBlocked = new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        });
+        const observed: string[] = [];
+        mockedGetDefaultProviders.mockImplementation(async (env) => {
+          if (env.ANTHROPIC_API_KEY) {
+            enterFirst();
+            await firstBlocked;
+          }
+          const current = getEnvOverrides();
+          const id = current?.ANTHROPIC_API_KEY ? 'anthropic:request-a' : 'openai:request-b';
+          observed.push(id);
+          return { redteamProvider: createMockProvider({ id }) };
+        });
+        const first = withEnvOverrides({ ANTHROPIC_API_KEY: 'fixture-a' }, () =>
+          redteamProviderManager.getProvider({ ignoreCliState: true }),
+        );
+        await firstEntered;
+        const second = await withEnvOverrides({ OPENAI_API_KEY: 'fixture-b' }, () =>
+          redteamProviderManager.getProvider({ ignoreCliState: true }),
+        );
+        setCliStateConfig({ env: { OPENAI_API_KEY: 'unrelated-global-key' } });
+        releaseFirst();
+        const firstProvider = await first;
+        expect(mockedGetDefaultProviders).toHaveBeenCalledTimes(2);
+        expect(observed).toEqual(['openai:request-b', 'anthropic:request-a']);
+        expect(firstProvider.id()).toBe('anthropic:request-a');
+        expect(second.id()).toBe('openai:request-b');
+      });
+
+      it('uses the selected provider JSON variant when jsonOnly is requested', async () => {
+        redteamProviderManager.clearProvider();
+        const defaultRedteamProvider = createMockProvider({ id: 'defaults-redteam-provider' });
+        const defaultRedteamJsonProvider = createMockProvider({
+          id: 'defaults-redteam-json-provider',
+        });
+        mockedGetDefaultProviders.mockResolvedValue({
+          redteamProvider: defaultRedteamProvider,
+          redteamJsonProvider: defaultRedteamJsonProvider,
+        });
+
+        const got = await redteamProviderManager.getProvider({ jsonOnly: true });
+
+        expect(got).toBe(defaultRedteamJsonProvider);
+        expect(mockedGetDefaultProviders).toHaveBeenCalledTimes(1);
+        expect(mockOpenAiInstances.length).toBe(0);
+      });
+
+      it('keeps structured work on a selected non-OpenAI provider when small is preferred', async () => {
+        redteamProviderManager.clearProvider();
+        const defaultRedteamProvider = createMockProvider({ id: 'defaults-redteam-provider' });
+        const defaultRedteamJsonProvider = createMockProvider({
+          id: 'defaults-redteam-json-provider',
+        });
+        mockedGetDefaultProviders.mockResolvedValue({
+          redteamProvider: defaultRedteamProvider,
+          redteamJsonProvider: defaultRedteamJsonProvider,
+        });
+
+        const got = await redteamProviderManager.getProvider({
+          jsonOnly: true,
+          preferSmallModel: true,
+        });
+
+        expect(got).toBe(defaultRedteamJsonProvider);
+        expect(mockedGetDefaultProviders).toHaveBeenCalledTimes(1);
+        expect(mockOpenAiInstances.length).toBe(0);
+      });
+
+      it('surfaces default-provider selection failures instead of silently using OpenAI', async () => {
+        redteamProviderManager.clearProvider();
+        mockedGetDefaultProviders.mockRejectedValueOnce(new Error('invalid provider defaults'));
+
+        await expect(redteamProviderManager.getProvider({})).rejects.toThrow(
+          'invalid provider defaults',
+        );
+      });
+
       it('falls back to OpenAI default when neither redteam.provider nor defaultTest provider is set', async () => {
         redteamProviderManager.clearProvider();
         mockOpenAiInstances.length = 0;
+        mockedGetDefaultProviders.mockResolvedValue({});
+        const env = { PROMPTFOO_JAILBREAK_TEMPERATURE: '0.25' };
 
         setCliStateConfig({
+          env,
           redteam: {
             provider: undefined,
           },
@@ -658,6 +806,7 @@ describe('shared redteam provider utilities', () => {
         const got = await redteamProviderManager.getProvider({});
         expect(got.id()).toContain('openai:');
         expect(mockOpenAiInstances.length).toBe(1);
+        expect(mockOpenAiInstances[0].config.temperature).toBe(0.25);
       });
 
       it('wraps the defaultTest fallback provider with the configured rate limit registry', async () => {
