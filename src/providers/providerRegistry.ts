@@ -2,17 +2,11 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import logger from '../logger';
 
-/**
- * Interface for providers that need cleanup on process exit.
- */
 interface CleanupProvider {
-  shutdown(): Promise<void> | void;
+  shutdown?(): Promise<void> | void;
+  cleanup?(): Promise<void> | void;
 }
 
-/**
- * Global registry of Python providers for cleanup on process exit.
- * Ensures no zombie Python processes are left running.
- */
 class ProviderRegistry {
   private providers = new Map<CleanupProvider, Set<object | undefined>>();
   private closing = new Map<CleanupProvider, Promise<void>>();
@@ -35,8 +29,11 @@ class ProviderRegistry {
   }
 
   async adopt(provider: object): Promise<void> {
-    if ('shutdown' in provider && typeof provider.shutdown === 'function') {
-      const cleanupProvider = provider as CleanupProvider;
+    const cleanupProvider = provider as CleanupProvider;
+    if (
+      typeof cleanupProvider.shutdown === 'function' ||
+      typeof cleanupProvider.cleanup === 'function'
+    ) {
       await this.closing.get(cleanupProvider);
       this.register(cleanupProvider);
     }
@@ -44,6 +41,16 @@ class ProviderRegistry {
 
   unregister(provider: CleanupProvider): void {
     this.providers.delete(provider);
+  }
+
+  private async close(provider: CleanupProvider): Promise<void> {
+    for (const cleanup of [provider.shutdown, provider.cleanup]) {
+      try {
+        await cleanup?.call(provider);
+      } catch (error) {
+        logger.warn('Error cleaning up provider', { error });
+      }
+    }
   }
 
   private registerShutdownHandlers(): void {
@@ -55,19 +62,11 @@ class ProviderRegistry {
       }
       shuttingDown = true;
 
-      logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
+      logger.debug(`Received ${signal}, shutting down ${this.providers.size} providers...`);
 
-      await Promise.all(
-        Array.from(this.providers.keys()).map((p) =>
-          Promise.resolve()
-            .then(() => p.shutdown())
-            .catch((err) => {
-              logger.error(`Error shutting down provider: ${err}`);
-            }),
-        ),
-      );
+      await Promise.all(Array.from(this.providers.keys(), (provider) => this.close(provider)));
 
-      logger.debug('Python provider shutdown complete');
+      logger.debug('Provider shutdown complete');
     };
 
     process.once('SIGINT', () => void shutdown('SIGINT'));
@@ -95,8 +94,7 @@ class ProviderRegistry {
       }
       this.providers.delete(provider);
       const closing = Promise.resolve()
-        .then(() => provider.shutdown())
-        .catch((error) => logger.warn(`Error shutting down provider: ${error}`))
+        .then(() => this.close(provider))
         .finally(() => this.closing.delete(provider));
       this.closing.set(provider, closing);
       pending.push(closing);

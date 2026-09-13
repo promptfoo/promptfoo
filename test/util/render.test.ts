@@ -2,6 +2,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderEnvOnlyInObject, renderVarsInObject } from '../../src/util/render';
 import { mockProcessEnv } from './utils';
 
+it.each(['plain', 'class'])('preserves %s provider identity while rendering config', (kind) => {
+  class Provider {
+    id() {
+      return 'shared';
+    }
+    async callApi() {
+      return { output: 'ok' };
+    }
+  }
+  const provider =
+    kind === 'class'
+      ? new Provider()
+      : {
+          id: () => 'shared',
+          callApi: async () => ({ output: 'ok' }),
+        };
+  const rendered = renderEnvOnlyInObject(
+    { providers: [provider], description: '{{ env.LABEL }}' },
+    { LABEL: 'rendered' },
+  );
+  expect(rendered.providers[0]).toBe(provider);
+  expect(rendered.description).toBe('rendered');
+});
+
 describe('renderVarsInObject', () => {
   beforeEach(() => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: undefined });

@@ -1,5 +1,6 @@
 import { getEnvBool } from '../envars';
 import logger from '../logger';
+import { isApiProvider } from '../types/providers';
 import { getNunjucksEngine } from './templates';
 
 import type { VarValue } from '../types';
@@ -33,7 +34,7 @@ export function renderEnvOnlyInObject<T>(
   envOverrides?: EnvOverrides,
   replaceBase?: boolean,
 ): T {
-  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING') || isApiProvider(obj)) {
     return obj;
   }
 

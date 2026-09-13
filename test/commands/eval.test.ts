@@ -45,6 +45,7 @@ import {
 } from '../../src/node/retry';
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import { loadApiProvider } from '../../src/providers/index';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { generateTable } from '../../src/table';
 import {
@@ -2273,13 +2274,16 @@ describe('evalCommand', () => {
       callApi: async () => ({ output: 'ok' }),
       cleanup,
     } as ApiProvider;
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: {} as UnifiedConfig,
-      testSuite: {
-        prompts: [],
-        providers: [provider],
-      },
-      basePath: path.resolve('/'),
+    vi.mocked(resolveConfigs).mockImplementationOnce(async () => {
+      await providerRegistry.adopt(provider);
+      return {
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [provider],
+        },
+        basePath: path.resolve('/'),
+      };
     });
     vi.mocked(evaluate).mockImplementationOnce(
       async (_testSuite, evalRecord) => evalRecord as Eval,
