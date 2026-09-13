@@ -249,19 +249,16 @@ describe('OpenAiImageProvider', () => {
 
   describe('Error handling', () => {
     it('should handle missing API key', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3');
-
-      vi.mocked(fetchWithCache).mockResolvedValueOnce({
-        data: { error: { message: 'OpenAI API key is not set' } },
-        cached: false,
-        status: 401,
-        statusText: 'Unauthorized',
-      });
-
-      const result = await provider.callApi('test prompt');
-
-      expect(result).toHaveProperty('error');
-      expect(result.error).toContain('OpenAI API key is not set');
+      const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
+      try {
+        const provider = new OpenAiImageProvider('dall-e-3');
+        await expect(provider.callApi('test prompt')).rejects.toThrow(
+          getOpenAiMissingApiKeyMessage('OPENAI_API_KEY'),
+        );
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('should handle API errors', async () => {

@@ -34,6 +34,9 @@ let dbInstance: Drizzle | null = null;
 let dbPromise: Promise<Drizzle> | null = null;
 let sqliteInstance: Client | null = null;
 let sqliteInstanceIsTesting = false;
+let closePromise: Promise<void> | null = null;
+let drainOperations: (() => Promise<void>) | null = null;
+let executeForClose: Client['execute'] | null = null;
 
 function isMissingPathError(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException | null)?.code;
@@ -244,7 +247,7 @@ function serializeTopLevelOperations(
 
   const withLockRecovery = async <T>(operation: () => Promise<T>, retry: boolean): Promise<T> => {
     for (let attempt = 1; ; attempt++) {
-      // The native transaction() method does not check client.closed itself.
+      // Do not retry or reuse a client whose recovery failed.
       if (client.closed) {
         throw new Error('Database connection is closed');
       }
@@ -288,10 +291,23 @@ function serializeTopLevelOperations(
   type TransactionCallback = Parameters<typeof transaction>[0];
   type TransactionContext = Parameters<TransactionCallback>[0];
 
-  const activeTransaction = new AsyncLocalStorage<TransactionContext>();
+  type TransactionScope = { transaction: TransactionContext | undefined };
+  const activeTransaction = new AsyncLocalStorage<TransactionScope>();
   let operationQueue = Promise.resolve();
+  let closing = false;
+  executeForClose = rawExecute;
+  drainOperations = () => {
+    if (activeTransaction.getStore()?.transaction) {
+      throw new Error('Cannot close the database inside a transaction');
+    }
+    closing = true;
+    return operationQueue;
+  };
 
   const runSerialized = <T>(operation: () => Promise<T>): Promise<T> => {
+    if (closing) {
+      return Promise.reject(new Error('Database connection is closing'));
+    }
     const result = operationQueue.then(operation);
     operationQueue = result.then(
       () => undefined,
@@ -305,10 +321,12 @@ function serializeTopLevelOperations(
     retry = true,
   ) => {
     return (...args: TArgs) => {
-      // Queueing behind the outer transaction would deadlock. Its own lock also
-      // cannot clear until the callback returns, so recover without retrying.
-      if (activeTransaction.getStore()) {
-        return withLockRecovery(() => method(...args), false);
+      // A root call cannot borrow the transaction's connection. Queueing would
+      // deadlock, and reconnecting after a lock error would abort the transaction.
+      if (activeTransaction.getStore()?.transaction) {
+        return Promise.reject(
+          new Error('Use the transaction handle (tx) for database operations inside a transaction'),
+        );
       }
       return runSerialized(() => withLockRecovery(() => method(...args), retry));
     };
@@ -322,7 +340,7 @@ function serializeTopLevelOperations(
   client.executeMultiple = serializeClientMethod(client.executeMultiple.bind(client), false);
 
   db.transaction = ((callback, config) => {
-    const currentTransaction = activeTransaction.getStore();
+    const currentTransaction = activeTransaction.getStore()?.transaction;
     if (currentTransaction) {
       // Reuse the transaction already owned by this async call chain. Queueing here
       // would deadlock because the outer callback is waiting for the nested promise.
@@ -331,7 +349,19 @@ function serializeTopLevelOperations(
 
     return runSerialized(() =>
       withLockRecovery(
-        () => transaction((tx) => activeTransaction.run(tx, () => callback(tx)), config),
+        () =>
+          transaction((tx) => {
+            const scope: TransactionScope = { transaction: tx };
+            return activeTransaction.run(scope, async () => {
+              try {
+                return await callback(tx);
+              } finally {
+                // Async resources can outlive the callback. Their root operations
+                // must queue normally instead of reusing a completed transaction.
+                scope.transaction = undefined;
+              }
+            });
+          }, config),
         false,
       ),
     );
@@ -341,6 +371,9 @@ function serializeTopLevelOperations(
 }
 
 export async function getDb() {
+  if (closePromise) {
+    throw new Error('Database connection is closing');
+  }
   if (dbInstance) {
     return dbInstance;
   }
@@ -353,10 +386,11 @@ export async function getDb() {
         import('drizzle-orm/libsql/node'),
       ]);
       const isTesting = getEnvBool('IS_TESTING');
-      // libsql opens fresh connections for top-level transactions, so tests need a
-      // shared in-memory database rather than connection-local `:memory:`.
+      // Keep one shared schema across test clients from separate module graphs.
       const dbUrl = isTesting ? 'file::memory:?cache=shared' : pathToFileURL(getDbPath()).href;
-      const client = createClient({ url: dbUrl });
+      // Operations are already serialized. Reuse the configured connection so
+      // every statement and transaction retains its connection-local PRAGMAs.
+      const client = createClient({ url: dbUrl, concurrency: 1 });
       sqliteInstance = client;
       sqliteInstanceIsTesting = isTesting;
       if (isTesting) {
@@ -394,15 +428,30 @@ export async function getDb() {
 }
 
 export async function closeDb() {
-  if (sqliteInstance) {
+  // Stop accepting work synchronously, before awaiting any queued operations.
+  // The drain also rejects a close from inside a transaction, even during shutdown.
+  const pendingOperations = drainOperations?.();
+  if (closePromise) {
+    return closePromise;
+  }
+  const initialization = dbPromise;
+  closePromise = (async () => {
+    await initialization?.catch(() => undefined);
+    await pendingOperations;
+    // Initialization may have installed the queue while closeDb was waiting.
+    await drainOperations?.();
+    if (!sqliteInstance) {
+      return;
+    }
+    const execute = executeForClose ?? sqliteInstance.execute.bind(sqliteInstance);
     try {
       // Attempt to checkpoint WAL file before closing
       if (!sqliteInstanceIsTesting && !getEnvBool('PROMPTFOO_DISABLE_WAL_MODE', false)) {
         try {
           // Queue behind pending writes, then attempt truncation without waiting on
           // readers. Native busy waits block the JS shutdown watchdog from firing.
-          await sqliteInstance.execute('PRAGMA busy_timeout = 0');
-          const result = await sqliteInstance.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+          await execute('PRAGMA busy_timeout = 0');
+          const result = await execute('PRAGMA wal_checkpoint(TRUNCATE)');
           const row = result.rows[0];
           const checkpointStatus = {
             busy: Number(row?.busy),
@@ -423,7 +472,7 @@ export async function closeDb() {
       }
 
       if (sqliteInstanceIsTesting) {
-        await closeTestDatabaseClient(sqliteInstance);
+        await closeTestDatabaseClient(sqliteInstance, execute);
       } else {
         // libsql Client.close() is synchronous; the WAL checkpoint above already
         // awaited the I/O that needed to finish before the underlying connection drops.
@@ -440,7 +489,14 @@ export async function closeDb() {
       sqliteInstanceIsTesting = false;
       dbInstance = null;
       dbPromise = null;
+      drainOperations = null;
+      executeForClose = null;
     }
+  })();
+  try {
+    await closePromise;
+  } finally {
+    closePromise = null;
   }
 }
 
@@ -457,7 +513,7 @@ export function isDbOpen(): boolean {
  * Should be called during graceful shutdown to prevent event loop hanging
  */
 export async function closeDbIfOpen(): Promise<void> {
-  if (sqliteInstance) {
+  if (sqliteInstance || dbPromise || closePromise) {
     await closeDb();
   }
 }
