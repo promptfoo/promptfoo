@@ -205,27 +205,35 @@ export async function fetchWithProxy(
     try {
       const parsedUrl = new URL(url);
       if (parsedUrl.username || parsedUrl.password) {
-        if (
-          finalOptions.headers &&
-          'Authorization' in (finalOptions.headers as Record<string, string>)
-        ) {
+        const headers = (finalOptions.headers ?? {}) as Record<string, string>;
+        // Header names are case-insensitive, and a Headers instance or array lowercases them.
+        // Matching only `Authorization` would add a second value that servers receive combined.
+        if (Object.keys(headers).some((name) => name.toLowerCase() === 'authorization')) {
           logger.warn(
             'Both URL credentials and Authorization header present - URL credentials will be ignored',
           );
         } else {
-          // Move credentials to Authorization header
-          const username = parsedUrl.username || '';
-          const password = parsedUrl.password || '';
-          const credentials = Buffer.from(`${username}:${password}`).toString('base64');
+          // Userinfo percent-encodes reserved characters, and HTTP clients decode it before
+          // Basic auth, so a password written as p%40ss must authenticate as p@ss. A malformed
+          // escape has no decoding and stays as written.
+          const credentials = [parsedUrl.username, parsedUrl.password]
+            .map((part) => {
+              try {
+                return decodeURIComponent(part);
+              } catch {
+                return part;
+              }
+            })
+            .join(':');
           finalOptions.headers = {
-            ...(finalOptions.headers as Record<string, string>),
-            Authorization: `Basic ${credentials}`,
+            ...headers,
+            Authorization: `Basic ${Buffer.from(credentials).toString('base64')}`,
           };
         }
         parsedUrl.username = '';
         parsedUrl.password = '';
         finalUrl = parsedUrl.toString();
-        finalUrlString = finalUrl.toString();
+        finalUrlString = finalUrl;
       }
     } catch (e) {
       logger.debug(`URL parsing failed in fetchWithProxy: ${e}`);

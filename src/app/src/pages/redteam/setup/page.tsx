@@ -289,8 +289,6 @@ export default function RedTeamSetupPage() {
         'error',
       );
     }
-
-    setHasUnsavedChanges(false);
   };
 
   const loadConfigs = async () => {

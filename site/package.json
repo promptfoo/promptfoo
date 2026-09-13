@@ -95,6 +95,7 @@
     "dompurify": "^3.4.8",
     "js-yaml": "5.4.1",
     "react-countup": "^6.5.3",
+    "react-turnstile": "^1.1.5",
     "swiper": "^14.0.0"
   }
 }

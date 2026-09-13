@@ -221,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.252",
+    "@anthropic-ai/claude-agent-sdk": "0.3.258",
     "@asteasolutions/zod-to-openapi": "^9.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
@@ -259,7 +259,7 @@
     "knip": "~6.27.0",
     "langium": "4.3.1",
     "node-sql-parser": "^5.4.0",
-    "oxc-parser": "^0.147.0",
+    "oxc-parser": "^0.148.0",
     "pdf-parse": "^2.4.5",
     "prettier": "^3.8.1",
     "read-excel-file": "^9.3.9",
@@ -274,7 +274,7 @@
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.252",
+    "@anthropic-ai/claude-agent-sdk": "0.3.258",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.1045.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@aws-sdk/client-s3": "^3.1003.0",
@@ -320,7 +320,7 @@
     "sharp": "^0.35.4"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.122.0",
+    "@anthropic-ai/sdk": "0.123.0",
     "@apidevtools/json-schema-ref-parser": "^16.0.0",
     "@hono/node-server": "2.1.1",
     "@inquirer/checkbox": "^5.1.0",
@@ -330,7 +330,7 @@
     "@inquirer/input": "^5.0.8",
     "@inquirer/search": "^4.1.8",
     "@inquirer/select": "^5.1.0",
-    "@libsql/client": "^0.17.3",
+    "@libsql/client": "^0.18.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "2.11.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
