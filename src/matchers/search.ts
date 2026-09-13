@@ -106,8 +106,9 @@ export async function matchesSearchRubric(
 
   const output = String(resp.output).trim();
   try {
-    if (output.startsWith('{')) {
-      JSON.parse(output);
+    const firstBrace = output.indexOf('{');
+    if (firstBrace !== -1) {
+      JSON.parse(output.slice(firstBrace, output.lastIndexOf('}') + 1));
     }
     const result = extractFirstJsonObject(String(resp.output)) as {
       pass?: boolean;
@@ -139,7 +140,7 @@ export async function matchesSearchRubric(
       },
     };
   } catch (err) {
-    if (output.startsWith('{')) {
+    if (output.includes('{')) {
       return {
         ...graderFail('Search rubric grader produced malformed JSON', resp.tokenUsage),
         assertion,

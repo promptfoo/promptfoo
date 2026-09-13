@@ -1896,6 +1896,24 @@ describe('runAssertion', () => {
     });
   });
 
+  it('should fail closed when the webhook omits a boolean verdict', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ score: 1 }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: webhookAssertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+    });
+    expect(result).toMatchObject({ pass: false, metadata: { assertionError: true } });
+  });
+
   it('should fail when the webhook returns an error', async () => {
     const output = 'Expected output';
 

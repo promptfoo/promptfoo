@@ -205,6 +205,16 @@ describe('matchesSearchRubric', () => {
     await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
       expect.objectContaining({ pass: false, metadata: { graderError: true } }),
     );
+
+    for (const output of [
+      '```json\n{"pass": false, "score": }\n```',
+      'Explanation: {"pass": true, "score": }',
+    ]) {
+      vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValueOnce({ output });
+      await expect(matchesSearchRubric('Confirm current facts', 'output', {})).resolves.toEqual(
+        expect.objectContaining({ pass: false, metadata: { graderError: true } }),
+      );
+    }
   });
 
   it('throws when no web search provider can be resolved', async () => {
