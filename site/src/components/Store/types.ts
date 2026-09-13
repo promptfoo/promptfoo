@@ -19,6 +19,15 @@ export interface FourthwallAttribute {
 
 export type FourthwallAttributeValue = string | FourthwallAttribute;
 
+export type FourthwallStock =
+  | {
+      type: 'LIMITED';
+      inStock: number;
+    }
+  | {
+      type: 'UNLIMITED';
+    };
+
 export interface FourthwallVariant {
   id: string;
   name: string;
@@ -26,10 +35,7 @@ export interface FourthwallVariant {
   unitPrice: FourthwallMoney;
   compareAtPrice?: FourthwallMoney;
   attributes: Record<string, FourthwallAttributeValue>;
-  stock: {
-    type: 'LIMITED' | 'UNLIMITED';
-    quantity?: number;
-  };
+  stock: FourthwallStock;
   images: FourthwallImage[];
   weight?: {
     value: number;
@@ -48,8 +54,12 @@ export interface FourthwallProduct {
   name: string;
   slug: string;
   description: string;
-  status: 'AVAILABLE' | 'UNAVAILABLE';
-  access: 'PUBLIC' | 'PRIVATE';
+  state: {
+    type: 'AVAILABLE' | 'SOLD_OUT';
+  };
+  access: {
+    type: 'PUBLIC' | 'HIDDEN' | 'PRIVATE' | 'ARCHIVED';
+  };
   images: FourthwallImage[];
   variants: FourthwallVariant[];
 }
@@ -75,10 +85,7 @@ export interface FourthwallCartVariant {
   unitPrice: FourthwallMoney;
   compareAtPrice?: FourthwallMoney;
   attributes?: Record<string, FourthwallAttributeValue>;
-  stock?: {
-    type: 'LIMITED' | 'UNLIMITED';
-    quantity?: number;
-  };
+  stock?: FourthwallStock;
   images?: FourthwallImage[];
   product?: {
     id?: string;

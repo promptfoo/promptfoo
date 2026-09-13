@@ -12,9 +12,11 @@ const mockProduct: FourthwallProduct = {
   slug: 'test-product',
   name: 'Test Product',
   description: '<p>A test product description</p>',
+  state: { type: 'AVAILABLE' },
+  access: { type: 'PUBLIC' },
   images: [
-    { id: 'img-1', url: 'https://example.com/image1.jpg', width: 800, height: 800 },
-    { id: 'img-2', url: 'https://example.com/image2.jpg', width: 800, height: 800 },
+    { url: 'https://example.com/image1.jpg', width: 800, height: 800 },
+    { url: 'https://example.com/image2.jpg', width: 800, height: 800 },
   ],
   variants: [
     {
@@ -43,6 +45,22 @@ describe('ProductCard', () => {
 
     const button = screen.getByRole('button', { name: `View ${mockProduct.name}` });
     expect(button).toBeInTheDocument();
+  });
+
+  it('marks sold-out products in the accessible label and image overlay', () => {
+    const soldOutProduct: FourthwallProduct = {
+      ...mockProduct,
+      state: { type: 'SOLD_OUT' },
+    };
+
+    render(<ProductCard product={soldOutProduct} onClick={vi.fn()} />);
+
+    const button = screen.getByRole('button', { name: `View ${mockProduct.name} (Sold Out)` });
+    expect(button).toBeInTheDocument();
+    expect(screen.getByText('Sold Out')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: mockProduct.name })).toHaveStyle({
+      filter: 'grayscale(100%)',
+    });
   });
 
   it('calls onClick when clicked', async () => {

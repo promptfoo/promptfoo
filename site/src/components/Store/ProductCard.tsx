@@ -4,7 +4,7 @@ import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
-import { formatPrice } from './useFourthwall';
+import { formatPrice, isProductSoldOut } from './useFourthwall';
 
 import type { FourthwallProduct } from './types';
 
@@ -21,6 +21,7 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
   const primaryImage = product.images[0];
   const hoverImage = product.images[1];
   const hasHoverImage = Boolean(hoverImage);
+  const soldOut = isProductSoldOut(product);
 
   const lowestPrice = useMemo(
     () =>
@@ -64,7 +65,7 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
           outlineOffset: '2px',
         },
       }}
-      aria-label={`View ${product.name}`}
+      aria-label={`View ${product.name}${soldOut ? ' (Sold Out)' : ''}`}
     >
       <Box
         sx={{
@@ -99,7 +100,8 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
             height: '100%',
             objectFit: 'cover',
             opacity: primaryLoaded && !(isHovered && hasHoverImage && hoverLoaded) ? 1 : 0,
-            transition: 'opacity 0.3s ease-out',
+            transition: 'opacity 0.3s ease-out, filter 0.3s ease-out',
+            filter: soldOut ? 'grayscale(100%)' : 'none',
           }}
         />
         {/* Hover image — rendered once to preload, shown on hover */}
@@ -116,9 +118,36 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
               height: '100%',
               objectFit: 'cover',
               opacity: isHovered && hoverLoaded ? 1 : 0,
-              transition: 'opacity 0.3s ease-out',
+              transition: 'opacity 0.3s ease-out, filter 0.3s ease-out',
+              filter: soldOut ? 'grayscale(100%)' : 'none',
             }}
           />
+        )}
+        {soldOut && (
+          <Box
+            sx={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              backgroundColor: 'rgba(0, 0, 0, 0.75)',
+              py: 0.75,
+              px: 1,
+              textAlign: 'center',
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{
+                color: '#fff',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                fontSize: '0.65rem',
+              }}
+            >
+              Sold Out
+            </Typography>
+          </Box>
         )}
       </Box>
       <Box
