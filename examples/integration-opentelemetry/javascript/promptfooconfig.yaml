@@ -1,6 +1,8 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: OpenTelemetry tracing with trace-based assertions
 
+sharing: false
+
 providers:
   - file://provider-simple-traced.js
 
@@ -100,6 +102,9 @@ tests:
 # Default assertions that apply to all test cases
 defaultTest:
   assert:
+    - type: icontains
+      value: '{{ topic }}'
+
     # Monitor 95th percentile latency (metric only, won't fail tests)
     - type: trace-span-duration
       value:
@@ -129,4 +134,5 @@ tracing:
     http:
       enabled: true
       port: 4318
+      host: '127.0.0.1'
       acceptFormats: ['json']

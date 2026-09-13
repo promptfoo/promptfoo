@@ -1,5 +1,6 @@
 // provider-simple-traced.js
-// RAG/Agent provider with intricate OpenTelemetry tracing
+// RAG/Agent provider with nested OpenTelemetry tracing for the
+// site/docs/guides/trace-based-agent-evals.md guide.
 
 const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
@@ -8,8 +9,16 @@ const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base'); // Use 
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
 
-// Configure OTLP exporter
-const exporterUrl = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces';
+// Configure OTLP exporter. The generic endpoint is a base URL; the trace-specific
+// endpoint is already the full export URL.
+const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/+$/, '');
+const exporterUrl =
+  process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT ||
+  (otlpEndpoint
+    ? otlpEndpoint.endsWith('/v1/traces')
+      ? otlpEndpoint
+      : `${otlpEndpoint}/v1/traces`
+    : 'http://127.0.0.1:4318/v1/traces');
 console.log('[Provider] Configuring OTLP exporter with URL:', exporterUrl);
 const exporter = new OTLPTraceExporter({
   url: exporterUrl,
@@ -118,13 +127,15 @@ class SimpleTracedProvider {
   }
 
   async _tracedCallApi(prompt, promptfooContext) {
+    const topic = prompt.toLowerCase().includes('quantum')
+      ? 'quantum computing'
+      : 'machine learning';
     // Use the improved runInSpan for the main workflow
-    return runInSpan(
+    const result = await runInSpan(
       'rag_agent_workflow',
       {
         'promptfoo.evaluation_id': promptfooContext.evaluationId,
         'promptfoo.test_case_id': promptfooContext.testCaseId,
-        'prompt.text': prompt,
         'prompt.length': prompt.length,
         'agent.type': 'rag_assistant',
         'agent.version': '2.0',
@@ -155,7 +166,7 @@ class SimpleTracedProvider {
                 : prompt.toLowerCase().includes('explain')
                   ? 'explanation'
                   : 'general',
-              entities: ['quantum computing', 'classical computing'],
+              entities: topic === 'quantum computing' ? [topic, 'classical computing'] : [topic],
               complexity: 'medium',
             };
 
@@ -185,12 +196,8 @@ class SimpleTracedProvider {
                 `retrieve_document_${i}`,
                 {
                   'document.index': i,
-                  'search.query': userIntent.entities.join(' '),
+                  'search.query.length': userIntent.entities.join(' ').length,
                   'tool.name': 'search_corpus',
-                  'tool.arguments': JSON.stringify({
-                    query: userIntent.entities.join(' '),
-                    document_index: i,
-                  }),
                 },
                 async () => {
                   const docSpan = trace.getSpan(context.active());
@@ -311,25 +318,22 @@ class SimpleTracedProvider {
             'generation.type': 'augmented_response',
             'model.name': 'gpt-4',
             'tool.name': 'compose_answer',
-            'tool.arguments': JSON.stringify({
-              citation_count: documents.length,
-              tone: 'explanatory',
-            }),
+            'document.count': documents.length,
           },
           async () => {
             const span = trace.getSpan(context.active());
             const generationDelay = 750 + Math.random() * 200;
             await new Promise((resolve) => setTimeout(resolve, generationDelay));
 
+            const explanation =
+              topic === 'quantum computing'
+                ? 'Quantum computing uses qubits, superposition, interference, and entanglement. Unlike classical bits, qubits can represent combinations of states before measurement. Quantum algorithms use these properties to solve some problems, such as simulating quantum systems, more efficiently.'
+                : 'Machine learning finds patterns in training data instead of relying on explicitly programmed rules. Training adjusts a model to improve its predictions; evaluation on separate data checks whether those patterns generalize. Common applications include classification, forecasting, and recommendations.';
             response = {
               text:
-                `Based on my analysis of ${documents.length} technical documents, here's a comprehensive explanation:\n\n` +
-                `${userIntent.entities.join(' and ')} are fascinating topics in computer science. ` +
-                `After analyzing multiple sources including arxiv papers and textbooks, I can provide the following insights:\n\n` +
-                `1. Core Concepts: The fundamental principles involve...\n` +
-                `2. Key Differences: When comparing these technologies...\n` +
-                `3. Practical Applications: In real-world scenarios...\n\n` +
-                `This synthesis is based on recent research and established knowledge in the field.`,
+                `Based on my analysis of ${documents.length} technical documents, here's an explanation of ${topic}:\n\n` +
+                `${explanation}\n\n` +
+                `Citations: ${documents.map((d) => d.title).join(', ')}.`,
               citations: documents.map((d) => ({
                 id: d.id,
                 title: d.title,
@@ -369,15 +373,6 @@ class SimpleTracedProvider {
           reasoning_steps: 3,
         });
 
-        // Force flush to ensure spans are sent
-        try {
-          console.log('[Provider] Flushing spans...');
-          await spanProcessor.forceFlush();
-          console.log('[Provider] Spans exported successfully');
-        } catch (error) {
-          console.error('[Provider] Failed to flush spans:', error.message);
-        }
-
         return {
           output: response.text,
           tokenUsage: {
@@ -393,6 +388,17 @@ class SimpleTracedProvider {
         };
       },
     );
+
+    // Force flush after the root span has ended so parent and child spans are exported.
+    try {
+      console.log('[Provider] Flushing spans...');
+      await spanProcessor.forceFlush();
+      console.log('[Provider] Spans exported successfully');
+    } catch (error) {
+      console.error('[Provider] Failed to flush spans:', error.message);
+    }
+
+    return result;
   }
 
   async _untracedCallApi(prompt, promptfooContext) {
