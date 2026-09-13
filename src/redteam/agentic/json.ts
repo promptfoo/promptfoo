@@ -64,7 +64,7 @@ export function extractJsonObjects(value: string): object[] {
 /** Bounded, iterative decoding shared by trace and provider evidence. */
 export function parseEvidenceCandidates(value: unknown): Record<string, unknown>[] {
   const candidates: Record<string, unknown>[] = [];
-  const pending: unknown[] = [value];
+  const pending: { value: unknown; pluginId?: unknown }[] = [{ value }];
   let visited = 0;
   let findings = 0;
   let records = 0;
@@ -74,12 +74,12 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
     if (++visited > 4000) {
       throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
     }
-    const next = pending.pop();
+    const { value: next, pluginId: inheritedPluginId } = pending.pop()!;
     if (Array.isArray(next)) {
       if (next.length > 1000) {
         throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
       }
-      pending.push(...[...next].reverse());
+      pending.push(...[...next].reverse().map((value) => ({ value, pluginId: inheritedPluginId })));
     } else if (next && typeof next === 'object') {
       const record = next as Record<string, unknown>;
       findings += Array.isArray(record.findings) ? record.findings.length : 0;
@@ -87,11 +87,18 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
       if (records > 1000 || findings > 1000) {
         throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
       }
-      const nested = [record.agenticEvidence, record.agentSdkEvidence].filter(
-        (value) => value !== undefined && value !== null,
+      const pluginId = record.pluginId ?? inheritedPluginId;
+      const nested = Object.entries(record).filter(
+        ([key, value]) => /^(?:agentic|agentSdk)Evidence$/i.test(key) && value != null,
       );
-      candidates.push(record);
-      pending.push(...nested.reverse());
+      if (record.findings !== undefined || nested.length === 0) {
+        candidates.push(
+          record.pluginId === undefined && pluginId !== undefined
+            ? { ...record, pluginId }
+            : record,
+        );
+      }
+      pending.push(...nested.reverse().map(([, value]) => ({ value, pluginId })));
     } else if (typeof next === 'string') {
       characters += next.length;
       if (characters > MAX_JSON_LENGTH) {
@@ -101,7 +108,7 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
         continue;
       }
       try {
-        pending.push(JSON.parse(next));
+        pending.push({ value: JSON.parse(next), pluginId: inheritedPluginId });
         continue;
       } catch {
         // Fall through to bounded extraction for mixed prose and JSON.
@@ -118,7 +125,12 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
         }
         untagged = untagged.replace(pattern, '');
       }
-      pending.push(...extractJsonObjects(untagged).reverse(), ...taggedValues.reverse());
+      pending.push(
+        ...[...extractJsonObjects(untagged).reverse(), ...taggedValues.reverse()].map((value) => ({
+          value,
+          pluginId: inheritedPluginId,
+        })),
+      );
     }
   }
 

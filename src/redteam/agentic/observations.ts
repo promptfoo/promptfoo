@@ -114,14 +114,14 @@ const AGENTIC_RUNTIME_FINDING_SEVERITY_ATTRS = [
   'agenticFindingSeverity',
   'agentSdkFindingSeverity',
 ];
-const AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS = [
-  'promptfoo.agentic.evidence_json',
-  'promptfoo.agent_sdk.evidence_json',
-  'agentic.evidence_json',
-  'agent.sdk.evidence_json',
-  'agenticEvidence',
-  'agentSdkEvidence',
-];
+const AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS: Record<string, string[]> = {
+  'promptfoo.agentic.evidence_json': ['promptfoo.agentic.plugin_id'],
+  'promptfoo.agent_sdk.evidence_json': ['promptfoo.agent_sdk.plugin_id'],
+  'agentic.evidence_json': ['agentic.plugin_id', 'agentic.pluginId'],
+  'agent.sdk.evidence_json': ['agent.sdk.plugin_id', 'agentSdk.pluginId'],
+  agenticevidence: ['agenticPluginId', 'agentic.pluginId'],
+  agentsdkevidence: ['agentSdkPluginId', 'agentSdk.pluginId'],
+};
 
 type TraceLikeSpan = {
   attributes?: Record<string, unknown>;
@@ -439,11 +439,18 @@ export function getTraceEvidenceValues(attributes: Record<string, unknown> | und
     .filter(
       ([key, value]) =>
         value !== undefined &&
-        AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS.some(
-          (alias) => alias.toLowerCase() === key.toLowerCase(),
+        Object.prototype.hasOwnProperty.call(
+          AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS,
+          key.toLowerCase(),
         ),
     )
-    .map(([, value]) => value);
+    .map(([key, value]) => {
+      const pluginId = getAttribute(
+        attributes,
+        AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS[key.toLowerCase()],
+      );
+      return pluginId === undefined ? value : { pluginId, agenticEvidence: value };
+    });
 }
 
 function findingObservationsFromAttributes(

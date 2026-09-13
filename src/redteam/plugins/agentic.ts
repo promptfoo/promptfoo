@@ -885,17 +885,11 @@ function extractAgenticRuntimeEvidence(
     }
   }
 
-  const candidates: unknown[] = [
-    gradingContext?.providerResponse?.metadata?.agenticEvidence,
-    gradingContext?.providerResponse?.metadata?.agentSdkEvidence,
+  const scopedEvidenceCandidates = parseEvidenceCandidates(
     gradingContext?.providerResponse?.metadata,
-  ];
-
-  const scopedEvidenceCandidates = candidates.flatMap((candidate) =>
-    parseEvidenceCandidates(candidate)
-      .map((evidence) => normalizeEvidenceForPlugin(evidence as AgenticRuntimeEvidence, pluginId))
-      .filter(hasVerifierEvidence),
-  );
+  )
+    .map((evidence) => normalizeEvidenceForPlugin(evidence as AgenticRuntimeEvidence, pluginId))
+    .filter(hasVerifierEvidence);
   if (scopedEvidenceCandidates.length > 0) {
     const primaryEvidence =
       scopedEvidenceCandidates.find((evidence) =>

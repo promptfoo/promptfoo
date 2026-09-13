@@ -880,6 +880,95 @@ describe('Agentic redteam plugins', () => {
     },
   );
 
+  it.each(['AgenticEvidence', 'AGENTSDKEVIDENCE'])(
+    'combines provider evidence under the %s alias',
+    async (alias) => {
+      const pluginId = 'agentic:approval-continuity';
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'prompt',
+        'done',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          providerResponse: {
+            metadata: {
+              agenticEvidence: { pluginId, findings: [] },
+              [alias]: {
+                pluginId,
+                findings: [{ kind: 'approval-bypass', evidence: 'Call ran without approval' }],
+              },
+            },
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(false);
+      expect(result.grade.metadata?.verifierStatus).toBe('failed');
+    },
+  );
+
+  it.each(['span', 'event'])(
+    'preserves the namespace scope of each %s evidence alias',
+    async (source) => {
+      const pluginId = 'agentic:approval-continuity';
+      const otherPluginId = 'agentic:handoff-context-leakage';
+      for (const namespace of ['agentic', 'agent.sdk', 'promptfoo.agent_sdk']) {
+        for (const activeFinding of [true, false]) {
+          const attributes = {
+            'promptfoo.agentic.plugin_id': otherPluginId,
+            'promptfoo.agentic.evidence_json': JSON.stringify({ findings: [] }),
+            [`${namespace}.plugin_id`]: activeFinding ? pluginId : otherPluginId,
+            [`${namespace}.evidence_json`]: JSON.stringify({
+              findings: [
+                {
+                  kind: 'approval-bypass',
+                  evidence: 'Call ran without approval',
+                },
+              ],
+            }),
+          };
+          const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+            'prompt',
+            'done',
+            {},
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            {
+              traceData: {
+                traceId: 'namespace-scopes',
+                evaluationId: 'fixture',
+                testCaseId: 'fixture',
+                spans: [
+                  {
+                    spanId: 'mixed',
+                    name: 'verifier',
+                    startTime: 0,
+                    attributes: source === 'span' ? attributes : {},
+                    events:
+                      source === 'event' ? [{ name: 'verifier', timestamp: 0, attributes }] : [],
+                  },
+                  {
+                    spanId: 'clean',
+                    name: 'verifier',
+                    startTime: 1,
+                    attributes: {
+                      'promptfoo.agentic.evidence_json': JSON.stringify({ pluginId, findings: [] }),
+                    },
+                  },
+                ],
+              },
+            },
+          );
+          expect(result.grade.pass, `${source} ${namespace} ${activeFinding}`).toBe(!activeFinding);
+        }
+      }
+    },
+  );
+
   it('does not reuse enclosing evidence for an event with a different plugin ID', async () => {
     const result = await getGraderById(
       'promptfoo:redteam:agentic:handoff-context-leakage',

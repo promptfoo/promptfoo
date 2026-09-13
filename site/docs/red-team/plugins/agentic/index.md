@@ -60,11 +60,11 @@ promptfoo.agentic.evidence_json={"findings":[]}
 ```
 
 The evidence can appear on a span or a span event. When the JSON omits `pluginId`,
-the grader uses the plugin ID attribute from that span or event. Event evidence can
+the grader uses the plugin ID attribute in the same namespace on that span or event. Event evidence can
 inherit the enclosing span's plugin ID, but an event cannot reuse the span's evidence
 under a different plugin ID. An explicit plugin ID inside the JSON keeps its own scope.
 An executed tool is not covered by a control that was blocked, denied, rejected, or failed.
-A failed verifier cannot be replaced by another clean result. Malformed findings for the active plugin also fail the row, including when another record or evidence alias contains a clean result. Evidence aliases are case-insensitive and checked together.
+A failed verifier cannot be replaced by another clean result. Malformed findings for the active plugin also fail the row, including when another record or evidence alias contains a clean result. Evidence aliases are case-insensitive and checked together, including aliases in provider metadata.
 
 Oversized evidence returns a grading error. Each evidence payload is limited to 100,000 decoded characters, 1,000 verifier records, and 1,000 findings across its aliases. Array and string wrappers do not consume the verifier-record limit; decoding stops after 4,000 steps. Trace processing retains at most 1,000 observations; guardrail coverage keeps its stricter 256-observation limit. Split larger workloads across evals.
 
