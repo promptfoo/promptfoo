@@ -97,6 +97,34 @@ describe('Python file references', { timeout: 15000 }, () => {
     });
   });
 
+  it('should execute a mixed-case Python file reference instead of inline code', async () => {
+    const assertion: Assertion = {
+      type: 'python',
+      value: 'file:///path/to/assert.PY:评分',
+    };
+
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.PY');
+    vi.mocked(runPython).mockResolvedValue(true);
+
+    const output = 'Expected output';
+    const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+    const providerResponse = { output };
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse,
+    });
+
+    expect(runPython).toHaveBeenCalledWith('/path/to/assert.PY', '评分', [
+      output,
+      expect.any(Object),
+    ]);
+    expect(runPythonCode).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ pass: true, reason: 'Assertion passed' });
+  });
+
   it('should correctly pass configuration to a python assert', async () => {
     const assertion: Assertion = {
       type: 'python',
