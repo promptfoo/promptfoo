@@ -8,10 +8,9 @@ providers:
   - id: google:video:veo-3.1-generate-preview
     config:
       vertexai: false
-      # Use metadata.sourceVideoUri from a previous Veo generation response
-      sourceVideo: https://generativelanguage.googleapis.com/v1beta/files/previous-veo-video
+      sourceVideo: https://generativelanguage.googleapis.com/v1beta/files/YOUR_VIDEO_ID:download?alt=media
       resolution: '720p'
-      durationSeconds: 8 # Video extension requires 8 seconds
+      durationSeconds: 8 # Gemini request setting; Veo adds 7 seconds
 
 defaultTest:
   assert:
@@ -27,6 +26,6 @@ tests:
       continuation: The scene transitions smoothly to a night sky with stars appearing
 
 # To use this:
-# 1. Generate a video and export the eval results with -o results.json.
-# 2. Copy response.metadata.sourceVideoUri into sourceVideo above.
+# 1. Generate a video with promptfooconfig.yaml and export results with -o results.json.
+# 2. Copy response.metadata.sourceVideoUri into sourceVideo (or use file:// for a saved Veo MP4).
 # 3. Set GOOGLE_API_KEY or GEMINI_API_KEY and run within two days of the source generation.

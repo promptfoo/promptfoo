@@ -17,8 +17,6 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { maybeLoadFromExternalFile } from '../../util/file';
-import { renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
@@ -34,6 +32,7 @@ import {
   getGoogleClient,
   getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
+  getVertexServiceTierHeaders,
   isNonCandidateStreamChunk,
   loadCredentials,
   mergeGoogleCompletionOptions,
@@ -42,6 +41,7 @@ import {
   normalizeGeminiAudio,
   normalizeGoogleServiceTier,
   normalizeSafetySettings,
+  parseConfigResponseSchema,
   removeDeprecatedGeminiGenerationParams,
   removeGoogleFunctionDeclarations,
   resolveGoogleToolConfig,
@@ -53,7 +53,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { CompletionOptions } from './types';
+import type { CompletionOptions, GoogleProviderConfig } from './types';
 import type { GeminiApiResponse, GeminiErrorResponse, GeminiResponseData } from './util';
 
 // Type for Google API errors
@@ -340,16 +340,19 @@ export class GoogleProvider extends GoogleGenericProvider {
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
-    const config = mergeGoogleCompletionOptions(
-      this.config,
-      context?.prompt?.config as Partial<CompletionOptions> | undefined,
-    );
+    const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+    const config = mergeGoogleCompletionOptions(this.config, promptConfig);
+    const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
 
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
       config.systemInstruction,
-      { useAssistantRole: config.useAssistantRole },
+      {
+        basePath:
+          promptConfig?.systemInstruction === undefined ? this.config.basePath : promptBasePath,
+        useAssistantRole: config.useAssistantRole,
+      },
     );
 
     const { toolConfig, toolsDisabled } = resolveGoogleToolConfig(config);
@@ -371,8 +374,14 @@ export class GoogleProvider extends GoogleGenericProvider {
     } = config.passthrough || {};
     const serviceTier = normalizeGoogleServiceTier(
       passthroughServiceTier ?? camelCasePassthroughServiceTier ?? config.service_tier,
-      this.isVertexMode,
     );
+    const tierHeaders = this.isVertexMode
+      ? getVertexServiceTierHeaders(serviceTier, this.config.headers)
+      : {};
+    const bodyServiceTier =
+      this.isVertexMode && serviceTier && ['standard', 'priority', 'flex'].includes(serviceTier)
+        ? undefined
+        : serviceTier;
     const serviceTierField = this.isVertexMode ? 'serviceTier' : 'service_tier';
     const requestPassthroughTools =
       toolsDisabled && passthroughTools !== undefined
@@ -409,7 +418,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           ? { systemInstruction }
           : { system_instruction: systemInstruction }
         : {}),
-      ...(serviceTier ? { [serviceTierField]: serviceTier } : {}),
+      ...(bodyServiceTier ? { [serviceTierField]: bodyServiceTier } : {}),
       ...passthrough,
     };
     body.generationConfig = removeDeprecatedGeminiGenerationParams(
@@ -425,21 +434,11 @@ export class GoogleProvider extends GoogleGenericProvider {
         );
       }
 
-      let schema = maybeLoadFromExternalFile(
-        renderVarsInObject(config.responseSchema, context?.vars),
+      const schema = parseConfigResponseSchema(
+        config.responseSchema,
+        context?.vars,
+        promptConfig?.responseSchema === undefined ? this.config.basePath : promptBasePath,
       );
-
-      // Parse JSON string if it's a string
-      if (typeof schema === 'string') {
-        try {
-          schema = JSON.parse(schema);
-        } catch (error) {
-          throw new Error(`Invalid JSON in responseSchema: ${error}`);
-        }
-      }
-
-      // Apply variable substitution to the loaded schema
-      schema = renderVarsInObject(schema, context?.vars);
 
       body.generationConfig.response_schema = schema;
       body.generationConfig.response_mime_type = 'application/json';
@@ -448,8 +447,15 @@ export class GoogleProvider extends GoogleGenericProvider {
     let data: GeminiApiResponse;
     let cached = false;
     let responseHeaders: unknown;
+    let requestedServiceTier: string | undefined;
 
     try {
+      const vertexHeaders = this.isVertexMode
+        ? { ...tierHeaders, ...(await this.getAuthHeaders()) }
+        : undefined;
+      requestedServiceTier = Object.entries(vertexHeaders ?? {}).find(
+        ([name]) => name.toLowerCase() === 'x-vertex-ai-llm-shared-request-type',
+      )?.[1];
       if (this.isVertexMode && !this.isExpressMode()) {
         // Vertex AI OAuth mode
         const client = await this.getClientWithCredentials();
@@ -461,6 +467,7 @@ export class GoogleProvider extends GoogleGenericProvider {
           url,
           method: 'POST',
           data: body,
+          headers: vertexHeaders,
           timeout: getRequestTimeoutMs(),
         });
         data = res.data as GeminiApiResponse;
@@ -472,7 +479,7 @@ export class GoogleProvider extends GoogleGenericProvider {
 
         const res = await fetchWithProxy(url, {
           method: 'POST',
-          headers: await this.getAuthHeaders(),
+          headers: vertexHeaders,
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(getRequestTimeoutMs()),
         });
@@ -524,7 +531,14 @@ export class GoogleProvider extends GoogleGenericProvider {
     }
 
     // Parse response
-    return this.parseGeminiResponse(data, cached, config, context, responseHeaders);
+    return this.parseGeminiResponse(
+      data,
+      cached,
+      config,
+      context,
+      responseHeaders,
+      requestedServiceTier,
+    );
   }
 
   /**
@@ -536,9 +550,12 @@ export class GoogleProvider extends GoogleGenericProvider {
     config: CompletionOptions,
     context?: CallApiContextParams,
     responseHeaders?: unknown,
+    requestedServiceTier?: string,
   ): Promise<ProviderResponse> {
     try {
       const { toolsDisabled } = resolveGoogleToolConfig(config);
+      const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
+      const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
 
       // Normalize response: non-streaming returns single object, streaming returns array
       const normalizedData = Array.isArray(data) ? data : [data];
@@ -700,6 +717,7 @@ export class GoogleProvider extends GoogleGenericProvider {
       const actualServiceTier = getGoogleResponseServiceTier(
         responseHeaders,
         lastData.usageMetadata,
+        this.isVertexMode,
       );
 
       // Include thinking tokens in output cost - Google bills them as output tokens
@@ -707,18 +725,18 @@ export class GoogleProvider extends GoogleGenericProvider {
         tokenUsage.completion == null
           ? undefined
           : tokenUsage.completion + (lastData.usageMetadata?.thoughtsTokenCount ?? 0);
-      const pricingConfig = this.isVertexMode ? { ...config, region: this.getRegion() } : config;
       const cost = cached
         ? undefined
         : calculateGoogleCostFromUsage(
             this.modelName,
-            pricingConfig,
+            config,
             lastData.usageMetadata?.promptTokenCount,
             completionForCost,
             this.isVertexMode,
             lastData.usageMetadata,
             actualServiceTier,
             this.isVertexMode ? this.getRegion() : undefined,
+            requestedServiceTier,
           );
       const audio = normalizeGeminiAudio(output);
       const thoughtSignatures = collectThoughtSignatures(dataWithResponse);
@@ -735,11 +753,25 @@ export class GoogleProvider extends GoogleGenericProvider {
           ...grounding,
           ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
           ...(actualServiceTier && { serviceTier: actualServiceTier }),
+          ...(this.isVertexMode &&
+            typeof lastData.usageMetadata?.trafficType === 'string' && {
+              trafficType: lastData.usageMetadata.trafficType,
+            }),
         },
       };
 
       try {
-        response.output = await this.executeFunctionToolCallbacks(output, config, toolsDisabled);
+        response.output = await this.executeFunctionToolCallbacks(
+          output,
+          {
+            ...config,
+            basePath:
+              promptConfig?.functionToolCallbacks === undefined
+                ? this.config.basePath
+                : promptBasePath,
+          },
+          toolsDisabled,
+        );
       } catch (error) {
         return { ...response, output: undefined, error: String(error) };
       }

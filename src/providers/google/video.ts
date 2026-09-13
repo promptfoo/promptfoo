@@ -116,22 +116,10 @@ export function validateAspectRatio(ratio: string): { valid: boolean; message?: 
   return { valid: true };
 }
 
-function addVertexSourceVideo(
-  instance: Record<string, unknown>,
-  sourceVideo?: string,
-): string | undefined {
-  if (!sourceVideo) {
-    return undefined;
-  }
-  if (!sourceVideo.startsWith('gs://')) {
-    return (
-      'Vertex AI Veo video extension requires a Google Cloud Storage URI beginning with gs://; ' +
-      'local paths, Gemini URIs, and operation IDs are not supported.'
-    );
-  }
-
-  instance.video = { gcsUri: sourceVideo, mimeType: 'video/mp4' };
-  return undefined;
+function isVideoOperationName(value: string): boolean {
+  return /^(?:(?:projects\/[^/]+\/locations\/[^/]+\/(?:publishers\/[^/]+\/models\/[^/]+\/)?)|(?:models\/[^/]+\/))?operations\/[^/]+$/.test(
+    value,
+  );
 }
 
 function isReusableAiStudioVideoUri(uri: string): boolean {
@@ -210,12 +198,8 @@ export function validateDuration(
   return { valid: true };
 }
 
-/**
- * Vertex's extend-a-video request body documents only `storageUri` and `sampleCount`, and fixes
- * the added length at 7 seconds -- `durationSeconds` is not an extension parameter. Existing
- * configs nonetheless carry 4 or 6 (this repo's own example shipped 6), so warn and fall back to
- * the extension default rather than failing a request the API would have accepted.
- */
+// AI Studio uses an 8-second request duration for extensions. Vertex omits it;
+// both APIs add a fixed 7 seconds to the source video.
 function resolveExtensionDuration(duration: number): GoogleVideoDuration {
   if (duration !== VEO_EXTENSION_DURATION) {
     logger.warn(
@@ -336,8 +320,7 @@ function mergeGoogleVideoRequestConfig(
     config: {
       ...providerConfig,
       ...promptConfig,
-      // Prompt configuration may shape the generated video, but it must not redirect an
-      // authenticated request, replace provider credentials, or switch authentication modes.
+      // Prompts may shape media generation, but provider settings own the authenticated request.
       apiKey: providerConfig.apiKey,
       vertexai: providerConfig.vertexai,
       projectId: providerConfig.projectId,
@@ -408,7 +391,7 @@ export class GoogleVideoProvider implements ApiProvider {
   }
 
   requiresApiKey(): boolean {
-    // ADC project discovery and prompt-level overrides are resolved inside callApi.
+    // Provider-owned API key and ADC project discovery are resolved inside callApi.
     return false;
   }
 
@@ -508,29 +491,35 @@ export class GoogleVideoProvider implements ApiProvider {
     return this.createAiStudioVideoJob(prompt, config, mediaBasePaths);
   }
 
-  private addVertexVideoInput(
+  private addVertexSourceVideo(
     instance: Record<string, unknown>,
-    config: GoogleVideoOptions,
-    basePath: string | undefined = config.basePath,
+    sourceVideo: string | undefined,
+    basePath?: string,
   ): string | undefined {
-    const sourceVideo = config.sourceVideo || config.extendVideoId;
-    if (!sourceVideo || sourceVideo.startsWith('gs://')) {
-      return addVertexSourceVideo(instance, sourceVideo);
+    if (!sourceVideo) {
+      return undefined;
+    }
+    if (isVideoOperationName(sourceVideo)) {
+      return 'Vertex AI Veo does not accept operation IDs for video extension. Set sourceVideo to a gs:// URI, base64 video data, or a file:// path.';
+    }
+    if (/\.(avi|mov|mkv|webm|mpeg|mpg|wmv|flv|3gp|3gpp)(?:[?#]|$)/i.test(sourceVideo)) {
+      return 'Vertex Veo video extension requires an MP4 source video.';
+    }
+    if (sourceVideo.startsWith('gs://')) {
+      instance.video = { gcsUri: sourceVideo, mimeType: 'video/mp4' };
+      return undefined;
     }
     if (
-      /^projects\/[^/]+\/locations\/[^/]+\/(?:publishers\/[^/]+\/models\/[^/]+\/)?operations\/[^/]+$/.test(
-        sourceVideo,
-      ) ||
-      (sourceVideo.includes('://') && !sourceVideo.startsWith('file://')) ||
-      (!sourceVideo.startsWith('file://') && !/^[A-Za-z0-9+/]+={0,2}$/.test(sourceVideo))
+      /^data:/i.test(sourceVideo) ||
+      (sourceVideo.includes('://') && !sourceVideo.startsWith('file://'))
     ) {
-      return 'Vertex AI Veo does not accept operation IDs or Gemini URIs for video extension. Set `sourceVideo` to a gs:// URI, base64 video data, or a file:// path.';
+      return 'Vertex AI Veo video extension requires a gs:// URI, base64 video data, or a file:// path.';
     }
-    const { data: videoData, error } = this.loadVideoData(sourceVideo, { basePath });
+    const { data, error } = this.loadVideoData(sourceVideo, { basePath });
     if (error) {
       return error;
     }
-    instance.video = { bytesBase64Encoded: videoData, mimeType: 'video/mp4' };
+    instance.video = { bytesBase64Encoded: data, mimeType: 'video/mp4' };
     return undefined;
   }
 
@@ -555,7 +544,7 @@ export class GoogleVideoProvider implements ApiProvider {
     if (config.resolution) {
       parameters.resolution = config.resolution;
     }
-    if (config.durationSeconds) {
+    if (config.durationSeconds && !config.sourceVideo && !config.extendVideoId) {
       parameters.durationSeconds = config.durationSeconds;
     }
     if (config.negativePrompt) {
@@ -616,7 +605,11 @@ export class GoogleVideoProvider implements ApiProvider {
       instance.referenceImages = refs;
     }
 
-    const sourceVideoError = this.addVertexVideoInput(instance, config, mediaBasePaths.sourceVideo);
+    const sourceVideoError = this.addVertexSourceVideo(
+      instance,
+      config.sourceVideo || config.extendVideoId,
+      mediaBasePaths.sourceVideo,
+    );
     if (sourceVideoError) {
       return { error: sourceVideoError };
     }
@@ -712,7 +705,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     const sourceVideo = config.sourceVideo || config.extendVideoId;
     if (sourceVideo) {
-      if (!sourceVideo.startsWith('file://') && sourceVideo.includes('/operations/')) {
+      if (isVideoOperationName(sourceVideo)) {
         return {
           error:
             'Google AI Studio Veo does not accept operation IDs for video extension. Provide a previous Veo video URI, file:// path, or base64 bytes via `sourceVideo`.',
@@ -752,7 +745,6 @@ export class GoogleVideoProvider implements ApiProvider {
     mediaBasePaths?: GoogleVideoMediaBasePaths,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
     const model = config.model || this.modelName;
-    const url = await this.getVertexEndpoint('predictLongRunning', model, config);
     const { body, error: bodyError } = this.buildVertexRequestBody(prompt, config, mediaBasePaths);
     if (bodyError || !body) {
       return { error: bodyError || 'Failed to build Vertex Veo request' };
@@ -760,6 +752,7 @@ export class GoogleVideoProvider implements ApiProvider {
 
     try {
       const client = await this.getClientWithCredentials(config);
+      const url = await this.getVertexEndpoint('predictLongRunning', model, config);
       logger.debug('[Google Video] Creating video job', { url, model });
 
       const response = await client.request({
@@ -1176,12 +1169,12 @@ export class GoogleVideoProvider implements ApiProvider {
     const aspectRatio = effectiveConfig.aspectRatio || DEFAULT_ASPECT_RATIO;
     const resolution = effectiveConfig.resolution || DEFAULT_RESOLUTION;
     const isVideoExtension = Boolean(effectiveConfig.sourceVideo || effectiveConfig.extendVideoId);
-    const isVertexExtension = isVideoExtension && this.isVertexMode(effectiveConfig);
     // Support both 'durationSeconds' and 'duration' (alias)
-    let durationSeconds =
-      effectiveConfig.durationSeconds ??
-      effectiveConfig.duration ??
-      (isVideoExtension ? VEO_EXTENSION_DURATION : DEFAULT_DURATION);
+    const configuredDuration =
+      effectiveConfig.durationSeconds ?? effectiveConfig.duration ?? DEFAULT_DURATION;
+    const durationSeconds = isVideoExtension
+      ? resolveExtensionDuration(configuredDuration)
+      : configuredDuration;
 
     // Validate aspect ratio
     const ratioValidation = validateAspectRatio(aspectRatio);
@@ -1198,11 +1191,6 @@ export class GoogleVideoProvider implements ApiProvider {
     );
     if (!resolutionValidation.valid) {
       return { error: resolutionValidation.message };
-    }
-
-    // Vertex extension does not send duration; normalize before applying shared constraints.
-    if (isVertexExtension) {
-      durationSeconds = resolveExtensionDuration(durationSeconds);
     }
 
     // Validate duration after resolution so unsupported resolutions report their own constraint.
@@ -1226,7 +1214,7 @@ export class GoogleVideoProvider implements ApiProvider {
         ...requestConfig,
         aspectRatio,
         resolution,
-        ...(isVertexExtension ? {} : { durationSeconds }),
+        ...(isVideoExtension && this.isVertexMode(effectiveConfig) ? {} : { durationSeconds }),
       },
       mediaBasePaths,
     );
@@ -1256,7 +1244,6 @@ export class GoogleVideoProvider implements ApiProvider {
     // Step 3: Store video to blob storage
     let blobRef: BlobRef | undefined;
     let sourceVideoUri: string | undefined;
-    const videoUri = completedOp.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
 
     // Check for base64 encoded video (new format)
     const generatedVideo = completedOp.response?.videos?.[0];
@@ -1323,7 +1310,7 @@ export class GoogleVideoProvider implements ApiProvider {
       },
       metadata: {
         operationName,
-        ...(videoUri && sourceVideoUri ? { videoUri: sourceVideoUri } : {}),
+        ...(sourceVideoUri ? { videoUri: sourceVideoUri } : {}),
         model,
         aspectRatio,
         resolution,

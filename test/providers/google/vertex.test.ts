@@ -7,6 +7,7 @@ import logger from '../../../src/logger';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
+import { fetchWithProxy } from '../../../src/util/fetch';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Hoisted mocks for cache
@@ -87,6 +88,11 @@ vi.mock('../../../src/cache', async (importOriginal) => {
     isCacheEnabled: mockIsCacheEnabled,
   };
 });
+
+vi.mock('../../../src/util/fetch', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithProxy: vi.fn(),
+}));
 
 vi.mock('../../../src/providers/google/util', async () => {
   const actual = await vi.importActual<typeof import('../../../src/providers/google/util')>(
@@ -185,6 +191,10 @@ describe('VertexChatProvider.callGeminiApi', () => {
     mockCacheGet.mockResolvedValue(null);
     mockCacheSet.mockReset();
     mockImportModule.mockReset();
+    vi.mocked(fetchWithProxy).mockReset();
+    vi.mocked(GoogleAuthManager.getApiKey)
+      .mockReset()
+      .mockReturnValue({ apiKey: undefined, source: 'none' });
 
     provider = new VertexChatProvider('gemini-pro', {
       config: {
@@ -407,6 +417,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(mockRequest).toHaveBeenCalledWith({
       url: expect.any(String),
       method: 'POST',
+      headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
       data: expect.objectContaining({
         contents: [{ parts: [{ text: 'test prompt' }], role: 'user' }],
       }),
@@ -733,51 +744,55 @@ describe('VertexChatProvider.callGeminiApi', () => {
     );
   });
 
-  it('should not invoke functionToolCallbacks when tools are disabled', async () => {
-    // Use a cached response so executeFunctionCallback would normally fire if not gated.
-    mockIsCacheEnabled.mockReturnValue(true);
-    mockCacheGet.mockResolvedValue(
-      JSON.stringify({
-        cached: true,
-        output: JSON.stringify({
-          functionCall: { name: 'should_not_run', args: '{}' },
+  it.each(['native', 'JSON object', 'JSON array'])(
+    'does not execute cached %s callbacks when tools are disabled',
+    async (form) => {
+      // Use a cached response so executeFunctionCallback would normally fire if not gated.
+      mockIsCacheEnabled.mockReturnValue(true);
+      const call = { functionCall: { name: 'should_not_run', args: '{}' } };
+      const output =
+        form === 'native' ? [call] : JSON.stringify(form === 'JSON array' ? [call] : call);
+      mockCacheGet.mockResolvedValue(
+        JSON.stringify({
+          cached: true,
+          output,
+          tokenUsage: { total: 5, prompt: 3, completion: 2 },
         }),
-        tokenUsage: { total: 5, prompt: 3, completion: 2 },
-      }),
-    );
+      );
 
-    const callback = vi.fn().mockResolvedValue('should not be called');
+      const callback = vi.fn().mockResolvedValue('should not be called');
 
-    const provider = new VertexChatProvider('gemini-pro', {
-      config: {
-        tool_choice: 'none',
-        tools: [
-          {
-            functionDeclarations: [
-              {
-                name: 'should_not_run',
-                description: 'Test',
-                parameters: { type: 'OBJECT', properties: {} },
-              },
-            ],
-          },
-        ],
-        functionToolCallbacks: { should_not_run: callback },
-      },
-    });
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: {
+          tool_choice: 'none',
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'should_not_run',
+                  description: 'Test',
+                  parameters: { type: 'OBJECT', properties: {} },
+                },
+              ],
+            },
+          ],
+          functionToolCallbacks: { should_not_run: callback },
+        },
+      });
 
-    const result = await provider.callApi('test');
+      const result = await provider.callApi('test');
 
-    expect(callback).not.toHaveBeenCalled();
-    // Output remains the original functionCall envelope when callbacks are gated.
-    expect(result.output).toBe(
-      JSON.stringify({ functionCall: { name: 'should_not_run', args: '{}' } }),
-    );
+      expect(callback).not.toHaveBeenCalled();
+      // Output remains the original functionCall envelope when callbacks are gated.
+      expect(result.output).toEqual(output);
+      expect(result.cached).toBe(true);
+      expect(fetchWithProxy).not.toHaveBeenCalled();
 
-    // Reset cache state so other tests aren't affected.
-    mockIsCacheEnabled.mockReturnValue(false);
-    mockCacheGet.mockReset();
-  });
+      // Reset cache state so other tests aren't affected.
+      mockIsCacheEnabled.mockReturnValue(false);
+      mockCacheGet.mockReset();
+    },
+  );
 
   it('should strip snake_case functions from a single passthrough tool when disabled', async () => {
     provider = new VertexChatProvider('gemini-pro', {
@@ -1028,15 +1043,66 @@ describe('VertexChatProvider.callGeminiApi', () => {
     ]);
   });
 
+  it.each(['JSON object', 'JSON array'])(
+    'executes configured cached %s callbacks',
+    async (form) => {
+      const callback = vi.fn().mockResolvedValue('cached callback result');
+      const call = { functionCall: { name: 'get_weather', args: { location: 'Boston' } } };
+      const output = JSON.stringify(form === 'JSON array' ? [call] : call);
+      mockCacheGet.mockResolvedValue(JSON.stringify({ output }));
+      const provider = new VertexChatProvider('gemini', {
+        config: { functionToolCallbacks: { get_weather: callback } },
+      });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.output).toBe('cached callback result');
+      expect(response.cached).toBe(true);
+      expect(callback).toHaveBeenCalledExactlyOnceWith('{"location":"Boston"}');
+      expect(fetchWithProxy).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ['unknown name', JSON.stringify({ functionCall: { name: 'unknown', args: {} } }), true],
+    ['non-string name', JSON.stringify({ functionCall: { name: 7, args: {} } }), true],
+    ['malformed JSON', '{"functionCall":', true],
+    [
+      'malformed arguments',
+      JSON.stringify({ functionCall: { name: 'get_weather', args: '{' } }),
+      true,
+    ],
+    [
+      'unconfigured name',
+      JSON.stringify({ functionCall: { name: 'get_weather', args: {} } }),
+      false,
+    ],
+  ])('preserves cached %s without executing a callback', async (_name, output, configured) => {
+    const callback = vi.fn();
+    mockCacheGet.mockResolvedValue(JSON.stringify({ output }));
+    const provider = new VertexChatProvider('gemini', {
+      config: { functionToolCallbacks: configured ? { get_weather: callback } : {} },
+    });
+
+    const response = await provider.callApi('test prompt');
+
+    expect(response.output).toBe(output);
+    expect(response.cached).toBe(true);
+    expect(callback).not.toHaveBeenCalled();
+    expect(fetchWithProxy).not.toHaveBeenCalled();
+  });
+
   it('should handle function tool callbacks correctly', async () => {
     const mockCachedResponse = {
       cached: true,
-      output: JSON.stringify({
-        functionCall: {
-          name: 'get_weather',
-          args: '{"location":"New York"}',
+      output: [
+        {
+          functionCall: {
+            name: 'get_weather',
+            args: '{"location":"New York"}',
+          },
         },
-      }),
+      ],
       tokenUsage: {
         total: 15,
         prompt: 10,
@@ -1282,6 +1348,80 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
   });
 
+  it.each([
+    ['fresh', true],
+    ['cached', true],
+    ['fresh', false],
+    ['cached', false],
+  ] as const)(
+    'rejects %s function-call fragments with supplied metadata=%s before callbacks without streaming opt-in',
+    async (source, suppliedMetadata) => {
+      const callback = vi.fn().mockResolvedValue('ticket found');
+      const geminiProvider = new VertexChatProvider('gemini-3.6-flash', {
+        config: {
+          tools: [{ functionDeclarations: [{ name: 'lookup_status' }] }],
+          functionToolCallbacks: { lookup_status: callback },
+        },
+      });
+      const parts = [
+        { functionCall: { name: 'lookup_status', args: { ticket: 'PF-3621' } } },
+        {
+          functionCall: {
+            name: 'lookup_status',
+            partialArgs: [{ jsonPath: '$.ticket', stringValue: 'PF-36' }],
+            willContinue: true,
+          },
+        },
+      ];
+      const raw = [
+        {
+          candidates: [{ content: { parts } }],
+          ...(suppliedMetadata && {
+            usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+          }),
+        },
+      ];
+      const mockRequest = mockVertexRequest(raw);
+      if (source === 'cached') {
+        mockCacheGet.mockResolvedValue(
+          JSON.stringify({
+            output: parts,
+            ...(suppliedMetadata && {
+              raw,
+              tokenUsage: { total: 15, prompt: 10, completion: 5 },
+              cost: 0.25,
+            }),
+          }),
+        );
+      }
+
+      const response = await geminiProvider.callGeminiApi('Look up the tickets');
+
+      expect(response.error).toBe(
+        'Error: Streamed function-call arguments require streaming: true and toolConfig.functionCallingConfig.streamFunctionCallArguments: true.',
+      );
+      expect(response.output).toBeUndefined();
+      expect(response.cached).toBe(source === 'cached');
+      if (suppliedMetadata) {
+        expect(response.tokenUsage).toMatchObject({
+          total: 15,
+          prompt: 10,
+          completion: 5,
+          ...(source === 'cached' ? { cached: 15 } : {}),
+        });
+        expect(response.cost).toEqual(source === 'cached' ? 0.25 : expect.any(Number));
+      } else {
+        expect(response.tokenUsage).toEqual(
+          source === 'cached' ? undefined : { total: 0, prompt: 0, completion: 0 },
+        );
+        expect(response.cost).toBeUndefined();
+      }
+      expect(response.raw).toEqual(source === 'cached' && suppliedMetadata ? raw : undefined);
+      expect(callback).not.toHaveBeenCalled();
+      expect(mockRequest).toHaveBeenCalledTimes(source === 'cached' ? 0 : 1);
+    },
+  );
+
   it('exposes text thought signatures in metadata without changing the textual output', async () => {
     const signedPart = { text: 'Signed response', thoughtSignature: 'signed-thought' };
     const geminiProvider = new VertexChatProvider('gemini-3.6-flash', {
@@ -1374,46 +1514,365 @@ describe('VertexChatProvider.callGeminiApi', () => {
     },
   );
 
-  it('should normalize Gemini priority service tier for Vertex requests', async () => {
-    const priorityProvider = new VertexChatProvider('gemini-3.1-pro-preview-customtools', {
-      config: { passthrough: { service_tier: 'priority' } },
-    });
-    const mockRequest = mockVertexRequest([
+  describe('Vertex tier protocol regression', () => {
+    it.each([
       {
-        candidates: [{ content: { parts: [{ text: 'response text' }] } }],
-        usageMetadata: {
-          promptTokenCount: 1_000,
-          candidatesTokenCount: 100,
-          totalTokenCount: 1_100,
-        },
+        label: 'OAuth Priority',
+        express: false,
+        config: { service_tier: 'priority' },
+        trafficType: 'ON_DEMAND_PRIORITY',
+        requestTier: 'priority',
+        actualTier: 'priority',
+        cost: 0.00099,
       },
-    ]);
+      {
+        label: 'OAuth camel passthrough Flex',
+        express: false,
+        config: { service_tier: 'priority', passthrough: { serviceTier: 'flex' } },
+        trafficType: 'ON_DEMAND_FLEX',
+        requestTier: 'flex',
+        actualTier: 'flex',
+        cost: 0.000275,
+      },
+      {
+        label: 'Express snake passthrough Priority',
+        express: true,
+        config: { service_tier: 'flex', passthrough: { service_tier: 'priority' } },
+        trafficType: 'ON_DEMAND_PRIORITY',
+        requestTier: 'priority',
+        actualTier: 'priority',
+        cost: 0.00099,
+      },
+      {
+        label: 'Express Flex',
+        express: true,
+        config: { service_tier: 'flex' },
+        trafficType: 'ON_DEMAND_FLEX',
+        requestTier: 'flex',
+        actualTier: 'flex',
+        cost: 0.000275,
+      },
+      {
+        label: 'OAuth Standard',
+        express: false,
+        config: { service_tier: 'standard' },
+        trafficType: 'ON_DEMAND',
+        actualTier: 'standard',
+        cost: 0.00055,
+      },
+      {
+        label: 'Express omitted tier',
+        express: true,
+        config: {},
+        trafficType: 'ON_DEMAND',
+        actualTier: 'standard',
+        cost: 0.00055,
+      },
+      {
+        label: 'OAuth explicit header',
+        express: false,
+        config: {
+          service_tier: 'priority',
+          headers: { 'x-VeRtEx-Ai-LlM-sHaReD-rEqUeSt-TyPe': 'flex', 'X-Request-Tag': 'retained' },
+        },
+        trafficType: 'ON_DEMAND_FLEX',
+        requestTier: 'flex',
+        actualTier: 'flex',
+        cost: 0.000275,
+      },
+      {
+        label: 'Express explicit header',
+        express: true,
+        config: {
+          service_tier: 'flex',
+          headers: {
+            'x-VeRtEx-Ai-LlM-sHaReD-rEqUeSt-TyPe': 'priority',
+            'X-Request-Tag': 'retained',
+          },
+        },
+        trafficType: 'ON_DEMAND_PRIORITY',
+        requestTier: 'priority',
+        actualTier: 'priority',
+        cost: 0.00099,
+      },
+      {
+        label: 'OAuth Priority downgrade',
+        express: false,
+        config: { service_tier: 'priority' },
+        trafficType: 'ON_DEMAND',
+        requestTier: 'priority',
+        actualTier: 'standard',
+        cost: 0.00055,
+      },
+      {
+        label: 'Express Priority downgrade',
+        express: true,
+        config: { service_tier: 'priority' },
+        trafficType: 'ON_DEMAND',
+        requestTier: 'priority',
+        actualTier: 'standard',
+        cost: 0.00055,
+      },
+      {
+        label: 'OAuth unknown traffic estimate',
+        express: false,
+        config: { service_tier: 'priority' },
+        trafficType: 'FUTURE_TRAFFIC_CLASS',
+        requestTier: 'priority',
+        cost: 0.00099,
+      },
+      {
+        label: 'Express provisioned traffic estimate',
+        express: true,
+        config: { service_tier: 'priority' },
+        trafficType: 'PROVISIONED_THROUGHPUT',
+        requestTier: 'priority',
+        cost: 0.00099,
+      },
+      {
+        label: 'streaming final usage downgrade',
+        express: false,
+        config: { service_tier: 'priority', streaming: true },
+        trafficType: 'ON_DEMAND',
+        requestTier: 'priority',
+        actualTier: 'standard',
+        cost: 0.00055,
+      },
+    ] as Array<{
+      label: string;
+      express: boolean;
+      config: Record<string, unknown>;
+      trafficType: string;
+      requestTier?: string;
+      actualTier?: string;
+      cost: number;
+    }>)(
+      'routes and accounts for $label',
+      async ({ express, config, trafficType, requestTier, actualTier, cost }) => {
+        if (express) {
+          vi.mocked(GoogleAuthManager.getApiKey).mockReturnValue({
+            apiKey: 'tier-api-key',
+            source: 'config',
+          });
+        }
+        const tierProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
+          config: {
+            region: 'global',
+            ...(express && { apiKey: 'tier-api-key', expressMode: true }),
+            headers: { 'X-Request-Tag': 'retained' },
+            ...config,
+          },
+        });
+        const finalChunk = {
+          candidates: [{ content: { parts: [{ text: 'tier response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000,
+            candidatesTokenCount: 100,
+            totalTokenCount: 1_100,
+            trafficType,
+          },
+        };
+        const payload = config.streaming
+          ? [{ usageMetadata: { trafficType: 'ON_DEMAND_PRIORITY' } }, finalChunk]
+          : [finalChunk];
+        const request = mockVertexRequest(payload);
+        vi.mocked(fetchWithProxy).mockResolvedValue(new Response(JSON.stringify(payload)));
 
-    const response = await priorityProvider.callGeminiApi('test prompt');
+        const response = await tierProvider.callGeminiApi('test prompt');
 
-    expect(mockRequest).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ serviceTier: 'SERVICE_TIER_PRIORITY' }),
-      }),
+        expect(response.output).toBe('tier response');
+        const options = express
+          ? vi.mocked(fetchWithProxy).mock.calls[0]?.[1]
+          : request.mock.calls[0]?.[0];
+        const headers = new Headers(options?.headers);
+        const body = express ? JSON.parse(String(options?.body)) : options?.data;
+        expect(headers.get('X-Vertex-AI-LLM-Shared-Request-Type')).toBe(requestTier ?? null);
+        expect(headers.has('X-Vertex-AI-LLM-Request-Type')).toBe(false);
+        expect(headers.get('X-Request-Tag')).toBe('retained');
+        expect(
+          Object.keys(options?.headers ?? {}).filter(
+            (name) => name.toLowerCase() === 'x-vertex-ai-llm-shared-request-type',
+          ),
+        ).toHaveLength(requestTier ? 1 : 0);
+        expect(body).not.toHaveProperty('serviceTier');
+        expect(body).not.toHaveProperty('service_tier');
+        expect(body.contents).toEqual([{ role: 'user', parts: [{ text: 'test prompt' }] }]);
+        expect(options?.method).toBe('POST');
+        const endpoint = config.streaming ? 'streamGenerateContent' : 'generateContent';
+        const modelPath = `publishers/google/models/gemini-3.5-flash-lite:${endpoint}`;
+        if (express) {
+          expect(vi.mocked(fetchWithProxy).mock.calls[0]?.[0]).toBe(
+            `https://aiplatform.googleapis.com/v1/${modelPath}`,
+          );
+          expect(headers.get('x-goog-api-key')).toBe('tier-api-key');
+          expect(request).not.toHaveBeenCalled();
+        } else {
+          expect(options?.url).toBe(
+            `https://aiplatform.googleapis.com/v1/projects/test-project-id/locations/global/${modelPath}`,
+          );
+          expect(headers.has('x-goog-api-key')).toBe(false);
+          expect(fetchWithProxy).not.toHaveBeenCalled();
+        }
+        expect(response.metadata).toMatchObject({ trafficType });
+        if (actualTier) {
+          expect(response.metadata).toHaveProperty('serviceTier', actualTier);
+        } else {
+          expect(response.metadata).not.toHaveProperty('serviceTier');
+        }
+        expect(response.cost).toBeCloseTo(cost, 12);
+      },
     );
-    expect(mockRequest.mock.calls[0]?.[0]?.data.service_tier).toBeUndefined();
-    expect(response.cost).toBeCloseTo((1.8 * (1_000 * 2 + 100 * 12)) / 1e6, 12);
+
+    it('isolates cached responses by the effective explicit tier header', async () => {
+      const cache = new Map<string, string>();
+      mockCacheGet.mockImplementation(async (key: string) => cache.get(key) ?? null);
+      mockCacheSet.mockImplementation(async (key: string, value: string) => {
+        cache.set(key, value);
+      });
+      const priorityProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
+        config: { region: 'global', service_tier: 'priority' },
+      });
+      const flexProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
+        config: {
+          region: 'global',
+          service_tier: 'priority',
+          headers: { 'x-vertex-ai-llm-shared-request-type': 'flex' },
+        },
+      });
+      const request = mockVertexRequest([]);
+      for (const [text, trafficType] of [
+        ['priority response', 'ON_DEMAND_PRIORITY'],
+        ['flex response', 'ON_DEMAND_FLEX'],
+      ]) {
+        request.mockResolvedValueOnce({
+          data: [
+            {
+              candidates: [{ content: { parts: [{ text }] } }],
+              usageMetadata: { promptTokenCount: 1_000, candidatesTokenCount: 100, trafficType },
+            },
+          ],
+        });
+      }
+
+      const priority = await priorityProvider.callGeminiApi('same prompt');
+      const flex = await flexProvider.callGeminiApi('same prompt');
+      const repeated = await flexProvider.callGeminiApi('same prompt');
+
+      expect(priority.output).toBe('priority response');
+      expect(flex.output).toBe('flex response');
+      expect(repeated.output).toBe('flex response');
+      expect(repeated.cached).toBe(true);
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(cache.size).toBe(2);
+      expect(request.mock.calls[0]?.[0]?.data).toEqual(request.mock.calls[1]?.[0]?.data);
+      expect(
+        new Headers(request.mock.calls[0]?.[0]?.headers).get('X-Vertex-AI-LLM-Shared-Request-Type'),
+      ).toBe('priority');
+      expect(
+        new Headers(request.mock.calls[1]?.[0]?.headers).get('X-Vertex-AI-LLM-Shared-Request-Type'),
+      ).toBe('flex');
+    });
+
+    it('preserves an opaque body tier without deriving a routing header', async () => {
+      const opaqueProvider = new VertexChatProvider('gemini-3.5-flash-lite', {
+        config: { region: 'global', passthrough: { serviceTier: 'future-tier' } },
+      });
+      const request = mockVertexRequest([
+        { candidates: [{ content: { parts: [{ text: 'opaque response' }] } }] },
+      ]);
+
+      const response = await opaqueProvider.callGeminiApi('test prompt');
+
+      expect(response.output).toBe('opaque response');
+      expect(request.mock.calls[0]?.[0]?.data.serviceTier).toBe('future-tier');
+      expect(request.mock.calls[0]?.[0]?.data).not.toHaveProperty('service_tier');
+      const headers = new Headers(request.mock.calls[0]?.[0]?.headers);
+      expect(headers.has('X-Vertex-AI-LLM-Shared-Request-Type')).toBe(false);
+      expect(headers.has('X-Vertex-AI-LLM-Request-Type')).toBe(false);
+    });
+
+    it('keeps different opaque body tiers separate with the same explicit routing header', async () => {
+      const cache = new Map<string, string>();
+      mockCacheGet.mockImplementation(async (key: string) => cache.get(key) ?? null);
+      mockCacheSet.mockImplementation(async (key: string, value: string) => {
+        cache.set(key, value);
+      });
+      const opaqueTiers = ['future-tier-a', 'future-tier-b'];
+      const providers = opaqueTiers.map(
+        (serviceTier) =>
+          new VertexChatProvider('gemini-3.5-flash-lite', {
+            config: {
+              region: 'global',
+              passthrough: { serviceTier },
+              headers: { 'x-vertex-ai-llm-shared-request-type': 'priority' },
+            },
+          }),
+      );
+      const request = mockVertexRequest([]);
+      for (const text of opaqueTiers) {
+        request.mockResolvedValueOnce({
+          data: [{ candidates: [{ content: { parts: [{ text }] } }] }],
+        });
+      }
+
+      const first = await providers[0].callGeminiApi('same prompt');
+      const second = await providers[1].callGeminiApi('same prompt');
+      const repeated = await providers[1].callGeminiApi('same prompt');
+
+      expect(first.output).toBe('future-tier-a');
+      expect(second.output).toBe('future-tier-b');
+      expect(repeated.output).toBe('future-tier-b');
+      expect(repeated.cached).toBe(true);
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(cache.size).toBe(2);
+      for (const [index, serviceTier] of opaqueTiers.entries()) {
+        const options = request.mock.calls[index]?.[0];
+        expect(options.data.serviceTier).toBe(serviceTier);
+        expect(options.data).not.toHaveProperty('service_tier');
+        expect(new Headers(options.headers).get('X-Vertex-AI-LLM-Shared-Request-Type')).toBe(
+          'priority',
+        );
+      }
+    });
+
+    it('keeps effective region separate from a defensively mismatched Flex response', async () => {
+      // This checks accounting isolation, not support for Flex requests in eu.
+      const tierProvider = new VertexChatProvider('gemini-3.5-flash', {
+        config: { service_tier: 'priority' },
+        env: { GOOGLE_CLOUD_LOCATION: 'eu' },
+      });
+      mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [{ text: 'Cached response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1_000_000,
+            cachedContentTokenCount: 1_000_000,
+            candidatesTokenCount: 0,
+            totalTokenCount: 1_000_000,
+            trafficType: 'ON_DEMAND_FLEX',
+          },
+        },
+      ]);
+
+      const response = await tierProvider.callGeminiApi('test prompt');
+
+      expect(response.cost).toBeCloseTo(0.0825, 12);
+      expect(response.metadata).toMatchObject({
+        trafficType: 'ON_DEMAND_FLEX',
+        serviceTier: 'flex',
+      });
+    });
   });
 
   it.each([
-    ['standard', { service_tier: 'standard' }, 'SERVICE_TIER_STANDARD', 0.00055],
-    ['flex', { service_tier: 'flex' }, 'SERVICE_TIER_FLEX', 0.000275],
-    ['priority', { service_tier: 'priority' }, 'SERVICE_TIER_PRIORITY', 0.00099],
-    [
-      'camel-case passthrough',
-      { passthrough: { serviceTier: 'priority' } },
-      'SERVICE_TIER_PRIORITY',
-      0.00099,
-    ],
+    ['standard', { service_tier: 'standard' }, null, 0.00055],
+    ['flex', { service_tier: 'flex' }, 'flex', 0.000275],
+    ['priority', { service_tier: 'priority' }, 'priority', 0.00099],
+    ['camel-case passthrough', { passthrough: { serviceTier: 'priority' } }, 'priority', 0.00099],
     [
       'passthrough override',
       { service_tier: 'priority', passthrough: { service_tier: 'flex' } },
-      'SERVICE_TIER_FLEX',
+      'flex',
       0.000275,
     ],
   ] as const)(
@@ -1435,7 +1894,12 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
       const response = await geminiProvider.callGeminiApi('test prompt');
 
-      expect(mockRequest.mock.calls[0]?.[0]?.data.serviceTier).toBe(expectedTier);
+      expect(mockRequest.mock.calls[0]?.[0]?.data.serviceTier).toBeUndefined();
+      expect(
+        new Headers(mockRequest.mock.calls[0]?.[0]?.headers).get(
+          'X-Vertex-AI-LLM-Shared-Request-Type',
+        ),
+      ).toBe(expectedTier);
       expect(mockRequest.mock.calls[0]?.[0]?.data.service_tier).toBeUndefined();
       expect(response.cost).toBeCloseTo(cost, 12);
     },
@@ -1468,12 +1932,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
   it('should handle errors in function tool callbacks', async () => {
     const mockCachedResponse = {
       cached: true,
-      output: JSON.stringify({
-        functionCall: {
-          name: 'errorFunction',
-          args: '{}',
+      output: [
+        {
+          functionCall: {
+            name: 'errorFunction',
+            args: '{}',
+          },
         },
-      }),
+      ],
       tokenUsage: {
         total: 5,
         prompt: 2,
@@ -1530,12 +1996,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
     it('should load and execute external function callbacks from file', async () => {
       const mockCachedResponse = {
         cached: true,
-        output: JSON.stringify({
-          functionCall: {
-            name: 'external_function',
-            args: '{"param":"test_value"}',
+        output: [
+          {
+            functionCall: {
+              name: 'external_function',
+              args: '{"param":"test_value"}',
+            },
           },
-        }),
+        ],
         tokenUsage: {
           total: 15,
           prompt: 10,
@@ -1586,12 +2054,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
     it('should cache external functions and not reload them on subsequent calls', async () => {
       const mockCachedResponse = {
         cached: true,
-        output: JSON.stringify({
-          functionCall: {
-            name: 'cached_function',
-            args: '{"value":123}',
+        output: [
+          {
+            functionCall: {
+              name: 'cached_function',
+              args: '{"value":123}',
+            },
           },
-        }),
+        ],
         tokenUsage: {
           total: 12,
           prompt: 8,
@@ -1643,12 +2113,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
     it('should handle errors in external function loading gracefully', async () => {
       const mockCachedResponse = {
         cached: true,
-        output: JSON.stringify({
-          functionCall: {
-            name: 'error_function',
-            args: '{"test":"data"}',
+        output: [
+          {
+            functionCall: {
+              name: 'error_function',
+              args: '{"test":"data"}',
+            },
           },
-        }),
+        ],
         tokenUsage: {
           total: 10,
           prompt: 6,
@@ -1699,12 +2171,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
     it('should handle mixed inline and external function callbacks', async () => {
       const mockCachedResponse = {
         cached: true,
-        output: JSON.stringify({
-          functionCall: {
-            name: 'external_function',
-            args: '{"external":"test"}',
+        output: [
+          {
+            functionCall: {
+              name: 'external_function',
+              args: '{"external":"test"}',
+            },
           },
-        }),
+        ],
         tokenUsage: {
           total: 20,
           prompt: 12,

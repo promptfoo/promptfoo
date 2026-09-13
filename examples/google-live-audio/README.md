@@ -27,4 +27,4 @@ View the results:
 promptfoo view
 ```
 
-For more information about the Google Live API, see the [Google AI Speech Generation documentation](https://ai.google.dev/gemini-api/docs/speech-generation).
+For more information about the Google Live API, see the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live).

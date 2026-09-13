@@ -23,7 +23,7 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { renderVarsInObject } from './util/index';
+import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
@@ -246,6 +246,9 @@ export async function renderPrompt(
   skipRenderVars?: string[],
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
+  // Reusing vars for another render must not inherit provenance from earlier loads.
+  setLoadedFileMimeTypes(vars);
+  const loadedMimeTypes = new Map<string, string>();
 
   let basePrompt = prompt.raw;
 
@@ -347,17 +350,17 @@ export async function renderPrompt(
             }
 
             vars[varName] = `data:${mimeType};base64,${base64Data}`;
-          } else if (fileType === 'audio' && fileExtension?.toLowerCase() === 'm4a' && provider) {
-            // Generic ISO-BMFF brands such as `isom` and `mp42` do not reveal
-            // whether a file contains audio or video. Preserve the known M4A
-            // provenance so providers receive the correct modality.
-            vars[varName] =
-              provider.getAudioInputFormat?.() === 'google'
-                ? `data:audio/mp4;base64,${base64Data}`
-                : base64Data;
           } else {
             // Keep existing behavior for video/audio files (raw base64)
             vars[varName] = base64Data;
+            if (
+              fileType === 'audio' &&
+              fileExtension?.toLowerCase() === 'm4a' &&
+              provider?.getAudioInputFormat?.() === 'google'
+            ) {
+              loadedMimeTypes.set(base64Data, 'audio/mp4');
+              setLoadedFileMimeTypes(vars, loadedMimeTypes);
+            }
           }
         } catch (error) {
           throw new Error(

@@ -145,7 +145,7 @@ Now that you've created an initial configuration, you can update `promptfooconfi
      - openai:chat:gpt-5.6
      - openai:chat:gpt-5.4-mini
      - anthropic:messages:claude-sonnet-5
-     - google:gemini-3.1-pro-preview
+     - google:gemini-3.8-flash
      # Or use your own custom provider
      - file://path/to/custom/provider.py
    ```
