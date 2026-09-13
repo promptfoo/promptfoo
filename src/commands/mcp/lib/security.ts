@@ -1,7 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { parse as parseCsv } from 'csv-parse/sync';
 import { globSync } from 'glob';
+import { testCaseFromCsvRow } from '../../../csv';
 import { parseScriptParts } from '../../../providers/scriptCompletion';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../../../util/config/extensions';
 import { isProviderConfigFileReference, normalizeProviderRef } from '../../../util/providerRef';
@@ -17,7 +19,7 @@ type EnvOverrides = Record<string, string | undefined>;
 
 const FILE_PROVIDER_PREFIX = 'file://';
 const LOCAL_PROVIDER_PREFIXES = ['exec:', 'golang:', 'python:', 'ruby:'] as const;
-const STATIC_CONFIG_EXTENSIONS = new Set(['.json', '.jsonl', '.yaml', '.yml']);
+const STATIC_CONFIG_EXTENSIONS = new Set(['.csv', '.json', '.jsonl', '.yaml', '.yml']);
 const PROVIDER_FILE_EXTENSIONS = new Set([
   'cjs',
   'cts',
@@ -140,7 +142,11 @@ export function validateMcpFilePath(filePath: string, resolutionBasePath = proce
 }
 
 function validateStateFilePath(filePath: string, state: ProviderValidationState): void {
-  validateMcpFilePathWithinWorkspace(filePath, state.basePath, state.basePath);
+  validateMcpFilePathWithinWorkspace(
+    filePath,
+    state.workspacePath ?? state.basePath,
+    state.basePath,
+  );
 }
 
 function validateStateExecutablePath(filePath: string, state: ProviderValidationState): void {
@@ -198,6 +204,7 @@ function isLocalConfigFileReference(value: string): boolean {
     filePath.startsWith('./') ||
     filePath.startsWith('../') ||
     filePath.startsWith('~/') ||
+    filePath.includes('/') ||
     filePath.includes('\\') ||
     filePath.includes('*') ||
     hasConfigFileExtension(filePath)
@@ -230,6 +237,7 @@ function renderProviderIdForValidation(providerId: string, env?: EnvOverrides): 
 
 interface ProviderValidationState {
   basePath: string;
+  workspacePath?: string;
   configPath?: string;
   refBasePath?: string;
   rootConfig?: unknown;
@@ -324,6 +332,7 @@ function validateJsonSchemaRef(
     if (target !== undefined) {
       if (providerConfigContext) {
         validateProviderConfigCodeReferences(target, state);
+        validateMultipartPaths(getObject(target), state);
         validateProviderReferenceWithState(target, state);
       } else {
         validateFileReferencesInValue(target, state, assertionContext);
@@ -436,6 +445,9 @@ function validateFileReferencesInValue(
       validateConfigFileReference(object.path, state);
     }
     for (const [key, entry] of Object.entries(object)) {
+      if (key === 'vars') {
+        validateLocalConfigFileReferences(entry, state, true, true);
+      }
       if (key === '$ref') {
         validateJsonSchemaRef(entry, state, assertionContext, providerConfigContext);
       }
@@ -493,6 +505,12 @@ function validateLocalConfigFileReferences(
           cwd: state.basePath,
           nodir: true,
         })) {
+          if (/\.xlsx?$/i.test(match)) {
+            throw new ConfigurationError(
+              'Spreadsheet test files are not allowed through MCP tools; use CSV, YAML, or JSON instead',
+              match,
+            );
+          }
           validateStaticConfigFile(match, state);
         }
       }
@@ -553,7 +571,9 @@ function validateStaticConfigLocalReferences(
     }
   }
   for (const extension of [rootConfig.extensions].flat()) {
-    validateCodeReference(extension, 'extension', state);
+    if (extension != null) {
+      validateCodeReference(extension, 'extension', state);
+    }
   }
   validateLocalConfigFileReferences(rootConfig.nunjucksFilters, state, true);
 }
@@ -576,6 +596,9 @@ function validateMcpServerConfig(server: unknown, state: ProviderValidationState
     throw new ConfigurationError(
       'MCP server command configs are not allowed through MCP tools; use a workspace-local server path instead',
     );
+  }
+  if (serverConfig.env !== undefined) {
+    throw new ConfigurationError('MCP server env configs are not allowed through MCP tools');
   }
 }
 
@@ -603,8 +626,22 @@ function validateProviderConfigCodeReferences(
     'responseParser',
     'validateStatus',
     'sessionParser',
+    'streamResponse',
   ]) {
     validateCodeReference(configObject?.[key], key, state);
+  }
+}
+
+function validateMultipartPaths(
+  config: Record<string, unknown> | undefined,
+  state: ProviderValidationState,
+): void {
+  const multipart = getObject(config?.multipart);
+  for (const part of Array.isArray(multipart?.parts) ? multipart.parts : []) {
+    const source = getObject(getObject(part)?.source);
+    if (source?.type === 'path' && typeof source.path === 'string') {
+      validateConfigFileReference(source.path, state);
+    }
   }
 }
 
@@ -616,6 +653,19 @@ function validateProviderConfigPaths(
   for (const key of ['codex_path_override', 'interpreter_path', 'path_to_claude_code_executable']) {
     if (typeof config?.[key] === 'string') {
       validateStateExecutablePath(config[key], state);
+    }
+  }
+  if (providerId.startsWith('google:live:')) {
+    const statefulApi = getObject(config?.functionToolStatefulApi);
+    for (const key of ['file', 'pythonExecutable']) {
+      if (typeof statefulApi?.[key] === 'string') {
+        validateStateExecutablePath(statefulApi[key], state);
+      }
+    }
+  }
+  for (const key of ['audioFile', 'audioOutputPath']) {
+    if (typeof config?.[key] === 'string') {
+      validateStateFilePath(config[key], state);
     }
   }
   if (providerId !== 'openai:codex-security' && !providerId.startsWith('openai:codex-security:')) {
@@ -705,15 +755,9 @@ function validateProviderReferenceWithState(
     'session responseParser',
     providerState,
   );
-  const multipart = getObject(configObject?.multipart);
-  for (const part of Array.isArray(multipart?.parts) ? multipart.parts : []) {
-    const source = getObject(getObject(part)?.source);
-    if (source?.type === 'path' && typeof source.path === 'string') {
-      validateConfigFileReference(source.path, providerState);
-    }
-  }
+  validateMultipartPaths(configObject, providerState);
   if (renderedProviderId === 'browser' || renderedProviderId.startsWith('browser:')) {
-    for (const action of Array.isArray(configObject?.actions) ? configObject.actions : []) {
+    for (const action of [configObject?.actions, configObject?.steps].flat()) {
       const entry = getObject(action);
       const screenshotPath = getObject(entry?.args)?.path;
       if (entry?.action === 'screenshot' && typeof screenshotPath === 'string') {
@@ -882,12 +926,16 @@ function validateStaticConfigFile(
   const realConfigPath = fs.realpathSync(configPath);
   const contents = fs.readFileSync(realConfigPath, 'utf8');
   const rawConfig =
-    extension === '.jsonl'
-      ? contents
-          .split(/\r?\n/)
-          .filter((line) => line.trim())
-          .map((line) => JSON.parse(line))
-      : loadYaml(contents);
+    extension === '.csv'
+      ? parseCsv(contents, { columns: true, skip_empty_lines: true }).map((row) =>
+          testCaseFromCsvRow(row as Parameters<typeof testCaseFromCsvRow>[0]),
+        )
+      : extension === '.jsonl'
+        ? contents
+            .split(/\r?\n/)
+            .filter((line) => line.trim())
+            .map((line) => JSON.parse(line))
+        : loadYaml(contents);
   const configState = {
     ...state,
     basePath: preserveBasePath ? state.basePath : path.dirname(realConfigPath),
@@ -1071,6 +1119,7 @@ export function validateMcpConfigFile(configPath: string, workspacePath = proces
     const configState: ProviderValidationState = {
       ...state,
       basePath: path.dirname(matchedConfigPath),
+      workspacePath,
       env: asEnvOverrides(rootConfig?.env),
     };
     validateStaticConfigFile(matchedConfigPath, configState);

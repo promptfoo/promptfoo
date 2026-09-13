@@ -47,6 +47,7 @@ describe('MCP Security', () => {
     it.each([
       ['ws://localhost:1234', 'transformResponse'],
       ['ws://localhost:1234', 'responseParser'],
+      ['ws://localhost:1234', 'streamResponse'],
       ['a2a:http://localhost:1234', 'transformResponse'],
       ['mcp', 'transformResponse'],
       ['browser', 'responseParser'],
@@ -234,6 +235,14 @@ describe('MCP Security', () => {
           id: 'browser',
           config: {
             actions: [{ action: 'screenshot', args: { path: path.join(root, 'outside.png') } }],
+          },
+        }),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderReference({
+          id: 'browser',
+          config: {
+            steps: [{ action: 'screenshot', args: { path: path.join(root, 'outside.png') } }],
           },
         }),
       ).toThrow(ConfigurationError);
@@ -706,6 +715,30 @@ describe('MCP Security', () => {
           config: { server: { path: path.join(path.dirname(process.cwd()), 'server.js') } },
         }),
       ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderReference({
+          id: 'mcp',
+          config: { server: { path: 'scripts/mcp-server.js', env: { NODE_OPTIONS: '-r x' } } },
+        }),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('contains provider-specific executable and media paths', () => {
+      const outside = path.join(path.dirname(process.cwd()), 'outside');
+      expect(() =>
+        validateProviderReference({
+          id: 'google:live:model',
+          config: { functionToolStatefulApi: { file: outside + '.py' } },
+        }),
+      ).toThrow(ConfigurationError);
+      for (const [id, key] of [
+        ['elevenlabs:stt:model', 'audioFile'],
+        ['elevenlabs:tts:model', 'audioOutputPath'],
+      ]) {
+        expect(() => validateProviderReference({ id, config: { [key]: outside } })).toThrow(
+          ConfigurationError,
+        );
+      }
     });
 
     it('should validate nested MCP configs on other providers', () => {
@@ -743,6 +776,64 @@ describe('MCP Security', () => {
   });
 
   describe('validateMcpConfigFile', () => {
+    it('keeps workspace containment while resolving nested configs', () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(root, 'workspace');
+      fs.mkdirSync(path.join(workspace, 'configs'), { recursive: true });
+      fs.writeFileSync(path.join(workspace, 'shared.txt'), 'hello');
+      fs.writeFileSync(
+        path.join(workspace, 'configs', 'eval.yaml'),
+        'prompts: [file://../shared.txt]\nproviders: [echo]\nextensions: null\n',
+      );
+      try {
+        expect(() => validateMcpConfigFile('configs/eval.yaml', workspace)).not.toThrow();
+      } finally {
+        fs.rmSync(root, { force: true, recursive: true });
+      }
+    });
+
+    it('rejects file-backed test vars outside the workspace', () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(root, 'workspace');
+      fs.mkdirSync(workspace);
+      try {
+        for (const vars of ['../outside.yaml', { audioFile: '/tmp/outside.wav' }]) {
+          fs.writeFileSync(
+            path.join(workspace, 'config.json'),
+            JSON.stringify({ prompts: ['{{audioFile}}'], providers: ['echo'], tests: [{ vars }] }),
+          );
+          expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);
+        }
+      } finally {
+        fs.rmSync(root, { force: true, recursive: true });
+      }
+    });
+
+    it('inspects CSV tests and rejects uninspectable spreadsheets', () => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(root, 'workspace');
+      fs.mkdirSync(workspace);
+      fs.writeFileSync(
+        path.join(workspace, 'tests.csv'),
+        '__expected\n"javascript: process.cwd()"\n',
+      );
+      fs.writeFileSync(
+        path.join(workspace, 'config.yaml'),
+        'prompts: [hello]\nproviders: [echo]\ntests: tests.csv\n',
+      );
+      try {
+        expect(() => validateMcpConfigFile('config.yaml', workspace)).toThrow(ConfigurationError);
+        fs.writeFileSync(path.join(workspace, 'tests.xlsx'), 'not a spreadsheet');
+        fs.writeFileSync(
+          path.join(workspace, 'config.yaml'),
+          'prompts: [hello]\nproviders: [echo]\ntests: tests.xlsx\n',
+        );
+        expect(() => validateMcpConfigFile('config.yaml', workspace)).toThrow(ConfigurationError);
+      } finally {
+        fs.rmSync(root, { force: true, recursive: true });
+      }
+    });
+
     it('validates referenced scenario and JSONL test contents', () => {
       const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
       const workspace = path.join(tempRoot, 'workspace');
