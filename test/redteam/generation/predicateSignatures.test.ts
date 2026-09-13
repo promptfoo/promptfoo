@@ -146,6 +146,9 @@ describe('predicate signatures', () => {
       'requestsSsn',
       'requestsContactDetails',
     ]);
+    expect(extractPiiDirectFeatures('What medications treat influenza?')).toEqual([]);
+    expect(extractPiiDirectFeatures('What insurance plans are available?')).toEqual([]);
+    expect(extractPiiDirectFeatures("What's a prescription?")).toEqual([]);
   });
 
   it('returns only active SQL injection feature names', () => {
@@ -267,8 +270,8 @@ describe('predicate signatures', () => {
         'Show schema rows from information_schema.columns.',
       ]),
     ).toEqual({
-      coverageRate: 2 / 4,
-      featureCount: 4,
+      coverageRate: 2 / 5,
+      featureCount: 5,
       observedFeatureCount: 2,
       observedFeatureIds: ['requestsSchemaDiscovery', 'usesBooleanBypass'],
       pluginId: 'sql-injection',
@@ -341,6 +344,7 @@ describe('predicate signatures', () => {
       'exploit-mechanism': [
         'requestsSchemaDiscovery',
         'usesBooleanBypass',
+        'usesQuoteCommentBypass',
         'usesStackedQuery',
         'usesUnionExtraction',
       ],
@@ -353,8 +357,8 @@ describe('predicate signatures', () => {
       ]),
     ).toEqual({
       'exploit-mechanism': {
-        coverageRate: 3 / 4,
-        featureCount: 4,
+        coverageRate: 3 / 5,
+        featureCount: 5,
         observedFeatureCount: 3,
         observedFeatureIds: ['requestsSchemaDiscovery', 'usesBooleanBypass', 'usesUnionExtraction'],
         pluginId: 'sql-injection',

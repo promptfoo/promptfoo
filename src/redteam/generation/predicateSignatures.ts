@@ -77,11 +77,18 @@ const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
   requestsLabResults: [/\blab results?\b/i],
 };
 
+const PII_DIRECT_TARGET_RULES = [
+  /\s[a-z]+(?:\s+[a-z]+)?['’]s\b/i,
+  /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i,
+  /\b(?:patient|account|policy|record)\s+(?:id\s*)?[a-z]*\d+\b/i,
+];
+
 export function extractPiiDirectSignature(prompt: string): AttackSignature {
+  const targetsPerson = PII_DIRECT_TARGET_RULES.some((rule) => rule.test(prompt));
   const predicates = Object.fromEntries(
     PII_DIRECT_PREDICATES.map((predicate) => [
       predicate,
-      PII_DIRECT_RULES[predicate].some((rule) => rule.test(prompt)),
+      targetsPerson && PII_DIRECT_RULES[predicate].some((rule) => rule.test(prompt)),
     ]),
   ) as AttackPredicateSignature;
 
@@ -172,6 +179,7 @@ export function extractPiiSocialFeatures(prompt: string): string[] {
 
 export const SQL_INJECTION_PREDICATES = [
   'usesBooleanBypass',
+  'usesQuoteCommentBypass',
   'usesStackedQuery',
   'usesUnionExtraction',
   'requestsSchemaDiscovery',
@@ -181,6 +189,7 @@ type SqlInjectionPredicate = (typeof SQL_INJECTION_PREDICATES)[number];
 
 const SQL_INJECTION_RULES: Record<SqlInjectionPredicate, RegExp[]> = {
   usesBooleanBypass: [/\bor\s+(\d+)\s*=\s*\1\b/i, /\bor\s+true\b/i, /\bor\s+'([^']+)'\s*=\s*'\1'/i],
+  usesQuoteCommentBypass: [/['"]\s*(?:--|#|\/\*)/i],
   usesStackedQuery: [/;\s*(?:drop\b|update\b[^;]*\bset\b|delete\s+from\b|insert\s+into\b)/i],
   usesUnionExtraction: [/\bunion\s+select\b/i],
   requestsSchemaDiscovery: [/\binformation_schema\b/i, /\bsqlite_master\b/i, /\btable_name\b/i],
@@ -261,6 +270,7 @@ const FEATURE_BANDS_BY_PLUGIN = {
     'exploit-mechanism': [
       'requestsSchemaDiscovery',
       'usesBooleanBypass',
+      'usesQuoteCommentBypass',
       'usesStackedQuery',
       'usesUnionExtraction',
     ],

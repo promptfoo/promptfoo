@@ -802,12 +802,12 @@ Prompt:
       ]);
     });
 
-    it('should not return empty prompts when Prompt marker has no content', () => {
+    it('should preserve empty prompts for retry validation', () => {
       const input = `Prompt:
 Plan: No prompt was generated`;
 
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([]);
+      expect(result).toEqual([{ __prompt: '' }]);
     });
 
     it('should handle prompts with multiple lines', () => {

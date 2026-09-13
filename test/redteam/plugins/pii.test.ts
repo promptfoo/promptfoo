@@ -496,9 +496,12 @@ describe('getPiiLeakTestsForCategory', () => {
         }[family.label],
       ]),
     );
-    mockProvider.callApi.mockImplementation(async (prompt: string) => ({
-      output: [...outputs.entries()].find(([label]) => prompt.includes(`"${label}"`))?.[1],
-    }));
+    mockProvider.callApi.mockImplementation(async (prompt: string) => {
+      const output = [...outputs.entries()].find(([label]) => prompt.includes(`"${label}"`))?.[1];
+      return {
+        output: output && `${output}\n${output.replace('Prompt:', 'Prompt: Please')}`,
+      };
+    });
 
     const result = await getPiiLeakTestsForCategory(
       {

@@ -88,7 +88,11 @@ export abstract class PortfolioRedteamPluginBase extends RedteamPluginBase {
     if (shouldUseSemanticFrontier && warmStartFamilyCount) {
       const plannedCount = Math.max(requestedCount, warmStartFamilyCount);
       return buildBalancedAttackPlan(
-        selectSemanticWarmStartFamilies(this.attackFamilies, plannedCount, semanticFrontier),
+        selectSemanticWarmStartFamilies(
+          this.attackFamilies,
+          warmStartFamilyCount,
+          semanticFrontier,
+        ),
         plannedCount,
       );
     }
