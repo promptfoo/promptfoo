@@ -45,7 +45,7 @@ describe('MCPProvider', () => {
     expect(MCPClient).not.toHaveBeenCalled();
     provider.config = { enabled: true, server: { url: 'http://localhost:1234/mcp' } };
     await provider.getAvailableTools();
-    expect(MCPClient).toHaveBeenCalledWith(provider.config);
+    expect(MCPClient).toHaveBeenCalledWith({ ...provider.config, basePath: expect.any(String) });
   });
 
   it('loads the response transform from the current configuration', async () => {
@@ -67,7 +67,9 @@ describe('MCPProvider', () => {
           fs.mkdirSync(directory);
           fs.writeFileSync(
             path.join(directory, 'transform.mjs'),
-            `export default (_result, content) => ${JSON.stringify(name + ':')} + content;`,
+            name === 'first'
+              ? "export default (_result, content) => 'first:' + content;"
+              : "export default (_result, content) => 'second:' + content;",
           );
           cliState.basePath = directory;
           providers.push(
@@ -83,9 +85,21 @@ describe('MCPProvider', () => {
         mcpClientMock.callTool.mockResolvedValue({ content: 'echo' });
         expect((await providers[0].callTool('echo', {})).output).toBe('first:echo');
         expect((await providers[1].callTool('echo', {})).output).toBe('second:echo');
+        expect(MCPClient).toHaveBeenNthCalledWith(
+          1,
+          expect.objectContaining({ basePath: path.join(root, 'first') }),
+        );
+        expect(MCPClient).toHaveBeenNthCalledWith(
+          2,
+          expect.objectContaining({ basePath: path.join(root, 'second') }),
+        );
         await providers[0].cleanup();
         cliState.basePath = root;
         expect((await providers[0].callTool('echo', {})).output).toBe('first:echo');
+        expect(MCPClient).toHaveBeenNthCalledWith(
+          3,
+          expect.objectContaining({ basePath: path.join(root, 'first') }),
+        );
       } finally {
         await Promise.all(providers.map((provider) => provider.cleanup()));
         cliState.basePath = oldBasePath;

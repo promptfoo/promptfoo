@@ -52,7 +52,7 @@ export class MCPProvider implements ApiProvider {
   }
 
   private async initialize(): Promise<MCPClient> {
-    const client = new MCPClient(this.config);
+    const client = new MCPClient({ ...this.config, basePath: this.basePath });
     this.mcpClient = client;
     this.transformResponse = loadTransformModule(
       this.config.transformResponse || this.config.responseParser,

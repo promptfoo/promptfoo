@@ -347,7 +347,7 @@ describe('MCPClient', () => {
 
       expect(StdioClientTransport).toHaveBeenCalledWith({
         command: process.execPath,
-        args: ['script.js'],
+        args: [path.resolve('script.js')],
         env: { ...(process.env as Record<string, string>), CUSTOM_MCP_VAR: 'custom_value' },
       });
       await mcpClient.cleanup();
@@ -411,28 +411,33 @@ describe('MCPClient', () => {
       expect(mockClient.connect).toHaveBeenCalledTimes(2);
     });
 
-    it('should resolve local server paths relative to the config base path', async () => {
-      mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
-      cliState.basePath = '/tmp/simple-mcp';
+    it.each(['config', 'cli-state'])(
+      'keeps the local server directory from %s until initialization',
+      async (source) => {
+        mockClient.connect.mockResolvedValueOnce(undefined);
+        mockClient.listTools.mockResolvedValueOnce({
+          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        });
+        cliState.basePath = '/tmp/simple-mcp';
 
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          path: './example-server.js',
-        },
-      });
+        mcpClient = new MCPClient({
+          enabled: true,
+          ...(source === 'config' ? { basePath: '/tmp/simple-mcp' } : {}),
+          server: {
+            path: './example-server.js',
+          },
+        });
 
-      await mcpClient.initialize();
+        cliState.basePath = '/tmp/another-config';
+        await mcpClient.initialize();
 
-      expect(StdioClientTransport).toHaveBeenCalledWith({
-        command: process.execPath,
-        args: [path.resolve(cliState.basePath, './example-server.js')],
-        env: process.env as Record<string, string>,
-      });
-    });
+        expect(StdioClientTransport).toHaveBeenCalledWith({
+          command: process.execPath,
+          args: [path.resolve('/tmp/simple-mcp', './example-server.js')],
+          env: process.env as Record<string, string>,
+        });
+      },
+    );
 
     it('should throw error for unsupported file type', async () => {
       mcpClient = new MCPClient({

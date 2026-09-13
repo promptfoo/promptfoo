@@ -104,6 +104,7 @@ export class MCPClient {
   private clients: Map<string, Client> = new Map();
   private tools: Map<string, MCPTool[]> = new Map();
   private config: MCPConfig;
+  private readonly basePath: string;
   private abortController = new AbortController();
   private transports: Map<
     string,
@@ -140,6 +141,7 @@ export class MCPClient {
 
   constructor(config: MCPConfig) {
     this.config = config;
+    this.basePath = path.resolve(config.basePath ?? cliState.basePath ?? '.');
   }
 
   async initialize(): Promise<void> {
@@ -208,9 +210,7 @@ export class MCPClient {
             ? 'python'
             : 'python3'
           : process.execPath;
-        const serverPath = cliState.basePath
-          ? path.resolve(cliState.basePath, server.path)
-          : server.path;
+        const serverPath = path.resolve(this.basePath, server.path);
 
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
         transport = new StdioClientTransport({
