@@ -5,6 +5,7 @@ import {
   accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateGradingResponseTokenUsage,
+  accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
   accumulateTokenUsage,
   createEmptyAssertions,
@@ -710,6 +711,33 @@ describe('tokenUsageUtils', () => {
       });
     });
 
+    it('keeps detail-only grading usage', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingResponseTokenUsage(target, {
+        tokenUsage: { numRequests: 0, completionDetails: { reasoning: 4 } },
+      });
+
+      expect(target.assertions).toMatchObject({
+        numRequests: 1,
+        completionDetails: { reasoning: 4 },
+      });
+    });
+
+    it('keeps incurred-only grading usage', () => {
+      const target = createEmptyTokenUsage();
+
+      accumulateGradingTokenUsage(target, {
+        numRequests: 0,
+        incurredTokenUsage: { total: 12, numRequests: 1 },
+      });
+
+      expect(target.incurredTokenUsage?.assertions).toMatchObject({
+        total: 12,
+        numRequests: 1,
+      });
+    });
+
     it('does not count fully cached strategy grading responses as new requests', () => {
       const target = createEmptyTokenUsage();
 
@@ -777,6 +805,12 @@ describe('tokenUsageUtils', () => {
       expect(accumulateGenerationTokenUsage(target, {})).toBe(false);
       expect(target.total).toBe(0);
     });
+    it('derives a missing generation total from reported components', () => {
+      const target = createEmptyTokenUsage();
+
+      expect(accumulateGenerationTokenUsage(target, { prompt: 4, completion: 3 })).toBe(true);
+      expect(target.generation).toMatchObject({ total: 7, prompt: 4, completion: 3 });
+    });
 
     it('preserves generation request counts when a provider reports no token totals', () => {
       const target = createEmptyTokenUsage();
@@ -784,6 +818,13 @@ describe('tokenUsageUtils', () => {
       expect(accumulateGenerationTokenUsage(target, { numRequests: 3 })).toBe(true);
       expect(target.generation).toMatchObject({ total: 0, numRequests: 3 });
       expect(target.numRequests).toBe(0);
+    });
+
+    it('keeps cached-only generation usage observable', () => {
+      const target = createEmptyTokenUsage();
+
+      expect(accumulateGenerationTokenUsage(target, { cached: 9 })).toBe(true);
+      expect(target.generation).toMatchObject({ cached: 9 });
     });
 
     it('preserves logical and incurred cached generation as separate scan buckets', () => {

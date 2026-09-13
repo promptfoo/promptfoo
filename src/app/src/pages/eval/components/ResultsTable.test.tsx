@@ -194,7 +194,21 @@ describe('ResultsTable Metrics Display', () => {
       evalId: '123',
       inComparisonMode: false,
       setTable: vi.fn(),
-      table: mockTable,
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              metrics: {
+                ...mockTable.head.prompts[0].metrics,
+                tokenUsage: { completion: 500, total: 1000, generation: { total: 6 } },
+              },
+            },
+          ],
+        },
+      },
       version: 4,
       renderMarkdown: true,
       fetchEvalData: vi.fn(),
@@ -213,7 +227,77 @@ describe('ResultsTable Metrics Display', () => {
       'Target Tokens: 1,000',
     );
     expect(screen.queryByText('Provider Tokens:')).not.toBeInTheDocument();
+    expect(screen.getByText('Total Tokens:').parentElement).toHaveTextContent(
+      'Total Tokens: 1,006',
+    );
+    expect(screen.getByText('Generation Tokens:').parentElement).toHaveTextContent(
+      'Generation Tokens: 6',
+    );
   });
+
+  it.each([
+    {
+      tokenUsage: { generation: { numRequests: 2 } },
+      filteredTokenUsage: { generation: { numRequests: 1 } },
+      label: 'Generation Requests:',
+      expected: '2(1 filtered)',
+    },
+    {
+      tokenUsage: { generation: { cached: 7 } },
+      filteredTokenUsage: { generation: { cached: 4 } },
+      label: 'Generation Cached Tokens:',
+      expected: '7(4 filtered)',
+    },
+    {
+      tokenUsage: { generation: { completionDetails: { reasoning: 3 } } },
+      filteredTokenUsage: { generation: { completionDetails: { reasoning: 2 } } },
+      label: 'Generation Reasoning Tokens:',
+      expected: '3(2 filtered)',
+    },
+    {
+      tokenUsage: {
+        generation: { total: 0 },
+        incurredTokenUsage: { generation: { total: 12, numRequests: 1 } },
+      },
+      filteredTokenUsage: { incurredTokenUsage: { generation: { total: 12, numRequests: 1 } } },
+      label: 'Incurred Generation Tokens:',
+      expected: '12(12 filtered)',
+    },
+  ])(
+    'shows $label without logical token totals',
+    ({ tokenUsage, filteredTokenUsage, label, expected }) => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: { redteam: {} },
+        evalId: '123',
+        inComparisonMode: false,
+        setTable: vi.fn(),
+        table: {
+          ...mockTable,
+          head: {
+            ...mockTable.head,
+            prompts: [
+              {
+                ...mockTable.head.prompts[0],
+                metrics: {
+                  ...mockTable.head.prompts[0].metrics,
+                  tokenUsage,
+                },
+              },
+            ],
+          },
+        },
+        version: 4,
+        renderMarkdown: true,
+        fetchEvalData: vi.fn(),
+        filters: { values: {}, appliedCount: 1, options: { metric: [] } },
+        filteredMetrics: [{ tokenUsage: filteredTokenUsage }],
+      }));
+
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+
+      expect(screen.getByText(label).parentElement).toHaveTextContent(label + ' ' + expected);
+    },
+  );
 
   it('displays average tokens with correct calculation', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);

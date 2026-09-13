@@ -20,6 +20,7 @@ import { formatDuration } from '@app/utils/date';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import { getActualPrompt } from '@app/utils/providerResponse';
 import {
+  getCombinedTokenUsageTotal,
   getIncurredTokenAccounting,
   getPrimaryTokenUsageLabel,
   getTokenUsageTotal,
@@ -32,6 +33,7 @@ import {
   type EvaluateTableRow,
   type GradingResult,
   type ProviderOptions,
+  type TokenUsage,
   type Vars,
 } from '@promptfoo/types';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/api/eval';
@@ -703,6 +705,31 @@ function renderCostMetric({
   );
 }
 
+const GENERATION_METRICS: Array<{
+  label: string;
+  read: (usage: TokenUsage['generation']) => number | undefined;
+}> = [
+  { label: 'Tokens', read: getTokenUsageTotal },
+  { label: 'Requests', read: (usage) => usage?.numRequests },
+  { label: 'Input Tokens', read: (usage) => usage?.prompt },
+  { label: 'Output Tokens', read: (usage) => usage?.completion },
+  { label: 'Cached Tokens', read: (usage) => usage?.cached },
+  { label: 'Reasoning Tokens', read: (usage) => usage?.completionDetails?.reasoning },
+  {
+    label: 'Accepted Prediction Tokens',
+    read: (usage) => usage?.completionDetails?.acceptedPrediction,
+  },
+  {
+    label: 'Rejected Prediction Tokens',
+    read: (usage) => usage?.completionDetails?.rejectedPrediction,
+  },
+  { label: 'Cache Read Tokens', read: (usage) => usage?.completionDetails?.cacheReadInputTokens },
+  {
+    label: 'Cache Creation Tokens',
+    read: (usage) => usage?.completionDetails?.cacheCreationInputTokens,
+  },
+];
+
 function renderTokenMetrics({
   metrics,
   filteredMetrics,
@@ -719,11 +746,29 @@ function renderTokenMetrics({
   const gradingTokens = getTokenUsageTotal(metrics?.tokenUsage?.assertions);
   const incurredAccounting = getIncurredTokenAccounting(metrics?.tokenUsage);
 
-  if (primaryTokens === 0 && attackerTokens === 0 && gradingTokens === 0) {
+  const generationRows = [
+    {
+      prefix: 'Generation',
+      usage: metrics?.tokenUsage?.generation,
+      filteredUsage: filteredMetrics?.tokenUsage?.generation,
+    },
+    {
+      prefix: 'Incurred Generation',
+      usage: metrics?.tokenUsage?.incurredTokenUsage?.generation,
+      filteredUsage: filteredMetrics?.tokenUsage?.incurredTokenUsage?.generation,
+    },
+  ].flatMap(({ prefix, usage, filteredUsage }) =>
+    GENERATION_METRICS.map(({ label, read }) => ({
+      label: `${prefix} ${label}`,
+      value: read(usage) ?? 0,
+      filteredValue: filteredMetrics?.tokenUsage ? (read(filteredUsage) ?? 0) : undefined,
+    })).filter(({ value }) => value !== 0),
+  );
+  const totalTokens = getCombinedTokenUsageTotal(metrics?.tokenUsage);
+  if (totalTokens === 0 && generationRows.length === 0) {
     return null;
   }
 
-  const totalTokens = primaryTokens + attackerTokens + gradingTokens;
   const filteredPrimaryTokens = filteredMetrics?.tokenUsage
     ? getTokenUsageTotal(filteredMetrics.tokenUsage)
     : undefined;
@@ -736,7 +781,7 @@ function renderTokenMetrics({
   const filteredTokens =
     filteredPrimaryTokens === undefined
       ? undefined
-      : filteredPrimaryTokens + (filteredAttackerTokens ?? 0) + (filteredGradingTokens ?? 0);
+      : getCombinedTokenUsageTotal(filteredMetrics?.tokenUsage);
   const totalAverage = testCount?.total ? totalTokens / testCount.total : 0;
   const filteredAverage =
     filteredTokens !== undefined && testCount?.filtered
@@ -774,6 +819,14 @@ function renderTokenMetrics({
             : renderFilteredSuffix(formatMetricValue(filteredGradingTokens))}
         </div>
       ) : null}
+      {generationRows.map(({ label, value, filteredValue }) => (
+        <div key={label}>
+          <strong>{label}:</strong> {formatMetricValue(value)}
+          {filteredValue === undefined
+            ? null
+            : renderFilteredSuffix(formatMetricValue(filteredValue))}
+        </div>
+      ))}
       {incurredAccounting ? (
         <>
           <div>

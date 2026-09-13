@@ -26,6 +26,7 @@ import { type SQL, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
+import { accumulateGenerationTokenUsage } from './tokenUsageUtils';
 
 import type { PromptMetrics } from '../types/index';
 
@@ -34,6 +35,8 @@ export interface FilteredMetricsOptions {
   numPrompts: number;
   /** SQL fragment for WHERE clause (not a raw string - prevents SQL injection) */
   whereSql: SQL<unknown>;
+  /** Canonical generation ledger stored with the evaluation. */
+  generationTokenUsage?: unknown;
 }
 
 /**
@@ -70,14 +73,22 @@ function jsonUsageTotal(column: SQL, usagePath: string, cachedResponsePath?: str
 }
 
 function jsonUsageRequests(column: SQL, usagePath: string, cachedResponsePath?: string): SQL {
+  const requests = sql`CAST(json_extract(${column}, ${`${usagePath}.numRequests`}) AS INTEGER)`;
+  const hasUsage = sql`(${jsonUsageTotal(column, usagePath, cachedResponsePath)} > 0
+    OR EXISTS (
+      SELECT 1
+      FROM json_each(json_extract(${column}, ${`${usagePath}.completionDetails`}))
+      WHERE CAST(value AS INTEGER) != 0
+    ))`;
   const explicitlyCached = cachedResponsePath
     ? sql`COALESCE(json_extract(${column}, ${cachedResponsePath}), 0) = 1`
     : sql`0`;
   return sql`CASE
     WHEN json_extract(${column}, ${usagePath}) IS NULL THEN 0
+    WHEN ${requests} = 0 AND NOT ${hasUsage} THEN 0
     WHEN ${explicitlyCached} THEN
-      MAX(COALESCE(CAST(json_extract(${column}, ${`${usagePath}.numRequests`}) AS INTEGER), 1), 1)
-    ELSE COALESCE(CAST(json_extract(${column}, ${`${usagePath}.numRequests`}) AS INTEGER), 1)
+      MAX(COALESCE(${requests}, 1), 1)
+    ELSE COALESCE(${requests}, 1)
   END`;
 }
 
@@ -296,6 +307,31 @@ async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
   return result?.count || 0;
 }
 
+async function getFilteredGenerationCarriers(whereSql: SQL<unknown>) {
+  const db = await getDb();
+  return (await db.all(sql`
+    SELECT
+      prompt_idx,
+      json_extract(test_case, '$.metadata.providerTokenUsage') as usage
+    FROM eval_results
+    WHERE ${whereSql}
+      AND json_valid(test_case)
+      AND json_type(test_case, '$.metadata.providerTokenUsage') = 'object'
+    ORDER BY prompt_idx, test_idx
+  `)) as Array<{ prompt_idx: number; usage: unknown }>;
+}
+
+function parseGenerationCarrier(usage: unknown) {
+  if (typeof usage !== 'string') {
+    return usage;
+  }
+  try {
+    return JSON.parse(usage);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * OPTIMIZED: Single GROUP BY query aggregating ALL prompts at once.
  * This is the key performance improvement from the audit.
@@ -303,7 +339,7 @@ async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
  * SECURITY: Uses parameterized SQL queries via Drizzle's sql template strings.
  */
 async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
-  const { numPrompts, whereSql } = opts;
+  const { generationTokenUsage, numPrompts, whereSql } = opts;
   const db = await getDb();
 
   // Initialize empty metrics
@@ -446,6 +482,21 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
       assertPassCount: 0,
       assertFailCount: 0,
     };
+  }
+
+  // Canonical generation belongs to prompt zero, even when its result rows are filtered out.
+  const recordedCanonicalUsage =
+    metrics[0] && accumulateGenerationTokenUsage(metrics[0].tokenUsage, generationTokenUsage);
+  if (!recordedCanonicalUsage) {
+    for (const { prompt_idx, usage } of await getFilteredGenerationCarriers(whereSql)) {
+      const metric = metrics[prompt_idx];
+      if (
+        metric &&
+        accumulateGenerationTokenUsage(metric.tokenUsage, parseGenerationCarrier(usage))
+      ) {
+        break;
+      }
+    }
   }
 
   // ===== QUERY 2: Named scores (SQL JSON aggregation) =====

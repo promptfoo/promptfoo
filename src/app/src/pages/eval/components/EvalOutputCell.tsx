@@ -1574,7 +1574,7 @@ function EvalOutputCell({
   const tokenUsage = output.tokenUsage || output.response?.tokenUsage;
   const tokenUsageDisplay = formatTokenUsageDisplay(tokenUsage);
   const tokPerSecDisplay = getTokensPerSecondDisplay({
-    tokenUsage,
+    tokenUsage: output.response?.tokenUsage ?? tokenUsage,
     latencyMs: output.latencyMs,
   });
   const costDisplay = getCostDisplay(output.cost);

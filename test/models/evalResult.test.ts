@@ -1353,6 +1353,32 @@ describe('EvalResult', () => {
       expect(result.toEvaluateResult().tokenUsage?.numRequests).toBe(1);
     });
 
+    it('keeps persisted generation usage in its own row bucket', () => {
+      const result = new EvalResult({
+        id: 'test-id',
+        evalId: 'test-eval-id',
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: {
+          ...mockTestCase,
+          metadata: { providerTokenUsage: { total: 7, prompt: 4, completion: 3 } },
+        },
+        prompt: mockPrompt,
+        success: true,
+        score: 1,
+        response: { output: 'hello', tokenUsage: { total: 10, prompt: 6, completion: 4 } },
+        gradingResult: null,
+        provider: mockProvider,
+        failureReason: ResultFailureReason.NONE,
+        namedScores: {},
+      });
+
+      expect(result.toEvaluateResult().tokenUsage).toMatchObject({
+        total: 10,
+        generation: { total: 7, prompt: 4, completion: 3 },
+      });
+    });
+
     it('should strip nested provider response metadata when metadata stripping is enabled', () => {
       const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_METADATA: 'true' });
 

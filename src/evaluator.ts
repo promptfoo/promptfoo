@@ -102,12 +102,14 @@ import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
+  accumulateGenerationTokenUsage,
   accumulateGradingRequest,
   accumulateGradingTokenUsage,
   accumulateResponseTokenUsage,
   cloneTokenUsageBreakdown,
   createEmptyAssertions,
   createEmptyTokenUsage,
+  hasObservableTokenUsage,
 } from './util/tokenUsageUtils';
 import { TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
@@ -3349,6 +3351,8 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   registers: EvalRegisters;
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
+  private generationUsageRecorded = false;
+  private recordedGenerationUsages = new Set<string>();
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3364,6 +3368,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
     };
+    this.generationUsageRecorded = Boolean(
+      cliState.resume &&
+        store.prompts.some((prompt) => {
+          const usage = prompt.metrics?.tokenUsage;
+          return (
+            hasObservableTokenUsage(usage?.generation) ||
+            hasObservableTokenUsage(usage?.incurredTokenUsage?.generation)
+          );
+        }),
+    );
     this.conversations = {};
     this.registers = {};
 
@@ -3457,6 +3471,28 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
   }
 
+  private recordGenerationUsage(
+    testCase: AtomicTestCase,
+    metrics: PromptMetrics | undefined,
+  ): AtomicTestCase {
+    const usage = testCase.metadata?.providerTokenUsage;
+    const usageKey = usage && typeof usage === 'object' ? JSON.stringify(usage) : undefined;
+    const recorded = usageKey !== undefined && this.recordedGenerationUsages.has(usageKey);
+    if (!this.generationUsageRecorded && metrics && usage && !recorded) {
+      if (accumulateGenerationTokenUsage(metrics.tokenUsage, usage)) {
+        if (usageKey !== undefined) {
+          this.recordedGenerationUsages.add(usageKey);
+        }
+        return testCase;
+      }
+    }
+    if ((this.generationUsageRecorded || recorded) && usage) {
+      const { providerTokenUsage: _recordedUsage, ...metadata } = testCase.metadata!;
+      return { ...testCase, metadata };
+    }
+    return testCase;
+  }
+
   // Buffer the authoritative copy of a row only once a DB persistence failure has been
   // observed. Before any failure, rows are recoverable from the streamed JSONL file and
   // the database during finalization; after a failure we can no longer trust the DB, so
@@ -3524,6 +3560,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
       countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
     });
+    const generationUsage = row.testCase?.metadata?.providerTokenUsage;
+    const generationUsageKey =
+      generationUsage && typeof generationUsage === 'object'
+        ? JSON.stringify(generationUsage)
+        : undefined;
+    if (
+      !this.generationUsageRecorded &&
+      !(generationUsageKey !== undefined && this.recordedGenerationUsages.has(generationUsageKey))
+    ) {
+      accumulateGenerationTokenUsage(metrics.tokenUsage, generationUsage);
+    }
 
     if (row.gradingResult?.tokensUsed) {
       accumulateGradingTokenUsage(metrics.tokenUsage, row.gradingResult.tokensUsed, {
@@ -3656,14 +3703,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         }
       }
 
+      const metrics = context.prompts[row.promptIdx].metrics;
+      invariant(metrics, 'Expected prompt.metrics to be set');
+      row.testCase = this.recordGenerationUsage(row.testCase, metrics);
+
       await this.persistEvalRow(row);
 
       if (this.abortIfTargetUnavailable(row, context)) {
         break;
       }
 
-      const metrics = context.prompts[row.promptIdx].metrics;
-      invariant(metrics, 'Expected prompt.metrics to be set');
       this.updatePromptMetricsForRow({
         derivedMetrics: context.testSuite.derivedMetrics,
         evalStep,
@@ -3795,10 +3844,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   ) {
     const sanitizedTestCase = { ...evalStep.test };
     delete (sanitizedTestCase as Partial<AtomicTestCase>).provider;
+    const { metrics } = context.prompts[evalStep.promptIdx];
 
     const timeoutResult = createEvalStepTimeoutResult(
       evalStep,
-      sanitizedTestCase,
+      this.recordGenerationUsage(sanitizedTestCase, metrics),
       timeoutMs,
       error,
     );
@@ -3806,7 +3856,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     await this.store.appendResult(timeoutResult);
     this.stats.errors++;
 
-    const { metrics } = context.prompts[evalStep.promptIdx];
     if (metrics) {
       metrics.testErrorCount += 1;
       metrics.totalLatencyMs += timeoutMs;
@@ -4651,11 +4700,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         continue;
       }
       const evalStep = runEvalOptions[i];
-      const timeoutResult = createMaxDurationTimeoutResult(evalStep, maxEvalTimeMs, startTime);
+      const testCase = { ...evalStep.test };
+      delete (testCase as Partial<AtomicTestCase>).provider;
+      const { metrics } = prompts[evalStep.promptIdx];
+      const timeoutResult = createMaxDurationTimeoutResult(
+        { ...evalStep, test: this.recordGenerationUsage(testCase, metrics) },
+        maxEvalTimeMs,
+        startTime,
+      );
       this.trackFinalJsonlResult(timeoutResult);
       await this.store.appendResult(timeoutResult);
       this.stats.errors++;
-      const { metrics } = prompts[evalStep.promptIdx];
       if (metrics) {
         metrics.testErrorCount += 1;
         metrics.totalLatencyMs += timeoutResult.latencyMs;
@@ -4823,6 +4878,13 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     }
 
     const { prompts, columnsByProvider } = buildCompletedPrompts(testSuite, this.store);
+
+    if (!this.generationUsageRecorded && prompts[0]?.metrics) {
+      this.generationUsageRecorded = accumulateGenerationTokenUsage(
+        prompts[0].metrics.tokenUsage,
+        this.store.config.metadata?.generationAccounting?.tokenUsage,
+      );
+    }
 
     await this.store.appendPrompts(prompts);
 

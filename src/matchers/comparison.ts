@@ -59,9 +59,13 @@ export async function matchesSelectBest(
       : resp.tokenUsage,
   );
   const cacheMetadata = resp.cached ? { metadata: { cachedResponse: true } } : {};
+  const usageForRow = (index: number, billedIndex = 0) => ({
+    tokensUsed: index === billedIndex ? tokensUsed : { numRequests: 0 },
+  });
   if (resp.error || !resp.output) {
-    return Array.from({ length: outputs.length }, () => ({
-      ...fail(resp.error || 'No output', tokensUsed),
+    return Array.from({ length: outputs.length }, (_value, index) => ({
+      ...fail(resp.error || 'No output'),
+      ...usageForRow(index),
       ...cacheMetadata,
     }));
   }
@@ -72,19 +76,21 @@ export async function matchesSelectBest(
   const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
-    return Array.from({ length: outputs.length }, () => ({
-      ...fail(`Invalid select-best verdict: ${verdict}`, tokensUsed),
+    return Array.from({ length: outputs.length }, (_value, index) => ({
+      ...fail(`Invalid select-best verdict: ${verdict}`),
+      ...usageForRow(index),
       ...cacheMetadata,
     }));
   }
 
   return outputs.map((_output, index) => {
+    const usage = usageForRow(index, verdict);
     if (index === verdict) {
       return {
         pass: true,
         score: 1,
         reason: `Output selected as the best: ${criteria}`,
-        tokensUsed,
+        ...usage,
         ...cacheMetadata,
       };
     } else {
@@ -92,7 +98,7 @@ export async function matchesSelectBest(
         pass: false,
         score: 0,
         reason: `Output not selected: ${criteria}`,
-        tokensUsed,
+        ...usage,
         ...cacheMetadata,
       };
     }
