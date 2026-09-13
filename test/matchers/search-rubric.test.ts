@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { withGradingProviderTracker } from '../../src/cliState';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 
@@ -76,6 +77,23 @@ describe('matchesSearchRubric', () => {
         reason: 'web search ok',
       }),
     );
+  });
+
+  it('tracks a constructed web-search fallback', async () => {
+    const { matchesSearchRubric } = await import('../../src/matchers/search');
+    mocks.getDefaultProviders.mockResolvedValue({
+      webSearchProvider: null,
+      llmRubricProvider: null,
+      gradingProvider: null,
+    });
+    mocks.loadApiProvider.mockResolvedValue(mocks.webSearchProvider);
+    const track = vi.fn();
+
+    await withGradingProviderTracker(track, () =>
+      matchesSearchRubric('Confirm current facts', 'output', {}),
+    );
+
+    expect(track).toHaveBeenCalledWith(mocks.webSearchProvider);
   });
 
   it('keeps reserved output and rubric vars ahead of user vars', async () => {

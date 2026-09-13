@@ -19,7 +19,7 @@ import {
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
-import { getProviderFactories } from './registry';
+import { getProviderFactory } from './registry';
 
 import type { EnvOverrides } from '../types/env';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
@@ -197,15 +197,14 @@ export async function loadApiProvider(
     });
   }
 
-  for (const factory of await getProviderFactories(renderedProviderPath)) {
-    if (factory.test(renderedProviderPath)) {
-      const ret = await factory.create(renderedProviderPath, providerOptions, context);
-      ret.transform = options.transform;
-      ret.delay = options.delay;
-      ret.inputs = options.inputs;
-      ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
-      return ret;
-    }
+  const factory = await getProviderFactory(renderedProviderPath);
+  if (factory) {
+    const ret = await factory.create(renderedProviderPath, providerOptions, context);
+    ret.transform = options.transform;
+    ret.delay = options.delay;
+    ret.inputs = options.inputs;
+    ret.label ||= renderEnvOnlyInObject(options.label || '', mergedEnv);
+    return ret;
   }
 
   const errorMessage = dedent`
@@ -348,6 +347,41 @@ export function resolveProviderConfigs(
  * Helper function to load providers from a file path.
  * Uses loadProviderConfigsFromFile to read configs, then instantiates them.
  */
+async function loadProviderBatch<T>(
+  loads: Promise<T>[],
+  providers: (value: T) => ApiProvider[],
+  callerOwned = new Set<ApiProvider>(),
+): Promise<T[]> {
+  const created = new Set<ApiProvider>();
+  const tracked = loads.map(async (load) => {
+    const value = await load;
+    for (const provider of providers(value)) {
+      created.add(provider);
+    }
+    return value;
+  });
+  try {
+    return await Promise.all(tracked);
+  } catch (error) {
+    const cleaned = new Set<ApiProvider>();
+    const cleanup = async (provider: ApiProvider) => {
+      if (callerOwned.has(provider) || cleaned.has(provider)) {
+        return;
+      }
+      cleaned.add(provider);
+      await provider.cleanup?.();
+    };
+    await Promise.allSettled([...created].map(cleanup));
+    for (const load of tracked) {
+      void load.then(
+        (value) => Promise.allSettled(providers(value).map(cleanup)),
+        () => undefined,
+      );
+    }
+    throw error;
+  }
+}
+
 async function loadProvidersFromFile(
   filePath: string,
   options: {
@@ -359,12 +393,14 @@ async function loadProvidersFromFile(
   const configs = loadProviderConfigsFromFile(filePath, basePath);
   const relativePath = filePath.slice('file://'.length);
 
-  return Promise.all(
-    configs.map((config) => {
+  const results = await loadProviderBatch(
+    configs.map(async (config) => {
       invariant(config.id, `Provider config in ${relativePath} must have an id`);
       return loadApiProvider(config.id, { options: config, basePath, env });
     }),
+    (provider) => [provider],
   );
+  return results;
 }
 
 export async function loadApiProviders(
@@ -397,7 +433,7 @@ export async function loadApiProviders(
   } else if (isApiProvider(providerPaths)) {
     return [providerPaths];
   } else if (Array.isArray(providerPaths)) {
-    const providersArrays = await Promise.all(
+    const providerResults = await loadProviderBatch(
       providerPaths.map(async (provider, idx) => {
         if (isApiProvider(provider)) {
           return [provider];
@@ -435,8 +471,10 @@ export async function loadApiProviders(
           }
         }
       }),
+      (providers) => providers,
+      new Set(providerPaths.filter(isApiProvider)),
     );
-    return providersArrays.flat();
+    return providerResults.flat();
   }
   throw new Error('Invalid providers list');
 }

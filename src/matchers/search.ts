@@ -4,7 +4,7 @@ import { DEFAULT_ANTHROPIC_MODEL } from '../providers/anthropic/defaults';
 import { getDefaultProviders } from '../providers/defaults';
 import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webSearchUtils';
 import { extractFirstJsonObject } from '../util/json';
-import { callProviderWithContext, getGradingProvider } from './providers';
+import { callProviderWithContext, getGradingProvider, trackGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import { tryParse } from './shared';
 
@@ -62,6 +62,7 @@ export async function matchesSearchRubric(
     // For search-rubric assertion, prefer Anthropic first (pass true)
     const webSearchProvider = await loadWebSearchProvider(true);
     if (webSearchProvider) {
+      trackGradingProvider(webSearchProvider);
       searchProvider = webSearchProvider;
     }
   }

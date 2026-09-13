@@ -8,7 +8,7 @@ import { globSync } from 'glob';
 import ora from 'ora';
 import { z } from 'zod';
 import { disableCache } from '../cache';
-import cliState from '../cliState';
+import cliState, { withGradingProviderTracker } from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
@@ -30,7 +30,6 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
-import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
@@ -76,6 +75,7 @@ import type {
   UnifiedConfig,
 } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
+import type { ApiProvider } from '../types/providers';
 import type { FilterOptions } from '../util/eval/filterTests';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -108,6 +108,7 @@ function runtimeTagsForEval(
 async function resolveReplayConfigs(
   evalRecord: Eval,
   action: 'resuming' | 'retrying errors for',
+  trackProvider?: (provider: ApiProvider) => void,
 ): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
   const providerFilterOptions = getPersistedProviderFilterOptions(
     evalRecord.runtimeOptions?.providerFilter,
@@ -134,7 +135,12 @@ async function resolveReplayConfigs(
     };
   }
 
-  const configs = await resolveConfigs(providerFilterOptions, replayConfig);
+  const configs = await resolveConfigs(
+    providerFilterOptions,
+    replayConfig,
+    undefined,
+    trackProvider,
+  );
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label below in doEval. Replay both stages so the resumed
   // provider set matches the original even when an instantiated id or label diverges
@@ -340,7 +346,10 @@ export async function doEval(
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
 
-  const runEvaluation = async (initialization?: boolean) => {
+  const runEvaluationBody = async (
+    initialization?: boolean,
+    trackProvider?: (provider: ApiProvider) => void,
+  ) => {
     const startTime = Date.now();
     telemetry.record('command_used', {
       name: 'eval - started',
@@ -452,7 +461,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveReplayConfigs(resumeEval, 'resuming'));
+      } = await resolveReplayConfigs(resumeEval, 'resuming', trackProvider));
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
         testSuite.prompts = resumeEval.prompts.map(
@@ -509,7 +518,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveReplayConfigs(resumeEval, 'retrying errors for'));
+      } = await resolveReplayConfigs(resumeEval, 'retrying errors for', trackProvider));
 
       // Ensure prompts exactly match the previous run to preserve IDs and content
       if (Array.isArray(resumeEval.prompts) && resumeEval.prompts.length > 0) {
@@ -528,7 +537,7 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs(cmdObj, defaultConfig));
+      } = await resolveConfigs(cmdObj, defaultConfig, undefined, trackProvider));
     }
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
@@ -794,6 +803,7 @@ export async function doEval(
       testSuite.defaultTest.options.provider = await loadApiProvider(cmdObj.grader, {
         basePath: cliState.basePath,
       });
+      trackProvider?.(testSuite.defaultTest.options.provider);
       // Also update cliState.config so redteam providers can access the grader
       if (cliState.config) {
         // Normalize string shorthand to object
@@ -1309,19 +1319,37 @@ export async function doEval(
       showRedteamProviderLabelMissingWarning(testSuite);
     }
 
-    // Clean up any WebSocket connections
-    if (testSuite.providers.length > 0) {
-      for (const provider of testSuite.providers) {
-        if (isApiProvider(provider)) {
-          const cleanup = provider?.cleanup?.();
-          if (cleanup instanceof Promise) {
-            await cleanup;
-          }
-        }
+    return ret;
+  };
+
+  const runEvaluation = async (initialization?: boolean) => {
+    const ownedProviders = new Set<ApiProvider>();
+    let evaluationError: unknown;
+    try {
+      return await withGradingProviderTracker(
+        (provider) => ownedProviders.add(provider),
+        () => runEvaluationBody(initialization, (provider) => ownedProviders.add(provider)),
+      );
+    } catch (error) {
+      evaluationError = error;
+      throw error;
+    } finally {
+      const results = await Promise.allSettled(
+        [...ownedProviders]
+          .filter(
+            (provider) =>
+              typeof (provider as ApiProvider & { shutdown?: unknown }).shutdown !== 'function',
+          )
+          .map(async (provider) => provider.cleanup?.()),
+      );
+      const cleanupError = results.find((result) => result.status === 'rejected')?.reason;
+      if (cleanupError && evaluationError === undefined) {
+        throw cleanupError;
+      }
+      if (cleanupError) {
+        logger.warn('Provider cleanup failed after evaluation error', { error: cleanupError });
       }
     }
-
-    return ret;
   };
 
   const result = await runEvaluation(true /* initialization */);

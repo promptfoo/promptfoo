@@ -6,7 +6,7 @@ import { Command } from 'commander';
 import { globSync } from 'glob';
 import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
-import cliState from '../../src/cliState';
+import cliState, { trackGradingProvider } from '../../src/cliState';
 import {
   doEval as commandDoEval,
   EvalCommandSchema as commandEvalCommandSchema,
@@ -519,6 +519,8 @@ describe('evalCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: undefined }),
       cloudConfig,
+      undefined,
+      expect.any(Function),
     );
   });
 
@@ -1135,6 +1137,8 @@ describe('evalCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: ['/suite/promptfooconfig.yaml'] }),
       expect.objectContaining({ prompts: ['from-dir'] }),
+      undefined,
+      expect.any(Function),
     );
 
     statSpy.mockRestore();
@@ -1168,6 +1172,8 @@ describe('evalCommand', () => {
         config: ['/base.yaml', '/suite/promptfooconfig.yaml', '/override.yaml'],
       }),
       expect.objectContaining({ prompts: ['from-dir'] }),
+      undefined,
+      expect.any(Function),
     );
 
     statSpy.mockRestore();
@@ -1224,6 +1230,8 @@ describe('evalCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: ['/base.yaml'] }),
       expect.anything(),
+      undefined,
+      expect.any(Function),
     );
 
     loggerWarnSpy.mockClear();
@@ -1777,6 +1785,8 @@ describe('evalCommand', () => {
       expect(resolveConfigs).toHaveBeenCalledWith(
         { filterProviders: 'selected-target' },
         resumeEval.config,
+        undefined,
+        expect.any(Function),
       );
     } finally {
       findByIdSpy.mockRestore();
@@ -1816,6 +1826,8 @@ describe('evalCommand', () => {
       expect(resolveConfigs).toHaveBeenCalledWith(
         { filterProviders: 'selected-target' },
         latestEval.config,
+        undefined,
+        expect.any(Function),
       );
       expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
@@ -2012,6 +2024,8 @@ describe('evalCommand', () => {
       expect(resolveConfigs).toHaveBeenCalledWith(
         { filterProviders: 'selected-target' },
         resumeEval.config,
+        undefined,
+        expect.any(Function),
       );
     } finally {
       warnSpy.mockClear();
@@ -2086,13 +2100,16 @@ describe('evalCommand', () => {
       callApi: async () => ({ output: 'ok' }),
       cleanup,
     } as ApiProvider;
-    vi.mocked(resolveConfigs).mockResolvedValueOnce({
-      config: {} as UnifiedConfig,
-      testSuite: {
-        prompts: [],
-        providers: [provider],
-      },
-      basePath: path.resolve('/'),
+    vi.mocked(resolveConfigs).mockImplementationOnce(async (_cmd, _config, _type, track) => {
+      track?.(provider);
+      return {
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [provider],
+        },
+        basePath: path.resolve('/'),
+      };
     });
     vi.mocked(evaluate).mockImplementationOnce(
       async (_testSuite, evalRecord) => evalRecord as Eval,
@@ -2101,6 +2118,101 @@ describe('evalCommand', () => {
     await doEval({}, defaultConfig, defaultConfigPath, {});
 
     expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('should clean up providers when evaluation fails', async () => {
+    const cleanup = vi.fn();
+    const provider = {
+      id: () => 'cleanup-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup,
+    } as ApiProvider;
+    vi.mocked(resolveConfigs).mockImplementationOnce(async (_cmd, _config, _type, track) => {
+      track?.(provider);
+      return {
+        config: {} as UnifiedConfig,
+        testSuite: {
+          prompts: [],
+          providers: [provider],
+        },
+        basePath: path.resolve('/'),
+      };
+    });
+    vi.mocked(evaluate).mockRejectedValueOnce(new Error('evaluation failed'));
+
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      'evaluation failed',
+    );
+
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('should track lazy grading providers and surface cleanup failures', async () => {
+    const cleanupError = new Error('cleanup failed');
+    const provider = {
+      id: () => 'lazy-grader',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn().mockRejectedValue(cleanupError),
+    } as ApiProvider;
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      trackGradingProvider(provider);
+      return evalRecord as Eval;
+    });
+
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(cleanupError);
+    expect(provider.cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('should preserve evaluation failures after grading cleanup fails', async () => {
+    const provider = {
+      id: () => 'lazy-grader',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn().mockRejectedValue(new Error('cleanup failed')),
+    } as ApiProvider;
+    // Keep the module-level warning spy intact for the randomized suite order.
+    const warnSpy = vi.spyOn(logger, 'warn');
+    vi.mocked(evaluate).mockImplementationOnce(async () => {
+      trackGradingProvider(provider);
+      throw new Error('evaluation failed');
+    });
+
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      'evaluation failed',
+    );
+    expect(warnSpy).toHaveBeenCalledWith('Provider cleanup failed after evaluation error', {
+      error: expect.any(Error),
+    });
+  });
+
+  it('should track direct CLI graders without double-cleaning registry providers', async () => {
+    const grader = {
+      id: () => 'cli-grader',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn(),
+    } as ApiProvider;
+    const registryProvider = {
+      id: () => 'registry-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup: vi.fn(),
+      shutdown: vi.fn(),
+    } as ApiProvider & { shutdown: () => void };
+    vi.mocked(loadApiProvider).mockResolvedValueOnce(grader);
+    vi.mocked(resolveConfigs).mockImplementationOnce(async (_cmd, _config, _type, track) => {
+      track?.(registryProvider);
+      return {
+        config: {} as UnifiedConfig,
+        testSuite: { prompts: [], providers: [] },
+        basePath: path.resolve('/'),
+      };
+    });
+    vi.mocked(evaluate).mockImplementationOnce(
+      async (_testSuite, evalRecord) => evalRecord as Eval,
+    );
+
+    await doEval({ grader: 'plugin:grader' }, defaultConfig, defaultConfigPath, {});
+
+    expect(grader.cleanup).toHaveBeenCalledOnce();
+    expect(registryProvider.cleanup).not.toHaveBeenCalled();
   });
 
   it('should handle redteam config', async () => {

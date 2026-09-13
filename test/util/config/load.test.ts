@@ -24,7 +24,7 @@ import {
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
 import { sanitizeTracingConfigForPersistence } from '../../../src/util/sanitizer';
-import { readTests } from '../../../src/util/testCaseReader';
+import { readTest, readTests } from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../utils';
 
@@ -1681,6 +1681,42 @@ describe('resolveConfigs', () => {
     expect(testSuite.tests).toEqual(externalTests);
     expect(testSuite.scenarios).toEqual(resolvedScenarios);
     expect(scenarios).toEqual([{ description: 'Scenario', tests: 'file://tests.yaml' }]);
+  });
+
+  it('tracks test providers without adding them to the target matrix', async () => {
+    const target = createMockProvider({ id: 'echo' });
+    const testProvider = createMockProvider({ id: 'test-provider' });
+    const defaultProvider = createMockProvider({ id: 'default-provider' });
+    const trackProvider = vi.fn();
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({ prompts: ['prompt'], providers: ['echo'], tests: [{}], defaultTest: {} }),
+    );
+    vi.mocked(globSync).mockReturnValueOnce(['config.json']);
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'prompt', label: 'prompt' }]);
+    vi.mocked(loadApiProviders).mockResolvedValue([target]);
+    vi.mocked(readTest).mockImplementationOnce(
+      async (test, _basePath, _validate, onConstructed) => {
+        onConstructed?.(defaultProvider);
+        return test as TestCase;
+      },
+    );
+    vi.mocked(readTests).mockImplementationOnce(async (_tests, _basePath, onConstructed) => {
+      onConstructed?.(testProvider);
+      return [{ provider: testProvider }];
+    });
+
+    const { testSuite } = await resolveConfigs(
+      { config: ['config.json'] },
+      {},
+      undefined,
+      trackProvider,
+    );
+
+    expect(testSuite.providers).toEqual([target]);
+    expect(trackProvider).toHaveBeenCalledWith(target);
+    expect(trackProvider).toHaveBeenCalledWith(defaultProvider);
+    expect(trackProvider).toHaveBeenCalledWith(testProvider);
   });
 
   it('should apply configured seeded sampling independently to default config scenarios', async () => {

@@ -59,6 +59,10 @@ const requiredPackagedPaths = [
   'dist/src/index.js',
   'dist/src/main.js',
   'dist/src/package.json',
+  'dist/src/provider-plugin.cjs',
+  'dist/src/provider-plugin.d.cts',
+  'dist/src/provider-plugin.d.ts',
+  'dist/src/provider-plugin.js',
   'dist/src/python/persistent_wrapper.py',
   'dist/src/python/wrapper.py',
   'dist/src/ruby/wrapper.rb',
@@ -400,7 +404,7 @@ pure.runPureAssertion({ assertion: { type: 'llm-rubric' }, providerResponse: { o
   // The full host entry still exposes upstream Drizzle declarations that need skipLibCheck.
   // Keep the dependency-light contracts/pure consumers above on strict declaration checks.
   fs.writeFileSync(
-    path.join(consumerDir, 'tsconfig.host-assertions.json'),
+    path.join(consumerDir, 'tsconfig.host.json'),
     JSON.stringify({
       compilerOptions: {
         module: 'NodeNext',
@@ -409,7 +413,12 @@ pure.runPureAssertion({ assertion: { type: 'llm-rubric' }, providerResponse: { o
         strict: true,
         skipLibCheck: true,
       },
-      include: ['import-assertions.mts', 'require-assertions.cts'],
+      include: [
+        'import-assertions.mts',
+        'require-assertions.cts',
+        'import-provider-plugin.mts',
+        'require-provider-plugin.cts',
+      ],
     }),
   );
   const customAssertionConsumer = `
@@ -448,11 +457,37 @@ pure.runPureAssertion({ assertion: { type: 'llm-rubric' }, providerResponse: { o
 }
 
 function writeConsumerScripts(consumerDir: string): void {
+  const pluginConsumer = `
+const registry = new plugin.ProviderPluginRegistry();
+const manifest: plugin.ProviderPluginManifest = {
+  apiVersion: plugin.PROVIDER_PLUGIN_API_VERSION,
+  name: 'consumer',
+  canHandle: (providerPath) => providerPath.startsWith('consumer:'),
+  load: async () => [{
+    test: (providerPath) => providerPath.startsWith('consumer:'),
+    create: async (providerPath, options, context) => ({
+      id: () => options.id ?? providerPath,
+      callApi: async () => ({ output: context.basePath ?? 'consumer output' }),
+    }),
+  }],
+};
+registry.register(manifest);
+`;
+  fs.writeFileSync(
+    path.join(consumerDir, 'import-provider-plugin.mts'),
+    "import * as plugin from 'promptfoo/provider-plugin';\n" + pluginConsumer,
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'require-provider-plugin.cts'),
+    "import plugin = require('promptfoo/provider-plugin');\n" + pluginConsumer,
+  );
+
   fs.writeFileSync(
     path.join(consumerDir, 'import-package.mjs'),
     [
       "import { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } from 'promptfoo';",
       "import { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } from 'promptfoo/contracts';",
+      "import { PROVIDER_PLUGIN_API_VERSION, ProviderPluginRegistry } from 'promptfoo/provider-plugin';",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -462,6 +497,9 @@ function writeConsumerScripts(consumerDir: string): void {
       'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
       "  throw new Error('Missing expected ESM provider capability export');",
       '}',
+      'if (PROVIDER_PLUGIN_API_VERSION !== 1 || typeof ProviderPluginRegistry !== "function") {',
+      "  throw new Error('Missing expected ESM provider plugin export');",
+      '}',
       '',
     ].join('\n'),
   );
@@ -470,6 +508,7 @@ function writeConsumerScripts(consumerDir: string): void {
     [
       "const { AssertionSchema, AtomicTestCaseSchema, TestSuiteSchema } = require('promptfoo');",
       "const { EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, hasFunctionToolCallValidator } = require('promptfoo/contracts');",
+      "const { PROVIDER_PLUGIN_API_VERSION, ProviderPluginRegistry } = require('promptfoo/provider-plugin');",
       '',
       'for (const value of [AssertionSchema, AtomicTestCaseSchema, EmailSchema, GetUserResponseSchema, InputsSchema, PromptSchema, TestSuiteSchema]) {',
       "  if (!value || typeof value.safeParse !== 'function') {",
@@ -478,6 +517,70 @@ function writeConsumerScripts(consumerDir: string): void {
       '}',
       'if (!hasFunctionToolCallValidator({ validateFunctionToolCall() {} })) {',
       "  throw new Error('Missing expected CJS provider capability export');",
+      '}',
+      'if (PROVIDER_PLUGIN_API_VERSION !== 1 || typeof ProviderPluginRegistry !== "function") {',
+      "  throw new Error('Missing expected CJS provider plugin export');",
+      '}',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(consumerDir, 'mixed-provider-plugin.mjs'),
+    [
+      "import { createRequire } from 'node:module';",
+      "import { loadApiProvider } from 'promptfoo';",
+      "import { MissingProviderPackageError as EsmMissingProviderPackageError, ProviderPluginLoadError as EsmProviderPluginLoadError, ProviderPluginRegistry as EsmProviderPluginRegistry } from 'promptfoo/provider-plugin';",
+      '',
+      'const require = createRequire(import.meta.url);',
+      "const cjsPromptfoo = require('promptfoo');",
+      "const { MissingProviderPackageError: CjsMissingProviderPackageError, PROVIDER_PLUGIN_API_VERSION, ProviderPluginLoadError: CjsProviderPluginLoadError, ProviderPluginRegistry: CjsProviderPluginRegistry, registerProviderPlugin } = require('promptfoo/provider-plugin');",
+      "if (typeof cjsPromptfoo.loadApiProvider !== 'function') {",
+      "  throw new Error('CommonJS root entrypoint failed to load beside the ESM root');",
+      '}',
+      'const dispose = registerProviderPlugin({',
+      '  apiVersion: PROVIDER_PLUGIN_API_VERSION,',
+      "  name: 'artifact-mixed-format',",
+      "  canHandle: (providerPath) => providerPath.startsWith('artifact-mixed:'),",
+      '  load: async () => [{',
+      "    test: (providerPath) => providerPath.startsWith('artifact-mixed:'),",
+      '    create: async () => ({',
+      "      id: () => 'artifact-mixed-format',",
+      "      callApi: async () => ({ output: 'mixed-format-ok' }),",
+      '    }),',
+      '  }],',
+      '});',
+      '',
+      'try {',
+      "  const provider = await loadApiProvider('artifact-mixed:model');",
+      "  if (provider.id() !== 'artifact-mixed-format') {",
+      "    throw new Error('CommonJS plugin registration was invisible to the ESM host');",
+      '  }',
+      '} finally {',
+      '  dispose();',
+      '}',
+      '',
+      "const missingCause = Object.assign(new Error(\"Cannot find package '@example/provider-missing' imported from /tmp/artifact-plugin.js\"), { code: 'ERR_MODULE_NOT_FOUND' });",
+      'const createMissingManifest = (name) => ({',
+      '  apiVersion: PROVIDER_PLUGIN_API_VERSION,',
+      '  name,',
+      "  packageName: '@example/provider-missing',",
+      '  canHandle: (providerPath) => providerPath.startsWith(`${name}:`),',
+      '  load: async () => { throw missingCause; },',
+      '});',
+      'const captureError = async (registry, providerPath) => {',
+      '  try {',
+      '    await registry.getFactories(providerPath, []);',
+      '  } catch (error) {',
+      '    return error;',
+      '  }',
+      "  throw new Error('Expected provider plugin load to fail');",
+      '};',
+      "const esmError = await captureError(new EsmProviderPluginRegistry([createMissingManifest('artifact-esm-missing')]), 'artifact-esm-missing:model');",
+      "const cjsError = await captureError(new CjsProviderPluginRegistry([createMissingManifest('artifact-cjs-missing')]), 'artifact-cjs-missing:model');",
+      'for (const error of [esmError, cjsError]) {',
+      '  if (!(error instanceof EsmMissingProviderPackageError) || !(error instanceof CjsMissingProviderPackageError) || !(error instanceof EsmProviderPluginLoadError) || !(error instanceof CjsProviderPluginLoadError)) {',
+      "    throw new Error('Provider plugin errors were not recognizable across ESM/CommonJS');",
+      '  }',
       '}',
       '',
     ].join('\n'),
@@ -759,12 +862,9 @@ async function main(): Promise<void> {
     run(process.execPath, ['pure-assertions.mjs'], consumerDir);
     run(process.execPath, ['import-package.mjs'], consumerDir);
     run(process.execPath, ['require-package.cjs'], consumerDir);
+    run(process.execPath, ['mixed-provider-plugin.mjs'], consumerDir);
     const tscPath = path.join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
-    for (const tsconfig of [
-      'tsconfig.json',
-      'tsconfig.node16-cjs.json',
-      'tsconfig.host-assertions.json',
-    ]) {
+    for (const tsconfig of ['tsconfig.json', 'tsconfig.node16-cjs.json', 'tsconfig.host.json']) {
       run(process.execPath, [tscPath, '--project', tsconfig], consumerDir);
     }
     assertInstalledWebApp(installedPackageDir);
