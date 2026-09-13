@@ -39,14 +39,14 @@
   "providers -> node": 301,
   "providers -> redteam": 4,
   "redteam -> core": 2,
-  "redteam -> legacy-contracts": 151,
+  "redteam -> legacy-contracts": 153,
   "redteam -> legacy-runtime": 142,
-  "redteam -> node": 208,
-  "redteam -> providers": 38,
+  "redteam -> node": 207,
+  "redteam -> providers": 37,
   "view-server -> core": 1,
-  "view-server -> legacy-contracts": 21,
+  "view-server -> legacy-contracts": 24,
   "view-server -> legacy-runtime": 35,
-  "view-server -> node": 44,
+  "view-server -> node": 45,
   "view-server -> providers": 3,
-  "view-server -> redteam": 13
+  "view-server -> redteam": 14
 }

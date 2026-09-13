@@ -55,10 +55,12 @@ metadata:
       numRequests: 4
 ```
 
-Generation usage includes system-purpose extraction, entity extraction, attack-goal extraction,
-and test generation. A failed request still increments `numRequests` when its token count is
-unavailable. Reusing a complete cached response adds neither requests nor newly consumed tokens;
-provider-side prompt caching during an actual model request still counts that request.
+Generation usage includes extraction, test generation, and strategy calls that report usage.
+Failed provider calls still increment `numRequests` when their token counts are unavailable.
+Cached responses remain in the logical totals; `incurredTokenUsage` records only newly consumed
+tokens and requests when these differ. Provider-side prompt caching still counts the model request.
+Generation failures retain observed usage in the CLI log, and preview and discovery responses include
+their observed usage in `tokenUsage`.
 
 `promptfoo redteam run` attributes generation tokens to the evaluation only when it generated the
 suite during that run. Running an existing generated suite does not charge its historical

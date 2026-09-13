@@ -13,6 +13,7 @@ import {
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import { getAvailableProviders } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
@@ -128,7 +129,14 @@ providersRouter.post(
         error: e,
         providerOptions,
       });
-      sendError(res, 500, "Discovery failed to discover the target's purpose");
+      const tokenUsage = getErrorTokenUsage(e);
+      sendError(
+        res,
+        500,
+        "Discovery failed to discover the target's purpose",
+        undefined,
+        tokenUsage ? { tokenUsage } : undefined,
+      );
       return;
     }
   },

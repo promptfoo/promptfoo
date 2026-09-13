@@ -8,6 +8,7 @@ import {
   doTargetPurposeDiscovery,
   normalizeTargetPurposeDiscoveryResult,
   resolveDiscoveryProviderContext,
+  TargetPurposeDiscoveryTaskResponseSchema,
 } from '../../../src/redteam/commands/discover';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 import { createMockProvider } from '../../factories/provider';
@@ -93,6 +94,44 @@ describe('resolveDiscoveryProviderContext', () => {
 });
 
 describe('normalizeTargetPurposeDiscoveryResult', () => {
+  it('preserves reported discovery token usage through response parsing and normalization', () => {
+    const parsed = TargetPurposeDiscoveryTaskResponseSchema.parse({
+      done: true,
+      state: { currentQuestionIndex: 0, answers: [] },
+      purpose: {
+        purpose: 'Book travel',
+        limitations: null,
+        user: null,
+        tools: [],
+        tokenUsage: { prompt: 4, completion: 6, total: 10, numRequests: 1 },
+      },
+    });
+
+    expect(normalizeTargetPurposeDiscoveryResult(parsed.purpose!)).toMatchObject({
+      tokenUsage: { prompt: 4, completion: 6, total: 10, numRequests: 1 },
+    });
+  });
+
+  it('ignores malformed optional discovery token usage', () => {
+    const parsed = TargetPurposeDiscoveryTaskResponseSchema.parse({
+      done: true,
+      state: { currentQuestionIndex: 0, answers: [] },
+      purpose: {
+        purpose: 'Book travel',
+        limitations: null,
+        user: null,
+        tools: [],
+        tokenUsage: { total: '10' },
+      },
+    });
+
+    expect(normalizeTargetPurposeDiscoveryResult(parsed.purpose!)).toEqual({
+      purpose: 'Book travel',
+      limitations: null,
+      user: null,
+      tools: [],
+    });
+  });
   it('should handle null-like values', () => {
     const result = normalizeTargetPurposeDiscoveryResult({
       purpose: null,
@@ -251,7 +290,99 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
+  });
+
+  it('preserves cached target usage without charging for the cached request', async () => {
+    mockedFetchWithProxy
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            done: false,
+            question: 'What is your purpose?',
+            state: { currentQuestionIndex: 0, answers: [] },
+            tokenUsage: { total: 3, numRequests: 1 },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            done: true,
+            purpose: { purpose: 'Test purpose', limitations: null, tools: [], user: null },
+            state: { currentQuestionIndex: 1, answers: ['A test assistant'] },
+            tokenUsage: { total: 4, numRequests: 1 },
+          }),
+        ),
+      );
+    const target = createMockProvider({
+      id: 'cached-target',
+      response: {
+        output: 'A test assistant',
+        cached: true,
+        tokenUsage: { total: 10, prompt: 6, completion: 4, numRequests: 1 },
+      },
+    });
+
+    const result = await doTargetPurposeDiscovery(target, undefined, false);
+
+    expect(result?.tokenUsage).toMatchObject({
+      total: 17,
+      cached: 10,
+      numRequests: 3,
+      incurredTokenUsage: { total: 7, numRequests: 2 },
+    });
+  });
+
+  it.each([
+    'target throw',
+    'target response',
+    'target without usage',
+    'remote status',
+    'remote body',
+  ])('retains earlier usage when discovery fails with %s', async (failure) => {
+    const question = (total: number) => ({
+      done: false,
+      question: 'What can you do?',
+      state: { currentQuestionIndex: 1, answers: [] },
+      tokenUsage: { total, numRequests: 1 },
+    });
+    mockedFetchWithProxy
+      .mockResolvedValueOnce(new Response(JSON.stringify(question(3))))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ...question(5),
+            ...(failure.startsWith('remote') ? { error: 'Discovery unavailable' } : {}),
+          }),
+          { status: failure === 'remote status' ? 503 : 200 },
+        ),
+      );
+    const callApi = vi
+      .fn()
+      .mockResolvedValueOnce({ output: 'A test assistant', tokenUsage: { total: 10 } });
+    if (failure === 'target response') {
+      callApi.mockResolvedValueOnce({ error: 'Target unavailable', tokenUsage: { total: 2 } });
+    } else {
+      callApi.mockRejectedValueOnce(
+        Object.assign(
+          new Error('Target unavailable'),
+          failure === 'target without usage' ? {} : { tokenUsage: { total: 2 } },
+        ),
+      );
+    }
+
+    await expect(
+      doTargetPurposeDiscovery({ id: () => 'target', callApi }, undefined, true),
+    ).rejects.toMatchObject({
+      cause: expect.any(Error),
+      tokenUsage: {
+        total: failure.startsWith('remote') || failure === 'target without usage' ? 18 : 20,
+        numRequests: failure.startsWith('remote') ? 3 : 4,
+      },
+    });
+    expect(mockProgressBar.stop).toHaveBeenCalledOnce();
   });
 
   it('should include Cloud target context in discovery requests', async () => {
@@ -282,6 +413,76 @@ describe('doTargetPurposeDiscovery', () => {
     expect(JSON.parse(request!.body as string)).toMatchObject({
       task: 'target-purpose-discovery',
       targetId: 'cloud-target-123',
+    });
+  });
+
+  it('accumulates top-level task and target token usage across discovery turns', async () => {
+    const mockResponses = [
+      {
+        done: false,
+        question: 'What is your purpose?',
+        state: { currentQuestionIndex: 0, answers: [] },
+        tokenUsage: { total: 5, prompt: 3, completion: 2 },
+      },
+      {
+        done: true,
+        purpose: {
+          purpose: 'Book travel',
+          limitations: null,
+          tools: [],
+          user: null,
+          tokenUsage: { total: 2, prompt: 1, completion: 1 },
+        },
+        state: { currentQuestionIndex: 1, answers: ['I book travel'] },
+        tokenUsage: { total: 7, prompt: 4, completion: 3 },
+      },
+    ];
+    mockedFetchWithProxy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify(mockResponses.shift()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+    const target = createMockProvider({
+      id: 'test',
+      response: {
+        output: 'I book travel',
+        tokenUsage: { total: 11, prompt: 6, completion: 5 },
+      },
+    });
+
+    const result = await doTargetPurposeDiscovery(target, undefined, false);
+
+    expect(result).toEqual({
+      purpose: 'Book travel',
+      limitations: null,
+      tools: [],
+      user: null,
+      tokenUsage: { total: 25, prompt: 14, completion: 11, cached: 0, numRequests: 4 },
+    });
+  });
+
+  it('counts a successful unmetered discovery request', async () => {
+    mockedFetchWithProxy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          done: true,
+          purpose: { purpose: 'Book travel', limitations: null, tools: [], user: null },
+          state: { currentQuestionIndex: 0, answers: [] },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const target = createMockProvider({ id: 'test', response: { output: 'unused' } });
+
+    await expect(doTargetPurposeDiscovery(target, undefined, false)).resolves.toEqual({
+      purpose: 'Book travel',
+      limitations: null,
+      tools: [],
+      user: null,
+      tokenUsage: expect.objectContaining({ numRequests: 1 }),
     });
   });
 
@@ -422,6 +623,7 @@ describe('doTargetPurposeDiscovery', () => {
         },
       ],
       user: 'Test user',
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 
@@ -471,6 +673,7 @@ describe('doTargetPurposeDiscovery', () => {
       limitations: null,
       tools: [],
       user: null,
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 
@@ -620,6 +823,7 @@ describe('doTargetPurposeDiscovery', () => {
         { name: 'tool2', description: 'desc2', arguments: [] },
       ],
       user: 'Test user',
+      tokenUsage: expect.objectContaining({ numRequests: 3 }),
     });
   });
 });

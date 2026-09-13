@@ -382,8 +382,13 @@ describe('API schema red-team coverage', () => {
           prompt: 'Try this',
           context: 'Generated locally',
           metadata: { pluginId: VALID_PLUGIN_ID },
+          tokenUsage: { total: 3, prompt: 2, completion: 1, numRequests: 1 },
         }),
-      ).toMatchObject({ prompt: 'Try this', metadata: { pluginId: VALID_PLUGIN_ID } });
+      ).toMatchObject({
+        prompt: 'Try this',
+        metadata: { pluginId: VALID_PLUGIN_ID },
+        tokenUsage: { total: 3, numRequests: 1 },
+      });
       expect(
         RedteamSchemas.GenerateTest.Response.parse({
           testCases: [{ prompt: 'one', context: 'ctx', metadata: { index: 1 } }],

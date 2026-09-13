@@ -37,7 +37,7 @@ import {
 import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from './constants/codingAgents';
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
-import { trackGenerationTokenUsage } from './generationTokenUsage';
+import { trackGenerationErrorTokenUsage, trackGenerationTokenUsage } from './generationTokenUsage';
 import { CustomPlugin } from './plugins/custom';
 import { Plugins } from './plugins/index';
 import { isValidPolicyObject, makeInlinePolicyIdSync } from './plugins/policy/utils';
@@ -955,39 +955,59 @@ function isStrategyCollection(id: string): id is keyof typeof STRATEGY_COLLECTIO
   return STRATEGY_COLLECTIONS.includes(id as keyof typeof STRATEGY_COLLECTION_MAPPINGS);
 }
 
-/**
- * Synthesizes test cases based on provided options.
- * @param options - The options for test case synthesis.
- * @returns A promise that resolves to an object containing the purpose, entities, and test cases.
- */
-export async function synthesize({
-  abortSignal,
-  cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
-  delay,
-  entities: entitiesOverride,
-  injectVar,
-  inputs,
-  language,
-  maxCharsPerMessage,
-  maxConcurrency = 1,
-  plugins,
-  prompts,
-  provider,
-  purpose: purposeOverride,
-  redteamGenerationContext: inputRedteamGenerationContext,
-  strategies,
-  targetIds,
-  showProgressBar: showProgressBarOverride,
-  excludeTargetOutputFromAgenticAttackGeneration,
-  testGenerationInstructions,
-}: SynthesizeOptions): Promise<{
+type SynthesizeResult = {
   purpose: string;
   entities: string[];
   testCases: TestCaseWithPlugin[];
   injectVar: string;
   failedPlugins: FailedPluginInfo[];
   generationTokenUsage?: TokenUsage;
-}> {
+};
+
+/** Synthesizes test cases and preserves usage when generation fails. */
+export async function synthesize(options: SynthesizeOptions): Promise<SynthesizeResult> {
+  const generationTokenUsage: TokenUsage = {
+    cached: 0,
+    completion: 0,
+    numRequests: 0,
+    prompt: 0,
+    total: 0,
+  };
+
+  try {
+    return await synthesizeInternal(options, generationTokenUsage);
+  } catch (error) {
+    const failure = error instanceof Error ? error : new Error(String(error));
+    trackGenerationErrorTokenUsage(generationTokenUsage, error, false);
+    Object.assign(failure, { tokenUsage: generationTokenUsage });
+    throw failure;
+  }
+}
+
+async function synthesizeInternal(
+  {
+    abortSignal,
+    cloudTargetDatabaseId: explicitCloudTargetDatabaseId,
+    delay,
+    entities: entitiesOverride,
+    injectVar,
+    inputs,
+    language,
+    maxCharsPerMessage,
+    maxConcurrency = 1,
+    plugins,
+    prompts,
+    provider,
+    purpose: purposeOverride,
+    redteamGenerationContext: inputRedteamGenerationContext,
+    strategies,
+    targetIds,
+    showProgressBar: showProgressBarOverride,
+    excludeTargetOutputFromAgenticAttackGeneration,
+    testGenerationInstructions,
+  }: SynthesizeOptions,
+  generationTokenUsage: TokenUsage,
+): Promise<SynthesizeResult> {
   // Add abort check helper
   const checkAbort = () => {
     if (abortSignal?.aborted) {
@@ -1078,13 +1098,6 @@ export async function synthesize({
   const providerSelection = await redteamProviderManager.getProviderSelection({
     provider,
   });
-  const generationTokenUsage: TokenUsage = {
-    cached: 0,
-    completion: 0,
-    numRequests: 0,
-    prompt: 0,
-    total: 0,
-  };
   const redteamProvider = trackGenerationTokenUsage(
     providerSelection.provider,
     generationTokenUsage,
