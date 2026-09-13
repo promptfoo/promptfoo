@@ -4,7 +4,10 @@ import { EmailValidationError } from '../../../src/globalConfig/accounts';
 import logger from '../../../src/logger';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';
 import { doRedteamRun } from '../../../src/redteam/shared';
-import { ProbeLimitExceededError } from '../../../src/redteam/types';
+import {
+  ProbeLimitExceededError,
+  UnsupportedRemoteRedteamAssertionsError,
+} from '../../../src/redteam/types';
 import { getConfigFromCloud } from '../../../src/util/cloud';
 
 vi.mock('../../../src/cliState', () => ({
@@ -420,6 +423,20 @@ describe('redteamRunCommand', () => {
       expect(logger.error).not.toHaveBeenCalledWith(
         expect.stringContaining('An unexpected error occurred during red team run'),
       );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should report remote assertion contract errors without a stack trace', async () => {
+      const contractError = new UnsupportedRemoteRedteamAssertionsError('ssrf', [
+        'promptfoo:redteam:future-remote-plugin',
+      ]);
+      vi.mocked(doRedteamRun).mockRejectedValueOnce(contractError);
+
+      const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
+      await runCommand!.parseAsync(['node', 'test']);
+
+      expect(logger.error).toHaveBeenCalledWith(contractError.message);
+      expect(logger.error).not.toHaveBeenCalledWith(expect.stringContaining(contractError.stack!));
       expect(process.exitCode).toBe(1);
     });
 
