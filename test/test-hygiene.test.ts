@@ -98,6 +98,13 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'E2E coverage requires an API key and optional Codex SDK dependency',
   },
   {
+    file: 'providers/muse-code.test.ts',
+    kind: 'skipIf',
+    linePattern:
+      /^it\.skipIf\(process\.platform === 'win32'\)\('excludes workspace executable symlinks'/,
+    reason: 'File symlink creation on Windows requires elevated privileges or Developer Mode',
+  },
+  {
     file: 'commands/mcp/lib/security.test.ts',
     kind: 'skipIf',
     linePattern:

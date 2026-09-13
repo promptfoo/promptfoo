@@ -131,6 +131,8 @@ export interface ApiProvider extends MinimalApiProvider {
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
+  /** Whether this coding agent can return agent-rubric verdicts, regardless of its display ID. */
+  supportsAgenticGrading?: boolean;
   transform?: string | TransformFunction;
   toJSON?: () => any;
   /**

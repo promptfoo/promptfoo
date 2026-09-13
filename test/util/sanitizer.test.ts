@@ -249,6 +249,8 @@ describe('isSecretEnvVarName', () => {
     'TURKEY',
     // `AUTH` only counts as the final word: these name a method and a scope.
     'WATSONX_AI_AUTH_TYPE',
+    'AUTH_ENABLED',
+    'AUTH_REQUIRED',
     'OAUTH_SCOPE',
     // Ordinary config fields keep the exact-name behavior.
     'maxTokens',
@@ -258,9 +260,184 @@ describe('isSecretEnvVarName', () => {
   ])('leaves %s alone', (name) => {
     expect(isSecretEnvVarName(name)).toBe(false);
   });
+
+  it('preserves auth type values in sanitized env maps', () => {
+    const env = { WATSONX_AI_AUTH_TYPE: 'iam', AUTH_ENABLED: 'true', AUTH_REQUIRED: 'false' };
+    expect(sanitizeObject({ env })).toEqual({
+      env,
+    });
+  });
 });
 
 describe('sanitizeObject', () => {
+  it.each([
+    ['base_url', 'https://user:password@example.test/v1'],
+    ['base_url', 'https://example.test/v1?api_key=short-secret'],
+    ['base_url', 'https://example.test/v1?cursor=sk-abcdefghijklmnopqrstuvwxyz'],
+    ['base_url', 'https://example.test/v1/token-deadbeef1234'],
+    ['base_url', 'https://example.test/v1/eyJheader.payload.signature'],
+    ['baseUrl', 'https://example.test/v1?github_pat=short-secret'],
+    ['base_url', 'https://{{ env.HOST }}/v1?github_pat=short-secret'],
+    ['base_url', 'https://example.test/v1#api_key=short-secret'],
+    ['base_url', 'https://example.test/v1?api_key=short-{{ env.SUFFIX }}'],
+    ['baseUrl', 'https://example.test/v1?github_pat={{ env.PREFIX }}-secret'],
+    ['base_url', 'https://example.test/v1?api_key={{ env.META_API_KEY }}&token=literal-secret'],
+    ['base_url', 'https://example.test/v1?api_key={{ "literal-secret" }}'],
+    ['base_url', '{{ endpoint }}?github_pat=literal-secret'],
+    ['base_url', '{{ endpoint }}?github_pat={{ "literal-secret" }}'],
+    ['base_url', '{{ origin }}:literal-secret@example.test'],
+  ])('redacts credentials in endpoint field %s: %s', (key, value) => {
+    expect(sanitizeObject({ [key]: value })).toEqual({ [key]: '[REDACTED]' });
+  });
+
+  it.each([
+    'https://example.test/v1?model=muse-code&region=us-east-1',
+    'https://example.test/oauth/token-exchange',
+    'https://example.test/token-endpoint/key-management/secret-rotation',
+  ])('preserves a base_url without credentials: %s', (baseUrl) => {
+    expect(sanitizeObject({ base_url: baseUrl })).toEqual({ base_url: baseUrl });
+  });
+
+  it('preserves a baseUrl without a trailing slash', () => {
+    const baseUrl = 'http://localhost:8080';
+    expect(sanitizeObject({ baseUrl })).toEqual({ baseUrl });
+  });
+
+  it.each([
+    ['base_url', 'https://example.test/v1?api_key={{ env.META_API_KEY }}'],
+    ['baseUrl', 'https://example.test/v1?github_pat={{ env.GITHUB_PAT }}'],
+    ['base_url', 'https://{{ env.HOST }}/v1?api_key={{ env.META_API_KEY | urlencode }}'],
+    ['base_url', 'https://example.test/v1#token={{ env.TOKEN }}'],
+    ['base_url', '{{ env.ENDPOINT }}'],
+  ])('preserves unresolved credential templates in %s: %s', (key, value) => {
+    expect(sanitizeObject({ [key]: value })).toEqual({ [key]: value });
+  });
+
+  it('redacts credential-bearing environment entries while preserving ordinary settings', () => {
+    const env = {
+      GITHUB_PAT: 'abc123',
+      DATABASE_PASSWORD: 'short-pass',
+      PGPASSWORD: 'short-pg-pass',
+      AUTHORIZATION: 'Bearer short-secret',
+      servicePasswordValue: 'service-pass',
+      DEPLOY_CREDENTIAL: 'deploy-credential',
+      CI_PW: 'ci-password',
+      HTTPS_PROXY: 'http://proxy-user:proxy-password@proxy.example:8080',
+      SERVICE_URL: 'https://service.example?github_pat=service-pat',
+      CUSTOM_SETTING: 'ghp_abcdefghijklmnopqrstuvwxyz1234567890',
+      PUBLIC_SETTING: 'keep-me',
+      HOTKEY: 'ctrl+s',
+      TOKENIZER_SETTING: 'default',
+      MUSE_AUTH_PATH: '/tmp/muse-auth.json',
+      ACTIONS_ID_TOKEN_REQUEST_URL: 'https://actions.example/token',
+    };
+    expect(sanitizeObject({ env, ordinary: { GITHUB_PAT: 'public-id' } })).toEqual({
+      env: {
+        GITHUB_PAT: '[REDACTED]',
+        DATABASE_PASSWORD: '[REDACTED]',
+        PGPASSWORD: '[REDACTED]',
+        AUTHORIZATION: '[REDACTED]',
+        servicePasswordValue: '[REDACTED]',
+        DEPLOY_CREDENTIAL: '[REDACTED]',
+        CI_PW: '[REDACTED]',
+        HTTPS_PROXY: '[REDACTED]',
+        SERVICE_URL: '[REDACTED]',
+        CUSTOM_SETTING: '[REDACTED]',
+        PUBLIC_SETTING: 'keep-me',
+        HOTKEY: 'ctrl+s',
+        TOKENIZER_SETTING: 'default',
+        MUSE_AUTH_PATH: '/tmp/muse-auth.json',
+        ACTIONS_ID_TOKEN_REQUEST_URL: 'https://actions.example/token',
+      },
+      ordinary: { GITHUB_PAT: 'public-id' },
+    });
+    expect(env.GITHUB_PAT).toBe('abc123');
+  });
+
+  it('preserves pure environment templates while redacting literal credentials', () => {
+    const env = {
+      META_API_KEY: '{{ env.META_API_KEY }}',
+      GITHUB_PAT: '{{ token }}',
+      PGPASSWORD: '{{ password | trim }}',
+      AUTHORIZATION: '{{ authorization }}',
+      GITHUB_TOKEN: '{{ credentials.github | trim }}',
+      DEPLOY_KEY: 'prefix-{{ token }}',
+      DATABASE_PASSWORD: 'literal-pass',
+    };
+    expect(sanitizeObject({ env })).toEqual({
+      env: { ...env, DEPLOY_KEY: '[REDACTED]', DATABASE_PASSWORD: '[REDACTED]' },
+    });
+    expect(sanitizeObject({ env }, { maxDepth: 0 })).toEqual({ env: '[...]' });
+  });
+
+  it.each(['{{ "template-literal-secret" }}', '{{ token | default("template-literal-secret") }}'])(
+    'redacts literal credentials embedded in an environment template: %s',
+    (value) => {
+      expect(sanitizeObject({ env: { GITHUB_PAT: value } })).toEqual({
+        env: { GITHUB_PAT: '[REDACTED]' },
+      });
+    },
+  );
+
+  it.each([
+    ['MUSE_AUTH_PATH', '/home/user/muse-auth.json'],
+    ['GOOGLE_APPLICATION_CREDENTIALS', '/home/user/key.json'],
+    ['AWS_SHARED_CREDENTIALS_FILE', '/home/user/.aws/credentials'],
+    ['AWS_WEB_IDENTITY_TOKEN_FILE', '/var/run/secrets/aws-token'],
+    ['CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE', '/home/user/gcloud-key.json'],
+    ['AZURE_AUTH_LOCATION', '/home/user/azure-auth.json'],
+    ['SSH_AUTH_SOCK', '/tmp/ssh-agent.sock'],
+    ['SSL_KEY_FILE', '/home/user/client-key.pem'],
+    ['DATABASE_PASSWORD_FILE', '/var/run/secrets/database-password'],
+  ])('preserves the credential locator %s without exempting literal secrets', (name, file) => {
+    expect(sanitizeObject({ env: { [name]: file } })).toEqual({ env: { [name]: file } });
+    expect(sanitizeObject({ env: { [name]: 'ghp_shortsecret' } })).toEqual({
+      env: { [name]: '[REDACTED]' },
+    });
+    expect(sanitizeObject({ env: { [name]: 'literal-secret' } })).toEqual({
+      env: { [name]: '[REDACTED]' },
+    });
+    expect(
+      sanitizeObject({ env: { [name]: 'https://user:password@example.test/key.json' } }),
+    ).toEqual({
+      env: { [name]: '[REDACTED]' },
+    });
+  });
+
+  it.each(['SNOWFLAKE_PRIVATE_KEY_FILE_PWD', 'FILE_ENCRYPTION_KEY', 'DIRECTORY_BIND_PASSWORD'])(
+    'redacts a credential whose name also contains a locator word: %s',
+    (name) => {
+      expect(sanitizeObject({ env: { [name]: 'synthetic-passphrase' } })).toEqual({
+        env: { [name]: '[REDACTED]' },
+      });
+    },
+  );
+
+  it('redacts webhook credentials while preserving ordinary URL path IDs', () => {
+    const env = {
+      SLACK_WEBHOOK_URL: 'https://hooks.slack.com/services/T000/B000/short-webhook-token',
+      SERVICE_URL: 'https://discord.com/api/webhooks/123456/short-discord-token',
+      PUBLIC_URL: 'https://example.test/resources/11111111-1111-4111-8111-111111111111',
+      TOKEN_URL: 'https://gateway.example/token/AbCdEfGhIjKlMnOpQrStUvWx',
+    };
+    expect(sanitizeObject({ env })).toEqual({
+      env: {
+        ...env,
+        SLACK_WEBHOOK_URL: '[REDACTED]',
+        SERVICE_URL: '[REDACTED]',
+        TOKEN_URL: '[REDACTED]',
+      },
+    });
+  });
+
+  it.each(['META_API_KEY', 'metaApiKey', 'meta-api-key'])(
+    'redacts the Meta API key field %s without relying on its value format',
+    (key) => {
+      expect(sanitizeObject({ env: { [key]: 'meta-dev-key', REGION: 'us-east-1' } })).toEqual({
+        env: { [key]: '[REDACTED]', REGION: 'us-east-1' },
+      });
+    },
+  );
   describe('environment variable maps', () => {
     it('redacts credential-named variables inside an env map', () => {
       // Regression: `env` is handed verbatim to a subprocess, so it is where a config
@@ -326,6 +503,12 @@ describe('sanitizeObject', () => {
         keyName: 'X-Api-Key',
         MAX_TOKENS: '2048',
       });
+    });
+  });
+
+  it('retains credential-suffix detection when sanitizing environment maps', () => {
+    expect(sanitizeObject({ env: { MYAUTHTOKEN: 'synthetic-token' } })).toEqual({
+      env: { MYAUTHTOKEN: '[REDACTED]' },
     });
   });
 
@@ -1519,6 +1702,12 @@ describe('sanitizeObject', () => {
       expect(result.requestBody).toContain('api_key=%5BREDACTED%5D');
       expect(result.requestBody).not.toContain('plain-secret');
       expect(result.requestBody).not.toContain('sk-123456789012345678901234567890');
+      expect(
+        sanitizeObject({
+          requestBody:
+            'user%5Bpassword.type%5D=short-secret&github_pat=%7B%7B%20%22literal-secret%22%20%7D%7D',
+        }).requestBody,
+      ).toBe('user%5Bpassword.type%5D=%5BREDACTED%5D&github_pat=%5BREDACTED%5D');
     });
 
     it('should sanitize URL-encoded request bodies with raw spaces', () => {
@@ -1563,11 +1752,13 @@ describe('sanitizeObject', () => {
     });
 
     it('should redact PHP/qs-style bracket keys', () => {
-      const body = 'user[password]=hunter2&user[name]=alice';
+      const body = 'user[password]=hunter2&user[name]=alice&github_pat=short-secret';
       const result = sanitizeUrlEncodedString(body);
       expect(result).toContain('user[password]=%5BREDACTED%5D');
       expect(result).toContain('user[name]=alice');
+      expect(result).toContain('github_pat=%5BREDACTED%5D');
       expect(result).not.toContain('hunter2');
+      expect(result).not.toContain('short-secret');
     });
 
     it('should still redact a secret value when the key has malformed percent-encoding', () => {
@@ -1717,6 +1908,9 @@ describe('sanitizeObject url-keyed fields', () => {
     // Unparseable but credential-bearing: fail closed.
     expect(sanitizeObject({ url: 'ht!tp://x?token=sk-1234567890abcdefghij' })).toEqual({
       url: '[REDACTED]',
+    });
+    expect(sanitizeObject({ url: 'https://example.test/?github_pat=short-secret' })).toEqual({
+      url: 'https://example.test/?github_pat=%5BREDACTED%5D',
     });
   });
 

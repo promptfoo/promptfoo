@@ -35,7 +35,7 @@ export async function matchesAgentRubric(
   if (!agentProvider || !isAgenticGradingProvider(agentProvider)) {
     throw new Error(
       'agent-rubric assertion requires an agentic grading provider. ' +
-        'Use openai:codex-sdk, openai:codex-app-server, anthropic:claude-agent-sdk, openinterpreter, or opencode:sdk.',
+        'Use openai:codex-sdk, openai:codex-app-server, anthropic:claude-agent-sdk, muse-code, openinterpreter, or opencode:sdk.',
     );
   }
 

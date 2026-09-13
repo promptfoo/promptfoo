@@ -46,6 +46,7 @@ const STRUCTURED_FOUNDATION_PROVIDER_TYPES = [
 const AGENTIC_PROVIDER_IDS = [
   'anthropic:claude-agent-sdk',
   'anthropic:claude-code',
+  'muse-code',
   'openai:codex',
   'openai:codex-app-server',
   'openai:codex-desktop',

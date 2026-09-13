@@ -105,6 +105,7 @@ export const SECRET_FIELD_NAMES = new Set([
   'password',
   'passwd',
   'pwd',
+  'pgpassword', // PostgreSQL's standard unseparated environment variable
 
   // Secret variants
   'secret',
@@ -123,7 +124,10 @@ export const SECRET_FIELD_NAMES = new Set([
   'authtoken',
   'clientsecret',
   'webhooksecret',
+  'slackwebhookurl',
+  'discordwebhookurl',
   'anthropicapikey',
+  'metaapikey',
   'awsbearertokenbedrock',
 
   // AWS SigV4 credentials. Both spellings are needed: normalizeFieldName strips
@@ -364,6 +368,275 @@ export function looksLikeSecret(value: string): boolean {
   }
 
   return false;
+}
+
+function getFieldNameWords(name: string): string[] {
+  return name
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .split(/[^a-zA-Z0-9]+/)
+    .map((word) => word.toLowerCase());
+}
+
+function isCredentialName(name: string): boolean {
+  return name
+    .split(/[.[]]+/)
+    .filter(Boolean)
+    .some((part) => {
+      const words = getFieldNameWords(part);
+      if (
+        ['enabled', 'endpoint', 'method', 'mode', 'required', 'type', 'uri', 'url'].includes(
+          words[words.length - 1] ?? '',
+        )
+      ) {
+        return false;
+      }
+      return (
+        isSecretEnvVarName(part) ||
+        words.some((word) => isSecretField(word) || /^(key|pat|credential|pass|pw)$/.test(word))
+      );
+    });
+}
+
+function isCredentialValue(value: string): boolean {
+  return (
+    /^(?:gh[pousr]_|github_pat_)[a-zA-Z0-9_]+$/.test(value) ||
+    /^(?:key|pat|secret|token)-(?=[a-zA-Z0-9_-]*\d)[a-zA-Z0-9_-]{8,}$/i.test(value) ||
+    /^eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$/.test(value) ||
+    (/^(?:sk-|key-|AKIA|AIza|Bearer\s|Basic\s)/i.test(value) && looksLikeSecret(value))
+  );
+}
+
+const CREDENTIAL_PATH_WORDS = new Set([
+  'file',
+  'path',
+  'filepath',
+  'dir',
+  'directory',
+  'location',
+  'sock',
+  'socket',
+]);
+
+function isCredentialPathName(name: string): boolean {
+  // Google ADC is the common locator whose name does not identify it as a path.
+  // Other SDKs use forms such as CREDENTIAL_FILE_OVERRIDE, AUTH_LOCATION, or AUTH_SOCK.
+  const words = getFieldNameWords(name);
+  const lastWord = words[words.length - 1] ?? '';
+  return (
+    name.toLowerCase() === 'google_application_credentials' ||
+    CREDENTIAL_PATH_WORDS.has(lastWord) ||
+    (lastWord === 'override' && words.some((word) => CREDENTIAL_PATH_WORDS.has(word)))
+  );
+}
+
+function isPathLikeCredentialValue(value: string): boolean {
+  return (
+    value.includes('/') ||
+    value.includes('\\') ||
+    /^[A-Za-z]:/.test(value) ||
+    /^[A-Za-z0-9_.-]+\.[A-Za-z0-9]+$/.test(value)
+  );
+}
+
+function collectAuthorizationCredentials(value: string, credentials: Set<string>): void {
+  const match = value.match(/^\s*(bearer|basic|token|api[-_]?key)\s+(\S+)\s*$/i);
+  if (!match) {
+    return;
+  }
+  credentials.add(match[2]);
+  if (match[1].toLowerCase() !== 'basic') {
+    return;
+  }
+  try {
+    const binary = atob(match[2]);
+    const utf8 = new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0)));
+    for (const decoded of new Set([binary, utf8])) {
+      const separator = decoded.indexOf(':');
+      const parts =
+        separator === -1
+          ? [decoded]
+          : [decoded, decoded.slice(0, separator), decoded.slice(separator + 1)];
+      for (const part of parts) {
+        if (part) {
+          credentials.add(part);
+        }
+      }
+    }
+  } catch {
+    // Malformed Basic values are still protected by their original credential component.
+  }
+}
+
+function collectRawUrlCredentials(
+  value: string,
+  addCredential: (raw: string, formEncoded?: boolean) => void,
+): void {
+  // URL parsing normalizes spaces, Unicode, and some punctuation. Keep the
+  // original userinfo and query values so the child cannot echo those spellings.
+  const schemeIndex = value.indexOf('://');
+  if (schemeIndex !== -1) {
+    const authority = value.slice(schemeIndex + 3).split(/[/?#]/, 1)[0];
+    const atIndex = authority.lastIndexOf('@');
+    if (atIndex !== -1) {
+      const userinfo = authority.slice(0, atIndex);
+      const colonIndex = userinfo.indexOf(':');
+      for (const raw of colonIndex === -1
+        ? [userinfo]
+        : [userinfo.slice(0, colonIndex), userinfo.slice(colonIndex + 1)]) {
+        addCredential(raw);
+      }
+    }
+  }
+  const addRawPair = (pair: string) => {
+    const equalsIndex = pair.indexOf('=');
+    if (equalsIndex === -1) {
+      return;
+    }
+    const rawKey = pair.slice(0, equalsIndex);
+    const rawValue = pair.slice(equalsIndex + 1);
+    if (
+      isCredentialName(decodeFormComponent(rawKey) ?? rawKey) ||
+      looksLikeSecret(decodeFormComponent(rawValue) ?? rawValue)
+    ) {
+      addCredential(rawValue, true);
+    }
+  };
+  const hashIndex = value.indexOf('#');
+  const beforeHash = hashIndex === -1 ? value : value.slice(0, hashIndex);
+  const queryIndex = beforeHash.indexOf('?');
+  const fields = [
+    queryIndex === -1 ? '' : beforeHash.slice(queryIndex + 1),
+    hashIndex === -1 ? '' : value.slice(hashIndex + 1),
+  ];
+  for (const field of fields) {
+    for (const pair of field.split('&')) {
+      addRawPair(pair);
+      if (pair.includes(';')) {
+        for (const segment of pair.split(';')) {
+          addRawPair(segment);
+        }
+      }
+    }
+  }
+}
+
+function collectWebhookPathCredentials(
+  value: string,
+  url: URL | undefined,
+  addCredential: (raw: string) => void,
+): void {
+  if (!url) {
+    return;
+  }
+  const host = url.hostname.toLowerCase().replace(/\.$/, '');
+  const rawPathStart = value.indexOf('/', value.indexOf('://') + 3);
+  const rawPath = rawPathStart === -1 ? '' : value.slice(rawPathStart).split(/[?#]/, 1)[0];
+  for (const pathname of [url.pathname, rawPath]) {
+    const segments = pathname.split('/').filter(Boolean);
+    const prefix = segments.map((part) => decodeFormComponent(part) ?? part);
+    for (const [index, part] of prefix.entries()) {
+      if (
+        isCredentialValue(part) ||
+        (index > 0 &&
+          getFieldNameWords(prefix[index - 1]).length === 1 &&
+          isCredentialName(prefix[index - 1]))
+      ) {
+        addCredential(segments[index]);
+      }
+    }
+    let credentialParts: string[] = [];
+    // These routes carry bearer credentials. Ordinary path IDs are intentionally preserved.
+    // https://api.slack.com/messaging/webhooks
+    // https://docs.discord.com/developers/resources/webhook#execute-webhook
+    if (host === 'hooks.slack.com' || host === 'hooks.slack-gov.com') {
+      if (prefix[0] === 'services' || prefix[0] === 'triggers') {
+        credentialParts = segments.slice(1, 4);
+      } else if (/^T[A-Z0-9]+$/i.test(prefix[0] ?? '')) {
+        credentialParts = segments.slice(0, 3);
+      }
+      if (credentialParts.length !== 3) {
+        continue;
+      }
+    } else if (/^(?:(?:canary|ptb)\.)?discord(?:app)?\.com$/.test(host)) {
+      const offset = /^v\d+$/.test(prefix[1] ?? '') ? 2 : 1;
+      if (prefix[0] !== 'api' || prefix[offset] !== 'webhooks') {
+        continue;
+      }
+      credentialParts = segments.slice(offset + 1, offset + 3);
+      if (credentialParts.length !== 2) {
+        continue;
+      }
+    }
+    credentialParts.forEach((part) => addCredential(part));
+  }
+}
+
+// Use the same credential detection for child responses, config exports, and provider records.
+export function collectEnvCredentials(env: Record<string, unknown>, baseUrl?: string): string[] {
+  const credentials = new Set<string>();
+  const addUrlCredentials = (value: string) => {
+    let url: URL | undefined;
+    try {
+      url = new URL(value);
+    } catch {
+      // Config exports can contain an unresolved hostname template.
+      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
+        return;
+      }
+    }
+    let hasCredentials = false;
+    const addRawCredential = (raw: string, formEncoded = false) => {
+      if (!raw) {
+        return;
+      }
+      hasCredentials = true;
+      credentials.add(raw);
+      try {
+        const decoded = decodeURIComponent(formEncoded ? raw.replace(/\+/g, ' ') : raw);
+        credentials.add(decoded);
+        credentials.add(encodeURIComponent(decoded));
+      } catch {
+        // Preserve the original representation even for malformed URI encodings.
+      }
+    };
+    for (const encoded of [url?.username, url?.password]) {
+      if (encoded) {
+        addRawCredential(encoded);
+      }
+    }
+    for (const [key, secret] of url?.searchParams ?? []) {
+      if (secret && (isCredentialName(key) || looksLikeSecret(secret))) {
+        hasCredentials = true;
+        credentials.add(secret);
+        credentials.add(encodeURIComponent(secret));
+      }
+    }
+
+    collectRawUrlCredentials(value, addRawCredential);
+    collectWebhookPathCredentials(value, url, addRawCredential);
+    if (hasCredentials) {
+      credentials.add(value);
+    }
+  };
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === 'string' && value) {
+      // An authentication-file path is an operational setting, not the credential it names.
+      const operational = isCredentialPathName(key);
+      if (
+        (!(operational && isPathLikeCredentialValue(value)) && isCredentialName(key)) ||
+        isCredentialValue(value)
+      ) {
+        credentials.add(value);
+        collectAuthorizationCredentials(value, credentials);
+      }
+      addUrlCredentials(value);
+    }
+  }
+  if (baseUrl) {
+    addUrlCredentials(baseUrl);
+  }
+  return [...credentials];
 }
 
 const SAFE_TRACING_CREDENTIAL_TEMPLATE =
@@ -934,14 +1207,13 @@ function redactNestedJsonValue(decoded: string | undefined): string | null {
 
 // Matches one `{{ ... }}` Nunjucks placeholder. `[^{}]*` excludes braces so it
 // cannot backtrack against the closing `}}` (linear, no ReDoS).
-const NUNJUCKS_PLACEHOLDER = /\{\{[^{}]*\}\}/g;
+// Only references and the standard credential-formatting filters are safe to
+// preserve. Other expressions can contain literal credentials or fallback values.
+const CREDENTIAL_REFERENCE_TEMPLATE =
+  /\{\{\s*[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*|\[['"][A-Za-z_][A-Za-z0-9_]*['"]\])*\s*(?:\|\s*(?:trim|urlencode)\s*)*\}\}/g;
 
-// A value that is entirely Nunjucks placeholders (e.g. `{{password}}`) with no
-// literal content is a config template, not a runtime secret. A value that merely
-// CONTAINS a placeholder alongside literal text (e.g. `abc{{x}}def`) is not, so a
-// secret-named key must still redact it.
-function isPureTemplateValue(value: string): boolean {
-  return value.includes('{{') && value.replace(NUNJUCKS_PLACEHOLDER, '').trim() === '';
+function isPureCredentialReference(value: string): boolean {
+  return value.includes('{{') && value.replace(CREDENTIAL_REFERENCE_TEMPLATE, '').trim() === '';
 }
 
 export function sanitizeUrlEncodedString(value: string): string {
@@ -957,13 +1229,8 @@ export function sanitizeUrlEncodedString(value: string): string {
       return match;
     }
 
-    // Preserve pure Nunjucks placeholders (e.g. a provider body template
-    // `password={{password}}`): these are config templates, not runtime secrets,
-    // and this string flows through sanitizeObject into persisted provider
-    // configs. Mirrors the template guard in sanitizeUrl. Checked before the
-    // secret-key redaction so a templated secret field is kept, but a value that
-    // only embeds a placeholder among literal text is not exempted.
-    if (isPureTemplateValue(rawValue)) {
+    // Preserve direct credential references in persisted provider configs.
+    if (isPureCredentialReference(rawValue)) {
       return match;
     }
 
@@ -973,8 +1240,7 @@ export function sanitizeUrlEncodedString(value: string): string {
     const decodedKey = decodeFormComponent(rawKey);
     // Split nested-key syntax (`user[password]`, `a.b.password`) into parts so we
     // can match the leaf name against SECRET_FIELD_NAMES.
-    const keyParts = decodedKey === undefined ? [] : decodedKey.split(/[.\[\]]+/).filter(Boolean);
-    const keyIsSecret = keyParts.some(isSecretField);
+    const keyIsSecret = decodedKey !== undefined && isCredentialName(decodedKey);
 
     // A secret-named key redacts its ENTIRE value before any template skip or
     // nested-JSON recursion, so a partial-template value (`password=abc{{x}}def`)
@@ -1014,24 +1280,61 @@ export function sanitizeUrlEncodedString(value: string): string {
   return changed ? result : value;
 }
 
+function sanitizeEnvMap(env: Record<string, unknown>, depth: number, maxDepth: number): unknown {
+  const sanitized = recursiveSanitize(env, depth, maxDepth);
+  if (!sanitized || typeof sanitized !== 'object') {
+    return sanitized;
+  }
+  const credentials = new Set(collectEnvCredentials(env));
+  for (const [name, item] of Object.entries(env)) {
+    if (typeof item !== 'string') {
+      continue;
+    }
+    // A pure reference contains no credential and must remain reusable in exported configs.
+    if (isPureCredentialReference(item)) {
+      sanitized[name] = item;
+    } else if (credentials.has(item)) {
+      sanitized[name] = REDACTED;
+    }
+  }
+  return sanitized;
+}
+
+function sanitizeBaseUrl(value: string): string {
+  const literalUrl = value.replace(CREDENTIAL_REFERENCE_TEMPLATE, '');
+  let hasLiteralCredentials = false;
+  const collect = (raw: string) => {
+    hasLiteralCredentials ||= raw.length > 0;
+  };
+  collectRawUrlCredentials(literalUrl, collect);
+  if (value.includes('{{') && !literalUrl.includes('://')) {
+    // A leading origin reference can supply the scheme at runtime. Still inspect
+    // the literal userinfo/query fragments that follow it before saving the config.
+    collectRawUrlCredentials(`https://placeholder${literalUrl}`, collect);
+  }
+  return hasLiteralCredentials || collectEnvCredentials({}, literalUrl).length ? REDACTED : value;
+}
+
 /**
  * Sanitize plain object fields
  */
-function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap = false): any {
+function sanitizePlainObject(obj: any, depth: number, maxDepth: number): any {
   const sanitized: any = {};
-  const isSecretKey = isEnvMap ? isSecretEnvVarName : isSecretField;
   for (const [key, value] of Object.entries(obj)) {
-    if (key === 'url' && typeof value === 'string') {
+    if (key === 'env' && value && typeof value === 'object' && !Array.isArray(value)) {
+      sanitized[key] = sanitizeEnvMap(value as Record<string, unknown>, depth + 1, maxDepth);
+    } else if (normalizeFieldName(key) === 'baseurl' && typeof value === 'string') {
+      sanitized[key] = sanitizeBaseUrl(value);
+    } else if (key === 'url' && typeof value === 'string') {
       sanitized[key] = sanitizeUrl(value);
-    } else if (isSecretKey(key)) {
-      sanitized[key] = REDACTED;
+    } else if (isSecretField(key)) {
+      sanitized[key] =
+        typeof value === 'string' && isPureCredentialReference(value) ? value : REDACTED;
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
       // Redact values that look like secrets (API keys, tokens, etc.)
       sanitized[key] = REDACTED;
     } else {
-      // An `env` map is handed verbatim to a subprocess, so its keys are environment
-      // variable names and get the broader credential-word match one level down.
-      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth, key === 'env');
+      sanitized[key] = recursiveSanitize(value, depth + 1, maxDepth);
     }
   }
   return sanitized;
@@ -1040,7 +1343,7 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
 /**
  * Recursively sanitize an object, redacting secret fields at any depth
  */
-function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap = false): any {
+function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH): any {
   if (typeof obj === 'function') {
     return `[Function] ${obj.name}`;
   }
@@ -1072,7 +1375,7 @@ function recursiveSanitize(obj: any, depth = 0, maxDepth = MAX_DEPTH, isEnvMap =
   }
 
   // Handle plain objects
-  return sanitizePlainObject(obj, depth, maxDepth, isEnvMap);
+  return sanitizePlainObject(obj, depth, maxDepth);
 }
 
 /**
@@ -1228,6 +1531,7 @@ export function sanitizeUrl(url: string): string {
       for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
         if (
           SENSITIVE_URL_PARAM_NAMES.test(key) ||
+          isCredentialName(key) ||
           rawSecretParamKeys.has(key) ||
           looksLikeSecret(value) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential
