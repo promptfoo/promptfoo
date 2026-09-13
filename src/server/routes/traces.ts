@@ -21,7 +21,9 @@ tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response
     logger.debug(`[TracesRoute] Fetching traces for evaluation ${evaluationId}`);
 
     const evaluation = await Eval.findById(evaluationId);
-    const traces = evaluation ? await evaluation.getTraces({ normalizeSpans: false }) : [];
+    const traces = evaluation
+      ? await evaluation.getTraces({ normalizeSpans: false, throwOnError: true })
+      : [];
 
     logger.debug(`[TracesRoute] Found ${traces.length} traces for evaluation ${evaluationId}`);
     res.json(TracesSchemas.GetByEval.Response.parse({ traces }));
@@ -52,9 +54,9 @@ tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
     }
 
     const evaluation = await Eval.findById(trace.evaluationId);
-    const visibleTrace = (await evaluation?.getTraces({ normalizeSpans: false }))?.find(
-      (candidate) => candidate.traceId === traceId,
-    );
+    const visibleTrace = (
+      await evaluation?.getTraces({ normalizeSpans: false, throwOnError: true })
+    )?.find((candidate) => candidate.traceId === traceId);
     if (!visibleTrace) {
       res.status(404).json({ error: 'Trace not found' });
       return;

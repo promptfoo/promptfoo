@@ -71,7 +71,7 @@ describe('Traces Routes', () => {
       const response = await api.get('/api/traces/evaluation/eval-private');
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ traces: [] });
-      expect(mockPublicTraces).toHaveBeenCalledWith({ normalizeSpans: false });
+      expect(mockPublicTraces).toHaveBeenCalledWith({ normalizeSpans: false, throwOnError: true });
     });
 
     it('should return traces array when traces exist', async () => {
@@ -101,7 +101,7 @@ describe('Traces Routes', () => {
         traces: mockTraces,
       });
       expect(Eval.findById).toHaveBeenCalledWith('eval-123');
-      expect(mockPublicTraces).toHaveBeenCalledWith({ normalizeSpans: false });
+      expect(mockPublicTraces).toHaveBeenCalledWith({ normalizeSpans: false, throwOnError: true });
     });
 
     it('should return empty array when no traces found', async () => {

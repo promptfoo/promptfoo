@@ -1,4 +1,5 @@
 import { BLOB_SCHEME } from '../blobs/constants';
+import { BaseTokenUsageSchema } from '../types/shared';
 
 import type { AssertionOrSet, AtomicTestCase, ProviderResponse } from '../types';
 
@@ -68,11 +69,25 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     response?: ProviderResponse | null;
     metadata?: Record<string, unknown>;
     error?: string | null;
+    tokenUsage?: unknown;
+    cost?: unknown;
+    incurredCost?: unknown;
+    latencyMs?: unknown;
   };
   const response = result.response;
   if (!requiresTraceRedaction(result.testCase?.assert)) {
     return input;
   }
+  const numericValue = (value: unknown) =>
+    typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  const parsedUsage = BaseTokenUsageSchema.safeParse(result.tokenUsage);
+  const parsedResponseUsage = BaseTokenUsageSchema.safeParse(response?.tokenUsage);
+  const accounting = {
+    tokenUsage: parsedUsage.success ? parsedUsage.data : undefined,
+    cost: numericValue(result.cost),
+    incurredCost: numericValue(result.incurredCost),
+    latencyMs: numericValue(result.latencyMs),
+  };
   const mediaOmitted = hasRedactionMedia(response);
   const metadata = { ...result.metadata };
   for (const key of Object.keys(response?.metadata ?? {})) {
@@ -82,10 +97,11 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
   delete metadata.sessionId;
   const error = result.error ? 'Error details omitted for trace/artifact redaction.' : result.error;
   if (!response) {
-    return { ...input, error, metadata };
+    return { ...input, ...accounting, error, metadata };
   }
   return {
     ...input,
+    ...accounting,
     error,
     metadata,
     response: {
@@ -93,11 +109,11 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
         ? '[Media response omitted: image or audio redaction could not be verified.]'
         : '[Response omitted for trace/artifact redaction.]',
       ...(response.error && { error: 'Error details omitted for trace/artifact redaction.' }),
-      cached: response.cached,
-      cost: response.cost,
-      incurredCost: response.incurredCost,
-      latencyMs: response.latencyMs,
-      tokenUsage: response.tokenUsage,
+      cached: typeof response.cached === 'boolean' ? response.cached : undefined,
+      cost: numericValue(response.cost),
+      incurredCost: numericValue(response.incurredCost),
+      latencyMs: numericValue(response.latencyMs),
+      tokenUsage: parsedResponseUsage.success ? parsedResponseUsage.data : undefined,
       metadata: mediaOmitted ? { redactionMediaOmitted: true } : { redactionContentOmitted: true },
     },
   };

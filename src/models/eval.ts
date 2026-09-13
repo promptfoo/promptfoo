@@ -1463,7 +1463,9 @@ export default class Eval {
     };
   }
 
-  async getTraces(options: { normalizeSpans?: boolean } = {}): Promise<TraceData[]> {
+  async getTraces(
+    options: { normalizeSpans?: boolean; throwOnError?: boolean } = {},
+  ): Promise<TraceData[]> {
     try {
       const traceStore = getTraceStore();
       const tracesData = await traceStore.getTracesByEvaluation(this.id);
@@ -1541,6 +1543,9 @@ export default class Eval {
         }),
       }));
     } catch (error) {
+      if (options.throwOnError) {
+        throw error;
+      }
       logger.debug(`Failed to fetch traces for eval ${this.id}: ${error}`);
       return [];
     }

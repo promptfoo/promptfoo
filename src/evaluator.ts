@@ -1757,7 +1757,7 @@ async function runEvalInternal({
 
             invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
-            trackProviderUsage(provider, response);
+            trackProviderUsage(provider, publicResponse);
             await applyRunEvalResponseOutcome({
               abortSignal,
               deferGrading,
@@ -3453,6 +3453,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   private trackRowStats(row: EvaluateResult): void {
+    row = sanitizeRedactionResult(row);
     if (row.success) {
       this.stats.successes++;
     } else if (row.failureReason === ResultFailureReason.ERROR) {
@@ -3509,6 +3510,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     promptEvalCount: number;
     row: EvaluateResult;
   }): void {
+    row = sanitizeRedactionResult(row);
     metrics.score += row.score;
     for (const [key, value] of Object.entries(row.namedScores)) {
       accumulateNamedMetric(metrics, {

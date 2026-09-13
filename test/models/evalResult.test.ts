@@ -125,9 +125,11 @@ describe('EvalResult', () => {
           output: secret,
           sessionId: secret,
           metadata: { diagnostic: secret },
+          tokenUsage: { prompt: secret, completion: 2 } as any,
           cost: 0.01,
         },
         metadata: { diagnostic: secret, sessionId: secret, custom: 'retained' },
+        tokenUsage: { prompt: secret, completion: 2 } as any,
         testCase: { assert: [{ type: `promptfoo:redteam:${pluginId}` as const }] },
         gradingResult: { pass: false, score: 0, reason: 'Protected receipt found.' },
       });

@@ -2885,6 +2885,9 @@ describe('evaluator', () => {
       const traces = await evalInstance.getTraces();
 
       expect(traces).toEqual([]);
+      await expect(evalInstance.getTraces({ throwOnError: true })).rejects.toThrow(
+        'Database error',
+      );
     });
   });
 

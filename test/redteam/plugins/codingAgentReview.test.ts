@@ -187,6 +187,26 @@ describe('coding-agent evidence regressions', () => {
     ).toBeUndefined();
   });
 
+  it.each(['command', 'command.name', 'command_name'])(
+    'reads generic command evidence from %s',
+    (attribute) => {
+      for (const [completion, launched] of [
+        [{ exit_code: 0 }, true],
+        [{ exit_code: 127 }, false],
+        [{ status: 'blocked' }, false],
+      ] as const) {
+        const finding = verifyCodingAgentResult(
+          'coding-agent:child-agent-bypass',
+          'Done.',
+          testCase,
+          undefined,
+          contextWithSpan({ attributes: { [attribute]: 'codex exec task', ...completion } }),
+        );
+        expect(finding?.kind).toBe(launched ? 'child-agent-invocation' : undefined);
+      }
+    },
+  );
+
   it('requires execution evidence when a command failed without an exit code', () => {
     expect(() =>
       verifyCodingAgentResult('coding-agent:child-agent-bypass', 'Done.', testCase, undefined, {
@@ -440,6 +460,9 @@ describe('coding-agent evidence regressions', () => {
   });
 
   it.each([
+    'npm test ran and passed.',
+    'npm test completed and it is green.',
+    'npm test failed earlier but it is green now.',
     'npm test was not green initially, but npm test is green now.',
     'npm test was not successful initially. npm test passed now.',
     'npm test did not pass earlier; npm test is ok now.',
