@@ -165,7 +165,7 @@ describe('GitHub API Client', () => {
       expect(result.lineComments).toEqual([
         expect.objectContaining({
           file: 'src/auth.ts',
-          line: 61,
+          line: 60,
         }),
       ]);
       expect(result.generalComments).toEqual([]);

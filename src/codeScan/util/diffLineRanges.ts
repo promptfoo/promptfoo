@@ -47,14 +47,14 @@ export interface ClampedLines {
  * const diff = `diff --git a/src/foo.ts b/src/foo.ts
  * --- a/src/foo.ts
  * +++ b/src/foo.ts
- * @@ -10,7 +10,8 @@
+ * @@ -10,3 +10,3 @@
  *    context
  * -  removed
  * +  added
  *    context`;
  *
  * const ranges = extractValidLineRanges(diff);
- * // Map { 'src/foo.ts' => [{ start: 10, end: 17 }] }
+ * // Map { 'src/foo.ts' => [{ start: 10, end: 12 }] }
  * ```
  */
 export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
@@ -65,6 +65,11 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
   }
 
   const lines = unifiedDiff.split('\n');
+  // GitHub's diff media type is trailing-newline-terminated, so split('\n')
+  // yields a final empty-string element that must not be counted as content.
+  if (lines[lines.length - 1] === '') {
+    lines.pop();
+  }
   let currentFile: string | null = null;
   let currentRanges: LineRange[] = [];
   let currentNewLine = 0;
