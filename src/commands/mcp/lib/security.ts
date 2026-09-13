@@ -71,8 +71,9 @@ export function validateProviderId(providerId: string): void {
   }
 
   // Extend model selectors without widening local module, executable or HTTP formats.
+  // Empty internal colon fields occur in fine-tuned IDs and model ARNs.
   const isModelSelector =
-    /^[a-zA-Z0-9_-]+:[a-zA-Z0-9_.-]+(?:[:/][a-zA-Z0-9_.-]+)+$/.test(providerId) &&
+    /^[a-zA-Z0-9_-]+:[a-zA-Z0-9_.-]+(?:(?::+|\/)[a-zA-Z0-9_.-]+)+$/.test(providerId) &&
     !/^(file|exec|python|golang|ruby|package|https?):/.test(providerId) &&
     !providerId.split(/[:/]/).some((segment) => segment === '.' || segment === '..') &&
     !isJavascriptFile(providerId);

@@ -19,6 +19,7 @@ import { createTheme, ThemeProvider } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
+import { Turnstile } from 'react-turnstile';
 import styles from './contact.module.css';
 
 const testimonials = [
@@ -53,6 +54,13 @@ const testimonials = [
 
 function Contact(): React.ReactElement {
   const isDarkTheme = useColorMode().colorMode === 'dark';
+  const [turnstileToken, setTurnstileToken] = React.useState('');
+  const [verificationError, setVerificationError] = React.useState(false);
+
+  const handleVerificationError = () => {
+    setTurnstileToken('');
+    setVerificationError(true);
+  };
 
   const theme = React.useMemo(
     () =>
@@ -99,6 +107,11 @@ function Contact(): React.ReactElement {
                 action="https://submit-form.com/ghriv7voL"
                 method="POST"
                 className={styles.contactForm}
+                onSubmit={(event) => {
+                  if (!turnstileToken) {
+                    event.preventDefault();
+                  }
+                }}
               >
                 {/* Formspark discards submissions when bots check this hidden field. */}
                 <input
@@ -184,9 +197,38 @@ function Contact(): React.ReactElement {
                   placeholder="Share a few details about your application, timeline, and deployment requirements."
                 />
 
+                {/* Formspark validates this token server-side using its stored secret. */}
+                <input type="hidden" name="cf-turnstile-response" value={turnstileToken} />
+                <Turnstile
+                  sitekey="0x4AAAAAAExEs4irtoVm_IKg"
+                  action="contact"
+                  theme={isDarkTheme ? 'dark' : 'light'}
+                  size="flexible"
+                  fixedSize
+                  responseField={false}
+                  refreshExpired="auto"
+                  onLoad={() => setTurnstileToken('')}
+                  onVerify={(token) => {
+                    setTurnstileToken(token);
+                    setVerificationError(false);
+                  }}
+                  onExpire={() => setTurnstileToken('')}
+                  onTimeout={() => setTurnstileToken('')}
+                  onError={handleVerificationError}
+                  onUnsupported={handleVerificationError}
+                />
+                {!turnstileToken && (
+                  <Typography variant="body2" color="text.secondary" role="status">
+                    {verificationError
+                      ? 'Verification failed. Please refresh the page or email us below.'
+                      : 'Complete the verification before submitting.'}
+                  </Typography>
+                )}
+
                 <Box className={styles.submitRow}>
                   <Button
                     type="submit"
+                    disabled={!turnstileToken}
                     variant="contained"
                     size="large"
                     endIcon={<ArrowForwardIcon />}
