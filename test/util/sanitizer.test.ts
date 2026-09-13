@@ -1261,7 +1261,7 @@ describe('sanitizeObject', () => {
       expect(JSON.stringify(result)).not.toContain(secret);
     });
 
-    it('reads accessor values once and omits them without exposing other secrets', () => {
+    it('omits accessor values without reading them or exposing other secrets', () => {
       let reads = 0;
       const input = {
         apiKey: 'fixture-key',
@@ -1275,7 +1275,24 @@ describe('sanitizeObject', () => {
       };
 
       expect(sanitizeObject(input)).toEqual({ apiKey: '[REDACTED]', lastError: '[REDACTED]' });
-      expect(reads).toBe(1);
+      expect(reads).toBe(0);
+    });
+
+    it('redacts an accessor even when it removes itself during serialization', () => {
+      const input: Record<string, unknown> = {};
+      Object.defineProperty(input, 'credential', {
+        enumerable: true,
+        configurable: true,
+        get() {
+          delete input.credential;
+          return 'sk-accessor-fixture-should-not-persist';
+        },
+      });
+
+      const result = sanitizeObject(input);
+
+      expect(result).toEqual({ credential: '[REDACTED]' });
+      expect(JSON.stringify(result)).not.toContain('sk-accessor-fixture');
     });
 
     it('should convert Map objects to empty objects via JSON', () => {

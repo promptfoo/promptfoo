@@ -1162,6 +1162,49 @@ function hasPropertyGetter(value: object, key: string): boolean {
   return false;
 }
 
+// JSON.stringify reads enumerable getters before its replacer runs. Snapshot data
+// descriptors first so a getter cannot rename or expose a credential while being
+// serialized. Keep built-ins with trusted serializers intact for the replacer below.
+function snapshotJsonData(
+  value: unknown,
+  seen = new WeakMap<object, unknown>(),
+  throwOnAccessor = false,
+): unknown {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  if (
+    ((value instanceof URL || Buffer.isBuffer(value) || value instanceof Date) &&
+      !hasUnsafeJsonSerializer(value)) ||
+    value instanceof Error
+  ) {
+    return value;
+  }
+  if (hasUnsafeJsonSerializer(value)) {
+    return REDACTED;
+  }
+  const existing = seen.get(value);
+  if (existing) {
+    return existing;
+  }
+  const copy = (Array.isArray(value) ? [] : {}) as Record<string, unknown>;
+  seen.set(value, copy);
+  for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
+    if (!descriptor.enumerable) {
+      continue;
+    }
+    if (!('value' in descriptor)) {
+      if (throwOnAccessor) {
+        throw new Error('Unsafe JSON accessor');
+      }
+      copy[key as keyof typeof copy] = REDACTED;
+      continue;
+    }
+    copy[key as keyof typeof copy] = snapshotJsonData(descriptor.value, seen, throwOnAccessor);
+  }
+  return copy;
+}
+
 /**
  * Generic function to sanitize any object by removing or redacting sensitive information
  * @param obj - The object to sanitize
@@ -1215,38 +1258,36 @@ export function sanitizeObject(
 
     const ancestors: object[] = [];
     const safeObj = JSON.parse(
-      JSON.stringify(obj, function (this: Record<string, unknown>, key, val) {
-        const descriptor = Object.getOwnPropertyDescriptor(this, key);
-        if (descriptor?.get) {
-          return REDACTED;
-        }
-        // Keep original credential fields when toJSON would hide their names.
-        const originalValue = descriptor?.value;
-        const value =
-          originalValue instanceof URL && originalValue.toJSON === URL.prototype.toJSON
-            ? sanitizeUrl(URL.prototype.toString.call(originalValue))
-            : originalValue instanceof Error
-              ? {
-                  name: redactErrorMessages ? REDACTED : originalValue.name,
-                  message: redactErrorMessages ? REDACTED : originalValue.message,
-                }
-              : hasUnsafeJsonSerializer(originalValue)
-                ? REDACTED
+      JSON.stringify(
+        snapshotJsonData(obj, new WeakMap<object, unknown>(), throwOnError),
+        function (this: Record<string, unknown>, key, val) {
+          const descriptor = Object.getOwnPropertyDescriptor(this, key);
+          // Keep original credential fields when toJSON would hide their names.
+          const originalValue = descriptor?.value;
+          const value =
+            originalValue instanceof URL && originalValue.toJSON === URL.prototype.toJSON
+              ? sanitizeUrl(URL.prototype.toString.call(originalValue))
+              : originalValue instanceof Error
+                ? {
+                    name: redactErrorMessages ? REDACTED : originalValue.name,
+                    message: redactErrorMessages ? REDACTED : originalValue.message,
+                  }
                 : val;
-        if (typeof value === 'bigint') {
-          return value.toString();
-        }
-        if (typeof value === 'object' && value !== null) {
-          while (ancestors.length && ancestors[ancestors.length - 1] !== this) {
-            ancestors.pop();
+          if (typeof value === 'bigint') {
+            return value.toString();
           }
-          if (ancestors.includes(value)) {
-            return omitCircularRefs ? undefined : '[Circular]';
+          if (typeof value === 'object' && value !== null) {
+            while (ancestors.length && ancestors[ancestors.length - 1] !== this) {
+              ancestors.pop();
+            }
+            if (ancestors.includes(value)) {
+              return omitCircularRefs ? undefined : '[Circular]';
+            }
+            ancestors.push(value);
           }
-          ancestors.push(value);
-        }
-        return value;
-      }),
+          return value;
+        },
+      ),
     );
 
     // Apply recursive sanitization with depth limiting

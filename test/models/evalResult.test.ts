@@ -488,6 +488,23 @@ describe('EvalResult', () => {
     expect(result.gradingResult.componentResults).toEqual([component, component]);
   });
 
+  it('preserves provider-map ids and cuts circular entries', () => {
+    const entry: any = { config: { apiKey: 'sk-map-secret' } };
+    entry.self = entry;
+
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        options: { provider: { auth: entry, token: { config: { apiKey: 'sk-other' } } } },
+      } as AtomicTestCase,
+    });
+
+    expect(result.testCase.options?.provider).toEqual({
+      auth: { config: { apiKey: '[REDACTED]' }, self: {} },
+      token: { config: { apiKey: '[REDACTED]' } },
+    });
+  });
+
   it('reads grading-result provider accessors once', () => {
     let reads = 0;
     const gradingResult: any = { pass: true, score: 1, reason: 'ok' };
@@ -524,6 +541,43 @@ describe('EvalResult', () => {
 
     expect(sanitized.testCase.vars).toEqual({ prompt: 'fixture input' });
     expect(reads).toBe(1);
+  });
+
+  it('does not traverse nested test-case vars twice', () => {
+    let reads = 0;
+    const vars: Record<string, unknown> = {};
+    Object.defineProperty(vars, 'prompt', {
+      enumerable: true,
+      get() {
+        if (++reads > 1) {
+          throw new Error('unexpected second nested read');
+        }
+        return 'fixture input';
+      },
+    });
+
+    const sanitized = sanitizeResultForJsonlArtifact({
+      testCase: { vars, options: {} } as AtomicTestCase,
+    });
+
+    expect(sanitized.testCase.vars).toEqual({});
+    expect(reads).toBe(0);
+  });
+
+  it('fails closed for throwing grading metadata accessors', () => {
+    const metadata: Record<string, unknown> = {};
+    Object.defineProperty(metadata, 'http', {
+      enumerable: true,
+      get() {
+        throw new Error('fixture metadata getter');
+      },
+    });
+
+    const result = sanitizeResultForJsonlArtifact({
+      gradingResult: { pass: true, score: 1, reason: 'ok', metadata },
+    });
+
+    expect(result.gradingResult.metadata).toEqual({});
   });
 
   it('reads option accessors once while preserving ordinary prompt text', () => {

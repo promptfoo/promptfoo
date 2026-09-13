@@ -124,39 +124,48 @@ export function sanitizeProvider(
 // Test and assertion provider slots also accept string ids and provider maps.
 // Preserve those public shapes while projecting concrete provider objects before
 // generic serialization can invoke an untrusted toJSON hook.
-function sanitizeProviderReference(provider: unknown): unknown {
+function sanitizeProviderReference(provider: unknown, active = new WeakSet<object>()): unknown {
   if (typeof provider === 'string') {
     return provider;
   }
   if (!provider || typeof provider !== 'object') {
     return provider;
   }
-  if (Array.isArray(provider)) {
-    return provider.map(sanitizeProviderReference);
+  if (active.has(provider)) {
+    return {};
   }
-  if (typeof (provider as { id?: unknown }).id === 'function') {
-    return sanitizeProvider(provider as ApiProvider | ProviderOptions);
-  }
-  if (typeof (provider as { id?: unknown }).id === 'string') {
-    const { id, label, config, ...options } = provider as ProviderOptions;
-    const sanitizedOptions = sanitizeForDbWithSecrets(options);
-    return {
-      ...(sanitizedOptions && typeof sanitizedOptions === 'object' ? sanitizedOptions : {}),
-      id,
-      ...(label !== undefined && { label }),
-      ...(config !== undefined && { config: sanitizeProviderConfig(config) }),
-    };
-  }
-  if ('env' in provider) {
-    return sanitizeForDbWithSecrets(provider);
-  }
-  return sanitizeForDbWithSecrets(
-    Object.fromEntries(
+  active.add(provider);
+  try {
+    if (Array.isArray(provider)) {
+      return provider.map((entry) => sanitizeProviderReference(entry, active));
+    }
+    if (typeof (provider as { id?: unknown }).id === 'function') {
+      return sanitizeProvider(provider as ApiProvider | ProviderOptions);
+    }
+    if (typeof (provider as { id?: unknown }).id === 'string') {
+      const { id, label, config, ...options } = provider as ProviderOptions;
+      const sanitizedOptions = sanitizeForDbWithSecrets(options);
+      return {
+        ...(sanitizedOptions && typeof sanitizedOptions === 'object' ? sanitizedOptions : {}),
+        id,
+        ...(label !== undefined && { label }),
+        ...(config !== undefined && { config: sanitizeProviderConfig(config) }),
+      };
+    }
+    if ('env' in provider) {
+      return sanitizeForDbWithSecrets(provider);
+    }
+    return Object.fromEntries(
       Object.entries(Object.getOwnPropertyDescriptors(provider))
         .filter(([, descriptor]) => 'value' in descriptor)
-        .map(([key, descriptor]) => [key, sanitizeProviderReference(descriptor.value)]),
-    ),
-  );
+        .map(([key, descriptor]) => [
+          key,
+          sanitizeForDbWithSecrets(sanitizeProviderReference(descriptor.value, active)),
+        ]),
+    );
+  } finally {
+    active.delete(provider);
+  }
 }
 
 /**
@@ -253,7 +262,7 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
     return testCase;
   }
   try {
-    const { provider, assert, options, ...fields } = { ...testCase };
+    const { provider, assert, options, vars, ...fields } = { ...testCase };
     const { provider: optionProvider, ...optionFields } = options ?? {};
     const sanitized = sanitizeForDbWithSecrets({
       ...fields,
@@ -263,8 +272,8 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
     if (optionProvider !== undefined && sanitized.options) {
       sanitized.options.provider = sanitizeProviderReference(optionProvider);
     }
-    if (fields.vars) {
-      sanitized.vars = sanitizeForDbWithSecrets(fields.vars, false);
+    if (vars) {
+      sanitized.vars = sanitizeForDbWithSecrets(vars, false);
     }
     if (provider !== undefined) {
       sanitized.provider = sanitizeProviderReference(provider) as AtomicTestCase['provider'];
@@ -493,7 +502,11 @@ function sanitizeGradingResultForDb<T>(gradingResult: T, seen = new WeakSet<obje
     const { metadata, assertion, componentResults } = next;
 
     if (metadata !== undefined) {
-      next.metadata = redactHttpHeadersOnMetadata(metadata);
+      try {
+        next.metadata = redactHttpHeadersOnMetadata(metadata);
+      } catch {
+        next.metadata = {};
+      }
     }
 
     if (asRecord(assertion)) {
