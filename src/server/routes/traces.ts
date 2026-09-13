@@ -54,9 +54,11 @@ tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
     }
 
     const evaluation = await Eval.findById(trace.evaluationId);
-    const visibleTrace = (
-      await evaluation?.getTraces({ normalizeSpans: false, throwOnError: true })
-    )?.find((candidate) => candidate.traceId === traceId);
+    const visibleTrace = evaluation
+      ? (await evaluation.getTraces({ normalizeSpans: false, throwOnError: true })).find(
+          (candidate) => candidate.traceId === traceId,
+        )
+      : trace;
     if (!visibleTrace) {
       res.status(404).json({ error: 'Trace not found' });
       return;

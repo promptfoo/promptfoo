@@ -277,6 +277,7 @@ export default class GoatProvider implements ApiProvider {
     let mediaRedactionFailed = false;
     if (redactTrace) {
       tracingOptions.includeInAttack = false;
+      context = { ...context, vars: { ...context.vars } };
     }
 
     let previousAttackerMessage = '';
@@ -348,6 +349,10 @@ export default class GoatProvider implements ApiProvider {
               context,
               options,
             );
+
+            if (unblockingResponse.sessionId) {
+              context.vars.sessionId = unblockingResponse.sessionId;
+            }
 
             if (redactTrace) {
               unblockingResponse = await externalizeResponseForRedteamHistory(
@@ -634,6 +639,10 @@ export default class GoatProvider implements ApiProvider {
           options,
         )) as GoatProviderResponse;
 
+        if (targetResponse.sessionId) {
+          context.vars.sessionId = targetResponse.sessionId;
+        }
+
         if (redactTrace) {
           targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
           if (!mediaRedactionFailed) {
@@ -683,10 +692,6 @@ export default class GoatProvider implements ApiProvider {
           }
         }
 
-        if (targetResponse.sessionId) {
-          context = context ?? { vars: {}, prompt: { raw: '', label: 'target' } };
-          context.vars.sessionId = targetResponse.sessionId;
-        }
         if (targetResponse.conversationEnded) {
           logger.info('[GOAT] Target ended conversation', {
             turn,
@@ -904,7 +909,7 @@ export default class GoatProvider implements ApiProvider {
           !redactTrace && traceSnapshots.length > 0
             ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
             : undefined,
-        sessionId: getSessionId(lastTargetResponse, context),
+        ...(!redactTrace && { sessionId: getSessionId(lastTargetResponse, context) }),
         ...(lastTransformDisplayVars && { transformDisplayVars: lastTransformDisplayVars }),
       },
       tokenUsage: totalTokenUsage,

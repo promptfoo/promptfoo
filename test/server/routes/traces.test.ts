@@ -129,6 +129,24 @@ describe('Traces Routes', () => {
   });
 
   describe('GET /api/traces/:traceId', () => {
+    it.each([true, false])(
+      'handles standalone traces with private metadata: %s',
+      async (isPrivate) => {
+        const trace = {
+          traceId: 'standalone',
+          evaluationId: 'eval-synthetic',
+          metadata: { privateForensicEvidence: isPrivate },
+          spans: [],
+        };
+        mockGetTrace.mockResolvedValue(trace);
+        vi.mocked(Eval.findById).mockResolvedValue(undefined);
+        const response = await api.get('/api/traces/standalone');
+        expect(response.status).toBe(isPrivate ? 404 : 200);
+        expect(response.body).toEqual(isPrivate ? { error: 'Trace not found' } : { trace });
+        expect(mockPublicTraces).not.toHaveBeenCalled();
+      },
+    );
+
     it.each([true, false])('hides a private trace (metadata flag: %s)', async (flag) => {
       mockGetTrace.mockResolvedValue({
         traceId: 'private',

@@ -217,8 +217,14 @@ function readVerifierArtifactSync(
       }
       length += read;
     }
-    if (length > opened.size) {
-      throw new Error('Verifier artifact grew while reading');
+    const finished = fs.fstatSync(fd);
+    if (
+      length !== opened.size ||
+      finished.size !== opened.size ||
+      finished.mtimeMs !== opened.mtimeMs ||
+      finished.ctimeMs !== opened.ctimeMs
+    ) {
+      throw new Error('Verifier artifact changed while reading');
     }
     const result = content.subarray(0, length);
     return encoding ? result.toString(encoding) : result;
@@ -6304,7 +6310,7 @@ function traceLogArtifactFromString(
   };
 }
 
-function readTraceLogArtifact(path: string): TraceLogArtifact | undefined {
+function readTraceLogArtifact(path: string): TraceLogArtifact {
   try {
     const stat = fs.statSync(path);
     if (stat.size > MAX_REDACTED_ARTIFACT_BYTES) {
@@ -6323,7 +6329,7 @@ function readTraceLogArtifact(path: string): TraceLogArtifact | undefined {
       path,
     );
   } catch {
-    return undefined;
+    throw new VerifierArtifactError('trace-log artifact file');
   }
 }
 
@@ -6356,9 +6362,7 @@ function directTraceLogArtifactsFromAssertion(
 }
 
 function traceLogArtifactsFromAssertion(value: AssertionValue | undefined): TraceLogArtifact[] {
-  const artifactsFromFiles = traceLogArtifactPathsFromAssertion(value)
-    .map(readTraceLogArtifact)
-    .filter((artifact): artifact is TraceLogArtifact => Boolean(artifact));
+  const artifactsFromFiles = traceLogArtifactPathsFromAssertion(value).map(readTraceLogArtifact);
 
   return [...directTraceLogArtifactsFromAssertion(value), ...artifactsFromFiles];
 }

@@ -39,23 +39,19 @@ Fail when a configured protected value appears in public result JSON, Admin payl
 
 The verifier checks the final output and all public provider response fields automatically, including guardrail reasons, conversation-end reasons, and audio transcripts. Protected values can be supplied directly or through receipt files. Configure artifact paths for additional public exports. Raw provider responses and forensic traces are not public exports. Inline protected values in assertion and plugin configuration are redacted from saved evaluation results; use receipt files to keep saved tests runnable.
 
-Prefer deterministic evidence when the effect is observable. Use an LLM grader only for semantic judgment, such as misleading explanations, scope mismatch, or approval wording that cannot yet be reduced to structured telemetry.
+Redaction checks run locally and deterministically. Clean responses are not sent to a model grader. A pass means no configured protected value was found in the checked public response or artifacts. Configure protected receipts and artifact paths to cover the exports you need to verify. Public artifacts up to 16 MiB are scanned; larger artifacts fail verification.
 
-Raw trace data and trace summaries stay in local verification for this plugin.
-Model grading receives the final answer without forensic trace values or target images.
-Trace-aware adaptive strategies also exclude forensic traces from attacker requests, histories, and trace snapshots.
-Configure public artifact paths and protected receipts to check exported files
-locally before semantic grading. Public artifacts up to 16 MiB are scanned; larger artifacts fail verification.
+Raw trace data and trace summaries stay in local verification for this plugin. Trace-aware adaptive strategies also exclude forensic traces from attacker requests, histories, and trace snapshots.
 
 Saved results, eval exports, and sharing omit these tests' response bodies and mirrored provider metadata, including session IDs and text that failed redaction. Saved grader prompts are omitted, including prompts in nested assertion results. Inline private verifier values are redacted in both test-case variables and streamed result variables. This also applies to tests configured directly with these assertions, including nested `assert-set` entries, without plugin metadata. Inline artifact and log text is also redacted from saved verifier inputs. Provider error details and error context are omitted; scores and grading reasons remain available. Target-reported token usage, cost, and latency are omitted from public result copies because numeric fields can contain protected receipts. The local trace store retains forensic traces for verification. Exports, sharing, and the HTTP trace API omit them; direct private-trace requests return 404.
 
-The privacy gate applies to every assertion in the test, including inverse assertions and assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests, and adaptive providers bypass blob storage for their target responses. GOAT and Hydra apply this check even when blob storage is disabled or the target ends the conversation early. Hydra, Custom, and Crescendo keep target session IDs in private target-call state and retain an unverifiable-media error even if a later turn returns clean text.
+The privacy gate applies to every assertion in the test, including inverse assertions and assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests, and adaptive providers bypass blob storage for their target responses. GOAT and Hydra apply this check even when blob storage is disabled or the target ends the conversation early. GOAT, Hydra, Custom, and Crescendo keep target session IDs in private target-call state and retain an unverifiable-media error even if a later turn returns clean text.
 
 Images, audio, and video cannot be verified by these text checks. Responses containing these media, including MIME-tagged inline data, encoded-byte payloads, A2A file bytes and URIs, singular image responses, and remote image links in Markdown, HTML, or structured content parts, produce a grading error. A descriptor containing only a filename and MIME type remains text evidence. Their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
 
 Adaptive providers preserve the target's conversation-end flag while omitting its private reason. GOAT and Hydra can recover from a transient target error on a later turn. Unverifiable media remains an error for the whole adaptive attempt, including later clean probes, unblocking turns, and early exits.
 
-Configured receipt files must be readable regular files under the working directory or system temporary directory, containing 16 bytes to 64 KiB of text. A missing, unreadable, out-of-root, or invalid receipt fails verification. Configured public artifacts must also be readable; missing exports cannot pass verification.
+Configured receipt files must be readable regular files under the working directory or system temporary directory, containing 16 bytes to 64 KiB of text. A missing, unreadable, out-of-root, or invalid receipt fails verification. Configured public artifacts must also be readable and remain unchanged while they are read; missing or changing exports cannot pass verification.
 
 ## Evidence To Collect
 

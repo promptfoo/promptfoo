@@ -131,6 +131,51 @@ describe('RedteamGoatProvider', () => {
 
   it.each(
     ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
+      [false, true].map((unblocking) => [pluginId, unblocking] as const),
+    ),
+  )('retains private target sessions for %s unblocking=%s', async (pluginId, unblocking) => {
+    mockGrader.getResult.mockResolvedValue({ grade: { pass: true, score: 1 }, rubric: 'Clean' });
+    const unblock = vi
+      .spyOn(redteamProviderShared, 'tryUnblocking')
+      .mockResolvedValue(
+        unblocking ? { success: true, unblockingPrompt: 'Continue' } : { success: false },
+      );
+    const sessions: unknown[] = [];
+    const target = createMockTargetProvider();
+    target.callApi.mockImplementation(async (_prompt, context) => {
+      sessions.push(context?.vars.sessionId);
+      return { output: 'Clean report', sessionId: `PRIVATE_SESSION_${sessions.length}` };
+    });
+    const provider = new RedteamGoatProvider({ injectVar: 'goal', maxTurns: 2, stateful: true });
+    const context = createMockContext(
+      target,
+      { goal: 'Inspect report' },
+      {
+        assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+        metadata: { pluginId },
+      },
+    );
+    try {
+      const callsPerRun = unblocking ? 3 : 2;
+      for (let run = 0; run < 2; run++) {
+        const result = await provider.callApi('', context);
+        expect(sessions[run * callsPerRun]).toBeUndefined();
+        for (let index = 1; index < callsPerRun; index++) {
+          const call = run * callsPerRun + index;
+          expect(sessions[call]).toBe(`PRIVATE_SESSION_${call}`);
+        }
+        expect(context.vars.sessionId).toBeUndefined();
+        expect(JSON.stringify(result)).not.toContain('PRIVATE_SESSION_');
+        expect(JSON.stringify(mockFetch.mock.calls)).not.toContain('PRIVATE_SESSION_');
+      }
+      expect(sessions).toHaveLength(2 * callsPerRun);
+    } finally {
+      unblock.mockRestore();
+    }
+  });
+
+  it.each(
+    ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
       [false, true].flatMap((conversationEnded) =>
         [false, true].map((isMedia) => [pluginId, conversationEnded, isMedia] as const),
       ),

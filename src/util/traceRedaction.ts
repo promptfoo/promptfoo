@@ -17,6 +17,21 @@ export function requiresTraceRedaction(assertions: AssertionOrSet[] | undefined)
   );
 }
 
+function hasMarkdownImage(text: string): boolean {
+  if (/!\[[^\]\n]*\]\s*(?:\([^\)\n]*\)|\[[^\]\n]*\])/.test(text)) {
+    return true;
+  }
+  const normalizeLabel = (label: string) => label.trim().replace(/\s+/g, ' ').toLowerCase();
+  const references = new Set(
+    Array.from(text.matchAll(/^ {0,3}\[([^\]\n]+)\]:\s*\S/gm), ([, label]) =>
+      normalizeLabel(label),
+    ),
+  );
+  return Array.from(text.matchAll(/!\[([^\]\n]+)\]/g)).some(([, label]) =>
+    references.has(normalizeLabel(label)),
+  );
+}
+
 export function hasRedactionMedia(response: ProviderResponse | null | undefined): boolean {
   const pending: unknown[] = [response];
   const seen = new Set<object>();
@@ -29,9 +44,10 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
     if (typeof value === 'string') {
       if (
         value.includes(BLOB_SCHEME) ||
-        /data:(?:audio|image|video)\/|<(?:svg|img|audio|video|picture|source)(?:\s|\/?>)|!\[[^\]\n]*\]/i.test(
+        /data:(?:audio|image|video)\/|<(?:svg|img|audio|video|picture|source)(?:\s|\/?>)/i.test(
           value,
-        )
+        ) ||
+        hasMarkdownImage(value)
       ) {
         return true;
       }

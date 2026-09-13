@@ -59,7 +59,7 @@ describe('HarnessGrader', () => {
               ? 'redacted-artifact-sensitive-value'
               : 'verifier-sidecar-failed',
         );
-        expect(model).toHaveBeenCalledTimes(mode === 'clean' ? 1 : 0);
+        expect(model).not.toHaveBeenCalled();
         expect(JSON.stringify(result)).not.toContain(secret);
       } finally {
         fs.rmSync(directory, { recursive: true, force: true });
@@ -88,7 +88,7 @@ describe('HarnessGrader', () => {
         },
       );
       expect(result.grade.pass).toBe(true);
-      expect(callApi).toHaveBeenCalledOnce();
+      expect(callApi).not.toHaveBeenCalled();
       expect(JSON.stringify(callApi.mock.calls)).not.toContain(canary);
     } finally {
       redteamProviderManager.clearProvider();
