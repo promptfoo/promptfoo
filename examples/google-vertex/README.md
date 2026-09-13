@@ -23,7 +23,7 @@ cd google-vertex
 
 ## Environment Variables
 
-- `VERTEX_PROJECT_ID` - Your Google Cloud project ID
+- `GOOGLE_CLOUD_PROJECT` - Your Google Cloud project ID (`VERTEX_PROJECT_ID` is also supported)
 - `GOOGLE_APPLICATION_CREDENTIALS` - Path to service account credentials (optional)
 
 ## Setup
@@ -46,7 +46,7 @@ cd google-vertex
 
 3. Set your project ID:
    ```sh
-   export VERTEX_PROJECT_ID=your-project-id
+   export GOOGLE_CLOUD_PROJECT=your-project-id
    ```
 
 ## Configurations
@@ -56,7 +56,8 @@ This example includes:
 - `promptfooconfig.gemini.yaml`: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, and earlier models with function calling, system instructions, and safety settings
 - `promptfooconfig.claude.yaml`: Claude Opus 5, Sonnet 5, Opus 4.6, Opus 4.1, and Haiku 4.5 reviewing code for issues
 - `promptfooconfig.llama.yaml`: Llama models with safety features and region configuration
-- `promptfooconfig.search.yaml`: Search grounding for real-time information
+- `promptfooconfig.search.yaml`: Search grounding with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
+- `promptfooconfig.image.yaml`: Multimodal image inputs with Gemini 3.6 Flash and Gemini 3.5 Flash-Lite
 - `promptfooconfig.response-schema.yaml`: Response schemas with structured output
 
 The Gemini Flash examples use Vertex AI's `global` endpoint. Gemini 3.8 Flash,
