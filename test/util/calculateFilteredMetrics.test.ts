@@ -432,6 +432,24 @@ describe('calculateFilteredMetrics', () => {
       });
     });
 
+    it('counts cached grading with detail-only usage as one request', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        tokenUsage: { total: 0, numRequests: 0 },
+        gradingUsage: { total: 0, numRequests: 0, completionDetails: { reasoning: 5 } },
+        gradingCached: true,
+      });
+
+      const [metrics] = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+
+      expect(metrics.tokenUsage.assertions).toMatchObject({ numRequests: 1 });
+    });
+
     it('preserves both logical and incurred buckets for filtered mixed-cache results', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
       await addTokenResult(eval_, {

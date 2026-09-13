@@ -3353,6 +3353,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
   private generationUsageRecorded = false;
+  private recordedGenerationUsages = new Set<string>();
   constructor(
     testSuite: TestSuite,
     store: EvaluationStore<TEvaluation, TResult>,
@@ -3475,17 +3476,19 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     testCase: AtomicTestCase,
     metrics: PromptMetrics | undefined,
   ): AtomicTestCase {
-    if (!this.generationUsageRecorded && metrics) {
-      this.generationUsageRecorded = accumulateGenerationTokenUsage(
-        metrics.tokenUsage,
-        testCase.metadata?.providerTokenUsage,
-      );
-      if (this.generationUsageRecorded) {
+    const usage = testCase.metadata?.providerTokenUsage;
+    const usageKey = usage && typeof usage === 'object' ? JSON.stringify(usage) : undefined;
+    const recorded = usageKey !== undefined && this.recordedGenerationUsages.has(usageKey);
+    if (!this.generationUsageRecorded && metrics && usage && !recorded) {
+      if (accumulateGenerationTokenUsage(metrics.tokenUsage, usage)) {
+        if (usageKey !== undefined) {
+          this.recordedGenerationUsages.add(usageKey);
+        }
         return testCase;
       }
     }
-    if (this.generationUsageRecorded && testCase.metadata?.providerTokenUsage) {
-      const { providerTokenUsage: _recordedUsage, ...metadata } = testCase.metadata;
+    if ((this.generationUsageRecorded || recorded) && usage) {
+      const { providerTokenUsage: _recordedUsage, ...metadata } = testCase.metadata!;
       return { ...testCase, metadata };
     }
     return testCase;
@@ -3558,11 +3561,16 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     accumulateResponseTokenUsage(metrics.tokenUsage, row.response, {
       countCachedAsRequest: (row.tokenUsage?.numRequests ?? 0) > 0,
     });
-    if (!this.generationUsageRecorded) {
-      this.generationUsageRecorded = accumulateGenerationTokenUsage(
-        metrics.tokenUsage,
-        row.testCase?.metadata?.providerTokenUsage,
-      );
+    const generationUsage = row.testCase?.metadata?.providerTokenUsage;
+    const generationUsageKey =
+      generationUsage && typeof generationUsage === 'object'
+        ? JSON.stringify(generationUsage)
+        : undefined;
+    if (
+      !this.generationUsageRecorded &&
+      !(generationUsageKey !== undefined && this.recordedGenerationUsages.has(generationUsageKey))
+    ) {
+      accumulateGenerationTokenUsage(metrics.tokenUsage, generationUsage);
     }
 
     if (row.gradingResult?.tokensUsed) {

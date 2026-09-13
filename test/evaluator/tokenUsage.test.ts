@@ -29,7 +29,7 @@ describeEvaluator('evaluator token usage', () => {
     });
   });
 
-  it('claims shared generation usage once before concurrent rows persist', async () => {
+  it('deduplicates fan-out generation usage while accumulating distinct ledgers', async () => {
     const generationUsage = { total: 7, prompt: 4, completion: 3 };
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -37,6 +37,7 @@ describeEvaluator('evaluator token usage', () => {
       tests: [
         { metadata: { providerTokenUsage: generationUsage } },
         { metadata: { providerTokenUsage: generationUsage } },
+        { metadata: { providerTokenUsage: { total: 5, prompt: 2, completion: 3 } } },
       ],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
@@ -44,9 +45,13 @@ describeEvaluator('evaluator token usage', () => {
     await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
     const results = await evalRecord.getResults();
 
-    expect(evalRecord.prompts[0].metrics?.tokenUsage.generation).toMatchObject(generationUsage);
+    expect(evalRecord.prompts[0].metrics?.tokenUsage.generation).toMatchObject({
+      total: 12,
+      prompt: 6,
+      completion: 6,
+    });
     expect(results.filter((result) => result.testCase.metadata?.providerTokenUsage)).toHaveLength(
-      1,
+      2,
     );
   });
 
