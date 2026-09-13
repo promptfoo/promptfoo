@@ -6,7 +6,10 @@ import {
   trajectoryCountBoundsError,
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
+  trajectoryToolArgsDefaultsError,
+  trajectoryToolArgsIgnoreError,
   trajectoryToolSequenceModeError,
+  trajectoryToolSequenceStepsError,
   trajectoryToolSetConfigError,
 } from '../contracts/validators/traceAssertionConfig';
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
@@ -429,6 +432,10 @@ function resolveSequenceValue(value: unknown): TrajectorySequenceValue {
     if (modeError) {
       throw new Error(modeError);
     }
+    const stepsError = trajectoryToolSequenceStepsError(sequenceValue);
+    if (stepsError) {
+      throw new Error(stepsError);
+    }
     return {
       mode: sequenceValue.mode === undefined ? 'in_order' : sequenceValue.mode,
       steps: sequenceValue.steps || [],
@@ -572,34 +579,19 @@ function resolveToolArgsMatchMode(
 }
 
 function resolveToolArgsMatchDefaults(defaults: unknown): ToolArgsDefaults | undefined {
-  if (defaults === undefined) {
-    return undefined;
+  const error = trajectoryToolArgsDefaultsError({ defaults });
+  if (error) {
+    throw new Error(error);
   }
-
-  if (!isRecord(defaults)) {
-    throw new Error(
-      'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values',
-    );
-  }
-
-  return defaults;
+  return defaults as ToolArgsDefaults | undefined;
 }
 
 function resolveToolArgsMatchIgnore(ignore: unknown): string[] {
-  if (ignore === undefined) {
-    return [];
+  const error = trajectoryToolArgsIgnoreError({ ignore });
+  if (error) {
+    throw new Error(error);
   }
-
-  const entries = Array.isArray(ignore) ? ignore : [ignore];
-  for (const entry of entries) {
-    if (typeof entry !== 'string' || entry.trim().length === 0) {
-      throw new Error(
-        'trajectory:tool-args-match assertion ignore must be a non-empty string or an array of non-empty strings',
-      );
-    }
-  }
-
-  return entries as string[];
+  return ignore === undefined ? [] : ((Array.isArray(ignore) ? ignore : [ignore]) as string[]);
 }
 
 function resolveToolArgsMatchValue(value: unknown) {
@@ -903,7 +895,12 @@ export const handleTrajectoryGoalSuccess = async (
           abortSignal: outerExecutionContext?.abortSignal
             ? AbortSignal.any([outerExecutionContext.abortSignal, timeoutController.signal])
             : timeoutController.signal,
-          queuedCallAbortSignal: timeoutController.signal,
+          queuedCallAbortSignal: outerExecutionContext?.queuedCallAbortSignal
+            ? AbortSignal.any([
+                outerExecutionContext.queuedCallAbortSignal,
+                timeoutController.signal,
+              ])
+            : timeoutController.signal,
         },
         runJudge,
       )

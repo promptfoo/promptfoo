@@ -232,6 +232,24 @@ describe('structured value assertions', () => {
     ).toMatch(/partial.*exact/);
   });
 
+  it('validates tool args options and defers external values', () => {
+    for (const value of [
+      { name: 'find', args: {}, defaults: [] },
+      { name: 'find', args: {}, ignore: [''] },
+    ]) {
+      expect(
+        getRunnableAssertionValueError(
+          make({ type: 'trajectory:tool-args-match', value: value as any }),
+        ),
+      ).toBeDefined();
+    }
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:tool-args-match', value: 'file://assertion.json' as any }),
+      ),
+    ).toBeUndefined();
+  });
+
   it('rejects malformed trajectory matcher fields and types', () => {
     for (const value of [
       { name: 'find', pattern: '   ', args: {} },
@@ -306,6 +324,11 @@ describe('structured value assertions', () => {
         }),
       ),
     ).toBeDefined();
+    expect(
+      getRunnableAssertionValueError(
+        make({ type: 'trajectory:tool-sequence', value: { steps: 'search' } as any }),
+      ),
+    ).toMatch(/steps must be an array/);
   });
 
   it('validates tokens-used budgets', () => {

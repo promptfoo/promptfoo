@@ -342,3 +342,25 @@ export function trajectoryRedactArgsError(value: {
   }
   return undefined;
 }
+
+export function trajectoryToolArgsDefaultsError(value: { defaults?: unknown }): string | undefined {
+  return value.defaults !== undefined && !isPlainObject(value.defaults)
+    ? 'trajectory:tool-args-match assertion defaults must be an object mapping argument names to default values'
+    : undefined;
+}
+
+export function trajectoryToolArgsIgnoreError(value: { ignore?: unknown }): string | undefined {
+  if (value.ignore === undefined) {
+    return undefined;
+  }
+  const entries = Array.isArray(value.ignore) ? value.ignore : [value.ignore];
+  return entries.every((entry) => typeof entry === 'string' && entry.trim().length > 0)
+    ? undefined
+    : 'trajectory:tool-args-match assertion ignore must be a non-empty string or an array of non-empty strings';
+}
+
+export function trajectoryToolSequenceStepsError(value: { steps?: unknown }): string | undefined {
+  return value.steps === undefined || Array.isArray(value.steps)
+    ? undefined
+    : 'trajectory:tool-sequence assertion steps must be an array';
+}

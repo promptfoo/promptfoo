@@ -8,7 +8,10 @@ import {
   trajectoryCountBoundsError,
   trajectoryGoalSuccessTimeoutError,
   trajectoryRedactArgsError,
+  trajectoryToolArgsDefaultsError,
+  trajectoryToolArgsIgnoreError,
   trajectoryToolSequenceModeError,
+  trajectoryToolSequenceStepsError,
   trajectoryToolSetConfigError,
 } from '@promptfoo/contracts';
 import type { Assertion, AssertionType } from '@promptfoo/types';
@@ -507,7 +510,11 @@ function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefine
     return 'Set trajectory tool args mode to "partial" or "exact".';
   }
   // A non-boolean redactArgsInFailures must fail loud here too, not fail open at eval time.
-  return trajectoryRedactArgsError(value);
+  return (
+    trajectoryRedactArgsError(value) ||
+    trajectoryToolArgsDefaultsError(value) ||
+    trajectoryToolArgsIgnoreError(value)
+  );
 }
 
 function getTrajectoryStepCountValueError(value: unknown): string | undefined {
@@ -543,6 +550,10 @@ function getTrajectoryToolSequenceValueError(value: unknown): string | undefined
     );
     if (modeError) {
       return modeError;
+    }
+    const stepsError = trajectoryToolSequenceStepsError(value);
+    if (stepsError) {
+      return stepsError;
     }
   }
   const steps = getTrajectoryToolSequenceSteps(value);
@@ -592,6 +603,12 @@ function getTrajectoryToolSetValueError(value: unknown): string | undefined {
 }
 
 function getStructuredValueError(assertion: Assertion): string | undefined {
+  if (
+    typeof assertion.value === 'string' &&
+    (assertion.value.startsWith('file://') || assertion.value.startsWith('package:'))
+  ) {
+    return undefined;
+  }
   if (
     OPTIONAL_SQL_CONFIGURATION_TYPES.has(assertion.type) &&
     assertion.value !== undefined &&
