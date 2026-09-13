@@ -2,6 +2,7 @@
  * Generic utility functions for sanitizing objects to prevent logging of secrets and credentials
  * Uses a custom recursive approach for reliable deep object sanitization.
  */
+import deepEqual from 'fast-deep-equal';
 import safeStringify from 'fast-safe-stringify';
 
 import type { EvalRuntimeOptions, UnifiedConfig } from '../types';
@@ -715,19 +716,36 @@ type RestoreResult<T> = {
 
 function collectStoredAzureBlobSasTokens(
   value: unknown,
-  tokensByRedactedUri = new Map<string, string>(),
-): Map<string, string> {
+  tokensByRedactedUri = new Map<string, string | null>(),
+  path: Array<string | null> = [],
+): Map<string, string | null> {
   if (typeof value === 'string') {
     const redacted = redactAzureBlobSasToken(value);
-    if (redacted !== value && !tokensByRedactedUri.has(redacted)) {
-      tokensByRedactedUri.set(redacted, value);
+    if (redacted !== value) {
+      const key = JSON.stringify([path, redacted]);
+      const globalKey = JSON.stringify([null, redacted]);
+      const storedValue = tokensByRedactedUri.get(key);
+      if (storedValue === undefined) {
+        tokensByRedactedUri.set(key, value);
+      } else if (storedValue !== value) {
+        // Two stored secrets collapse to the same redacted URI. Leave future
+        // submissions redacted rather than guessing which credential to reuse.
+        tokensByRedactedUri.set(key, null);
+      }
+      const globalValue = tokensByRedactedUri.get(globalKey);
+      if (globalValue === undefined) {
+        tokensByRedactedUri.set(globalKey, value);
+      } else if (globalValue !== value) {
+        tokensByRedactedUri.set(globalKey, null);
+      }
     }
     return tokensByRedactedUri;
   }
 
   if (Array.isArray(value)) {
+    // Preserve field names and array depth while allowing entries to move.
     for (const item of value) {
-      collectStoredAzureBlobSasTokens(item, tokensByRedactedUri);
+      collectStoredAzureBlobSasTokens(item, tokensByRedactedUri, [...path, null]);
     }
     return tokensByRedactedUri;
   }
@@ -736,19 +754,23 @@ function collectStoredAzureBlobSasTokens(
     return tokensByRedactedUri;
   }
 
-  for (const item of Object.values(value)) {
-    collectStoredAzureBlobSasTokens(item, tokensByRedactedUri);
+  for (const [key, item] of Object.entries(value)) {
+    collectStoredAzureBlobSasTokens(item, tokensByRedactedUri, [...path, key]);
   }
   return tokensByRedactedUri;
 }
 
 function restoreAzureBlobSasTokensFromMap<T>(
   value: T,
-  tokensByRedactedUri: ReadonlyMap<string, string>,
+  tokensByRedactedUri: ReadonlyMap<string, string | null>,
+  path: Array<string | null> = [],
 ): RestoreResult<T> {
   if (typeof value === 'string') {
-    const storedValue = tokensByRedactedUri.get(value);
-    return storedValue === undefined
+    if (tokensByRedactedUri.get(JSON.stringify([null, value])) === null) {
+      return { value, restored: false };
+    }
+    const storedValue = tokensByRedactedUri.get(JSON.stringify([path, value]));
+    return storedValue == null
       ? { value, restored: false }
       : { value: storedValue as T, restored: true };
   }
@@ -756,7 +778,7 @@ function restoreAzureBlobSasTokensFromMap<T>(
   if (Array.isArray(value)) {
     let restored = false;
     const restoredItems = value.map((item) => {
-      const result = restoreAzureBlobSasTokensFromMap(item, tokensByRedactedUri);
+      const result = restoreAzureBlobSasTokensFromMap(item, tokensByRedactedUri, [...path, null]);
       restored ||= result.restored;
       return result.value;
     });
@@ -769,7 +791,7 @@ function restoreAzureBlobSasTokensFromMap<T>(
 
   let restored = false;
   const restoredEntries = Object.entries(value).map(([key, item]) => {
-    const result = restoreAzureBlobSasTokensFromMap(item, tokensByRedactedUri);
+    const result = restoreAzureBlobSasTokensFromMap(item, tokensByRedactedUri, [...path, key]);
     restored ||= result.restored;
     return [key, result.value];
   });
@@ -788,20 +810,28 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
 
   if (Array.isArray(value)) {
     const storedItems = Array.isArray(storedValue) ? storedValue : [];
-    const storedTokensByRedactedUri = collectStoredAzureBlobSasTokens(storedItems);
+    const storedTokensByRedactedUri = new Map<string, string | null>();
+    for (const storedItem of storedItems) {
+      collectStoredAzureBlobSasTokens(storedItem, storedTokensByRedactedUri);
+    }
+    const hasSameLength = value.length === storedItems.length;
+    const redactedStoredItems = storedItems.map((item) => redactAzureBlobSasTokens(item));
     let restored = false;
     const restoredItems = value.map((item, index) => {
-      const positional = restoreAzureBlobSasTokensWithResult(item, storedItems[index]);
-
-      // Positional restore fails when array entries are reordered, inserted, or
-      // edited outside the URI field. Also match by redacted URI identity so
-      // unchanged nested SAS references keep their stored signature.
-      const fallback = restoreAzureBlobSasTokensFromMap(
-        positional.value,
+      const storedItem = storedItems[index];
+      const canRestorePositionally =
+        storedItem !== undefined && hasSameLength && deepEqual(item, redactedStoredItems[index]);
+      // Duplicate redacted URIs have no immutable client-visible identity. Restore them only
+      // when the complete item is unchanged at the same position; otherwise fail closed.
+      const structuralResult = canRestorePositionally
+        ? restoreAzureBlobSasTokensWithResult(item, storedItem)
+        : { value: item, restored: false };
+      const mappedResult = restoreAzureBlobSasTokensFromMap(
+        structuralResult.value,
         storedTokensByRedactedUri,
       );
-      restored ||= positional.restored || fallback.restored;
-      return fallback.value;
+      restored ||= structuralResult.restored || mappedResult.restored;
+      return mappedResult.value;
     });
     return restored ? { value: restoredItems as T, restored } : { value, restored };
   }
@@ -830,6 +860,9 @@ function restoreAzureBlobSasTokensWithResult<T>(value: T, storedValue: unknown):
  * If the caller edits the resource or supplies a replacement token, retain its value.
  */
 export function restoreAzureBlobSasTokens<T>(value: T, storedValue: unknown): T {
+  if (collectStoredAzureBlobSasTokens(storedValue).size === 0) {
+    return value;
+  }
   return restoreAzureBlobSasTokensWithResult(value, storedValue).value;
 }
 

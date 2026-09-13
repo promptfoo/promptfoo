@@ -426,6 +426,9 @@ const CONDITIONAL_TAG_PATTERN = /^(?:if|elif)\s+([\s\S]+)$/;
 const STRING_LITERAL_PATTERN = /(["'])(?:\\.|(?!\1)[\s\S])*\1/g;
 const IDENTIFIER_PATTERN = /\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/g;
 const IGNORED_NUNJUCKS_IDENTIFIERS = new Set([
+  'range',
+  'cycler',
+  'joiner',
   'and',
   'defined',
   'else',
@@ -452,7 +455,12 @@ function addVariablesFromExpression(
   const expressionWithoutStrings = expression.replace(STRING_LITERAL_PATTERN, '');
   for (const match of expressionWithoutStrings.matchAll(IDENTIFIER_PATTERN)) {
     const variable = getTopLevelVariable(match[0]);
-    if (variable && !localVariables.has(variable) && !IGNORED_NUNJUCKS_IDENTIFIERS.has(variable)) {
+    if (
+      variable &&
+      expressionWithoutStrings[match.index - 1] !== '.' &&
+      !localVariables.has(variable) &&
+      !IGNORED_NUNJUCKS_IDENTIFIERS.has(variable)
+    ) {
       variables.add(variable);
     }
   }

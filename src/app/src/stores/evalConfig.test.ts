@@ -44,6 +44,56 @@ describe('evalConfig store', () => {
       expect(config.env).toBeUndefined();
     });
 
+    it('binds source eval lineage to replaced configs and clears it on reset', () => {
+      useStore.getState().setConfig({ description: 'Loaded eval' }, 'eval-a');
+      expect(useStore.getState().sourceEvalId).toBe('eval-a');
+
+      useStore.getState().updateConfig({ description: 'Edited eval' });
+      expect(useStore.getState().sourceEvalId).toBe('eval-a');
+      expect(JSON.parse(localStorage.getItem('promptfoo') || '{}').state.sourceEvalId).toBe(
+        'eval-a',
+      );
+
+      useStore.getState().setConfig({ description: 'Unrelated config' });
+      expect(useStore.getState().sourceEvalId).toBeUndefined();
+
+      useStore.getState().setConfig({ description: 'Loaded again' }, 'eval-b');
+      useStore.getState().reset();
+      expect(useStore.getState().sourceEvalId).toBeUndefined();
+    });
+
+    it('clears persisted lineage when credential redaction fails closed', () => {
+      const config = new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error('fixture redaction failure');
+          },
+        },
+      );
+
+      useStore.getState().setConfig(config, 'source-eval');
+
+      const persisted = JSON.parse(localStorage.getItem('promptfoo') || '{}').state;
+      expect(persisted.config).toEqual(DEFAULT_CONFIG);
+      expect(persisted.sourceEvalId).toBeUndefined();
+    });
+
+    it('clears rehydrated lineage when credential redaction fails closed', () => {
+      const config = new Proxy(
+        {},
+        {
+          ownKeys: () => {
+            throw new Error('fixture redaction failure');
+          },
+        },
+      );
+      const merge = useStore.persist.getOptions().merge!;
+      const state = merge({ config, sourceEvalId: 'source-eval' }, useStore.getState()) as any;
+      expect(state.config).toEqual(DEFAULT_CONFIG);
+      expect(state.sourceEvalId).toBeUndefined();
+    });
+
     it('should reset to default config', () => {
       // First, modify the config
       useStore.getState().updateConfig({

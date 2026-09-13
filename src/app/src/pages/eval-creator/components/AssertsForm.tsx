@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Textarea } from '@app/components/ui/textarea';
+import { STRUCTURED_VALUE_ASSERTION_TYPES } from './assertionValueValidation';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
 interface AssertsFormProps {
@@ -66,6 +67,7 @@ const assertTypes: AssertionType[] = [
   'trajectory:tool-args-match',
   'trajectory:tool-used',
   'trajectory:tool-sequence',
+  'trajectory:tool-set',
   'trajectory:step-count',
 
   // Metrics
@@ -76,6 +78,7 @@ const assertTypes: AssertionType[] = [
   'perplexity',
   'perplexity-score',
   'rouge-n',
+  'tokens-used',
   'webhook',
 
   // Negations
@@ -202,13 +205,19 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                         ? assert.value
                         : typeof assert.value === 'number'
                           ? String(assert.value)
-                          : ''
+                          : assert.value && typeof assert.value === 'object'
+                            ? JSON.stringify(assert.value)
+                            : ''
                     }
                     onChange={(e) => {
                       const newValue = e.target.value;
-                      const newAsserts = asserts.map((a, i) =>
-                        i === index ? { ...a, value: newValue } : a,
-                      );
+                      let value: Assertion['value'] = newValue;
+                      if (STRUCTURED_VALUE_ASSERTION_TYPES.has(assert.type)) {
+                        try {
+                          value = JSON.parse(newValue);
+                        } catch {}
+                      }
+                      const newAsserts = asserts.map((a, i) => (i === index ? { ...a, value } : a));
                       setAsserts(newAsserts);
                       onAdd(newAsserts);
                     }}
