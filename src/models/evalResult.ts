@@ -140,7 +140,7 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
       return provider.map((entry) => sanitizeProviderReference(entry, active));
     }
     const descriptors = Object.getOwnPropertyDescriptors(provider);
-    const id = descriptors.id?.value;
+    const id = getDataMethod(provider, 'id') ?? descriptors.id?.value;
     if (typeof id === 'function') {
       return sanitizeProvider(provider as ApiProvider | ProviderOptions);
     }
@@ -164,11 +164,22 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
         )
         .map(([key, descriptor]) => [
           key,
-          sanitizeForDbWithSecrets(sanitizeProviderReference(descriptor.value, active)),
+          isSecretField(key) && (descriptor.value === null || typeof descriptor.value !== 'object')
+            ? REDACTED
+            : sanitizeForDbWithSecrets(sanitizeProviderReference(descriptor.value, active)),
         ]),
     );
   } finally {
     active.delete(provider);
+  }
+}
+
+function getDataMethod(value: object, key: string): unknown {
+  for (let current: object | null = value; current; current = Object.getPrototypeOf(current)) {
+    const descriptor = Object.getOwnPropertyDescriptor(current, key);
+    if (descriptor && 'value' in descriptor) {
+      return descriptor.value;
+    }
   }
 }
 
@@ -687,7 +698,7 @@ function redactSensitiveResultFieldsForDb<
     // sanitizeMetadataForDb). fields.response is the raw input, so its headers are still
     // cleartext here and can be matched against an echoed result-level metadata.headers.
     metadata: sanitizeMetadataForDb(
-      sanitizeForDb(fields.metadata),
+      sanitizeForDbWithSecrets(fields.metadata, false),
       (plainResponse as ProviderResponse | null | undefined)?.metadata,
     ),
   };

@@ -295,6 +295,12 @@ describe('sanitizeObject', () => {
       expect(result.url).not.toContain('pass');
       expect(result.url).not.toContain('secret');
       expect(result.value).toBe('abcdef0123456789'.repeat(8));
+      expect(sanitizeObject('payload=' + 'a'.repeat(64), { redactStringValues: false })).toBe(
+        'payload=' + 'a'.repeat(64),
+      );
+      expect(sanitizeObject('apiKey=short', { redactStringValues: false })).toBe(
+        'apiKey=%5BREDACTED%5D',
+      );
     });
 
     it('does not widen redaction outside env maps', () => {
@@ -374,6 +380,9 @@ describe('sanitizeObject', () => {
 
     it('canonicalizes duplicate JSON keys even when the final value is benign', () => {
       expect(sanitizeObject('{"message":"sk-hidden-secret","message":"safe"}')).toBe(
+        '{"message":"safe"}',
+      );
+      expect(sanitizeObject('{"mess\\u0061ge":"sk-hidden-secret","message":"safe"}')).toBe(
         '{"message":"safe"}',
       );
     });

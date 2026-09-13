@@ -223,6 +223,19 @@ describe('EvalResult', () => {
     expect(result.metadata?.headers).toEqual({ authorization: '[REDACTED]' });
   });
 
+  it('does not let result metadata serializers rename headers', () => {
+    const metadata = {
+      headers: { authorization: 'short-fixture' },
+      toJSON() {
+        return { message: this.headers.authorization };
+      },
+    };
+
+    const result = sanitizeResultForJsonlArtifact({ metadata });
+
+    expect(result.metadata).toBe('[REDACTED]');
+  });
+
   it('projects provider slots before generic result serialization', () => {
     let providerSerializations = 0;
     const provider = {
@@ -502,6 +515,27 @@ describe('EvalResult', () => {
     expect(result.testCase.options?.provider).toEqual({
       auth: { config: { apiKey: '[REDACTED]' }, self: {} },
       token: { config: { apiKey: '[REDACTED]' } },
+    });
+  });
+
+  it('preserves prototype provider ids and provider-map key redaction', () => {
+    class FixtureProvider {
+      url = 'wss://host/path?token=short-secret';
+      id() {
+        return 'fixture';
+      }
+    }
+
+    const result = sanitizeResultForJsonlArtifact({
+      testCase: {
+        vars: {},
+        options: { provider: { runtime: new FixtureProvider(), apiKey: 'short-fixture' } },
+      } as AtomicTestCase,
+    });
+
+    expect(result.testCase.options?.provider).toEqual({
+      runtime: { id: 'fixture' },
+      apiKey: '[REDACTED]',
     });
   });
 

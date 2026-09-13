@@ -860,7 +860,7 @@ function sanitizeJsonString(
     parsed = JSON.parse(str);
   } catch {
     if (looksLikeUrlEncodedFormData(str)) {
-      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str);
+      const sanitizedUrlEncoded = sanitizeUrlEncodedString(str, redactStringValues);
       if (sanitizedUrlEncoded !== str) {
         return sanitizedUrlEncoded;
       }
@@ -902,9 +902,14 @@ function hasSecretJsonKey(value: string): boolean {
 }
 
 function hasDuplicateJsonKey(value: string): boolean {
-  const keys = [...value.matchAll(/"(?:\\.|[^"\\])*"\s*:/g)].map((match) =>
-    match[0].slice(0, match[0].lastIndexOf(':')).trim(),
-  );
+  const keys = [...value.matchAll(/"(?:\\.|[^"\\])*"\s*:/g)].map((match) => {
+    const key = match[0].slice(0, match[0].lastIndexOf(':')).trim();
+    try {
+      return JSON.parse(key);
+    } catch {
+      return key;
+    }
+  });
   return new Set(keys).size !== keys.length;
 }
 
@@ -988,7 +993,7 @@ function isPureTemplateValue(value: string): boolean {
   return value.includes('{{') && value.replace(NUNJUCKS_PLACEHOLDER, '').trim() === '';
 }
 
-export function sanitizeUrlEncodedString(value: string): string {
+export function sanitizeUrlEncodedString(value: string, redactStringValues = true): string {
   if (!value.includes('=')) {
     return value;
   }
@@ -1046,7 +1051,8 @@ export function sanitizeUrlEncodedString(value: string): string {
     // `key=AAAA+BBBB...` where the raw 64-char chunk matches but the
     // space-bearing decoded form doesn't).
     const valueLooksSecret =
-      looksLikeSecret(rawValue) || (decodedValue !== undefined && looksLikeSecret(decodedValue));
+      redactStringValues &&
+      (looksLikeSecret(rawValue) || (decodedValue !== undefined && looksLikeSecret(decodedValue)));
 
     if (valueLooksSecret) {
       changed = true;
