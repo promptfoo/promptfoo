@@ -64,7 +64,9 @@ export function registerCompareProvidersTool(server: McpServer) {
           );
         }
 
-        apiProviders.forEach((provider) => validateMcpProviderPrompt(provider, testPrompt));
+        apiProviders.forEach((provider, index) =>
+          validateMcpProviderPrompt(provider, testPrompt, providers[index]),
+        );
 
         // Test each provider in parallel
         const startTime = Date.now();

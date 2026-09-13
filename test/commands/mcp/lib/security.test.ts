@@ -280,6 +280,37 @@ describe('MCP Security', () => {
         ConfigurationError,
       );
     });
+
+    it('guards file prompts using the requested provider id before labels can hide it', () => {
+      expect(() =>
+        validateMcpProviderPrompt(
+          { id: 'friendly label' },
+          path.join(root, 'outside.wav'),
+          'elevenlabs:stt:fixture',
+        ),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('contains provider executable and codex-security paths', () => {
+      expect(() =>
+        validateProviderReference({
+          id: 'openai:codex-app-server',
+          config: { codex_path_override: path.join(root, 'outside') },
+        }),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderReference({
+          id: 'openai:codex-app-server',
+          config: { codex_path_override: 'codex' },
+        }),
+      ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderReference({
+          id: 'openai:codex-security',
+          config: { knowledge_base_paths: [path.join(root, 'outside')] },
+        }),
+      ).toThrow(ConfigurationError);
+    });
   });
 
   describe('validateMcpFilePath', () => {
@@ -808,6 +839,20 @@ describe('MCP Security', () => {
       );
       try {
         expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).not.toThrow();
+        fs.writeFileSync(
+          path.join(workspace, 'promptfooconfig.yaml'),
+          [
+            'prompts: [hello]',
+            'providers:',
+            '  - $ref: "#/defs/provider"',
+            'defs:',
+            '  provider: { id: "exec:node ' + path.join(tempRoot, 'outside.js') + '" }',
+            '',
+          ].join('\n'),
+        );
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
       } finally {
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
@@ -831,6 +876,19 @@ describe('MCP Security', () => {
         expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
           ConfigurationError,
         );
+        fs.writeFileSync(
+          path.join(workspace, 'provider.yaml'),
+          'defs:\n  provider:\n    id: echo\n    config:\n      transformResponse: process.cwd()\n',
+        );
+        fs.writeFileSync(
+          path.join(workspace, 'promptfooconfig.yaml'),
+          ['prompts: [hello]', 'providers:', '  - $ref: ./provider.yaml#/defs/provider', ''].join(
+            '\n',
+          ),
+        );
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
       } finally {
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
@@ -845,6 +903,13 @@ describe('MCP Security', () => {
         'prompts: [hello]\nproviders: [echo]\ntests: az://bucket/tests.yaml\n',
       );
       try {
+        expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
+          ConfigurationError,
+        );
+        fs.writeFileSync(
+          path.join(workspace, 'promptfooconfig.yaml'),
+          'prompts: [hello]\nproviders: [echo]\ntests: { path: az://bucket/tests.yaml }\n',
+        );
         expect(() => validateMcpConfigFile('promptfooconfig.yaml', workspace)).toThrow(
           ConfigurationError,
         );
@@ -866,6 +931,21 @@ describe('MCP Security', () => {
         expect(() => validateMcpConfigFile('promptfooconfig.js', workspace)).toThrow(
           /Dynamic JavaScript and TypeScript config files are not allowed/,
         );
+      } finally {
+        fs.rmSync(tempRoot, { force: true, recursive: true });
+      }
+    });
+
+    it('rejects directory config paths before default config resolution', () => {
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      const workspace = path.join(tempRoot, 'workspace');
+      fs.mkdirSync(workspace);
+      fs.writeFileSync(
+        path.join(workspace, 'promptfooconfig.yaml'),
+        'prompts: [hello]\nproviders: [echo]\n',
+      );
+      try {
+        expect(() => validateMcpConfigFile('.', workspace)).toThrow(ConfigurationError);
       } finally {
         fs.rmSync(tempRoot, { force: true, recursive: true });
       }
@@ -1005,10 +1085,23 @@ describe('MCP Security', () => {
         expect(() => validateMcpConfigFile('promptfooconfig.json', workspace)).toThrow(
           ConfigurationError,
         );
+        fs.writeFileSync(path.join(workspace, 'prompt.js'), 'export default "hello";\n');
         fs.writeFileSync(
           path.join(workspace, 'promptfooconfig.json'),
           JSON.stringify({
-            prompts: [`exec:node --require=${path.join(tempRoot, 'outside.js')} scripts/prompt.js`],
+            prompts: ['exec:node prompt.js -e process.exit()'],
+            providers: ['echo'],
+          }),
+        );
+        expect(() => validateMcpConfigFile('promptfooconfig.json', workspace)).toThrow(
+          ConfigurationError,
+        );
+        fs.writeFileSync(
+          path.join(workspace, 'promptfooconfig.json'),
+          JSON.stringify({
+            prompts: [
+              `exec:node --require=file://${path.join(tempRoot, 'outside.js')} scripts/prompt.js`,
+            ],
             providers: ['echo'],
           }),
         );

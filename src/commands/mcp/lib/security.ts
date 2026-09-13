@@ -139,6 +139,18 @@ export function validateMcpFilePath(filePath: string, resolutionBasePath = proce
   validateMcpFilePathWithinWorkspace(filePath, process.cwd(), resolutionBasePath);
 }
 
+function validateStateFilePath(filePath: string, state: ProviderValidationState): void {
+  validateMcpFilePathWithinWorkspace(filePath, state.basePath, state.basePath);
+}
+
+function validateStateExecutablePath(filePath: string, state: ProviderValidationState): void {
+  validateStateFilePath(filePath, state);
+  const resolvedPath = path.resolve(state.basePath, filePath);
+  if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isFile()) {
+    throw new ConfigurationError('MCP executable overrides require a workspace file', filePath);
+  }
+}
+
 function hasProviderFileExtension(filePath: string): boolean {
   return PROVIDER_FILE_EXTENSIONS.has(path.extname(filePath).slice(1).toLowerCase());
 }
@@ -267,7 +279,7 @@ function validateConfigFileReference(value: string, state: ProviderValidationSta
     windowsPathsNoEscape: true,
   });
   for (const candidate of matches.length ? matches : [filePath]) {
-    validateMcpFilePath(candidate, state.basePath);
+    validateStateFilePath(candidate, state);
   }
 }
 
@@ -277,7 +289,7 @@ function resolveConfigFileReference(value: string, state: ProviderValidationStat
     ? rendered.slice(FILE_PROVIDER_PREFIX.length)
     : rendered;
   const filePath = stripConfigFileExport(withoutProtocol);
-  validateMcpFilePath(filePath, state.basePath);
+  validateStateFilePath(filePath, state);
   return path.resolve(state.basePath, filePath);
 }
 
@@ -308,24 +320,19 @@ function validateJsonSchemaRef(
       return;
     }
     state.validatedConfigFiles.add(cacheKey);
-    let pointer: string;
-    try {
-      pointer = decodeURIComponent(renderedRef.slice(1));
-    } catch {
-      throw new ConfigurationError('Invalid JSON-schema reference', renderedRef);
-    }
-    const parts = pointer === '' ? [] : pointer.startsWith('/') ? pointer.slice(1).split('/') : [];
-    const target = parts.reduce<unknown>((current, part) => {
-      const key = part.replace(/~1/g, '/').replace(/~0/g, '~');
-      return Array.isArray(current) ? current[Number(key)] : getObject(current)?.[key];
-    }, state.rootConfig);
+    const target = resolveJsonPointer(state.rootConfig, renderedRef);
     if (target !== undefined) {
-      validateFileReferencesInValue(target, state, assertionContext, providerConfigContext);
+      if (providerConfigContext) {
+        validateProviderConfigCodeReferences(target, state);
+        validateProviderReferenceWithState(target, state);
+      } else {
+        validateFileReferencesInValue(target, state, assertionContext);
+      }
     }
     return;
   }
 
-  const [refPath] = renderedRef.split('#', 1);
+  const [refPath, fragment] = renderedRef.split('#', 2);
   if (!refPath) {
     return;
   }
@@ -340,11 +347,26 @@ function validateJsonSchemaRef(
   });
   validateStaticConfigFile(resolvedRefPath, state, true, assertionContext, providerConfigContext);
   if (providerConfigContext) {
-    validateProviderConfigCodeReferences(loadYaml(fs.readFileSync(resolvedRefPath, 'utf8')), {
-      ...state,
-      basePath: path.dirname(resolvedRefPath),
-    });
+    const rawRef = loadYaml(fs.readFileSync(resolvedRefPath, 'utf8'));
+    const refState = { ...state, basePath: path.dirname(resolvedRefPath) };
+    const target = fragment === undefined ? rawRef : resolveJsonPointer(rawRef, `#${fragment}`);
+    validateProviderConfigCodeReferences(target, refState);
+    validateProviderReferenceWithState(target, refState);
   }
+}
+
+function resolveJsonPointer(root: unknown, reference: string): unknown {
+  let pointer: string;
+  try {
+    pointer = decodeURIComponent(reference.slice(1));
+  } catch {
+    throw new ConfigurationError('Invalid JSON-schema reference', reference);
+  }
+  const parts = pointer === '' ? [] : pointer.startsWith('/') ? pointer.slice(1).split('/') : [];
+  return parts.reduce<unknown>((current, part) => {
+    const key = part.replace(/~1/g, '/').replace(/~0/g, '~');
+    return Array.isArray(current) ? current[Number(key)] : getObject(current)?.[key];
+  }, root);
 }
 
 function validateCodeReference(
@@ -436,6 +458,13 @@ function rejectRemoteConfigSources(value: unknown): void {
   }
   if (Array.isArray(value)) {
     value.forEach(rejectRemoteConfigSources);
+    return;
+  }
+  const object = getObject(value);
+  if (object) {
+    for (const key of ['path', 'file', 'tests', 'scenarios']) {
+      rejectRemoteConfigSources(object[key]);
+    }
   }
 }
 
@@ -523,7 +552,9 @@ function validateStaticConfigLocalReferences(
       validateConfigFileReference(envPath, state);
     }
   }
-  validateLocalConfigFileReferences(rootConfig.extensions, state, true);
+  for (const extension of [rootConfig.extensions].flat()) {
+    validateCodeReference(extension, 'extension', state);
+  }
   validateLocalConfigFileReferences(rootConfig.nunjucksFilters, state, true);
 }
 
@@ -577,6 +608,40 @@ function validateProviderConfigCodeReferences(
   }
 }
 
+function validateProviderConfigPaths(
+  providerId: string,
+  config: Record<string, unknown> | undefined,
+  state: ProviderValidationState,
+): void {
+  for (const key of ['codex_path_override', 'interpreter_path', 'path_to_claude_code_executable']) {
+    if (typeof config?.[key] === 'string') {
+      validateStateExecutablePath(config[key], state);
+    }
+  }
+  if (providerId !== 'openai:codex-security' && !providerId.startsWith('openai:codex-security:')) {
+    return;
+  }
+  for (const key of [
+    'repository',
+    'working_dir',
+    'output_dir',
+    'plugin_path',
+    'python_path',
+    'finding_file',
+  ]) {
+    if (typeof config?.[key] === 'string') {
+      validateStateFilePath(config[key], state);
+    }
+  }
+  for (const filePath of Array.isArray(config?.knowledge_base_paths)
+    ? config.knowledge_base_paths
+    : []) {
+    if (typeof filePath === 'string') {
+      validateStateFilePath(filePath, state);
+    }
+  }
+}
+
 function validateProviderReferenceWithState(
   provider: unknown,
   state: ProviderValidationState,
@@ -608,6 +673,7 @@ function validateProviderReferenceWithState(
     validateMcpConfigObject(descriptor.loadOptions.config, providerState);
   }
   const configObject = getObject(descriptor.loadOptions.config);
+  validateProviderConfigPaths(renderedProviderId, configObject, providerState);
   validateCodeReference(descriptor.loadOptions.transform, 'provider transform', providerState);
   validateProviderConfigCodeReferences(configObject, providerState);
   for (const container of [
@@ -714,7 +780,7 @@ function validateExecReference(
   let hasScript = false;
   for (let index = 0; index < parts.length; index++) {
     const part = parts[index];
-    if (!hasScript && isInlineExecutionFlag(part)) {
+    if (isInlineExecutionFlag(part)) {
       throw new ConfigurationError(
         'MCP exec commands must use a workspace script, not inline code',
       );
@@ -735,7 +801,11 @@ function validateExecReference(
       if (!preload || !isLocalConfigFileReference(preload)) {
         throw new ConfigurationError('MCP exec preloads require a workspace file');
       }
-      validatePath(preload);
+      validatePath(
+        preload.startsWith(FILE_PROVIDER_PREFIX)
+          ? preload.slice(FILE_PROVIDER_PREFIX.length)
+          : preload,
+      );
       continue;
     }
     if (!hasScript && index > 0 && !part.startsWith('-') && !looksLikePath(part)) {
@@ -782,10 +852,18 @@ function validateStaticConfigContents(
   }
 
   const providers = rootConfig.providers ?? rootConfig.targets;
+  const validateProvider = (provider: unknown) => {
+    const reference = getObject(provider)?.$ref;
+    if (reference === undefined) {
+      validateProviderReferenceWithState(provider, state);
+    } else {
+      validateJsonSchemaRef(reference, state, false, true);
+    }
+  };
   if (Array.isArray(providers)) {
-    providers.forEach((provider) => validateProviderReferenceWithState(provider, state));
+    providers.forEach(validateProvider);
   } else if (providers !== undefined) {
-    validateProviderReferenceWithState(providers, state);
+    validateProvider(providers);
   }
 }
 
@@ -888,7 +966,7 @@ function validateProviderIdWithState(providerId: string, state: ProviderValidati
     if (!providerPath) {
       throw new ConfigurationError(`Invalid provider ID format: ${renderedProviderId}`);
     }
-    validateMcpFilePath(providerPath, state.basePath);
+    validateStateFilePath(providerPath, state);
     validateProviderConfigFile(providerPath, state);
     return;
   }
@@ -917,8 +995,10 @@ export function validateMcpAssertion(assertion: unknown): void {
 export function validateMcpProviderPrompt(
   provider: { id: string | (() => string) },
   prompt: string,
+  requestedProviderId?: string,
 ): void {
-  const providerId = typeof provider.id === 'function' ? provider.id() : provider.id;
+  const providerId =
+    requestedProviderId ?? (typeof provider.id === 'function' ? provider.id() : provider.id);
   if (
     providerId.startsWith('openai:transcription:') ||
     providerId.startsWith('elevenlabs:stt:') ||
@@ -964,6 +1044,10 @@ export function validateMcpConfigFile(configPath: string, workspacePath = proces
     windowsPathsNoEscape: true,
   });
   if (matchedConfigPaths.length === 0) {
+    const resolvedConfigPath = path.resolve(workspacePath, configPath);
+    if (fs.existsSync(resolvedConfigPath) && fs.statSync(resolvedConfigPath).isDirectory()) {
+      throw new ConfigurationError('MCP config paths must name a static config file', configPath);
+    }
     return;
   }
 

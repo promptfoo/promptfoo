@@ -106,7 +106,7 @@ export function registerTestProviderTool(server: McpServer) {
 
         // Load the provider
         const apiProvider = await loadProvider(provider);
-        validateMcpProviderPrompt(apiProvider, defaultPrompt);
+        validateMcpProviderPrompt(apiProvider, defaultPrompt, _providerId);
 
         // Test the provider with timeout and detailed metrics
         const startTime = Date.now();
