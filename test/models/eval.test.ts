@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, gte, sql } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile, updateSignalFileForDeletedEvals } from '../../src/database/signal';
@@ -1850,6 +1850,50 @@ describe('evaluator', () => {
       expect(result.body).toEqual([]);
       expect(result.totalCount).toBe(0);
       expect(result.filteredCount).toBe(0);
+    });
+  });
+
+  describe('getFailureSummary', () => {
+    it('groups failed results by error and supports filtering by a selected group', async () => {
+      const eval_ = await EvalFactory.create({
+        numResults: 5,
+        resultTypes: ['error'],
+      });
+      const db = await getDb();
+
+      await db
+        .update(evalResultsTable)
+        .set({ error: 'Request timed out' })
+        .where(eq(evalResultsTable.evalId, eval_.id))
+        .run();
+      await db
+        .update(evalResultsTable)
+        .set({ error: 'Invalid provider response' })
+        .where(and(eq(evalResultsTable.evalId, eval_.id), gte(evalResultsTable.testIdx, 3)))
+        .run();
+
+      await expect(eval_.getFailureSummary()).resolves.toEqual([
+        { error: 'Request timed out', count: 3 },
+        { error: 'Invalid provider response', count: 2 },
+      ]);
+
+      const table = await eval_.getTablePage({
+        filters: [
+          JSON.stringify({
+            logicOperator: 'and',
+            type: 'error',
+            operator: 'equals',
+            value: 'Request timed out',
+          }),
+        ],
+      });
+
+      expect(table.filteredCount).toBe(3);
+      expect(
+        table.body
+          .flatMap((row) => row.outputs)
+          .every((output) => output.error === 'Request timed out'),
+      ).toBe(true);
     });
   });
 

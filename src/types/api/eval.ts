@@ -135,6 +135,22 @@ export const EvalTableResponseSchema = z
 export const EvalTableJsonExportResponseSchema = z.lazy(() => EvaluateTableSchema);
 export type EvalTableResponse = z.infer<typeof EvalTableResponseSchema>;
 
+// GET /api/eval/:id/failure-summary
+
+export const GetFailureSummaryParamsSchema = EvalIdParamSchema;
+
+export const GetFailureSummaryResponseSchema = z.object({
+  failures: z.array(
+    z.object({
+      error: z.string().min(1),
+      count: z.number().int().positive(),
+    }),
+  ),
+});
+
+export type GetFailureSummaryParams = z.infer<typeof GetFailureSummaryParamsSchema>;
+export type GetFailureSummaryResponse = z.infer<typeof GetFailureSummaryResponseSchema>;
+
 // POST /api/eval/job
 
 /**
@@ -371,6 +387,10 @@ export const EvalSchemas = {
     Query: EvalTableQuerySchema,
     Response: EvalTableResponseSchema,
     JsonExportResponse: EvalTableJsonExportResponseSchema,
+  },
+  FailureSummary: {
+    Params: GetFailureSummaryParamsSchema,
+    Response: GetFailureSummaryResponseSchema,
   },
   AddResults: {
     Params: AddResultsParamsSchema,

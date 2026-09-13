@@ -33,6 +33,7 @@ import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
 import { DownloadDialog, DownloadMenuItem } from './DownloadMenu';
 import EvalHeader from './EvalHeader';
 import EvalSelectorDialog from './EvalSelectorDialog';
+import { FailureSummary } from './FailureSummary';
 import { FilterChips } from './FilterChips';
 import { useFilterMode } from './FilterModeProvider';
 import { FilterModeSelector } from './FilterModeSelector';
@@ -119,6 +120,10 @@ function getAppliedFilterLabel(
     };
     const operatorDisplay = operatorSymbols[filter.operator] || filter.operator;
     return `${filter.field} ${operatorDisplay} ${truncatedValue}`;
+  }
+
+  if (filter.type === 'error') {
+    return `Error: ${truncatedValue}`;
   }
 
   if (filter.type === 'plugin') {
@@ -913,6 +918,7 @@ export default function ResultsView({
                         </button>
                       </Badge>
                     )}
+                    <FailureSummary evalId={currentEvalId} />
                     {filters.appliedCount > 0 && (
                       <AppliedFilterBadges
                         filters={appliedFilters}

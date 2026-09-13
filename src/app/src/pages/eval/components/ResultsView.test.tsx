@@ -79,6 +79,10 @@ vi.mock('./FilterModeSelector', () => ({
   ),
 }));
 
+vi.mock('./FailureSummary', () => ({
+  FailureSummary: () => null,
+}));
+
 const mockUseFilterMode = vi.fn();
 vi.mock('./FilterModeProvider', () => ({
   useFilterMode: () => mockUseFilterMode(),

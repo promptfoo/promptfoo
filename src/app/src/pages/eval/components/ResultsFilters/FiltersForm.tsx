@@ -22,6 +22,7 @@ import { type ResultsFilter, useTableStore } from '../store';
 const TYPE_LABELS: Record<ResultsFilter['type'], string> = {
   metric: 'Metric',
   metadata: 'Metadata',
+  error: 'Error',
   plugin: 'Plugin',
   strategy: 'Strategy',
   severity: 'Severity',
