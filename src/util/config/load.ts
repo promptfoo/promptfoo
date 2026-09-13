@@ -33,7 +33,7 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
-import { isApiProvider } from '../../types/providers';
+import { type ApiProvider, isApiProvider } from '../../types/providers';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
@@ -769,6 +769,7 @@ export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
+  onProviderConstructed?: (provider: ApiProvider) => void,
 ): Promise<{
   testSuite: TestSuite;
   config: Partial<UnifiedConfig>;
@@ -958,9 +959,13 @@ export async function resolveConfigs(
     env: config.env,
     basePath,
   });
+  if (onProviderConstructed) {
+    parsedProviders?.forEach((provider) => onProviderConstructed(provider));
+  }
   const parsedTests: TestCase[] = await readTests(
     config.tests || [],
     cmdObj.tests ? undefined : basePath,
+    onProviderConstructed,
   );
 
   // Parse testCases for each scenario
@@ -987,6 +992,7 @@ export async function resolveConfigs(
         const parsedScenarioTests: TestCase[] = await readTests(
           scenario.tests,
           cmdObj.tests ? undefined : basePath,
+          onProviderConstructed,
         );
         scenario.tests = parsedScenarioTests;
       }

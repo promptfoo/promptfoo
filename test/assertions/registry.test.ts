@@ -22,6 +22,11 @@ vi.mock('../../src/redteam/remoteGeneration', () => ({
   shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
+const traceStoreMocks = vi.hoisted(() => ({ getTrace: vi.fn() }));
+vi.mock('../../src/tracing/store', () => ({
+  getTraceStore: () => ({ getTrace: traceStoreMocks.getTrace }),
+}));
+
 // Causes a SIGSEGV in GitHub Actions.
 vi.mock('libsql');
 
@@ -289,6 +294,9 @@ describe('pure assertion registry', () => {
 });
 
 describe('assertion registry injection', () => {
+  beforeEach(() => {
+    traceStoreMocks.getTrace.mockReset();
+  });
   it.each([undefined, 'trace-run'])(
     'forwards supplied traces to custom handlers (traceId=%s)',
     async (traceId) => {
@@ -445,6 +453,36 @@ describe('assertion registry injection', () => {
     expect(result.componentResults).toEqual([
       expect.objectContaining({ reason: 'batch fake registry handler' }),
     ]);
+  });
+
+  it('preloads traces for injected batch handlers', async () => {
+    const trace = {
+      traceId: 'trace-1',
+      evaluationId: 'eval',
+      testCaseId: 'case',
+      spans: [{ spanId: 'span', name: 'work', startTime: 1, endTime: 2 }],
+    };
+    traceStoreMocks.getTrace.mockResolvedValue(trace);
+    const handler = vi.fn(
+      (params: AssertionParams): GradingResult => ({
+        pass: true,
+        score: 1,
+        reason: 'trace inspected',
+        assertion: params.assertion,
+      }),
+    );
+    const registry = new AssertionRegistry<AssertionParams, GradingResult>([
+      { name: 'fake', handlers: { equals: handler } },
+    ]);
+
+    await runAssertions({
+      providerResponse: { output: 'actual output' },
+      registry,
+      traceId: trace.traceId,
+      test: { assert: [{ type: 'equals', value: 'ignored' }] } as AtomicTestCase,
+    });
+
+    expect(handler.mock.calls[0][0].assertionValueContext.trace).toEqual(trace);
   });
 
   it('preserves the unknown assertion error message', async () => {

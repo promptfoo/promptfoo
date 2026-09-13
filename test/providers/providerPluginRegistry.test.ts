@@ -324,6 +324,39 @@ describe('ProviderPluginRegistry', () => {
     }
   });
 
+  it('rejects a failed provider load without waiting for a hung sibling', async () => {
+    const dispose = registerProviderPlugin(
+      createManifest(
+        'hung-load',
+        (providerPath) => providerPath.startsWith('hung-load:'),
+        async () => [
+          {
+            test: () => true,
+            create: async (providerPath) => {
+              if (providerPath.endsWith(':hang')) {
+                return new Promise(() => undefined);
+              }
+              throw new Error('load failed');
+            },
+          },
+        ],
+      ),
+    );
+
+    try {
+      await expect(
+        Promise.race([
+          loadApiProviders(['hung-load:hang', 'hung-load:fail']),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('provider load timed out')), 100),
+          ),
+        ]),
+      ).rejects.toThrow('load failed');
+    } finally {
+      dispose();
+    }
+  });
+
   it('cleans created providers when another entry in the same file fails', async () => {
     const cleanup = vi.fn();
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'provider-file-cleanup-'));
