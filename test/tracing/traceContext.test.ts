@@ -446,9 +446,15 @@ describe('fetchTraceContext', () => {
     });
   });
 
-  it('discards cyclic parent relationships while preserving valid spans', async () => {
+  it('severs cyclic parent relationships without dropping execution evidence', async () => {
     mockExternalTrace([
-      { spanId: 'cycle-a', parentSpanId: 'cycle-b', name: 'cycle.a', startTime: 1 },
+      {
+        spanId: 'cycle-a',
+        parentSpanId: 'cycle-b',
+        name: 'cycle.a',
+        startTime: 1,
+        attributes: { 'tool.name': 'update_seat' },
+      },
       { spanId: 'cycle-b', parentSpanId: 'cycle-a', name: 'cycle.b', startTime: 2 },
       { spanId: 'valid', name: 'target.call', startTime: 3 },
     ]);
@@ -459,8 +465,10 @@ describe('fetchTraceContext', () => {
       maxRetries: 0,
     });
 
-    expect(storedSpans.map((span) => span.spanId)).toEqual(['valid']);
-    expect(result?.spans.map((span) => span.name)).toEqual(['target.call']);
+    expect(storedSpans.map((span) => span.spanId)).toEqual(['cycle-a', 'cycle-b', 'valid']);
+    expect(storedSpans.slice(0, 2).every((span) => span.parentSpanId === undefined)).toBe(true);
+    expect(result?.spans.map((span) => span.name)).toEqual(['cycle.a', 'cycle.b', 'target.call']);
+    expect(result?.spans[0].attributes?.['tool.name']).toBe('update_seat');
   });
 
   it('replaces overlapping external trace secrets without rewriting redaction markers', async () => {

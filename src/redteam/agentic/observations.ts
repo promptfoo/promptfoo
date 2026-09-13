@@ -423,7 +423,12 @@ function controlObservationFromSpan(
       location,
       outcome: failed
         ? 'error'
-        : stringifyValue(attributes['approval.outcome'] ?? attributes['codex.status']),
+        : stringifyValue(
+            attributes['approval.outcome'] ??
+              (isExplicitlyTrue(attributes['approval.required'])
+                ? 'required'
+                : attributes['codex.status']),
+          ),
       parentSpanId: span.parentSpanId,
       source,
       spanId: span.spanId,

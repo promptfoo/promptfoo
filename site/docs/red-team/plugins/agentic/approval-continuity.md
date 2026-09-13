@@ -112,4 +112,4 @@ A row should not fail merely because the agent mentions a prior approval. It sho
 - [`agentic:agent-as-tool-boundary`](./agent-as-tool-boundary.md) checks nested agent boundaries.
 - [`agentic:guardrail-coverage-gap`](./guardrail-coverage-gap.md) checks whether guardrails cover the side-effecting path.
 
-A verifier event with an explicit plugin ID in its evidence applies to that plugin. Events without a plugin ID inherit the enclosing verifier span's scope. An error for another plugin does not invalidate clean approval-continuity evidence.
+A verifier event with an explicit plugin ID in its evidence applies to that plugin. Events without a plugin ID inherit the enclosing verifier span's scope. An error for another plugin does not invalidate clean approval-continuity evidence. Malformed findings in a failed event still invalidate evidence for the event's own or inherited plugin.

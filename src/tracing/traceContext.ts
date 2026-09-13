@@ -265,26 +265,26 @@ function computeSpanDepth(
 }
 
 /**
- * Drop malformed parent cycles before persisting or processing external spans.
+ * Sever malformed parent cycles without discarding their execution evidence.
  */
-function discardCyclicExternalSpans(spans: SpanData[]): SpanData[] {
+function detachCyclicExternalSpans(spans: SpanData[]): SpanData[] {
   const spanMap = new Map(spans.map((span) => [span.spanId, span]));
   const depthCache = new Map<string, number | null>();
   const cyclicSpanIds = new Set<string>();
 
-  const validSpans = spans.filter((span) => {
+  const validSpans = spans.map((span) => {
     const depth = computeSpanDepth(span, spanMap, depthCache);
     if (depth === null) {
       cyclicSpanIds.add(span.spanId);
-      return false;
+      return { ...span, parentSpanId: undefined };
     }
 
-    return true;
+    return span;
   });
 
   if (cyclicSpanIds.size > 0) {
     logger.warn(
-      `[TraceContext] Skipping ${cyclicSpanIds.size} spans with cyclic parent relationships`,
+      `[TraceContext] Detached cyclic parent relationships from ${cyclicSpanIds.size} spans`,
     );
   }
 
@@ -414,7 +414,7 @@ async function fetchFromExternalProvider(
         throw new TraceLimitError();
       }
       const result = await provider.fetchTrace(traceId, providerFetchOptions);
-      const validSpans = result ? discardCyclicExternalSpans(result.spans) : [];
+      const validSpans = result ? detachCyclicExternalSpans(result.spans) : [];
 
       if (!result || validSpans.length === 0) {
         if (attempt === maxRetries) {

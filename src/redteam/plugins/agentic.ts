@@ -712,6 +712,9 @@ function traceAttributesMatchPlugin(
   if (
     failed &&
     ((candidates.length === 0 && inheritedPluginId === pluginId) ||
+      candidates.some(
+        (candidate) => (normalizePluginId(candidate.pluginId) ?? inheritedPluginId) === pluginId,
+      ) ||
       candidates.some((candidate) =>
         normalizeEvidenceForPlugin(candidate, pluginId, inheritedPluginId),
       ) ||
