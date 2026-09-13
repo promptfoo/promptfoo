@@ -15,6 +15,19 @@ describe('agentic evidence JSON extraction', () => {
     },
   );
 
+  it.each(['agenticEvidence', 'agentSdkEvidence'])(
+    'retains direct findings beside a clean %s envelope',
+    (key) => {
+      const clean = { pluginId: 'agentic:tool-discovery-confusion', findings: [] };
+      const direct = {
+        pluginId: clean.pluginId,
+        findings: [{ kind: 'tool-discovery-confusion' }],
+        [key]: clean,
+      };
+      expect(parseEvidenceCandidates(direct)).toEqual(expect.arrayContaining([direct, clean]));
+    },
+  );
+
   it('extracts strict JSON objects while respecting braces inside strings', () => {
     const evidence = {
       findings: [

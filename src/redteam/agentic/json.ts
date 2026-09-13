@@ -79,11 +79,8 @@ export function parseEvidenceCandidates(value: unknown): Record<string, unknown>
       const nested = [record.agenticEvidence, record.agentSdkEvidence].filter(
         (value) => value !== undefined && value !== null,
       );
-      if (nested.length === 0) {
-        candidates.push(record);
-      } else {
-        pending.push(...nested.reverse());
-      }
+      candidates.push(record);
+      pending.push(...nested.reverse());
     } else if (typeof next === 'string') {
       if (next.length > MAX_JSON_LENGTH) {
         return [];

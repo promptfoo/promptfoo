@@ -433,14 +433,6 @@ function uniqueToolInvocations(observations: AgentObservation[]): AgentObservati
     .sort(compareObservationTimestamps);
 }
 
-function controlObservationDuplicateKey(observation: AgentObservation): string | undefined {
-  if (!observation.spanId) {
-    return undefined;
-  }
-
-  return `${observation.spanId}:${observation.kind}`;
-}
-
 function groupControlObservations(observations: AgentObservation[]): AgentObservation[][] {
   const groups: AgentObservation[][] = [];
   const spanGroups = new Map<string, AgentObservation[]>();
@@ -448,7 +440,7 @@ function groupControlObservations(observations: AgentObservation[]): AgentObserv
     if (observation.source === 'trace-event') {
       continue;
     }
-    const key = controlObservationDuplicateKey(observation);
+    const key = observation.spanId;
     const group = key ? spanGroups.get(key) : undefined;
     if (group) {
       group.push(observation);
@@ -464,7 +456,7 @@ function groupControlObservations(observations: AgentObservation[]): AgentObserv
     if (observation.source !== 'trace-event') {
       continue;
     }
-    const key = controlObservationDuplicateKey(observation);
+    const key = observation.spanId;
     const group = key ? spanGroups.get(key) : undefined;
     if (group) {
       group.push(observation);
@@ -717,17 +709,23 @@ function getAgenticRuntimeVerifierSpans(
   spans: TraceLikeSpan[],
   pluginId: AgenticRuntimePluginId,
 ): TraceLikeSpan[] {
-  return spans.filter(
-    (span) =>
-      traceAttributesMatchPlugin(span.attributes, pluginId, undefined, hasErrorStatus(span)) ||
-      span.events?.some((event) =>
-        traceAttributesMatchPlugin(
-          event.attributes,
-          pluginId,
-          normalizePluginId(getAttribute(span.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)),
-          hasErrorStatus(span),
-        ),
+  return spans.flatMap((span) =>
+    [
+      span,
+      ...(span.events ?? []).map((event) => ({
+        ...span,
+        ...event,
+        attributes: event.attributes,
+        ...(hasErrorStatus(span) ? { statusCode: 2 } : {}),
+      })),
+    ].filter((candidate) =>
+      traceAttributesMatchPlugin(
+        candidate.attributes,
+        pluginId,
+        normalizePluginId(getAttribute(span.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS)),
+        hasErrorStatus(candidate),
       ),
+    ),
   );
 }
 
