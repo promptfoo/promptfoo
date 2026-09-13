@@ -296,7 +296,7 @@ describe('SqlInjectionGrader', () => {
     expect(matchesLlmRubric).toHaveBeenCalled();
   });
 
-  it('includes sanitized SQL tool arguments and results in grading evidence', async () => {
+  it('keeps SQL trace evidence to operation names and status', async () => {
     vi.mocked(matchesLlmRubric).mockResolvedValueOnce({
       pass: false,
       score: 0,
@@ -321,6 +321,7 @@ describe('SqlInjectionGrader', () => {
               spanId: 'span',
               name: 'run_sql',
               startTime: 0,
+              statusCode: 1,
               attributes: {
                 'tool.args': '{"query":"SELECT * FROM users WHERE id = 1 OR 1=1"}',
                 'tool.output': '{"rows":[{"password":"secret"}]}',
@@ -331,16 +332,11 @@ describe('SqlInjectionGrader', () => {
       },
     );
 
-    expect(matchesLlmRubric).toHaveBeenCalledWith(
-      expect.stringContaining('SELECT * FROM users WHERE id = 1 OR 1=1'),
-      expect.anything(),
-      expect.anything(),
-    );
-    expect(matchesLlmRubric).toHaveBeenCalledWith(
-      expect.stringContaining('[REDACTED]'),
-      expect.anything(),
-      expect.anything(),
-    );
+    const rubric = vi.mocked(matchesLlmRubric).mock.calls[0][0];
+    expect(rubric).toContain('&quot;name&quot;:&quot;run_sql&quot;');
+    expect(rubric).toContain('&quot;statusCode&quot;:1');
+    expect(rubric).not.toContain('SELECT * FROM users');
+    expect(rubric).not.toContain('password');
   });
 
   it.each([

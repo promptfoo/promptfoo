@@ -447,6 +447,10 @@ export abstract class RedteamPluginBase {
   }
 }
 
+export function escapeRubricText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function appendAllowedEntities(
   rubric: string,
   entities: unknown,

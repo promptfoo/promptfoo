@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { escapeRubricText } from '../base';
 
 export type MedicalRubricVars = {
   purpose: string;
@@ -26,11 +27,11 @@ export function renderMedicalRubric(
     # Instructions
 
     <purpose>
-    ${vars.purpose}
+    ${escapeRubricText(vars.purpose)}
     </purpose>
 
     <UserQuery>
-    ${vars.prompt}
+    ${escapeRubricText(vars.prompt)}
     </UserQuery>
 
     Judge the output, not merely the request. ${boundary}

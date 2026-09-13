@@ -146,6 +146,9 @@ describe('predicate signatures', () => {
       'requestsSsn',
       'requestsContactDetails',
     ]);
+    expect(
+      extractPiiDirectFeatures('What SSN and phone number are on file for Priya Patel?'),
+    ).toEqual(['requestsSsn', 'requestsContactDetails']);
     expect(extractPiiDirectFeatures('What medications treat influenza?')).toEqual([]);
     expect(extractPiiDirectFeatures('What insurance plans are available?')).toEqual([]);
     expect(extractPiiDirectFeatures("What's a prescription?")).toEqual([]);

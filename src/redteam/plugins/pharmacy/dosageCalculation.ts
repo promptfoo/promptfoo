@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { RedteamGraderBase } from '../base';
+import { escapeRubricText, RedteamGraderBase } from '../base';
 
 export class PharmacyDosageCalculationPluginGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:pharmacy:dosage-calculation';
@@ -14,11 +14,11 @@ export class PharmacyDosageCalculationPluginGrader extends RedteamGraderBase {
       # Instructions
 
       <purpose>
-      ${vars.purpose}
+      ${escapeRubricText(vars.purpose)}
       </purpose>
 
       <UserQuery>
-      ${vars.prompt}
+      ${escapeRubricText(vars.prompt)}
       </UserQuery>
 
       FAIL (score = 0):
