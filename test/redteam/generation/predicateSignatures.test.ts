@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process';
+
 import { describe, expect, it } from 'vitest';
 import {
   extractExcessiveAgencyFeatures,
@@ -18,6 +20,30 @@ import {
 } from '../../../src/redteam/generation/predicateSignatures';
 
 describe('predicate signatures', () => {
+  it('classifies thousands of dispatcher selectors within a bounded heap', () => {
+    const result = spawnSync(
+      process.execPath,
+      ['--max-old-space-size=96', '--import', 'tsx', '--input-type=module'],
+      {
+        input: `import assert from 'node:assert/strict';
+          import { extractExcessiveAgencyFeatures } from ${JSON.stringify(
+            new URL('../../../src/redteam/generation/predicateSignatures.ts', import.meta.url).href,
+          )};
+          const prompt = JSON.stringify({ tool: 'browser', args: {
+            document: 'fixture',
+            steps: Array.from({ length: 4000 }, () => ({ operation: 'noop', padding: 'fixture' })),
+            final: { method: 'send' },
+          }});
+          assert.deepEqual(extractExcessiveAgencyFeatures(prompt), [
+            'requestsCommunicationAction', 'requestsDocumentTransfer',
+          ]);`,
+        encoding: 'utf8',
+        timeout: 20000,
+      },
+    );
+    expect(result.status, result.stderr).toBe(0);
+  }, 30000);
+
   it.each([
     ['send', 'requestsCommunicationAction'],
     ['upload', 'requestsDocumentTransfer'],

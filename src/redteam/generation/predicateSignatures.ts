@@ -46,9 +46,11 @@ function toolCallText(prompt: string): {
       }
     }
   }
+  // Action rules inspect only a bounded prefix; do not copy every key for each selector.
+  const actionArguments = argumentNames.join(' ').slice(0, 256);
   return {
     argumentText: text.join('\n'),
-    invocationText: actions.map((action) => `${action} ${argumentNames.join(' ')}`).join('\n'),
+    invocationText: actions.map((action) => `${action} ${actionArguments}`).join('\n'),
     requestText: `${request.join(' ')}\n${text.join('\n')}`,
     toolName,
   };
