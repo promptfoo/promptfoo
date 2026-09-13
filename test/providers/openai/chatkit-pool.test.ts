@@ -647,6 +647,30 @@ describe('ChatKitBrowserPool', () => {
       await expect(queued).resolves.toMatchObject({ templateKey: TEST_TEMPLATE_KEY });
     });
 
+    it('reserves an idle page while refreshing it', async () => {
+      const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 2 });
+      instance.setTemplate(TEST_TEMPLATE_KEY, TEST_HTML);
+      const idlePage = await instance.acquirePage(TEST_TEMPLATE_KEY);
+      await instance.releasePage(idlePage);
+      instance.setTemplate(TEST_TEMPLATE_KEY, '<html>updated</html>');
+
+      let finishRefresh!: () => void;
+      mockPage.reload.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishRefresh = resolve;
+          }),
+      );
+      const refreshing = instance.acquirePage(TEST_TEMPLATE_KEY);
+      await vi.waitFor(() => expect(mockPage.reload).toHaveBeenCalled());
+      const second = await instance.acquirePage(TEST_TEMPLATE_KEY);
+      finishRefresh();
+      const first = await refreshing;
+
+      expect(first).not.toBe(second);
+      expect(instance.getStats().inUse).toBe(2);
+    });
+
     it('should not reuse pages across different templates', async () => {
       const instance = ChatKitBrowserPool.getInstance({ maxConcurrency: 4 });
       const key1 = 'wf_workflow1:default:default';

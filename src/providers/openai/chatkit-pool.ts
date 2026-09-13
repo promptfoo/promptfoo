@@ -314,8 +314,13 @@ export class ChatKitBrowserPool {
       (p) => !p.inUse && !p.ready && p.templateKey === templateKey,
     );
     if (needsRefresh) {
-      await this.refreshPooledPage(needsRefresh);
       needsRefresh.inUse = true;
+      try {
+        await this.refreshPooledPage(needsRefresh);
+      } catch (error) {
+        needsRefresh.inUse = false;
+        throw error;
+      }
       logger.debug('[ChatKitPool] Acquired and refreshed page', {
         templateKey,
         poolSize: this.pages.length,
