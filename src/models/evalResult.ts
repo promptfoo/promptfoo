@@ -302,6 +302,9 @@ function stripResponseContentMetadata(metadata: Record<string, unknown>): void {
   if ('structuredOutput' in metadata) {
     metadata.structuredOutput = RESPONSE_OUTPUT_STRIPPED;
   }
+  if ('codexAppServer' in metadata) {
+    metadata.codexAppServer = RESPONSE_OUTPUT_STRIPPED;
+  }
 }
 
 export function projectMetadataForOutput(

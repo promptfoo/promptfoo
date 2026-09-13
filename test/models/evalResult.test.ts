@@ -1809,6 +1809,7 @@ describe('EvalResult', () => {
               },
             ],
             structuredOutput: { answer: 'STRUCTURED_OUTPUT_SECRET' },
+            codexAppServer: { items: [{ text: 'CODEX_APP_SERVER_SECRET' }] },
             audio: {
               data: 'REALTIME_AUDIO_SECRET',
               format: 'pcm16',
@@ -1839,6 +1840,7 @@ describe('EvalResult', () => {
           expect(metadata.skillCalls[0]).toMatchObject({ name: 'pdf' });
           expect(metadata.skillCalls[0].input).toBe('[output stripped]');
           expect(metadata.structuredOutput).toBe('[output stripped]');
+          expect(metadata.codexAppServer).toBe('[output stripped]');
           expect(metadata.permissionDenials[0]).toMatchObject({ tool_name: 'Write' });
           expect(metadata.permissionDenials[0].tool_input).toBe('[output stripped]');
           for (const secret of [
@@ -1847,6 +1849,7 @@ describe('EvalResult', () => {
             'TOOL_RESULT_SECRET',
             'SKILL_INPUT_SECRET',
             'STRUCTURED_OUTPUT_SECRET',
+            'CODEX_APP_SERVER_SECRET',
             'REALTIME_AUDIO_SECRET',
             'REALTIME_TRANSCRIPT_SECRET',
             'REALTIME_FUNCTION_RESULT_SECRET',

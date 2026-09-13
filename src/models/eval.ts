@@ -281,6 +281,12 @@ function jsonTextOrNull(value: SQLWrapper, path: string): SQL<string | null> {
   >`CASE WHEN json_type(${value}, ${path}) = 'text' THEN json_extract(${value}, ${path}) ELSE NULL END`;
 }
 
+function jsonBoundedTextOrNull(value: SQLWrapper, path: string): SQL<string | null> {
+  return sql<
+    string | null
+  >`CASE WHEN json_type(${value}, ${path}) = 'text' THEN substr(json_extract(${value}, ${path}), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}) ELSE NULL END`;
+}
+
 function jsonBooleanOrNull(value: SQLWrapper, path: string): SQL<number | null> {
   return sql<
     number | null
@@ -438,11 +444,17 @@ function normalizePromptForRedteamReport(prompt: unknown, bound = true): Prompt 
         : value
       : '';
   const raw = text(prompt.raw);
+  const metrics =
+    isRecord(prompt.metrics) && isRecord(prompt.metrics.tokenUsage)
+      ? { tokenUsage: prompt.metrics.tokenUsage }
+      : undefined;
   return {
     ...(typeof prompt.id === 'string' && { id: prompt.id }),
     raw,
     label: typeof prompt.label === 'string' ? text(prompt.label) : raw,
     ...(typeof prompt.display === 'string' && { display: text(prompt.display) }),
+    ...(typeof prompt.provider === 'string' && { provider: prompt.provider }),
+    ...(metrics && { metrics }),
   };
 }
 
@@ -664,7 +676,7 @@ function projectResultForRedteamReport(
     stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
       ? undefined
       : typeof redteamFinalPromptCandidate === 'string'
-        ? redteamFinalPromptCandidate
+        ? redteamFinalPromptCandidate.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
         : undefined;
   const responsePrompt = boundReportPrompt(result.response?.prompt);
   const hasResponsePrompt = !stripFlags.shouldStripPromptText && responsePrompt !== undefined;
@@ -2581,7 +2593,7 @@ export default class Eval {
         responseRedteamFinalPrompt:
           stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
             ? sql<string | null>`NULL`
-            : jsonTextOrNull(validResponseJson, '$.metadata.redteamFinalPrompt'),
+            : jsonBoundedTextOrNull(validResponseJson, '$.metadata.redteamFinalPrompt'),
         errorExists: sql<number>`CASE
           WHEN ${evalResultsTable.error} IS NOT NULL AND ${evalResultsTable.error} <> '' THEN 1
           ELSE 0
@@ -2667,7 +2679,7 @@ export default class Eval {
         metadataRedteamFinalPrompt:
           stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
             ? sql<string | null>`NULL`
-            : jsonTextOrNull(validMetadataJson, '$.redteamFinalPrompt'),
+            : jsonBoundedTextOrNull(validMetadataJson, '$.redteamFinalPrompt'),
         metadataRedteamHistory: jsonHistoryForRedteamReport(
           validMetadataJson,
           '$.redteamHistory',
