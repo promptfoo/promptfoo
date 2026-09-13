@@ -104,11 +104,23 @@ describe('handleClassifier', () => {
     );
   });
 
-  it('does not flip a grader/transport failure into a pass for inverse assertions', async () => {
+  it('rejects non-string classifier assertion values', async () => {
+    const params = createParams({
+      renderedValue: { label: 'safe' },
+    });
+
+    await expect(handleClassifier(params)).rejects.toThrow(
+      '"classifier" assertion type must have a string value or be undefined',
+    );
+    expect(mockedMatchesClassification).not.toHaveBeenCalled();
+  });
+
+  it('preserves the full grader failure result for inverse assertions', async () => {
     mockedMatchesClassification.mockResolvedValue({
       pass: false,
       score: 0,
       reason: 'Unknown error fetching classification',
+      tokensUsed: { total: 5, prompt: 3, completion: 2 },
       metadata: { graderError: true },
     });
     const params = createParams({
@@ -125,18 +137,8 @@ describe('handleClassifier', () => {
       pass: false,
       score: 0,
       reason: 'Unknown error fetching classification',
+      tokensUsed: { total: 5, prompt: 3, completion: 2 },
       metadata: { graderError: true },
     });
-  });
-
-  it('rejects non-string classifier assertion values', async () => {
-    const params = createParams({
-      renderedValue: { label: 'safe' },
-    });
-
-    await expect(handleClassifier(params)).rejects.toThrow(
-      '"classifier" assertion type must have a string value or be undefined',
-    );
-    expect(mockedMatchesClassification).not.toHaveBeenCalled();
   });
 });

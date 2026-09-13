@@ -164,7 +164,7 @@ describe('handleSearchRubric', () => {
     expect(result.reason).toContain('does not require web search verification');
   });
 
-  it('does not flip a grader/transport failure into a pass for inverse assertions', async () => {
+  it('preserves the full grader failure result for inverse assertions', async () => {
     const params: AssertionParams = {
       ...defaultParams,
       inverse: true,
@@ -172,13 +172,16 @@ describe('handleSearchRubric', () => {
     };
 
     const errorResult: GradingResult = {
+      assertion: params.assertion,
       pass: false,
       score: 0,
       reason: 'Search rubric evaluation failed: Request timed out',
+      tokensUsed: { total: 5, prompt: 3, completion: 2 },
       metadata: { graderError: true },
     };
 
-    mockMatchesSearchRubric.mockResolvedValue(errorResult);
+    // Keep the expected result independent so an in-place mutation cannot hide a regression.
+    mockMatchesSearchRubric.mockResolvedValue(structuredClone(errorResult));
 
     const result = await handleSearchRubric(params);
 

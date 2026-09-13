@@ -23,11 +23,13 @@ export async function handleClassifier({
     test.options,
   );
 
-  // A classification provider/transport error is not evidence about the
-  // content, so never flip it into a pass for `not-classifier` — propagate it
-  // verbatim (mirrors the inverse-aware llm-rubric/g-eval/moderation handlers).
   if (isGraderFailure(classificationResult)) {
-    return { ...classificationResult, assertion };
+    // A broken grader is not evidence the criterion was or was not met; never
+    // invert a transport/parse failure into a pass.
+    return {
+      assertion,
+      ...classificationResult,
+    };
   }
 
   if (inverse) {

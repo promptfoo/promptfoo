@@ -27,11 +27,9 @@ export async function handleSearchRubric({
     providerCallContext,
   );
 
-  // A search-rubric provider/transport error is not evidence about the
-  // content, so never flip it into a pass for `not-search-rubric` — propagate
-  // it verbatim (mirrors the inverse-aware llm-rubric/g-eval/moderation/
-  // classifier handlers).
   if (isGraderFailure(result)) {
+    // A broken grader is not evidence about the criterion; propagate verbatim
+    // instead of flipping a transport failure into a pass.
     return result;
   }
 
