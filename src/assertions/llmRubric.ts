@@ -28,7 +28,7 @@ export const handleLlmRubric = async ({
   const resp = await matchesLlmRubric(
     renderedValue || '',
     outputString,
-    test.options as GradingConfig,
+    (test.options ?? {}) as GradingConfig,
     test.vars,
     assertion,
     !assertion.transform && (providerResponse?.images?.length || providerResponse?.audio)

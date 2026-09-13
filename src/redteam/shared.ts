@@ -23,18 +23,18 @@ import type { RedteamRunOptions } from './types';
 
 let envPathRun = Promise.resolve();
 
-export function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
-  const run = () => withRemoteGeneration(options.remote, () => doRedteamRunScoped(options));
-  if (!options.envPath) {
-    return run();
-  }
-
+export function withRedteamEnvIsolation<T>(run: () => Promise<T>): Promise<T> {
   const result = envPathRun.then(run);
   envPathRun = result.then(
     () => undefined,
     () => undefined,
   );
   return result;
+}
+
+export function doRedteamRun(options: RedteamRunOptions): Promise<Eval | undefined> {
+  const run = () => withRemoteGeneration(options.remote, () => doRedteamRunScoped(options));
+  return withRedteamEnvIsolation(run);
 }
 
 async function doRedteamRunScoped(options: RedteamRunOptions): Promise<Eval | undefined> {

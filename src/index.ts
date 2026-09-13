@@ -20,7 +20,7 @@ import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
 import { RedteamGraderBase, RedteamPluginBase } from './redteam/plugins/base';
 import { Plugins } from './redteam/plugins/index';
-import { doRedteamRun } from './redteam/shared';
+import { doRedteamRun, withRedteamEnvIsolation } from './redteam/shared';
 import { Strategies } from './redteam/strategies/index';
 
 import type Eval from './models/eval';
@@ -202,7 +202,7 @@ const redteam: RedteamApi = {
     Plugin: RedteamPluginBase,
     Grader: RedteamGraderBase,
   },
-  generate: doGenerateRedteam,
+  generate: (options) => withRedteamEnvIsolation(() => doGenerateRedteam(options)),
   run: runRedteam,
 };
 

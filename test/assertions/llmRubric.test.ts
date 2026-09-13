@@ -66,7 +66,7 @@ describe('handleLlmRubric', () => {
     expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
       'test rendered value',
       'test output string',
-      undefined,
+      {},
       {},
       params.assertion,
       undefined,
@@ -94,7 +94,7 @@ describe('handleLlmRubric', () => {
     expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
       { test: 'value' },
       'test output string',
-      undefined,
+      {},
       {},
       params.assertion,
       undefined,
@@ -122,7 +122,7 @@ describe('handleLlmRubric', () => {
     expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
       '',
       'test output string',
-      undefined,
+      {},
       {},
       params.assertion,
       undefined,
@@ -154,7 +154,7 @@ describe('handleLlmRubric', () => {
     expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
       'test rubric',
       'test output string',
-      undefined,
+      {},
       {},
       params.assertion,
       { providerResponse: params.providerResponse },
@@ -194,7 +194,7 @@ describe('handleLlmRubric', () => {
     expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
       'test rubric',
       'transformed output',
-      undefined,
+      {},
       {},
       params.assertion,
       undefined,
@@ -496,6 +496,7 @@ describe('handleLlmRubric', () => {
     const result = await handleLlmRubric(params);
 
     expect(result).toEqual(expectedResult);
+    expect(mockMatchesLlmRubric.mock.calls[0][2]).toEqual({});
   });
 
   // Additional edge case: rubricPrompt is an empty object
@@ -603,7 +604,7 @@ describe('handleLlmRubric', () => {
     expect(mockMatchesLlmRubric).toHaveBeenCalledWith(
       ['foo', 'bar'],
       'test output string',
-      undefined,
+      {},
       {},
       params.assertion,
       undefined,

@@ -197,7 +197,7 @@ describe('doRedteamRun', () => {
     expect(vi.mocked(doEval).mock.calls[0][0]).toMatchObject({ envPath: 'generation.env' });
   });
 
-  it('serializes runs that load environment files', async () => {
+  it('serializes env-less runs behind environment-file runs', async () => {
     let releaseFirst!: () => void;
     vi.mocked(doGenerateRedteam)
       .mockImplementationOnce(
@@ -210,7 +210,7 @@ describe('doRedteamRun', () => {
 
     const first = doRedteamRun({ envPath: 'first.env' });
     await vi.waitFor(() => expect(doGenerateRedteam).toHaveBeenCalledTimes(1));
-    const second = doRedteamRun({ envPath: 'second.env' });
+    const second = doRedteamRun({});
 
     await Promise.resolve();
     expect(doGenerateRedteam).toHaveBeenCalledTimes(1);
@@ -219,7 +219,7 @@ describe('doRedteamRun', () => {
 
     expect(doGenerateRedteam).toHaveBeenNthCalledWith(
       2,
-      expect.objectContaining({ envFile: 'second.env' }),
+      expect.not.objectContaining({ envFile: expect.anything() }),
     );
   });
 
