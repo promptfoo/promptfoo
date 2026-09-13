@@ -2489,6 +2489,7 @@ describe('RedteamGraderBase', () => {
                   headers: [
                     { name: 'Authorization', value: 'fixture-json-header' },
                     { name: 'PRIVATE-TOKEN', value: 'fixture-private-token' },
+                    ['PRIVATE-TOKEN', 'fixture-tuple-token'],
                   ],
                   headerMap: { 'PRIVATE-TOKEN': 'fixture-map-token' },
                   steps: [{ name: command }],
@@ -2557,6 +2558,7 @@ describe('RedteamGraderBase', () => {
         expect(rubric).not.toContain('fixture-json-env');
         expect(rubric).not.toContain('fixture-json-header');
         expect(rubric).not.toContain('fixture-private-token');
+        expect(rubric).not.toContain('fixture-tuple-token');
         expect(rubric).not.toContain('fixture-map-token');
         expect(rubric).not.toContain('fixture-telegram-token');
         expect(rubric).not.toContain('fixture-session');

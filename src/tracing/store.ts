@@ -129,6 +129,7 @@ function computeDepth(
   span: { spanId: string; parentSpanId?: string | null },
   spanMap: Map<string, { spanId: string; parentSpanId?: string | null }>,
   depthCache: Map<string, number>,
+  active = new Set<string>(),
 ): number {
   if (depthCache.has(span.spanId)) {
     return depthCache.get(span.spanId)!;
@@ -139,7 +140,12 @@ function computeDepth(
     return 0;
   }
 
-  const parentDepth = computeDepth(spanMap.get(span.parentSpanId)!, spanMap, depthCache);
+  if (active.has(span.spanId)) {
+    return 0;
+  }
+  active.add(span.spanId);
+  const parentDepth = computeDepth(spanMap.get(span.parentSpanId)!, spanMap, depthCache, active);
+  active.delete(span.spanId);
   const currentDepth = parentDepth + 1;
   depthCache.set(span.spanId, currentDepth);
   return currentDepth;

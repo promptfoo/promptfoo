@@ -420,7 +420,8 @@ function redactTraceValue(
           option === 'pass' ||
           option === 'proxy-pass' ||
           option === shortPasswordFlag ||
-          isSecretField(option));
+          isSecretField(option) ||
+          isTracingCredentialHeader(previous, entry));
       if (
         typeof entry === 'string' &&
         index > 0 &&
@@ -516,7 +517,10 @@ function redactTraceEvidence(text: string): string {
           : match,
     )
     .replace(/\b((?:set-)?cookie\s*:\s*)[^\s"'`\\;&|\r\n]+/gi, '$1[REDACTED]')
-    .replace(/\b(authorization\s*:\s*)(?:(?:Bearer|Basic)\s+)?[^"'`\s\\;]+/gi, '$1[REDACTED]')
+    .replace(
+      /\b(authorization\s*:\s*)(?:(?:Bearer|Basic|ApiKey|Digest)\s+)?[^"'`\s\\;]+/gi,
+      '$1[REDACTED]',
+    )
     .replace(
       /(^|\s)((?:--?(?:api[-_]?key|pass|password|proxy-pass|proxy-user|secret|token|user)|-u)(?:\s+|=))(?:"[^"]*"|'[^']*'|[^\s"'`\\;]+)/gi,
       '$1$2[REDACTED]',

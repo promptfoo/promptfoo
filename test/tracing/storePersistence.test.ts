@@ -350,6 +350,21 @@ describe('TraceStore span persistence', () => {
       'aaaaaaaaaaaaaaaa',
     ]);
   });
+
+  it('does not recurse forever when local spans have cyclic parents', async () => {
+    const traceStore = await createTrace('cyclic-parents');
+    await traceStore.addSpans('cyclic-parents', [
+      { spanId: 'aaaaaaaaaaaaaaaa', parentSpanId: 'bbbbbbbbbbbbbbbb', name: 'first', startTime: 1 },
+      {
+        spanId: 'bbbbbbbbbbbbbbbb',
+        parentSpanId: 'aaaaaaaaaaaaaaaa',
+        name: 'second',
+        startTime: 2,
+      },
+    ]);
+
+    await expect(traceStore.getSpans('cyclic-parents', { maxDepth: 5 })).resolves.toHaveLength(2);
+  });
 });
 
 describe('span uniqueness migration', () => {

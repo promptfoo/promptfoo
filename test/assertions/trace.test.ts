@@ -523,7 +523,6 @@ return {
       sanitizeAttributes: false,
       includeInternalSpans: false,
       maxDepth: 5,
-      maxSpans: 50,
       spanFilter: undefined,
     });
   });
@@ -555,7 +554,6 @@ return {
       sanitizeAttributes: false,
       includeInternalSpans: false,
       maxDepth: 5,
-      maxSpans: 50,
       spanFilter: undefined,
     });
   });
@@ -593,7 +591,6 @@ return {
       sanitizeAttributes: false,
       includeInternalSpans: false,
       maxDepth: 5,
-      maxSpans: 1,
       spanFilter: undefined,
     });
 
@@ -640,7 +637,6 @@ return {
       sanitizeAttributes: false,
       includeInternalSpans: true,
       maxDepth: 5,
-      maxSpans: 1,
       spanFilter: ['http.*'],
     });
   });
