@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
-import cliState from '../../cliState';
+import cliState, { trackGradingProvider } from '../../cliState';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
 import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
@@ -150,6 +150,9 @@ async function loadRedteamProvider({
         response_format: jsonOnly ? { type: 'json_object' } : undefined,
       },
     });
+  }
+  if (!isApiProvider(redteamProvider)) {
+    trackGradingProvider(ret);
   }
   return ret;
 }

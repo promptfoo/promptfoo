@@ -2238,9 +2238,10 @@ describe('evalCommand', () => {
         basePath: path.resolve('/'),
       };
     });
-    vi.mocked(evaluate).mockImplementationOnce(
-      async (_testSuite, evalRecord) => evalRecord as Eval,
-    );
+    vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+      await providerRegistry.shutdownAll();
+      return evalRecord as Eval;
+    });
 
     providerRegistry.register(registryProvider);
     try {
