@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ModelAuditHistoryPage from './page';
 
 // Mock the stores used by ModelAuditHistory
@@ -28,6 +28,23 @@ const renderWithRouter = (component: React.ReactElement) => {
 };
 
 describe('ModelAuditHistoryPage', () => {
+  const originalTitle = document.title;
+  let descriptionMetaTag: HTMLMetaElement;
+
+  beforeEach(() => {
+    descriptionMetaTag = document.createElement('meta');
+    descriptionMetaTag.name = 'description';
+    descriptionMetaTag.content = 'Initial description';
+    document.head.appendChild(descriptionMetaTag);
+    document.title = 'Initial Title';
+  });
+
+  afterEach(() => {
+    cleanup();
+    descriptionMetaTag.remove();
+    document.title = originalTitle;
+  });
+
   it('renders the scan history page', () => {
     const { container } = renderWithRouter(<ModelAuditHistoryPage />);
 
@@ -43,5 +60,12 @@ describe('ModelAuditHistoryPage', () => {
 
     // The page should show the no rows overlay
     expect(screen.getByText(/no scan history found/i)).toBeInTheDocument();
+  });
+
+  it('sets Model Audit history metadata', () => {
+    renderWithRouter(<ModelAuditHistoryPage />);
+
+    expect(document.title).toBe('Model Audit History | promptfoo');
+    expect(descriptionMetaTag).toHaveAttribute('content', 'Browse model audit scan history');
   });
 });

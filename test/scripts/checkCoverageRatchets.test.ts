@@ -104,6 +104,30 @@ describe('coverage ratchets', () => {
     );
   });
 
+  it.each(['ts', 'tsx'])('excludes browser tests from source coverage floors (%s)', (extension) => {
+    const file = `src/app/src/tests/browser-mode/navigation.browser.${extension}`;
+    const result = evaluateCoverageRatchets({
+      changedFiles: [{ path: file, status: 'A' }],
+      coverageMap: { [file]: coverageFile(file, { statements: { covered: 0, total: 4 } }) },
+      repoRoot,
+      report: frontendReport,
+    });
+    expect(result.checkedFiles).toEqual([]);
+    expect(result.failures).toEqual([]);
+  });
+
+  it('keeps production browser replacements in source coverage floors', () => {
+    const file = 'src/app/src/util/createHash.browser.ts';
+    const result = evaluateCoverageRatchets({
+      changedFiles: [{ path: file, status: 'A' }],
+      coverageMap: { [file]: coverageFile(file, { statements: { covered: 0, total: 4 } }) },
+      repoRoot,
+      report: frontendReport,
+    });
+    expect(result.checkedFiles).toHaveLength(1);
+    expect(result.failures).toHaveLength(1);
+  });
+
   it('does not gate ordinary modified legacy source files', () => {
     const result = evaluateCoverageRatchets({
       changedFiles: [{ path: 'src/legacy.ts', status: 'M' }],
