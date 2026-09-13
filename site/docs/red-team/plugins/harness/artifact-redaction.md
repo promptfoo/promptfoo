@@ -44,7 +44,7 @@ Eval exports and sharing omit these tests' forensic traces, response bodies, and
 
 The privacy gate applies to every assertion in the test, including inverse assertions and assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests.
 
-Image pixels and audio cannot be verified by these text checks. Responses containing either produce a grading error, and their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
+Images, audio, and video cannot be verified by these text checks. Responses containing these media produce a grading error, and their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
 
 Adaptive providers bypass target-response blob storage for artifact-redaction tests. Hydra keeps target session IDs in private target-call state and retains an unverifiable-media error even if a later turn returns clean text.
 

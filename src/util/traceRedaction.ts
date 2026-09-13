@@ -27,7 +27,10 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
     }
     const value = pending.pop();
     if (typeof value === 'string') {
-      if (value.includes(BLOB_SCHEME) || /data:(?:audio|image)\/|<svg(?:\s|\/?>)/i.test(value)) {
+      if (
+        value.includes(BLOB_SCHEME) ||
+        /data:(?:audio|image|video)\/|<svg(?:\s|\/?>)/i.test(value)
+      ) {
         return true;
       }
       if (/^\s*[{[]/.test(value)) {
@@ -41,13 +44,16 @@ export function hasRedactionMedia(response: ProviderResponse | null | undefined)
       seen.add(value);
       const record = value as Record<string, unknown>;
       const audio = record.audio as ProviderResponse['audio'];
+      const video = record.video as ProviderResponse['video'];
       if (
         record.redactionMediaOmitted === true ||
         record.isBase64 === true ||
         (typeof record.b64_json === 'string' && record.b64_json.length > 0) ||
         (Array.isArray(record.images) && record.images.length > 0) ||
+        audio?.id ||
         audio?.data ||
-        audio?.blobRef
+        audio?.blobRef ||
+        (video && Object.values(video).some(Boolean))
       ) {
         return true;
       }
@@ -87,7 +93,14 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
   const mediaOmitted = hasRedactionMedia(response);
   const metadata = { ...result.metadata };
   for (const key of Object.keys(response?.metadata ?? {})) {
-    delete metadata[key];
+    if (
+      result.testCase?.metadata &&
+      Object.prototype.hasOwnProperty.call(result.testCase.metadata, key)
+    ) {
+      metadata[key] = result.testCase.metadata[key];
+    } else {
+      delete metadata[key];
+    }
   }
   delete metadata.errorContext;
   delete metadata.sessionId;
@@ -102,7 +115,7 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
     metadata,
     response: {
       output: mediaOmitted
-        ? '[Media response omitted: image or audio redaction could not be verified.]'
+        ? '[Media response omitted: image, audio, or video redaction could not be verified.]'
         : '[Response omitted for trace/artifact redaction.]',
       ...(response.error && { error: 'Error details omitted for trace/artifact redaction.' }),
       cached: typeof response.cached === 'boolean' ? response.cached : undefined,

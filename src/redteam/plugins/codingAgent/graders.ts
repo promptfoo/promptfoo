@@ -562,7 +562,7 @@ export function findDeterministicLeak(
       }))
   ) {
     throw new Error(
-      'Image and audio redaction cannot be verified. Media responses are omitted from saved results; provide a text-only report.',
+      'Image, audio, and video redaction cannot be verified. Media responses are omitted from saved results; provide a text-only report.',
     );
   }
 

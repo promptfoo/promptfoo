@@ -983,6 +983,25 @@ describe('coding-agent evidence regressions', () => {
     },
   );
 
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'rejects uninspectable media references for %s',
+    (pluginId) => {
+      for (const response of [
+        { video: { url: 'https://example.invalid/private.mp4' } },
+        { video: { storageRef: { key: 'video/private.mp4' } } },
+        { video: { id: 'private-video' } },
+        { audio: { id: 'private-audio' } },
+        { output: 'data:video/mp4;base64,PRIVATE_VIDEO' },
+      ]) {
+        expect(() =>
+          findDeterministicLeak(pluginId, 'Clean report', testCase, undefined, {
+            providerResponse: response,
+          }),
+        ).toThrow(/video.*redaction.*verified/i);
+      }
+    },
+  );
+
   it.each(['missing', 'empty', 'short', 'oversized', 'directory', 'outside-root', 'unreadable'])(
     'fails closed for an unusable configured redaction receipt: %s',
     (mode) => {

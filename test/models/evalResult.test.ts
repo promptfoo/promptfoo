@@ -31,6 +31,47 @@ import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
   it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'retains test-owned metadata after removing %s provider echoes',
+    async (pluginId) => {
+      const secret = 'PRIVATE_METADATA_ECHO';
+      const metadata = {
+        pluginId,
+        strategyId: 'basic',
+        goal: 'Inspect a public report',
+        pluginConfig: { rawReceipt: secret },
+      };
+      const echoes = Object.fromEntries(Object.keys(metadata).map((key) => [key, secret]));
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        testCase: {
+          assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+          metadata: metadata as AtomicTestCase['metadata'],
+        },
+        metadata: { ...echoes, unrelated: 'retained' },
+        response: { output: 'Clean report', metadata: echoes },
+      });
+      const saved = await EvalResult.createFromEvaluateResult('metadata-echo-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'metadata-echo-bulk-' + pluginId,
+      );
+      for (const result of [
+        sanitizeResultForJsonlArtifact(row),
+        saved.toEvaluateResult(),
+        bulk.toEvaluateResult(),
+      ]) {
+        expect(result.metadata).toMatchObject({
+          pluginId,
+          strategyId: 'basic',
+          goal: metadata.goal,
+          unrelated: 'retained',
+        });
+        expect(JSON.stringify(result)).not.toContain(secret);
+      }
+    },
+  );
+
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
     'omits numeric provider receipts from public %s accounting',
     async (pluginId) => {
       const secret = '1234567890123456';

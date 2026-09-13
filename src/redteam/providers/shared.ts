@@ -936,7 +936,7 @@ export async function externalizeResponseForRedteamHistory<T extends ProviderRes
     const sanitized = sanitizeRedactionResult({ response, testCase }).response;
     return {
       ...sanitized,
-      error: 'Image and audio redaction cannot be verified; provide a text-only report.',
+      error: 'Image, audio, and video redaction cannot be verified; provide a text-only report.',
     };
   }
   if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {

@@ -51,7 +51,7 @@ Saved results, eval exports, and sharing omit these tests' response bodies and m
 
 The privacy gate applies to every assertion in the test, including inverse assertions and assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests, and adaptive providers bypass blob storage for their target responses. GOAT and Hydra apply this check even when blob storage is disabled or the target ends the conversation early. Hydra keeps target session IDs in private target-call state and retains an unverifiable-media error even if a later turn returns clean text.
 
-Image pixels and audio cannot be verified by these text checks. Responses containing either, including media embedded in output or metadata, produce a grading error. Their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
+Images, audio, and video cannot be verified by these text checks. Responses containing these media, including media embedded in output or metadata, produce a grading error. Their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
 
 Configured receipt files must be readable regular files under the working directory or system temporary directory, containing 16 bytes to 64 KiB of text. A missing, unreadable, out-of-root, or invalid receipt fails verification. Configured public artifacts must also be readable; missing exports cannot pass verification.
 
