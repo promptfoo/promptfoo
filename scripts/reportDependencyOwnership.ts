@@ -142,6 +142,9 @@ function getShadowRanges(
     ForOfStatement(node) {
       lexicalScopes.push([node.start, node.end]);
     },
+    SwitchStatement(node) {
+      lexicalScopes.push([node.start, node.end]);
+    },
     FunctionDeclaration(node) {
       addFunctionScope(node);
     },
@@ -219,6 +222,11 @@ function getShadowRanges(
     ClassDeclaration(node) {
       if (node.id?.name === name) {
         ranges.push(scopeFor(node.start, lexicalScopes));
+      }
+    },
+    ClassExpression(node) {
+      if (node.id?.name === name) {
+        ranges.push([node.body.start, node.body.end]);
       }
     },
     CatchClause(node) {

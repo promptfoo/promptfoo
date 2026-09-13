@@ -1128,7 +1128,10 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
     mockVertexRequest([
       {
-        candidates: [{ content: { parts: [signedPart] } }],
+        candidates: [
+          { content: { parts: [signedPart] } },
+          { content: { parts: [{ text: 'Ignored', thoughtSignature: 'ignored' }] } },
+        ],
         usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
       },
     ]);

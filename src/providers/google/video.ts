@@ -7,6 +7,7 @@ import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
+import { getVertexApiHostForRegion } from './shared';
 import {
   determineGoogleVertexMode,
   getGoogleApiKey,
@@ -227,7 +228,8 @@ export class GoogleVideoProvider implements ApiProvider {
   private async getVertexEndpoint(config: GoogleVideoOptions, action: string): Promise<string> {
     const location = this.getLocation(config);
     const projectId = config.projectId || (await resolveProjectId(config, this.env));
-    return `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:${action}`;
+    const model = config.model || this.modelName;
+    return `https://${getVertexApiHostForRegion(location)}/v1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:${action}`;
   }
 
   private getAiStudioEndpoint(pathSuffix: string): string {
@@ -314,6 +316,9 @@ export class GoogleVideoProvider implements ApiProvider {
       };
       return undefined;
     }
+    if (/^(?:https?:|data:)/i.test(config.sourceVideo)) {
+      return 'Vertex AI Veo sourceVideo must be a gs:// URI, base64 video data, or a file:// path.';
+    }
 
     const { data: videoData, error } = this.loadVideoData(config.sourceVideo);
     if (error) {
@@ -333,23 +338,25 @@ export class GoogleVideoProvider implements ApiProvider {
     const instance: Record<string, unknown> = { prompt };
     const parameters: Record<string, unknown> = {};
 
-    if (config.aspectRatio) {
-      parameters.aspectRatio = config.aspectRatio;
-    }
-    if (config.resolution) {
-      parameters.resolution = config.resolution;
-    }
-    if (config.durationSeconds) {
-      parameters.durationSeconds = config.durationSeconds;
-    }
-    if (config.negativePrompt) {
-      parameters.negativePrompt = config.negativePrompt;
-    }
-    if (config.personGeneration) {
-      parameters.personGeneration = config.personGeneration;
-    }
-    if (config.seed !== undefined) {
-      parameters.seed = config.seed;
+    if (!config.sourceVideo) {
+      if (config.aspectRatio) {
+        parameters.aspectRatio = config.aspectRatio;
+      }
+      if (config.resolution) {
+        parameters.resolution = config.resolution;
+      }
+      if (config.durationSeconds) {
+        parameters.durationSeconds = config.durationSeconds;
+      }
+      if (config.negativePrompt) {
+        parameters.negativePrompt = config.negativePrompt;
+      }
+      if (config.personGeneration) {
+        parameters.personGeneration = config.personGeneration;
+      }
+      if (config.seed !== undefined) {
+        parameters.seed = config.seed;
+      }
     }
 
     if (config.image) {
@@ -398,12 +405,11 @@ export class GoogleVideoProvider implements ApiProvider {
       return { error: videoError };
     }
 
-    return {
-      body: {
-        instances: [instance],
-        parameters,
-      },
-    };
+    const body: Record<string, unknown> = { instances: [instance] };
+    if (Object.keys(parameters).length > 0) {
+      body.parameters = parameters;
+    }
+    return { body };
   }
 
   private buildAiStudioRequestBody(
@@ -518,7 +524,7 @@ export class GoogleVideoProvider implements ApiProvider {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(body),
+        data: body,
       });
 
       return { operation: response.data as GoogleVideoOperation };
@@ -545,7 +551,9 @@ export class GoogleVideoProvider implements ApiProvider {
 
     try {
       const headers = await this.getAiStudioHeaders(config);
-      const url = this.getAiStudioEndpoint(`models/${this.modelName}:predictLongRunning`);
+      const url = this.getAiStudioEndpoint(
+        `models/${config.model || this.modelName}:predictLongRunning`,
+      );
 
       logger.debug('[Google Video] Creating video job', {
         url,
@@ -622,9 +630,9 @@ export class GoogleVideoProvider implements ApiProvider {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
+          data: {
             operationName,
-          }),
+          },
         });
 
         const operation = response.data as GoogleVideoOperation;

@@ -21,7 +21,7 @@ describe('Google Vertex default providers', () => {
     expect(providers.gradingProvider).toBeInstanceOf(VertexChatProvider);
   });
 
-  it('should keep the default Gemini 3.6 provider global while honoring API host overrides', () => {
+  it('should keep the default Gemini 3.8 provider global while honoring API host overrides', () => {
     const providers = getGoogleVertexProviders({
       VERTEX_REGION: 'us-central1',
       VERTEX_API_HOST: 'vertex-proxy.example.test',

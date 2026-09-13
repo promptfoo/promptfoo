@@ -250,6 +250,7 @@ describe('GoogleVideoProvider', () => {
         vertexai: true,
         projectId: 'prompt-project',
         region: 'europe-west4',
+        model: 'veo-3.1-generate-preview',
         credentials: '/prompt-credentials.json',
       };
       mockResolveProjectId.mockImplementation((config) => config.projectId);
@@ -286,7 +287,7 @@ describe('GoogleVideoProvider', () => {
 
       expect(result.error).toBeUndefined();
       const endpoint =
-        'https://europe-west4-aiplatform.googleapis.com/v1/projects/prompt-project/locations/europe-west4/publishers/google/models/veo-3.1-generate-001';
+        'https://europe-west4-aiplatform.googleapis.com/v1/projects/prompt-project/locations/europe-west4/publishers/google/models/veo-3.1-generate-preview';
       expect(mockRequest).toHaveBeenNthCalledWith(
         1,
         expect.objectContaining({ url: `${endpoint}:predictLongRunning`, method: 'POST' }),
@@ -795,7 +796,7 @@ describe('GoogleVideoProvider', () => {
       // First call is job creation
       expect(mockRequest).toHaveBeenCalled();
       const firstCallOptions = mockRequest.mock.calls[0][0];
-      const body = JSON.parse(firstCallOptions.body);
+      const body = firstCallOptions.data;
 
       expect(body.parameters.aspectRatio).toBe('9:16');
       expect(body.parameters.resolution).toBe('720p');
@@ -853,9 +854,9 @@ describe('GoogleVideoProvider', () => {
 
         expect(result.error).toBeUndefined();
         expect(mockRequest).toHaveBeenCalled();
-        const body = JSON.parse(mockRequest.mock.calls[0][0].body);
+        const body = mockRequest.mock.calls[0][0].data;
         // The configured 4/6 must never reach the wire; Veo fixes the added length itself.
-        expect(body.parameters.durationSeconds).toBeUndefined();
+        expect(body.parameters).toBeUndefined();
         expect(result.video?.duration).toBeUndefined();
         expect(result.metadata).toMatchObject({ extensionSeconds: 7 });
       },
@@ -969,9 +970,9 @@ describe('GoogleVideoProvider', () => {
         const result = await provider.callApi('Extend');
 
         const firstCallOptions = mockRequest.mock.calls[0][0];
-        const body = JSON.parse(firstCallOptions.body);
+        const body = firstCallOptions.data;
         expect(result.error).toBeUndefined();
-        expect(body.parameters.durationSeconds).toBeUndefined();
+        expect(body.parameters).toBeUndefined();
         expect(body.instances[0].video).toEqual({
           gcsUri: sourceVideo,
           mimeType: 'video/mp4',
@@ -1007,7 +1008,7 @@ describe('GoogleVideoProvider', () => {
         await provider.callApi('Extend');
 
         const firstCallOptions = mockRequest.mock.calls[0][0];
-        const body = JSON.parse(firstCallOptions.body);
+        const body = firstCallOptions.data;
         expect(body.instances[0].video).toEqual({
           bytesBase64Encoded: Buffer.from('source video').toString('base64'),
           mimeType: 'video/mp4',
@@ -1040,12 +1041,26 @@ describe('GoogleVideoProvider', () => {
       await provider.callApi('Extend');
 
       const firstCallOptions = mockRequest.mock.calls[0][0];
-      const body = JSON.parse(firstCallOptions.body);
+      const body = firstCallOptions.data;
       expect(body.instances[0].video).toEqual({
         bytesBase64Encoded: sourceVideo,
         mimeType: 'video/mp4',
       });
     });
+
+    it.each(['https://example.test/source.mp4', 'data:video/mp4;base64,c291cmNl'])(
+      'rejects unsupported Vertex URL input %s before sending a request',
+      async (sourceVideo) => {
+        const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
+          config: { sourceVideo },
+        });
+
+        const result = await provider.callApi('Continue');
+
+        expect(result.error).toContain('sourceVideo');
+        expect(mockRequest).not.toHaveBeenCalled();
+      },
+    );
 
     it('should handle blob storage deduplication', async () => {
       const operationName =
@@ -1122,9 +1137,9 @@ describe('GoogleVideoProvider', () => {
         });
 
         const result = await provider.callApi('Animate these images');
-        const body = JSON.parse(
-          vertexai ? mockRequest.mock.calls[0][0].body : mockFetchWithTimeout.mock.calls[0][1].body,
-        );
+        const body = vertexai
+          ? mockRequest.mock.calls[0][0].data
+          : JSON.parse(mockFetchWithTimeout.mock.calls[0][1].body);
         const image = { bytesBase64Encoded: imageData, mimeType: 'image/png' };
 
         expect(result.error).toBeUndefined();
@@ -1186,7 +1201,7 @@ describe('GoogleVideoProvider', () => {
       await provider.callApi('Animate this image');
 
       const firstCallOptions = mockRequest.mock.calls[0][0];
-      const body = JSON.parse(firstCallOptions.body);
+      const body = firstCallOptions.data;
 
       expect(body.instances[0].image).toEqual({
         bytesBase64Encoded: 'ZmFrZS1pbWFnZS1kYXRh', // base64 of 'fake-image-data'
@@ -1255,7 +1270,7 @@ describe('GoogleVideoProvider', () => {
       await provider.callApi('Generate with references');
 
       const firstCallOptions = mockRequest.mock.calls[0][0];
-      const body = JSON.parse(firstCallOptions.body);
+      const body = firstCallOptions.data;
 
       expect(body.instances[0].referenceImages).toHaveLength(2);
       expect(body.instances[0].referenceImages[0].referenceType).toBe('asset');
@@ -1312,7 +1327,7 @@ describe('GoogleVideoProvider', () => {
 
       expect(mockRequest).toHaveBeenCalled();
       const firstCallOptions = mockRequest.mock.calls[0][0];
-      const body = JSON.parse(firstCallOptions.body);
+      const body = firstCallOptions.data;
 
       expect(body.instances[0].referenceImages).toHaveLength(3);
     });
@@ -1362,7 +1377,7 @@ describe('GoogleVideoProvider', () => {
       await provider.callApi('Interpolate between frames');
 
       const firstCallOptions = mockRequest.mock.calls[0][0];
-      const body = JSON.parse(firstCallOptions.body);
+      const body = firstCallOptions.data;
 
       expect(body.instances[0].image).toBeDefined();
       expect(body.instances[0].lastFrame).toBeDefined();
@@ -1402,7 +1417,7 @@ describe('GoogleVideoProvider', () => {
       await provider.callApi('Interpolate');
 
       const firstCallOptions = mockRequest.mock.calls[0][0];
-      const body = JSON.parse(firstCallOptions.body);
+      const body = firstCallOptions.data;
 
       expect(body.instances[0].lastFrame).toBeDefined();
     });

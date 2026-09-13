@@ -960,9 +960,11 @@ describe('dependency ownership report', () => {
   it('ignores require calls shadowed by a function parameter', () => {
     write(
       'src/index.js',
-      "export function load(require, module) { require('local-only'); return module.require('local-module'); } try {} catch (require) { require('caught-require'); } try {} catch (module) { module.require('caught-module'); }",
+      "export function load(require, module) { require('local-only'); return module.require('local-module'); } try {} catch (require) { require('caught-require'); } try {} catch (module) { module.require('caught-module'); } switch (true) { case true: { let require; require('switched'); break; } } require('real-package'); const C = class module { static load() { module.require('class-local'); } };",
     );
-    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([]);
+    expect(reportDependencyOwnership(root, config).undeclaredUsages).toEqual([
+      expect.objectContaining({ dependency: 'real-package' }),
+    ]);
   });
 
   it('keeps require shadowing within its binding scope', () => {
