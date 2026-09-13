@@ -1050,7 +1050,10 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
             : REDACTED,
         ]),
       );
-    } else if (key === 'apiHost' && typeof value === 'string') {
+    } else if (
+      typeof value === 'string' &&
+      (key === 'apiHost' || (isEnvMap && key.toUpperCase().endsWith('_HOST')))
+    ) {
       const scheme = /^[a-z][a-z\d+.-]*:\/\//i;
       const hasScheme = scheme.test(value);
       const endpoint = sanitizeUrlForLogging(hasScheme ? value : `https://${value}`);

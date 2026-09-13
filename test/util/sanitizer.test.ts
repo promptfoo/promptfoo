@@ -1363,6 +1363,13 @@ describe('sanitizeObject', () => {
       );
     });
 
+    it('redacts credential-bearing environment host overrides', () => {
+      const value = 'gateway-user:gateway-password@gateway.example';
+      expect(JSON.stringify(sanitizeObject({ env: { OPENAI_API_HOST: value } }))).not.toContain(
+        'gateway-password',
+      );
+    });
+
     it.each(['/auth/proxy/v1', '/token/count/v1', '/auth/configuration/v1'])(
       'preserves ordinary route %s',
       (path) => {

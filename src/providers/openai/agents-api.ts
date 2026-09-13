@@ -206,8 +206,11 @@ function getUrlCredentials(value: string): string[] {
   try {
     url = new URL(value);
   } catch {
-    // Strings that are not valid URLs carry no URL credentials.
-    return [];
+    // Fetch errors can echo malformed input URLs, so retain secret-looking path segments.
+    return value
+      .split(/[/?#]/)
+      .filter((segment) => sanitizeUrlForLogging(`/${segment}`).includes('%5BREDACTED%5D'))
+      .flatMap((segment) => [segment, decodeUrlComponent(segment)]);
   }
   const found = [url.username, url.password].flatMap((part) => [part, decodeUrlComponent(part)]);
   const userinfo = decodeUserinfo(url);
@@ -901,7 +904,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (!hasSubagents) {
         result.cost = calculateOpenAIUsageCost(model, this.config, usage, {
           apiUrl: this.getApiUrl(),
-          serviceTier: finished.agent.service_tier,
+          serviceTier: finished.agent.service_tier ?? this.config.agent?.service_tier,
         });
       }
       Object.assign(metadata, {
@@ -964,6 +967,9 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       }
       if (turn?.status === 'completed') {
         session = await this.request<Session>(endpoint, 'GET', headers, signal);
+        if (session.status !== 'idle') {
+          continue;
+        }
         return { session, turn };
       }
       await sleepWithAbort(this.config.pollIntervalMs ?? 1_000, signal);

@@ -892,6 +892,17 @@ describe('OpenAiAgentsApiProvider', () => {
     });
   });
 
+  it('rejects a failed session refreshed after its root turn completes', async () => {
+    mockApi((pathname, method) =>
+      method === 'GET' && pathname.endsWith('/sess_test')
+        ? json({ ...session, status: 'failed', error: 'late failure' })
+        : undefined,
+    );
+    const result = await provider().callApi('hi');
+    expect(result.error).toBe('Agents API session failed: late failure');
+    expect(result.output).toBeUndefined();
+  });
+
   it('waits through initial idle and completed subagent turns until the root finishes', async () => {
     vi.useFakeTimers();
     vi.mocked(fetchWithRetries)
@@ -1142,6 +1153,17 @@ describe('OpenAiAgentsApiProvider', () => {
     const result = await agent.callApi('hi');
     expect(result.error).toContain('Rejected [REDACTED]');
     expect(JSON.stringify(result)).not.toContain(secret);
+  });
+
+  it('redacts credential paths from malformed gateway URL errors', async () => {
+    const secret = 'auth-supersecretvalue123';
+    vi.mocked(fetchWithRetries).mockRejectedValue(
+      new TypeError('Invalid URL https://[bad]/' + secret),
+    );
+    const result = await provider({
+      apiBaseUrl: 'https://[bad]/' + secret,
+    }).callApi('hi');
+    expect(result.error).not.toContain(secret);
   });
 
   it('redacts the decoded parts of a configured Basic authorization header', async () => {
@@ -1640,6 +1662,14 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(requests.findIndex((request) => request.method === 'DELETE')).toBeGreaterThan(
       lastSessionRead,
     );
+  });
+
+  it('uses the configured service tier when the final session omits it', async () => {
+    const standard = await provider().callApi('hi');
+    const priority = await provider({
+      agent: { model: 'gpt-6-astra', service_tier: 'priority' },
+    }).callApi('hi');
+    expect(priority.cost).toBeCloseTo(standard.cost! * 2);
   });
 
   it('keeps a successful answer when final usage stays unavailable', async () => {
