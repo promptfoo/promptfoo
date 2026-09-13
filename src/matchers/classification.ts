@@ -31,13 +31,14 @@ export async function matchesClassification(
   if (!resp.classification) {
     return graderFail(resp.error || 'Unknown error fetching classification');
   }
+  const scores = Object.values(resp.classification);
+  if (scores.length === 0) {
+    // No scores means there is no verdict, even when a specific label was requested.
+    return graderFail('No classification scores returned');
+  }
+
   let score: number;
   if (expected === undefined) {
-    const scores = Object.values(resp.classification);
-    if (scores.length === 0) {
-      // A grader that returns no scores gave us nothing to invert on either.
-      return graderFail('No classification scores returned');
-    }
     score = Math.max(...scores);
   } else {
     score = resp.classification[expected] || 0;
