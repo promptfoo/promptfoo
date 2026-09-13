@@ -178,7 +178,14 @@ async function runAsync(
 }
 
 function runNpm(args: string[], cwd: string, envOverrides: NodeJS.ProcessEnv = {}): string {
-  return run(process.platform === 'win32' ? 'npm.cmd' : 'npm', args, cwd, envOverrides);
+  return run(
+    process.platform === 'win32' ? process.execPath : 'npm',
+    process.platform === 'win32'
+      ? [createRequire(import.meta.url).resolve('npm/bin/npm-cli.js'), ...args]
+      : args,
+    cwd,
+    envOverrides,
+  );
 }
 
 function assertPackagedFiles(packResult: PackResult): void {

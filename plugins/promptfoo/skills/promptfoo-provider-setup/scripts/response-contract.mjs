@@ -17,6 +17,9 @@ function typeCheck(schema, resolveRef, seen = new Set()) {
     return 'true';
   }
   const resolved = resolveRef(schema);
+  if (resolved === false) {
+    return 'false';
+  }
   if (seen.has(resolved)) {
     return 'true';
   }

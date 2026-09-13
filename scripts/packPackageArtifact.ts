@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 interface PackResult {
@@ -26,8 +27,17 @@ function main(): void {
   const artifactDirectory = path.resolve(ROOT, destination);
   fs.mkdirSync(artifactDirectory, { recursive: true });
   const output = execFileSync(
-    process.platform === 'win32' ? 'npm.cmd' : 'npm',
-    ['pack', '--ignore-scripts', '--json', '--pack-destination', artifactDirectory],
+    process.platform === 'win32' ? process.execPath : 'npm',
+    [
+      ...(process.platform === 'win32'
+        ? [createRequire(import.meta.url).resolve('npm/bin/npm-cli.js')]
+        : []),
+      'pack',
+      '--ignore-scripts',
+      '--json',
+      '--pack-destination',
+      artifactDirectory,
+    ],
     {
       cwd: ROOT,
       encoding: 'utf8',

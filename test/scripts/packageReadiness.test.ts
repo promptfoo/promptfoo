@@ -289,26 +289,27 @@ describe('package artifact readiness', () => {
 
   it('scans extensionless JavaScript and rejects undeclared runtime externals', () => {
     write('package.json', JSON.stringify({ dependencies: {} }));
-    write('dist/index.cjs', "require('./loader');");
+    write('dist/index.cjs', "require('./loader'); require('./loader.txt');");
     write('dist/loader', "require('yaml');");
+    write('dist/loader.txt', "require('zod');");
 
     expect(computePackageArtifactClosure(packageRoot, 'dist/index.cjs')).toMatchObject({
-      files: ['dist/index.cjs', 'dist/loader'],
-      externalDependencies: ['yaml'],
+      files: ['dist/index.cjs', 'dist/loader', 'dist/loader.txt'],
+      externalDependencies: ['yaml', 'zod'],
     });
     const report = computePackageArtifactReadinessReport(packageRoot, [
       {
         name: 'fixture',
         entrypoint: 'src/index.ts',
         artifacts: { cjs: 'dist/index.cjs' },
-        allowedExternal: ['yaml'],
+        allowedExternal: ['yaml', 'zod'],
         allowedBuiltins: [],
         maxSourceFiles: 1,
-        maxArtifactFiles: 2,
+        maxArtifactFiles: 3,
         maxArtifactBytes: 100,
       },
     ]);
-    expect(report.violations).toContain('fixture/cjs: undeclared external dependencies: yaml');
+    expect(report.violations).toContain('fixture/cjs: undeclared external dependencies: yaml, zod');
 
     write('package.json', JSON.stringify({ optionalDependencies: { yaml: '^2.0.0' } }));
     expect(
@@ -317,10 +318,10 @@ describe('package artifact readiness', () => {
           name: 'fixture',
           entrypoint: 'src/index.ts',
           artifacts: { cjs: 'dist/index.cjs' },
-          allowedExternal: ['yaml'],
+          allowedExternal: ['yaml', 'zod'],
           allowedBuiltins: [],
           maxSourceFiles: 1,
-          maxArtifactFiles: 2,
+          maxArtifactFiles: 3,
           maxArtifactBytes: 100,
         },
       ]).violations,
@@ -346,20 +347,23 @@ describe('package artifact readiness', () => {
       JSON.stringify({
         name: 'fixture',
         exports: { './other': { import: { default: './dist/other.js' } } },
+        imports: { '#internal': './dist/internal.js' },
       }),
     );
     write(
       'dist/index.js',
-      "import 'fixture/other'; void import('./bad.json'); void import('./ok.json', { with: { type: 'json' } });",
+      "import 'fixture/other'; import '#internal'; void import('./bad.json'); void import('./ok.json', { with: { type: 'json' } }); void import('./addon.node');",
     );
     write('dist/other.js', "import 'yaml';");
+    write('dist/internal.js', "import 'zod';");
     write('dist/bad.json', '{}');
     write('dist/ok.json', '{}');
+    write('dist/addon.node', 'binary');
 
     expect(computePackageArtifactClosure(packageRoot, 'dist/index.js')).toMatchObject({
-      files: ['dist/index.js', 'dist/ok.json', 'dist/other.js'],
-      externalDependencies: ['yaml'],
-      unsupportedPackageImports: ['dist/index.js: ./bad.json'],
+      files: ['dist/index.js', 'dist/internal.js', 'dist/ok.json', 'dist/other.js'],
+      externalDependencies: ['yaml', 'zod'],
+      unsupportedPackageImports: ['dist/index.js: ./addon.node', 'dist/index.js: ./bad.json'],
     });
   });
 

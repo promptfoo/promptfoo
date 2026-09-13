@@ -32,6 +32,8 @@ describe('extractModuleSpecifiers', () => {
       export { exported } from 'esm-export';
       import('dynamic-import');
       import('dynamic-import-with-options', { with: { type: 'json' } });
+      import data from './data.json' with { type: 'json' };
+      import.meta.resolve('resolved-package');
       const required = require('cjs-require');
       const resolved = require.resolve('cjs-resolve');
       const resolvedWithPaths = require.resolve('cjs-resolve-with-paths', { paths: [] });
@@ -47,6 +49,8 @@ describe('extractModuleSpecifiers', () => {
       'esm-export',
       'dynamic-import',
       'dynamic-import-with-options',
+      './data.json',
+      'resolved-package',
       'cjs-require',
       'cjs-resolve',
       'cjs-resolve-with-paths',
@@ -157,13 +161,18 @@ describe('extractRuntimeModuleSpecifiers', () => {
     const source = `
       const { createRequire: makeRequire } = require('module');
       const load = makeRequire(import.meta.url);
+      const factory = require('module').createRequire;
+      const memberLoad = factory(import.meta.url);
       load('yaml');
+      memberLoad('zod');
       process.getBuiltinModule('node:fs');
     `;
 
     expect(extractRuntimeModuleSpecifiers(source, 'fixture.ts')).toEqual([
       'module',
+      'module',
       'yaml',
+      'zod',
       'node:fs',
     ]);
   });
@@ -196,6 +205,7 @@ describe('computeRuntimeDependencyClosure', () => {
         export const later = () => load('yaml');
         const load = require;
         void import('./lazy');
+        void import('./helper.js');
       `,
     );
     write(
@@ -207,12 +217,13 @@ describe('computeRuntimeDependencyClosure', () => {
       `,
     );
     write('src/lazy.ts', "export { value } from 'external-runtime';");
+    write('src/helper.js', "require('js-runtime');");
     write('src/types.ts', 'export interface TypeOnly { value: string }');
 
     expect(computeRuntimeDependencyClosure(repoRoot, 'src/index.ts')).toEqual({
       entrypoint: 'src/index.ts',
-      files: ['src/index.ts', 'src/lazy.ts', 'src/runtime.ts'],
-      externalDependencies: ['@scope/runtime', 'external-runtime', 'yaml'],
+      files: ['src/helper.js', 'src/index.ts', 'src/lazy.ts', 'src/runtime.ts'],
+      externalDependencies: ['@scope/runtime', 'external-runtime', 'js-runtime', 'yaml'],
       nodeBuiltins: ['fs'],
       unresolvedInternalImports: [],
     });

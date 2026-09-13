@@ -48,6 +48,7 @@ export interface LayerConfig {
 }
 
 const TYPESCRIPT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts'];
+const EXECUTABLE_SOURCE_EXTENSIONS = [...TYPESCRIPT_EXTENSIONS, '.js', '.mjs', '.cjs'];
 const DIRECTORY_INDEXES = TYPESCRIPT_EXTENSIONS.map((extension) => `index${extension}`);
 const SOURCE_EXTENSIONS_BY_RUNTIME_EXTENSION: Record<string, string[]> = {
   '.js': ['.ts', '.tsx'],
@@ -308,6 +309,15 @@ function isRuntimeLoader(node: Node, aliases: Set<string>): boolean {
   );
 }
 
+function isImportMetaResolve(node: Node): boolean {
+  return (
+    node.type === 'MemberExpression' &&
+    getMemberName(node) === 'resolve' &&
+    node.object.type === 'MetaProperty' &&
+    node.object.meta.name === 'import'
+  );
+}
+
 export interface RuntimeModuleReference {
   specifier: string;
   kind: 'import' | 'require';
@@ -368,6 +378,17 @@ function extractModuleReferences(
     VariableDeclarator(node) {
       if (node.id.type === 'Identifier' && node.init) {
         declarations.push({ name: node.id.name, init: node.init });
+        if (
+          node.init.type === 'MemberExpression' &&
+          getMemberName(node.init) === 'createRequire' &&
+          node.init.object.type === 'CallExpression' &&
+          isRuntimeLoader(node.init.object.callee, aliases) &&
+          ['node:module', 'module'].includes(
+            getStaticModuleSpecifier(node.init.object.arguments[0]) ?? '',
+          )
+        ) {
+          createRequireFactories.add(node.id.name);
+        }
       } else if (
         node.id.type === 'ObjectPattern' &&
         node.init?.type === 'CallExpression' &&
@@ -423,7 +444,20 @@ function extractModuleReferences(
                 specifier.type !== 'ImportSpecifier' || specifier.importKind !== 'type',
             )))
       ) {
-        add(node.source, 'import');
+        const specifier = getStaticModuleSpecifier(node.source);
+        if (specifier !== undefined) {
+          references.push({
+            specifier,
+            kind: 'import',
+            hasJsonAttribute: node.attributes.some(
+              (attribute) =>
+                attribute.key.type === 'Identifier' &&
+                attribute.key.name === 'type' &&
+                attribute.value.type === 'Literal' &&
+                attribute.value.value === 'json',
+            ),
+          });
+        }
       }
     },
     ExportAllDeclaration(node) {
@@ -465,8 +499,8 @@ function extractModuleReferences(
       }
     },
     CallExpression(node) {
-      if (isRuntimeLoader(node.callee, aliases)) {
-        add(node.arguments[0], 'require');
+      if (isRuntimeLoader(node.callee, aliases) || isImportMetaResolve(node.callee)) {
+        add(node.arguments[0], isImportMetaResolve(node.callee) ? 'import' : 'require');
       }
     },
   }).visit(program);
@@ -661,7 +695,7 @@ export function computeRuntimeDependencyClosure(
     }
     files.add(importer);
 
-    if (!TYPESCRIPT_EXTENSIONS.includes(path.extname(importer))) {
+    if (!EXECUTABLE_SOURCE_EXTENSIONS.includes(path.extname(importer))) {
       continue;
     }
 

@@ -102,6 +102,13 @@ jobs:
           path: ${{ steps.package-artifact.outputs.tarball }}
           if-no-files-found: error
           retention-days: 7
+      - name: Upload package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: promptfoo-npm-backfill-package
+          path: ${{ steps.package-artifact.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
       - name: Test package artifact
         if: needs.release-please.outputs.release_created == 'true'
         env:
@@ -222,13 +229,6 @@ jobs:
             fi
             PROMPTFOO_CONFIG_DIR="$RUNNER_TEMP/promptfoo-backfill-config" PROMPTFOO_DISABLE_TELEMETRY=1 PROMPTFOO_DISABLE_UPDATE=true node "$consumer_dir/node_modules/promptfoo/dist/src/entrypoint.js" --version
           fi
-      - name: Upload package artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: promptfoo-npm-backfill-package
-          path: ${{ steps.package-artifact.outputs.tarball }}
-          if-no-files-found: error
-          retention-days: 7
 
   publish-npm-backfill:
     # npm trusted publishing is bound to this workflow filename on npmjs.com,

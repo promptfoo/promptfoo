@@ -448,15 +448,18 @@ function resolvePackageSelfReference(
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
     name?: string;
     exports?: Record<string, unknown>;
+    imports?: Record<string, unknown>;
   };
-  if (
-    !manifest.name ||
-    (specifier !== manifest.name && !specifier.startsWith(`${manifest.name}/`))
-  ) {
+  const packageExport = specifier.startsWith('#')
+    ? manifest.imports?.[specifier]
+    : manifest.name && (specifier === manifest.name || specifier.startsWith(`${manifest.name}/`))
+      ? manifest.exports?.[
+          specifier === manifest.name ? '.' : `.${specifier.slice(manifest.name.length)}`
+        ]
+      : null;
+  if (packageExport === null) {
     return null;
   }
-  const exportKey = specifier === manifest.name ? '.' : `.${specifier.slice(manifest.name.length)}`;
-  const packageExport = manifest.exports?.[exportKey];
   const conditional =
     packageExport && typeof packageExport === 'object'
       ? (packageExport as Record<string, unknown>)[kind === 'import' ? 'import' : 'require']
@@ -484,7 +487,11 @@ function addArtifactSpecifier(
     return;
   }
   if (resolvedArtifact?.relativePath) {
-    if (kind === 'import' && resolvedArtifact.relativePath.endsWith('.json') && !hasJsonAttribute) {
+    if (
+      kind === 'import' &&
+      (resolvedArtifact.relativePath.endsWith('.node') ||
+        (resolvedArtifact.relativePath.endsWith('.json') && !hasJsonAttribute))
+    ) {
       state.unsupportedPackageImports.add(`${artifactPath}: ${specifier}`);
       return;
     }
@@ -496,6 +503,13 @@ function addArtifactSpecifier(
   const selfReference = resolvePackageSelfReference(packageRoot, specifier, kind);
   if (selfReference !== null) {
     if (selfReference) {
+      if (
+        kind === 'import' &&
+        (selfReference.endsWith('.node') || (selfReference.endsWith('.json') && !hasJsonAttribute))
+      ) {
+        state.unsupportedPackageImports.add(`${artifactPath}: ${specifier}`);
+        return;
+      }
       state.pending.push(selfReference);
     } else {
       state.unsupportedPackageImports.add(`${artifactPath}: ${specifier}`);
@@ -505,10 +519,6 @@ function addArtifactSpecifier(
   const builtinName = getNodeBuiltinName(specifier);
   if (builtinName) {
     state.nodeBuiltins.add(builtinName);
-    return;
-  }
-  if (specifier.startsWith('#')) {
-    state.unsupportedPackageImports.add(`${artifactPath}: ${specifier}`);
     return;
   }
   const packageName = getPackageName(specifier);
@@ -564,7 +574,7 @@ export function computePackageArtifactClosure(
     files.add(artifactPath);
     const contents = fs.readFileSync(absolutePath);
     totalBytes += contents.length;
-    if (!/\.(?:(?:c|m)?(?:js|ts)|jsx)$/.test(artifactPath) && path.extname(artifactPath) !== '') {
+    if (['.json', '.node', '.wasm'].includes(path.extname(artifactPath))) {
       continue;
     }
 
