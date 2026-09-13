@@ -185,15 +185,28 @@ function normalizeJavascriptAssertionResult(
   }
 
   const pass = result.pass !== inverse;
+  // When the assertion is inverted (not-javascript) and the inversion changed
+  // the outcome, preserve the custom reason from the GradingResult verbatim.
+  // The user wrote the reason as explanatory prose — mechanically prefixing it
+  // (e.g. "NOT: …") can make it read as the opposite of what it describes.
+  // Keeping it verbatim lets the user craft their own negation-aware message.
+  // Use ?? (not ||) so that an explicit empty-string reason is also preserved.
+  let reason: string;
+  if (pass === result.pass) {
+    // Inversion did not change the outcome — keep the original reason as-is.
+    reason = result.reason;
+  } else if (pass) {
+    // Inversion turned a function-fail into a test-pass: assertion succeeded.
+    reason = result.reason ?? 'Assertion passed';
+  } else {
+    // Inversion turned a function-pass into a test-fail: surface the original
+    // reason verbatim so the user sees the custom message they provided.
+    reason = result.reason ?? `Custom function returned ${result.pass ? 'true' : 'false'}`;
+  }
   return {
     ...result,
     pass,
-    reason:
-      pass === result.pass
-        ? result.reason
-        : pass
-          ? 'Assertion passed'
-          : `Custom function returned ${result.pass ? 'true' : 'false'}`,
+    reason,
     assertion: normalizeResultAssertion(result.assertion, assertion),
   };
 }
