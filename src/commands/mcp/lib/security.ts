@@ -1,10 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
 
 import { parse as parseCsv } from 'csv-parse/sync';
 import { globSync } from 'glob';
 import { testCaseFromCsvRow } from '../../../csv';
+import { normalizeFilePath } from '../../../providers/httpMultipart';
 import { parseScriptParts } from '../../../providers/scriptCompletion';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../../../util/config/extensions';
 import { isProviderConfigFileReference, normalizeProviderRef } from '../../../util/providerRef';
@@ -277,7 +277,7 @@ function renderConfigFileReferenceForValidation(value: string, state: ProviderVa
 
 function validateConfigFileReference(value: string, state: ProviderValidationState): void {
   const rendered = renderConfigFileReferenceForValidation(value, state);
-  const withoutProtocol = stripFileUrlForValidation(rendered);
+  const withoutProtocol = normalizeFilePath(rendered);
   const filePath = stripConfigFileExport(withoutProtocol);
   const matches = globSync(filePath, {
     absolute: true,
@@ -292,21 +292,10 @@ function validateConfigFileReference(value: string, state: ProviderValidationSta
 
 function resolveConfigFileReference(value: string, state: ProviderValidationState): string {
   const rendered = renderConfigFileReferenceForValidation(value, state);
-  const withoutProtocol = stripFileUrlForValidation(rendered);
+  const withoutProtocol = normalizeFilePath(rendered);
   const filePath = stripConfigFileExport(withoutProtocol);
   validateStateFilePath(filePath, state);
   return path.resolve(state.basePath, filePath);
-}
-
-function stripFileUrlForValidation(value: string): string {
-  if (!value.startsWith(FILE_PROVIDER_PREFIX)) {
-    return value;
-  }
-  // Preserve Promptfoo's relative file://config.yaml convention, while matching
-  // the runtime's absolute normalization for the standard localhost authority.
-  return /^file:\/\/localhost(?:\/|$)/i.test(value)
-    ? fileURLToPath(value)
-    : value.slice(FILE_PROVIDER_PREFIX.length);
 }
 
 function validateJsonSchemaRef(
