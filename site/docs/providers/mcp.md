@@ -60,7 +60,7 @@ providers:
 Promptfoo's own environment, so the server process inherits everything Promptfoo was started
 with and a per-server entry wins on conflict.
 
-Relative `server.path` values resolve from the configuration directory, including when evaluations overlap or reuse a provider.
+Relative `server.path` values resolve from the configuration directory, including when JavaScript configs export preconstructed providers or evaluations overlap and reuse a provider. An explicit provider `basePath` takes precedence.
 
 Keep secrets out of the config file. `{{ env.VAR }}` placeholders are resolved from the
 environment when the provider loads, so the config stays committable while the credential comes

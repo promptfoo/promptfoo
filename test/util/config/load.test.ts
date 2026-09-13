@@ -2244,6 +2244,24 @@ describe('readConfig', () => {
     expect(importModule).toHaveBeenCalledWith('config.js');
   });
 
+  it('binds preconstructed providers to their containing JavaScript config', async () => {
+    const providers = new Map<string, ReturnType<typeof createMockProvider>>();
+    vi.mocked(importModule).mockImplementation(async (configPath) => {
+      const provider = createMockProvider();
+      provider.setConfigBasePath = vi.fn();
+      providers.set(String(configPath), provider);
+      await Promise.resolve();
+      return { providers: [provider], prompts: ['hello'] };
+    });
+    const configs = ['/first/config.mjs', '/second/config.mjs'];
+    const loaded = await Promise.all(configs.map((configPath) => readConfig(configPath)));
+    for (const [index, configPath] of configs.entries()) {
+      const provider = providers.get(configPath)!;
+      expect(provider.setConfigBasePath).toHaveBeenCalledWith(path.dirname(configPath));
+      expect((loaded[index].providers as unknown[])[0]).toBe(provider);
+    }
+  });
+
   it('should throw error for unsupported file format', async () => {
     vi.mocked(path.parse).mockReturnValue({ ext: '.txt' } as unknown as path.ParsedPath);
 

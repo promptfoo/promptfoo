@@ -739,6 +739,52 @@ describe('defaultTest normalization for extensions', () => {
     }
   });
 
+  it.each(['insert', 'remove'])(
+    'preserves selected scenario conversations when a serialized hook edits and %s rows',
+    async (operation) => {
+      vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {
+        if (hookName !== 'beforeAll') {
+          return context;
+        }
+        const suite = (context as { suite: TestSuite }).suite;
+        const tests = JSON.parse(JSON.stringify(suite.tests)) as TestSuite['tests'];
+        for (const test of tests!) {
+          test.vars = { ...test.vars, edited: true };
+        }
+        if (operation === 'insert') {
+          tests!.unshift({ vars: { turn: 'inserted' } });
+        } else {
+          tests!.pop();
+        }
+        tests!.reverse();
+        return { ...context, suite: { ...suite, tests } };
+      });
+      const suite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [{ raw: '{{turn}}', label: 'test' }],
+        scenarios: [
+          {
+            config: [{ vars: { region: 'west' } }, { vars: { region: 'east' } }],
+            tests: [{ vars: { turn: 'first' } }, { vars: { turn: 'second' } }],
+          },
+        ],
+        extensions: ['file://test-extension.js'],
+      };
+      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, evalRecord, { maxConcurrency: 1, testCaseIndices: [0, 1, 2, 3] });
+      const { results } = await evalRecord.toEvaluateSummary();
+      const scenarioRows = results.filter((result) => result.vars.region);
+      expect(scenarioRows).toHaveLength(operation === 'insert' ? 4 : 3);
+      for (const row of scenarioRows) {
+        expect(row.vars.edited).toBe(true);
+        expect(row.testCase.metadata?.conversationId).toBe(
+          row.vars.region === 'west' ? '__scenario_0__' : '__scenario_1__',
+        );
+      }
+      expect(JSON.stringify(results)).not.toContain('__promptfoo_deferred_scenario_index');
+    },
+  );
+
   it('preserves requested test case index order and duplicates', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

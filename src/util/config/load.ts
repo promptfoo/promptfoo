@@ -336,7 +336,14 @@ function renderConfigEnvTemplatesInScope<T extends { env?: Record<string, string
 }
 
 export async function readConfig(configPath: string): Promise<UnifiedConfig> {
-  return cliState.withEnv(undefined, () => readConfigInScope(configPath));
+  const config = await cliState.withEnv(undefined, () => readConfigInScope(configPath));
+  const providers = Array.isArray(config.providers) ? config.providers : [config.providers];
+  for (const provider of providers) {
+    if (isApiProvider(provider)) {
+      provider.setConfigBasePath?.(path.dirname(path.resolve(configPath)));
+    }
+  }
+  return config;
 }
 
 async function readConfigInScope(configPath: string): Promise<UnifiedConfig> {

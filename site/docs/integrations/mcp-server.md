@@ -134,7 +134,7 @@ The AI will use these tools in sequence:
 2. `list_evaluations` - Show recent runs
 3. `run_evaluation` - Execute with test case filtering, such as `{"start": 0, "end": 5}` for the first five zero-based test indices
 
-Test case indices address logical tests after scenario expansion: explicit tests first; then, for each scenario, config rows in declaration order with test templates iterated within each row. Variable combinations, prompts, providers, and repeats do not add indices. Reusing a suite does not append duplicate scenario rows. Each `run_evaluation` call keeps its concurrency setting isolated from overlapping calls.
+Test case indices address logical tests after scenario expansion: explicit tests first; then, for each scenario, config rows in declaration order with test templates iterated within each row. Variable combinations, prompts, providers, and repeats do not add indices. Reusing a suite does not append duplicate scenario rows. Selected scenario rows retain their conversation grouping when extension hooks serialize, edit, reorder, add, or remove tests. Each `run_evaluation` call keeps its concurrency setting isolated from overlapping calls.
 
 Environment files configured through `commandLineOptions.envPath` are also isolated per call, including built-in providers, subprocess providers, executable prompts, and callbacks. Suite environment settings override file defaults. Loading a file does not change the server process environment or copy its values into the saved configuration’s `env` settings.
 

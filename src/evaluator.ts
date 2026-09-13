@@ -2451,11 +2451,7 @@ export function getTestCasesForSelection(testSuite: TestSuite): AtomicTestCase[]
   return buildTestsFromSuite(testSuite, { includeDefaultTest: false });
 }
 
-function stableSerializeSelection(
-  value: unknown,
-  seen = new WeakSet<object>(),
-  sortKeys = false,
-): string {
+function stableSerializeSelection(value: unknown, seen = new WeakSet<object>()): string {
   if (value === undefined) {
     return 'undefined';
   }
@@ -2481,7 +2477,7 @@ function stableSerializeSelection(
 
   try {
     if (Array.isArray(value)) {
-      return `[${value.map((item) => stableSerializeSelection(item, seen, sortKeys)).join(',')}]`;
+      return `[${value.map((item) => stableSerializeSelection(item, seen)).join(',')}]`;
     }
     if (value instanceof Date) {
       return JSON.stringify(value.toISOString());
@@ -2489,13 +2485,8 @@ function stableSerializeSelection(
 
     const record = value as Record<string, unknown>;
     const keys = Object.keys(record);
-    if (sortKeys) {
-      keys.sort();
-    }
     return `{${keys
-      .map(
-        (key) => `${JSON.stringify(key)}:${stableSerializeSelection(record[key], seen, sortKeys)}`,
-      )
+      .map((key) => `${JSON.stringify(key)}:${stableSerializeSelection(record[key], seen)}`)
       .join(',')}}`;
   } finally {
     seen.delete(value);
@@ -2657,18 +2648,6 @@ function getTestCaseFingerprint(
       : undefined;
   return createHash('sha256')
     .update(stableSerializeSelection(defaults ? { test, defaults } : test))
-    .digest('hex');
-}
-
-function getTestCaseProvenanceFingerprint(testCase: unknown, basePath: string): string {
-  return createHash('sha256')
-    .update(
-      stableSerializeSelection(
-        canonicalizeSelectionFingerprintValue(testCase, basePath),
-        new WeakSet<object>(),
-        true,
-      ),
-    )
     .digest('hex');
 }
 
@@ -2850,25 +2829,21 @@ function mergeScenarioTest(
 }
 
 function cloneSelectedTestCase(testCase: AtomicTestCase): AtomicTestCase {
-  const cloned = { ...testCase } as DeferredScenarioTest;
   const scenarioIndex = (testCase as DeferredScenarioTest)[DEFERRED_SCENARIO_INDEX];
-  if (scenarioIndex !== undefined) {
-    Object.defineProperty(cloned, DEFERRED_SCENARIO_INDEX, {
-      configurable: true,
-      enumerable: false,
-      value: scenarioIndex,
-    });
-  }
-  return cloned;
+  return {
+    ...testCase,
+    // Extension hooks can serialize, edit, reorder, and insert rows. Keep their scenario
+    // identity independent of contents and remove it after applying deferred defaults.
+    ...(scenarioIndex !== undefined && { [DEFERRED_SCENARIO_INDEX]: scenarioIndex }),
+  };
 }
 
 function applyDeferredScenarioDefaults(
   testSuite: TestSuite,
   testCase: AtomicTestCase,
-  fallbackScenarioIndex?: number,
 ): AtomicTestCase {
   const deferredTest = testCase as DeferredScenarioTest;
-  const scenarioIndex = deferredTest[DEFERRED_SCENARIO_INDEX] ?? fallbackScenarioIndex;
+  const scenarioIndex = deferredTest[DEFERRED_SCENARIO_INDEX];
   if (scenarioIndex === undefined) {
     return testCase;
   }
@@ -5274,8 +5249,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
 
     ensureDefaultTestForExtensions(testSuite);
     const hasTestCaseSelection = options.testCaseSelection !== undefined;
-    let deferredScenarioIndicesByFingerprint: Map<string, number[]> | undefined;
-    let deferredScenarioIndicesByPosition: Array<number | undefined> | undefined;
     if (options.testCaseIndices || hasTestCaseSelection) {
       const unresolvedTests = getTestCasesForSelection(testSuite);
       const selectedTestCaseIndices = hasTestCaseSelection
@@ -5295,20 +5268,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const selectedTests = selectedTestCaseIndices.map((index) =>
         cloneSelectedTestCase(unresolvedTests[index]),
       );
-      deferredScenarioIndicesByFingerprint = new Map<string, number[]>();
-      deferredScenarioIndicesByPosition = selectedTests.map((testCase) => {
-        const scenarioIndex = (testCase as DeferredScenarioTest)[DEFERRED_SCENARIO_INDEX];
-        if (scenarioIndex !== undefined) {
-          const fingerprint = getTestCaseProvenanceFingerprint(
-            testCase,
-            options.configBasePath ?? '.',
-          );
-          const scenarioIndices = deferredScenarioIndicesByFingerprint!.get(fingerprint) ?? [];
-          scenarioIndices.push(scenarioIndex);
-          deferredScenarioIndicesByFingerprint!.set(fingerprint, scenarioIndices);
-        }
-        return scenarioIndex;
-      });
       testSuite = {
         ...testSuite,
         tests: selectedTests,
@@ -5320,29 +5279,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     });
     testSuite = beforeAllOut.suite;
     if ((options.testCaseIndices || hasTestCaseSelection) && testSuite.tests) {
-      const fallbackIndices = new Map(
-        [...(deferredScenarioIndicesByFingerprint?.entries() ?? [])].map(
-          ([fingerprint, indices]) => [fingerprint, [...indices]],
-        ),
-      );
-      const canUsePositionFallback =
-        deferredScenarioIndicesByPosition?.length === testSuite.tests.length;
       testSuite = {
         ...testSuite,
-        tests: testSuite.tests.map((testCase, index) => {
-          const atomicTestCase = testCase as AtomicTestCase;
-          const hasDirectProvenance =
-            (atomicTestCase as DeferredScenarioTest)[DEFERRED_SCENARIO_INDEX] !== undefined;
-          const fingerprint = getTestCaseProvenanceFingerprint(
-            atomicTestCase,
-            options.configBasePath ?? '.',
-          );
-          const fallbackScenarioIndex = hasDirectProvenance
-            ? undefined
-            : (fallbackIndices.get(fingerprint)?.shift() ??
-              (canUsePositionFallback ? deferredScenarioIndicesByPosition?.[index] : undefined));
-          return applyDeferredScenarioDefaults(testSuite, atomicTestCase, fallbackScenarioIndex);
-        }),
+        tests: testSuite.tests.map((testCase) =>
+          applyDeferredScenarioDefaults(testSuite, testCase as AtomicTestCase),
+        ),
       };
     }
 

@@ -22,6 +22,7 @@ export class MCPProvider implements ApiProvider {
   private mcpClient?: MCPClient;
   config: MCPConfig;
   private readonly basePath: string;
+  private configBasePath?: string;
   private defaultArgs?: Record<string, unknown>;
   private initializationPromise?: Promise<MCPClient>;
   private transformResponse: Promise<
@@ -43,6 +44,10 @@ export class MCPProvider implements ApiProvider {
     }
   }
 
+  setConfigBasePath(basePath: string): void {
+    this.configBasePath ??= getTransformBasePath(this.config.basePath ?? basePath);
+  }
+
   id(): string {
     return 'mcp';
   }
@@ -52,11 +57,12 @@ export class MCPProvider implements ApiProvider {
   }
 
   private async initialize(): Promise<MCPClient> {
-    const client = new MCPClient({ ...this.config, basePath: this.basePath });
+    const basePath = this.configBasePath ?? this.basePath;
+    const client = new MCPClient({ ...this.config, basePath });
     this.mcpClient = client;
     this.transformResponse = loadTransformModule(
       this.config.transformResponse || this.config.responseParser,
-      this.basePath,
+      basePath,
     ).then(createTransformResponse);
     await Promise.all([client.initialize(), this.transformResponse]);
 

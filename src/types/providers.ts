@@ -123,6 +123,8 @@ export interface CallApiOptionsParams {
 }
 
 export interface ApiProvider extends MinimalApiProvider {
+  /** Bind the containing config directory before lazy provider initialization. */
+  setConfigBasePath?: (basePath: string) => void;
   callApi: CallApiFunction;
   callClassificationApi?: (prompt: string) => Promise<ProviderClassificationResponse>;
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;

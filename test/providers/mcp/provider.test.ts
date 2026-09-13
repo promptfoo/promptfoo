@@ -48,6 +48,26 @@ describe('MCPProvider', () => {
     expect(MCPClient).toHaveBeenCalledWith({ ...provider.config, basePath: expect.any(String) });
   });
 
+  it('binds a preconstructed provider before initialization and retains its directory on reuse', async () => {
+    const provider = new MCPProvider({ config: { enabled: true, server: { path: 'server.js' } } });
+    provider.setConfigBasePath('/config/first');
+    await provider.getAvailableTools();
+    await provider.cleanup();
+    provider.setConfigBasePath('/config/second');
+    await provider.getAvailableTools();
+    expect(MCPClient).toHaveBeenCalledTimes(2);
+    for (const [config] of vi.mocked(MCPClient).mock.calls) {
+      expect(config.basePath).toBe('/config/first');
+    }
+  });
+
+  it('preserves an explicit provider basePath when binding a config directory', async () => {
+    const provider = new MCPProvider({ config: { enabled: true, basePath: '/explicit' } });
+    provider.setConfigBasePath('/config');
+    await provider.getAvailableTools();
+    expect(MCPClient).toHaveBeenCalledWith(expect.objectContaining({ basePath: '/explicit' }));
+  });
+
   it('loads the response transform from the current configuration', async () => {
     const provider = new MCPProvider({ config: { enabled: true } });
     provider.config = { enabled: true, responseParser: 'content.toUpperCase()' };
