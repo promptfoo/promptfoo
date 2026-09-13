@@ -307,6 +307,12 @@ describe('MCP Security', () => {
           'file://provider.yaml',
         ),
       ).toThrow(ConfigurationError);
+      expect(() =>
+        validateMcpProviderPrompt(
+          { id: 'openai:codex-sdk' },
+          JSON.stringify([{ type: 'local_image', path: path.join(root, 'outside.png') }]),
+        ),
+      ).toThrow(ConfigurationError);
     });
 
     it('contains provider executable and codex-security paths', () => {
@@ -788,6 +794,12 @@ describe('MCP Security', () => {
         { id: 'openinterpreter', config: { interpreter_home: outside } },
         { id: 'anthropic:claude-agent-sdk', config: { plugins: [{ path: outside }] } },
         { id: 'openai:codex-app-server', config: { cli_env: { PATH: outside } } },
+        { id: 'anthropic:claude-agent-sdk', config: { env: { NODE_OPTIONS: outside } } },
+        { id: 'anthropic:claude-agent-sdk', config: { executable_args: ['--require', outside] } },
+        { id: 'python:script.py', config: { pythonExecutable: outside } },
+        { id: 'ruby:script.rb', config: { rubyExecutable: outside } },
+        { id: 'golang:script.go', config: { goExecutable: outside } },
+        { id: 'http://localhost:8080', config: { url: '{{ env.OPENAI_API_KEY }}' } },
       ]) {
         expect(() => validateProviderReference(provider)).toThrow(ConfigurationError);
       }
@@ -832,8 +844,33 @@ describe('MCP Security', () => {
         fs.writeFileSync(
           path.join(workspace, 'config.json'),
           JSON.stringify({
-            prompts: [{ raw: 'hello', config: { working_dir: outside } }],
+            prompts: [
+              {
+                raw: 'hello',
+                config: {
+                  working_dir: outside,
+                  functionToolStatefulApi: { file: outside + '.py' },
+                },
+              },
+            ],
             providers: ['openai:codex-sdk'],
+          }),
+        );
+        expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);
+        fs.writeFileSync(
+          path.join(workspace, 'config.json'),
+          JSON.stringify({
+            prompts: [{ raw: 'hello', config: { functionToolStatefulApi: { file: outside } } }],
+            providers: ['echo'],
+          }),
+        );
+        expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);
+        fs.writeFileSync(
+          path.join(workspace, 'config.json'),
+          JSON.stringify({
+            prompts: ['hello'],
+            providers: [{ $ref: '#/defs/provider' }],
+            defs: { provider: { id: 'exec:node ../outside.js' } },
           }),
         );
         expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);
@@ -919,6 +956,19 @@ describe('MCP Security', () => {
             prompts: ['{{audioFile}}'],
             providers: ['echo'],
             tests: [{ vars: 'vars.yaml' }],
+          }),
+        );
+        expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);
+        fs.writeFileSync(
+          path.join(workspace, 'vars.json'),
+          '{"audio":{"audioFile":"/tmp/outside.wav"}}',
+        );
+        fs.writeFileSync(
+          path.join(workspace, 'config.json'),
+          JSON.stringify({
+            prompts: ['{{audioFile}}'],
+            providers: ['echo'],
+            tests: [{ vars: { $ref: './vars.json#/audio' } }],
           }),
         );
         expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);

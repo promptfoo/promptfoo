@@ -333,7 +333,11 @@ function validateJsonSchemaRef(
     const target = resolveJsonPointer(state.rootConfig, renderedRef);
     if (target !== undefined) {
       if (providerConfigContext) {
-        validateProviderConfigForId(providerIdContext ?? '', getObject(target), state);
+        if (providerIdContext) {
+          validateProviderConfigForId(providerIdContext, getObject(target), state);
+        } else {
+          validateProviderReferenceWithState(target, state);
+        }
       } else {
         validateFileReferencesInValue(target, state, assertionContext, false, varsContext);
         if (varsContext) {
@@ -358,10 +362,26 @@ function validateJsonSchemaRef(
     basePath: state.refBasePath ?? state.basePath,
   });
   validateStaticConfigFile(resolvedRefPath, state, true, assertionContext, providerConfigContext);
-  if (providerConfigContext) {
-    const rawRef = loadYaml(fs.readFileSync(resolvedRefPath, 'utf8'));
-    const refState = { ...state, basePath: path.dirname(resolvedRefPath) };
-    const target = fragment === undefined ? rawRef : resolveJsonPointer(rawRef, `#${fragment}`);
+  if (!fs.existsSync(resolvedRefPath)) {
+    return;
+  }
+  const rawRef = loadYaml(fs.readFileSync(resolvedRefPath, 'utf8'));
+  const refState = {
+    ...state,
+    basePath: path.dirname(resolvedRefPath),
+    refBasePath: path.dirname(resolvedRefPath),
+  };
+  const target = fragment === undefined ? rawRef : resolveJsonPointer(rawRef, `#${fragment}`);
+  if (target !== undefined) {
+    validateStaticConfigContents(
+      target,
+      refState,
+      assertionContext,
+      providerConfigContext,
+      varsContext,
+    );
+  }
+  if (providerConfigContext && target !== undefined) {
     validateProviderConfigCodeReferences(target, refState);
     validateProviderReferenceWithState(target, refState);
   }
@@ -409,6 +429,11 @@ function validateFileReferencesInValue(
   providerIdContext?: string,
 ): void {
   if (typeof value === 'string') {
+    if (providerConfigContext && /\{\{\s*env\./i.test(value)) {
+      throw new ConfigurationError(
+        'Process environment templates are not allowed in MCP providers',
+      );
+    }
     const rendered = renderEnvOnlyInObject(value, state.env);
     if (rendered.startsWith(FILE_PROVIDER_PREFIX)) {
       validateConfigFileReference(rendered, state);
@@ -723,24 +748,35 @@ function validateStringPaths(
   }
 }
 
+function validateExecutableStringPaths(
+  config: Record<string, unknown> | undefined,
+  keys: readonly string[],
+  state: ProviderValidationState,
+): void {
+  for (const key of keys) {
+    if (typeof config?.[key] === 'string') {
+      validateStateExecutablePath(config[key], state);
+    }
+  }
+}
+
 function validateProviderConfigPaths(
   providerId: string,
   config: Record<string, unknown> | undefined,
   state: ProviderValidationState,
 ): void {
-  for (const key of ['codex_path_override', 'interpreter_path', 'path_to_claude_code_executable']) {
-    if (typeof config?.[key] === 'string') {
-      validateStateExecutablePath(config[key], state);
-    }
-  }
-  if (providerId.startsWith('google:live:')) {
-    const statefulApi = getObject(config?.functionToolStatefulApi);
-    for (const key of ['file', 'pythonExecutable']) {
-      if (typeof statefulApi?.[key] === 'string') {
-        validateStateExecutablePath(statefulApi[key], state);
-      }
-    }
-  }
+  validateExecutableStringPaths(
+    config,
+    ['codex_path_override', 'interpreter_path', 'path_to_claude_code_executable'],
+    state,
+  );
+  const statefulApi = getObject(config?.functionToolStatefulApi);
+  validateExecutableStringPaths(statefulApi, ['file', 'pythonExecutable'], state);
+  validateExecutableStringPaths(
+    config,
+    ['pythonExecutable', 'rubyExecutable', 'goExecutable'],
+    state,
+  );
   validateStringPaths(
     config,
     ['audioFile', 'audioOutputPath', 'keyFilename', 'device_identity_path', 'device_auth_path'],
@@ -804,6 +840,12 @@ function validateProviderConfigPaths(
   }
   if (config?.cli_env !== undefined) {
     throw new ConfigurationError('Agent child env configs are not allowed through MCP tools');
+  }
+  if (
+    providerId.startsWith('anthropic:claude-agent-sdk') &&
+    (config?.env !== undefined || config?.executable_args !== undefined)
+  ) {
+    throw new ConfigurationError('Agent child runtime overrides are not allowed through MCP tools');
   }
 }
 
@@ -1215,6 +1257,37 @@ export function validateMcpProviderPrompt(
     providerId === 'elevenlabs:isolation';
   if (isAudioProvider(requestedProviderId) || isAudioProvider(resolvedProviderId)) {
     validateMcpFilePath(prompt.trim());
+  }
+  const isCodexProvider = (providerId: string | undefined) =>
+    providerId === 'openai:codex-sdk' ||
+    providerId?.startsWith('openai:codex-sdk:') ||
+    providerId === 'openai:codex-app-server' ||
+    providerId?.startsWith('openai:codex-app-server:');
+  if (isCodexProvider(requestedProviderId) || isCodexProvider(resolvedProviderId)) {
+    let input: unknown;
+    try {
+      input = JSON.parse(prompt);
+    } catch {
+      return;
+    }
+    const inspect = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        value.forEach(inspect);
+        return;
+      }
+      const item = getObject(value);
+      if (!item) {
+        return;
+      }
+      if (
+        ['local_image', 'skill', 'mention'].includes(String(item.type)) &&
+        typeof item.path === 'string'
+      ) {
+        validateMcpFilePath(item.path);
+      }
+      Object.values(item).forEach(inspect);
+    };
+    inspect(input);
   }
 }
 
