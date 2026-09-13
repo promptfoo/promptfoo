@@ -451,8 +451,9 @@ function extractModuleReferences(
             kind: 'import',
             hasJsonAttribute: node.attributes.some(
               (attribute) =>
-                attribute.key.type === 'Identifier' &&
-                attribute.key.name === 'type' &&
+                (attribute.key.type === 'Identifier'
+                  ? attribute.key.name
+                  : getStaticModuleSpecifier(attribute.key)) === 'type' &&
                 attribute.value.type === 'Literal' &&
                 attribute.value.value === 'json',
             ),

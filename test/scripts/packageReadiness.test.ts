@@ -352,16 +352,23 @@ describe('package artifact readiness', () => {
     );
     write(
       'dist/index.js',
-      "import 'fixture/other'; import '#internal'; void import('./bad.json'); void import('./ok.json', { with: { type: 'json' } }); void import('./addon.node');",
+      "import 'fixture/other'; import '#internal'; import quoted from './quoted.json' with { \"type\": 'json' }; void quoted; void import('./bad.json'); void import('./ok.json', { with: { type: 'json' } }); void import('./addon.node');",
     );
     write('dist/other.js', "import 'yaml';");
     write('dist/internal.js', "import 'zod';");
     write('dist/bad.json', '{}');
     write('dist/ok.json', '{}');
+    write('dist/quoted.json', '{}');
     write('dist/addon.node', 'binary');
 
     expect(computePackageArtifactClosure(packageRoot, 'dist/index.js')).toMatchObject({
-      files: ['dist/index.js', 'dist/internal.js', 'dist/ok.json', 'dist/other.js'],
+      files: [
+        'dist/index.js',
+        'dist/internal.js',
+        'dist/ok.json',
+        'dist/other.js',
+        'dist/quoted.json',
+      ],
       externalDependencies: ['yaml', 'zod'],
       unsupportedPackageImports: ['dist/index.js: ./addon.node', 'dist/index.js: ./bad.json'],
     });

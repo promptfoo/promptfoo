@@ -102,13 +102,6 @@ jobs:
           path: ${{ steps.package-artifact.outputs.tarball }}
           if-no-files-found: error
           retention-days: 7
-      - name: Upload package artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: promptfoo-npm-backfill-package
-          path: ${{ steps.package-artifact.outputs.tarball }}
-          if-no-files-found: error
-          retention-days: 7
       - name: Test package artifact
         if: needs.release-please.outputs.release_created == 'true'
         env:
@@ -209,6 +202,13 @@ jobs:
           pack_json="$(npm pack --ignore-scripts --json --pack-destination "$artifact_dir")"
           filename="$(printf '%s' "$pack_json" | EXPECTED_VERSION="$TAG_NAME" node -e "const results = JSON.parse(require('node:fs').readFileSync(0, 'utf8')); if (!Array.isArray(results) || results.length !== 1) { throw new Error('Expected exactly one package artifact'); } const [result] = results; if (result.name !== 'promptfoo' || result.version !== process.env.EXPECTED_VERSION || typeof result.filename !== 'string') { throw new Error('Packed artifact metadata does not match the requested release'); } process.stdout.write(result.filename);")"
           echo "tarball=$artifact_dir/$filename" >> "$GITHUB_OUTPUT"
+      - name: Upload package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: promptfoo-npm-backfill-package
+          path: ${{ steps.package-artifact.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
       - name: Test package artifact
         env:
           PACKAGE_TARBALL: ${{ steps.package-artifact.outputs.tarball }}
