@@ -3,6 +3,7 @@ import { MULTI_INPUT_VAR } from '../redteam/constants';
 import { getGraderById } from '../redteam/graders';
 import { checkExfilTracking } from '../redteam/strategies/indirectWebPwn';
 import invariant from '../util/invariant';
+import { TRACE_REDACTION_ASSERTIONS } from '../util/traceRedaction';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
@@ -80,12 +81,18 @@ export const handleRedteam = async ({
   const assertionIndex = assertionValueContext.test.assert
     ?.flatMap((item) => (item.type === 'assert-set' ? item.assert : [item]))
     .indexOf(assertion);
+  const indexedResults = providerResponse.metadata?.storedGraderResults;
+  const singularResult = providerResponse.metadata?.storedGraderResult;
+  const directPrivacyMatch =
+    !test.metadata?.pluginId &&
+    TRACE_REDACTION_ASSERTIONS.has(assertion.type) &&
+    singularResult?.assertion?.type === assertion.type;
   const storedResult =
-    (assertionIndex !== undefined &&
-      providerResponse.metadata?.storedGraderResults?.[assertionIndex]) ||
-    (test.metadata?.pluginId &&
-      assertion.type.includes(test.metadata.pluginId) &&
-      providerResponse.metadata?.storedGraderResult);
+    (assertionIndex !== undefined && indexedResults?.[assertionIndex]) ||
+    (!indexedResults &&
+      (directPrivacyMatch ||
+        (test.metadata?.pluginId && assertion.type.includes(test.metadata.pluginId))) &&
+      singularResult);
   if (storedResult) {
     // Check if any turns had grader errors (even though we have a stored result)
     const redteamHistory = providerResponse.metadata?.redteamHistory as

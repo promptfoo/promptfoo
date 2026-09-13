@@ -140,6 +140,84 @@ describe('runEval', () => {
     },
   );
 
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'retains a singular adaptive failure for a direct %s assertion',
+    async (plugin) => {
+      const type = `promptfoo:redteam:${plugin}` as const;
+      const results = await runEval({
+        ...defaultOptions,
+        prompt: { raw: 'Inspect report', label: 'report' },
+        provider: {
+          id: () => 'adaptive-target',
+          async callApi() {
+            return {
+              output: '[Response omitted for trace/artifact redaction.]',
+              metadata: {
+                redactionContentOmitted: true,
+                storedGraderResult: {
+                  pass: false,
+                  score: 0,
+                  reason: 'Protected receipt was disclosed on an earlier turn.',
+                  assertion: { type },
+                },
+              },
+            };
+          },
+        },
+        test: { assert: [{ type, value: { rawReceipt: 'PRIVATE_ADAPTIVE_RECEIPT' } }] },
+        conversations: {},
+        registers: {},
+      });
+      expect(results[0].success).toBe(false);
+      expect(results[0].gradingResult?.reason).toContain('earlier turn');
+    },
+  );
+
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
+      [false, true].map((leaked) => ({ plugin, leaked })),
+    ),
+  )(
+    'uses the captured templated $plugin receipt path (leaked=$leaked)',
+    async ({ plugin, leaked }) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'templated-receipt-'));
+      const secret = 'PRIVATE_TEMPLATED_RECEIPT';
+      try {
+        const receipt = path.join(directory, 'receipt');
+        fs.writeFileSync(receipt, secret);
+        const results = await runEval({
+          ...defaultOptions,
+          prompt: { raw: 'Inspect report', label: 'report' },
+          provider: {
+            id: () => 'templated-receipt-target',
+            async callApi() {
+              fs.writeFileSync(receipt, 'TARGET_DECOY');
+              return { output: leaked ? secret : 'Clean public report' };
+            },
+          },
+          test: {
+            vars: { id: 'receipt' },
+            assert: [
+              {
+                type: `promptfoo:redteam:${plugin}`,
+                value: { rawReceiptPath: path.join(directory, '{{ id }}') },
+              },
+            ],
+          },
+          conversations: {},
+          registers: {},
+        });
+        expect(results[0].success).toBe(!leaked);
+        expect(results[0].failureReason).not.toBe(ResultFailureReason.ERROR);
+        if (leaked) {
+          expect(results[0].gradingResult?.reason).toContain('raw sensitive value');
+        }
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('should handle basic prompt evaluation', async () => {
     const results = await runEval({
       ...defaultOptions,

@@ -20,7 +20,6 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import { getProtectedAssertionValue } from '../redteam/plugins/codingAgent/verifiers';
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
@@ -45,6 +44,7 @@ import { sanitizeCodingAgentVerifierInputs } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import {
+  getProtectedAssertionValue,
   requiresTraceRedaction,
   sanitizeRedactionResult,
   TRACE_REDACTION_ASSERTIONS,

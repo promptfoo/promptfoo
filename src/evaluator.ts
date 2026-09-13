@@ -3639,7 +3639,14 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           () => runExtensionHook(testSuite.extensions, 'beforeEach', { test: evalStep.test }),
         );
         const prepared = await Promise.race([hook, interrupted]);
-        evalStep.test = { ...prepared.test };
+        evalStep.test = {
+          ...prepared.test,
+          assert: prepared.test.assert?.map((assertion) =>
+            assertion.type === 'assert-set'
+              ? { ...assertion, assert: assertion.assert.map((child) => ({ ...child })) }
+              : { ...assertion },
+          ),
+        };
         this.preparedReceiptHooks.set(evalStep.test, {
           status: 'ready',
           elapsedMs: Date.now() - startedAt,

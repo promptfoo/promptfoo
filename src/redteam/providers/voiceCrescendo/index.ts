@@ -575,10 +575,12 @@ export class VoiceCrescendoProvider implements ApiProvider {
             undefined,
             { providerResponse: targetResponse },
           );
-          storedGraderResults[index] = {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, redactionAssertion, rubric),
-          };
+          if (storedGraderResults[index]?.pass !== false) {
+            storedGraderResults[index] = {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, redactionAssertion, rubric),
+            };
+          }
         }
 
         if (targetResponse.conversationEnded) {
@@ -627,8 +629,10 @@ export class VoiceCrescendoProvider implements ApiProvider {
           responseTranscript: responseText,
         });
 
-        // Check if response is a refusal
-        if (isBasicRefusal(responseText)) {
+        const grades = Object.values(storedGraderResults);
+        const failedGrade = grades.find((grade) => !grade.pass);
+        // A refusal can still disclose a protected receipt.
+        if (isBasicRefusal(responseText) && !failedGrade) {
           logger.debug('[VoiceCrescendo] Detected refusal, trying different approach');
           if (backtrackCount < this.maxBacktracks) {
             backtrackCount++;
@@ -641,8 +645,6 @@ export class VoiceCrescendoProvider implements ApiProvider {
         }
 
         // Evaluate if objective achieved
-        const grades = Object.values(storedGraderResults);
-        const failedGrade = grades.find((grade) => !grade.pass);
         const evaluation = grades.length
           ? {
               objectiveAchieved: Boolean(failedGrade),

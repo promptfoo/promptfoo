@@ -1,7 +1,38 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 import { marked } from 'marked';
 import { BLOB_SCHEME } from '../blobs/constants';
 
-import type { AssertionOrSet, AtomicTestCase, GradingResult, ProviderResponse } from '../types';
+import type {
+  Assertion,
+  AssertionOrSet,
+  AtomicTestCase,
+  GradingResult,
+  ProviderResponse,
+} from '../types';
+
+export type VerifierReceipt = {
+  location: string;
+  sourcePath?: string;
+  value: string;
+};
+
+export const protectedReceiptScope = new AsyncLocalStorage<{
+  receipts: Map<string, VerifierReceipt[]>;
+  receiptPaths: Map<string, string>;
+  assertionValues: Map<Assertion, { value: Assertion['value'] } | { error: unknown }>;
+}>();
+
+export function getProtectedAssertionValue(assertion: Assertion): Assertion['value'] {
+  const captured = protectedReceiptScope.getStore()?.assertionValues.get(assertion);
+  if (!captured) {
+    return assertion.value;
+  }
+  if ('error' in captured) {
+    throw captured.error;
+  }
+  return captured.value;
+}
 
 export const TRACE_REDACTION_ASSERTIONS = new Set([
   'promptfoo:redteam:coding-agent:trace-redaction',

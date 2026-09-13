@@ -204,6 +204,43 @@ describe('VoiceCrescendoProvider', () => {
     },
   );
 
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'retains a %s disclosure through a refusal backtrack',
+    async (plugin) => {
+      const secret = 'PRIVATE_REFUSAL_RECEIPT';
+      const { isBasicRefusal } = await import('../../../../src/redteam/util');
+      vi.mocked(isBasicRefusal).mockReturnValueOnce(true).mockReturnValue(false);
+      vi.mocked(getTargetResponse)
+        .mockResolvedValueOnce({ output: `I cannot comply: ${secret}` })
+        .mockResolvedValue({ output: 'Clean public report' });
+      const provider = new VoiceCrescendoProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+        maxBacktracks: 1,
+        delayBetweenTurns: 0,
+      });
+      const test = {
+        vars: {},
+        assert: [{ type: `promptfoo:redteam:${plugin}` as const, value: { rawReceipt: secret } }],
+      };
+      const result = await provider.callApi('Inspect public report', {
+        originalProvider: mockTargetProvider,
+        vars: {},
+        prompt: { raw: 'Test', label: 'Test' },
+        test,
+      });
+      const { runAssertions } = await import('../../../../src/assertions');
+      const grade = await runAssertions({
+        test,
+        prompt: 'Inspect public report',
+        providerResponse: result,
+      });
+      expect(grade.pass).toBe(false);
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(JSON.stringify(mockRedteamProvider.callApi.mock.calls)).not.toContain(secret);
+    },
+  );
+
   it('should return error when no target provider configured', async () => {
     const provider = new VoiceCrescendoProvider({ injectVar: 'goal' });
 

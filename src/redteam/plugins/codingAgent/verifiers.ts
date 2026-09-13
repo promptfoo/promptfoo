@@ -8,7 +8,12 @@ import * as yaml from 'js-yaml';
 import { COMMAND_ATTRIBUTE_KEYS, getFirstStringAttribute } from '../../../tracing/toolAttributes';
 import { processFileReference } from '../../../util/file';
 import { renderVarsInObject } from '../../../util/render';
-import { TRACE_REDACTION_ASSERTIONS } from '../../../util/traceRedaction';
+import {
+  getProtectedAssertionValue,
+  protectedReceiptScope,
+  TRACE_REDACTION_ASSERTIONS,
+  type VerifierReceipt,
+} from '../../../util/traceRedaction';
 import {
   collectCodingAgentPublicResponseEvidence,
   collectCodingAgentTraceEvidence,
@@ -42,22 +47,6 @@ class VerifierArtifactError extends Error {
 }
 
 const MAX_VERIFIER_ARTIFACT_BYTES = 1024 * 1024;
-
-const protectedReceiptScope = new AsyncLocalStorage<{
-  receipts: Map<string, VerifierReceipt[]>;
-  assertionValues: Map<Assertion, { value: Assertion['value'] } | { error: unknown }>;
-}>();
-
-export function getProtectedAssertionValue(assertion: Assertion): Assertion['value'] {
-  const captured = protectedReceiptScope.getStore()?.assertionValues.get(assertion);
-  if (!captured) {
-    return assertion.value;
-  }
-  if ('error' in captured) {
-    throw captured.error;
-  }
-  return captured.value;
-}
 
 function* protectedReceiptAssertions(test: AtomicTestCase): Generator<Assertion> {
   const pending = [...(test.assert ?? [])];
@@ -105,6 +94,7 @@ export async function withProtectedReceiptScope<T>(
   const parent = inherit ? protectedReceiptScope.getStore() : undefined;
   const inherited = parent?.receipts;
   const receipts = new Map<string, VerifierReceipt[]>(inherited);
+  const resolvedReceiptPaths = new Map<string, string>();
   const assertionValues = new Map(parent?.assertionValues);
   for await (const test of tests) {
     for (const assertion of protectedReceiptAssertions(test)) {
@@ -123,6 +113,7 @@ export async function withProtectedReceiptScope<T>(
       for (const configuredPath of receiptPaths(assertion, value)) {
         const filePath = renderVarsInObject(configuredPath, test.vars ?? {});
         const key = path.resolve(filePath);
+        resolvedReceiptPaths.set(configuredPath, key);
         if (inherited?.has(key)) {
           continue;
         }
@@ -139,7 +130,10 @@ export async function withProtectedReceiptScope<T>(
       }
     }
   }
-  return protectedReceiptScope.run({ receipts, assertionValues }, run);
+  return protectedReceiptScope.run(
+    { receipts, receiptPaths: resolvedReceiptPaths, assertionValues },
+    run,
+  );
 }
 
 const COMMAND_OUTPUT_KEYS = ['aggregated_output', 'output', 'stderr', 'stdout'].flatMap((key) => [
@@ -391,12 +385,6 @@ type FileExpectation = {
   mustNotExist: boolean;
   path: string;
   shouldExist: boolean;
-};
-
-type VerifierReceipt = {
-  location: string;
-  sourcePath?: string;
-  value: string;
 };
 
 type OutsideReadReport = {
@@ -6263,15 +6251,16 @@ function lifecycleScriptArtifactsFromAssertionAndTest(
 }
 
 function protectedReceiptsFromFile(filePath: string, location: string): VerifierReceipt[] {
-  const scope = protectedReceiptScope.getStore()?.receipts;
+  const scope = protectedReceiptScope.getStore();
   if (!scope) {
     return [readVerifierReceipt(filePath, location)];
   }
-  const receipts = scope.get(path.resolve(filePath));
+  const key = scope.receiptPaths.get(filePath) ?? path.resolve(filePath);
+  const receipts = scope.receipts.get(key);
   if (!receipts?.length) {
     throw new VerifierArtifactError(
       location,
-      scope.has(path.resolve(filePath))
+      scope.receipts.has(key)
         ? undefined
         : 'Protected receipt files must be configured before target execution. Use an inline or static file assertion value, or prepare the value in a beforeEach hook.',
     );

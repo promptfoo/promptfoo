@@ -261,58 +261,80 @@ describeEvaluator('evaluator assertions', () => {
     },
   );
 
-  it('captures each repeated hook value in a shared file and uses beforeAll extensions', async () => {
-    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'repeat-hook-receipt-'));
-    try {
-      const receipt = path.join(directory, 'receipt');
-      let hookCalls = 0;
-      let targetCalls = 0;
-      const secrets = ['PRIVATE_FIRST_REPEAT_RECEIPT', 'PRIVATE_SECOND_REPEAT_RECEIPT'];
-      vi.mocked(runExtensionHook).mockImplementation(async (extensions, phase, context) => {
-        if (phase === 'beforeAll' && 'suite' in context) {
-          return { suite: { ...context.suite, extensions: ['file://prepared-hook.js'] } };
-        }
-        if (phase === 'beforeEach' && 'test' in context) {
-          expect(extensions).toEqual(['file://prepared-hook.js']);
-          fs.writeFileSync(receipt, secrets[hookCalls++]);
-        }
-        return context;
-      });
-      vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+  it.each(
+    ['receipt', 'static plan'].flatMap((source) =>
+      ['repeat', 'prompts', 'providers'].map((expansion) => ({ source, expansion })),
+    ),
+  )(
+    'captures each $source across $expansion with beforeAll extensions',
+    async ({ source, expansion }) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'repeat-hook-receipt-'));
+      try {
+        const receipt = path.join(directory, source === 'static plan' ? 'receipt.json' : 'receipt');
+        let hookCalls = 0;
+        let targetCalls = 0;
+        const secrets = ['PRIVATE_FIRST_REPEAT_RECEIPT', 'PRIVATE_SECOND_REPEAT_RECEIPT'];
+        vi.mocked(runExtensionHook).mockImplementation(async (extensions, phase, context) => {
+          if (phase === 'beforeAll' && 'suite' in context) {
+            return { suite: { ...context.suite, extensions: ['file://prepared-hook.js'] } };
+          }
+          if (phase === 'beforeEach' && 'test' in context) {
+            expect(extensions).toEqual(['file://prepared-hook.js']);
+            const secret = secrets[hookCalls++];
+            fs.writeFileSync(
+              receipt,
+              source === 'static plan' ? JSON.stringify({ rawReceipt: secret }) : secret,
+            );
+          }
+          return context;
+        });
+        vi.mocked(mockApiProvider.callApi).mockImplementation(async () => {
+          expect(hookCalls).toBe(2);
+          fs.writeFileSync(receipt, 'PRIVATE_TARGET_DECOY_RECEIPT');
+          return { output: secrets[targetCalls++] };
+        });
+        const suite: TestSuite = {
+          providers:
+            expansion === 'providers'
+              ? [mockApiProvider, { ...mockApiProvider, id: () => 'second-target' }]
+              : [mockApiProvider],
+          prompts:
+            expansion === 'prompts'
+              ? [toPrompt('Inspect receipts'), toPrompt('Inspect receipts again')]
+              : [toPrompt('Inspect receipts')],
+          extensions: ['file://original-hook.js'],
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'promptfoo:redteam:coding-agent:trace-redaction',
+                  value:
+                    source === 'static plan' ? `file://${receipt}` : { rawReceiptPath: receipt },
+                },
+              ],
+            },
+          ],
+        };
+        const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+        await evaluate(suite, record, {
+          repeat: expansion === 'repeat' ? 2 : 1,
+          maxConcurrency: 2,
+          timeoutMs: 10000,
+        });
+        const summary = await record.toEvaluateSummary();
         expect(hookCalls).toBe(2);
-        fs.writeFileSync(receipt, 'PRIVATE_TARGET_DECOY_RECEIPT');
-        return { output: secrets[targetCalls++] };
-      });
-      const suite: TestSuite = {
-        providers: [mockApiProvider],
-        prompts: [toPrompt('Inspect receipts')],
-        extensions: ['file://original-hook.js'],
-        tests: [
-          {
-            assert: [
-              {
-                type: 'promptfoo:redteam:coding-agent:trace-redaction',
-                value: { rawReceiptPath: receipt },
-              },
-            ],
-          },
-        ],
-      };
-      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
-      await evaluate(suite, record, { repeat: 2, maxConcurrency: 2, timeoutMs: 10000 });
-      const summary = await record.toEvaluateSummary();
-      expect(hookCalls).toBe(2);
-      expect(targetCalls).toBe(2);
-      expect(
-        summary.results.every(
-          (result) =>
-            !result.success && result.gradingResult?.reason.includes('raw sensitive value'),
-        ),
-      ).toBe(true);
-    } finally {
-      fs.rmSync(directory, { recursive: true, force: true });
-    }
-  });
+        expect(targetCalls).toBe(2);
+        expect(
+          summary.results.every(
+            (result) =>
+              !result.success && result.gradingResult?.reason.includes('raw sensitive value'),
+          ),
+        ).toBe(true);
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
 
   it.each([false, true])(
     'preserves hook errors for file receipt tests: %s',
