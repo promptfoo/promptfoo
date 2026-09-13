@@ -32,11 +32,22 @@ jobs:
       id-token: write
 
     steps:
+      - name: Resolve manual PR head SHA
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.inputs.pr_number }}
+        run: |
+          head_sha="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid --jq '.headRefOid')"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
       - name: Checkout code
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          ref: ${{ github.event.pull_request.head.sha || steps.pr.outputs.head_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       # Pin to 24.15.0 (not .nvmrc): Node 24.16.0 adds ~10s to every HTTPS
       # request on Linux runners, dragging the scanner's uncached

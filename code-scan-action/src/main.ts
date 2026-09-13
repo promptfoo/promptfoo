@@ -349,7 +349,7 @@ async function assertWorkspaceHead(context: PullRequestContext): Promise<void> {
     ignoreReturnCode: true,
   });
   const workspaceHead = output.trim();
-  if (exitCode !== 0 || (workspaceHead && workspaceHead !== context.sha)) {
+  if (exitCode !== 0 || !workspaceHead || workspaceHead !== context.sha) {
     throw new Error(
       `Workspace HEAD (${workspaceHead || 'unknown'}) does not match PR head ${context.sha}`,
     );
@@ -1053,21 +1053,18 @@ async function handleScanResponse(
       review,
       inputs.configPath ? undefined : inputs.minimumSeverity,
     );
-    return;
-  }
-
-  if (comments.length > 0 && commentsPosted === true) {
+  } else if (comments.length > 0 && commentsPosted === true) {
     core.info('✅ Comments posted to PR by scan server');
-    return;
-  }
-
-  if (comments.length > 0) {
+  } else if (comments.length > 0) {
     // commentsPosted is undefined - old server version
     core.info('✅ Comments returned (server version does not indicate if posted)');
-    return;
+  } else {
+    core.info('✨ No vulnerabilities found!');
   }
 
-  core.info('✨ No vulnerabilities found!');
+  if (inputs.sarifOutputPath && skippedFiles > 0) {
+    throw new Error('SARIF was requested but withheld because changed files were skipped.');
+  }
 }
 
 function logActCommentPreview(comments: Comment[]): void {

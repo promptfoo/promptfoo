@@ -180,6 +180,20 @@ const MOCK_PROMPTFOO_ENTRYPOINT = path.join(
   'entrypoint.js',
 );
 
+function emitWorkspaceHead(
+  command: string,
+  args: string[] | undefined,
+  options:
+    | { listeners?: { stdout?: (data: Buffer) => void; stderr?: (data: Buffer) => void } }
+    | undefined,
+) {
+  if (command !== 'git' || args?.[0] !== 'rev-parse') {
+    return false;
+  }
+  options?.listeners?.stdout?.(Buffer.from('abc123\n'));
+  return true;
+}
+
 function expectedInstallArgs(version: string): string[] {
   return [
     'install',
@@ -1119,6 +1133,9 @@ describe('code-scan-action main', () => {
           args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
+          if (emitWorkspaceHead(command, args, options)) {
+            return 0;
+          }
           if (isPromptfooExecCommand(command, args) && options?.listeners?.stdout) {
             options.listeners.stdout(
               Buffer.from(
@@ -1156,6 +1173,9 @@ describe('code-scan-action main', () => {
             | { listeners?: { stdout?: (data: Buffer) => void; stderr?: (data: Buffer) => void } }
             | undefined,
         ) => {
+          if (emitWorkspaceHead(command, args, options)) {
+            return 0;
+          }
           if (isPromptfooExecCommand(command, args) && options?.listeners?.stderr) {
             options.listeners.stderr(Buffer.from('Fork PR scanning not authorized'));
             return 1;
@@ -1202,6 +1222,9 @@ describe('code-scan-action main', () => {
           args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
+          if (emitWorkspaceHead(command, args, options)) {
+            return 0;
+          }
           if (isPromptfooExecCommand(command, args) && options?.listeners?.stdout) {
             options.listeners.stdout(Buffer.from(JSON.stringify(response)));
           }
@@ -1282,6 +1305,9 @@ describe('code-scan-action main', () => {
           args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
+          if (emitWorkspaceHead(command, args, options)) {
+            return 0;
+          }
           if (isPromptfooExecCommand(command, args) && options?.listeners?.stdout) {
             options.listeners.stdout(
               Buffer.from(
@@ -1324,6 +1350,9 @@ describe('code-scan-action main', () => {
         );
       });
       expect(mocks.fs.writeFileSync).not.toHaveBeenCalled();
+      expect(mocks.core.setFailed).toHaveBeenCalledWith(
+        expect.stringContaining('SARIF was requested but withheld'),
+      );
     });
 
     it('fails before scanning when the checkout is not the PR head', async () => {
@@ -1345,6 +1374,30 @@ describe('code-scan-action main', () => {
       await vi.waitFor(() => {
         expect(mocks.core.setFailed).toHaveBeenCalledWith(
           expect.stringContaining('Workspace HEAD (merge-commit) does not match PR head abc123'),
+        );
+      });
+      expect(mocks.actionGithub.getPRFiles).not.toHaveBeenCalled();
+    });
+
+    it('fails before scanning when git returns an empty workspace head', async () => {
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (command === 'git' && args?.[0] === 'rev-parse') {
+            options?.listeners?.stdout?.(Buffer.from('\n'));
+          }
+          return 0;
+        },
+      );
+
+      await triggerSarifAction('reports/promptfoo-code-scan.sarif');
+
+      await vi.waitFor(() => {
+        expect(mocks.core.setFailed).toHaveBeenCalledWith(
+          expect.stringContaining('Workspace HEAD (unknown) does not match PR head abc123'),
         );
       });
       expect(mocks.actionGithub.getPRFiles).not.toHaveBeenCalled();
@@ -1919,6 +1972,9 @@ describe('code-scan-action main', () => {
           _args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
+          if (emitWorkspaceHead(command, _args, options)) {
+            return 0;
+          }
           if (isPromptfooExecCommand(command, _args) && options?.listeners?.stdout) {
             options.listeners.stdout(
               Buffer.from(
@@ -2015,12 +2071,21 @@ describe('code-scan-action main', () => {
     });
 
     it('cleans up generated config when npm installation fails', async () => {
-      mocks.exec.exec.mockImplementation(async (command: string, args: string[] | undefined) => {
-        if (isNpmInstallCall([command, args])) {
-          throw new Error('npm install failed');
-        }
-        return 0;
-      });
+      mocks.exec.exec.mockImplementation(
+        async (
+          command: string,
+          args: string[] | undefined,
+          options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
+        ) => {
+          if (emitWorkspaceHead(command, args, options)) {
+            return 0;
+          }
+          if (isNpmInstallCall([command, args])) {
+            throw new Error('npm install failed');
+          }
+          return 0;
+        },
+      );
 
       await import('../../code-scan-action/src/main');
 
@@ -2037,6 +2102,9 @@ describe('code-scan-action main', () => {
           _args: string[] | undefined,
           options: { listeners?: { stderr?: (data: Buffer) => void } } | undefined,
         ) => {
+          if (emitWorkspaceHead(command, _args, options)) {
+            return 0;
+          }
           if (isPromptfooExecCommand(command, _args)) {
             options?.listeners?.stderr?.(Buffer.from('scanner failed'));
             return 17;
@@ -2061,6 +2129,9 @@ describe('code-scan-action main', () => {
           _args: string[] | undefined,
           options: { listeners?: { stdout?: (data: Buffer) => void } } | undefined,
         ) => {
+          if (emitWorkspaceHead(command, _args, options)) {
+            return 0;
+          }
           if (isPromptfooExecCommand(command, _args)) {
             options?.listeners?.stdout?.(Buffer.from('{invalid'));
           }

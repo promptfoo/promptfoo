@@ -125,6 +125,7 @@ jobs:
           # Pin to the immutable commit SHA, not a mutable branch ref.
           ref: ${{ steps.pr.outputs.head_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Verify workspace HEAD matches the requested PR head
         env:
