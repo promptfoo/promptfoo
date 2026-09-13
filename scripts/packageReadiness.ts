@@ -221,7 +221,7 @@ function validatePackageCandidate(
     );
   }
   const realEntrypointPath = fs.realpathSync(entrypointPath);
-  const realEntrypointRelativePath = path.relative(repoRoot, realEntrypointPath);
+  const realEntrypointRelativePath = path.relative(fs.realpathSync(repoRoot), realEntrypointPath);
   if (
     realEntrypointRelativePath.startsWith(`..${path.sep}`) ||
     realEntrypointRelativePath === '..' ||
@@ -488,9 +488,10 @@ function addArtifactSpecifier(
   }
   if (resolvedArtifact?.relativePath) {
     if (
-      kind === 'import' &&
-      (resolvedArtifact.relativePath.endsWith('.node') ||
-        (resolvedArtifact.relativePath.endsWith('.json') && !hasJsonAttribute))
+      (kind === 'import' &&
+        (resolvedArtifact.relativePath.endsWith('.node') ||
+          (resolvedArtifact.relativePath.endsWith('.json') && !hasJsonAttribute))) ||
+      (kind === 'require' && resolvedArtifact.relativePath.endsWith('.wasm'))
     ) {
       state.unsupportedPackageImports.add(`${artifactPath}: ${specifier}`);
       return;

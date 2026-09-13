@@ -34,6 +34,7 @@ describe('extractModuleSpecifiers', () => {
       import('dynamic-import-with-options', { with: { type: 'json' } });
       import data from './data.json' with { type: 'json' };
       import.meta.resolve('resolved-package');
+      import.meta.resolve('./optional.js');
       const required = require('cjs-require');
       const resolved = require.resolve('cjs-resolve');
       const resolvedWithPaths = require.resolve('cjs-resolve-with-paths', { paths: [] });
@@ -95,19 +96,24 @@ describe('extractRuntimeModuleSpecifiers', () => {
         const third = fromCreateRequire;
         import { createRequire as makeRequire } from 'node:module';
         import * as nodeModule from 'node:module';
+        import Module from 'node:module';
         const fourth = makeRequire(import.meta.url);
         const fifth = nodeModule.createRequire(import.meta.url);
+        const sixth = Module.createRequire(import.meta.url);
         third('zod');
         fourth('yaml');
         fifth('toml');
+        sixth('lodash');
       `;
       expect(extract(source, 'fixture.ts')).toEqual([
         'yaml',
         'node:module',
         'node:module',
+        'node:module',
         'zod',
         'yaml',
         'toml',
+        'lodash',
       ]);
     },
   );

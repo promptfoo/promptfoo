@@ -227,6 +227,23 @@ describe('package artifact readiness', () => {
     });
   });
 
+  it('preserves JSON attributes and ignores relative import.meta.resolve probes', () => {
+    write(
+      'dist/index.js',
+      `export { default as data } from './data.json' with { type: 'json' };
+       void import('./dynamic.json', { "with": { "type": 'json' } });
+       import.meta.resolve('./optional.js');`,
+    );
+    write('dist/data.json', '{}');
+    write('dist/dynamic.json', '{}');
+
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.js')).toMatchObject({
+      files: ['dist/data.json', 'dist/dynamic.json', 'dist/index.js'],
+      missingFiles: [],
+      unsupportedPackageImports: [],
+    });
+  });
+
   it('uses CommonJS resolution for createRequire inside ESM', () => {
     write(
       'dist/index.js',
@@ -274,16 +291,25 @@ describe('package artifact readiness', () => {
   });
 
   it('counts the original bytes of binary artifacts', () => {
-    const source = "require('./native.node'); require('./module.wasm');";
+    const source = "require('./native.node');";
     const binary = Buffer.from([0xff, 0x80, 0, 0x61]);
     write('dist/index.cjs', source);
     fs.writeFileSync(path.join(packageRoot, 'dist/native.node'), binary);
-    fs.writeFileSync(path.join(packageRoot, 'dist/module.wasm'), binary);
 
     expect(computePackageArtifactClosure(packageRoot, 'dist/index.cjs')).toMatchObject({
-      files: ['dist/index.cjs', 'dist/module.wasm', 'dist/native.node'],
-      totalBytes: Buffer.byteLength(source) + binary.length * 2,
+      files: ['dist/index.cjs', 'dist/native.node'],
+      totalBytes: Buffer.byteLength(source) + binary.length,
       missingFiles: [],
+    });
+  });
+
+  it('rejects CommonJS requires of WebAssembly artifacts', () => {
+    write('dist/index.cjs', "require('./module.wasm');");
+    write('dist/module.wasm', 'binary');
+
+    expect(computePackageArtifactClosure(packageRoot, 'dist/index.cjs')).toMatchObject({
+      files: ['dist/index.cjs'],
+      unsupportedPackageImports: ['dist/index.cjs: ./module.wasm'],
     });
   });
 

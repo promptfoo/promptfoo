@@ -296,6 +296,10 @@ function getMemberName(node: Node): string | undefined {
   return node.computed ? getStaticModuleSpecifier(node.property) : undefined;
 }
 
+function getPropertyName(node: Node): string | undefined {
+  return node.type === 'Identifier' ? node.name : getStaticModuleSpecifier(node);
+}
+
 function isRuntimeLoader(node: Node, aliases: Set<string>): boolean {
   const memberName = getMemberName(node);
   return (
@@ -331,17 +335,25 @@ function hasJsonImportAttribute(options: Node | null | undefined): boolean {
   return options.properties.some(
     (property) =>
       property.type === 'Property' &&
-      property.key.type === 'Identifier' &&
-      property.key.name === 'with' &&
+      getPropertyName(property.key) === 'with' &&
       property.value.type === 'ObjectExpression' &&
       property.value.properties.some(
         (attribute) =>
           attribute.type === 'Property' &&
-          attribute.key.type === 'Identifier' &&
-          attribute.key.name === 'type' &&
+          getPropertyName(attribute.key) === 'type' &&
           attribute.value.type === 'Literal' &&
           attribute.value.value === 'json',
       ),
+  );
+}
+
+function hasJsonAttributes(attributes: Node[]): boolean {
+  return attributes.some(
+    (attribute) =>
+      attribute.type === 'ImportAttribute' &&
+      getPropertyName(attribute.key) === 'type' &&
+      attribute.value.type === 'Literal' &&
+      attribute.value.value === 'json',
   );
 }
 
@@ -370,7 +382,10 @@ function extractModuleReferences(
           specifier.imported.name === 'createRequire'
         ) {
           createRequireFactories.add(specifier.local.name);
-        } else if (specifier.type === 'ImportNamespaceSpecifier') {
+        } else if (
+          specifier.type === 'ImportNamespaceSpecifier' ||
+          specifier.type === 'ImportDefaultSpecifier'
+        ) {
           moduleNamespaces.add(specifier.local.name);
         }
       }
@@ -429,7 +444,7 @@ function extractModuleReferences(
   const references: RuntimeModuleReference[] = [];
   function add(source: Node | null | undefined, kind: RuntimeModuleReference['kind']): void {
     const specifier = source ? getStaticModuleSpecifier(source) : undefined;
-    if (specifier !== undefined) {
+    if (typeof specifier === 'string') {
       references.push({ specifier, kind });
     }
   }
@@ -445,18 +460,11 @@ function extractModuleReferences(
             )))
       ) {
         const specifier = getStaticModuleSpecifier(node.source);
-        if (specifier !== undefined) {
+        if (typeof specifier === 'string') {
           references.push({
             specifier,
             kind: 'import',
-            hasJsonAttribute: node.attributes.some(
-              (attribute) =>
-                (attribute.key.type === 'Identifier'
-                  ? attribute.key.name
-                  : getStaticModuleSpecifier(attribute.key)) === 'type' &&
-                attribute.value.type === 'Literal' &&
-                attribute.value.value === 'json',
-            ),
+            hasJsonAttribute: hasJsonAttributes(node.attributes),
           });
         }
       }
@@ -473,12 +481,19 @@ function extractModuleReferences(
           (node.specifiers.length === 0 ||
             node.specifiers.some((specifier) => specifier.exportKind !== 'type')))
       ) {
-        add(node.source, 'import');
+        const specifier = node.source && getStaticModuleSpecifier(node.source);
+        if (typeof specifier === 'string') {
+          references.push({
+            specifier,
+            kind: 'import',
+            hasJsonAttribute: hasJsonAttributes(node.attributes),
+          });
+        }
       }
     },
     ImportExpression(node) {
       const specifier = getStaticModuleSpecifier(node.source);
-      if (specifier !== undefined) {
+      if (typeof specifier === 'string') {
         references.push({
           specifier,
           kind: 'import',
@@ -500,8 +515,18 @@ function extractModuleReferences(
       }
     },
     CallExpression(node) {
-      if (isRuntimeLoader(node.callee, aliases) || isImportMetaResolve(node.callee)) {
-        add(node.arguments[0], isImportMetaResolve(node.callee) ? 'import' : 'require');
+      if (isRuntimeLoader(node.callee, aliases)) {
+        add(node.arguments[0], 'require');
+      } else if (isImportMetaResolve(node.callee)) {
+        const specifier = getStaticModuleSpecifier(node.arguments[0]);
+        if (
+          specifier !== undefined &&
+          !specifier.startsWith('.') &&
+          !specifier.startsWith('/') &&
+          !specifier.startsWith('#')
+        ) {
+          references.push({ specifier, kind: 'import' });
+        }
       }
     },
   }).visit(program);
