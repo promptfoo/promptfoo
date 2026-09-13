@@ -11,7 +11,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
-import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
+import { evaluate, PromptSuggestionsRejectedError, withEvaluationResources } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -30,7 +30,6 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
-import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
@@ -298,7 +297,6 @@ export async function doEval(
   const isCliInvocation = isCliEventSource(evaluateOptions);
 
   let config: Partial<UnifiedConfig> | undefined = undefined;
-  let testSuite: TestSuite | undefined = undefined;
   let _basePath: string | undefined = undefined;
   let commandLineOptions: Record<string, any> | undefined = undefined;
 
@@ -340,7 +338,8 @@ export async function doEval(
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
 
-  const runEvaluation = async (initialization?: boolean) => {
+  const runEvaluationWithResources = async (initialization?: boolean) => {
+    let testSuite: TestSuite | undefined = undefined;
     const startTime = Date.now();
     telemetry.record('command_used', {
       name: 'eval - started',
@@ -937,42 +936,46 @@ export async function doEval(
       process.on('SIGINT', sigintHandler);
     }
 
-    // Run the evaluation!!!!!!
-    let ret;
-    try {
-      ret = await evaluate(testSuite, evalRecord, {
-        ...options,
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        abortSignal: evaluateOptions.abortSignal,
-        isRedteam: Boolean(config.redteam),
-      });
-
-      // Post-evaluation cleanup for retry-errors mode
-      // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
-      // Skip if evaluation was paused - no point cleaning up incomplete retry
-      if (retryErrors && cliState._retryErrorResultIds && !paused) {
-        const errorResultIds = cliState._retryErrorResultIds;
+    const ret = await withEvaluationResources(
+      async () => {
         try {
-          await deleteErrorResults(errorResultIds);
-          await recalculatePromptMetrics(ret);
-          logger.debug(
-            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
-          );
-        } catch (cleanupError) {
-          // Cleanup failure is non-fatal - retry itself succeeded
-          logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
-            error: cleanupError,
+          const ret = await evaluate(testSuite, evalRecord, {
+            ...options,
+            filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+            abortSignal: evaluateOptions.abortSignal,
+            isRedteam: Boolean(config?.redteam),
           });
+
+          // Post-evaluation cleanup for retry-errors mode
+          // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
+          // Skip if evaluation was paused - no point cleaning up incomplete retry
+          if (retryErrors && cliState._retryErrorResultIds && !paused) {
+            const errorResultIds = cliState._retryErrorResultIds;
+            try {
+              await deleteErrorResults(errorResultIds);
+              await recalculatePromptMetrics(ret);
+              logger.debug(
+                `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+              );
+            } catch (cleanupError) {
+              // Cleanup failure is non-fatal - retry itself succeeded
+              logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
+                error: cleanupError,
+              });
+            } finally {
+              // Clear the stored error result IDs
+              delete cliState._retryErrorResultIds;
+              // Clear retry mode flags
+              cliState.retryMode = false;
+            }
+          }
+          return ret;
         } finally {
-          // Clear the stored error result IDs
-          delete cliState._retryErrorResultIds;
-          // Clear retry mode flags
-          cliState.retryMode = false;
+          cleanupHandler(); // Always cleanup, even if evaluate() throws
         }
-      }
-    } finally {
-      cleanupHandler(); // Always cleanup, even if evaluate() throws
-    }
+      },
+      { testSuite, ownedProviders: testSuite.providers },
+    );
 
     // Clear resume flag after run completes
     cliState.resume = false;
@@ -1309,20 +1312,11 @@ export async function doEval(
       showRedteamProviderLabelMissingWarning(testSuite);
     }
 
-    // Clean up any WebSocket connections
-    if (testSuite.providers.length > 0) {
-      for (const provider of testSuite.providers) {
-        if (isApiProvider(provider)) {
-          const cleanup = provider?.cleanup?.();
-          if (cleanup instanceof Promise) {
-            await cleanup;
-          }
-        }
-      }
-    }
-
     return ret;
   };
+
+  const runEvaluation = (initialization?: boolean) =>
+    withEvaluationResources(() => runEvaluationWithResources(initialization));
 
   const result = await runEvaluation(true /* initialization */);
   if (watchTermination) {

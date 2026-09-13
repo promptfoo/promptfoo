@@ -45,6 +45,13 @@ export function getGradingProviderCallOptions(): CallApiOptionsParams | undefine
   return abortSignal ? { abortSignal } : undefined;
 }
 
+export function callEmbeddingProvider(provider: ApiProvider, input: string) {
+  const options = getGradingProviderCallOptions();
+  return options
+    ? provider.callEmbeddingApi!(input, undefined, options)
+    : provider.callEmbeddingApi!(input);
+}
+
 /**
  * Apply tracing, rate limits, and grouped scheduling to every grading-provider modality.
  */

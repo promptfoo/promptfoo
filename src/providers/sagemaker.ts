@@ -1,3 +1,6 @@
+import { Agent as HttpAgent } from 'node:http';
+import { homedir } from 'node:os';
+import { join, resolve, sep } from 'node:path';
 import crypto from 'crypto';
 
 import { z } from 'zod';
@@ -6,6 +9,12 @@ import logger from '../logger';
 import telemetry from '../telemetry';
 import { getTransformErrorMessage, TransformInputType, transform } from '../util/transform';
 import { StringOrFunctionSchema } from '../validators/shared';
+import type { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
+import type {
+  AwsCredentialIdentity,
+  RuntimeConfigAwsCredentialIdentityProvider,
+} from '@aws-sdk/types';
+import type { DefaultsMode } from '@smithy/core/client';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -13,6 +22,7 @@ import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
+  ProviderCleanupContext,
   ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
@@ -22,9 +32,22 @@ import type { TransformContext, TransformFunction } from '../types/transform';
 /**
  * Sleep utility function for implementing delays
  * @param ms Milliseconds to sleep
- * @returns Promise that resolves after the specified delay
+ * @returns Promise that resolves after the specified delay or rejects on cancellation
  */
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    signal.throwIfAborted();
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      reject(signal.reason);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 
 function stringifyTransformResult(result: unknown): string | undefined {
   if (result === undefined || result === null) {
@@ -82,6 +105,248 @@ const SageMakerConfigSchema = z.strictObject({
 
 type SageMakerConfig = z.infer<typeof SageMakerConfigSchema>;
 
+// Inputs read by the SDK's credential providers and their nested service clients.
+// Inference and retry settings must not discard still-valid memoized credentials.
+const CREDENTIAL_ENV_VARS = [
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
+  'AWS_CREDENTIAL_EXPIRATION',
+  'AWS_CREDENTIAL_SCOPE',
+  'AWS_ACCOUNT_ID',
+  'AWS_PROFILE',
+  'AWS_CONFIG_FILE',
+  'AWS_SHARED_CREDENTIALS_FILE',
+  'HOME',
+  'USERPROFILE',
+  'HOMEPATH',
+  'HOMEDRIVE',
+  'AWS_WEB_IDENTITY_TOKEN_FILE',
+  'AWS_ROLE_ARN',
+  'AWS_ROLE_SESSION_NAME',
+  'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI',
+  'AWS_CONTAINER_CREDENTIALS_FULL_URI',
+  'AWS_CONTAINER_AUTHORIZATION_TOKEN',
+  'AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE',
+  'AWS_EC2_METADATA_DISABLED',
+  'AWS_EC2_METADATA_SERVICE_ENDPOINT',
+  'AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE',
+  'AWS_EC2_METADATA_V1_DISABLED',
+  'AWS_LOGIN_CACHE_DIRECTORY',
+  'AWS_ENDPOINT_URL',
+  'AWS_ENDPOINT_URL_STS',
+  'AWS_ENDPOINT_URL_SSO',
+  'AWS_ENDPOINT_URL_SSO_OIDC',
+  'AWS_ENDPOINT_URL_SIGNIN',
+  'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS',
+  'AWS_USE_FIPS_ENDPOINT',
+  'AWS_USE_DUALSTACK_ENDPOINT',
+] as const;
+
+function credentialHelperInputs(...services: string[]): string[] {
+  return [
+    'AWS_ENDPOINT_URL',
+    'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS',
+    'AWS_USE_FIPS_ENDPOINT',
+    'AWS_USE_DUALSTACK_ENDPOINT',
+    ...services.map((service) => `AWS_ENDPOINT_URL_${service}`),
+  ];
+}
+
+// Follow the SDK's profile precedence to compare only inputs used by the selected source.
+function profileCredentialInputs(
+  profiles: Record<string, Record<string, string | undefined>>,
+  name: string,
+  defaultChainEnvironment?: CredentialScope['environment'],
+  visited = new Set<string>(),
+): string[] | undefined {
+  const data = profiles[name];
+  if (!data || visited.has(name)) {
+    return undefined;
+  }
+  const recursive = visited.size > 0;
+  const staticKeys = data.aws_access_key_id && data.aws_secret_access_key;
+  if (recursive && staticKeys) {
+    return [];
+  }
+  visited.add(name);
+  if (data.role_arn && data.source_profile && data.credential_source === undefined) {
+    const source = profileCredentialInputs(
+      profiles,
+      data.source_profile,
+      defaultChainEnvironment,
+      visited,
+    );
+    return source && [...credentialHelperInputs('STS'), ...source];
+  }
+  if ((data.role_arn || recursive) && data.credential_source && data.source_profile === undefined) {
+    // Metadata errors and missing Environment credentials can continue through the
+    // default chain. Before resolution, their nominal source cannot exclude fallback inputs.
+    // Explicit profiles use fromIni alone, so they keep source-specific pruning.
+    if (
+      defaultChainEnvironment &&
+      (data.credential_source !== 'Environment' ||
+        !(
+          defaultChainEnvironment.AWS_ACCESS_KEY_ID && defaultChainEnvironment.AWS_SECRET_ACCESS_KEY
+        ))
+    ) {
+      return undefined;
+    }
+    const sources: Record<string, string[]> = {
+      Environment: [
+        'AWS_ACCESS_KEY_ID',
+        'AWS_SECRET_ACCESS_KEY',
+        'AWS_SESSION_TOKEN',
+        'AWS_CREDENTIAL_EXPIRATION',
+        'AWS_CREDENTIAL_SCOPE',
+        'AWS_ACCOUNT_ID',
+      ],
+      EcsContainer: [
+        'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI',
+        'AWS_CONTAINER_CREDENTIALS_FULL_URI',
+        'AWS_CONTAINER_AUTHORIZATION_TOKEN',
+        'AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE',
+      ],
+      Ec2InstanceMetadata: [
+        'AWS_PROFILE',
+        'AWS_EC2_METADATA_SERVICE_ENDPOINT',
+        'AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE',
+        'AWS_EC2_METADATA_V1_DISABLED',
+      ],
+    };
+    const source = sources[data.credential_source];
+    return source && [...(data.role_arn ? credentialHelperInputs('STS') : []), ...source];
+  }
+  if (staticKeys) {
+    return [];
+  }
+  if (data.web_identity_token_file && data.role_arn) {
+    return [
+      ...credentialHelperInputs('STS'),
+      ...(data.role_session_name === undefined ? ['AWS_ROLE_SESSION_NAME'] : []),
+    ];
+  }
+  // Processes inherit arbitrary environment inputs; retain the existing bounded input set.
+  if (data.credential_process) {
+    return undefined;
+  }
+  if (
+    ['sso_start_url', 'sso_account_id', 'sso_session', 'sso_region', 'sso_role_name'].some(
+      (key) => typeof data[key] === 'string',
+    )
+  ) {
+    return credentialHelperInputs('SSO', ...(data.sso_session ? ['SSO_OIDC'] : []));
+  }
+  // An expired login refresh can continue to other default-chain sources.
+  if (data.login_session && !defaultChainEnvironment) {
+    return [...credentialHelperInputs('SIGNIN'), 'AWS_LOGIN_CACHE_DIRECTORY'];
+  }
+  return undefined;
+}
+
+type CredentialScope = Pick<
+  SageMakerConfig,
+  'profile' | 'accessKeyId' | 'secretAccessKey' | 'sessionToken'
+> & {
+  region: string;
+  environment: Record<string, string | undefined>;
+  helperEndpointPolicy?: string;
+  files?: SharedFileInputs;
+};
+
+interface SharedFileInputs {
+  filepath: string;
+  configFilepath: string;
+}
+
+function captureSharedFiles(environment: Record<string, string | undefined>): SharedFileInputs {
+  // Match the SDK's HOME precedence and ~/ handling before an asynchronous import
+  // or credential resolver can observe a different process environment.
+  const home =
+    environment.HOME ||
+    environment.USERPROFILE ||
+    (environment.HOMEPATH
+      ? `${environment.HOMEDRIVE ?? `C:${sep}`}${environment.HOMEPATH}`
+      : homedir());
+  const file = (value: string | undefined, name: string) =>
+    resolve(
+      value
+        ? value.startsWith('~/')
+          ? join(home, value.slice(2))
+          : value
+        : join(home, '.aws', name),
+    );
+  return {
+    filepath: file(environment.AWS_SHARED_CREDENTIALS_FILE, 'credentials'),
+    configFilepath: file(environment.AWS_CONFIG_FILE, 'config'),
+  };
+}
+
+function sameCredentialScope(left: CredentialScope, right: CredentialScope): boolean {
+  return (
+    left.region === right.region &&
+    left.profile === right.profile &&
+    left.accessKeyId === right.accessKeyId &&
+    left.secretAccessKey === right.secretAccessKey &&
+    left.sessionToken === right.sessionToken &&
+    left.helperEndpointPolicy === right.helperEndpointPolicy &&
+    left.files?.filepath === right.files?.filepath &&
+    left.files?.configFilepath === right.files?.configFilepath &&
+    Object.keys(left.environment).length === Object.keys(right.environment).length &&
+    Object.entries(left.environment).every(([name, value]) => right.environment[name] === value)
+  );
+}
+
+// Defaults discovery belongs to the provider, independently of short-lived HTTP clients.
+const DEFAULTS_ENV_VARS = [
+  'AWS_DEFAULTS_MODE',
+  'AWS_PROFILE',
+  'AWS_CONFIG_FILE',
+  'AWS_SHARED_CREDENTIALS_FILE',
+  'HOME',
+  'USERPROFILE',
+  'HOMEPATH',
+  'HOMEDRIVE',
+  'AWS_EXECUTION_ENV',
+  'AWS_REGION',
+  'AWS_DEFAULT_REGION',
+  'AWS_EC2_METADATA_DISABLED',
+  'AWS_EC2_METADATA_SERVICE_ENDPOINT',
+  'AWS_EC2_METADATA_SERVICE_ENDPOINT_MODE',
+] as const;
+
+interface RuntimeDefaultsState {
+  inputs: (string | undefined)[];
+  provider?: ReturnType<typeof import('@smithy/core/config').resolveDefaultsModeConfig>;
+}
+
+interface RuntimeRetryState {
+  maxAttempts: number;
+  provider?: SageMakerRuntimeClient['config']['retryStrategy'];
+}
+
+interface RuntimeEndpoint {
+  url: string | undefined;
+  useFipsEndpoint: boolean;
+  useDualstackEndpoint: boolean;
+}
+
+interface RuntimeCredentials {
+  scope: CredentialScope;
+  provider: RuntimeConfigAwsCredentialIdentityProvider;
+  reusable: boolean;
+  passiveRefreshPossible?: boolean;
+}
+
+interface RuntimeInitialization {
+  scope: CredentialScope;
+  endpoint: RuntimeEndpoint;
+  retry: RuntimeRetryState;
+  defaults: RuntimeDefaultsState;
+  promise: Promise<SageMakerRuntimeClient>;
+  credentials?: RuntimeCredentials;
+}
+
 interface SageMakerOptions extends ProviderOptions {
   config?: SageMakerConfig;
 }
@@ -91,8 +356,16 @@ interface SageMakerOptions extends ProviderOptions {
  */
 abstract class SageMakerGenericProvider {
   env?: EnvOverrides;
-  sagemakerRuntime?: any; // SageMaker runtime client
-  private initializedRuntime?: { client: any; region: string };
+  #sagemakerRuntime?: any; // SageMaker runtime client
+  #initializedRuntime?: { client: SageMakerRuntimeClient; region: string };
+  private readonly runtimeClients = new Map<SageMakerRuntimeClient, string>();
+  private readonly runtimeClockOffsets = new Map<string, number>();
+  readonly #runtimeInitializations: RuntimeInitialization[] = [];
+  private readonly runtimeRetryStates = new Map<string, RuntimeRetryState>();
+  private readonly runtimeDefaultsStates = new Map<string, RuntimeDefaultsState>();
+  #retainedCredentials?: RuntimeCredentials;
+  private runtimeGeneration = 0;
+  private readonly activeRequests = new Set<AbortController>();
   config: SageMakerConfig;
   endpointName: string;
   delay?: number; // Delay between API calls in milliseconds
@@ -111,7 +384,7 @@ abstract class SageMakerGenericProvider {
       SageMakerConfigSchema.parse(config);
     } catch (error) {
       logger.warn(
-        `Error validating SageMaker config\nConfig: ${JSON.stringify(config)}\n${error instanceof z.ZodError ? z.prettifyError(error) : error}`,
+        `Error validating SageMaker config\n${error instanceof z.ZodError ? z.prettifyError(error) : error}`,
       );
     }
 
@@ -126,6 +399,14 @@ abstract class SageMakerGenericProvider {
     });
   }
 
+  get sagemakerRuntime(): any {
+    return this.#sagemakerRuntime;
+  }
+
+  set sagemakerRuntime(client: any) {
+    this.#sagemakerRuntime = client;
+  }
+
   id(): string {
     // Use custom provider ID if provided, otherwise use default format
     return this.providerId || `sagemaker:${this.endpointName}`;
@@ -138,25 +419,57 @@ abstract class SageMakerGenericProvider {
   /**
    * Get AWS credentials from config or environment
    */
-  async getCredentials(): Promise<any> {
-    if (this.config.accessKeyId && this.config.secretAccessKey) {
+  async getCredentials(
+    config: SageMakerConfig = this.config,
+    environment?: CredentialScope['environment'],
+    files?: SharedFileInputs,
+  ): Promise<AwsCredentialIdentity | RuntimeConfigAwsCredentialIdentityProvider | undefined> {
+    const { accessKeyId, secretAccessKey, sessionToken, profile } = config;
+    if (accessKeyId && secretAccessKey) {
       logger.debug('Using explicit credentials from config');
       return {
-        accessKeyId: this.config.accessKeyId,
-        secretAccessKey: this.config.secretAccessKey,
-        sessionToken: this.config.sessionToken,
+        accessKeyId,
+        secretAccessKey,
+        sessionToken,
       };
     }
-    if (this.config.profile) {
-      logger.debug(`Using AWS profile: ${this.config.profile}`);
-      try {
-        const { fromSSO } = await import('@aws-sdk/credential-provider-sso');
-        return fromSSO({ profile: this.config.profile });
-      } catch {
-        throw new Error(
-          `Failed to load AWS SSO profile. Please install @aws-sdk/credential-provider-sso`,
+    if (
+      !profile &&
+      !environment?.AWS_PROFILE &&
+      environment?.AWS_ACCESS_KEY_ID &&
+      environment.AWS_SECRET_ACCESS_KEY
+    ) {
+      // Capture the SDK's static environment identity as values, just like explicit
+      // config credentials; a later ambient change cannot select another signer.
+      return {
+        accessKeyId: environment.AWS_ACCESS_KEY_ID,
+        secretAccessKey: environment.AWS_SECRET_ACCESS_KEY,
+        ...(environment.AWS_SESSION_TOKEN && { sessionToken: environment.AWS_SESSION_TOKEN }),
+        ...(environment.AWS_CREDENTIAL_EXPIRATION && {
+          expiration: new Date(environment.AWS_CREDENTIAL_EXPIRATION),
+        }),
+        ...(environment.AWS_CREDENTIAL_SCOPE && {
+          credentialScope: environment.AWS_CREDENTIAL_SCOPE,
+        }),
+        ...(environment.AWS_ACCOUNT_ID && { accountId: environment.AWS_ACCOUNT_ID }),
+      };
+    }
+    if (profile) {
+      logger.debug(`Using AWS profile: ${profile}`);
+      const { fromIni } = await import('@aws-sdk/credential-provider-ini').catch((cause) => {
+        throw Object.assign(
+          new Error(
+            'The @aws-sdk/credential-provider-ini package is required for AWS profiles. Please install it with: npm install @aws-sdk/credential-provider-ini',
+          ),
+          { cause },
         );
-      }
+      });
+      return fromIni({
+        profile,
+        filepath: environment?.AWS_SHARED_CREDENTIALS_FILE || undefined,
+        configFilepath: environment?.AWS_CONFIG_FILE || undefined,
+        ...files,
+      });
     }
 
     // Default credentials will be loaded from environment or instance profile
@@ -164,40 +477,528 @@ abstract class SageMakerGenericProvider {
     return undefined;
   }
 
+  private async getCredentialScope(
+    region: string,
+    smithyConfig: typeof import('@smithy/core/config'),
+    credentialConfig: Pick<
+      SageMakerConfig,
+      'profile' | 'accessKeyId' | 'secretAccessKey' | 'sessionToken'
+    > = this.config,
+    capturedEnvironment: CredentialScope['environment'] = process.env,
+    files: SharedFileInputs = captureSharedFiles(capturedEnvironment),
+  ): Promise<CredentialScope> {
+    const { profile, accessKeyId, secretAccessKey, sessionToken } = credentialConfig;
+    if (accessKeyId && secretAccessKey) {
+      return { region, accessKeyId, secretAccessKey, sessionToken, environment: {} };
+    }
+    const environment: CredentialScope['environment'] = Object.fromEntries(
+      CREDENTIAL_ENV_VARS.map((name) => [name, capturedEnvironment[name]]),
+    );
+    let helperEndpointPolicy: string | undefined;
+    const selectedProfile = profile || environment.AWS_PROFILE;
+    if (selectedProfile || !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY)) {
+      const { booleanSelector, loadConfig, parseKnownFiles, SelectorType } = smithyConfig;
+      const profiles = await parseKnownFiles(files);
+      const inputs = profileCredentialInputs(
+        profiles,
+        selectedProfile || 'default',
+        profile ? undefined : environment,
+      );
+      if (inputs) {
+        const used = new Set([
+          ...inputs,
+          'AWS_CONFIG_FILE',
+          'AWS_SHARED_CREDENTIALS_FILE',
+          'HOME',
+          'USERPROFILE',
+          'HOMEPATH',
+          'HOMEDRIVE',
+          ...(profile ? [] : ['AWS_PROFILE']),
+          // An implicit default profile must yield when environment credentials become available.
+          ...(selectedProfile ? [] : ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY']),
+        ]);
+        const helperEndpoints = inputs.filter((name) => name.startsWith('AWS_ENDPOINT_URL_'));
+        if (helperEndpoints.length) {
+          if (profile) {
+            // Credential profile selection does not pin the nested clients' ambient
+            // service configuration. Compare effective policies, not profile names.
+            helperEndpointPolicy = JSON.stringify(
+              await Promise.all(
+                helperEndpoints.map((name) =>
+                  this.getEndpointPolicy(
+                    smithyConfig,
+                    name.slice('AWS_ENDPOINT_URL_'.length),
+                    environment,
+                    files,
+                  ),
+                ),
+              ),
+            );
+          }
+          // Nested SDK clients resolve endpoint policy from the ambient AWS profile,
+          // independently of the profile selected for credentials.
+          const ignoreEndpoints = await loadConfig(
+            {
+              environmentVariableSelector: () =>
+                booleanSelector(
+                  environment,
+                  'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS',
+                  SelectorType.ENV,
+                ),
+              configFileSelector: (data) =>
+                booleanSelector(data, 'ignore_configured_endpoint_urls', SelectorType.CONFIG),
+              default: false,
+            },
+            {
+              profile: environment.AWS_PROFILE || 'default',
+              ...files,
+            },
+          )();
+          if (ignoreEndpoints) {
+            for (const name of helperEndpoints) {
+              used.delete(name);
+            }
+          }
+          // A service-specific URL wins over the common URL for that helper.
+          if (ignoreEndpoints || helperEndpoints.every((name) => environment[name])) {
+            used.delete('AWS_ENDPOINT_URL');
+          }
+        }
+        for (const name of Object.keys(environment)) {
+          if (!used.has(name)) {
+            delete environment[name];
+          }
+        }
+      }
+    }
+    return { region, profile, environment, helperEndpointPolicy, files };
+  }
+
+  private async getEndpointPolicy(
+    smithyConfig: typeof import('@smithy/core/config'),
+    service = 'SAGEMAKER_RUNTIME',
+    environment?: CredentialScope['environment'],
+    files?: SharedFileInputs,
+  ): Promise<RuntimeEndpoint> {
+    const {
+      booleanSelector,
+      CONFIG_PREFIX_SEPARATOR,
+      loadConfig,
+      NODE_USE_FIPS_ENDPOINT_CONFIG_OPTIONS,
+      NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS,
+      SelectorType,
+    } = smithyConfig;
+    const configFiles = environment
+      ? {
+          profile: environment.AWS_PROFILE || 'default',
+          ...(files ?? captureSharedFiles(environment)),
+        }
+      : undefined;
+    const useFipsEndpoint = await loadConfig(
+      {
+        ...NODE_USE_FIPS_ENDPOINT_CONFIG_OPTIONS,
+        environmentVariableSelector: (env) =>
+          NODE_USE_FIPS_ENDPOINT_CONFIG_OPTIONS.environmentVariableSelector(environment ?? env),
+      },
+      configFiles,
+    )();
+    const useDualstackEndpoint = await loadConfig(
+      {
+        ...NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS,
+        environmentVariableSelector: (env) =>
+          NODE_USE_DUALSTACK_ENDPOINT_CONFIG_OPTIONS.environmentVariableSelector(
+            environment ?? env,
+          ),
+      },
+      configFiles,
+    )();
+    // Match the runtime SDK's configured HTTP endpoint precedence. This is separate
+    // from both the SageMaker deployment name and the credential helpers' endpoints.
+    const ignored = await loadConfig(
+      {
+        environmentVariableSelector: (env) =>
+          booleanSelector(
+            environment ?? env,
+            'AWS_IGNORE_CONFIGURED_ENDPOINT_URLS',
+            SelectorType.ENV,
+          ),
+        configFileSelector: (profile) =>
+          booleanSelector(profile, 'ignore_configured_endpoint_urls', SelectorType.CONFIG),
+        default: false,
+      },
+      configFiles,
+    )();
+    if (ignored) {
+      return { url: undefined, useFipsEndpoint, useDualstackEndpoint };
+    }
+    const url = await loadConfig(
+      {
+        environmentVariableSelector: (env) =>
+          (environment ?? env)[`AWS_ENDPOINT_URL_${service}`] ||
+          (environment ?? env).AWS_ENDPOINT_URL ||
+          undefined,
+        configFileSelector: (profile, config) => {
+          if (profile.services) {
+            const services = config?.[`services${CONFIG_PREFIX_SEPARATOR}${profile.services}`];
+            if (!services) {
+              throw new Error(
+                `The services section "${profile.services}" specified in the profile is not present in the shared configuration file.`,
+              );
+            }
+            const endpoint =
+              services[`${service.toLowerCase()}${CONFIG_PREFIX_SEPARATOR}endpoint_url`];
+            if (endpoint) {
+              return endpoint;
+            }
+          }
+          return profile.endpoint_url || undefined;
+        },
+        default: undefined,
+      },
+      configFiles,
+    )();
+    return { url, useFipsEndpoint, useDualstackEndpoint };
+  }
+
   /**
    * Initialize and return the SageMaker runtime client
    */
-  async getSageMakerRuntimeInstance(region?: string) {
-    if (
-      !this.sagemakerRuntime ||
-      (region !== undefined &&
-        this.initializedRuntime !== undefined &&
-        this.sagemakerRuntime === this.initializedRuntime.client &&
-        region !== this.initializedRuntime.region)
-    ) {
-      try {
-        const { SageMakerRuntimeClient } = await import('@aws-sdk/client-sagemaker-runtime');
-        const credentials = await this.getCredentials();
+  async getSageMakerRuntimeInstance(region?: string, generation = this.runtimeGeneration) {
+    this.assertRuntimeGeneration(generation);
+    // A caller-supplied client is borrowed, not part of the provider's region pool.
+    if (this.sagemakerRuntime && this.sagemakerRuntime !== this.#initializedRuntime?.client) {
+      return this.sagemakerRuntime;
+    }
 
-        const runtimeRegion = region ?? this.getRegion();
-        const runtime = new SageMakerRuntimeClient({
-          region: runtimeRegion,
-          maxAttempts: getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3),
-          retryMode: 'adaptive',
-          ...(credentials ? { credentials } : {}),
-        });
-
-        this.sagemakerRuntime = runtime;
-        this.initializedRuntime = { client: runtime, region: runtimeRegion };
-        logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
-        return runtime;
-      } catch {
-        throw new Error(
+    const importError = (cause: unknown): never => {
+      this.assertRuntimeGeneration(generation);
+      throw Object.assign(
+        new Error(
           'The @aws-sdk/client-sagemaker-runtime package is required. Please install it with: npm install @aws-sdk/client-sagemaker-runtime',
-        );
+        ),
+        { cause },
+      );
+    };
+    const runtimeRegion = region ?? this.getRegion();
+    const credentialConfig = {
+      profile: this.config.profile,
+      accessKeyId: this.config.accessKeyId,
+      secretAccessKey: this.config.secretAccessKey,
+      sessionToken: this.config.sessionToken,
+    };
+    const environment = Object.fromEntries(
+      [...CREDENTIAL_ENV_VARS, ...DEFAULTS_ENV_VARS, 'AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME'].map(
+        (name) => [name, process.env[name]],
+      ),
+    );
+    const files = captureSharedFiles(environment);
+    const maxAttempts = getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3);
+    const smithyConfig = await import('@smithy/core/config').catch(importError);
+    const scope = await this.getCredentialScope(
+      runtimeRegion,
+      smithyConfig,
+      credentialConfig,
+      environment,
+      files,
+    );
+    const endpoint = await this.getEndpointPolicy(
+      smithyConfig,
+      'SAGEMAKER_RUNTIME',
+      environment,
+      files,
+    );
+    this.assertRuntimeGeneration(generation);
+    let retry = this.runtimeRetryStates.get(runtimeRegion);
+    if (!retry || retry.maxAttempts !== maxAttempts) {
+      retry = { maxAttempts };
+      this.runtimeRetryStates.set(runtimeRegion, retry);
+    }
+    const retryState = retry;
+    const defaultsInputs = [
+      ...DEFAULTS_ENV_VARS.map((name) => environment[name]),
+      files.filepath,
+      files.configFilepath,
+    ];
+    let defaults = this.runtimeDefaultsStates.get(runtimeRegion);
+    if (!defaults || defaults.inputs.some((value, index) => value !== defaultsInputs[index])) {
+      defaults = { inputs: defaultsInputs };
+      this.runtimeDefaultsStates.set(runtimeRegion, defaults);
+    }
+    const defaultsState = defaults;
+    // Resolve before later SDK imports can delay this request's selected defaults.
+    defaultsState.provider ??= smithyConfig.resolveDefaultsModeConfig({
+      region: runtimeRegion,
+      // The SDK validates the selected mode. Its `auto` performance discovery
+      // remains SDK-owned; it cannot change our explicit serving region or endpoint.
+      defaultsMode: smithyConfig.loadConfig<DefaultsMode>(
+        {
+          environmentVariableSelector: () =>
+            environment.AWS_DEFAULTS_MODE as DefaultsMode | undefined,
+          configFileSelector: (profile) => profile.defaults_mode as DefaultsMode | undefined,
+          default: 'legacy',
+        },
+        { profile: environment.AWS_PROFILE || 'default', ...files },
+      ),
+    });
+    const defaultsMode = await defaultsState.provider();
+    if (
+      DEFAULTS_ENV_VARS.some((name) => environment[name] !== process.env[name]) &&
+      this.runtimeDefaultsStates.get(runtimeRegion) === defaultsState
+    ) {
+      // Keep this request's result, but do not retain it under inputs that changed
+      // during discovery. A newer same-region selection owns its own state.
+      this.runtimeDefaultsStates.delete(runtimeRegion);
+    }
+    this.assertRuntimeGeneration(generation);
+    for (const credentials of [
+      this.#retainedCredentials,
+      ...this.#runtimeInitializations.map((candidate) => candidate.credentials),
+    ]) {
+      if (credentials?.passiveRefreshPossible && !sameCredentialScope(credentials.scope, scope)) {
+        // A background SDK refresh can read inputs after its foreground call.
+        // Retain coalescing within one scope, but not across an observed change.
+        credentials.reusable = false;
+        if (this.#retainedCredentials === credentials) {
+          this.#retainedCredentials = undefined;
+        }
       }
     }
-    return this.sagemakerRuntime;
+    let entry = this.#runtimeInitializations.find(
+      (candidate) =>
+        candidate.credentials?.reusable !== false &&
+        candidate.endpoint.url === endpoint.url &&
+        candidate.endpoint.useFipsEndpoint === endpoint.useFipsEndpoint &&
+        candidate.endpoint.useDualstackEndpoint === endpoint.useDualstackEndpoint &&
+        candidate.retry === retryState &&
+        candidate.defaults === defaultsState &&
+        sameCredentialScope(candidate.scope, scope),
+    );
+    if (!entry) {
+      const initialization: RuntimeInitialization = {
+        scope,
+        endpoint,
+        retry: retryState,
+        defaults: defaultsState,
+        promise: Promise.resolve().then(async () => {
+          const { SageMakerRuntimeClient } = await import(
+            '@aws-sdk/client-sagemaker-runtime'
+          ).catch(importError);
+          const { loadConfigsForDefaultMode } = await import('@smithy/core/client').catch(
+            importError,
+          );
+          this.assertRuntimeGeneration(generation);
+          if (
+            this.#retainedCredentials &&
+            !sameCredentialScope(this.#retainedCredentials.scope, scope)
+          ) {
+            this.#retainedCredentials = undefined;
+          }
+          const retainedState = this.#retainedCredentials;
+          const retainedCredentials = retainedState?.provider;
+          let credentials =
+            retainedCredentials ??
+            (await this.getCredentials(scope, scope.environment, scope.files));
+          let credentialsTreatedAsExpired:
+            | typeof import('@aws-sdk/credential-provider-node').credentialsTreatedAsExpired
+            | undefined;
+          if (!credentials || (!scope.profile && typeof credentials === 'function')) {
+            const defaultChain = await import('@aws-sdk/credential-provider-node').catch(
+              importError,
+            );
+            credentialsTreatedAsExpired = defaultChain.credentialsTreatedAsExpired;
+            credentials ??= defaultChain.defaultProvider({
+              // Static environment credentials were captured above. Pin the remaining
+              // profile chain rather than allowing a later AWS_PROFILE to choose it.
+              profile: scope.environment.AWS_PROFILE || 'default',
+              ...scope.files,
+            });
+          }
+          if (!retainedCredentials && typeof credentials === 'function') {
+            const chain = credentials;
+            // STS and other credential clients must own their transport independently of SageMaker.
+            const callerClientConfig = { region: async () => runtimeRegion };
+            const isolated: RuntimeConfigAwsCredentialIdentityProvider = (options) =>
+              chain({ ...options, callerClientConfig });
+            credentials = isolated;
+          }
+          const credentialProvider = typeof credentials === 'function' ? credentials : undefined;
+          const credentialState = credentialProvider
+            ? (retainedState ?? { scope, provider: credentialProvider, reusable: true })
+            : undefined;
+          initialization.credentials = credentialState;
+          if (credentialProvider && credentialState && !(scope.profile && retainedState)) {
+            credentials = async (options) => {
+              const inputsMatch = async () => {
+                if (
+                  Object.entries(scope.environment).some(
+                    ([name, value]) => process.env[name] !== value,
+                  )
+                ) {
+                  return false;
+                }
+                if (scope.helperEndpointPolicy === undefined) {
+                  return true;
+                }
+                try {
+                  return (
+                    (await this.getCredentialScope(runtimeRegion, smithyConfig))
+                      .helperEndpointPolicy === scope.helperEndpointPolicy
+                  );
+                } catch {
+                  // An invalid later configuration cannot validate this retained state.
+                  // Leave the current credential result/error to the SDK.
+                  return false;
+                }
+              };
+              const initiallyMatched = await inputsMatch();
+              try {
+                const resolved = await credentialProvider(options);
+                // The default chain may return cached credentials while refreshing
+                // in the background. Its later input reads outlive this guard.
+                credentialState.passiveRefreshPossible ||=
+                  !(options && 'forceRefresh' in options && options.forceRefresh) &&
+                  !!credentialsTreatedAsExpired?.(resolved);
+                return resolved;
+              } finally {
+                if (!initiallyMatched || !(await inputsMatch())) {
+                  // A lazy chain may observe newer inputs. Keep active requests owned,
+                  // but never reuse their client or credentials under the old scope.
+                  credentialState.reusable = false;
+                  if (this.#retainedCredentials === credentialState) {
+                    this.#retainedCredentials = undefined;
+                  }
+                }
+              }
+            };
+          }
+          const retryStrategy = await retryState.provider?.();
+          this.assertRuntimeGeneration(generation);
+          const client = new SageMakerRuntimeClient({
+            region: runtimeRegion,
+            endpoint: endpoint.url,
+            ignoreConfiguredEndpointUrls: true,
+            systemClockOffset: this.runtimeClockOffsets.get(runtimeRegion),
+            useFipsEndpoint: endpoint.useFipsEndpoint,
+            useDualstackEndpoint: endpoint.useDualstackEndpoint,
+            defaultsMode,
+            maxAttempts,
+            retryMode: 'adaptive',
+            ...(retryStrategy ? { retryStrategy } : {}),
+            requestHandler: {
+              ...loadConfigsForDefaultMode(defaultsMode),
+              // The SDK's lazy HTTP agent factory creates separate pools when first sends overlap.
+              httpAgent: new HttpAgent({ keepAlive: true, maxSockets: 50 }),
+            },
+            credentials,
+          });
+          if (client.config) {
+            if (!this.runtimeClockOffsets.has(runtimeRegion)) {
+              this.runtimeClockOffsets.set(runtimeRegion, client.config.systemClockOffset ?? 0);
+            }
+            // Every owned transport shares the SDK's latest correction for this region.
+            // A client created before another learns must not restore its stale seed.
+            Object.defineProperty(client.config, 'systemClockOffset', {
+              enumerable: true,
+              configurable: true,
+              get: () => this.runtimeClockOffsets.get(runtimeRegion) ?? 0,
+              set: (offset: number) => {
+                if (Number.isFinite(offset)) {
+                  this.runtimeClockOffsets.set(runtimeRegion, offset);
+                }
+              },
+            });
+          }
+          if (client.config?.retryStrategy) {
+            retryState.provider = client.config.retryStrategy;
+          }
+          if (credentialState && scope.profile) {
+            // Explicit profiles need the SDK memoizer; default chains retain their own refresh.
+            credentialState.provider = retainedCredentials ?? client.config.credentials;
+          }
+          this.runtimeClients.set(client, runtimeRegion);
+          logger.debug(`SageMaker client initialized for region ${runtimeRegion}`);
+          return client;
+        }),
+      };
+      this.#runtimeInitializations.push(initialization);
+      entry = initialization;
+    }
+    let runtime: SageMakerRuntimeClient;
+    try {
+      runtime = await entry.promise;
+    } catch (error) {
+      const index = this.#runtimeInitializations.indexOf(entry);
+      if (index !== -1) {
+        this.#runtimeInitializations.splice(index, 1);
+      }
+      throw error;
+    }
+    this.assertRuntimeGeneration(generation);
+    if (entry.credentials?.reusable) {
+      this.#retainedCredentials = entry.credentials;
+    }
+    if (!this.sagemakerRuntime || this.sagemakerRuntime === this.#initializedRuntime?.client) {
+      this.sagemakerRuntime = runtime;
+      this.#initializedRuntime = { client: runtime, region: runtimeRegion };
+    }
+    return runtime;
+  }
+
+  protected async withRequest<T>(
+    run: (generation: number, signal: AbortSignal) => Promise<T>,
+    callerSignal?: AbortSignal,
+  ): Promise<T> {
+    const controller = new AbortController();
+    const signal = callerSignal
+      ? AbortSignal.any([callerSignal, controller.signal])
+      : controller.signal;
+    signal.throwIfAborted();
+    this.activeRequests.add(controller);
+    let onAbort!: () => void;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      onAbort = () => reject(signal.reason);
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+      return await Promise.race([run(this.runtimeGeneration, signal), aborted]);
+    } finally {
+      signal.removeEventListener('abort', onAbort);
+      this.activeRequests.delete(controller);
+      // Share region clients only while requests overlap; no global evaluation owns them.
+      if (this.activeRequests.size === 0) {
+        this.cleanup();
+      }
+    }
+  }
+
+  protected assertRuntimeGeneration(generation: number): void {
+    if (generation !== this.runtimeGeneration) {
+      throw new Error('SageMaker provider was shut down during the request');
+    }
+  }
+
+  cleanup(context?: ProviderCleanupContext): void {
+    if (context?.reason === 'evaluation-complete' && this.activeRequests.size > 0) {
+      return;
+    }
+    this.runtimeGeneration++;
+    for (const controller of this.activeRequests) {
+      controller.abort(new Error('SageMaker provider was shut down during the request'));
+    }
+    const clients = [...this.runtimeClients.keys()];
+    this.runtimeClients.clear();
+    this.#runtimeInitializations.length = 0;
+    if (clients.includes(this.sagemakerRuntime)) {
+      this.sagemakerRuntime = undefined;
+    }
+    this.#initializedRuntime = undefined;
+    for (const client of clients) {
+      try {
+        client.destroy();
+      } catch (error) {
+        logger.warn('Error destroying SageMaker runtime client', { error });
+      }
+    }
   }
 
   /**
@@ -656,7 +1457,19 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _options?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    return this.withRequest(
+      (generation, signal) => this.callApiWithRuntime(prompt, context, generation, signal),
+      options?.abortSignal,
+    );
+  }
+
+  private async callApiWithRuntime(
+    prompt: string,
+    context: CallApiContextParams | undefined,
+    generation: number,
+    abortSignal: AbortSignal,
   ): Promise<ProviderResponse> {
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
@@ -739,11 +1552,12 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       logger.debug(
         `Applying delay of ${delayMs}ms before calling SageMaker endpoint ${request.endpoint}`,
       );
-      await sleep(delayMs);
+      await sleep(delayMs, abortSignal);
     }
 
     // Not in cache or cache disabled, make the actual API call
-    const runtime = await this.getSageMakerRuntimeInstance(request.region);
+    abortSignal.throwIfAborted();
+    const runtime = await this.getSageMakerRuntimeInstance(request.region, generation);
 
     logger.debug(`Calling SageMaker endpoint ${request.endpoint}`);
     logger.debug(
@@ -761,7 +1575,9 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       });
 
       const startTime = Date.now();
-      const response = await runtime.send(command);
+      this.assertRuntimeGeneration(generation);
+      abortSignal.throwIfAborted();
+      const response = await runtime.send(command, { abortSignal });
       const endTime = Date.now();
       const _latency = endTime - startTime;
 
@@ -778,6 +1594,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       );
 
       const output = await this.parseResponse(responseBody, request.responsePath);
+      abortSignal.throwIfAborted();
+      this.assertRuntimeGeneration(generation);
 
       // Handle known errors:
       if (typeof output === 'object' && output !== null && 'code' in output) {
@@ -818,6 +1636,8 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
       if (isCacheEnabled() && !bustCache && result.output && !result.error) {
         const cache = getCache ? getCache() : await import('../cache').then((m) => m.getCache());
         const resultToCache = JSON.stringify(result);
+        abortSignal.throwIfAborted();
+        this.assertRuntimeGeneration(generation);
 
         try {
           await cache.set(getCacheKey(), resultToCache);
@@ -856,24 +1676,22 @@ export class SageMakerEmbeddingProvider
    * Generate a consistent cache key for SageMaker embedding requests
    * Uses crypto.createHash to generate a shorter, more efficient key
    */
-  private getCacheKey(text: string): string {
-    // Create a deterministic representation of the request parameters
-    const configForKey = {
-      endpoint: this.getEndpointName(),
-      modelType: this.config.modelType,
-      contentType: this.getContentType(),
-      acceptType: this.getAcceptType(),
-      region: this.getRegion(),
-      responseFormat: this.config.responseFormat,
-    };
-
-    const configStr = JSON.stringify(configForKey);
+  private getCacheKey(
+    text: string,
+    request: Pick<SageMakerConfig, 'modelType' | 'responseFormat'> & {
+      endpoint: string;
+      contentType: string;
+      acceptType: string;
+      region: string;
+    },
+  ): string {
+    const configStr = JSON.stringify(request);
 
     // Generate shorter, more efficient hashed keys
     const textHash = crypto.createHash('sha256').update(text).digest('hex').substring(0, 16);
     const configHash = crypto.createHash('sha256').update(configStr).digest('hex').substring(0, 8);
 
-    return `sagemaker:embedding:v1:${this.getEndpointName()}:${textHash}:${configHash}`;
+    return `sagemaker:embedding:v1:${request.endpoint}:${textHash}:${configHash}`;
   }
 
   /**
@@ -882,6 +1700,19 @@ export class SageMakerEmbeddingProvider
   async callEmbeddingApi(
     text: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderEmbeddingResponse> {
+    return this.withRequest(
+      (generation, signal) => this.callEmbeddingWithRuntime(text, context, generation, signal),
+      options?.abortSignal,
+    );
+  }
+
+  private async callEmbeddingWithRuntime(
+    text: string,
+    context: CallApiContextParams | undefined,
+    generation: number,
+    abortSignal: AbortSignal,
   ): Promise<ProviderEmbeddingResponse> {
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
@@ -908,18 +1739,30 @@ export class SageMakerEmbeddingProvider
       );
     }
 
+    // Keep lookup, invocation, parsing and storage on the same request identity.
+    const request = {
+      endpoint: this.getEndpointName(),
+      modelType: this.config.modelType,
+      contentType: this.getContentType(),
+      acceptType: this.getAcceptType(),
+      region: this.getRegion(),
+      responseFormat: this.config.responseFormat ? { ...this.config.responseFormat } : undefined,
+    };
+    let cacheKey: string | undefined;
+    const getCacheKey = () => (cacheKey ??= this.getCacheKey(transformedText, request));
+
     // Check if we should use cache - use the transformed text for cache key
     const bustCache = context?.debug === true; // If debug mode is on, bust the cache
     if (isCacheEnabled() && !bustCache) {
-      const cacheKey = this.getCacheKey(transformedText);
       const cache = (await getCache)
         ? await getCache()
         : await import('../cache').then((m) => m.getCache());
 
       // Try to get from cache
-      const cachedResult = await cache.get<string>(cacheKey);
+      const cachedResult = await cache.get<string>(getCacheKey());
+      abortSignal.throwIfAborted();
       if (cachedResult) {
-        logger.debug(`Using cached SageMaker embedding response for ${this.getEndpointName()}`);
+        logger.debug(`Using cached SageMaker embedding response for ${request.endpoint}`);
 
         try {
           // Parse the cached result
@@ -941,16 +1784,17 @@ export class SageMakerEmbeddingProvider
     // Apply delay if specified and not using cached response
     if (delayMs && delayMs > 0) {
       logger.debug(
-        `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
+        `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${request.endpoint}`,
       );
-      await sleep(delayMs);
+      await sleep(delayMs, abortSignal);
     }
 
     // Not in cache or cache disabled, make the actual API call
-    const runtime = await this.getSageMakerRuntimeInstance();
+    abortSignal.throwIfAborted();
+    const runtime = await this.getSageMakerRuntimeInstance(request.region, generation);
 
     let payload;
-    const modelType = this.config.modelType || 'custom';
+    const modelType = request.modelType || 'custom';
 
     logger.debug(`Formatting embedding payload for model type: ${modelType}`);
 
@@ -979,21 +1823,24 @@ export class SageMakerEmbeddingProvider
         break;
     }
 
-    logger.debug(`Calling SageMaker embedding endpoint ${this.getEndpointName()}`);
+    logger.debug(`Calling SageMaker embedding endpoint ${request.endpoint}`);
     logger.debug(`With payload: ${payload}`);
 
     try {
       const { InvokeEndpointCommand } = await import('@aws-sdk/client-sagemaker-runtime');
 
       const command = new InvokeEndpointCommand({
-        EndpointName: this.getEndpointName(),
-        ContentType: this.getContentType(),
-        Accept: this.getAcceptType(),
+        EndpointName: request.endpoint,
+        ContentType: request.contentType,
+        Accept: request.acceptType,
         Body: payload,
       });
 
       const startTime = Date.now();
-      const response = await runtime.send(command);
+      this.assertRuntimeGeneration(generation);
+      abortSignal.throwIfAborted();
+      const response = await runtime.send(command, { abortSignal });
+      abortSignal.throwIfAborted();
       const endTime = Date.now();
       const _latency = endTime - startTime;
 
@@ -1024,12 +1871,13 @@ export class SageMakerEmbeddingProvider
         (Array.isArray(responseJson) ? responseJson[0] : responseJson);
 
       // If response format specifies a path, extract it using JavaScript expression evaluation
-      if (this.config.responseFormat?.path) {
+      if (request.responseFormat?.path) {
         try {
-          const pathExpression = this.config.responseFormat.path;
+          const pathExpression = request.responseFormat.path;
 
           // Extract data using the expression
           const extracted = await this.extractFromPath(responseJson, pathExpression);
+          abortSignal.throwIfAborted();
 
           // Validate that the extracted data is an array of numbers (embedding)
           if (Array.isArray(extracted) && extracted.every((val) => typeof val === 'number')) {
@@ -1049,7 +1897,8 @@ export class SageMakerEmbeddingProvider
             // Cache the result if caching is enabled
             await this.cacheEmbeddingResult(
               result,
-              transformedText,
+              getCacheKey,
+              abortSignal,
               context,
               isTransformed,
               isTransformed ? text : undefined,
@@ -1062,8 +1911,9 @@ export class SageMakerEmbeddingProvider
             );
           }
         } catch (error) {
+          abortSignal.throwIfAborted();
           logger.warn(
-            `Failed to extract embedding from path expression: ${this.config.responseFormat.path}, Error: ${error}`,
+            `Failed to extract embedding from path expression: ${request.responseFormat.path}, Error: ${error}`,
           );
           logger.debug(
             `Response JSON structure: ${JSON.stringify(responseJson).substring(0, 200)}...`,
@@ -1094,7 +1944,8 @@ export class SageMakerEmbeddingProvider
       // Cache the result if caching is enabled
       await this.cacheEmbeddingResult(
         result,
-        transformedText,
+        getCacheKey,
+        abortSignal,
         context,
         isTransformed,
         isTransformed ? text : undefined,
@@ -1102,6 +1953,7 @@ export class SageMakerEmbeddingProvider
 
       return result;
     } catch (error: any) {
+      abortSignal.throwIfAborted();
       logger.error(`SageMaker embedding API error: ${error}`);
       return {
         error: `SageMaker embedding API error: ${error.message || String(error)}`,
@@ -1114,7 +1966,8 @@ export class SageMakerEmbeddingProvider
    */
   private async cacheEmbeddingResult(
     result: ProviderEmbeddingResponse,
-    text: string, // This is the transformed text
+    getCacheKey: () => string,
+    abortSignal: AbortSignal,
     context?: CallApiContextParams,
     isTransformed: boolean = false,
     originalText?: string,
@@ -1124,7 +1977,7 @@ export class SageMakerEmbeddingProvider
 
     // Save result to cache if successful and caching enabled
     if (isCacheEnabled() && !bustCache && result.embedding && !result.error) {
-      const cacheKey = this.getCacheKey(text);
+      const cacheKey = getCacheKey();
       const cache = (await getCache)
         ? await getCache()
         : await import('../cache').then((m) => m.getCache());
@@ -1143,11 +1996,13 @@ export class SageMakerEmbeddingProvider
       const resultToCache = JSON.stringify(result);
 
       try {
+        abortSignal.throwIfAborted();
         await cache.set(cacheKey, resultToCache);
         logger.debug(
           `Stored SageMaker embedding response in cache with key: ${cacheKey.substring(0, 100)}...`,
         );
       } catch (_) {
+        abortSignal.throwIfAborted();
         logger.warn(`Failed to store SageMaker embedding response in cache: ${_}`);
       }
     }
