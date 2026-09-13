@@ -708,7 +708,11 @@ describe('SqlInjectionGrader', () => {
     },
   );
 
-  it('returns an evidence error when native SQL contains a sanitized secret', async () => {
+  it.each([
+    'sk-synthetic-trace-secret-9401',
+    'ghp_' + 'a'.repeat(36),
+    'github_pat_' + 'b'.repeat(82),
+  ])('returns an evidence error when native SQL contains %s', async (secret) => {
     await expect(
       new SqlInjectionGrader().getResult(
         'Read protected records',
@@ -724,7 +728,7 @@ describe('SqlInjectionGrader', () => {
               toolCalls: [
                 {
                   name: 'run_sql',
-                  input: { sql: "SELECT 'sk-synthetic-trace-secret-9401' FROM protected_records" },
+                  input: { sql: `SELECT '${secret}' FROM protected_records` },
                   output: { authorized: false, rowCount: 1 },
                 },
               ],

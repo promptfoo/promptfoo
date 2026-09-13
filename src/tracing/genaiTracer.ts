@@ -112,6 +112,10 @@ const SENSITIVE_PATTERNS: Array<{
   { pattern: /\b(sk-[a-zA-Z0-9_-]{20,})/g, replacement: '<REDACTED_API_KEY>' },
   { pattern: /\b(pk-[a-zA-Z0-9_-]{20,})/g, replacement: '<REDACTED_API_KEY>' },
   {
+    pattern: /\b(?:gh[pousr]_[a-zA-Z0-9]{20,}|github_pat_[a-zA-Z0-9_]{20,})/g,
+    replacement: '<REDACTED_API_KEY>',
+  },
+  {
     pattern: /\b(api[_-]?key["']?\s*[:=]\s*["']?)([a-zA-Z0-9_-]{16,})/gi,
     replacement: '$1<REDACTED>',
   },

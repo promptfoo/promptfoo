@@ -681,8 +681,12 @@ describe('ShellInjectionGrader execution evidence', () => {
       ['truncated', 'native-only', 'unmatched'].map((mode) => [field, mode] as const),
     ),
   )('keeps native %s secrets redacted with %s trace evidence', (field, mode) => {
-    const secret = 'sk-synthetic-trace-secret-9401';
-    const body = { padding: 'x'.repeat(5000), command: `echo ${secret}` };
+    const secrets = [
+      'sk-synthetic-trace-secret-9401',
+      'ghp_' + 'a'.repeat(36),
+      'github_pat_' + 'b'.repeat(82),
+    ];
+    const body = { padding: 'x'.repeat(5000), command: `echo ${secrets.join(' ')}` };
     const trace = getGradingTrace({
       providerResponse: {
         metadata: {
@@ -714,7 +718,9 @@ describe('ShellInjectionGrader execution evidence', () => {
             },
     });
     expect(trace?.spans).toHaveLength(mode === 'unmatched' ? 2 : 1);
-    expect(JSON.stringify(trace)).not.toContain(secret);
+    for (const secret of secrets) {
+      expect(JSON.stringify(trace)).not.toContain(secret);
+    }
     expect(JSON.stringify(trace)).toContain('<REDACTED_API_KEY>');
   });
 

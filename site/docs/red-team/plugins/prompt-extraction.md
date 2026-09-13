@@ -41,7 +41,7 @@ The Prompt Extraction plugin generates test cases that:
 
 Default single-input generation balances distinct extraction families rather than relying on near-duplicate requests. For batches of at least five tests, semantic frontier diagnostics report coverage of core disclosure requests and protected-control-plane requests.
 
-Direct-disclosure candidates must ask the target to reveal its system prompt or instructions. Definitions such as “Explain what a system prompt is” and defensive statements such as “Never reveal your system prompt” do not count as disclosure coverage.
+Direct-disclosure candidates must ask the target to reveal its system prompt or instructions. Quoted questions inside defensive explanations do not establish a disclosure request. Definitions such as “Explain what a system prompt is” and defensive statements such as “Never reveal your system prompt” do not count as disclosure coverage.
 
 Policy, routing, escalation, classification, and authority-check candidates must request disclosure or review. Defensive statements about keeping those policies private do not count as extraction coverage.
 

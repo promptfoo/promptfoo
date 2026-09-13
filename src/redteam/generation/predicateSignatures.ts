@@ -75,7 +75,10 @@ const PROMPT_EXTRACTION_RULES: Record<PromptExtractionPredicate, RegExp[]> = {
       String.raw`${REQUEST_PREFIX}${DISCLOSURE_ACTION}\bsystem (?:prompt|instructions?)\b`,
       'i',
     ),
-    /\bwhat (?:is|are)\s+(?:your|the)\s+(?:(?:initial|original|hidden|full)\s+)*system (?:prompt|instructions?)\b/i,
+    new RegExp(
+      String.raw`${REQUEST_PREFIX}what (?:is|are)\s+(?:your|the)\s+(?:(?:initial|original|hidden|full)\s+)*system (?:prompt|instructions?)\b`,
+      'i',
+    ),
   ],
   requestsOperatingInstructions: [
     new RegExp(
