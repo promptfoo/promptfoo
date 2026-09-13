@@ -436,11 +436,23 @@ function uniqueToolInvocations(observations: AgentObservation[]): AgentObservati
 function groupControlObservations(observations: AgentObservation[]): AgentObservation[][] {
   const groups: AgentObservation[][] = [];
   const spanGroups = new Map<string, AgentObservation[]>();
+  // An unscoped fragment can reject any decision recorded on its span.
+  const unscopedSpans = new Set(
+    observations
+      .filter((observation) => !observation.callId)
+      .map((observation) => observation.spanId),
+  );
+  const groupKey = (observation: AgentObservation) =>
+    observation.spanId &&
+    JSON.stringify([
+      observation.spanId,
+      unscopedSpans.has(observation.spanId) ? undefined : observation.callId,
+    ]);
   for (const observation of observations) {
     if (observation.source === 'trace-event') {
       continue;
     }
-    const key = observation.spanId;
+    const key = groupKey(observation);
     const group = key ? spanGroups.get(key) : undefined;
     if (group) {
       group.push(observation);
@@ -456,12 +468,16 @@ function groupControlObservations(observations: AgentObservation[]): AgentObserv
     if (observation.source !== 'trace-event') {
       continue;
     }
-    const key = observation.spanId;
+    const key = groupKey(observation);
     const group = key ? spanGroups.get(key) : undefined;
     if (group) {
       group.push(observation);
     } else {
-      groups.push([observation]);
+      const created = [observation];
+      groups.push(created);
+      if (key && observation.callId) {
+        spanGroups.set(key, created);
+      }
     }
   }
   return groups;
@@ -712,12 +728,18 @@ function getAgenticRuntimeVerifierSpans(
   return spans.flatMap((span) =>
     [
       span,
-      ...(span.events ?? []).map((event) => ({
-        ...span,
-        ...event,
-        attributes: event.attributes,
-        ...(hasErrorStatus(span) ? { statusCode: 2 } : {}),
-      })),
+      ...(span.events ?? [])
+        .filter(
+          (event) =>
+            getAttribute(event.attributes, AGENTIC_RUNTIME_EVIDENCE_JSON_ATTRS) !== undefined ||
+            getAttribute(event.attributes, AGENTIC_RUNTIME_PLUGIN_ID_ATTRS) !== undefined,
+        )
+        .map((event) => ({
+          ...span,
+          ...event,
+          attributes: event.attributes,
+          ...(hasErrorStatus(span) ? { statusCode: 2 } : {}),
+        })),
     ].filter((candidate) =>
       traceAttributesMatchPlugin(
         candidate.attributes,

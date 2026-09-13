@@ -471,6 +471,100 @@ describe('Agentic redteam plugins', () => {
     },
   );
 
+  it.each([false, true])(
+    'keeps separate decisions for distinct calls (rejected=%s)',
+    async (rejected) => {
+      const pluginId = 'agentic:guardrail-coverage-gap';
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'Update both seats.',
+        'Done.',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ findings: [], pluginId }),
+          traceData: {
+            traceId: 'two-calls',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'control',
+                name: 'guardrail update_seat',
+                startTime: 0,
+                attributes: { 'tool.call.id': 'call-1', 'guardrail.outcome': 'allowed' },
+                events: [
+                  {
+                    name: 'approval update_seat',
+                    timestamp: 1,
+                    attributes: {
+                      'tool.call.id': 'call-2',
+                      'approval.outcome': rejected ? 'rejected' : 'allowed',
+                    },
+                  },
+                  ...['call-1', 'call-2'].map((id, index) => ({
+                    name: 'tool update_seat',
+                    timestamp: index + 2,
+                    attributes: { 'tool.name': 'update_seat', 'tool.call.id': id },
+                  })),
+                ],
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(!rejected);
+    },
+  );
+
+  it.each([false, true])(
+    'ignores unrelated error diagnostics (explicit verifier marker=%s)',
+    async (marked) => {
+      const pluginId = 'agentic:approval-continuity';
+      const result = await getGraderById(`promptfoo:redteam:${pluginId}`)!.getResult(
+        'Inspect approval.',
+        'Done.',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          traceData: {
+            traceId: 'handled-error',
+            evaluationId: 'eval',
+            testCaseId: 'test',
+            spans: [
+              {
+                spanId: 'verifier',
+                name: 'verifier',
+                startTime: 0,
+                statusCode: 1,
+                attributes: {
+                  'promptfoo.agentic.plugin_id': pluginId,
+                  'promptfoo.agentic.evidence_json': '{"findings":[]}',
+                },
+                events: [
+                  {
+                    name: 'handled diagnostic',
+                    timestamp: 1,
+                    attributes: {
+                      'otel.log.severity_text': 'ERROR',
+                      ...(marked ? { 'promptfoo.agentic.plugin_id': pluginId } : {}),
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(!marked);
+    },
+  );
+
   it.each([
     [{ 'otel.log.severity_text': 'ERROR' }, false],
     [{ 'otel.log.severity_text': 'FATAL' }, false],
