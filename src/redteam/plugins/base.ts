@@ -9,6 +9,7 @@ import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
+import { normalizeMcpToolCall, stringifyMcpToolCall } from '../mcpToolCall';
 import { redteamProviderManager } from '../providers/shared';
 import {
   getGeneratedPromptOverLimit,
@@ -200,8 +201,28 @@ export abstract class RedteamPluginBase {
       // Use formatter to parse output
       const formatter = getPromptOutputFormatter(this.config);
       const parsedPrompts = formatter.parse(generatedPrompts, this.config);
-      const validationResult = this.validatePromptLengths(parsedPrompts);
-      retryInstructions = validationResult.retryInstructions;
+      const mcpTools = this.config.mcpTools;
+      let invalidMcpCalls = false;
+      const validPrompts =
+        !hasMultipleInputs && mcpTools?.length
+          ? parsedPrompts.flatMap((prompt) => {
+              const call = normalizeMcpToolCall(prompt.__prompt, mcpTools);
+              if (!call) {
+                invalidMcpCalls = true;
+                return [];
+              }
+              return [{ ...prompt, __prompt: stringifyMcpToolCall(call) }];
+            })
+          : parsedPrompts;
+      const validationResult = this.validatePromptLengths(validPrompts);
+      retryInstructions =
+        [
+          validationResult.retryInstructions,
+          invalidMcpCalls &&
+            'Return valid JSON MCP tool calls using only the provided tools and arguments that match their input schemas.',
+        ]
+          .filter(Boolean)
+          .join('\n') || undefined;
       return validationResult.acceptedPrompts;
     };
     // biome-ignore-end lint/complexity/noExcessiveCognitiveComplexity: Existing redteam generation flow handles batching, parsing, retries, and validation in one place.

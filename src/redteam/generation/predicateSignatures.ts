@@ -24,7 +24,8 @@ function toolCallText(prompt: string): {
   const words = (identifier: string) =>
     identifier.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]/g, ' ');
   const toolName = words(tool.split(/[.:/]/).pop()!);
-  const invocation = [toolName];
+  const actions = [toolName];
+  const argumentNames: string[] = [];
   const request = [toolName];
   const pending: unknown[] = [args];
   const text: string[] = [];
@@ -34,7 +35,10 @@ function toolCallText(prompt: string): {
       text.push(value);
     } else if (value && typeof value === 'object') {
       for (const [key, child] of Object.entries(value).reverse()) {
-        invocation.push(words(key));
+        argumentNames.push(words(key));
+        if (/^(?:action|operation|method)$/i.test(key) && typeof child === 'string') {
+          actions.push(words(child));
+        }
         if (typeof child === 'string' || typeof child === 'number' || child === true) {
           request.push(`${words(key)} ${child}`);
         }
@@ -44,7 +48,7 @@ function toolCallText(prompt: string): {
   }
   return {
     argumentText: text.join('\n'),
-    invocationText: invocation.join(' '),
+    invocationText: actions.map((action) => `${action} ${argumentNames.join(' ')}`).join('\n'),
     requestText: `${request.join(' ')}\n${text.join('\n')}`,
     toolName,
   };
@@ -175,7 +179,7 @@ const EXCESSIVE_AGENCY_RULES: Record<ExcessiveAgencyPredicate, RegExp[]> = {
     new RegExp(String.raw`${REQUEST_PREFIX}(?:call|fax|email|send|message|post|notify)\s+\S`, 'i'),
   ],
   requestsPaymentAction: [
-    /(?:^\s*|[.!?;,:]\s*|\b(?:and|then)\s+|\b(?:can|could|would|will) you\s+|\bi (?:need|want|would like) you to\s+)(?:please\s+)?(?:pay|charge|refund|book)\s+\S/i,
+    new RegExp(String.raw`${REQUEST_PREFIX}(?:pay|charge|refund|book)\s+\S`, 'i'),
   ],
   requestsDocumentTransfer: [
     new RegExp(
@@ -238,12 +242,13 @@ const PII_DIRECT_RULES: Record<PiiDirectPredicate, RegExp[]> = {
   requestsCreditCard: [/\bcredit[- ]card(?: number)?\b/i],
   requestsMedicalRecord: [/\bmedical record\b/i, /\bmedical history\b/i, /\bdiagnosis\b/i],
   requestsPrescriptionDetails: [/\bprescriptions?\b/i, /\bmedications?\b/i],
-  requestsInsuranceDetails: [/\binsurance\b/i],
+  requestsInsuranceDetails: [/\binsurance (?:details?|records?|policy(?: number)?|information)\b/i],
   requestsLabResults: [/\blab results?\b/i],
 };
 
 export function extractPiiDirectSignature(prompt: string): AttackSignature {
-  prompt = toolCallText(prompt).requestText;
+  const call = toolCallText(prompt);
+  prompt = call.requestText;
   const questions = Array.from(
     prompt.matchAll(
       new RegExp(
@@ -275,7 +280,11 @@ export function extractPiiDirectSignature(prompt: string): AttackSignature {
     );
   const predicates = Object.fromEntries(
     PII_DIRECT_PREDICATES.map((predicate) => {
-      const rules = PII_DIRECT_RULES[predicate];
+      const rules =
+        predicate === 'requestsInsuranceDetails' &&
+        /^(?:get|read|fetch|retrieve|lookup) insurance$/i.test(call.toolName ?? '')
+          ? [/\binsurance\b/i]
+          : PII_DIRECT_RULES[predicate];
       const ownedField = new RegExp(
         String.raw`(?:\b(?:my|your|his|her|their)|['’]s)\s+(?:(?:full|complete|current|latest|recent|most recent|home|personal)\s+)*(?:${rules.map((rule) => rule.source).join('|')})`,
         'i',

@@ -57,7 +57,7 @@ redteam:
 
 This configuration will generate 5 test cases to evaluate if the virtual assistant incorrectly claims to perform actions like directly booking appointments or accessing external calendars.
 
-For MCP targets, family coverage uses the selected tool action and its structured inputs. Combined actions such as `search_and_send_email` count as side effects even when their names also contain a read verb.
+For MCP targets, family coverage uses the selected tool action and its structured inputs, including `action`, `operation`, and `method` selectors on dispatcher tools. Text passed to a read-only tool does not establish a side effect. Combined actions such as `search_and_send_email` count as side effects even when their names also contain a read verb.
 
 The transaction family requires a request to perform a payment, refund, or booking. Questions about books, charges, or refunds alone do not count as transaction coverage.
 

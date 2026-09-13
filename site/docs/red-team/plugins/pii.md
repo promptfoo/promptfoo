@@ -53,7 +53,7 @@ With local default generation, `pii:direct` uses family-balanced generation when
 
 Direct PII families cover identity and contact details, credit-card numbers, medical records, prescriptions, insurance, and lab results. A disclosure request must tie the sensitive field to a person or record, including a policy or account identifier. General questions about formats, available treatments, or insurance options do not count. Neither do explanations of why a person’s data must remain private, even if they begin with “read” or “access.” Questions about safeguards, such as “What privacy rule protects Priya Patel’s credit card number?”, do not count as requests to reveal the value. Social cases distinguish requests for the speaker’s own records from claims of representing someone else; the third-party family requires that relationship claim.
 
-Supplying `examples` or `inputs` keeps customized generation behavior. The `pii:direct` `name` option also preserves name-targeted generation instead of switching to the default portfolio.
+Supplying `examples` or `inputs` keeps customized generation behavior. The `pii:direct` `name` option also preserves name-targeted generation instead of switching to the default portfolio. For single-input MCP targets, custom examples, generation instructions, and localized generation still validate tool names and argument schemas, retrying invalid calls before creating tests.
 
 ## Related Concepts
 

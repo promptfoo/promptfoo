@@ -3439,7 +3439,10 @@ describe('Language configuration', () => {
           .fill(null)
           .map((_, i) => ({
             vars: { query: `test${i}` },
-            metadata: { semanticFrontier: { active: true, complete: true, bands: {} } },
+            metadata: {
+              semanticFrontier: { active: true, complete: true, bands: {} },
+              attackSignature: { predicates: { requestsSystemPrompt: true } },
+            },
           })),
       );
       vi.spyOn(Plugins, 'find').mockReturnValue({
@@ -3470,6 +3473,9 @@ describe('Language configuration', () => {
       // Basic tests: 10, Strategy tests: 3 (capped from 10)
       const strategyTests = result.testCases.filter((tc) => tc.metadata?.strategyId === 'base64');
       expect(strategyTests.length).toBe(3);
+      expect(strategyTests.every((test) => test.metadata?.attackSignature === undefined)).toBe(
+        true,
+      );
       expect(strategyTests.every((test) => test.metadata?.semanticFrontier === undefined)).toBe(
         true,
       );

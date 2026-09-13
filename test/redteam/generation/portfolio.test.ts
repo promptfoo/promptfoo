@@ -120,14 +120,52 @@ class CrossFamilyPortfolioPlugin extends ProviderDrivenPortfolioPlugin {
 
 describe('PortfolioRedteamPluginBase', () => {
   it.each([
+    { examples: ['Custom attack.'] },
+    { modifiers: { testGenerationInstructions: 'Use my custom scenario.' } },
+    { language: 'Spanish' },
+  ])('validates and retries MCP calls on legacy fallback: %j', async (config) => {
+    const provider = createMockProvider();
+    const valid = { tool: 'execute', args: { command: 'custom scenario' } };
+    provider.callApi
+      .mockResolvedValueOnce(
+        createProviderResponse({ output: 'Prompt: {"tool":"invented","args":{}}' }),
+      )
+      .mockResolvedValueOnce(
+        createProviderResponse({ output: 'Prompt: {"tool":"execute","args":{"command":42}}' }),
+      )
+      .mockResolvedValue(createProviderResponse({ output: 'Prompt: ' + JSON.stringify(valid) }));
+    const plugin = new ProviderDrivenPortfolioPlugin(provider, 'MCP target', 'input', {
+      ...config,
+      mcpTools: [
+        {
+          name: 'execute',
+          inputSchema: {
+            type: 'object',
+            properties: { command: { type: 'string' } },
+            required: ['command'],
+            additionalProperties: false,
+          },
+        },
+      ],
+    });
+    const tests = await plugin.generateTests(1);
+    expect(tests).toHaveLength(1);
+    expect(JSON.parse(String(tests[0].vars?.input))).toEqual(valid);
+    expect(tests[0].metadata?.attackSignature).toBeUndefined();
+    expect(plugin.familyTemplateCalls).toBe(0);
+  });
+
+  it.each([
     { tool: 'invented', args: { command: 'accepted attack' } },
     { tool: 'execute', args: { command: 42, accepted: true } },
   ])('repairs invalid MCP candidates before counting coverage: %j', async (invalid) => {
     const provider = createMockProvider();
     const repaired = { tool: 'execute', args: { command: 'accepted replacement' } };
-    vi.spyOn(provider, 'callApi').mockImplementation(async (prompt) => ({
-      output: 'Prompt: ' + JSON.stringify(prompt.includes('Repair pass') ? repaired : invalid),
-    }));
+    provider.callApi
+      .mockResolvedValueOnce(
+        createProviderResponse({ output: 'Prompt: ' + JSON.stringify(invalid) }),
+      )
+      .mockResolvedValue(createProviderResponse({ output: 'Prompt: ' + JSON.stringify(repaired) }));
     const plugin = new ProviderDrivenPortfolioPlugin(provider, 'MCP target', 'input', {
       mcpTools: [
         {
@@ -144,7 +182,8 @@ describe('PortfolioRedteamPluginBase', () => {
     const tests = await plugin.generateTests(1);
     expect(tests).toHaveLength(1);
     expect(JSON.parse(String(tests[0].vars?.input))).toEqual(repaired);
-    expect(tests[0].metadata?.generationPhase).toBe('repair');
+    expect(tests[0].metadata?.generationPhase).toBe('initial');
+    expect(provider.callApi).toHaveBeenCalledTimes(2);
   });
 
   afterEach(() => {

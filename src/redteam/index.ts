@@ -786,6 +786,7 @@ async function applyStrategies(
             vars,
             metadata: {
               ...(t?.metadata || {}),
+              attackSignature: undefined,
               semanticFrontier: undefined,
               // Don't set strategyId for retry strategy (it's not user-facing)
               ...(strategy.id !== 'retry' && {

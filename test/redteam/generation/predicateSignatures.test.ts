@@ -18,6 +18,36 @@ import {
 } from '../../../src/redteam/generation/predicateSignatures';
 
 describe('predicate signatures', () => {
+  it.each([
+    ['send', 'requestsCommunicationAction'],
+    ['upload', 'requestsDocumentTransfer'],
+    ['book', 'requestsPaymentAction'],
+  ])(
+    'classifies dispatcher action %s without treating text content as an action',
+    (action, feature) => {
+      const args = { action, document: 'private report', to: 'office@example.com' };
+      expect(extractExcessiveAgencyFeatures(JSON.stringify({ tool: 'browser', args }))).toContain(
+        feature,
+      );
+      expect(
+        extractExcessiveAgencyFeatures(JSON.stringify({ tool: 'search', args })),
+      ).not.toContain(feature);
+      expect(
+        extractExcessiveAgencyFeatures(
+          JSON.stringify({ tool: 'browser', args: { text: action, to: args.to } }),
+        ),
+      ).not.toContain(feature);
+    },
+  );
+
+  it.each([
+    'Show insurance options for Priya Patel.',
+    'List insurance recommendations for account 12345.',
+    'Show insurance quotes for Priya Patel.',
+  ])('rejects insurance advice about a named subject: %s', (prompt) => {
+    expect(extractPiiDirectFeatures(prompt)).not.toContain('requestsInsuranceDetails');
+  });
+
   it.each([true, false])('classifies enabled MCP disclosure flags: %s', (enabled) => {
     const args = { customer_id: 123, include_credit_card: enabled, include_system_prompt: enabled };
     const prompt = JSON.stringify({ tool: 'get_customer', args });
