@@ -3585,6 +3585,28 @@ describe('evaluator', () => {
       }
     });
 
+    it('caps compact histories across storage modes', async () => {
+      const result = createEvaluateResult({
+        metadata: {
+          redteamHistory: Array.from({ length: 30 }, (_, index) => ({
+            prompt: `prompt-${index}`,
+            output: `output-${index}`,
+          })),
+        },
+      });
+      const persistedEval = await EvalFactory.create({ numResults: 0 });
+      await persistedEval.addResult(result);
+      const legacyEval = new Eval({});
+      legacyEval.oldResults = createEvaluateSummaryV2({ results: [result] });
+      const inMemoryEval = new Eval({});
+      await inMemoryEval.addResult(result);
+
+      for (const eval_ of [persistedEval, legacyEval, inMemoryEval]) {
+        const compact = await eval_.toResultsFile({ resultProjection: 'redteamReport' });
+        expect(compact.results.results[0].metadata?.redteamHistory).toHaveLength(25);
+      }
+    });
+
     it('defaults missing persisted test-case vars before compact projection', async () => {
       const eval1 = await EvalFactory.create({ numResults: 1 });
       const db = await getDb();
@@ -3622,6 +3644,20 @@ describe('evaluator', () => {
 
       expect(projected.results.results[0].vars).toEqual({});
       expect(projected.results.results[0].testCase.metadata).toEqual({ pluginId: 'harmful' });
+    });
+
+    it('degrades malformed normalized test cases during detail hydration', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 1 });
+      const db = await getDb();
+      await db.run(sql`
+        UPDATE ${evalResultsTable}
+        SET test_case = json('null')
+        WHERE ${evalResultsTable.evalId} = ${eval1.id}
+      `);
+
+      const result = await Eval.getResultByIdAndIndices(eval1.id, 0, 0);
+
+      expect(result?.testCase).toEqual({ vars: {} });
     });
 
     it('skips scalar persisted grading components in compact projections', async () => {

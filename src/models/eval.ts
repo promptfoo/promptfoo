@@ -63,6 +63,7 @@ import {
 import EvalResult, {
   getOutputStripFlags,
   getResultIndexKey,
+  MAX_COMPACT_HISTORY_ENTRIES,
   MAX_COMPACT_HISTORY_MEDIA_LENGTH,
   MAX_COMPACT_HISTORY_TEXT_LENGTH,
   type OutputStripFlags,
@@ -402,6 +403,7 @@ function jsonHistoryForRedteamReport(
         )))
       FROM json_each(${metadata}, ${path}) AS report_history
       WHERE report_history.type = 'object'
+        AND report_history.key < ${MAX_COMPACT_HISTORY_ENTRIES}
     )
     ELSE NULL
   END`;

@@ -146,6 +146,7 @@ export function projectErrorForOutput(
 // (`jsonHistoryForRedteamReport`) in sync with these limits.
 export const MAX_COMPACT_HISTORY_TEXT_LENGTH = 10_240;
 export const MAX_COMPACT_HISTORY_MEDIA_LENGTH = 65_536;
+export const MAX_COMPACT_HISTORY_ENTRIES = 25;
 
 // Require history prompt/output to be strings (never nested objects): the report UI
 // renders them as React children and throws on non-string content.
@@ -205,50 +206,53 @@ function projectRedteamHistoryForOutput(
     });
   }
 
-  return history.filter(isRecord).map((entry) => {
-    const boundedPrompt = forceProjection ? boundHistoryText(entry.prompt) : entry.prompt;
-    const boundedPromptAudio = forceProjection
-      ? boundHistoryMedia(entry.promptAudio)
-      : entry.promptAudio;
-    const boundedPromptImage = forceProjection
-      ? boundHistoryMedia(entry.promptImage)
-      : entry.promptImage;
-    const boundedOutput = forceProjection ? boundHistoryText(entry.output) : entry.output;
-    const boundedOutputAudio = forceProjection
-      ? boundHistoryMedia(entry.outputAudio)
-      : entry.outputAudio;
-    const boundedOutputImage = forceProjection
-      ? boundHistoryMedia(entry.outputImage)
-      : entry.outputImage;
-    return {
-      ...(typeof entry.id === 'string' && { id: entry.id }),
-      ...(typeof entry.parentId === 'string' && { parentId: entry.parentId }),
-      ...(typeof entry.score === 'number' && { score: entry.score }),
-      ...(typeof entry.depth === 'number' && { depth: entry.depth }),
-      ...(typeof entry.wasSelected === 'boolean' && { wasSelected: entry.wasSelected }),
-      ...(typeof entry.graderPassed === 'boolean' && { graderPassed: entry.graderPassed }),
-      ...(entry.role === 'user' || entry.role === 'assistant' || entry.role === 'system'
-        ? { role: entry.role }
-        : {}),
-      ...(stripFlags.shouldStripPromptText
-        ? { prompt: '[prompt stripped]' }
-        : {
-            ...(boundedPrompt !== undefined && { prompt: boundedPrompt }),
-            ...(boundedPromptAudio !== undefined && { promptAudio: boundedPromptAudio }),
-            ...(boundedPromptImage !== undefined && { promptImage: boundedPromptImage }),
-          }),
-      ...(stripFlags.shouldStripResponseOutput
-        ? { output: '[output stripped]' }
-        : {
-            ...(boundedOutput !== undefined && { output: boundedOutput }),
-            ...(boundedOutputAudio !== undefined && { outputAudio: boundedOutputAudio }),
-            ...(boundedOutputImage !== undefined && { outputImage: boundedOutputImage }),
-          }),
-      ...(!forceProjection &&
-        !stripFlags.shouldStripTestVars &&
-        entry.inputVars !== undefined && { inputVars: entry.inputVars }),
-    };
-  });
+  return history
+    .filter(isRecord)
+    .slice(0, MAX_COMPACT_HISTORY_ENTRIES)
+    .map((entry) => {
+      const boundedPrompt = forceProjection ? boundHistoryText(entry.prompt) : entry.prompt;
+      const boundedPromptAudio = forceProjection
+        ? boundHistoryMedia(entry.promptAudio)
+        : entry.promptAudio;
+      const boundedPromptImage = forceProjection
+        ? boundHistoryMedia(entry.promptImage)
+        : entry.promptImage;
+      const boundedOutput = forceProjection ? boundHistoryText(entry.output) : entry.output;
+      const boundedOutputAudio = forceProjection
+        ? boundHistoryMedia(entry.outputAudio)
+        : entry.outputAudio;
+      const boundedOutputImage = forceProjection
+        ? boundHistoryMedia(entry.outputImage)
+        : entry.outputImage;
+      return {
+        ...(typeof entry.id === 'string' && { id: entry.id }),
+        ...(typeof entry.parentId === 'string' && { parentId: entry.parentId }),
+        ...(typeof entry.score === 'number' && { score: entry.score }),
+        ...(typeof entry.depth === 'number' && { depth: entry.depth }),
+        ...(typeof entry.wasSelected === 'boolean' && { wasSelected: entry.wasSelected }),
+        ...(typeof entry.graderPassed === 'boolean' && { graderPassed: entry.graderPassed }),
+        ...(entry.role === 'user' || entry.role === 'assistant' || entry.role === 'system'
+          ? { role: entry.role }
+          : {}),
+        ...(stripFlags.shouldStripPromptText
+          ? { prompt: '[prompt stripped]' }
+          : {
+              ...(boundedPrompt !== undefined && { prompt: boundedPrompt }),
+              ...(boundedPromptAudio !== undefined && { promptAudio: boundedPromptAudio }),
+              ...(boundedPromptImage !== undefined && { promptImage: boundedPromptImage }),
+            }),
+        ...(stripFlags.shouldStripResponseOutput
+          ? { output: '[output stripped]' }
+          : {
+              ...(boundedOutput !== undefined && { output: boundedOutput }),
+              ...(boundedOutputAudio !== undefined && { outputAudio: boundedOutputAudio }),
+              ...(boundedOutputImage !== undefined && { outputImage: boundedOutputImage }),
+            }),
+        ...(!forceProjection &&
+          !stripFlags.shouldStripTestVars &&
+          entry.inputVars !== undefined && { inputVars: entry.inputVars }),
+      };
+    });
 }
 
 const RESPONSE_OUTPUT_STRIPPED = '[output stripped]';
@@ -1595,7 +1599,7 @@ export default class EvalResult {
 
     this.promptIdx = opts.promptIdx;
     this.testIdx = opts.testIdx;
-    this.testCase = opts.testCase;
+    this.testCase = isRecord(opts.testCase) ? opts.testCase : ({ vars: {} } as AtomicTestCase);
     this.prompt = opts.prompt;
     this.promptId = opts.promptId || hashPrompt(opts.prompt);
     this.error = opts.error;
@@ -1616,7 +1620,7 @@ export default class EvalResult {
       ? opts.failureReason
       : ResultFailureReason.NONE;
     this.persisted = opts.persisted || false;
-    this.pluginId = opts.testCase.metadata?.pluginId;
+    this.pluginId = this.testCase.metadata?.pluginId;
   }
 
   async save() {
