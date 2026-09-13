@@ -857,7 +857,7 @@ export async function resolveConfigs(
       ? false
       : (fileConfig.sharing ?? defaultConfig.sharing),
     defaultTest: processedDefaultTest
-      ? await readTest(processedDefaultTest, basePath, true)
+      ? await readTest(processedDefaultTest, basePath, true, onProviderConstructed)
       : undefined,
     derivedMetrics: fileConfig.derivedMetrics || defaultConfig.derivedMetrics,
     outputPath: cmdObj.output || fileConfig.outputPath || defaultConfig.outputPath,
