@@ -1037,7 +1037,11 @@ describe('JSON export with improved error handling', () => {
         });
         try {
           configReads = 0;
-          const projectedTable = sanitizeTableForArtifact(table);
+          // Streaming projects the original header, not getTable()'s sanitized copy.
+          const projectedTable = sanitizeTableForArtifact({
+            ...table,
+            head: { ...table.head, prompts },
+          });
           const expected = evalTableToCsv(projectedTable);
           const oneProjectionReads = configReads;
           expect(oneProjectionReads).toBeGreaterThan(0);

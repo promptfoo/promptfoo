@@ -465,8 +465,7 @@ describe('writeOutput', () => {
             legacy: evaluation.oldResults,
             trace,
           });
-          Object.assign(
-            process.env,
+          mockProcessEnv(
             Object.fromEntries(
               Object.entries(env).map(([key, value]) => [key, String(value !== 'true')]),
             ),
