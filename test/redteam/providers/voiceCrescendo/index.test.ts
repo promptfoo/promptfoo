@@ -150,6 +150,60 @@ describe('VoiceCrescendoProvider', () => {
     },
   );
 
+  it.each(
+    (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
+      [false, true].flatMap((grouped) =>
+        [false, true].map((leaked) => ({ plugin, grouped, leaked })),
+      ),
+    ),
+  )(
+    'keeps separate $plugin grades (grouped=$grouped, leaked=$leaked)',
+    async ({ plugin, grouped, leaked }) => {
+      const secrets = ['FIRST_PRIVATE_VOICE_RECEIPT', 'SECOND_PRIVATE_VOICE_RECEIPT'];
+      vi.mocked(getTargetResponse).mockResolvedValue({
+        output: leaked ? secrets[1] : 'Clean public report',
+      });
+      const provider = new VoiceCrescendoProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+        delayBetweenTurns: 0,
+      });
+      const assertions = secrets.map((secret) => ({
+        type: `promptfoo:redteam:${plugin}` as const,
+        value: { rawReceipt: secret },
+      }));
+      const test = {
+        vars: {},
+        ...(grouped && { metadata: { pluginId: plugin } }),
+        assert: [
+          { type: 'contains' as const, value: 'omitted' },
+          ...(grouped ? [{ type: 'assert-set' as const, assert: assertions }] : assertions),
+        ],
+      };
+      const result = await provider.callApi('Inspect public report', {
+        originalProvider: mockTargetProvider,
+        vars: {},
+        prompt: { raw: 'Test', label: 'Test' },
+        test,
+      });
+      const { runAssertions } = await import('../../../../src/assertions');
+      const grade = await runAssertions({
+        test,
+        prompt: 'Inspect public report',
+        providerResponse: result,
+      });
+      expect(grade.pass).toBe(!leaked);
+      const components = grouped
+        ? grade.componentResults![1].componentResults!
+        : grade.componentResults!.slice(1);
+      expect(components.map(({ pass }) => pass)).toEqual([true, !leaked]);
+      for (const secret of secrets) {
+        expect(JSON.stringify(result)).not.toContain(secret);
+        expect(JSON.stringify(mockRedteamProvider.callApi.mock.calls)).not.toContain(secret);
+      }
+    },
+  );
+
   it('should return error when no target provider configured', async () => {
     const provider = new VoiceCrescendoProvider({ injectVar: 'goal' });
 

@@ -55,9 +55,9 @@ Adaptive providers preserve the target's conversation-end flag while omitting it
 
 Configured receipt files must be readable regular files under the working directory or system temporary directory, containing 16 bytes to 64 KiB of text. A missing, unreadable, out-of-root, or invalid receipt fails verification. Use `rawReceiptPath` and `redactedArtifactPath` to check a protected value against an exported file locally. Files must remain unchanged while they are read.
 
-Protected receipt files are captured before any target runs. For tests using receipt files, `beforeEach` hooks run in test order during preparation; each hook runs once, keeps its normal error and timeout behavior, and its receipt values are captured before the next hook. Every captured value remains protected when multiple tests reuse a file. Other tests keep their usual hook timing.
+Protected receipt files are captured before any target runs. For tests using receipt files, `beforeEach` hooks run in test order during preparation; each hook runs once, keeps its normal error and timeout behavior, and its receipt values are captured before the next hook. Every captured value remains protected when multiple tests reuse a file. Other tests keep their usual hook timing. Declare the privacy assertion before the hook when cases share a receipt file. If hooks add the entire assertion, use a separate file per case or run with `maxConcurrency: 1`.
 
-Use inline assertion objects or static JSON/YAML assertion files to declare receipt paths. If a script prepares the assertion value, resolve it in `beforeEach`. Output-dependent assertion scripts run after the target and cannot introduce new protected receipt paths. Literal, JSON-escaped, and percent-encoded receipt values in public artifacts fail verification.
+Use inline assertion objects or static JSON/YAML assertion files to declare receipt paths. Static assertion values are loaded before target execution and retained for grading. If a script prepares the assertion value, resolve it in `beforeEach`. Output-dependent assertion scripts run after the target and cannot introduce new protected receipt paths. Literal, JSON-escaped, and percent-encoded receipt values in public artifacts fail verification.
 
 ## Evidence To Collect
 

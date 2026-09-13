@@ -42,6 +42,7 @@ import {
   TRACE_REDACTION_ASSERTIONS,
 } from '../../util/traceRedaction';
 import { TransformInputType, transform } from '../../util/transform';
+import { getProtectedAssertionValue } from '../plugins/codingAgent/verifiers';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
@@ -1100,5 +1101,5 @@ export function getGraderAssertionValue(
     return undefined;
   }
 
-  return assertToUse.value;
+  return getProtectedAssertionValue(assertToUse);
 }

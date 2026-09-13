@@ -186,7 +186,7 @@ describeEvaluator('evaluator assertions', () => {
   it.each(
     (['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const).flatMap((plugin) =>
       [1, 2].flatMap((maxConcurrency) =>
-        ['missing', 'existing', 'unconfigured'].map((initial) => ({
+        ['missing', 'existing', 'unconfigured', 'declared-shared'].map((initial) => ({
           plugin,
           maxConcurrency,
           initial,
@@ -199,7 +199,9 @@ describeEvaluator('evaluator assertions', () => {
       const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hook-receipts-'));
       try {
         const secrets = ['PRIVATE_HOOK_FIRST_RECEIPT', 'PRIVATE_HOOK_SECOND_RECEIPT'];
-        const receipts = secrets.map((_, index) => path.join(directory, `receipt-${index}`));
+        const receipts = secrets.map((_, index) =>
+          path.join(directory, `receipt-${initial === 'declared-shared' ? 'shared' : index}`),
+        );
         if (initial === 'existing') {
           receipts.forEach((file) => fs.writeFileSync(file, 'PRIVATE_INITIAL_RECEIPT'));
         }
@@ -208,7 +210,7 @@ describeEvaluator('evaluator assertions', () => {
           if (phase === 'beforeEach' && 'test' in context) {
             const index = Number(context.test.vars?.index);
             fs.writeFileSync(receipts[index], secrets[index]);
-            if (initial === 'unconfigured') {
+            if (initial.startsWith('unconfigured')) {
               context.test.assert = [
                 {
                   type: `promptfoo:redteam:${plugin}`,
@@ -232,10 +234,9 @@ describeEvaluator('evaluator assertions', () => {
           extensions: ['file://initialize-receipts.js'],
           tests: receipts.map((receipt, index) => ({
             vars: { index },
-            assert:
-              initial === 'unconfigured'
-                ? undefined
-                : [{ type: `promptfoo:redteam:${plugin}`, value: { rawReceiptPath: receipt } }],
+            assert: initial.startsWith('unconfigured')
+              ? undefined
+              : [{ type: `promptfoo:redteam:${plugin}`, value: { rawReceiptPath: receipt } }],
           })),
         };
         const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
@@ -250,7 +251,7 @@ describeEvaluator('evaluator assertions', () => {
         expect(
           summary.results.every((row) => row.gradingResult?.reason.includes('raw sensitive value')),
         ).toBe(true);
-        if (initial !== 'unconfigured') {
+        if (!initial.startsWith('unconfigured')) {
           expect(events.slice(0, 2)).toEqual(['hook-0', 'hook-1']);
         }
         expect(events.filter((event) => event.startsWith('hook-'))).toEqual(['hook-0', 'hook-1']);

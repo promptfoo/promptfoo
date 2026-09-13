@@ -43,7 +43,21 @@ class VerifierArtifactError extends Error {
 
 const MAX_VERIFIER_ARTIFACT_BYTES = 1024 * 1024;
 
-const protectedReceiptScope = new AsyncLocalStorage<Map<string, VerifierReceipt[]>>();
+const protectedReceiptScope = new AsyncLocalStorage<{
+  receipts: Map<string, VerifierReceipt[]>;
+  assertionValues: Map<Assertion, { value: Assertion['value'] } | { error: unknown }>;
+}>();
+
+export function getProtectedAssertionValue(assertion: Assertion): Assertion['value'] {
+  const captured = protectedReceiptScope.getStore()?.assertionValues.get(assertion);
+  if (!captured) {
+    return assertion.value;
+  }
+  if ('error' in captured) {
+    throw captured.error;
+  }
+  return captured.value;
+}
 
 function* protectedReceiptAssertions(test: AtomicTestCase): Generator<Assertion> {
   const pending = [...(test.assert ?? [])];
@@ -88,16 +102,21 @@ export async function withProtectedReceiptScope<T>(
   run: () => Promise<T>,
   { inherit = false }: { inherit?: boolean } = {},
 ): Promise<T> {
-  const inherited = inherit ? protectedReceiptScope.getStore() : undefined;
+  const parent = inherit ? protectedReceiptScope.getStore() : undefined;
+  const inherited = parent?.receipts;
   const receipts = new Map<string, VerifierReceipt[]>(inherited);
+  const assertionValues = new Map(parent?.assertionValues);
   for await (const test of tests) {
     for (const assertion of protectedReceiptAssertions(test)) {
       let value = assertion.value;
       if (typeof value === 'string' && /^file:\/\/.*\.(?:json|ya?ml|txt)$/.test(value)) {
         try {
-          value = processFileReference(value);
-        } catch {
-          // Assertion processing reports invalid config files in the normal grading result.
+          value = parent?.assertionValues.has(assertion)
+            ? getProtectedAssertionValue(assertion)
+            : processFileReference(value);
+          assertionValues.set(assertion, { value });
+        } catch (error) {
+          assertionValues.set(assertion, { error });
           continue;
         }
       }
@@ -120,7 +139,7 @@ export async function withProtectedReceiptScope<T>(
       }
     }
   }
-  return protectedReceiptScope.run(receipts, run);
+  return protectedReceiptScope.run({ receipts, assertionValues }, run);
 }
 
 const COMMAND_OUTPUT_KEYS = ['aggregated_output', 'output', 'stderr', 'stdout'].flatMap((key) => [
@@ -6244,7 +6263,7 @@ function lifecycleScriptArtifactsFromAssertionAndTest(
 }
 
 function protectedReceiptsFromFile(filePath: string, location: string): VerifierReceipt[] {
-  const scope = protectedReceiptScope.getStore();
+  const scope = protectedReceiptScope.getStore()?.receipts;
   if (!scope) {
     return [readVerifierReceipt(filePath, location)];
   }

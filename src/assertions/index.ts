@@ -20,6 +20,7 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { getProtectedAssertionValue } from '../redteam/plugins/codingAgent/verifiers';
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
@@ -498,7 +499,7 @@ async function runAssertionInternal({
 
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
-  let renderedValue = assertion.value;
+  let renderedValue = getProtectedAssertionValue(assertion);
   let valueFromScript: ValueFromScriptType;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {

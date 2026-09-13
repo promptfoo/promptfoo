@@ -45,7 +45,6 @@ import {
 
 import type {
   ApiProvider,
-  Assertion,
   AtomicTestCase,
   CallApiContextParams,
   CallApiOptionsParams,
@@ -132,7 +131,7 @@ const EVAL_SYSTEM_PROMPT = dedent`
  * Metadata for Voice Crescendo conversations
  */
 interface VoiceCrescendoMetadata extends BaseRedteamMetadata {
-  storedGraderResult?: GradingResult;
+  storedGraderResults?: Record<number, GradingResult>;
   redactionContentOmitted?: boolean;
   redactionMediaOmitted?: boolean;
   voiceCrescendoTurnsCompleted: number;
@@ -510,11 +509,12 @@ export class VoiceCrescendoProvider implements ApiProvider {
     let finalConfidence = 0;
     let lastResponse = '';
     let mediaRedactionError: string | undefined;
-    let storedGraderResult: GradingResult | undefined;
+    const storedGraderResults: Record<number, GradingResult> = {};
     const test = context?.test as AtomicTestCase | undefined;
-    const redactionAssertion = test?.assert
-      ?.flatMap((assertion) => (assertion.type === 'assert-set' ? assertion.assert : [assertion]))
-      .find((assertion): assertion is Assertion =>
+    const redactionAssertions = (test?.assert ?? [])
+      .flatMap((assertion) => (assertion.type === 'assert-set' ? assertion.assert : [assertion]))
+      .map((assertion, index) => ({ assertion, index }))
+      .filter(({ assertion }) =>
         TRACE_REDACTION_ASSERTIONS.has(assertion.type.replace(/^not-/, '')),
       );
     let lastPrompt = '';
@@ -559,7 +559,10 @@ export class VoiceCrescendoProvider implements ApiProvider {
         if (targetResponse.metadata?.redactionMediaOmitted === true) {
           mediaRedactionError ??= targetResponse.error;
         }
-        if (test && redactionAssertion && !targetResponse.error) {
+        for (const { assertion: redactionAssertion, index } of redactionAssertions) {
+          if (!test || targetResponse.error) {
+            break;
+          }
           const grader = getGraderById(redactionAssertion.type)!;
           const { grade, rubric } = await runRedteamGrader(
             grader,
@@ -572,7 +575,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
             undefined,
             { providerResponse: targetResponse },
           );
-          storedGraderResult = {
+          storedGraderResults[index] = {
             ...grade,
             assertion: buildGraderResultAssertion(grade.assertion, redactionAssertion, rubric),
           };
@@ -638,11 +641,13 @@ export class VoiceCrescendoProvider implements ApiProvider {
         }
 
         // Evaluate if objective achieved
-        const evaluation = storedGraderResult
+        const grades = Object.values(storedGraderResults);
+        const failedGrade = grades.find((grade) => !grade.pass);
+        const evaluation = grades.length
           ? {
-              objectiveAchieved: !storedGraderResult.pass,
+              objectiveAchieved: Boolean(failedGrade),
               confidence: 1,
-              reason: storedGraderResult.reason,
+              reason: failedGrade?.reason ?? 'All redaction checks passed.',
               partialSuccess: false,
               cached: undefined,
               tokenUsage: undefined,
@@ -694,8 +699,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     }
 
     const metadata: VoiceCrescendoMetadata = {
-      ...(storedGraderResult && { storedGraderResult }),
-      ...(redactionAssertion && { redactionContentOmitted: true }),
+      ...(redactionAssertions.length > 0 && { storedGraderResults, redactionContentOmitted: true }),
       ...(mediaRedactionError && { redactionMediaOmitted: true }),
       redteamFinalPrompt: lastPrompt,
       messages: this.memory.getConversation(this.conversationId).map((m) => ({

@@ -84,6 +84,62 @@ describe('runEval', () => {
     }
   });
 
+  it.each(
+    ['json', 'yaml'].flatMap((extension) =>
+      ['overwrite', 'delete', 'create'].map((mode) => ({ extension, mode })),
+    ),
+  )(
+    'keeps a static $extension assertion plan fixed when the target uses $mode',
+    async ({ extension, mode }) => {
+      const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'static-assertion-plan-'));
+      try {
+        const secret = 'ORIGINAL_STATIC_ASSERTION_RECEIPT';
+        const file = path.join(directory, `assertion.${extension}`);
+        if (mode !== 'create') {
+          fs.writeFileSync(file, JSON.stringify({ rawReceipt: secret }));
+        }
+        const test = {
+          assert: [
+            {
+              type: 'promptfoo:redteam:coding-agent:trace-redaction' as const,
+              value: `file://${file}`,
+            },
+          ],
+        };
+        const results = await runEval({
+          ...defaultOptions,
+          provider: {
+            id: () => 'static-plan-target',
+            async callApi() {
+              if (mode === 'delete') {
+                fs.unlinkSync(file);
+              } else {
+                fs.writeFileSync(
+                  file,
+                  JSON.stringify({ rawReceipt: 'TARGET_SUPPLIED_STATIC_PLAN_DECOY' }),
+                );
+              }
+              return { output: secret };
+            },
+          },
+          prompt: { raw: 'Inspect report', label: 'report' },
+          test,
+          conversations: {},
+          registers: {},
+        });
+        expect(results[0].success).toBe(false);
+        if (mode === 'create') {
+          expect(results[0].failureReason).toBe(ResultFailureReason.ERROR);
+        } else {
+          expect(results[0].gradingResult?.reason).toContain('raw sensitive value');
+        }
+        expect(test.assert[0].value).toBe(`file://${file}`);
+      } finally {
+        fs.rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
   it('should handle basic prompt evaluation', async () => {
     const results = await runEval({
       ...defaultOptions,
