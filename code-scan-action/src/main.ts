@@ -17,7 +17,7 @@ import * as github from '@actions/github';
 // instead of resolving a mutable dist-tag like `latest`.
 import { version as defaultPromptfooVersion } from '../../package.json';
 import { hasPrPostableFindings, prepareComments } from '../../src/codeScan/util/github';
-import { hasSarifReportableFindings, scanResponseToSarif } from '../../src/codeScan/util/sarif';
+import { scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
@@ -29,12 +29,18 @@ import {
 } from '../../src/types/codeScan';
 import { getGitHubOIDCToken } from './auth';
 import { generateConfigFile } from './config';
-import { getGitHubContext, getPRFiles, partitionReviewCommentsByDiff } from './github';
+import {
+  assertCurrentPRHead,
+  getGitHubContext,
+  getPRFiles,
+  partitionReviewCommentsByDiff,
+} from './github';
 
 interface ActionInputs {
   apiHost: string;
   minimumSeverity: string;
   configPath: string;
+  diffsOnly: boolean;
   guidanceText: string;
   guidanceFile: string;
   githubToken: string;
@@ -64,6 +70,7 @@ function formatError(error: unknown): string {
 }
 
 const DEFAULT_MINIMUM_SEVERITY = 'medium';
+const DEFAULT_API_HOST = 'https://api.promptfoo.app';
 
 /**
  * Resolve the effective minimum severity from the two supported inputs.
@@ -81,8 +88,8 @@ const DEFAULT_MINIMUM_SEVERITY = 'medium';
  * emitted so the workflow author can collapse the inputs.
  */
 function resolveMinimumSeverityInput(): string {
-  const primary = core.getInput('min-severity').trim();
-  const alias = core.getInput('minimum-severity').trim();
+  const primary = core.getInput('min-severity').trim().toLowerCase();
+  const alias = core.getInput('minimum-severity').trim().toLowerCase();
 
   if (primary && alias && primary !== alias) {
     core.warning(
@@ -91,6 +98,30 @@ function resolveMinimumSeverityInput(): string {
   }
 
   return primary || alias || DEFAULT_MINIMUM_SEVERITY;
+}
+
+function resolveDiffsOnlyInput(): boolean {
+  return core.getInput('diffs-only').trim() ? core.getBooleanInput('diffs-only') : false;
+}
+
+function warnIgnoredInputsWhenConfigPathSet(configPath: string): void {
+  if (!configPath) {
+    return;
+  }
+
+  const ignoredInputs = [
+    'min-severity',
+    'minimum-severity',
+    'diffs-only',
+    'guidance',
+    'guidance-file',
+  ].filter((name) => core.getInput(name).trim());
+
+  if (ignoredInputs.length > 0) {
+    core.warning(
+      `config-path supplies scan policy; ignoring Action input${ignoredInputs.length === 1 ? '' : 's'}: ${ignoredInputs.join(', ')}`,
+    );
+  }
 }
 
 // Exact versions only (optionally with a prerelease suffix). Anything looser — a range,
@@ -124,10 +155,14 @@ function resolvePromptfooVersionInput(): string {
 }
 
 function getActionInputs(): ActionInputs {
+  const configPath = core.getInput('config-path').trim();
+  warnIgnoredInputsWhenConfigPathSet(configPath);
+
   return {
-    apiHost: core.getInput('api-host'),
-    minimumSeverity: resolveMinimumSeverityInput(),
-    configPath: core.getInput('config-path'),
+    apiHost: core.getInput('api-host').trim() || DEFAULT_API_HOST,
+    minimumSeverity: configPath ? DEFAULT_MINIMUM_SEVERITY : resolveMinimumSeverityInput(),
+    configPath,
+    diffsOnly: configPath ? false : resolveDiffsOnlyInput(),
     guidanceText: core.getInput('guidance'),
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
@@ -182,6 +217,10 @@ function createScanEnv(oidcToken: string | undefined): Record<string, string> {
 }
 
 function loadGuidance(inputs: ActionInputs): string | undefined {
+  if (inputs.configPath) {
+    return undefined;
+  }
+
   if (inputs.guidanceText && inputs.guidanceFile) {
     throw new Error('Cannot specify both guidance and guidance-file inputs');
   }
@@ -254,12 +293,17 @@ async function authenticateWithOidc(): Promise<string | undefined> {
   }
 }
 
-function resolveConfigPath(configPath: string, minimumSeverity: string, guidance?: string): string {
+function resolveConfigPath(
+  configPath: string,
+  minimumSeverity: string,
+  guidance: string | undefined,
+  diffsOnly: boolean,
+): string {
   if (configPath) {
     return configPath;
   }
 
-  const generatedConfigPath = generateConfigFile(minimumSeverity, guidance);
+  const generatedConfigPath = generateConfigFile(minimumSeverity, guidance, diffsOnly);
   core.info(`📝 Generated temporary config at ${generatedConfigPath}`);
   return generatedConfigPath;
 }
@@ -282,15 +326,41 @@ async function getBaseBranch(githubToken: string, context: PullRequestContext): 
   return pr.base.ref;
 }
 
-async function fetchBaseBranch(baseBranch: string): Promise<void> {
+async function fetchBaseBranch(baseBranch: string, githubToken: string): Promise<void> {
   core.info(`📥 Fetching base branch: ${baseBranch}...`);
 
   try {
-    await exec.exec('git', ['fetch', 'origin', `${baseBranch}:${baseBranch}`]);
+    const basicAuth = Buffer.from(`x-access-token:${githubToken}`).toString('base64');
+    await exec.exec('git', ['fetch', 'origin', `${baseBranch}:${baseBranch}`], {
+      env: {
+        ...process.env,
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+        GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${basicAuth}`,
+      },
+    });
     core.info(`✅ Base branch ${baseBranch} fetched successfully`);
   } catch (error) {
     core.warning(`Failed to fetch base branch ${baseBranch}: ${formatError(error)}`);
     core.warning('Git diff may fail if base branch is not available');
+  }
+}
+
+async function assertWorkspaceHead(context: PullRequestContext): Promise<void> {
+  let output = '';
+  const exitCode = await exec.exec('git', ['rev-parse', 'HEAD'], {
+    listeners: {
+      stdout: (data: Buffer) => {
+        output += data.toString();
+      },
+    },
+    ignoreReturnCode: true,
+  });
+  const workspaceHead = output.trim();
+  if (exitCode !== 0 || !workspaceHead || workspaceHead !== context.sha) {
+    throw new Error(
+      `Workspace HEAD (${workspaceHead || 'unknown'}) does not match PR head ${context.sha}`,
+    );
   }
 }
 
@@ -651,11 +721,7 @@ function buildGeneralCommentBody(comment: Comment): string {
 }
 
 function toReviewComment(comment: Comment) {
-  // GitHub's createReview API requires start_line < line for multi-line comments and
-  // rejects the entire review (422) otherwise. Comments routed here are clamped upstream
-  // by partitionReviewCommentsByDiff, but guard explicitly so this never depends on a
-  // caller having run that clamp. The ternary also narrows startLine to `number`,
-  // dropping the null/undefined the API type rejects.
+  // GitHub rejects multi-line comments unless start_line is strictly before line.
   const startLine =
     comment.startLine && comment.line && comment.startLine < comment.line
       ? comment.startLine
@@ -689,6 +755,7 @@ async function postReview(
     repo: context.repo,
     pull_number: context.number,
     event: 'COMMENT',
+    commit_id: context.sha,
     body: reviewBody || undefined,
     comments: lineComments.length > 0 ? lineComments.map(toReviewComment) : undefined,
   });
@@ -724,31 +791,91 @@ async function postFallbackComments(
   context: PullRequestContext,
   comments: Comment[],
   review: string | undefined,
-  minimumSeverity: string,
+  minimumSeverity: string | undefined,
 ): Promise<void> {
   core.info('📝 Server could not post comments - posting as fallback...');
 
+  const octokit = github.getOctokit(githubToken);
+  const {
+    lineComments: preparedLineComments,
+    generalComments,
+    reviewBody,
+  } = prepareComments(comments, review, minimumSeverity);
+
+  let lineComments: Comment[];
+  let invalidLineComments: Comment[];
   try {
-    const octokit = github.getOctokit(githubToken);
-    const {
-      lineComments: preparedLineComments,
-      generalComments,
-      reviewBody,
-    } = prepareComments(comments, review, minimumSeverity);
-    const { lineComments, invalidLineComments } = await partitionReviewCommentsByDiff(
+    ({ lineComments, invalidLineComments } = await partitionReviewCommentsByDiff(
       githubToken,
       context,
       preparedLineComments,
-    );
-
-    await postReview(octokit, context, lineComments, reviewBody);
-    await postGeneralComments(octokit, context, [...generalComments, ...invalidLineComments]);
-
-    core.info('✅ All comments posted to PR by action');
+    ));
   } catch (error) {
-    core.error(`Failed to post comments: ${formatError(error)}`);
-    core.warning('Comments could not be posted to PR');
+    if (error instanceof Error && error.name === 'StalePullRequestHeadError') {
+      throw error;
+    }
+    // If the diff can't be fetched/validated, treat every prepared line comment as a
+    // general comment so no finding is dropped over a location-validation failure.
+    core.warning(`Failed to validate comment locations against the PR diff: ${formatError(error)}`);
+    lineComments = [];
+    invalidLineComments = preparedLineComments;
   }
+
+  // Comments that are always general (file-only, fileless) plus line comments whose exact
+  // location is not in the reviewed diff.
+  const generalCommentsToPost = [...generalComments, ...invalidLineComments];
+
+  // A rejected review must not discard the findings that can still be posted separately.
+  let reviewFailed = false;
+  try {
+    await postReview(octokit, context, lineComments, reviewBody);
+  } catch (error) {
+    reviewFailed = true;
+    core.warning(
+      `Failed to post PR review; degrading ${lineComments.length} line finding${lineComments.length === 1 ? '' : 's'} to general comments: ${formatError(error)}`,
+    );
+    generalCommentsToPost.push(...lineComments);
+  }
+
+  if (generalCommentsToPost.length > 0 || (reviewFailed && reviewBody)) {
+    // Issue comments are not commit-bound. Recheck after the review attempt before
+    // falling back, and fail if the current head cannot be verified.
+    await assertCurrentPRHead(octokit.rest, context);
+  }
+
+  try {
+    // Preserve the review summary too when the review write failed, so it is not lost.
+    if (reviewFailed && reviewBody) {
+      try {
+        await octokit.rest.issues.createComment({
+          owner: context.owner,
+          repo: context.repo,
+          issue_number: context.number,
+          body: reviewBody,
+        });
+      } catch (error) {
+        if (generalCommentsToPost.length === 0) {
+          throw error;
+        }
+        core.warning('Failed to post review summary as a comment: ' + formatError(error));
+      }
+    }
+    await postGeneralComments(octokit, context, generalCommentsToPost);
+  } catch (error) {
+    // The general-comment fallback is the last channel for these findings. If it also
+    // fails, fail the Action rather than reporting a green scan with findings absent.
+    core.error(`Failed to post comments: ${formatError(error)}`);
+    core.setFailed(
+      `Code scan found findings but they could not be posted to the PR: ${formatError(error)}`,
+    );
+    return;
+  }
+
+  core.info(
+    reviewFailed
+      ? '✅ Findings posted as general comments after the PR review could not be created'
+      : '✅ All comments posted to PR by action',
+  );
 }
 
 // The shared symlink-safe containment check lives at src/util/isPathWithinDir.ts, but
@@ -891,15 +1018,14 @@ async function handleScanResponse(
   inputs: ActionInputs,
   context: PullRequestContext,
 ): Promise<void> {
-  const { comments, commentsPosted, review, skipReason } = scanResponse;
-  const hasSarifFindings = hasSarifReportableFindings(scanResponse);
+  const { comments, commentsPosted, review, skipReason, skippedFiles } = scanResponse;
   const hasPrFindings = hasPrPostableFindings(comments);
 
-  // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
-  // existing Code Scanning findings or imply that authorization-gated work ran. Mixed
-  // responses still need processing when a finding can be surfaced through SARIF or PR
-  // comments, because those output channels intentionally support different locations.
-  if (skipReason && !hasSarifFindings && !hasPrFindings) {
+  // A skipped scan is not a clean scan. SARIF is withheld entirely for any response
+  // carrying a skipReason (see below), so a skip is only worth processing when a finding
+  // can still be surfaced through PR comments. Bail out otherwise so we never imply that
+  // authorization-gated work ran.
+  if (skipReason && !hasPrFindings) {
     core.info(`🔀 Scan skipped: ${skipReason}`);
     return;
   }
@@ -915,9 +1041,16 @@ async function handleScanResponse(
 
   core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
 
-  // A mixed skip with only PR-postable findings must not upload an empty SARIF run.
-  if (!skipReason || hasSarifFindings) {
+  // Withhold SARIF for ANY response carrying a skipReason. A partial SARIF run (even one
+  // location-backed finding) uploaded under the same Code Scanning category can be treated
+  // as authoritative and silently close prior real alerts that are merely absent from this
+  // incomplete scan. Surviving findings are still surfaced through PR comments below.
+  if (!skipReason && skippedFiles === 0) {
     emitConfiguredSarifOutput(scanResponse, inputs);
+  } else if ((skippedFiles ?? 0) > 0) {
+    core.warning(
+      `SARIF not written because ${skippedFiles} changed file${skippedFiles === 1 ? ' was' : 's were'} skipped.`,
+    );
   }
 
   if ((hasPrFindings || review) && commentsPosted === false) {
@@ -926,23 +1059,20 @@ async function handleScanResponse(
       context,
       comments,
       review,
-      inputs.minimumSeverity,
+      inputs.configPath ? undefined : inputs.minimumSeverity,
     );
-    return;
-  }
-
-  if (comments.length > 0 && commentsPosted === true) {
+  } else if (comments.length > 0 && commentsPosted === true) {
     core.info('✅ Comments posted to PR by scan server');
-    return;
-  }
-
-  if (comments.length > 0) {
+  } else if (comments.length > 0) {
     // commentsPosted is undefined - old server version
     core.info('✅ Comments returned (server version does not indicate if posted)');
-    return;
+  } else {
+    core.info('✨ No vulnerabilities found!');
   }
 
-  core.info('✨ No vulnerabilities found!');
+  if (inputs.sarifOutputPath && skippedFiles !== 0) {
+    throw new Error('SARIF was requested but withheld because changed files were skipped.');
+  }
 }
 
 function logActCommentPreview(comments: Comment[]): void {
@@ -982,6 +1112,7 @@ async function runCodeScan(): Promise<void> {
   core.info('🔍 Starting Promptfoo Code Scan...');
 
   const context = await getGitHubContext(inputs.githubToken);
+  await assertWorkspaceHead(context);
   core.info(`📋 Scanning PR #${context.number} in ${context.owner}/${context.repo}`);
 
   core.info('🔎 Checking if this is a setup PR...');
@@ -996,15 +1127,21 @@ async function runCodeScan(): Promise<void> {
 
   const oidcToken = await authenticateWithOidc();
 
-  const finalConfigPath = resolveConfigPath(inputs.configPath, inputs.minimumSeverity, guidance);
+  const finalConfigPath = resolveConfigPath(
+    inputs.configPath,
+    inputs.minimumSeverity,
+    guidance,
+    inputs.diffsOnly,
+  );
 
   try {
     const baseBranch = await getBaseBranch(inputs.githubToken, context);
-    await fetchBaseBranch(baseBranch);
+    await fetchBaseBranch(baseBranch, inputs.githubToken);
 
     const cliArgs = buildCliArgs(inputs.apiHost, finalConfigPath, baseBranch, context);
     const scanResponse = await getScanResponse(cliArgs, oidcToken, inputs.promptfooVersion);
 
+    await assertWorkspaceHead(context);
     await handleScanResponse(scanResponse, inputs, context);
     logActCommentPreview(scanResponse.comments);
   } finally {

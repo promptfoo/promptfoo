@@ -103,6 +103,13 @@ deleted file mode 100644
     const ranges = extractValidLineRanges(diff);
     expect(ranges.has('src/deleted.ts')).toBe(false);
   });
+
+  it('does not count the terminal newline past the declared hunk length', () => {
+    const diff =
+      'diff --git a/src/foo.ts b/src/foo.ts\n--- a/src/foo.ts\n+++ b/src/foo.ts\n@@ -10,1 +10,1 @@\n+new line\n';
+
+    expect(extractValidLineRanges(diff).get('src/foo.ts')).toEqual([{ start: 10, end: 10 }]);
+  });
 });
 
 describe('clampCommentLines', () => {

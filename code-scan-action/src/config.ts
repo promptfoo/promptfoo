@@ -15,15 +15,20 @@ import { type ScanConfig, ScanConfigSchema, validateSeverity } from '../../src/t
  * Generate a temporary YAML config file from action inputs
  * @param minimumSeverity Minimum severity level
  * @param guidance Optional custom guidance text
+ * @param diffsOnly Whether to restrict the scan to changed lines
  * @returns Path to temporary config file
  */
-export function generateConfigFile(minimumSeverity: string, guidance?: string): string {
+export function generateConfigFile(
+  minimumSeverity: string,
+  guidance?: string,
+  diffsOnly = false,
+): string {
   // Validate severity input (throws ZodError if invalid)
   const validatedSeverity = validateSeverity(minimumSeverity);
 
   const config: ScanConfig = {
     minimumSeverity: validatedSeverity,
-    diffsOnly: false, // Always enable full repo exploration for GitHub Actions (never diffs-only)
+    diffsOnly,
     guidance,
   };
 

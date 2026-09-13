@@ -69,6 +69,7 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
   let currentRanges: LineRange[] = [];
   let currentNewLine = 0;
   let hunkStartLine = 0;
+  let hunkEndLine = 0;
 
   for (const line of lines) {
     // Match file header: diff --git a/path b/path
@@ -92,6 +93,7 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
       currentRanges = [];
       currentNewLine = 0;
       hunkStartLine = 0;
+      hunkEndLine = 0;
       continue;
     }
 
@@ -109,10 +111,12 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
       // Start tracking new hunk
       hunkStartLine = hunkHeader.newStart;
       currentNewLine = hunkHeader.newStart;
+      hunkEndLine = hunkHeader.newStart + hunkHeader.newCount - 1;
 
       // For hunks with 0 lines in new file (pure deletion), don't start a range
       if (hunkHeader.newCount === 0) {
         hunkStartLine = 0;
+        hunkEndLine = 0;
       }
       continue;
     }
@@ -122,7 +126,10 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
       if (line.startsWith('-')) {
         // Removed line - doesn't exist in new file
         continue;
-      } else if (line.startsWith('+') || line.startsWith(' ') || line === '') {
+      } else if (
+        currentNewLine <= hunkEndLine &&
+        (line.startsWith('+') || line.startsWith(' ') || line === '')
+      ) {
         // Added line, context line, or empty line within hunk
         currentNewLine++;
       } else if (line.startsWith('\\')) {

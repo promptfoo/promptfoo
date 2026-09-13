@@ -8,9 +8,9 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { Octokit } from '@octokit/rest';
 import {
-  clampCommentLines,
   extractValidLineRanges,
   type FileLineRanges,
+  isLineInDiff,
 } from '../../src/codeScan/util/diffLineRanges';
 import {
   type Comment,
@@ -18,6 +18,13 @@ import {
   FileChangeStatus,
   type PullRequestContext,
 } from '../../src/types/codeScan';
+
+export class StalePullRequestHeadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StalePullRequestHeadError';
+  }
+}
 
 /**
  * Get GitHub context from the current workflow.
@@ -98,7 +105,7 @@ export async function getPRFiles(
 
 /**
  * Fetch PR diff and extract valid line ranges for each file.
- * This is used to validate and clamp comment line numbers.
+ * This is used to validate exact comment locations.
  */
 async function getPRDiffRanges(
   octokit: Octokit,
@@ -122,32 +129,47 @@ async function getPRDiffRanges(
   }
 }
 
-/**
- * Clamp a comment's line numbers to valid diff ranges.
- * Returns the adjusted comment, or null if lines cannot be clamped.
- */
-function clampCommentToValidRange(comment: Comment, validRanges: FileLineRanges): Comment | null {
+export async function assertCurrentPRHead(
+  octokit: Pick<Octokit, 'pulls'>,
+  context: PullRequestContext,
+): Promise<void> {
+  const { data: pr } = await octokit.pulls.get({
+    owner: context.owner,
+    repo: context.repo,
+    pull_number: context.number,
+  });
+  if (pr.head.sha !== context.sha) {
+    throw new StalePullRequestHeadError(
+      'Pull request head changed after scan: ' + context.sha + ' -> ' + pr.head.sha,
+    );
+  }
+}
+
+// Keep exact finding locations. Out-of-diff findings become general comments instead
+// of being moved onto unrelated code in a nearby hunk.
+function isInlineCommentInDiff(comment: Comment, validRanges: FileLineRanges): boolean {
   if (!comment.file || comment.line == null) {
-    return comment;
+    return false;
   }
 
-  const clamped = clampCommentLines(comment.file, comment.startLine, comment.line, validRanges);
-
-  if (!clamped) {
-    // File not in diff - return null to convert to general comment
-    return null;
+  if (!isLineInDiff(comment.file, comment.line, validRanges)) {
+    return false;
   }
 
-  return {
-    ...comment,
-    startLine: clamped.startLine,
-    line: clamped.line,
-  };
+  // Multi-line comment: GitHub requires start_line to be in the diff too. When startLine
+  // is absent or not strictly less than line, toReviewComment posts it single-line, so the
+  // end line is the only anchor that must be present.
+  if (comment.startLine != null && comment.startLine < comment.line) {
+    return isLineInDiff(comment.file, comment.startLine, validRanges);
+  }
+
+  return true;
 }
 
 /**
  * Validate review-comment locations against the current PR diff.
- * Comments that cannot be placed inline are returned separately for general posting.
+ * Comments that cannot be placed inline are returned separately for general posting with
+ * their original locations preserved.
  */
 async function partitionReviewCommentsWithOctokit(
   octokit: Octokit,
@@ -158,7 +180,9 @@ async function partitionReviewCommentsWithOctokit(
   generalComments: Comment[];
   invalidLineComments: Comment[];
 }> {
+  await assertCurrentPRHead(octokit, context);
   const validRanges = await getPRDiffRanges(octokit, context);
+  await assertCurrentPRHead(octokit, context);
   const lineComments: Comment[] = [];
   const generalComments: Comment[] = [];
   const invalidLineComments: Comment[] = [];
@@ -169,12 +193,12 @@ async function partitionReviewCommentsWithOctokit(
       continue;
     }
 
-    const clamped = clampCommentToValidRange(comment, validRanges);
-    if (clamped) {
-      lineComments.push(clamped);
+    if (isInlineCommentInDiff(comment, validRanges)) {
+      // Exact location is in the diff - keep it inline, unmodified.
+      lineComments.push(comment);
     } else {
       core.warning(
-        `Comment on ${comment.file}:${comment.line} could not be placed in diff - converting to general comment`,
+        `Comment on ${comment.file}:${comment.line} is not on a line in the reviewed diff - posting as a general comment to preserve its location`,
       );
       invalidLineComments.push(comment);
     }

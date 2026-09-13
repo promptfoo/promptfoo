@@ -4,7 +4,11 @@
 
 import * as github from '@actions/github';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getGitHubContext, partitionReviewCommentsByDiff } from '../../code-scan-action/src/github';
+import {
+  getGitHubContext,
+  partitionReviewCommentsByDiff,
+  StalePullRequestHeadError,
+} from '../../code-scan-action/src/github';
 import type { Octokit } from '@octokit/rest';
 
 const mocks = vi.hoisted(() => {
@@ -63,7 +67,11 @@ index abc123..def456 100644
     Octokit: vi.fn().mockImplementation(() => ({
       pulls: {
         createReview: vi.fn().mockResolvedValue({}),
-        get: vi.fn().mockResolvedValue({ data: mockDiff }),
+        get: vi.fn().mockImplementation((options) =>
+          Promise.resolve({
+            data: options?.mediaType ? mockDiff : { head: { sha: 'abc123' } },
+          }),
+        ),
       },
       issues: {
         createComment: vi.fn().mockResolvedValue({}),
@@ -89,6 +97,9 @@ vi.mock('../../code-scan-action/node_modules/@octokit/rest/dist-src/index.js', (
 const mockDiff = mocks.mockDiff;
 
 describe('GitHub API Client', () => {
+  it('labels stale-head errors for fail-closed handling', () => {
+    expect(new StalePullRequestHeadError('stale').name).toBe('StalePullRequestHeadError');
+  });
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.github.context.repo = {
@@ -107,7 +118,11 @@ describe('GitHub API Client', () => {
       return {
         pulls: {
           createReview: vi.fn().mockResolvedValue({}),
-          get: vi.fn().mockResolvedValue({ data: mockDiff }),
+          get: vi.fn().mockImplementation((options) =>
+            Promise.resolve({
+              data: options?.mediaType ? mockDiff : { head: { sha: 'abc123' } },
+            }),
+          ),
         },
         issues: {
           createComment: vi.fn().mockResolvedValue({}),
@@ -148,13 +163,51 @@ describe('GitHub API Client', () => {
       sha: 'abc123',
     };
 
-    it('clamps comments to visible diff lines and routes unmapped files to general comments', async () => {
+    it('keeps a comment inline only when its exact line is in the diff', async () => {
+      // The mock diff covers src/auth.ts lines 40-60. Line 50 is inside that range.
+      const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
+        {
+          file: 'src/auth.ts',
+          line: 50,
+          finding: 'Finding on a changed line',
+        },
+      ]);
+
+      // Location is preserved exactly - never clamped/moved to a different line.
+      expect(result.lineComments).toEqual([
+        expect.objectContaining({
+          file: 'src/auth.ts',
+          line: 50,
+        }),
+      ]);
+      expect(result.generalComments).toEqual([]);
+      expect(result.invalidLineComments).toEqual([]);
+    });
+
+    it('routes an out-of-diff line to a general comment preserving its original location (no clamping)', async () => {
+      // src/auth.ts is in the diff but line 500 is far outside the 40-60 hunk. The previous
+      // behavior clamped this to line 61 (nearest visible line), silently re-pointing the
+      // finding at unrelated code. It must now be preserved at line 500 as a general comment.
       const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
         {
           file: 'src/auth.ts',
           line: 500,
-          finding: 'Finding in a changed file',
+          finding: 'Finding on an unchanged line reported by full-repo tracing',
         },
+      ]);
+
+      expect(result.lineComments).toEqual([]);
+      expect(result.generalComments).toEqual([]);
+      expect(result.invalidLineComments).toEqual([
+        expect.objectContaining({
+          file: 'src/auth.ts',
+          line: 500,
+        }),
+      ]);
+    });
+
+    it('routes a comment on a file absent from the diff to a general comment', async () => {
+      const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
         {
           file: 'src/outside-diff.ts',
           line: 12,
@@ -162,19 +215,79 @@ describe('GitHub API Client', () => {
         },
       ]);
 
-      expect(result.lineComments).toEqual([
-        expect.objectContaining({
-          file: 'src/auth.ts',
-          line: 61,
-        }),
-      ]);
-      expect(result.generalComments).toEqual([]);
+      expect(result.lineComments).toEqual([]);
       expect(result.invalidLineComments).toEqual([
         expect.objectContaining({
           file: 'src/outside-diff.ts',
           line: 12,
         }),
       ]);
+    });
+
+    it('keeps a multi-line comment inline only when both endpoints are in the diff', async () => {
+      const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
+        {
+          file: 'src/auth.ts',
+          startLine: 45,
+          line: 50,
+          finding: 'Multi-line finding fully inside the hunk',
+        },
+        {
+          file: 'src/auth.ts',
+          startLine: 30,
+          line: 50,
+          finding: 'Multi-line finding whose start is outside the hunk',
+        },
+      ]);
+
+      expect(result.lineComments).toEqual([
+        expect.objectContaining({
+          file: 'src/auth.ts',
+          startLine: 45,
+          line: 50,
+        }),
+      ]);
+      expect(result.invalidLineComments).toEqual([
+        expect.objectContaining({
+          file: 'src/auth.ts',
+          startLine: 30,
+          line: 50,
+        }),
+      ]);
+    });
+
+    it('routes comments with no line number to general comments', async () => {
+      const result = await partitionReviewCommentsByDiff('fake-token', mockContext, [
+        {
+          file: 'src/auth.ts',
+          line: null,
+          finding: 'File-only finding',
+        },
+      ]);
+
+      expect(result.generalComments).toEqual([
+        expect.objectContaining({
+          file: 'src/auth.ts',
+        }),
+      ]);
+      expect(result.lineComments).toEqual([]);
+      expect(result.invalidLineComments).toEqual([]);
+    });
+
+    it('fails closed when the pull request head changed after scanning', async () => {
+      mocks.Octokit.mockImplementationOnce(function () {
+        return {
+          pulls: {
+            get: vi.fn().mockResolvedValue({ data: { head: { sha: 'new-head' } } }),
+          },
+        } as unknown as Octokit;
+      });
+
+      await expect(
+        partitionReviewCommentsByDiff('fake-token', mockContext, [
+          { file: 'src/auth.ts', line: 50, finding: 'stale finding' },
+        ]),
+      ).rejects.toThrow('Pull request head changed after scan');
     });
   });
 });

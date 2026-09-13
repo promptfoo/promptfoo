@@ -72,6 +72,9 @@ export function displayScanResults(
     // Output full scan response to stdout for programmatic consumption
     console.log(JSON.stringify(response, null, 2));
   } else if (options.format === CodeScanOutputFormat.SARIF) {
+    if (response.skipReason || response.skippedFiles !== 0) {
+      throw new Error('Refusing to emit SARIF for a partial scan with skipped files');
+    }
     console.log(JSON.stringify(scanResponseToSarif(response), null, 2));
   } else {
     // Pretty-print results for human consumption
