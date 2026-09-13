@@ -46,7 +46,7 @@ function httpJsonTransforms(markdown: string) {
 function runCli(args: string[]) {
   return promisify(execFile)(
     process.execPath,
-    ['--import', 'tsx', 'src/localEntrypoint.ts', ...args],
+    [path.join(repoRoot, 'dist/src/entrypoint.js'), ...args],
     {
       cwd: repoRoot,
       encoding: 'utf8',
