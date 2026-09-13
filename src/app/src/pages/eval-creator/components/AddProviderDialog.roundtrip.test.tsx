@@ -152,7 +152,6 @@ describe('eval provider configuration round trips', () => {
         expect(saveButton).toBeDisabled();
         await user.hover(saveButton.parentElement!);
         expect(await screen.findByRole('tooltip')).toHaveTextContent('Agent Alias ID is required');
-        await user.unhover(saveButton.parentElement!);
         expect(getCallApiMock().mock.calls.filter(([path]) => path === '/eval/job')).toHaveLength(
           0,
         );
