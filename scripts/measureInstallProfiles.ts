@@ -456,7 +456,7 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
   const lockfile = path.join(resolution, 'package-lock.json');
   report.lockfileSha256 = sha256(lockfile);
   fs.copyFileSync(lockfile, path.join(output, 'consumer-package-lock.json'));
-  let passed = true;
+  let passed = scripts;
   for (const profile of profiles) {
     console.log(`Measuring ${profile}; retained evidence: ${output}`);
     const consumer = path.join(work, profile);
@@ -538,7 +538,7 @@ export async function measureInstallProfiles(args = process.argv.slice(2)): Prom
     }
     const probes = await probeConsumer(consumer, logs, profileEnv, runs);
     Object.assign(result, probes);
-    result.passed = probes.passed && tree.code === 0 && !tree.timedOut;
+    result.passed = scripts && probes.passed && tree.code === 0 && !tree.timedOut;
     passed = Boolean(result.passed) && passed;
     result.status = 'measured';
     save();
