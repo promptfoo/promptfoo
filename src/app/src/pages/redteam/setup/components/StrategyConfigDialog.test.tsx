@@ -20,6 +20,65 @@ describe('StrategyConfigDialog', () => {
     vi.clearAllMocks();
   });
 
+  it('saves PDF input selection and scanned mode', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <StrategyConfigDialog
+        open
+        strategy="pdf"
+        config={{}}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'pdf', name: 'PDF', description: 'PDF attachments' }}
+      />,
+    );
+    await user.type(screen.getByLabelText('PDF input variable'), 'document');
+    await user.click(screen.getByLabelText('Document format'));
+    await user.click(screen.getByRole('option', { name: 'Scanned PDF' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mockOnSave).toHaveBeenCalledWith('pdf', { input: 'document', mode: 'scanned' });
+  });
+
+  it.each([[], ['base64'], ['jailbreak:hydra'], ['mischievous-user']])(
+    'does not offer PDF inside a layer with steps %j',
+    async (...steps) => {
+      const user = userEvent.setup();
+      renderWithProviders(
+        <StrategyConfigDialog
+          open
+          strategy="layer"
+          config={{ steps }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+          allStrategies={[{ id: 'pdf', config: { input: 'document' } }]}
+        />,
+      );
+      await user.click(screen.getByRole('combobox'));
+      expect(screen.queryByRole('option', { name: /^pdf$/ })).not.toBeInTheDocument();
+    },
+  );
+
+  it('preserves the configured strategy options when adding it to a layer', async () => {
+    const user = userEvent.setup();
+    const strategy = { id: 'jailbreak:meta', config: { numIterations: 7 } };
+    renderWithProviders(
+      <StrategyConfigDialog
+        open
+        strategy="layer"
+        config={{ steps: ['rot13'] }}
+        onClose={mockOnClose}
+        onSave={mockOnSave}
+        strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        allStrategies={[strategy]}
+      />,
+    );
+    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('option', { name: /^jailbreak:meta$/ }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mockOnSave).toHaveBeenCalledWith('layer', { steps: ['rot13', strategy] });
+  });
+
   it('should correctly filter layerPlugins when using the stable empty array for selectedPlugins', async () => {
     const user = userEvent.setup();
     renderWithProviders(

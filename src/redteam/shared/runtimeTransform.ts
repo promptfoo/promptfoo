@@ -101,6 +101,9 @@ export async function applyRuntimeTransforms(
   if (!layerConfigs?.length) {
     return { prompt, originalPrompt };
   }
+  if (layerConfigs.some((layer) => (typeof layer === 'string' ? layer : layer.id).split(':')[0] === 'pdf')) {
+    return { prompt, originalPrompt, error: 'PDF transforms support single-turn generation only' };
+  }
 
   logger.debug(`[RuntimeTransform] Applying ${layerConfigs.length} transforms to prompt`, {
     hasContext: !!context,

@@ -153,6 +153,7 @@ describe('index.ts exports', () => {
     'OutputConfigSchema',
     'OutputFileExtension',
     'PartialGenerationError',
+    'PdfTemplateSchema',
     'PluginConfigSchema',
     'PolicyObjectSchema',
     'ProvidersSchema',

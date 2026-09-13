@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ProviderOptionsSchema } from '../../validators/providers';
-import { BaseTokenUsageSchema } from '../shared';
+import { BaseTokenUsageSchema, PdfTemplateSchema } from '../shared';
 import { ErrorResponseSchema, JsonObjectSchema } from './common';
 
 // Refined ProviderOptionsSchema that requires id as a non-empty string at runtime.
@@ -37,7 +37,9 @@ const JsonProviderInputDefinitionSchema = z.union([
     type: z.literal('text').optional(),
   }),
   z.object({
-    config: JsonProviderDocumentInputConfigSchema.optional(),
+    config: JsonProviderDocumentInputConfigSchema.extend({
+      template: PdfTemplateSchema.optional(),
+    }).optional(),
     description: z.string().min(1),
     type: z.literal('pdf'),
   }),

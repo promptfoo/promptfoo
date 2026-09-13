@@ -69,6 +69,13 @@ describe('runtimeTransform', () => {
   });
 
   describe('applyRuntimeTransforms', () => {
+    it.each(['pdf', 'pdf:scanned'])('rejects PDF variants in runtime layers: %s', async (id) => {
+      const action = vi.fn();
+      const result = await applyRuntimeTransforms('attack', 'input', [id], [{ id: 'pdf', action }]);
+      expect(result.error).toContain('single-turn generation only');
+      expect(action).not.toHaveBeenCalled();
+    });
+
     it('should return original prompt when no layers provided', async () => {
       const result = await applyRuntimeTransforms('test prompt', 'input', [], mockStrategies);
 

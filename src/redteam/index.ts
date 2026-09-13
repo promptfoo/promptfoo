@@ -128,7 +128,7 @@ async function rematerializeStrategyInputVars(
   const materializedPromptSnapshot = getMaterializedMultiInputPromptSnapshot(testCase.metadata);
   const currentInjectVar = testCase.vars?.[injectVar];
 
-  if (!inputs || Object.keys(inputs).length === 0 || !currentInjectVar) {
+  if (testCase.metadata?.pdf || !inputs || Object.keys(inputs).length === 0 || !currentInjectVar) {
     return {
       inputMaterialization,
       vars: testCase.vars,
@@ -494,7 +494,11 @@ function filterOversizedTestCases<T extends TestCase>(
       (testCase.metadata?.pluginConfig as { maxCharsPerMessage?: number } | undefined)
         ?.maxCharsPerMessage;
     const violation = getGeneratedPromptOverLimit(
-      String(testCase.vars?.[injectVar] ?? ''),
+      String(
+        testCase.metadata?.pdf
+          ? testCase.metadata.originalText
+          : (testCase.vars?.[injectVar] ?? ''),
+      ),
       testCaseMaxCharsPerMessage,
     );
     if (!violation) {

@@ -70,7 +70,9 @@ export function getMediaUrl(storageRef: string): string | null {
   if (!key) {
     return null;
   }
-  return `${getApiBaseUrl()}/media/${key}`;
+  return /^(audio|image|video|document)\/[a-f0-9]{12}\.[a-z0-9]+$/.test(key)
+    ? `${getApiBaseUrl()}/media/${key}`
+    : `${getApiBaseUrl()}/media?${new URLSearchParams({ key })}`;
 }
 
 export function getBlobUrl(blobRef: string): string | null {

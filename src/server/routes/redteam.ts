@@ -57,6 +57,13 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       count,
     } = parsedBody.data;
 
+    if (strategy.id === 'pdf') {
+      res.status(400).json({
+        error: 'Run a red team eval to test PDF uploads; the example preview only supports text.',
+      });
+      return;
+    }
+
     const pluginConfigurationError = getPluginConfigurationError(plugin);
     if (pluginConfigurationError) {
       res.status(400).json({ error: pluginConfigurationError });

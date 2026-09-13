@@ -3,11 +3,27 @@ import { z } from 'zod';
 // GET /api/media/:type/:filename
 
 export const MediaParamsSchema = z.object({
-  type: z.enum(['audio', 'image', 'video']),
+  type: z.enum(['audio', 'image', 'video', 'document']),
   filename: z.string().regex(/^[a-f0-9]{12}\.[a-z0-9]+$/i, 'Invalid media filename'),
 });
 
 export type MediaParams = z.infer<typeof MediaParamsSchema>;
+
+// GET /api/media?key=... supports provider-defined storage keys.
+const MediaQuerySchema = z.object({
+  key: z
+    .string()
+    .min(1)
+    .max(2048)
+    .refine(
+      (key) =>
+        !key.startsWith('/') &&
+        !key.includes('\\') &&
+        !key.includes('\0') &&
+        !key.split('/').some((part) => part === '.' || part === '..'),
+      'Invalid media key',
+    ),
+});
 
 // GET /api/media/stats
 
@@ -46,5 +62,6 @@ export const MediaSchemas = {
   },
   Get: {
     Params: MediaParamsSchema,
+    Query: MediaQuerySchema,
   },
 } as const;

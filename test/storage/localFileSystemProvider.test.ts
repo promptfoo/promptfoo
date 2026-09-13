@@ -59,4 +59,21 @@ describe('LocalFileSystemProvider', () => {
     const retrieved = await provider.retrieve(ref.key);
     expect(retrieved.toString('utf8')).toBe('hello');
   });
+
+  it('does not expose the storage index or metadata sidecars as media', async () => {
+    tempDir = createTempDir('promptfoo-media-');
+    const provider = new LocalFileSystemProvider({ basePath: tempDir });
+    const { ref } = await provider.store(Buffer.from('%PDF-1.7'), {
+      contentType: 'application/pdf',
+      mediaType: 'document',
+      originalText: 'Private review notes',
+    });
+    for (const key of ['hash-index.json', `${ref.key}.meta.json`]) {
+      expect(fs.existsSync(path.join(tempDir, key))).toBe(true);
+      await expect(provider.exists(key)).resolves.toBe(false);
+      await expect(provider.retrieve(key)).rejects.toThrow('Invalid local media key');
+      await expect(provider.getUrl(key)).resolves.toBeNull();
+    }
+    await expect(provider.retrieve(ref.key)).resolves.toEqual(Buffer.from('%PDF-1.7'));
+  });
 });

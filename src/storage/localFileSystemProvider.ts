@@ -34,6 +34,7 @@ function getExtensionFromContentType(contentType: string): string {
     'audio/mpeg': 'mp3',
     'audio/ogg': 'ogg',
     'audio/webm': 'webm',
+    'application/pdf': 'pdf',
     'image/png': 'png',
     'image/jpeg': 'jpg',
     'image/jpg': 'jpg',
@@ -120,6 +121,11 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
       throw new Error(
         `[LocalStorage] Invalid media key: path traversal attempt detected ("${key}")`,
       );
+    }
+    // Only keys emitted by store() identify media. The index and metadata sidecars
+    // share this directory but must never be readable through the media API.
+    if (!/^(audio|image|video|document|media)\/[a-f0-9]{12}\.[a-z0-9]+$/i.test(key)) {
+      throw new Error('[LocalStorage] Invalid local media key');
     }
     return targetPath;
   }

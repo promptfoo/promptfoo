@@ -204,7 +204,7 @@ tests:
 
 Scripted vars are useful when testing vector databases like Pinecone, Chroma, Milvus, etc. You can communicate directly with the database to fetch the context you need.
 
-PDFs are also supported and can be used to extract text from a document:
+PDFs are also supported and can be used to extract text from a document. This loads text into the variable; to test native PDF uploads with adversarial documents, use the [PDF strategy](/docs/red-team/strategies/pdf).
 
 ```yaml
 tests:

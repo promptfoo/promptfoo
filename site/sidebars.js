@@ -209,6 +209,7 @@ const redTeamSidebar = [
         collapsed: true,
         items: [
           'red-team/strategies/image',
+          'red-team/strategies/pdf',
           'red-team/strategies/audio',
           'red-team/strategies/video',
         ],
@@ -308,6 +309,7 @@ const redTeamSidebar = [
         label: 'Multi-Modal Red Teaming',
         id: 'guides/multimodal-red-team',
       },
+      { type: 'doc', label: 'PDF Upload Red Teaming', id: 'guides/pdf-red-team' },
       {
         type: 'doc',
         label: 'Foundation Model Red Teaming',

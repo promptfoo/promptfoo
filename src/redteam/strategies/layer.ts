@@ -59,6 +59,11 @@ export async function addLayerTestCases(
     return [];
   }
 
+  const stepIds = steps.map((step) => (typeof step === 'string' ? step : step.id));
+  if (stepIds.some((id) => id.split(':')[0] === 'pdf')) {
+    throw new Error('PDF is a standalone strategy and cannot be used inside a layer');
+  }
+
   let current: TestCaseWithPlugin[] = testCases;
 
   for (let i = 0; i < steps.length; i++) {
