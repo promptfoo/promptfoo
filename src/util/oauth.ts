@@ -21,6 +21,7 @@ export interface TokenRefreshLock {
  */
 export interface OAuthTokenConfig {
   tokenUrl: string;
+  signal?: AbortSignal;
   grantType: 'client_credentials' | 'password';
   clientId?: string;
   clientSecret?: string;
@@ -74,6 +75,7 @@ export async function fetchOAuthToken(config: OAuthTokenConfig): Promise<OAuthTo
 
   const response = await fetchWithProxy(config.tokenUrl, {
     method: 'POST',
+    signal: config.signal,
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },

@@ -46,6 +46,7 @@ interface ChatKitPoolConfig {
 export class ChatKitBrowserPool {
   private static instance: ChatKitBrowserPool | null = null;
   private static cleanupRegistered: boolean = false;
+  private static pendingShutdown: Promise<void> | null = null;
 
   private browser: Browser | null = null;
   private server: http.Server | null = null;
@@ -56,6 +57,8 @@ export class ChatKitBrowserPool {
   private templates: Map<string, string> = new Map(); // templateKey -> HTML
   private initialized: boolean = false;
   private initPromise: Promise<void> | null = null;
+  private shutdownPromise: Promise<void> | null = null;
+  private shutdownGeneration = 0;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
 
   private constructor(config: ChatKitPoolConfig) {
@@ -105,18 +108,6 @@ export class ChatKitBrowserPool {
         serverPort: config?.serverPort ?? 0,
       });
       ChatKitBrowserPool.registerCleanupHandlers();
-
-      // Register with providerRegistry for cleanup at end of evaluation
-      // This is cleaner than relying only on process exit handlers
-      const instance = ChatKitBrowserPool.instance;
-      providerRegistry.register({
-        async shutdown() {
-          if (instance) {
-            await instance.shutdown();
-            ChatKitBrowserPool.instance = null;
-          }
-        },
-      });
     } else if (config) {
       // Warn if different config is requested for existing instance
       const existing = ChatKitBrowserPool.instance.config;
@@ -134,6 +125,7 @@ export class ChatKitBrowserPool {
         );
       }
     }
+    providerRegistry.register(ChatKitBrowserPool.instance);
     return ChatKitBrowserPool.instance;
   }
 
@@ -190,18 +182,33 @@ export class ChatKitBrowserPool {
       return this.initPromise;
     }
 
-    this.initPromise = this.doInitialize();
-    await this.initPromise;
-    this.initPromise = null;
+    const generation = this.shutdownGeneration;
+    const initialization = this.doInitialize();
+    this.initPromise = initialization;
+    try {
+      await initialization;
+    } catch (error) {
+      if (generation === this.shutdownGeneration) {
+        await this.shutdown();
+      }
+      throw error;
+    } finally {
+      this.initPromise = null;
+    }
   }
 
   private async doInitialize(): Promise<void> {
+    const generation = this.shutdownGeneration;
+    await ChatKitBrowserPool.pendingShutdown;
+    if (generation !== this.shutdownGeneration) {
+      throw new Error('ChatKit pool initialization cancelled during shutdown');
+    }
     logger.debug('[ChatKitPool] Initializing browser pool', {
       maxConcurrency: this.config.maxConcurrency,
     });
 
     // Create shared HTTP server with per-template routing
-    this.server = http.createServer((req, res) => {
+    const server = http.createServer((req, res) => {
       // Extract template key from URL path: /template/<key>
       const url = new URL(req.url || '/', `http://localhost`);
       const pathParts = url.pathname.split('/').filter(Boolean);
@@ -222,23 +229,37 @@ export class ChatKitBrowserPool {
       res.end('Template not found');
     });
 
+    this.server = server;
     await new Promise<void>((resolve, reject) => {
-      this.server!.once('error', (err: NodeJS.ErrnoException) => {
+      server.once('error', (err: NodeJS.ErrnoException) => {
         reject(new Error(`Failed to start ChatKit pool server: ${err.message}`));
       });
-      this.server!.listen(this.config.serverPort, () => {
-        const address = this.server!.address();
+      server.listen(this.config.serverPort, () => {
+        if (generation !== this.shutdownGeneration) {
+          server.close();
+          reject(new Error('ChatKit pool initialization cancelled during shutdown'));
+          return;
+        }
+        const address = server.address();
         this.serverPort = typeof address === 'object' ? address?.port || 0 : 0;
         logger.debug('[ChatKitPool] Server started', { port: this.serverPort });
         resolve();
       });
     });
+    if (generation !== this.shutdownGeneration) {
+      throw new Error('ChatKit pool initialization cancelled during shutdown');
+    }
 
     // Launch single browser
     try {
-      this.browser = await chromium.launch({
+      const browser = await chromium.launch({
         headless: this.config.headless,
       });
+      if (generation !== this.shutdownGeneration) {
+        await browser.close();
+        throw new Error('ChatKit pool initialization cancelled during shutdown');
+      }
+      this.browser = browser;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       if (msg.includes("Executable doesn't exist")) {
@@ -246,7 +267,6 @@ export class ChatKitBrowserPool {
       }
       throw error;
     }
-
     this.initialized = true;
     logger.debug('[ChatKitPool] Browser pool initialized');
   }
@@ -534,8 +554,32 @@ export class ChatKitBrowserPool {
   /**
    * Shutdown the pool and release all resources
    */
-  async shutdown(): Promise<void> {
+  shutdown(): Promise<void> {
+    if (this.shutdownPromise) {
+      return this.shutdownPromise;
+    }
+    this.shutdownGeneration++;
+    const work = this.doShutdown();
+    const previous = ChatKitBrowserPool.pendingShutdown;
+    const completed = Promise.allSettled(previous ? [previous, work] : [work]).then(() => {});
+    ChatKitBrowserPool.pendingShutdown = completed;
+    void completed.then(() => {
+      if (ChatKitBrowserPool.pendingShutdown === completed) {
+        ChatKitBrowserPool.pendingShutdown = null;
+      }
+    });
+    this.shutdownPromise = work.finally(() => {
+      this.shutdownPromise = null;
+    });
+    return this.shutdownPromise;
+  }
+
+  private async doShutdown(): Promise<void> {
     logger.debug('[ChatKitPool] Shutting down');
+    providerRegistry.unregister(this);
+    if (ChatKitBrowserPool.instance === this) {
+      ChatKitBrowserPool.instance = null;
+    }
 
     // Cancel any pending idle timer
     this.cancelIdleTimer();
@@ -568,7 +612,8 @@ export class ChatKitBrowserPool {
 
     // Close server
     if (this.server) {
-      this.server.close();
+      const server = this.server;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
       this.server = null;
     }
 

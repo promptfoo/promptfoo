@@ -61,16 +61,21 @@ export class ElevenLabsClient {
 
     let lastError: Error | null = null;
 
-    const { headers: optionsHeaders, allowRetriesForNonIdempotent, ...restOptions } = options || {};
+    const {
+      headers: optionsHeaders,
+      signal: externalSignal,
+      allowRetriesForNonIdempotent,
+      ...restOptions
+    } = options || {};
     const headers = toPlainHeaders(optionsHeaders);
     const hasIdempotencyKey = 'idempotency-key' in headers;
     const effectiveRetries = allowRetriesForNonIdempotent || hasIdempotencyKey ? this.retries : 0;
 
     for (let attempt = 0; attempt <= effectiveRetries; attempt++) {
+      externalSignal?.throwIfAborted();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-
         // Handle FormData for multipart uploads
         const isFormData = body instanceof FormData;
         headers['xi-api-key'] = this.apiKey;
@@ -86,7 +91,9 @@ export class ElevenLabsClient {
           method: 'POST',
           headers,
           body: isFormData ? body : JSON.stringify(body),
-          signal: controller.signal,
+          signal: externalSignal
+            ? AbortSignal.any([controller.signal, externalSignal])
+            : controller.signal,
           ...restOptions,
         });
 
@@ -116,6 +123,7 @@ export class ElevenLabsClient {
         }
       } catch (error) {
         lastError = error as Error;
+        externalSignal?.throwIfAborted();
 
         // Don't retry on authentication errors
         if (error instanceof ElevenLabsAuthError) {
@@ -129,6 +137,8 @@ export class ElevenLabsClient {
           );
           await new Promise((resolve) => setTimeout(resolve, backoffMs));
         }
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
 

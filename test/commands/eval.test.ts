@@ -38,6 +38,7 @@ import {
 } from '../../src/node/retry';
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import { loadApiProvider } from '../../src/providers/index';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { generateTable } from '../../src/table';
 import {
@@ -2126,9 +2127,10 @@ describe('evalCommand', () => {
       },
       basePath: path.resolve('/'),
     });
-    vi.mocked(evaluate).mockImplementationOnce(
-      async (_testSuite, evalRecord) => evalRecord as Eval,
-    );
+    vi.mocked(evaluate).mockImplementationOnce(async (testSuite, evalRecord) => {
+      await providerRegistry.withScope(testSuite.providers, async () => undefined);
+      return evalRecord as Eval;
+    });
 
     await doEval({}, defaultConfig, defaultConfigPath, {});
 

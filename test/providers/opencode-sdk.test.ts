@@ -1860,6 +1860,77 @@ describe('OpenCodeSDKProvider', () => {
   });
 
   describe('cleanup', () => {
+    it('deletes a persistent remote session created after cleanup', async () => {
+      const creation = createDeferred<ReturnType<typeof createMockSessionResponse>>();
+      mockSessionCreate.mockReturnValueOnce(creation.promise);
+      const provider = new OpenCodeSDKProvider({
+        config: { baseUrl: 'http://127.0.0.1:4096', persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      const call = provider.callApi('hello');
+      await vi.waitFor(() => expect(mockSessionCreate).toHaveBeenCalledOnce());
+
+      await provider.cleanup();
+      creation.resolve(createMockSessionResponse('late-session'));
+      await expect(call).resolves.toMatchObject({ error: expect.stringContaining('cleanup') });
+      expect(mockSessionDelete).toHaveBeenCalledWith({ sessionID: 'late-session' });
+      expect(mockSessionPrompt).not.toHaveBeenCalled();
+      expect((provider as any).sessions.size).toBe(0);
+    });
+
+    it('does not wait for startup and closes a late server', async () => {
+      const creation = createDeferred<{
+        client: any;
+        server: { url: string; close: typeof mockServerClose };
+      }>();
+      mockCreateOpencode.mockReturnValueOnce(creation.promise);
+      const provider = new OpenCodeSDKProvider({ env: { ANTHROPIC_API_KEY: 'test-api-key' } });
+      const call = provider.callApi('hello').catch(() => undefined);
+      await vi.waitFor(() => expect(mockCreateOpencode).toHaveBeenCalledOnce());
+
+      await provider.cleanup();
+      expect(mockServerClose).not.toHaveBeenCalled();
+      creation.resolve({
+        client: { session: { create: mockSessionCreate } },
+        server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+      });
+      await call;
+      expect(mockServerClose).toHaveBeenCalledOnce();
+      expect(mockSessionCreate).not.toHaveBeenCalled();
+    });
+
+    it('waits for an old fixed-port startup before starting its replacement', async () => {
+      const creation = createDeferred<{
+        client: any;
+        server: { url: string; close: typeof mockServerClose };
+      }>();
+      mockCreateOpencode.mockReturnValueOnce(creation.promise);
+      const provider = new OpenCodeSDKProvider({
+        config: { port: 4096 },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      const first = provider.callApi('first');
+      await vi.waitFor(() => expect(mockCreateOpencode).toHaveBeenCalledOnce());
+
+      await provider.cleanup();
+      const second = provider.callApi('second');
+      await new Promise<void>(setImmediate);
+      expect(mockCreateOpencode).toHaveBeenCalledOnce();
+
+      creation.resolve({
+        client: { session: { create: mockSessionCreate } },
+        server: { url: 'http://127.0.0.1:4096', close: mockServerClose },
+      });
+      await expect(first).resolves.toMatchObject({ error: expect.stringContaining('cleanup') });
+      await expect(second).resolves.toMatchObject({ output: expect.any(String) });
+      expect(mockServerClose).toHaveBeenCalledOnce();
+      expect(mockCreateOpencode).toHaveBeenCalledTimes(2);
+      expect(mockServerClose.mock.invocationCallOrder[0]).toBeLessThan(
+        mockCreateOpencode.mock.invocationCallOrder[1],
+      );
+      await provider.cleanup();
+    });
+
     it('should close server on cleanup', async () => {
       const provider = new OpenCodeSDKProvider({
         env: { ANTHROPIC_API_KEY: 'test-api-key' },
@@ -1886,6 +1957,19 @@ describe('OpenCodeSDKProvider', () => {
       expect(mockSessionDelete).toHaveBeenCalledWith({
         sessionID: 'test-session-123',
       });
+    });
+
+    it('bounds stalled persistent session deletion', async () => {
+      mockSessionDelete.mockReturnValueOnce(new Promise(() => undefined));
+      const provider = new OpenCodeSDKProvider({
+        config: { persist_sessions: true },
+        env: { ANTHROPIC_API_KEY: 'test-api-key' },
+      });
+      await provider.callApi('Test prompt');
+      vi.useFakeTimers();
+      const cleanup = provider.cleanup();
+      await vi.advanceTimersByTimeAsync(5000);
+      await cleanup;
     });
   });
 

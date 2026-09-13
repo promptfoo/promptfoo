@@ -20,6 +20,7 @@ import {
 import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { sleep } from '../../src/util/time';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { createDeferred } from '../util/utils';
 import { toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -32,6 +33,52 @@ afterEach(() => {
 });
 
 describeEvaluator('evaluator execution control', () => {
+  it.each([false, true])(
+    'isolates overlapping evaluation cleanup (shared provider: %s)',
+    async (shared) => {
+      const started = createDeferred<void>();
+      const pending = createDeferred<ProviderResponse>();
+      const slow = {
+        id: () => 'slow',
+        cleanup: vi.fn(),
+        callApi: vi
+          .fn()
+          .mockImplementationOnce(() => {
+            started.resolve();
+            return pending.promise;
+          })
+          .mockResolvedValue({ output: 'hello' }),
+      };
+      const fast = shared
+        ? slow
+        : {
+            id: () => 'fast',
+            cleanup: vi.fn(),
+            callApi: vi.fn().mockResolvedValue({ output: 'hello' }),
+          };
+      providerRegistry.register(slow);
+      providerRegistry.register(fast);
+      const suite = (provider: ApiProvider): TestSuite => ({
+        providers: [provider],
+        prompts: [toPrompt('hello')],
+        tests: [{}],
+      });
+      const slowRun = evaluate(suite(slow), new Eval({}), {});
+      await started.promise;
+      try {
+        await evaluate(suite(fast), new Eval({}), {});
+        expect(slow.cleanup).not.toHaveBeenCalled();
+        if (!shared) {
+          expect(fast.cleanup).toHaveBeenCalledOnce();
+        }
+      } finally {
+        pending.resolve({ output: 'hello' });
+        await slowRun;
+      }
+      expect(slow.cleanup).toHaveBeenCalledOnce();
+    },
+  );
+
   it('evaluates with provider delay', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
@@ -117,7 +164,7 @@ describeEvaluator('evaluator execution control', () => {
         await originalClose.call(this);
         throw new Error('simulated close failure');
       });
-    const shutdownSpy = vi.spyOn(providerRegistry, 'shutdownAll').mockResolvedValue();
+    const cleanup = vi.fn();
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
     const provider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
@@ -132,17 +179,17 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{}],
     };
 
+    providerRegistry.register(Object.assign(provider, { cleanup }));
     try {
       const evalRecord = new Eval({ outputPath });
       // Results persisted, so the close failure is recoverable (the output file is
       // regenerated from the database) — the run still succeeds and cleanup still runs.
       await expect(evaluate(testSuite, evalRecord, {})).resolves.toBeDefined();
-      expect(shutdownSpy).toHaveBeenCalledOnce();
+      expect(cleanup).toHaveBeenCalledOnce();
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('simulated close failure'));
     } finally {
       warnSpy.mockRestore();
       closeSpy.mockRestore();
-      shutdownSpy.mockRestore();
       fs.rmSync(outputPath, { force: true });
     }
   });
@@ -731,6 +778,9 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{}],
     };
 
+    // Another evaluation still owns this provider when the timed-out run finishes.
+    const otherDone = createDeferred<void>();
+    const otherEvaluation = providerRegistry.withScope([slowApiProvider], () => otherDone.promise);
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 100 });
       await vi.advanceTimersByTimeAsync(100);
@@ -754,6 +804,8 @@ describeEvaluator('evaluator execution control', () => {
 
       expect(slowApiProvider.cleanup).not.toHaveBeenCalled();
     } finally {
+      otherDone.resolve();
+      await otherEvaluation;
       if (longTimer) {
         clearTimeout(longTimer);
       }
@@ -808,6 +860,9 @@ describeEvaluator('evaluator execution control', () => {
       tests: [{}],
     };
 
+    // Another evaluation still owns this provider when the timed-out run finishes.
+    const otherDone = createDeferred<void>();
+    const otherEvaluation = providerRegistry.withScope([hangingProvider], () => otherDone.promise);
     try {
       const evalPromise = evaluate(testSuite, mockEval as unknown as Eval, { timeoutMs: 50 });
       await vi.advanceTimersByTimeAsync(50);
@@ -822,6 +877,8 @@ describeEvaluator('evaluator execution control', () => {
         }),
       );
     } finally {
+      otherDone.resolve();
+      await otherEvaluation;
       vi.useRealTimers();
     }
   });

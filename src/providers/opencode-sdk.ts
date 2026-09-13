@@ -838,6 +838,8 @@ export class OpenCodeSDKProvider implements ApiProvider {
   private opencodeModule?: LoadedOpenCodeSDKModule;
   private client?: OpenCodeClient;
   private clientInitialization?: Promise<void>;
+  private previousClientInitialization?: Promise<void>;
+  private clientGeneration = 0;
   private server?: OpenCodeServer;
   private sessions: Map<string, OpenCodeSessionHandle> = new Map(); // cacheKey -> session info
   private sessionOrder: string[] = []; // Track insertion order for LRU eviction
@@ -900,7 +902,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    await this.clientInitialization?.catch(() => undefined);
+    this.clientGeneration++;
+    this.previousClientInitialization =
+      this.clientInitialization ?? this.previousClientInitialization;
     this.clientInitialization = undefined;
     for (const session of this.sessions.values()) {
       try {
@@ -1191,7 +1195,21 @@ export class OpenCodeSDKProvider implements ApiProvider {
     if (!session) {
       return;
     }
-    await this.client?.session?.delete?.(this.buildDeleteSessionParameters(session));
+    const deletion = this.client?.session?.delete?.(this.buildDeleteSessionParameters(session));
+    if (!deletion) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        deletion,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('OpenCode session deletion timed out')), 5000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private buildAbortSessionParameters(
@@ -1297,7 +1315,11 @@ export class OpenCodeSDKProvider implements ApiProvider {
   }
 
   private async ensureClient(config: OpenCodeSDKConfig): Promise<void> {
+    const generation = this.clientGeneration;
     const opencodeModule = await this.ensureOpenCodeModule();
+    if (generation !== this.clientGeneration) {
+      throw new Error('OpenCode initialization cancelled during cleanup');
+    }
 
     this.validateSessionPolicyConfiguration(config);
 
@@ -1311,6 +1333,16 @@ export class OpenCodeSDKProvider implements ApiProvider {
     const { createOpencode, createOpencodeClient } = opencodeModule;
     let initialization: Promise<void>;
     initialization = (async () => {
+      if (config.port && this.previousClientInitialization) {
+        const previous = this.previousClientInitialization;
+        await previous.catch(() => undefined);
+        if (this.previousClientInitialization === previous) {
+          this.previousClientInitialization = undefined;
+        }
+        if (generation !== this.clientGeneration) {
+          throw new Error('OpenCode initialization cancelled during cleanup');
+        }
+      }
       if (config.baseUrl) {
         this.client = createOpencodeClient({
           baseUrl: config.baseUrl,
@@ -1337,6 +1369,10 @@ export class OpenCodeSDKProvider implements ApiProvider {
       }
 
       const opencode = await createOpencode(serverOptions);
+      if (generation !== this.clientGeneration) {
+        opencode.server.close();
+        throw new Error('OpenCode initialization cancelled during cleanup');
+      }
       this.client = opencode.client;
       this.server = opencode.server;
       logger.debug(`OpenCode server started at ${opencode.server.url}`);
@@ -1400,7 +1436,9 @@ export class OpenCodeSDKProvider implements ApiProvider {
       };
     }
 
-    const createResult = await this.client.session.create(
+    const client = this.client;
+    const generation = this.clientGeneration;
+    const createResult = await client.session.create(
       this.buildCreateSessionParameters(config, sessionQuery),
     );
     const createData = unwrapOpenCodeResult(createResult);
@@ -1416,6 +1454,15 @@ export class OpenCodeSDKProvider implements ApiProvider {
       id: sessionId,
       query: sessionQuery,
     };
+
+    if (generation !== this.clientGeneration) {
+      try {
+        await client.session.delete?.(this.buildDeleteSessionParameters(session));
+      } catch (err) {
+        logger.debug(`Failed to delete late OpenCode session ${session.id}: ${err}`);
+      }
+      throw new Error('OpenCode session creation cancelled during cleanup');
+    }
 
     if (config.persist_sessions) {
       this.addSession(sessionCacheKey, session);

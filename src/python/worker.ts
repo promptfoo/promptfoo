@@ -51,6 +51,9 @@ export class PythonWorker {
       this.pythonPath || 'python',
       typeof this.pythonPath === 'string',
     );
+    if (this.shuttingDown) {
+      throw new Error('Python worker shut down during startup');
+    }
 
     this.process = new PythonShell(wrapperPath, {
       mode: 'text',
@@ -272,13 +275,12 @@ export class PythonWorker {
   }
 
   async shutdown(): Promise<void> {
+    this.shuttingDown = true;
     if (!this.process) {
       return;
     }
 
     try {
-      this.shuttingDown = true;
-
       // Reject any in-flight request promptly
       if (this.pendingRequest) {
         this.pendingRequest.reject(new Error('Worker shutting down'));

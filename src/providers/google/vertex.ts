@@ -541,9 +541,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
   }
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
+    await this.initializeMCP();
 
     // Merge configs from the provider and the prompt
     const config = mergeGoogleCompletionOptions(

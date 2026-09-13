@@ -101,6 +101,7 @@ function getEffectiveRequestOptions(config: MCPConfig): MCPRequestOptions | unde
 
 export class MCPClient {
   private clients: Map<string, Client> = new Map();
+  private pendingConnections = new Set<() => Promise<void>>();
   private tools: Map<string, MCPTool[]> = new Map();
   private config: MCPConfig;
   private transports: Map<
@@ -113,6 +114,9 @@ export class MCPClient {
   private tokenExpiresAt: Map<string, number> = new Map();
   // Lock mechanism to prevent concurrent token refresh per server
   private tokenRefreshLocks: Map<string, TokenRefreshLock> = new Map();
+  private shuttingDown = false;
+  private generation = 0;
+  private oauthAbortController = new AbortController();
 
   get hasInitialized(): boolean {
     return this.clients.size > 0;
@@ -140,7 +144,18 @@ export class MCPClient {
     this.config = config;
   }
 
+  private assertActive(generation = this.generation): void {
+    if (this.shuttingDown || generation !== this.generation) {
+      throw new Error('MCP client is shutting down');
+    }
+  }
+
   async initialize(): Promise<void> {
+    const generation = this.generation;
+    this.shuttingDown = false;
+    if (this.oauthAbortController.signal.aborted) {
+      this.oauthAbortController = new AbortController();
+    }
     if (!this.config.enabled) {
       return;
     }
@@ -156,27 +171,48 @@ export class MCPClient {
       }
       usedKeys.add(serverKey);
       logger.info(`connecting to server ${serverKey}`);
-      await this.connectToServer(server, serverKey);
+      await this.connectToServer(server, serverKey, generation);
     }
   }
 
   private async connectToServer(
     server: MCPServerConfig,
     serverKey = server.name || server.url || server.path || 'default',
+    generation = this.generation,
   ): Promise<void> {
+    this.assertActive(generation);
     const { Client } = await loadMcpClientSdk();
-    const client = new Client({
+    this.assertActive(generation);
+    const clientInfo = {
       name: 'promptfoo-MCP',
       version: '1.0.0',
       description: 'Promptfoo MCP client for connecting to MCP servers during LLM evaluations',
-    });
+    };
+    let client = new Client(clientInfo);
 
-    let transport: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport;
+    let transport:
+      | StdioClientTransport
+      | SSEClientTransport
+      | StreamableHTTPClientTransport
+      | undefined;
+    let closingClient: Client | undefined;
+    let closingTransport: typeof transport;
+    let closePromise: Promise<void> | undefined;
+    const closePendingConnection = () => {
+      if (!closePromise || closingClient !== client || closingTransport !== transport) {
+        closingClient = client;
+        closingTransport = transport;
+        closePromise = this.closeConnection(client, transport);
+      }
+      return closePromise;
+    };
+    this.pendingConnections.add(closePendingConnection);
     try {
       const requestOptions = getEffectiveRequestOptions(this.config);
 
       if (server.command) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+        this.assertActive(generation);
         // NPM package or other command execution
         transport = new StdioClientTransport({
           command: server.command,
@@ -202,6 +238,7 @@ export class MCPClient {
           : server.path;
 
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+        this.assertActive(generation);
         transport = new StdioClientTransport({
           command,
           args: [serverPath],
@@ -223,7 +260,12 @@ export class MCPClient {
           // Fetch token using configured tokenUrl or OAuth discovery
           // This avoids SDK's OAuth discovery which requires authorization_endpoint
           logger.debug('[MCP] Fetching OAuth token');
-          const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(oauthAuth, server.url);
+          const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(
+            oauthAuth,
+            server.url,
+            this.oauthAbortController.signal,
+          );
+          this.assertActive(generation);
           authHeaders = { Authorization: `Bearer ${accessToken}` };
 
           // Store config and expiration for proactive token refresh
@@ -263,6 +305,7 @@ export class MCPClient {
           const { StreamableHTTPClientTransport } = await import(
             '@modelcontextprotocol/sdk/client/streamableHttp.js'
           );
+          this.assertActive(generation);
           transport = new StreamableHTTPClientTransport(
             new URL(serverUrl),
             hasOptions ? transportOptions : undefined,
@@ -273,7 +316,14 @@ export class MCPClient {
           logger.debug(
             `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
           );
+          await closePendingConnection();
+          if (this.shuttingDown || generation !== this.generation) {
+            throw error;
+          }
+          client = new Client(clientInfo);
+          transport = undefined;
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
+          this.assertActive(generation);
           transport = new SSEClientTransport(
             new URL(serverUrl),
             hasOptions ? transportOptions : undefined,
@@ -320,6 +370,9 @@ export class MCPClient {
         );
       }
 
+      if (this.shuttingDown || generation !== this.generation) {
+        throw new Error('MCP connection closed during initialization');
+      }
       this.transports.set(serverKey, transport);
       this.clients.set(serverKey, client);
       this.tools.set(serverKey, filteredTools);
@@ -331,11 +384,15 @@ export class MCPClient {
         );
       }
     } catch (error) {
+      // Failed handshakes/tool discovery have not entered the connection maps yet.
+      await closePendingConnection();
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (this.isDebugEnabled) {
         logger.error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
       }
       throw new Error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
+    } finally {
+      this.pendingConnections.delete(closePendingConnection);
     }
   }
 
@@ -374,6 +431,9 @@ export class MCPClient {
     // remains, this caller either uses the refreshed token or starts its own refresh.
     // Another caller may install a new lock while we wait, so check again each time.
     while (true) {
+      if (this.shuttingDown) {
+        return;
+      }
       const existingRefreshPromise = this.tokenRefreshLocks.get(serverKey)?.promise;
       if (!existingRefreshPromise) {
         break;
@@ -436,6 +496,9 @@ export class MCPClient {
     this.transports.delete(serverKey);
 
     // Reconnect with fresh token
+    if (this.shuttingDown) {
+      return;
+    }
     await this.connectToServer(oauthConfig.serverConfig, serverKey);
     logger.debug(`[MCP] Successfully refreshed OAuth token for server ${serverKey}`);
   }
@@ -563,14 +626,14 @@ export class MCPClient {
     throw new Error(`Tool ${name} not found in any connected MCP server`);
   }
 
-  async cleanup(): Promise<void> {
-    for (const [serverKey, client] of this.clients.entries()) {
+  private async closeConnection(
+    client: Client,
+    transport?: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport,
+  ): Promise<void> {
+    // Always attempt both closes, even if transport teardown fails.
+    for (const resource of [transport, client]) {
       try {
-        const transport = this.transports.get(serverKey);
-        if (transport) {
-          await transport.close();
-        }
-        await client.close();
+        await resource?.close();
       } catch (error) {
         if (this.isDebugEnabled) {
           logger.error(
@@ -578,6 +641,19 @@ export class MCPClient {
           );
         }
       }
+    }
+  }
+
+  async cleanup(): Promise<void> {
+    this.generation++;
+    this.shuttingDown = true;
+    this.oauthAbortController.abort();
+    const pendingConnections = [...this.pendingConnections];
+    this.pendingConnections.clear();
+    await Promise.all(pendingConnections.map((close) => close()));
+    await Promise.allSettled([...this.tokenRefreshLocks.values()].map(({ promise }) => promise));
+    for (const [serverKey, client] of this.clients.entries()) {
+      await this.closeConnection(client, this.transports.get(serverKey));
     }
     this.clients.clear();
     this.transports.clear();
