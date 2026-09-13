@@ -465,7 +465,7 @@ describe('HttpProvider structured multipart requests', () => {
         file.close = async () => {
           await close();
           fs.renameSync(baseDir, `${baseDir}-original`);
-          fs.symlinkSync(outsideDir, baseDir, 'junction');
+          fs.renameSync(outsideDir, baseDir);
         };
       }
       return file;

@@ -249,6 +249,7 @@ async function loadFilePart(
   source: z.infer<typeof PathFileSourceSchema>,
   vars: Record<string, unknown>,
   basePath: string,
+  baseIdentity: { dev: bigint; ino: bigint },
   abortSignal?: AbortSignal,
 ): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
   const renderedPath = renderTemplate(source.path, vars);
@@ -259,9 +260,10 @@ async function loadFilePart(
   }
   const file = await fs.open(canonicalPath, 'r');
   try {
-    const [opened, canonical, currentPath] = await Promise.all([
+    const [opened, canonical, currentBase, currentPath] = await Promise.all([
       file.stat({ bigint: true }),
       fs.stat(canonicalPath, { bigint: true }),
+      fs.stat(basePath, { bigint: true }),
       fs.realpath(process.platform === 'win32' ? canonicalPath : `/dev/fd/${file.fd}`),
     ]);
     if (
@@ -269,6 +271,8 @@ async function loadFilePart(
       opened.ino === 0n ||
       opened.dev !== canonical.dev ||
       opened.ino !== canonical.ino ||
+      currentBase.dev !== baseIdentity.dev ||
+      currentBase.ino !== baseIdentity.ino ||
       currentPath !== canonicalPath ||
       !isCanonicalPathWithinDir(currentPath, basePath)
     ) {
@@ -294,6 +298,7 @@ export async function renderHttpMultipartBody(
   const fields: MultipartFieldDescriptor[] = [];
   const files: MultipartFileDescriptor[] = [];
   let basePath: string | undefined;
+  let baseIdentity: { dev: bigint; ino: bigint } | undefined;
 
   for (const part of config.parts) {
     abortSignal?.throwIfAborted();
@@ -311,7 +316,8 @@ export async function renderHttpMultipartBody(
 
     if (part.source.type === 'path') {
       basePath ??= await resolveCanonicalDir(cliState.basePath || process.cwd());
-      const file = await loadFilePart(part.source, vars, basePath, abortSignal);
+      baseIdentity ??= await fs.stat(basePath, { bigint: true });
+      const file = await loadFilePart(part.source, vars, basePath, baseIdentity, abortSignal);
       loaded = file;
       defaultFilename = file.filename;
     } else {
