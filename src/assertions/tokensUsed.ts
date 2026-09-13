@@ -109,7 +109,11 @@ function coveredAgentSpanIds(spans: TraceSpan[]): Set<string> {
   const byId = new Map(spans.map((span) => [span.spanId, span]));
   const descendantTotals = new Map<string, number>();
 
-  for (const child of spans.filter((span) => hasTokenUsageAttributes(span.attributes))) {
+  for (const child of spans.filter(
+    (span) =>
+      hasTokenUsageAttributes(span.attributes) &&
+      span.attributes?.['gen_ai.operation.name'] !== 'invoke_agent',
+  )) {
     const visited = new Set<string>();
     let id = child.parentSpanId;
     while (id && !visited.has(id)) {

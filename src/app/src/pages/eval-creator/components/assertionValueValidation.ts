@@ -602,11 +602,12 @@ function getTrajectoryToolSetValueError(value: unknown): string | undefined {
   return undefined;
 }
 
+function isExternalAssertionValue(value: unknown): boolean {
+  return typeof value === 'string' && (value.startsWith('file://') || value.startsWith('package:'));
+}
+
 function getStructuredValueError(assertion: Assertion): string | undefined {
-  if (
-    typeof assertion.value === 'string' &&
-    (assertion.value.startsWith('file://') || assertion.value.startsWith('package:'))
-  ) {
+  if (isExternalAssertionValue(assertion.value)) {
     return undefined;
   }
   if (

@@ -176,6 +176,9 @@ export function tokensUsedConfigError(value: {
   if (pattern !== undefined && (typeof pattern !== 'string' || !pattern.trim())) {
     return 'tokens-used pattern must be a non-empty string';
   }
+  if (source === 'response' && pattern !== undefined) {
+    return 'tokens-used pattern requires source "trace" or "auto"';
+  }
   if (min !== undefined) {
     const error = finiteNonNegativeNumberError(min, 'tokens-used min');
     if (error) {

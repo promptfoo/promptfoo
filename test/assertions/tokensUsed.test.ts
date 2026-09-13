@@ -326,6 +326,52 @@ describe('handleTokensUsed', () => {
     expect(result.reason).toContain('Tokens used: 150');
   });
 
+  it('does not let nested agent aggregates cover their ancestors', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 249, source: 'trace' } },
+      renderedValue: { max: 249, source: 'trace' },
+      assertionValueContext: {
+        ...baseParams.assertionValueContext,
+        trace: {
+          ...traceWithTokens,
+          spans: [
+            {
+              spanId: 'root',
+              name: 'root',
+              startTime: 0,
+              endTime: 3,
+              attributes: {
+                'gen_ai.operation.name': 'invoke_agent',
+                'gen_ai.usage.total_tokens': 150,
+              },
+            },
+            {
+              spanId: 'nested',
+              parentSpanId: 'root',
+              name: 'nested',
+              startTime: 1,
+              endTime: 3,
+              attributes: {
+                'gen_ai.operation.name': 'invoke_agent',
+                'gen_ai.usage.total_tokens': 100,
+              },
+            },
+            {
+              spanId: 'leaf',
+              parentSpanId: 'nested',
+              name: 'leaf',
+              startTime: 2,
+              endTime: 3,
+              attributes: { 'gen_ai.usage.total_tokens': 100 },
+            },
+          ],
+        },
+      },
+    };
+    expect(handleTokensUsed(params).reason).toContain('Tokens used: 250');
+  });
+
   it('counts cyclic malformed span hierarchies without failing open', () => {
     const params: AssertionParams = {
       ...baseParams,
@@ -766,6 +812,15 @@ describe('handleTokensUsed', () => {
     expect(() => handleTokensUsed(blankPatternParams)).toThrow(
       'tokens-used pattern must be a non-empty string',
     );
+  });
+
+  it('rejects a response source with a trace pattern', () => {
+    const params: AssertionParams = {
+      ...baseParams,
+      assertion: { type: 'tokens-used', value: { max: 1, source: 'response', pattern: 'llm.*' } },
+      renderedValue: { max: 1, source: 'response', pattern: 'llm.*' },
+    };
+    expect(() => handleTokensUsed(params)).toThrow(/pattern requires source/);
   });
 
   it('respects the pattern filter when computing tokens from trace', () => {
