@@ -93,12 +93,13 @@ describe('Codex Computer Use example', () => {
   });
   it('accepts a trajectory after metadata redacts the expected prompt', async () => {
     expect(trajectoryAssertion).toBeDefined();
-    const targetApp = '/tmp/PromptfooComputerUseTarget.app';
+    const targetApp = '/tmp/alice@example.com/PromptfooComputerUseTarget.app';
+    const recordedApp = '/tmp/[REDACTED]/PromptfooComputerUseTarget.app';
     const items = [
-      { tool: 'get_app_state', arguments: { app: targetApp } },
-      { tool: 'set_value', arguments: { app: targetApp, value: 'email [REDACTED]' } },
-      { tool: 'click', arguments: { app: targetApp } },
-      { tool: 'get_app_state', arguments: { app: targetApp } },
+      { tool: 'get_app_state', arguments: { app: recordedApp } },
+      { tool: 'set_value', arguments: { app: recordedApp, value: 'email [REDACTED]' } },
+      { tool: 'click', arguments: { app: recordedApp } },
+      { tool: 'get_app_state', arguments: { app: recordedApp } },
     ].map((item, index) => ({
       type: 'mcpToolCall',
       server: 'computer-use',

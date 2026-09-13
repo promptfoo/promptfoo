@@ -175,6 +175,18 @@ describe.runIf(process.platform !== 'win32')('Computer Use runner recovery', () 
     expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');
   });
 
+  it('allows the bundled config to reference runner-owned environment', async () => {
+    const fixture = createFixture();
+    fs.writeFileSync(
+      path.join(fixture.example, 'promptfooconfig.yaml'),
+      'defaultTest:\n  vars:\n    target_app: "{{ env.COMPUTER_USE_TARGET_APP }}"\n',
+    );
+
+    const result = await fixture.run({}, ['eval', '-c', 'promptfooconfig.yaml']);
+
+    expect(result.code, result.stderr).toBe(0);
+  });
+
   it('rejects env files declared by a config before launch', async () => {
     const fixture = createFixture();
     fs.writeFileSync(
