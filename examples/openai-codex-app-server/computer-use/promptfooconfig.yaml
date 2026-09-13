@@ -129,6 +129,13 @@ defaultTest:
           computerUseCalls[typeIndex]?.arguments?.text ??
           ''
         );
+        const promptPattern = enteredPrompt
+          .split('[REDACTED]')
+          .map((part) => part.replace(/[.*+?^$\{\}()|[\]\\]/g, '\\$&'))
+          .join('.+');
+        const enteredExpectedPrompt = new RegExp(`^${promptPattern}$`).test(
+          String(context.vars.prompt)
+        );
         const submitIndex = computerUseCalls.findIndex((item, index) =>
           index > typeIndex && ['click', 'press_key'].includes(item.tool)
         );
@@ -138,7 +145,7 @@ defaultTest:
         const hasUiTrajectory =
           firstReadIndex >= 0 &&
           typeIndex > firstReadIndex &&
-          enteredPrompt === context.vars.prompt &&
+          enteredExpectedPrompt &&
           submitIndex > typeIndex &&
           readBackIndex > submitIndex;
         const pass =

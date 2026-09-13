@@ -30,33 +30,51 @@ reject_state_overrides() {
       exit 1
     fi
   }
-  for ((index = 1; index <= $#; index++)); do
-    arg="${!index}"
-    case "$arg" in
-    --config=* | --env-file=* | --env-path=*) config="${arg#*=}" ;;
-    -c | --config | --env-file | --env-path)
-      ((index++))
-      config="${!index:-}"
-      ;;
-    *) continue ;;
-    esac
-    [[ "$config" == -* ]] && continue
-    IFS=, read -ra configs <<<"$config"
+  inspect_config() {
+    local config="$1"
+    [[ "$config" = /* ]] || config="$EXAMPLE_DIR/$config"
+    reject_state_file "$config"
+    while IFS= read -r env_path; do
+      env_path="${env_path#"${env_path%%[![:space:]]*}"}"
+      env_path="${env_path%"${env_path##*[![:space:]]}"}"
+      [[ "$env_path" = /* ]] || env_path="${config%/*}/$env_path"
+      [[ -n "$env_path" ]] && reject_state_file "$env_path"
+    done < <(sed -nE 's/^[[:space:]]*envPath:[[:space:]]*([^#]+).*$/\1/p' "$config")
+  }
+  inspect_paths() {
+    local config
+    IFS=, read -ra configs <<<"$1"
     for config in "${configs[@]}"; do
       config="${config#"${config%%[![:space:]]*}"}"
       config="${config%"${config##*[![:space:]]}"}"
       [[ -n "$config" ]] || continue
-      [[ "$config" = /* ]] || config="$EXAMPLE_DIR/$config"
-      reject_state_file "$config"
-      if [[ "$arg" == -c || "$arg" == --config || "$arg" == --config=* ]]; then
-        while IFS= read -r env_path; do
-          env_path="${env_path#"${env_path%%[![:space:]]*}"}"
-          env_path="${env_path%"${env_path##*[![:space:]]}"}"
-          [[ "$env_path" = /* ]] || env_path="${config%/*}/$env_path"
-          [[ -n "$env_path" ]] && reject_state_file "$env_path"
-        done < <(sed -nE 's/^[[:space:]]*envPath:[[:space:]]*([^#]+).*$/\1/p' "$config")
+      if [[ "$2" == config ]]; then
+        inspect_config "$config"
+      else
+        reject_state_file "$config"
       fi
     done
+  }
+  for ((index = 1; index <= $#; index++)); do
+    arg="${!index}"
+    case "$arg" in
+    --config=*) inspect_paths "${arg#*=}" config ;;
+    --env-file=* | --env-path=*) inspect_paths "${arg#*=}" env ;;
+    -c | --config)
+      ((index++))
+      while ((index <= $#)) && [[ "${!index}" != -* ]]; do
+        inspect_paths "${!index}" config
+        ((index++))
+      done
+      ((index--))
+      ;;
+    --env-file | --env-path)
+      ((index++))
+      config="${!index:-}"
+      [[ "$config" == -* ]] || inspect_paths "$config" env
+      ;;
+    *) continue ;;
+    esac
   done
 }
 
@@ -64,7 +82,7 @@ reject_state_overrides() {
 # preflight cannot leave a stale, intentionally vulnerable target running.
 terminate_process() {
   local pid="${1:-}"
-  if [[ -z "$pid" ]]; then
+  if [[ -z "$pid" ]] || [[ "$(ps -p "$pid" -o command= 2>/dev/null)" != "$TARGET_APP_BINARY" ]]; then
     return
   fi
   kill "$pid" 2>/dev/null || true
@@ -75,7 +93,9 @@ terminate_process() {
     fi
     sleep 0.1
   done
-  kill -9 "$pid" 2>/dev/null || true
+  if [[ "$(ps -p "$pid" -o command= 2>/dev/null)" == "$TARGET_APP_BINARY" ]]; then
+    kill -9 "$pid" 2>/dev/null || true
+  fi
   wait "$pid" 2>/dev/null || true
 }
 

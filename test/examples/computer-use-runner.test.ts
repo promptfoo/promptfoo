@@ -46,6 +46,10 @@ done
   fs.writeFileSync(
     path.join(bin, 'ps'),
     `#!/bin/bash
+if [[ "$1" == -p ]]; then
+  [[ "\${FIXTURE_PID_COMMAND:-$FIXTURE_TARGET_BINARY}" == none ]] || printf '%s\\n' "\${FIXTURE_PID_COMMAND:-$FIXTURE_TARGET_BINARY}"
+  exit 0
+fi
 if [[ -n "\${FIXTURE_STALE_PID:-}" ]]; then
   printf '%s %s\\n' "$FIXTURE_STALE_PID" "$FIXTURE_TARGET_BINARY"
 fi
@@ -186,6 +190,36 @@ describe.runIf(process.platform !== 'win32')('Computer Use runner recovery', () 
 
     expect(result.code).not.toBe(0);
     expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');
+  });
+
+  it('rejects state redirects from later variadic config operands', async () => {
+    const fixture = createFixture();
+    fs.writeFileSync(path.join(fixture.example, 'safe.yaml'), 'description: safe\n');
+    fs.writeFileSync(
+      path.join(fixture.example, 'escape.yaml'),
+      'env:\n  PROMPTFOO_CONFIG_DIR: /tmp/outside\n',
+    );
+
+    const result = await fixture.run({}, ['eval', '-c', 'safe.yaml', 'escape.yaml']);
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('Refusing config that overrides runner-owned Promptfoo state');
+  });
+
+  it('does not signal a saved pid after it no longer belongs to the target', async () => {
+    const fixture = createFixture();
+    const stale = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)']);
+    const exited = once(stale, 'exit');
+    try {
+      await fixture.run({
+        FIXTURE_STALE_PID: String(stale.pid),
+        FIXTURE_PID_COMMAND: '/tmp/reused-by-another-process',
+      });
+      expect(stale.exitCode).toBeNull();
+    } finally {
+      stale.kill('SIGTERM');
+      await exited;
+    }
   });
 
   it('recreates compiler caches before invoking xcrun', async () => {

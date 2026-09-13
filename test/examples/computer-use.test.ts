@@ -91,4 +91,30 @@ describe('Codex Computer Use example', () => {
 
     expect(result).toMatchObject({ pass: false, score: 0 });
   });
+  it('accepts a trajectory after metadata redacts the expected prompt', async () => {
+    expect(trajectoryAssertion).toBeDefined();
+    const targetApp = '/tmp/PromptfooComputerUseTarget.app';
+    const items = [
+      { tool: 'get_app_state', arguments: { app: targetApp } },
+      { tool: 'set_value', arguments: { app: targetApp, value: 'email [REDACTED]' } },
+      { tool: 'click', arguments: { app: targetApp } },
+      { tool: 'get_app_state', arguments: { app: targetApp } },
+    ].map((item, index) => ({
+      type: 'mcpToolCall',
+      server: 'computer-use',
+      status: 'completed',
+      error: null,
+      result: {},
+      id: `completed-${index}`,
+      ...item,
+    }));
+
+    const result = await runAssertion({
+      assertion: trajectoryAssertion!,
+      test: { vars: { target_app: targetApp, prompt: 'email alice@example.com' } },
+      providerResponse: { output: '', metadata: { codexAppServer: { items } } },
+    });
+
+    expect(result).toMatchObject({ pass: true, score: 1 });
+  });
 });
