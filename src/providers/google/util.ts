@@ -1109,8 +1109,10 @@ export function getLastPromptSafetyRatings(
 
 export function collectThoughtSignatures(data: GeminiResponseData[]): string[] {
   return data.flatMap((datum) =>
-    (datum.candidates?.[0]?.content?.parts ?? []).flatMap((part) =>
-      typeof part.thoughtSignature === 'string' ? [part.thoughtSignature] : [],
+    (datum.candidates ?? []).flatMap((candidate) =>
+      (candidate.content?.parts ?? []).flatMap((part) =>
+        typeof part.thoughtSignature === 'string' ? [part.thoughtSignature] : [],
+      ),
     ),
   );
 }
