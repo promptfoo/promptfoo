@@ -125,6 +125,7 @@ describe('monkeyPatchFetch', () => {
       headers: {
         'X-Promptfoo-Api-Key': `Bearer ${apiKey}`,
       },
+      dispatcher: expect.objectContaining({ dispatch: expect.any(Function) }),
     });
     const requestInit = mockOriginalFetch.mock.calls[0][1] as RequestInit;
     expect(new Headers(requestInit.headers).has('authorization')).toBe(false);
@@ -144,6 +145,7 @@ describe('monkeyPatchFetch', () => {
 
     expect(mockOriginalFetch).toHaveBeenCalledWith(url, {
       headers: { 'X-Promptfoo-Api-Key': 'Bearer caller-token' },
+      dispatcher: expect.objectContaining({ dispatch: expect.any(Function) }),
     });
   });
 
