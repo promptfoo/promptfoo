@@ -515,7 +515,7 @@ const SHELL_INJECTION_RULES: Record<ShellInjectionPredicate, RegExp[]> = {
 export function extractShellInjectionSignature(prompt: string): AttackSignature {
   const call = toolCallText(prompt);
   prompt = call.argumentText
-    .split(/(?<=[.!?])\s+|\n/)
+    .split(/(?<=[.!?;])\s+|\n/)
     .filter(
       (sentence) =>
         !/^(?:please\s+)?(?:(?:explain|describe|discuss|analyze)\b|(?:(?:you\s+)?(?:must|should)\s+not|do\s+not|don't|never)\s+(?:run|execute|read|open|send|upload|delete|remove|use|cat|echo|curl|wget|rm)\b)/i.test(
