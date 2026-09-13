@@ -725,6 +725,12 @@ describe('hoisted mock provenance', () => {
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
   });
 
+  it('preserves a reset completed before a caught failure', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn().mockReturnValue('x'));
+      beforeEach(() => { try { mock.mockReset(); work(); } catch {} });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
   it.each([
     `describe('generated', () => { cases.forEach(() => it('generated', () => mock())); });`,
     `cases.forEach(() => it('generated', () => mock()));`,
@@ -2172,6 +2178,42 @@ describe('hoisted mock provenance', () => {
         beforeEach(() => mock.mockReset()); it('works', () => mock());
       });`;
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('keeps parameterized test row mock identities', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn());
+      describe('first', () => { beforeEach(() => mock.mockReturnValue(1)); it('a', () => mock()); });
+      describe('second', () => { test.each([[unrelated], [mock]])('case', (candidate) => candidate()); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it('finds a test handler before a trailing timeout', () => {
+    const source = `const mock = vi.hoisted(() => vi.fn());
+      describe('first', () => { beforeEach(() => mock.mockReturnValue(1)); it('a', () => mock()); });
+      describe('second', () => { it('b', () => mock(), 1000); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it('preserves Object.freeze identity for reset analysis', () => {
+    const source = `const holder = vi.hoisted(() =>
+      Object.freeze({ mock: vi.fn().mockReturnValue('x') }));
+      beforeEach(() => holder.mock.mockReset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('binds this for a known reset method', () => {
+    const source = `const holder = vi.hoisted(() => ({
+      mock: vi.fn().mockReturnValue('x'), reset() { this.mock.mockReset(); }
+    })); beforeEach(() => holder.reset());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('executes a known getter when its property is read', () => {
+    const source = `const holder = vi.hoisted(() => {
+      const mock = vi.fn();
+      return { get configured() { mock.mockReturnValue('x'); return mock; } };
+    }); beforeEach(() => unrelated.mockReset()); holder.configured;`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
   });
 
   it('drops a setup setter canceled later in the same hook', () => {
