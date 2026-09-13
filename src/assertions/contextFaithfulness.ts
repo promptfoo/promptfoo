@@ -1,6 +1,7 @@
 import { matchesContextFaithfulness } from '../matchers/rag';
 import invariant from '../util/invariant';
 import { resolveContext } from './contextUtils';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from './ragDefaults';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -47,7 +48,7 @@ export async function handleContextFaithfulness({
       test.vars.query,
       output,
       context,
-      assertion.threshold ?? 0,
+      assertion.threshold ?? DEFAULT_RAG_ASSERTION_THRESHOLD,
       test.options,
       test.vars,
       providerCallContext,
