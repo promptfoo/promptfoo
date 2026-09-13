@@ -316,7 +316,7 @@ describe('matchesContextRecall', () => {
       ]);
     });
 
-    it('should return score 0 when LLM returns no classification lines', async () => {
+    it('should return score 0 and tag it as a grader error when the LLM returns no classification lines', async () => {
       const context = 'Test context';
       const groundTruth = 'Test ground truth';
       const threshold = 0.5;
@@ -338,6 +338,7 @@ describe('matchesContextRecall', () => {
       expect(result.score).toBe(0);
       expect(result.metadata?.totalSentences).toBe(0);
       expect(result.pass).toBe(false);
+      expect(result.metadata?.graderError).toBe(true);
     });
   });
 
