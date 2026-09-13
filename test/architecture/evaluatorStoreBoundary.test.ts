@@ -8,10 +8,14 @@ import { extractModuleSpecifiers } from '../../scripts/architectureUtils';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 describe('evaluator store boundary', () => {
-  it('keeps the evaluator independent from the concrete Eval model', () => {
+  it('keeps the evaluator independent from concrete models', () => {
     const evaluatorPath = 'src/evaluator.ts';
     const source = readFileSync(path.join(repoRoot, evaluatorPath), 'utf8');
 
-    expect(extractModuleSpecifiers(source, evaluatorPath)).not.toContain('./models/eval');
+    expect(
+      extractModuleSpecifiers(source, evaluatorPath).filter((specifier) =>
+        /(?:^|\/)models(?:\/|$)/.test(specifier),
+      ),
+    ).toEqual([]);
   });
 });
