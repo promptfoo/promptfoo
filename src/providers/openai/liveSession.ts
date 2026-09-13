@@ -415,8 +415,10 @@ export class LiveSession {
         this.streamAudio();
         break;
       case 'session.instructions.appended':
-        this.acknowledgeCommand(event.client_event_id);
+        const acknowledged = this.acknowledgeCommand(event.client_event_id);
         if (
+          acknowledged &&
+          this.started &&
           event.client_event_id === OPENING_INSTRUCTION_ID &&
           this.captureEndFrame === undefined &&
           !this.closing
@@ -517,12 +519,14 @@ export class LiveSession {
   }
 
   /** An acknowledged command is no longer pending, so session.close cannot cancel it. */
-  private acknowledgeCommand(clientEventId: unknown): void {
+  private acknowledgeCommand(clientEventId: unknown): boolean {
     const command =
       typeof clientEventId === 'string' ? this.commands.get(clientEventId) : undefined;
-    if (command) {
-      command.pending = false;
+    if (!command?.pending) {
+      return false;
     }
+    command.pending = false;
+    return true;
   }
 
   private handleApiError(event: LiveEvent): void {
@@ -996,7 +1000,7 @@ export class LiveSession {
 function credentialForms(value: string): string[] {
   // HTTP drops surrounding whitespace, so a gateway echoes the trimmed value.
   const trimmed = value.trim();
-  const token = trimmed.replace(/^(?:Bearer|Basic)\s+/i, '');
+  const token = trimmed.replace(/^[A-Za-z][\w-]*\s+/, '');
   if (!/^Basic\s/i.test(trimmed)) {
     return [trimmed, token];
   }

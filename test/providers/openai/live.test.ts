@@ -339,6 +339,8 @@ describe('OpenAiLiveProvider', () => {
   it('reports startup timeout and releases the socket', async () => {
     const result = provider().callApi('Hi');
     const socket = await connect();
+    emit(socket, { type: 'session.instructions.appended', client_event_id: 'promptfoo_start' });
+    expect(sentTypes(socket)).not.toContain('session.commentary.append');
     await vi.advanceTimersByTimeAsync(200);
     expect((await result).error).toContain('session.started');
     expect(socket.terminate).toHaveBeenCalledOnce();
@@ -1447,6 +1449,27 @@ describe('OpenAiLiveProvider', () => {
     expect((await result).error).toBe(
       'GPT-Live WebSocket handshake failed (HTTP 401): Invalid api-key [REDACTED] for "api-key":"[REDACTED]" and key=[REDACTED] (k9zz and xk9z are unrelated).',
     );
+  });
+
+  it('redacts tokens from custom authorization schemes', async () => {
+    const result = new OpenAiLiveProvider('gpt-live-1', {
+      config: {
+        apiBaseUrl: 'http://localhost:1234/v1',
+        headers: { Authorization: 'Token gateway-secret' },
+        responseWindowMs: 100,
+        websocketTimeout: 200,
+        closeTimeoutMs: 100,
+      },
+    }).callApi('Hi');
+    await vi.advanceTimersByTimeAsync(0);
+    sockets[0].emit(
+      'unexpected-response',
+      {},
+      httpResponse(401, JSON.stringify({ error: { message: 'invalid token gateway-secret' } })),
+    );
+    const response = await result;
+    expect(response.error).toContain('invalid token [REDACTED]');
+    expect(JSON.stringify(response)).not.toContain('gateway-secret');
   });
 
   it('redacts a short userinfo password from Live error text and apiErrors', async () => {
