@@ -2470,7 +2470,21 @@ describe('Responses stream regressions', () => {
             content_index: '0:1',
             text: 'SECOND',
           },
-          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'fc_1',
+                  call_id: 'call_1',
+                  name: 'lookup',
+                  arguments: '{}',
+                },
+              ],
+            },
+          },
         ]),
         'test',
         { debug: vi.fn() },
@@ -6868,5 +6882,160 @@ describe('Responses stream regressions', () => {
         expect(JSON.stringify(parsed)).not.toContain('dangerous_action');
       },
     );
+
+    it('does not recover empty-ID or late finalized message text', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_text.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: '',
+            text: 'SECRET',
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'message',
+              id: 'm_safe',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'SAFE' }],
+            },
+          },
+          {
+            type: 'response.content_part.done',
+            output_index: 0,
+            content_index: 1,
+            item_id: 'm_safe',
+            part: { type: 'output_text', text: 'LATE SECRET' },
+          },
+          { type: 'response.incomplete', response: { status: 'incomplete', output: [] } },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      expect(JSON.stringify(parsed)).toContain('SAFE');
+      expect(JSON.stringify(parsed)).not.toContain('SECRET');
+    });
+
+    it('keeps finalized refusal identity and ignores late refusal deltas', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.refusal.done',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_secret',
+            refusal: 'SAFE REFUSAL',
+          },
+          {
+            type: 'response.refusal.delta',
+            output_index: 0,
+            content_index: 0,
+            item_id: 'm_secret',
+            delta: 'LATE SECRET',
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'message',
+                  id: 'm_safe',
+                  role: 'assistant',
+                  content: [{ type: 'output_text', text: 'SAFE ANSWER' }],
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      expect(JSON.stringify(parsed)).not.toContain('LATE SECRET');
+    });
+
+    it('bills finalized searches omitted from a safety snapshot once', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: { type: 'web_search_call', id: 'ws_1', action: { type: 'search' } },
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              incomplete_details: { reason: 'safety' },
+              output: [],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      expect(
+        calculateObservableOpenAIToolCost(parsed, 'gpt-4o', { tools: [{ type: 'web_search' }] }),
+      ).toBeCloseTo(0.01, 10);
+    });
+
+    it('preserves finalized call metadata after late arguments and rejects malformed IDs', async () => {
+      const parsed = await readResponsesStream(
+        createSseResponse([
+          {
+            type: 'response.output_item.done',
+            output_index: 0,
+            item: {
+              type: 'function_call',
+              id: 'fc_1',
+              call_id: 'call_1',
+              name: 'lookup',
+              arguments: '{}',
+            },
+          },
+          {
+            type: 'response.function_call_arguments.done',
+            output_index: 0,
+            item_id: 'fc_1',
+            arguments: '{"late":true}',
+          },
+          {
+            type: 'response.output_item.done',
+            output_index: 1,
+            item: {
+              type: 'function_call',
+              id: { bad: true },
+              call_id: 'bad',
+              name: 'danger',
+              arguments: '{}',
+            },
+          },
+          {
+            type: 'response.incomplete',
+            response: {
+              status: 'incomplete',
+              output: [
+                {
+                  type: 'function_call',
+                  id: 'fc_1',
+                  call_id: 'call_1',
+                  name: 'lookup',
+                  arguments: '{}',
+                },
+              ],
+            },
+          },
+        ]),
+        'test',
+        { debug: vi.fn() },
+      );
+      expect(parsed.output).toEqual([
+        expect.objectContaining({ id: 'fc_1', call_id: 'call_1', name: 'lookup' }),
+      ]);
+      expect(JSON.stringify(parsed)).not.toContain('danger');
+    });
   });
 });

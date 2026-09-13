@@ -1,3 +1,5 @@
+import { promptfooBillingOutput } from '../openai/billing';
+
 type ResponsesStreamEvent = {
   type?: string;
   response?: any;
@@ -197,14 +199,14 @@ function getOutputRefusalItem(event: ResponsesStreamEvent): any | undefined {
     return getSafeOutputRefusalItem([event.delta]);
   }
   if (event.type === 'response.refusal.done' && event.refusal !== '') {
-    return getSafeOutputRefusalItem([event.refusal]);
+    return getSafeOutputRefusalItem([event.refusal], { id: event.item_id });
   }
   if (
     event.type === 'response.content_part.done' &&
     event.part?.type === 'refusal' &&
     event.part.refusal !== ''
   ) {
-    return getSafeOutputRefusalItem([event.part.refusal]);
+    return getSafeOutputRefusalItem([event.part.refusal], { id: event.item_id });
   }
   if (event.type !== 'response.output_item.done') {
     return undefined;
@@ -1039,11 +1041,13 @@ export async function readResponsesStream(
   const completedUnindexedOutputTexts: string[] = [];
   let finalizedUnindexedOutputText = false;
   const finalizedOutputTextKeys = new Set<string>();
+  const finalizedMessageOutputIndices = new Set<number>();
   const invalidlyIndexedOutputTextByContent = new Map<string, string>();
   const finalizedInvalidOutputTextKeys = new Set<string>();
   let currentInvalidOutputTextKey: string | undefined;
   const finalizedNonMessageItems = new Map<string, RetainedStreamOutputItem>();
   const finalizedRefusalItems = new Map<string, RetainedStreamOutputItem>();
+  const finalizedRefusalKeys = new Set<string>();
   const refusalDeltaChunks = new Map<string, string[]>();
   const refusalItemIds = new Map<string, string>();
   const addedFunctionItems = new Map<string, Record<string, string | undefined>>();
@@ -1061,7 +1065,9 @@ export async function readResponsesStream(
 
   const isInvalidOutputTextItemId = (itemId: unknown): boolean =>
     itemId !== undefined &&
-    (typeof itemId !== 'string' || itemId.length > MAX_STREAM_FUNCTION_METADATA_CHARS);
+    (typeof itemId !== 'string' ||
+      itemId.length === 0 ||
+      itemId.length > MAX_STREAM_FUNCTION_METADATA_CHARS);
 
   const appendOutputText = (text: string): void => {
     if (text.length > MAX_STREAM_OUTPUT_CHARS - outputText.length) {
@@ -1121,10 +1127,21 @@ export async function readResponsesStream(
       finalizedNonMessageItems.size +
       finalizedRefusalItems.size <
       MAX_STREAM_OUTPUT_KEYS - (reserveForRefusal ? 1 : 0);
+  const isLateFinalizedMessageEvent = (event: ResponsesStreamEvent): boolean => {
+    const outputIndex = getValidOutputIndex(event);
+    return (
+      event.type !== 'response.output_item.done' &&
+      outputIndex !== undefined &&
+      finalizedMessageOutputIndices.has(outputIndex)
+    );
+  };
 
   const processOutputTextEvent = (event: ResponsesStreamEvent) => {
     const delta = getOutputTextDelta(event);
     if (!delta) {
+      return;
+    }
+    if (isLateFinalizedMessageEvent(event)) {
       return;
     }
 
@@ -1210,6 +1227,9 @@ export async function readResponsesStream(
 
   const processOutputTextDoneEvent = (event: ResponsesStreamEvent) => {
     if (typeof event.text !== 'string') {
+      return;
+    }
+    if (isLateFinalizedMessageEvent(event)) {
       return;
     }
 
@@ -1417,6 +1437,8 @@ export async function readResponsesStream(
       (event.type === 'response.content_part.added' && event.part?.type === 'output_text')
     ) {
       finalizedUnindexedOutputText = false;
+      currentOutputTextKey = undefined;
+      currentInvalidOutputTextKey = undefined;
     }
 
     if (event.response && typeof event.response === 'object') {
@@ -1428,6 +1450,12 @@ export async function readResponsesStream(
       latestResponse = boundedResponse(event);
       latestResponseEventType = event.type;
       latestResponseEventCount = streamEventCount;
+    }
+    if (event.type === 'response.output_item.done' && event.item?.type === 'message') {
+      const outputIndex = getValidOutputIndex(event);
+      if (outputIndex !== undefined) {
+        finalizedMessageOutputIndices.add(outputIndex);
+      }
     }
 
     let finalizedRefusalItem = getOutputRefusalItem(event);
@@ -1449,6 +1477,9 @@ export async function readResponsesStream(
         }
       }
       const key = getOutputTextKey(event) ?? getInvalidOutputTextKey(event);
+      if (event.type === 'response.refusal.delta' && finalizedRefusalKeys.has(key)) {
+        return;
+      }
       let knownSerializedLength: number | undefined;
       if (event.type === 'response.refusal.delta') {
         const itemId =
@@ -1484,6 +1515,7 @@ export async function readResponsesStream(
           knownSerializedLength = previousItem.serializedLength + JSON.stringify(delta).length - 2;
         }
       } else {
+        finalizedRefusalKeys.add(key);
         refusalDeltaChunks.delete(key);
         refusalItemIds.delete(key);
       }
@@ -1514,7 +1546,7 @@ export async function readResponsesStream(
     ) {
       const outputIndex = getValidOutputIndex(event);
       let item = event.item as any;
-      if (item.type === 'message' && isInvalidOutputTextItemId(item.id)) {
+      if (isInvalidOutputTextItemId(item.id)) {
         return;
       }
       if (item.type === 'message' && outputIndex !== undefined) {
@@ -1643,10 +1675,13 @@ export async function readResponsesStream(
       event.part?.type === 'output_text' &&
       Object.keys(event.part).some((key) => key !== 'type' && key !== 'text')
     ) {
+      const outputIndex = getValidOutputIndex(event);
+      if (outputIndex !== undefined && finalizedMessageOutputIndices.has(outputIndex)) {
+        return;
+      }
       if (isInvalidOutputTextItemId(event.item_id)) {
         return;
       }
-      const outputIndex = getValidOutputIndex(event);
       const key = getMessageOutputKey(event.output_index, event.item_id);
       const existingItem = finalizedNonMessageItems.get(key)?.item;
       const content = Array.isArray(existingItem?.content) ? [...existingItem.content] : [];
@@ -1696,9 +1731,13 @@ export async function readResponsesStream(
       event.type === 'response.function_call_arguments.done' &&
       typeof event.arguments === 'string'
     ) {
+      if (isInvalidOutputTextItemId(event.item_id)) {
+        return;
+      }
       const outputIndex = getValidOutputIndex(event);
       const key = getFunctionCallOutputKey(event.output_index, event.item_id);
       const item = {
+        ...finalizedNonMessageItems.get(key)?.item,
         ...addedFunctionItems.get(key),
         type: 'function_call',
         ...(event.item_id ? { id: event.item_id } : {}),
@@ -2077,17 +2116,25 @@ export async function readResponsesStream(
       : outputWithCompletedAnnotations,
     isCompletedResponse,
   );
-  const billingOutput = latestResponse?.output
-    ?.filter(
-      (item: any) =>
-        item?.type === 'file_search_call' ||
-        (item?.type === 'web_search_call' && item.action?.type === 'search'),
-    )
-    .map((item: any) =>
-      item.type === 'web_search_call'
-        ? { type: item.type, action: { type: 'search' } }
-        : { type: item.type },
-    );
+  const billingOutput = Array.from(
+    new Map(
+      [
+        ...(latestResponse?.output ?? []),
+        ...Array.from(finalizedNonMessageItems.values(), ({ item }) => item),
+      ]
+        .filter(
+          (item: any) =>
+            item?.type === 'file_search_call' ||
+            (item?.type === 'web_search_call' && item.action?.type === 'search'),
+        )
+        .map((item: any, index) => [
+          `${item.type}:${typeof item.id === 'string' ? item.id : typeof item.call_id === 'string' ? item.call_id : index}`,
+          item.type === 'web_search_call'
+            ? { type: item.type, action: { type: 'search' } }
+            : { type: item.type },
+        ]),
+    ).values(),
+  );
 
   if (latestResponse && hasTerminalSafetyDecision(latestResponse)) {
     const safeOutput = filterExecutableToolCalls(finalizedStreamOutput, true);
@@ -2105,7 +2152,7 @@ export async function readResponsesStream(
     }
     return boundedResponse({
       ...getSafeRefusalResponse(latestResponse, safeOutput, true),
-      ...(billingOutput?.length ? { _promptfooBillingOutput: billingOutput } : {}),
+      ...(billingOutput?.length ? { [promptfooBillingOutput]: billingOutput } : {}),
     });
   }
 
@@ -2113,7 +2160,7 @@ export async function readResponsesStream(
     const safeOutput = filterExecutableToolCalls(finalizedStreamOutput, true);
     return boundedResponse({
       ...getSafeRefusalResponse(latestResponse, safeOutput, true),
-      ...(billingOutput?.length ? { _promptfooBillingOutput: billingOutput } : {}),
+      ...(billingOutput?.length ? { [promptfooBillingOutput]: billingOutput } : {}),
     });
   }
 

@@ -1099,4 +1099,17 @@ describe('OpenAI billing helpers', () => {
       ),
     ).toBe(0);
   });
+
+  it('ignores endpoint-supplied billing override fields', () => {
+    expect(
+      calculateObservableOpenAIToolCost(
+        {
+          _promptfooBillingOutput: [{ type: 'file_search_call' }],
+          output: [{ type: 'web_search_call', action: { type: 'search' } }],
+        },
+        'gpt-4o',
+        { tools: [{ type: 'web_search' }] },
+      ),
+    ).toBeCloseTo(0.01, 10);
+  });
 });

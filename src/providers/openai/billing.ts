@@ -41,6 +41,7 @@ export type OpenAIBillingUsage = {
 };
 
 const PER_MILLION = 1 / 1_000_000;
+export const promptfooBillingOutput = Symbol('promptfooBillingOutput');
 
 function perMillion(value: number): number {
   return value * PER_MILLION;
@@ -1093,7 +1094,7 @@ export function calculateObservableOpenAIToolCost(
   modelName: string,
   config: OpenAIToolCostConfig = {},
 ): number {
-  const output = data?._promptfooBillingOutput ?? data?.output;
+  const output = data?.[promptfooBillingOutput] ?? data?.output;
   if (!Array.isArray(output)) {
     return 0;
   }
