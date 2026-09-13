@@ -63,8 +63,6 @@ export interface ProviderResponse {
   latencyMs?: number;
   metadata?: {
     redteamFinalPrompt?: string;
-    /** Marks a tool diagnostic so its text is not mistaken for target model quota. */
-    errorOrigin?: 'tool';
     http?: {
       status: number;
       statusText: string;

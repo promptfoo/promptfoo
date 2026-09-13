@@ -1,6 +1,7 @@
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadApiProvider } from '../../src/providers';
 import { isFoundationModelProvider } from '../../src/providers/constants';
 import { LlamaApiProvider } from '../../src/providers/llamaApi';
 import { MCPProvider } from '../../src/providers/mcp';
@@ -61,6 +62,46 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 describe('Provider Registry', () => {
+  it.each([undefined, 'configured-opencode'])('preserves OpenCode provider ID %s', async (id) => {
+    const providerPath = 'opencode:sdk';
+    const factory = providerMap.find((entry) => entry.test(providerPath))!;
+    const provider = await factory.create(providerPath, { id }, { options: {} });
+    expect(provider.id()).toBe(id ?? providerPath);
+  });
+
+  it.each(['openai:codex-sdk', 'openai:codex-sdk:gpt-5.5'])(
+    'merges scoped Codex SDK environment for %s',
+    async (providerPath) => {
+      const factory = providerMap.find((entry) => entry.test(providerPath))!;
+      const provider = await factory.create(
+        providerPath,
+        { env: { CODEX_API_KEY: 'provider-key' } },
+        {
+          options: {},
+          env: { CODEX_API_KEY: 'suite-key', OPENAI_API_BASE_URL: 'https://suite.example/v1' },
+        },
+      );
+      expect(provider).toHaveProperty('env', {
+        CODEX_API_KEY: 'provider-key',
+        OPENAI_API_BASE_URL: 'https://suite.example/v1',
+      });
+    },
+  );
+
+  it.each([
+    { suite: { OPENAI_API_KEY: 'suite-key' }, scoped: { CODEX_API_KEY: 'provider-key' } },
+    { suite: { CODEX_API_KEY: 'suite-key' }, scoped: { OPENAI_API_KEY: 'provider-key' } },
+  ])(
+    'preserves scoped credentials across Codex API-key aliases: $scoped',
+    async ({ suite, scoped }) => {
+      const provider = await loadApiProvider('openai:codex-sdk', {
+        env: suite,
+        options: { env: scoped },
+      });
+      expect(provider).toHaveProperty('apiKey', 'provider-key');
+    },
+  );
+
   it.each([
     'openai:gpt-4o-mini-realtime-preview-2024-12-17',
     'openai:realtime:gpt-4o-mini-realtime-preview-2024-12-17',

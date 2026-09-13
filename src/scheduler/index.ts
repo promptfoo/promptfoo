@@ -9,6 +9,8 @@
 
 // Adaptive concurrency
 export { AdaptiveConcurrency, WARNING_THRESHOLD } from './adaptiveConcurrency';
+// Cancellation-aware waits
+export { sleepWithAbort } from './cancellation';
 // Header parsing
 export {
   type ParsedRateLimitHeaders,

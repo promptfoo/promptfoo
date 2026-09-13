@@ -1,4 +1,9 @@
-import type { ResponseHeadersObserver } from './types';
+import { markResponseHeadersObserverErrorResponse, type ResponseHeadersObserver } from './types';
+
+export {
+  isResponseHeadersObserverErrorResponse,
+  preserveResponseHeadersObserverErrorResponse,
+} from './types';
 
 type HeaderArguments = Parameters<ResponseHeadersObserver>;
 type Observe = (args: HeaderArguments, alreadyObserved: boolean) => boolean;
@@ -6,7 +11,6 @@ type Observe = (args: HeaderArguments, alreadyObserved: boolean) => boolean;
 // Provenance lives on the callback, not in a registry of providers or call contexts.
 const OWNER = Symbol('rateLimitResponseHeadersObserver');
 const CALLER_ERRORS = Symbol('responseHeadersCallerErrors');
-const CALLER_ERROR_RESPONSE = Symbol('responseHeadersCallerErrorResponse');
 interface ObserverOwner {
   owner: object;
   observe: Observe;
@@ -99,26 +103,7 @@ export function preserveResponseHeadersObserverError<T extends object>(
   response: T,
 ): T {
   if (isResponseHeadersObserverError(observer, error)) {
-    Object.defineProperty(response, CALLER_ERROR_RESPONSE, { value: true });
-  }
-  return response;
-}
-
-export function isResponseHeadersObserverErrorResponse(response: unknown): boolean {
-  return (
-    typeof response === 'object' &&
-    response !== null &&
-    (response as { [CALLER_ERROR_RESPONSE]?: boolean })[CALLER_ERROR_RESPONSE] === true
-  );
-}
-
-/** Copy private caller-exception provenance when the same error response is projected. */
-export function preserveResponseHeadersObserverErrorResponse<T extends object>(
-  source: unknown,
-  response: T,
-): T {
-  if (isResponseHeadersObserverErrorResponse(source)) {
-    Object.defineProperty(response, CALLER_ERROR_RESPONSE, { value: true });
+    markResponseHeadersObserverErrorResponse(response);
   }
   return response;
 }

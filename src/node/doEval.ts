@@ -944,6 +944,7 @@ export async function doEval(
         ...options,
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
+        pauseSignal: isCliInvocation && cmdObj.write !== false ? abortController.signal : undefined,
         isRedteam: Boolean(config.redteam),
       });
 

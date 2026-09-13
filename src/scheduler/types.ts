@@ -3,11 +3,37 @@
  */
 
 import { isHttpRateLimitError } from '../util/fetch/errors';
-import { isResponseHeadersObserverErrorResponse } from './responseHeadersObserver';
 
 import type { CallApiOptionsParams, ProviderResponse } from '../types/providers';
 
 export type ResponseHeadersObserver = NonNullable<CallApiOptionsParams['onResponseHeaders']>;
+
+// The response marker stays private to the scheduler's shared response classification.
+const CALLER_ERROR_RESPONSE = Symbol('responseHeadersCallerErrorResponse');
+
+export function markResponseHeadersObserverErrorResponse<T extends object>(response: T): T {
+  Object.defineProperty(response, CALLER_ERROR_RESPONSE, { value: true });
+  return response;
+}
+
+export function isResponseHeadersObserverErrorResponse(response: unknown): boolean {
+  return (
+    typeof response === 'object' &&
+    response !== null &&
+    (response as { [CALLER_ERROR_RESPONSE]?: boolean })[CALLER_ERROR_RESPONSE] === true
+  );
+}
+
+/** Copy private caller-exception provenance when the same error response is projected. */
+export function preserveResponseHeadersObserverErrorResponse<T extends object>(
+  source: unknown,
+  response: T,
+): T {
+  if (isResponseHeadersObserverErrorResponse(source)) {
+    markResponseHeadersObserverErrorResponse(response);
+  }
+  return response;
+}
 
 /**
  * Options for rate-limited execution.
