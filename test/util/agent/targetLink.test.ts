@@ -258,6 +258,33 @@ describe('attachTargetLink', () => {
     expect(fetchWithProxy).toHaveBeenCalledTimes(2);
   });
 
+  it('rejects HTTPS upgrades that change an explicit port', async () => {
+    vi.mocked(fetchWithProxy).mockResolvedValueOnce(
+      new Response('', { status: 307, headers: { location: 'https://example.test/next' } }),
+    );
+    const { attachTargetLink } = await import('../../../src/util/agent/targetLink');
+    attachTargetLink(fakeClient as any, { id: () => 'test', callApi: vi.fn() as any });
+
+    fakeClient._simulateEvent(TargetLinkEvents.PROBE_HTTP, {
+      requestId: 'port-change',
+      url: 'http://example.test:8080/start',
+      headers: { Authorization: 'Bearer sentinel' },
+      body: 'payload',
+    });
+
+    await vi.waitFor(() => {
+      const result = fakeClient._emittedToServer.find(
+        (event) => event.event === TargetLinkEvents.PROBE_HTTP_RESULT,
+      );
+      expect(result?.args[0]).toMatchObject({
+        requestId: 'port-change',
+        success: false,
+        error: 'TargetLink HTTP probes do not follow cross-origin redirects',
+      });
+    });
+    expect(fetchWithProxy).toHaveBeenCalledOnce();
+  });
+
   it('rejects cross-origin HTTP redirects before forwarding credentials', async () => {
     vi.mocked(fetchWithProxy).mockResolvedValueOnce(
       new Response('', { status: 307, headers: { location: 'https://other.test/next' } }),

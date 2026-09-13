@@ -878,9 +878,10 @@ function sanitizeJsonString(
     }
 
     const redactRawHttpHeaders = (value: string) =>
-      value.replace(
-        /^(authorization|cookie|x-(?:api-key|client-secret|session-token)):[^\r\n]*$/gim,
-        '$1: [REDACTED]',
+      value.replace(/^([A-Za-z][A-Za-z0-9-]*):[^\r\n]*$/gm, (line, name) =>
+        isSecretHeaderField(name) || name.toLowerCase() === 'cookie'
+          ? `${name}: ${REDACTED}`
+          : line,
       );
     const rawHttpBoundary = str.search(/\r?\n\r?\n/);
     if (rawHttpBoundary !== -1) {
@@ -891,7 +892,13 @@ function sanitizeJsonString(
         (_, prefix, target, suffix) => `${prefix}${sanitizeUrl(target)}${suffix}`,
       );
       const rawBody = str.slice(rawHttpBoundary + separator.length);
-      const body = sanitizeMultipartSecretFields(rawBody);
+      const multipartBoundary = rawHeaders.match(
+        /^content-type:\s*multipart\/form-data[^\r\n]*?\bboundary=(?:"([^"]+)"|([^;\s]+))/im,
+      );
+      const body = sanitizeMultipartSecretFields(
+        rawBody,
+        multipartBoundary?.[1] ?? multipartBoundary?.[2],
+      );
       const isRawHttp =
         headers !== rawHeaders ||
         /^(?:[A-Z]+\s+\S+\s+HTTP\/\d(?:\.\d)?|HTTP\/\d(?:\.\d)?\s+\d{3})/i.test(rawHeaders);
@@ -922,7 +929,7 @@ function sanitizeRawHttpBody(
   rawHttpMessages: number,
 ): string {
   if (depth >= maxDepth) {
-    return body;
+    return REDACTED;
   }
   if (rawHttpMessages >= MAX_RAW_HTTP_MESSAGES) {
     return REDACTED;
@@ -962,12 +969,16 @@ const URL_ENCODED_PAIR_RE = /(^|[&;])([^=&;]+)=([^&;]*)/g;
 
 // Redact values of credential-named multipart fields while preserving the
 // boundary and non-secret parts byte-for-byte.
-function sanitizeMultipartSecretFields(value: string): string {
-  if (!/\r?\n--/.test(value)) {
+function sanitizeMultipartSecretFields(value: string, boundary?: string): string {
+  if (!boundary) {
     return value;
   }
+  const delimiter = boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return value.replace(
-    /(content-disposition:\s*form-data;[^\r\n]*\bname="([^"]+)"[^\r\n]*\r?\n(?:[^\r\n]+\r?\n)*\r?\n)([\s\S]*?)(?=\r?\n--)/gi,
+    new RegExp(
+      `(content-disposition:\\s*form-data;[^\\r\\n]*\\bname="([^"]+)"[^\\r\\n]*\\r?\\n(?:[^\\r\\n]+\\r?\\n)*\\r?\\n)([\\s\\S]*?)(?=\\r?\\n--${delimiter}(?:--)?(?:\\r?\\n|$))`,
+      'gi',
+    ),
     (part, headers, name) => (isSecretField(name) ? `${headers}${REDACTED}` : part),
   );
 }
@@ -1339,18 +1350,27 @@ export function sanitizeUrl(url: string): string {
     const rawSecretParamKeys = getSecretLookingRawQueryKeys(parsedUrl.search);
 
     try {
-      for (const [key, value] of Array.from(sanitizedUrl.searchParams.entries())) {
-        if (
+      const sanitizedParams = new URLSearchParams();
+      const redactedKeys = new Set<string>();
+      const params = Array.from(sanitizedUrl.searchParams.entries());
+      for (const [key, value] of params) {
+        const shouldRedact =
           SENSITIVE_URL_PARAM_NAMES.test(key) ||
           rawSecretParamKeys.has(key) ||
           looksLikeSecret(value) ||
           // URLSearchParams only splits on `&`, so a `;`-delimited credential
           // (`data=ok;api_key=sk-...`, legacy but still accepted by some stacks)
           // hides inside one value. Redact the whole value when it conceals one.
-          (value.includes(';') && hasSecretFormSegment(value))
-        ) {
-          sanitizedUrl.searchParams.set(key, '[REDACTED]');
+          (value.includes(';') && hasSecretFormSegment(value));
+        if (!shouldRedact || !redactedKeys.has(key)) {
+          sanitizedParams.append(key, shouldRedact ? '[REDACTED]' : value);
+          if (shouldRedact) {
+            redactedKeys.add(key);
+          }
         }
+      }
+      if (params.length > 0) {
+        sanitizedUrl.search = sanitizedParams.toString();
       }
     } catch (paramError) {
       // Can't use logger here as it would create a circular dependency.

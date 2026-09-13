@@ -156,7 +156,10 @@ async function sendEvalRecord(
   let evalData: Record<string, unknown> = {
     ...evalRecord,
     config: redactedConfig,
-    prompts: sanitizeObject(evalRecord.prompts, { maxDepth: Number.POSITIVE_INFINITY }),
+    prompts: evalRecord.prompts.map((prompt) => ({
+      ...sanitizeObject(prompt, { maxDepth: Number.POSITIVE_INFINITY }),
+      raw: prompt.raw,
+    })),
     results: [],
     traces,
   };

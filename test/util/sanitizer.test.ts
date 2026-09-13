@@ -401,6 +401,9 @@ describe('sanitizeObject', () => {
           'POST /v1 HTTP/1.1\nX-Client-Secret: header-secret\n\n{"apiKey":"body-secret"}',
         ),
       ).toBe('POST /v1 HTTP/1.1\nX-Client-Secret: [REDACTED]\n\n{"apiKey":"[REDACTED]"}');
+      expect(sanitizeObject('POST /v1 HTTP/1.1\nX-Custom-Token: tiny\n\nbody')).toBe(
+        'POST /v1 HTTP/1.1\nX-Custom-Token: [REDACTED]\n\nbody',
+      );
       expect(sanitizeObject('X-Session-Token: header-secret')).toBe('X-Session-Token: [REDACTED]');
       expect(sanitizeObject('POST /v1?api_key=tiny HTTP/1.1\n\nbody')).toBe(
         'POST /v1?api_key=%5BREDACTED%5D HTTP/1.1\n\nbody',
@@ -408,6 +411,11 @@ describe('sanitizeObject', () => {
       expect(
         sanitizeObject(
           'POST /v1 HTTP/1.1\nContent-Type: multipart/form-data; boundary=x\n\n--x\nContent-Disposition: form-data; name="api_key"\n\ntiny\n--x--',
+        ),
+      ).toContain('name="api_key"\n\n[REDACTED]\n--x--');
+      expect(
+        sanitizeObject(
+          'POST /v1 HTTP/1.1\nContent-Type: multipart/form-data; boundary=x\n\n--x\nContent-Disposition: form-data; name="api_key"\n\ntiny\n--fake\nstill-secret\n--x--',
         ),
       ).toContain('name="api_key"\n\n[REDACTED]\n--x--');
       expect(sanitizeObject('ordinary text\n\n'.repeat(1000))).toBe(

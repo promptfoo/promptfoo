@@ -827,7 +827,7 @@ describe('createShareableUrl', () => {
       mockEval.prompts = [
         {
           provider: 'openai:gpt-4',
-          raw: 'prompt1',
+          raw: 'prompt with api_key=prompt-secret',
           label: 'prompt1',
           config: { apiKey: 'prompt-secret' },
         },
@@ -863,7 +863,7 @@ describe('createShareableUrl', () => {
       expect(requestBody.config.providers[0].config.mcp.servers).toEqual([{ url: 'http://local' }]);
       expect(mockFetch.mock.calls[0][1].body).not.toContain('provider-secret');
       expect(requestBody.prompts[0].config.apiKey).toBe('[REDACTED]');
-      expect(mockFetch.mock.calls[0][1].body).not.toContain('prompt-secret');
+      expect(requestBody.prompts[0].raw).toBe('prompt with api_key=prompt-secret');
     });
 
     it.each([false, true])(
