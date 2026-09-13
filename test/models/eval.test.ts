@@ -1549,6 +1549,18 @@ describe('evaluator', () => {
       expect(eval1.results).toEqual([]);
     });
 
+    it('applies output strip flags to selected persisted result rows', async () => {
+      const eval1 = await EvalFactory.create();
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_STRIP_RESPONSE_OUTPUT: 'true' });
+      try {
+        expect(await Eval.getResultByIdAndIndices(eval1.id, 1, 0)).toMatchObject({
+          response: { output: '[output stripped]' },
+        });
+      } finally {
+        restoreEnv();
+      }
+    });
+
     it('loads selected legacy result rows', async () => {
       const eval1 = new Eval({});
       eval1.oldResults = createEvaluateSummaryV2({
@@ -1782,7 +1794,11 @@ describe('evaluator', () => {
     it('applies prompt and variable stripping to full exported config copies', async () => {
       const eval1 = new Eval({});
       eval1.config = {
+        metadata: { secret: 'CONFIG_METADATA_SECRET' },
         prompts: [{ id: 'prompt-id', raw: 'CONFIG_PROMPT_SECRET', label: 'CONFIG_LABEL_SECRET' }],
+        redteam: {
+          plugins: [{ id: 'policy', config: { policy: 'REDTEAM_POLICY_SECRET' } }],
+        },
         tests: [{ prompt: 'TEST_PROMPT_SECRET', vars: { input: 'TEST_VAR_SECRET' } }],
         defaultTest: {
           prompt: 'DEFAULT_PROMPT_SECRET',
@@ -1802,6 +1818,7 @@ describe('evaluator', () => {
       const restoreEnv = mockProcessEnv({
         PROMPTFOO_STRIP_PROMPT_TEXT: 'true',
         PROMPTFOO_STRIP_TEST_VARS: 'true',
+        PROMPTFOO_STRIP_METADATA: 'true',
       });
 
       try {
@@ -1826,6 +1843,8 @@ describe('evaluator', () => {
           tests: [{ prompt: '[prompt stripped]', vars: {} }],
           defaultTest: { prompt: '[prompt stripped]', vars: {} },
         });
+        expect(config.metadata).toBeUndefined();
+        expect(config.redteam.plugins[0]).toEqual({ id: 'policy' });
       } finally {
         restoreEnv();
       }
@@ -2298,6 +2317,7 @@ describe('evaluator', () => {
           expect(projected.results.results[0].testCase).toBeUndefined();
           expect(projected.results.table.body[0].vars).toEqual([]);
           expect(projected.results.table.body[0].test).toBeUndefined();
+          expect(JSON.stringify(await eval1.getTable())).not.toContain('MALFORMED_');
           expect(projected.results.table.body[0].outputs[0].testCase).toBeUndefined();
         } finally {
           restoreEnv();
@@ -2351,7 +2371,7 @@ describe('evaluator', () => {
               severity: 'high',
               config: { apiKey: 'plugin-secret', prompt: oversizedText },
             },
-            { id: 'policy', config: { policy: 'Inline policy text', apiKey: 'policy-secret' } },
+            { id: 'policy', config: { policy: oversizedText, apiKey: 'policy-secret' } },
             {
               id: 'policy',
               config: {
@@ -2501,7 +2521,7 @@ describe('evaluator', () => {
           frameworks: ['owasp:llm'],
           plugins: [
             { id: 'coding-agent:network-egress-bypass', severity: 'high' },
-            { id: 'policy', config: { policy: 'Inline policy text' } },
+            { id: 'policy', config: { policy: oversizedText.slice(0, 10_240) } },
             {
               id: 'policy',
               config: {

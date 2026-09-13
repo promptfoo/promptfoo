@@ -282,6 +282,9 @@ function stripAgentCallContent(entry: unknown, contentKeys: readonly string[]): 
 function stripResponseContentMetadata(metadata: Record<string, unknown>): void {
   delete metadata.audio;
   delete metadata.functionCallResults;
+  delete metadata.openInterpreter;
+  delete metadata.conversationHistory;
+  delete metadata.transcription;
   if ('trace' in metadata) {
     metadata.trace = RESPONSE_OUTPUT_STRIPPED;
   }

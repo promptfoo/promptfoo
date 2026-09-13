@@ -800,7 +800,7 @@ function projectToolsForRedteamReport(
   return projectedTools.length > 0 ? projectedTools : undefined;
 }
 
-function projectPluginForRedteamReport(plugin: unknown): unknown {
+function projectPluginForRedteamReport(plugin: unknown, stripPromptText = false): unknown {
   if (typeof plugin === 'string') {
     return plugin;
   }
@@ -812,13 +812,13 @@ function projectPluginForRedteamReport(plugin: unknown): unknown {
     id: plugin.id,
     ...(typeof plugin.severity === 'string' && { severity: plugin.severity }),
   };
-  if (plugin.id !== 'policy' || !isRecord(plugin.config)) {
+  if (stripPromptText || plugin.id !== 'policy' || !isRecord(plugin.config)) {
     return projectedPlugin;
   }
 
   const policy = plugin.config.policy;
   if (typeof policy === 'string') {
-    projectedPlugin.config = { policy };
+    projectedPlugin.config = { policy: policy.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH) };
   } else if (isRecord(policy)) {
     const projectedPolicy = {
       ...(typeof policy.id === 'string' && { id: policy.id }),
@@ -857,7 +857,7 @@ function projectConfigForRedteamReport(config: Partial<UnifiedConfig>): Partial<
   const plugins = (
     Array.isArray(config.redteam?.plugins)
       ? config.redteam.plugins
-          .map(projectPluginForRedteamReport)
+          .map((plugin) => projectPluginForRedteamReport(plugin))
           .filter((plugin) => plugin !== undefined)
       : undefined
   ) as NonNullable<NonNullable<Partial<UnifiedConfig>['redteam']>['plugins']> | undefined;
@@ -930,9 +930,22 @@ export function projectConfigForOutput(
           ? undefined
           : '[prompt stripped]'
     : config.prompts;
+  const redteam =
+    stripFlags.shouldStripPromptText && config.redteam
+      ? {
+          ...config.redteam,
+          ...(Array.isArray(config.redteam.plugins) && {
+            plugins: config.redteam.plugins
+              .map((plugin) => projectPluginForRedteamReport(plugin, true))
+              .filter((plugin) => plugin !== undefined),
+          }),
+        }
+      : config.redteam;
   return {
     ...config,
+    ...(stripFlags.shouldStripMetadata && { metadata: undefined }),
     ...(prompts !== undefined && { prompts }),
+    ...(redteam !== undefined && { redteam }),
     ...(Array.isArray(config.tests) && { tests: config.tests.map(projectTest) }),
     ...(config.defaultTest !== undefined && { defaultTest: projectTest(config.defaultTest) }),
     ...(Array.isArray(config.scenarios) && { scenarios: config.scenarios.map(projectScenario) }),
@@ -1409,7 +1422,7 @@ export default class Eval {
       ? await EvalResult.findByEvalIdAndResultId(evalId, resultId, testIdx, promptIdx)
       : await EvalResult.findByEvalIdAndIndices(evalId, testIdx, promptIdx);
     if (normalizedResult) {
-      return normalizedResult.toEvaluateResult();
+      return sanitizeResultForJsonlArtifact(normalizedResult.toEvaluateResult());
     }
 
     const db = await getDb();
@@ -1759,7 +1772,9 @@ export default class Eval {
 
   async getTable(): Promise<EvaluateTable> {
     if (this.useOldResults()) {
-      return this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] };
+      return projectEvaluateTableForOutput(
+        this.oldResults?.table || { head: { prompts: [], vars: [] }, body: [] },
+      );
     }
     return convertResultsToTable(await this.toResultsFile());
   }

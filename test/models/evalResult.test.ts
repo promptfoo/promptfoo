@@ -1820,6 +1820,9 @@ describe('EvalResult', () => {
               { tool_name: 'Write', tool_input: { path: 'PERMISSION_DENIAL_SECRET' } },
             ],
             trace: { rationale: 'BEDROCK_TRACE_SECRET' },
+            openInterpreter: { messages: ['OPEN_INTERPRETER_SECRET'] },
+            conversationHistory: ['ELEVENLABS_AGENT_SECRET'],
+            transcription: 'ELEVENLABS_STT_SECRET',
             numTurns: 3,
           },
         },
@@ -1857,6 +1860,9 @@ describe('EvalResult', () => {
             'REALTIME_FUNCTION_RESULT_SECRET',
             'PERMISSION_DENIAL_SECRET',
             'BEDROCK_TRACE_SECRET',
+            'OPEN_INTERPRETER_SECRET',
+            'ELEVENLABS_AGENT_SECRET',
+            'ELEVENLABS_STT_SECRET',
           ]) {
             expect(JSON.stringify(result)).not.toContain(secret);
           }
