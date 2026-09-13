@@ -418,11 +418,16 @@ describe('storeBlob persistence failures with shared files', () => {
     await storeBlob(data, 'image/png', { evalId: firstEvalId, location: 'import' });
     const files = await snapshotFiles();
 
-    const stored = await storeBlob(data, 'audio/wav', { evalId: secondEvalId, location: 'import' });
+    const stored = await storeBlob(data, 'audio/wav', {
+      evalId: secondEvalId,
+      location: 'import',
+      kindFromMimeType: (type) => type.split('/', 1)[0],
+    });
 
     expect(stored.deduplicated).toBe(true);
     expect(stored.ref.mimeType).toBe('image/png');
     expect((await snapshotRows()).assets[0].mimeType).toBe('image/png');
+    expect((await snapshotRows()).references[1].kind).toBe('image');
     expect((await getShareAuthorizedBlob(hash, secondEvalId))?.metadata.mimeType).toBe('image/png');
     expect(await snapshotFiles()).toEqual(files);
   });

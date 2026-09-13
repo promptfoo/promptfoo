@@ -104,13 +104,18 @@ describe('Blobs Routes', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.ref.uri).toBe(`promptfoo://blob/${hash}`);
-      expect(mockedStoreBlob).toHaveBeenCalledWith(Buffer.from('image-bytes'), 'image/png', {
-        evalId,
-        kind: 'image',
-        location: 'share',
-        promptIdx: 2,
-        testIdx: 1,
-      });
+      expect(mockedStoreBlob).toHaveBeenCalledWith(
+        Buffer.from('image-bytes'),
+        'image/png',
+        expect.objectContaining({
+          evalId,
+          kind: 'image',
+          kindFromMimeType: expect.any(Function),
+          location: 'share',
+          promptIdx: 2,
+          testIdx: 1,
+        }),
+      );
       expect(mockedSignalEvaluationChanged).toHaveBeenCalledWith(evalId);
     });
 
@@ -137,10 +142,11 @@ describe('Blobs Routes', () => {
       // A stored text/html blob would be a same-origin stored-XSS vector when served back.
       // kind is derived from the sanitized MIME ('other'), never trusted from the client, so the
       // media-library response (which only permits image/video/audio/other) can't 500 on it.
-      expect(mockedStoreBlob).toHaveBeenCalledWith(expect.any(Buffer), 'application/octet-stream', {
-        evalId,
-        kind: 'other',
-      });
+      expect(mockedStoreBlob).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        'application/octet-stream',
+        expect.objectContaining({ evalId, kindFromMimeType: expect.any(Function) }),
+      );
     });
 
     it('derives kind from the sanitized MIME, ignoring a client-supplied kind', async () => {
@@ -166,7 +172,7 @@ describe('Blobs Routes', () => {
       expect(mockedStoreBlob).toHaveBeenCalledWith(
         expect.any(Buffer),
         'image/png',
-        expect.objectContaining({ evalId, kind: 'image' }),
+        expect.objectContaining({ evalId, kindFromMimeType: expect.any(Function) }),
       );
     });
 

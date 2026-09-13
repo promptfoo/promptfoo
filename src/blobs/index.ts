@@ -54,6 +54,7 @@ export async function storeBlob(
     promptIdx?: number;
     location?: string;
     kind?: string;
+    kindFromMimeType?: (mimeType: string) => string;
   },
 ): Promise<BlobStoreResult> {
   const provider = getBlobStorageProvider();
@@ -77,6 +78,12 @@ export async function storeBlob(
       .onConflictDoNothing()
       .run();
 
+    const asset = await tx
+      .select({ mimeType: blobAssetsTable.mimeType })
+      .from(blobAssetsTable)
+      .where(eq(blobAssetsTable.hash, result.ref.hash))
+      .get();
+
     if (refContext?.evalId) {
       await tx
         .insert(blobReferencesTable)
@@ -87,17 +94,12 @@ export async function storeBlob(
           testIdx: refContext.testIdx,
           promptIdx: refContext.promptIdx,
           location: refContext.location,
-          kind: refContext.kind,
+          kind: refContext.kindFromMimeType?.(asset!.mimeType) ?? refContext.kind,
         })
         .onConflictDoNothing()
         .run();
     }
 
-    const asset = await tx
-      .select({ mimeType: blobAssetsTable.mimeType })
-      .from(blobAssetsTable)
-      .where(eq(blobAssetsTable.hash, result.ref.hash))
-      .get();
     return asset!.mimeType;
   });
 

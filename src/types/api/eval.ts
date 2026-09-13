@@ -241,7 +241,6 @@ export const MAX_SPANS_PER_TRACE = 10_000;
 export const MAX_SPANS_PER_APPEND_REQUEST = 20_000;
 const MAX_TRACE_IDENTIFIER_LENGTH = 512;
 const MAX_TRACE_NAME_LENGTH = 4_096;
-const MAX_TRACE_STATUS_MESSAGE_LENGTH = 4_096;
 const MAX_TRACE_RECORD_LENGTH = 1_000_000;
 const MAX_TRACE_REQUEST_LENGTH = 8 * 1024 * 1024;
 
@@ -267,11 +266,11 @@ const TraceSpanRequestSchema = z
     status: z
       .object({
         code: z.union([z.enum(['unset', 'ok', 'error']), z.number().int().min(0).max(2)]),
-        message: z.string().max(MAX_TRACE_STATUS_MESSAGE_LENGTH).optional(),
+        message: z.string().optional(),
       })
       .optional(),
     statusCode: z.number().int().min(0).max(2).optional(),
-    statusMessage: z.string().max(MAX_TRACE_STATUS_MESSAGE_LENGTH).optional(),
+    statusMessage: z.string().optional(),
   })
   .passthrough()
   .refine(serializedLengthWithin(MAX_TRACE_RECORD_LENGTH), 'Span is too large');

@@ -77,7 +77,7 @@ blobsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   // Derive kind from the sanitized MIME rather than trusting the client: the media-library
   // response only permits image/video/audio/other, so a client kind like "application" (from a
   // non-media MIME prefix) would otherwise fail response validation and 500 the listing.
-  const refContext = { ...context, kind: getKindFromMimeType(mimeType) };
+  const refContext = { ...context, kindFromMimeType: getKindFromMimeType };
   try {
     const db = await getDb();
     const evalExists = await db

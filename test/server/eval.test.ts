@@ -193,6 +193,8 @@ describe('eval routes', () => {
       testEvalIds.add(eval_.id);
       const traceId = randomUUID().replaceAll('-', '');
       const payload = [trace(traceId)];
+      const statusMessage = 'x'.repeat(4_097);
+      payload[0].spans[0].status.message = statusMessage;
 
       const firstResponse = await api.post(`/api/eval/${eval_.id}/traces`).send(payload);
       const retryResponse = await api.post(`/api/eval/${eval_.id}/traces`).send(payload);
@@ -213,7 +215,7 @@ describe('eval routes', () => {
         spanId: 'span-1',
         attributes: { model: 'test-model' },
         statusCode: 2,
-        statusMessage: 'provider failed',
+        statusMessage,
       });
     });
 
