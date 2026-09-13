@@ -67,7 +67,7 @@ export function parseEvidenceCandidates(
   { preserveInvalid = false }: { preserveInvalid?: boolean } = {},
 ): Record<string, unknown>[] {
   const candidates: Record<string, unknown>[] = [];
-  const pending: { value: unknown; pluginId?: unknown }[] = [{ value }];
+  const pending: { value: unknown; pluginId?: string }[] = [{ value }];
   let visited = 0;
   let findings = 0;
   let records = 0;
@@ -93,14 +93,16 @@ export function parseEvidenceCandidates(
       if (records > 1000 || findings > 1000) {
         throw new Error('Agentic evidence exceeds scan limits and cannot be graded');
       }
-      const pluginId = record.pluginId ?? inheritedPluginId;
+      const explicitPluginId =
+        typeof record.pluginId === 'string' && record.pluginId.trim() ? record.pluginId : undefined;
+      const pluginId = explicitPluginId ?? inheritedPluginId;
       const nested = Object.entries(record).filter(
         ([key, value]) =>
           /^(?:agentic|agentSdk)Evidence$/i.test(key) && (preserveInvalid || value != null),
       );
       if (record.findings !== undefined || nested.length === 0) {
         candidates.push(
-          record.pluginId === undefined && pluginId !== undefined
+          explicitPluginId === undefined && pluginId !== undefined
             ? { ...record, pluginId }
             : record,
         );
@@ -136,7 +138,8 @@ export function parseEvidenceCandidates(
         untagged = untagged.replace(pattern, '');
       }
       const extracted = [...extractJsonObjects(untagged).reverse(), ...taggedValues.reverse()];
-      if (preserveInvalid && extracted.length === 0) {
+      // Extracted objects do not prove the rest of a malformed container is valid.
+      if (preserveInvalid && (untagged.trim() || taggedValues.length === 0)) {
         candidates.push({ pluginId: inheritedPluginId });
       }
       pending.push(

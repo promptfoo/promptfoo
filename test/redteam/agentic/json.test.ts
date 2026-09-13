@@ -2,6 +2,39 @@ import { describe, expect, it, vi } from 'vitest';
 import { extractJsonObjects, parseEvidenceCandidates } from '../../../src/redteam/agentic/json';
 
 describe('agentic evidence JSON extraction', () => {
+  it.each([
+    '[{"pluginId":"other","findings":[]}, null',
+    '{"agenticEvidence":{"pluginId":"other","findings":[]}, "broken":',
+    '<AgenticEvidence>[{"pluginId":"other","findings":[]}, null</AgenticEvidence>',
+  ])('preserves inherited scope after partially extracting malformed JSON: %s', (payload) => {
+    expect(
+      parseEvidenceCandidates(
+        { pluginId: 'active', agenticEvidence: payload },
+        { preserveInvalid: true },
+      ),
+    ).toEqual(
+      expect.arrayContaining([{ pluginId: 'active' }, { pluginId: 'other', findings: [] }]),
+    );
+  });
+
+  it.each([42, null, false, '', '   ', {}, []])(
+    'retains inherited scope for malformed plugin ID %j',
+    (pluginId) => {
+      const finding = { kind: 'unsafe' };
+      expect(
+        parseEvidenceCandidates({
+          pluginId: 'active',
+          agenticEvidence: { pluginId, agentSdkEvidence: { findings: [finding] } },
+        }),
+      ).toEqual([{ pluginId: 'active', findings: [finding] }]);
+      expect(
+        parseEvidenceCandidates({
+          pluginId: 'active',
+          agenticEvidence: { pluginId, findings: [finding] },
+        }),
+      ).toEqual([{ pluginId: 'active', findings: [finding] }]);
+    },
+  );
   it.each([null, '', true, [], { agenticEvidence: null }, '<AgenticEvidence></AgenticEvidence>'])(
     'preserves inherited scope for malformed branches when checking verifier status: %j',
     (malformed) => {

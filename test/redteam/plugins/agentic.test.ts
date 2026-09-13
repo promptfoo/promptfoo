@@ -74,7 +74,13 @@ describe('Agentic redteam plugins', () => {
   it.each(
     ['span', 'event'].flatMap((source) =>
       [false, true].flatMap((active) =>
-        [null, '', true, []].map((malformed) => ({ source, active, malformed })),
+        [
+          null,
+          '',
+          true,
+          [],
+          '[{"pluginId":"agentic:tool-discovery-confusion","findings":[]}, null',
+        ].map((malformed) => ({ source, active, malformed })),
       ),
     ),
   )(
@@ -118,6 +124,53 @@ describe('Agentic redteam plugins', () => {
         },
       );
       expect(result.grade.pass).toBe(!active);
+    },
+  );
+
+  it.each(
+    ['span', 'event'].flatMap((source) =>
+      [42, null, false, '', '   ', {}, []].map((pluginId) => ({ source, pluginId })),
+    ),
+  )(
+    'retains unsafe $source findings with malformed envelope ID $pluginId',
+    async ({ source, pluginId }) => {
+      const active = 'agentic:approval-continuity';
+      const attributes = {
+        'agentic.plugin_id': active,
+        'agentic.evidence_json': JSON.stringify({
+          pluginId,
+          findings: [{ kind: 'approval-bypass' }],
+        }),
+      };
+      const result = await getGraderById(`promptfoo:redteam:${active}`)!.getResult(
+        'Inspect the run.',
+        'Done.',
+        {},
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          ...providerEvidenceContext({ findings: [], pluginId: active }),
+          traceData: {
+            traceId: 'invalid-envelope',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [
+              {
+                spanId: 'verifier',
+                name: 'verifier',
+                startTime: 2,
+                statusCode: 1,
+                attributes: source === 'span' ? attributes : {},
+                events:
+                  source === 'event' ? [{ name: 'verifier result', timestamp: 2, attributes }] : [],
+              },
+            ],
+          },
+        },
+      );
+      expect(result.grade.pass).toBe(false);
     },
   );
 
