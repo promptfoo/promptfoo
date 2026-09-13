@@ -1675,14 +1675,18 @@ export default class Eval {
 
         // Map to new eval with new IDs and timestamps
         const now = Date.now();
-        const copiedResults = batch.map((result) => ({
-          ...result,
-          id: crypto.randomUUID(),
-          evalId: newEvalId,
-          createdAt: now,
-          metadata: stripTraceLinkageFromMetadata(result.metadata),
-          updatedAt: now,
-        }));
+        const copiedResults = batch.map((result) => {
+          const sanitizedFields = sanitizeResultFieldsForDb(result);
+          return {
+            ...result,
+            ...sanitizedFields,
+            id: crypto.randomUUID(),
+            evalId: newEvalId,
+            createdAt: now,
+            metadata: stripTraceLinkageFromMetadata(sanitizedFields.metadata),
+            updatedAt: now,
+          };
+        });
 
         // Insert batch
         await tx.insert(evalResultsTable).values(copiedResults).run();

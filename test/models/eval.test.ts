@@ -902,17 +902,25 @@ describe('evaluator', () => {
 
     it('drops trace linkage from copied results without copied trace records', async () => {
       const eval_ = await EvalFactory.create({ numResults: 0 });
-      await EvalResult.createFromEvaluateResult(
-        eval_.id,
-        createEvaluateResult({
-          traceId: 'copy-source-trace',
-          evaluationId: eval_.id,
-          metadata: {
-            source: 'copy-path',
-            __promptfoo: { retained: 'internal-metadata' },
+      const sourceResult = createEvaluateResult({
+        traceId: 'copy-source-trace',
+        evaluationId: eval_.id,
+        metadata: {
+          source: 'copy-path',
+          __promptfoo: { retained: 'internal-metadata' },
+        },
+      });
+      await EvalResult.createFromEvaluateResult(eval_.id, sourceResult);
+      await (await getDb())
+        .update(evalResultsTable)
+        .set({
+          testCase: {
+            ...sourceResult.testCase,
+            vars: { apiKey: 'legacy-copy-secret' },
           },
-        }),
-      );
+        })
+        .where(eq(evalResultsTable.evalId, eval_.id))
+        .run();
 
       const copy = await eval_.copy();
       const [copiedResult] = await EvalResult.findManyByEvalId(copy.id);
@@ -925,6 +933,7 @@ describe('evaluator', () => {
       });
       expect(copiedResult.toEvaluateResult().traceId).toBeUndefined();
       expect(copiedResult.toEvaluateResult().evaluationId).toBeUndefined();
+      expect(JSON.stringify(copiedResult.testCase)).not.toContain('legacy-copy-secret');
     });
   });
 

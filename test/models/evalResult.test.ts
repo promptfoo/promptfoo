@@ -505,7 +505,7 @@ describe('EvalResult', () => {
     });
   });
 
-  it('reads grading-result provider accessors once', () => {
+  it('does not invoke grading-result accessors', () => {
     let reads = 0;
     const gradingResult: any = { pass: true, score: 1, reason: 'ok' };
     Object.defineProperty(gradingResult, 'assertion', {
@@ -520,11 +520,11 @@ describe('EvalResult', () => {
 
     const result = sanitizeResultForJsonlArtifact({ gradingResult });
 
-    expect(result.gradingResult.assertion.provider).toEqual({ id: 'fixture' });
-    expect(reads).toBe(1);
+    expect(result.gradingResult.assertion).toBeUndefined();
+    expect(reads).toBe(0);
   });
 
-  it('reads test-case accessors once while preserving their values', () => {
+  it('does not invoke test-case accessors', () => {
     let reads = 0;
     const testCase = { options: {}, assert: [] } as AtomicTestCase;
     Object.defineProperty(testCase, 'vars', {
@@ -539,8 +539,8 @@ describe('EvalResult', () => {
 
     const sanitized = sanitizeResultForJsonlArtifact({ testCase });
 
-    expect(sanitized.testCase.vars).toEqual({ prompt: 'fixture input' });
-    expect(reads).toBe(1);
+    expect(sanitized.testCase.vars).toBeUndefined();
+    expect(reads).toBe(0);
   });
 
   it('does not traverse nested test-case vars twice', () => {

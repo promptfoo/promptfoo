@@ -168,6 +168,14 @@ function sanitizeProviderReference(provider: unknown, active = new WeakSet<objec
   }
 }
 
+function getDataProperties(value: object): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(Object.getOwnPropertyDescriptors(value))
+      .filter(([, descriptor]) => descriptor.enumerable && 'value' in descriptor)
+      .map(([key, descriptor]) => [key, descriptor.value]),
+  );
+}
+
 /**
  * Sanitize an object for database storage by removing circular references
  * and non-serializable values (functions, Timeout objects, etc.).
@@ -262,7 +270,9 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
     return testCase;
   }
   try {
-    const { provider, assert, options, vars, ...fields } = { ...testCase };
+    const { provider, assert, options, vars, providerOutput, ...fields } = getDataProperties(
+      testCase,
+    ) as AtomicTestCase;
     const { provider: optionProvider, ...optionFields } = options ?? {};
     const sanitized = sanitizeForDbWithSecrets({
       ...fields,
@@ -278,8 +288,8 @@ function sanitizeTestCaseForDb(testCase: AtomicTestCase): AtomicTestCase {
     if (provider !== undefined) {
       sanitized.provider = sanitizeProviderReference(provider) as AtomicTestCase['provider'];
     }
-    if (fields.providerOutput !== undefined) {
-      sanitized.providerOutput = sanitizeForDbWithSecrets(fields.providerOutput, false);
+    if (providerOutput !== undefined) {
+      sanitized.providerOutput = sanitizeForDbWithSecrets(providerOutput, false);
     }
     if (optionFields.rubricPrompt !== undefined) {
       sanitized.options = {
@@ -491,14 +501,14 @@ function redactHttpHeadersOnMetadata<T>(
 // Redact transport headers and assertion configs on each grading component.
 function sanitizeGradingResultForDb<T>(gradingResult: T, seen = new WeakSet<object>()): T {
   if (!gradingResult || typeof gradingResult !== 'object' || Array.isArray(gradingResult)) {
-    return gradingResult;
+    return sanitizeForDbWithSecrets(gradingResult) as T;
   }
   if (seen.has(gradingResult)) {
     return {} as T;
   }
   seen.add(gradingResult);
   try {
-    const next: Record<string, unknown> = { ...(gradingResult as Record<string, unknown>) };
+    const next = getDataProperties(gradingResult);
     const { metadata, assertion, componentResults } = next;
 
     if (metadata !== undefined) {
@@ -675,14 +685,23 @@ function redactSensitiveResultFieldsForDb<
 
 // Project mutable or imported result fields immediately before a database write.
 export function sanitizeResultFieldsForDb(
-  result: Pick<
-    EvaluateResult,
-    'testCase' | 'prompt' | 'provider' | 'namedScores' | 'metadata' | 'traceId' | 'evaluationId'
+  result: Omit<
+    Pick<
+      EvaluateResult,
+      'testCase' | 'prompt' | 'provider' | 'namedScores' | 'metadata' | 'traceId' | 'evaluationId'
+    >,
+    'namedScores' | 'metadata'
   > & {
+    namedScores?: EvaluateResult['namedScores'] | null;
+    metadata?: EvaluateResult['metadata'] | null;
     response?: ProviderResponse | null;
     gradingResult?: GradingResult | null;
   },
-  persistedMetadata = persistTraceMetadata(result.metadata, result.traceId, result.evaluationId),
+  persistedMetadata = persistTraceMetadata(
+    result.metadata ?? undefined,
+    result.traceId,
+    result.evaluationId,
+  ),
 ) {
   return {
     testCase: sanitizeTestCaseForDb(result.testCase),
