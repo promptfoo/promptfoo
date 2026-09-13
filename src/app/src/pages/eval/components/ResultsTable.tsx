@@ -1903,6 +1903,7 @@ function ResultsTable({
   const ratingTableRef = React.useRef(table);
   ratingTableRef.current = table;
   const ratingRevisionRef = React.useRef(new Map<string, number>());
+  const persistedRatingRef = React.useRef(new Map<string, EvaluateTableOutput>());
   const { head, body } = table;
 
   const isRedteam = React.useMemo(() => {
@@ -1953,6 +1954,9 @@ function ResultsTable({
     ) => {
       const currentTable = ratingTableRef.current;
       const existingOutput = currentTable.body[rowIndex].outputs[promptIndex];
+      if (!persistedRatingRef.current.has(resultId)) {
+        persistedRatingRef.current.set(resultId, existingOutput);
+      }
       const revision = (ratingRevisionRef.current.get(resultId) ?? 0) + 1;
       ratingRevisionRef.current.set(resultId, revision);
       const ratingUpdate = getManualRatingUpdate({
@@ -1993,6 +1997,7 @@ function ResultsTable({
             gradingResult,
             table: newTable,
           });
+          persistedRatingRef.current.set(resultId, newTable.body[rowIndex].outputs[promptIndex]!);
           if (evalId) {
             clearEvalApiResponseCache(evalId);
           }
@@ -2004,7 +2009,8 @@ function ResultsTable({
               const updatedBody = [...latestTable.body];
               const updatedRow = { ...updatedBody[rowIndex] };
               const updatedOutputs = [...updatedRow.outputs];
-              updatedOutputs[promptIndex] = existingOutput;
+              updatedOutputs[promptIndex] =
+                persistedRatingRef.current.get(resultId) ?? existingOutput;
               updatedRow.outputs = updatedOutputs;
               updatedBody[rowIndex] = updatedRow;
               ratingTableRef.current = { ...latestTable, body: updatedBody };

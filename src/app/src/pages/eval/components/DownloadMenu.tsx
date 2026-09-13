@@ -571,7 +571,17 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
           };
         })
         .filter((row): row is NonNullable<typeof row> => row !== null);
-      const blob = new Blob([JSON.stringify(formattedData, null, 2)], { type: 'application/json' });
+      const blob = new Blob(
+        [
+          '[\n',
+          ...formattedData.flatMap((row, index) => [
+            index ? ',\n' : '',
+            JSON.stringify(row, null, 2),
+          ]),
+          '\n]',
+        ],
+        { type: 'application/json' },
+      );
       if (!isCurrent()) {
         return;
       }
@@ -775,7 +785,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                     disabled={
                       !table ||
                       !table.body ||
-                      table.body.every((row) => row.outputs.every((output) => output?.pass)) ||
+                      table.body.every((row) => !getFailedBaseOutput(row)) ||
                       advancedExportInProgress !== null
                     }
                   >

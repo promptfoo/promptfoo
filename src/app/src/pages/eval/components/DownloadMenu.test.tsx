@@ -1079,6 +1079,29 @@ describe('DownloadMenu', () => {
       expect(button).not.toBeDisabled();
     });
 
+    it('disables failed-test export for comparison-only failures', () => {
+      vi.mocked(useResultsViewStore).mockReturnValue({
+        table: {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [
+                { id: 'base-pass', evalId: mockEvalId, pass: true },
+                { id: 'comparison-fail', evalId: 'comparison-eval', pass: false },
+              ],
+            },
+          ],
+        },
+        config: mockConfig,
+        evalId: mockEvalId,
+      });
+
+      renderDownloadDialog();
+
+      expect(screen.getByRole('button', { name: /Download Failed Tests/i })).toBeDisabled();
+    });
+
     it('handles edge case with empty body array', async () => {
       vi.mocked(useResultsViewStore).mockReturnValue({
         table: {
