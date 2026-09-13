@@ -7,6 +7,114 @@ import {
 } from '../../../src/providers/openai/billing';
 
 describe('OpenAI billing helpers', () => {
+  it.each([
+    { cached_tokens: 40, cached_tokens_details: { image_tokens: 40 } },
+    { cached_tokens: 140 },
+  ])('prices chat-latest image inputs with cache details %j', (cacheDetails) => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chat-latest',
+        {},
+        {
+          input_tokens: 200,
+          output_tokens: 10,
+          input_tokens_details: {
+            text_tokens: 100,
+            image_tokens: 100,
+            ...cacheDetails,
+          },
+        },
+      ),
+    ).toBeCloseTo(
+      ((200 - cacheDetails.cached_tokens) * 5 + cacheDetails.cached_tokens * 0.5 + 10 * 30) / 1e6,
+      10,
+    );
+  });
+
+  it('applies custom input costs to text-priced chat-latest image tokens', () => {
+    const usage = {
+      input_tokens: 200,
+      output_tokens: 10,
+      input_tokens_details: {
+        text_tokens: 100,
+        image_tokens: 100,
+        cached_tokens: 40,
+        cached_tokens_details: { image_tokens: 40 },
+      },
+    };
+
+    expect(
+      calculateOpenAIUsageCost('chat-latest', { inputCost: 10e-6, outputCost: 60e-6 }, usage),
+    ).toBeCloseTo(200 * 10e-6 + 10 * 60e-6, 10);
+    expect(calculateOpenAIUsageCost('chat-latest', { cost: 10e-6 }, usage)).toBeCloseTo(
+      210 * 10e-6,
+      10,
+    );
+  });
+
+  it('keeps documented standard rates for chat-latest long prompts', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chat-latest',
+        {},
+        {
+          input_tokens: 300_000,
+          output_tokens: 1_000,
+          input_tokens_details: { cached_tokens: 100_000 },
+        },
+      ),
+    ).toBeCloseTo((200_000 * 5 + 100_000 * 0.5 + 1_000 * 30) / 1e6, 10);
+  });
+
+  it('does not invent non-standard service-tier pricing for chat-latest', () => {
+    const usage = {
+      input_tokens: 1_000,
+      output_tokens: 100,
+      input_tokens_details: { cached_tokens: 400 },
+    };
+
+    expect(
+      calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'batch' }),
+    ).toBeUndefined();
+    expect(
+      calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'flex' }),
+    ).toBeUndefined();
+    expect(
+      calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'priority' }),
+    ).toBeUndefined();
+    expect(
+      calculateOpenAIUsageCost('chat-latest', {}, usage, { serviceTier: 'premium' }),
+    ).toBeUndefined();
+
+    expect(
+      calculateOpenAIUsageCost('chat-latest', { inputCost: 2e-6, outputCost: 3e-6 }, usage, {
+        serviceTier: 'premium',
+      }),
+    ).toBeCloseTo(1_000 * 2e-6 + 100 * 3e-6);
+    expect(
+      calculateOpenAIUsageCost('chat-latest', { inputCost: 2e-6, outputCost: 3e-6 }, usage, {
+        serviceTier: 'priority',
+      }),
+    ).toBeCloseTo(1_000 * 2e-6 + 100 * 3e-6);
+  });
+
+  it('uses non-reasoning web search preview pricing for chat-latest aliases', () => {
+    const output = {
+      output: [{ type: 'web_search_call', action: { type: 'search' } }],
+    };
+    const config = { tools: [{ type: 'web_search_preview' as const }] };
+
+    expect(calculateObservableOpenAIToolCost(output, 'chat-latest', config)).toBeCloseTo(0.025, 10);
+    expect(calculateObservableOpenAIToolCost(output, 'openai/chat-latest', config)).toBeCloseTo(
+      0.025,
+      10,
+    );
+    expect(calculateObservableOpenAIToolCost(output, 'vendor/chat-latest', config)).toBeCloseTo(
+      0.025,
+      10,
+    );
+  });
+
   describe('GPT-6 Astra', () => {
     it.each([
       { inputTokens: 272_000, input: 10, cached: 1, write: 12.5, output: 50 },
@@ -776,6 +884,33 @@ describe('OpenAI billing helpers', () => {
         { cachedResponse: true },
       ),
     ).toBeUndefined();
+  });
+
+  it('does not bill cached chat-latest responses with unsupported tiers', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chat-latest',
+        {},
+        { prompt_tokens: 10, completion_tokens: 5 },
+        { cachedResponse: true, serviceTier: 'premium' },
+      ),
+    ).toBe(0);
+  });
+
+  it('uses audio overrides for chat-latest responses with unsupported tiers', () => {
+    expect(
+      calculateOpenAIUsageCost(
+        'chat-latest',
+        { audioInputCost: 0.01, audioOutputCost: 0.03 },
+        {
+          prompt_tokens: 3,
+          completion_tokens: 2,
+          prompt_tokens_details: { audio_tokens: 3 },
+          completion_tokens_details: { audio_tokens: 2 },
+        },
+        { serviceTier: 'premium' },
+      ),
+    ).toBeCloseTo(0.09, 10);
   });
 
   it('prices audio text and audio tokens separately', () => {

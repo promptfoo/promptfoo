@@ -635,8 +635,15 @@ export function calculateOpenAIUsageCostFromTokenUsage(
     : cost;
 }
 
-function normalizeServiceTier(serviceTier: string | null | undefined): OpenAIProcessingTier {
+function normalizeServiceTier(
+  serviceTier: string | null | undefined,
+): OpenAIProcessingTier | undefined {
   switch (serviceTier) {
+    case null:
+    case undefined:
+    case 'default':
+    case 'standard':
+      return 'standard';
     case 'fast':
       return 'priority';
     case 'batch':
@@ -644,7 +651,7 @@ function normalizeServiceTier(serviceTier: string | null | undefined): OpenAIPro
     case 'priority':
       return serviceTier;
     default:
-      return 'standard';
+      return undefined;
   }
 }
 
@@ -758,6 +765,11 @@ function getModelRates(
             }
           : text,
     };
+  }
+
+  // Only Standard pricing is published for the floating Instant alias.
+  if (modelName === 'chat-latest' && tier !== 'standard') {
+    return undefined;
   }
 
   const model = TEXT_MODELS_BY_ID.get(modelName);
@@ -973,8 +985,22 @@ export function calculateOpenAIUsageCost(
 
   const usageParts = getOpenAIUsageParts(rawUsage);
   const usage = extractOpenAIBillingUsage(rawUsage);
+  if (options.cachedResponse && getModelRates(modelName, 'standard', usage.totalInputTokens)) {
+    return 0;
+  }
   const tier = normalizeServiceTier(options.serviceTier);
-  const modelRates = getModelRates(modelName, tier, usage.totalInputTokens);
+  const hasCustomTextCost =
+    config.cost !== undefined || config.inputCost !== undefined || config.outputCost !== undefined;
+  const hasCustomAudioCost =
+    config.audioCost !== undefined ||
+    config.audioInputCost !== undefined ||
+    config.audioOutputCost !== undefined;
+  const modelRates =
+    (tier && getModelRates(modelName, tier, usage.totalInputTokens)) ??
+    ((!tier || (modelName === 'chat-latest' && tier !== 'standard')) &&
+    (hasCustomTextCost || hasCustomAudioCost)
+      ? { text: { input: 0 }, ...(hasCustomAudioCost && { audio: { input: 0 } }) }
+      : undefined);
   if (!modelRates) {
     return undefined;
   }
@@ -987,10 +1013,6 @@ export function calculateOpenAIUsageCost(
           text: applyRateMultiplier(modelRates.text, OPENAI_REGIONAL_PROCESSING_MULTIPLIER),
         }
       : modelRates;
-
-  if (options.cachedResponse) {
-    return 0;
-  }
 
   const { hasOutputBreakdown } = usageParts;
 
