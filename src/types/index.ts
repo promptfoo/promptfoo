@@ -319,6 +319,22 @@ export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & {
 export type EvalRuntimeOptions = Partial<EvaluateOptions> & {
   /** @internal Normalized value of --filter-providers or --filter-targets. */
   providerFilter?: string;
+  /** @internal Base directory used to resolve relative file references during resume/retry. */
+  configBasePath?: string;
+  /** @internal Fingerprint of file-backed matrix values used to guard replay ordering. */
+  matrixValuesFingerprint?: string;
+  /** @internal Test selection applied before matrix expansion, replayed to preserve test indices. */
+  testFilter?: {
+    errorsOnly?: string;
+    failing?: string;
+    failingOnly?: string;
+    firstN?: number | string;
+    metadata?: string | string[];
+    pattern?: string;
+    range?: string;
+    sample?: number | string;
+    sampleSeed?: number;
+  };
 };
 
 const PromptMetricsSchema = z.object({

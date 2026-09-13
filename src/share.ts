@@ -17,7 +17,11 @@ import {
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
 import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
-import { redactAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './util/sanitizer';
+import {
+  redactAzureBlobSasTokens,
+  sanitizeRuntimeOptions,
+  sanitizeTracingConfigForPersistence,
+} from './util/sanitizer';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -150,6 +154,7 @@ async function sendEvalRecord(
   let evalData: Record<string, unknown> = {
     ...evalRecord,
     config: redactedConfig,
+    runtimeOptions: sanitizeRuntimeOptions(evalRecord.runtimeOptions),
     results: [],
     traces,
   };

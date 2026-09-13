@@ -75,6 +75,15 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return result.save();
   }
 
+  setMatrixValuesFingerprint(fingerprint: string | undefined): void {
+    this.evaluation.runtimeOptions ??= {};
+    if (fingerprint === undefined) {
+      delete this.evaluation.runtimeOptions.matrixValuesFingerprint;
+    } else {
+      this.evaluation.runtimeOptions.matrixValuesFingerprint = fingerprint;
+    }
+  }
+
   setDurationMs(durationMs: number): void {
     this.evaluation.setDurationMs(durationMs);
   }

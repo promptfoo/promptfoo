@@ -41,7 +41,7 @@ import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
 import { filterPrompts } from '../eval/filterPrompts';
 import { filterProviderConfigs, getProviderIdAndLabel } from '../eval/filterProviders';
-import { filterTests } from '../eval/filterTests';
+import { deriveScenarioSampleSeed, filterTests } from '../eval/filterTests';
 import { promptfooCommand } from '../promptfooCommand';
 import { preserveTracingCredentialReferences } from '../sanitizer';
 import { readTest, readTests } from '../testCaseReader';
@@ -98,16 +98,6 @@ function normalizeConfiguredCommandLineOptions(
   return Object.fromEntries(
     Object.entries(validationResult.data).filter(([key]) => key in commandLineOptions),
   );
-}
-
-function deriveScenarioSampleSeed(seed: number, scenarioIndex: number): number {
-  const tupleSeed = `${seed}:${scenarioIndex}`;
-  let state = 2166136261;
-  for (let i = 0; i < tupleSeed.length; i++) {
-    state = Math.imul(state ^ tupleSeed.charCodeAt(i), 16777619);
-  }
-
-  return state >>> 0;
 }
 
 /**
@@ -769,6 +759,7 @@ export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
+  options?: { basePath?: string },
 ): Promise<{
   testSuite: TestSuite;
   config: Partial<UnifiedConfig>;
@@ -820,7 +811,7 @@ export async function resolveConfigs(
   }
 
   // Use base path in cases where path was supplied in the config file
-  const basePath = configPaths ? path.dirname(configPaths[0]) : '';
+  const basePath = configPaths ? path.dirname(configPaths[0]) : (options?.basePath ?? '');
   let commandLineOptions = normalizeConfiguredCommandLineOptions(
     fileConfig.commandLineOptions || defaultConfig.commandLineOptions,
     configPaths ? `configuration file ${configPaths[0]}` : 'default configuration',
@@ -978,7 +969,11 @@ export async function resolveConfigs(
   }
   if (Array.isArray(config.scenarios)) {
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
-    const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    let filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
+    if (filterSample !== undefined && filterSampleSeed === undefined) {
+      filterSampleSeed = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+      commandLineOptions = { ...commandLineOptions, filterSampleSeed };
+    }
     for (const [scenarioIndex, scenario] of config.scenarios.entries()) {
       if (typeof scenario === 'object' && scenario.tests && typeof scenario.tests === 'string') {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
