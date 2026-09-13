@@ -240,7 +240,10 @@ describe('Google media and tool-policy input boundaries', () => {
       const provider = await load(route);
 
       const response = await withCacheEnabled(false, () =>
-        provider.callApi(encoded, { vars: { media: encoded } }),
+        provider.callApi(encoded, {
+          vars: { media: encoded },
+          prompt: { raw: '{{media}}', label: 'skeleton-metadata' },
+        }),
       );
 
       expect(response.error).toBeUndefined();
