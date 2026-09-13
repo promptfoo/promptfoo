@@ -14,7 +14,7 @@ export const REDACTED = '[REDACTED]';
 // Query-parameter names that imply a credential value. Shared by sanitizeUrl's
 // per-param redaction and the fail-closed decision for unparseable URLs.
 const SENSITIVE_URL_PARAM_NAMES =
-  /(api[_-]?key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
+  /(api[_-]?key|key|token|password|secret|signature|sig|access[_-]?token|refresh[_-]?token|id[_-]?token|client[_-]?secret|authorization)/i;
 const OPAQUE_CREDENTIAL_PATH_SEGMENT =
   /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32,}|(?:token|key|secret|credential|auth)[-_][a-z0-9._-]{8,}|eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)$/i;
 
@@ -69,7 +69,7 @@ function hasSecretFormSegment(text: string): boolean {
     const rawKey = segment.slice(0, equalsIndex);
     const key = decodeFormComponent(rawKey) ?? rawKey;
     const keyParts = key.split(/[._\-\[\]]+/).filter(Boolean);
-    if (isSecretField(key) || keyParts.some(isSecretField)) {
+    if (key.toLowerCase() === 'key' || isSecretField(key) || keyParts.some(isSecretField)) {
       return true;
     }
   }
@@ -1068,7 +1068,8 @@ function sanitizePlainObject(obj: any, depth: number, maxDepth: number, isEnvMap
         (isEnvMap && key.toUpperCase().endsWith('_URL')))
     ) {
       sanitized[key] =
-        key === 'url' || (isEnvMap && key.toUpperCase().endsWith('_URL'))
+        key === 'url' ||
+        (isEnvMap && key.toUpperCase().endsWith('_URL') && !/^OPENAI_(?:API_)?BASE_URL$/i.test(key))
           ? sanitizeUrl(value)
           : sanitizeUrlForLogging(value);
     } else if (typeof value === 'string' && looksLikeSecret(value)) {
@@ -1349,6 +1350,11 @@ export function sanitizeUrlForLogging(url: string): string {
       .join('/');
     return isPathOnly ? parsed.pathname + parsed.search + parsed.hash : parsed.toString();
   } catch {
-    return sanitized;
+    const hasOpaquePath = url
+      .split(/[/?#]/)
+      .some((segment) =>
+        OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decodeFormComponent(segment) ?? segment),
+      );
+    return unparseableUrlMightLeakSecret(url) || hasOpaquePath ? REDACTED : sanitized;
   }
 }

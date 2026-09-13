@@ -1155,15 +1155,14 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(JSON.stringify(result)).not.toContain(secret);
   });
 
-  it('redacts credential paths from malformed gateway URL errors', async () => {
-    const secret = 'auth-supersecretvalue123';
-    vi.mocked(fetchWithRetries).mockRejectedValue(
-      new TypeError('Invalid URL https://[bad]/' + secret),
-    );
-    const result = await provider({
-      apiBaseUrl: 'https://[bad]/' + secret,
-    }).callApi('hi');
-    expect(result.error).not.toContain(secret);
+  it.each([
+    'https://[bad]/auth-supersecretvalue123',
+    'https://[bad]/?key=s3cr3t',
+    'https://user:gateway-pass@[bad]/',
+  ])('redacts credentials from malformed gateway URL errors: %s', async (apiBaseUrl) => {
+    vi.mocked(fetchWithRetries).mockRejectedValue(new TypeError('Invalid URL ' + apiBaseUrl));
+    const result = await provider({ apiBaseUrl }).callApi('hi');
+    expect(result.error).not.toContain(apiBaseUrl);
   });
 
   it('redacts the decoded parts of a configured Basic authorization header', async () => {
@@ -1220,6 +1219,21 @@ describe('OpenAiAgentsApiProvider', () => {
     expect(await provider().callApi('hi')).toMatchObject({
       error: expect.stringContaining('pagination limit'),
       metadata: { sessionDeleted: true },
+    });
+  });
+
+  it('bounds retained bytes across paginated lists', async () => {
+    const payload = 'x'.repeat(9 * 1024 * 1024);
+    let pages = 0;
+    mockApi((pathname) => {
+      if (pathname.endsWith('/turns')) {
+        pages++;
+        return json(page([{ id: payload }], pages === 1, 'next'));
+      }
+      return undefined;
+    });
+    expect(await provider().callApi('hi')).toMatchObject({
+      error: expect.stringContaining('pagination limit'),
     });
   });
 
@@ -1587,6 +1601,19 @@ describe('OpenAiAgentsApiProvider', () => {
     });
   });
 
+  it('waits before polling a completed turn with a non-idle session', async () => {
+    vi.useFakeTimers();
+    vi.mocked(fetchWithRetries)
+      .mockResolvedValueOnce(json(session))
+      .mockResolvedValueOnce(json(page([turn])))
+      .mockResolvedValueOnce(json({ ...session, status: 'in_progress' }));
+    const pending = provider({ pollIntervalMs: 1_000 }).callApi('hi');
+    await vi.advanceTimersByTimeAsync(999);
+    expect(vi.mocked(fetchWithRetries)).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect((await pending).output).toBe('42');
+  });
+
   it('propagates cancellation but uses an independent signal for cleanup', async () => {
     vi.useFakeTimers();
     vi.mocked(fetchWithRetries)
@@ -1886,6 +1913,23 @@ describe('OpenAiAgentsApiProvider', () => {
         expect(result.metadata).not.toHaveProperty('subagentUsage');
       },
     );
+
+    it('drops inherited credential headers when a prompt changes endpoints', async () => {
+      await provider({
+        apiBaseUrl: 'https://gateway.example/v1',
+        headers: { 'X-Gateway-Auth': 'gateway-secret', 'X-Tenant': 'tenant-a' },
+      }).callApi('hi', {
+        vars: {},
+        prompt: {
+          raw: 'hi',
+          label: 'test',
+          config: { apiBaseUrl: 'https://prompt.example/v1' },
+        },
+      });
+      const headers = new Headers(vi.mocked(fetchWithRetries).mock.calls[0][1]?.headers);
+      expect(headers.get('X-Gateway-Auth')).toBeNull();
+      expect(headers.get('X-Tenant')).toBe('tenant-a');
+    });
 
     it('propagates eval cancellation while reading subagent turns', async () => {
       const controller = new AbortController();

@@ -206,11 +206,8 @@ function getUrlCredentials(value: string): string[] {
   try {
     url = new URL(value);
   } catch {
-    // Fetch errors can echo malformed input URLs, so retain secret-looking path segments.
-    return value
-      .split(/[/?#]/)
-      .filter((segment) => sanitizeUrlForLogging(`/${segment}`).includes('%5BREDACTED%5D'))
-      .flatMap((segment) => [segment, decodeUrlComponent(segment)]);
+    // A malformed credential-bearing URL can be echoed only as one opaque error value.
+    return sanitizeUrlForLogging(value) === value ? [] : [value];
   }
   const found = [url.username, url.password].flatMap((part) => [part, decodeUrlComponent(part)]);
   const userinfo = decodeUserinfo(url);
@@ -402,8 +399,13 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   private readonly modelOverride: string;
   private credentials: string[] = [];
   // callApi creates a fresh provider instance, so all lists share one call budget.
-  private listBudget = { pages: MAX_SESSION_LIST_PAGES, items: MAX_LIST_ITEMS };
+  private listBudget = {
+    pages: MAX_SESSION_LIST_PAGES,
+    items: MAX_LIST_ITEMS,
+    bytes: MAX_RESPONSE_BODY_BYTES,
+  };
   private listItemPeaks = new Map<string, number>();
+  private listBytePeaks = new Map<string, number>();
   // Provider credentials replaced by prompt settings are still redacted if an error echoes them.
   private readonly inheritedCredentials = new Set<string>();
 
@@ -526,6 +528,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
     const items: T[] = [];
     const cursors = new Set<string>();
     let after: string | undefined;
+    let bytes = 0;
     for (let pageCount = 0; pageCount < MAX_LIST_PAGES; pageCount++) {
       if (this.listBudget.pages === 0) {
         throw new Error(
@@ -557,6 +560,16 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       }
       this.listBudget.items -= growth;
       this.listItemPeaks.set(endpoint, nextPeak);
+      bytes += Buffer.byteLength(JSON.stringify(page.data));
+      const previousBytePeak = this.listBytePeaks.get(endpoint) ?? 0;
+      const byteGrowth = Math.max(previousBytePeak, bytes) - previousBytePeak;
+      if (byteGrowth > this.listBudget.bytes) {
+        throw new Error(
+          `Agents API session pagination limit exceeded (${MAX_RESPONSE_BODY_BYTES} bytes)`,
+        );
+      }
+      this.listBudget.bytes -= byteGrowth;
+      this.listBytePeaks.set(endpoint, Math.max(previousBytePeak, bytes));
       items.push(...page.data);
       if (!page.has_more) {
         return items;
@@ -712,8 +725,19 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
     const promptConfig = context?.prompt?.config;
+    const endpointOverride =
+      promptConfig?.apiBaseUrl !== undefined || promptConfig?.apiHost !== undefined;
+    const inheritedHeaders =
+      endpointOverride && promptConfig?.headers === undefined
+        ? Object.fromEntries(
+            Object.entries(this.config.headers ?? {}).filter(
+              ([name]) => !isCredentialName(name) && !/(?:^|[-_])auth(?:$|[-_])/i.test(name),
+            ),
+          )
+        : this.config.headers;
     const mergedConfig = {
       ...this.config,
+      ...(endpointOverride && { headers: inheritedHeaders }),
       ...(promptConfig?.apiBaseUrl !== undefined && { apiHost: undefined }),
       ...(promptConfig?.apiHost !== undefined && { apiBaseUrl: undefined }),
       ...(promptConfig?.apiKeyEnvar !== undefined && { apiKey: undefined }),
@@ -968,6 +992,7 @@ export class OpenAiAgentsApiProvider extends OpenAiGenericProvider {
       if (turn?.status === 'completed') {
         session = await this.request<Session>(endpoint, 'GET', headers, signal);
         if (session.status !== 'idle') {
+          await sleepWithAbort(this.config.pollIntervalMs ?? 1_000, signal);
           continue;
         }
         return { session, turn };

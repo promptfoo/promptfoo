@@ -1363,6 +1363,13 @@ describe('sanitizeObject', () => {
       );
     });
 
+    it('redacts gateway credentials in base URL env values and bare key queries', () => {
+      const value = 'https://gateway.example/auth-supersecretvalue123?key=s3cr3t';
+      const result = sanitizeObject({ env: { OPENAI_API_BASE_URL: value }, apiBaseUrl: value });
+      expect(JSON.stringify(result)).not.toContain('supersecretvalue123');
+      expect(JSON.stringify(result)).not.toContain('s3cr3t');
+    });
+
     it('redacts credential-bearing environment host overrides', () => {
       const value = 'gateway-user:gateway-password@gateway.example';
       expect(JSON.stringify(sanitizeObject({ env: { OPENAI_API_HOST: value } }))).not.toContain(
