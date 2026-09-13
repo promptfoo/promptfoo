@@ -87,12 +87,13 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     },
     fal: {
       title: 'fal.ai Images',
-      helpText: 'Use an image model ID with the fal:image: prefix. Configure FAL_KEY or apiKey.',
+      helpText:
+        'Use an image model ID with the fal:image: prefix. Set FAL_KEY on the Promptfoo server.',
     },
     'cloudflare-ai': {
       title: 'Cloudflare Workers AI',
       helpText:
-        'Use a Workers AI chat model. Configure CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_KEY, or accountId and apiKey.',
+        'Use a Workers AI chat model. Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_KEY on the Promptfoo server.',
     },
     'llama.cpp': {
       title: 'llama.cpp',
@@ -102,17 +103,17 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     llamafile: {
       title: 'Llamafile',
       helpText:
-        'Start the llamafile server and use its OpenAI-compatible chat API. Replace local-model with the served model name when required. Set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set apiKeyEnvar to its environment variable or supply apiKey.',
+        'Start the llamafile server and use its OpenAI-compatible chat API. Replace local-model with the served model name when required. Set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set the key in an environment variable on the Promptfoo server and set apiKeyEnvar to that variable name.',
     },
     vllm: {
       title: 'vLLM',
       helpText:
-        'Use the exact model name exposed by your vLLM server, including any namespace, path, or custom served-model-name. Set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set apiKeyEnvar to its environment variable or supply apiKey.',
+        'Use the exact model name exposed by your vLLM server, including any namespace, path, or custom served-model-name. Set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set the key in an environment variable on the Promptfoo server and set apiKeyEnvar to that variable name.',
     },
     'text-generation-webui': {
       title: 'Text Generation WebUI',
       helpText:
-        'Start the server with its OpenAI-compatible API enabled. Use the served model name and set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set apiKeyEnvar to its environment variable or supply apiKey.',
+        'Start the server with its OpenAI-compatible API enabled. Use the served model name and set apiBaseUrl including /v1. Authentication is disabled by default. If your server requires a key, set the key in an environment variable on the Promptfoo server and set apiKeyEnvar to that variable name.',
     },
     ollama: {
       title: 'Ollama',
@@ -122,12 +123,12 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     databricks: {
       title: 'Databricks',
       helpText:
-        'Use a chat serving endpoint available in your Databricks workspace. You can replace the managed endpoint name with your own deployment name. Configure DATABRICKS_WORKSPACE_URL and DATABRICKS_TOKEN, or workspaceUrl and apiKey.',
+        'Use a chat serving endpoint available in your Databricks workspace. You can replace the managed endpoint name with your own deployment name. Set DATABRICKS_WORKSPACE_URL and DATABRICKS_TOKEN on the Promptfoo server.',
     },
     deepseek: {
       title: 'DeepSeek',
       helpText:
-        'Use a DeepSeek model ID with DEEPSEEK_API_KEY or apiKey. This example disables thinking for a non-reasoning chat target.',
+        'Use a DeepSeek model ID and set DEEPSEEK_API_KEY on the Promptfoo server. This example disables thinking for a non-reasoning chat target.',
     },
     cerebras: {
       title: 'Cerebras',
@@ -135,7 +136,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
     },
     groq: {
       title: 'Groq',
-      helpText: 'Use a Groq-hosted model ID. Configure GROQ_API_KEY or apiKey.',
+      helpText: 'Use a Groq-hosted model ID. Set GROQ_API_KEY on the Promptfoo server.',
     },
   };
   const guidance = providerType ? initialGuidance[providerType] : undefined;

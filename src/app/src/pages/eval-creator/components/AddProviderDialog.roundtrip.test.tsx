@@ -13,6 +13,7 @@ import AddProviderDialog from './AddProviderDialog';
 import { ProvidersListSection } from './ProvidersListSection';
 import RunTestSuiteButton from './RunTestSuiteButton';
 import { normalizeProviders } from './setupReadiness';
+import type { UnifiedConfig } from '@promptfoo/types';
 
 vi.mock('@app/utils/api', () => ({ callApi: vi.fn() }));
 
@@ -144,6 +145,65 @@ describe('eval provider configuration round trips', () => {
       await user.click(screen.getByRole('button', { name: 'Run Eval' }));
       const [, request] = getCallApiMock().mock.calls.find(([path]) => path === '/eval/job')!;
       expect(JSON.parse(request!.body as string).providers).toEqual(expected);
+    },
+  );
+
+  it.each(
+    ['llamafile', 'vllm', 'text-generation-webui'].flatMap((type) =>
+      [
+        { selector: 'string false', value: 'false', expected: false },
+        { selector: 'null', value: null, expected: false },
+        { selector: 'false', value: false, expected: false },
+        { selector: 'true', value: true, expected: true },
+        { selector: 'absent', value: undefined, expected: false },
+        {
+          selector: 'named environment',
+          value: false,
+          expected: false,
+          apiKeyEnvar: 'LOCAL_MODEL_KEY',
+        },
+      ].map((policy) => ({ type, ...policy })),
+    ),
+  )(
+    'applies live local credential policy for $type selector $selector before Run',
+    async ({ type, value, expected, apiKeyEnvar }) => {
+      const user = userEvent.setup();
+      const provider = {
+        id: 'openai:chat:local-policy-model',
+        label: 'Local credential policy',
+        config: {
+          type,
+          apiBaseUrl: 'http://localhost:8129/v1',
+          temperature: 0.2,
+          ...(value === undefined ? {} : { useDefaultApiKey: value }),
+          ...(apiKeyEnvar ? { apiKeyEnvar } : {}),
+        },
+      };
+      // Imported JSON is untyped at this boundary, including malformed selectors.
+      act(() =>
+        useStore.getState().setConfig({
+          providers: [provider],
+          prompts: ['Hello'],
+          tests: [{ vars: {} }],
+        } as unknown as Partial<UnifiedConfig>),
+      );
+      mockCallApiRoutes([{ method: 'POST', path: '/eval/job', response: { id: 'policy-job' } }]);
+      renderWithProviders(<EvalProviderSetup />);
+      // Run the live state directly; do not reload the persistence-scrubbed copy.
+      await user.click(screen.getByRole('button', { name: 'Run Eval' }));
+      const [, request] = getCallApiMock().mock.calls.find(([path]) => path === '/eval/job')!;
+      const normalized = [
+        {
+          ...provider,
+          config: { ...provider.config, apiKeyRequired: false, useDefaultApiKey: expected },
+        },
+      ];
+      expect(JSON.parse(request!.body as string).providers).toEqual(normalized);
+      expect(useStore.getState().config.providers).toEqual(normalized);
+      expect(JSON.parse(localStorage.getItem('promptfoo')!).state.config.providers).toEqual(
+        normalized,
+      );
+      expect(provider.config.useDefaultApiKey).toBe(value);
     },
   );
 

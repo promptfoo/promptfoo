@@ -25,8 +25,9 @@ export function withLocalProviderType(
   return providerId?.startsWith('openai:chat:') && isLocalOpenAiProviderType(providerType)
     ? {
         apiKeyRequired: false,
-        useDefaultApiKey: false,
         ...config,
+        useDefaultApiKey:
+          typeof config.useDefaultApiKey === 'boolean' ? config.useDefaultApiKey : false,
         type: providerType,
         // A complete JSON replacement must not fall back to OpenAI's ambient endpoint.
         apiBaseUrl:

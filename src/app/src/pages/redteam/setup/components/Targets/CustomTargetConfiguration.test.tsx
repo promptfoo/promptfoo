@@ -34,6 +34,41 @@ const replaceText = async (
 };
 
 describe('CustomTargetConfiguration', () => {
+  it.each(
+    ['llamafile', 'vllm', 'text-generation-webui'].flatMap((type) =>
+      ['false', null].map((value) => ({ type, value })),
+    ),
+  )(
+    'rejects a nonboolean $type key selector $value during JSON editing',
+    async ({ type, value }) => {
+      const user = userEvent.setup();
+      const updateCustomTarget = vi.fn();
+      render(
+        <CustomTargetConfiguration
+          selectedTarget={{ id: 'openai:chat:local-policy-model', config: { type } }}
+          updateCustomTarget={updateCustomTarget}
+          rawConfigJson="{}"
+          setRawConfigJson={vi.fn()}
+          bodyError={null}
+          providerType={type}
+        />,
+      );
+      await replaceText(
+        user,
+        screen.getByTestId('code-editor'),
+        JSON.stringify({ useDefaultApiKey: value }),
+      );
+      expect(updateCustomTarget).toHaveBeenLastCalledWith(
+        'config',
+        expect.objectContaining({
+          type,
+          apiKeyRequired: false,
+          useDefaultApiKey: false,
+        }),
+      );
+    },
+  );
+
   it.each([
     'together',
     'huggingface',

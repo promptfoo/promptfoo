@@ -5573,6 +5573,27 @@ describe('useRedTeamConfig', () => {
 
     it.each(
       localTypes.flatMap(({ type }) =>
+        ['false', null, 0, {}, []].map((value) => ({ type, value })),
+      ),
+    )('rejects a nonboolean live $type key selector $value on import', ({ type, value }) => {
+      const target = {
+        id: 'openai:chat:local-policy-model',
+        config: { type, useDefaultApiKey: value, temperature: 0.2 },
+      };
+      useRedTeamConfig.getState().setFullConfig({
+        ...useRedTeamConfig.getState().config,
+        target: target as unknown as Config['target'],
+      });
+      const live = useRedTeamConfig.getState().config.target;
+      expect(live.config).toMatchObject({ type, useDefaultApiKey: false, temperature: 0.2 });
+      expect(JSON.parse(window.localStorage.getItem('redTeamConfig')!).state.config.target).toEqual(
+        live,
+      );
+      expect(target.config.useDefaultApiKey).toBe(value);
+    });
+
+    it.each(
+      localTypes.flatMap(({ type }) =>
         [false, true].map((useDefaultApiKey) => ({
           type,
           useDefaultApiKey,
