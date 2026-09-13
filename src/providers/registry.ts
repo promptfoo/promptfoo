@@ -419,6 +419,11 @@ export const providerMap: ProviderFactory[] = [
       if (modelType === 'responses') {
         return new AzureResponsesProvider(deploymentName || 'gpt-4.1-2025-04-14', providerOptions);
       }
+      if (modelType === 'live') {
+        throw new Error(
+          'GPT-Live is available through openai:live:<model name>, not the Azure provider.',
+        );
+      }
       if (modelType === 'realtime') {
         requirePathSegment('realtime', 'a deployment name', 'deployment');
         if (NON_CONVERSATIONAL_REALTIME_MODELS.has(deploymentName)) {
@@ -1040,6 +1045,15 @@ export const providerMap: ProviderFactory[] = [
           assertOpenAiApiModel(candidate, apiUrl);
         }
       }
+      if (
+        [modelType, requestedApiModel].some(
+          (model) => model === 'gpt-live-transcribe' || model.startsWith('gpt-live-transcribe-'),
+        )
+      ) {
+        throw new Error(
+          'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+        );
+      }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
           modelName || configuredModel || 'gpt-5.6-terra',
@@ -1089,6 +1103,14 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
+      // Conversational GPT-Live snapshots use the Live endpoint.
+      if (modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType)) {
+        const { OpenAiLiveProvider } = await import('./openai/live');
+        return new OpenAiLiveProvider(
+          modelType === 'live' ? modelName || configuredModel || 'gpt-live-1' : modelType,
+          providerOptions,
+        );
+      }
       if (shouldDefaultToOpenAiResponses(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
@@ -1135,7 +1157,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:live:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },

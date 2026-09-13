@@ -71,6 +71,7 @@ Use an explicit endpoint in each provider ID. This makes the request format pred
 | Audio input and output                 | `openai:chat:gpt-audio-1.5`                | [Audio](#audio-capabilities)                                             |
 | Text to speech                         | `openai:tts:gpt-4o-mini-tts`               | [Text to speech](#text-to-speech)                                        |
 | Conversational Realtime                | `openai:realtime:gpt-realtime-2.1`         | [Realtime](#realtime-api-models)                                         |
+| Full-duplex voice                      | `openai:live:gpt-live-1`                   | [GPT-Live](./openai-live.md)                                             |
 
 For file transcription, see [audio transcription](#audio-transcription). For Agents SDK, ChatKit, and Codex workflows, see [agent providers](#agentic-providers).
 

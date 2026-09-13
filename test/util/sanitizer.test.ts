@@ -1392,6 +1392,17 @@ describe('sanitizeObject', () => {
       expect(result.url).not.toContain('password');
     });
 
+    it('redacts credentials in provider and environment endpoint URLs', () => {
+      const config = {
+        apiBaseUrl: 'http://fixture-user-secret:@localhost:1234/v1',
+        env: { OPENAI_API_BASE_URL: 'https://user:password@gateway.example/v1' },
+      };
+      const result = sanitizeObject(config);
+      expect(result.apiBaseUrl).toBe('http://***:***@localhost:1234/v1');
+      expect(result.env.OPENAI_API_BASE_URL).toBe('https://***:***@gateway.example/v1');
+      expect(config.apiBaseUrl).toContain('fixture-user-secret');
+    });
+
     it('should sanitize database connection config', () => {
       const dbConfig = {
         host: 'localhost',
