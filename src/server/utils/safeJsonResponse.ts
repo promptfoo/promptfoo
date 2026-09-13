@@ -28,21 +28,26 @@ export function stripOversizedStrings<T>(
   {
     maxStringLength = DEFAULT_OVERSIZED_STRING_LIMIT,
     maxTotalStringLength = DEFAULT_TOTAL_STRING_LIMIT,
+    preserveStringKeys,
     stats,
   }: {
     maxStringLength?: number;
     maxTotalStringLength?: number;
+    preserveStringKeys?: ReadonlySet<string>;
     stats?: OversizedStringStats;
   } = {},
 ): T {
   const seen = new WeakSet<object>();
   let totalStringLength = 0;
 
-  function stripValue(current: unknown, depth = 0): unknown {
+  function stripValue(current: unknown, depth = 0, key?: string): unknown {
     if (depth > 512) {
       return '[content omitted: excessive nesting]';
     }
     if (typeof current === 'string') {
+      if (key && preserveStringKeys?.has(key)) {
+        return current;
+      }
       if (
         current.length <= maxStringLength &&
         totalStringLength + current.length <= maxTotalStringLength
@@ -78,7 +83,7 @@ export function stripOversizedStrings<T>(
 
       const stripped: Record<string, unknown> = Object.create(null);
       for (const [key, child] of Object.entries(current)) {
-        stripped[key] = stripValue(child, depth + 1);
+        stripped[key] = stripValue(child, depth + 1, key);
       }
 
       seen.delete(current);

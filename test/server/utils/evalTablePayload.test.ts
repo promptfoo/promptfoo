@@ -248,9 +248,17 @@ describe('trimEvalTableForApi', () => {
     const text = 'x'.repeat(100_000);
     const baseRow = createEvaluateTable().body[0];
     const table = createEvaluateTable({
+      head: {
+        prompts: Array.from({ length: 101 }, (_, index) => ({
+          ...createCompletedPrompt(text, { id: `prompt-${index}`, label: text }),
+          evalId: 'eval-1',
+        })),
+        vars: [],
+      },
       body: Array.from({ length: 101 }, (_, index) => ({
         ...baseRow,
         description: `row-${index}`,
+        vars: [text],
         outputs: [
           {
             ...baseRow.outputs[0],
@@ -258,7 +266,12 @@ describe('trimEvalTableForApi', () => {
             evalId: 'eval-1',
             provider: 'provider-label',
             text,
-            gradingResult: { pass: true, score: 1, reason: text },
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: text,
+              assertion: { type: 'human', value: text },
+            },
           },
         ],
       })),
@@ -274,8 +287,14 @@ describe('trimEvalTableForApi', () => {
       pass: true,
       score: 1,
       reason: '[content omitted: 100000 characters]',
+      assertion: { type: 'human', value: '[content omitted: 100000 characters]' },
     });
-    expect(trimmed.body[100].description).toBe('row-100');
+    expect(trimmed.body[100].vars).toEqual(['[content omitted: 100000 characters]']);
+    expect(trimmed.head.prompts[100]).toMatchObject({
+      id: 'prompt-100',
+      evalId: 'eval-1',
+      raw: '[content omitted: 100000 characters]',
+    });
   });
 
   it('reports media omission when oversized video data is stripped', () => {

@@ -113,8 +113,14 @@ type TrimOptions = {
   maxStringLength?: number;
 };
 
-function trimForTable<T>(value: T, maxStringLength: number): T {
-  return stripOversizedStrings(value, { maxStringLength });
+const TABLE_STRUCTURAL_STRING_KEYS = new Set(['id', 'evalId', 'provider', 'type']);
+
+function trimForTable<T>(
+  value: T,
+  maxStringLength: number,
+  preserveStringKeys?: ReadonlySet<string>,
+): T {
+  return stripOversizedStrings(value, { maxStringLength, preserveStringKeys });
 }
 
 function trimTextForTable(value: string | undefined, maxStringLength: number): string {
@@ -358,31 +364,15 @@ export function trimEvalTableForApi<T extends TableLike>(
 ): T {
   const trimmed = {
     ...table,
-    head: trimForTable(table.head, maxStringLength),
+    head: trimForTable(table.head, maxStringLength, TABLE_STRUCTURAL_STRING_KEYS),
     body: table.body.map((row) => trimTableRowForApi(row, maxStringLength)),
   } as T;
-  // Keep identifiers available for detail hydration while sharing one string
-  // budget across every potentially heavy cell field.
-  const payloads = trimForTable(
-    trimmed.body.map((row) =>
-      row.outputs.map((cell) => {
-        if (!cell) {
-          return cell;
-        }
-        const { id: _, evalId: __, provider: ___, ...payload } = cell;
-        return payload;
-      }),
-    ),
-    maxStringLength,
-  );
-  for (const [rowIndex, row] of trimmed.body.entries()) {
-    for (const [cellIndex, cell] of row.outputs.entries()) {
-      if (cell) {
-        Object.assign(cell, payloads[rowIndex][cellIndex]);
-      }
-    }
-  }
-  return trimmed;
+  return {
+    ...trimmed,
+    // Share one budget across row payloads and cells while retaining fields
+    // used for hydration, ownership, and grading controls.
+    body: trimForTable(trimmed.body, maxStringLength, TABLE_STRUCTURAL_STRING_KEYS),
+  };
 }
 
 export function trimEvalConfigForTableApi<T extends object>(
