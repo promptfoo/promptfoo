@@ -511,7 +511,8 @@ export class GoogleVideoProvider implements ApiProvider {
     }
     if (
       /^data:/i.test(sourceVideo) ||
-      (sourceVideo.includes('://') && !sourceVideo.startsWith('file://'))
+      (sourceVideo.includes('://') && !sourceVideo.startsWith('file://')) ||
+      (!sourceVideo.startsWith('file://') && !/^[A-Za-z0-9+/]+={0,2}$/.test(sourceVideo))
     ) {
       return 'Vertex AI Veo video extension requires a gs:// URI, base64 video data, or a file:// path.';
     }

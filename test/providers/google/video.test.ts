@@ -2177,6 +2177,23 @@ describe('GoogleVideoProvider', () => {
       expect(fs.readFileSync).not.toHaveBeenCalled();
     });
 
+    it.each(
+      (['sourceVideo', 'extendVideoId'] as const).flatMap((field) =>
+        ['previous-operation-id', 'relative/source.mp4'].map((value) => ({ field, value })),
+      ),
+    )('rejects non-base64 $field=$value before a Vertex request', async ({ field, value }) => {
+      const provider = new GoogleVideoProvider('veo-3.1-generate-001', {
+        config: { [field]: value, vertexai: true, projectId: 'test-project' },
+      });
+
+      const result = await provider.callApi('Extend');
+
+      expect(result.error).toContain('base64 video data');
+      expect(mockRequest).not.toHaveBeenCalled();
+      expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
     it.each(['gs://video-bucket/source.mp4', 'gs://video-bucket/operations/source.mp4'])(
       'sends Vertex GCS input %s using gcsUri',
       async (sourceVideo) => {

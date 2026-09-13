@@ -201,6 +201,9 @@ describe('Google media and tool-policy input boundaries', () => {
       ['opus-theora.ogg', 'audio/ogg'],
       ['vorbis-ordinary.ogg', 'audio/ogg'],
       ['opus-ordinary.ogg', 'audio/ogg'],
+      ['skeleton-vorbis.ogg', 'audio/ogg'],
+      ['skeleton-opus.ogg', 'audio/ogg'],
+      ['skeleton-theora.ogg', undefined],
       ['webm-4004.webm', 'video/webm'],
       ['webm-84.webm', 'video/webm'],
       ['theora.ogg', undefined],
@@ -225,6 +228,23 @@ describe('Google media and tool-policy input boundaries', () => {
       const parts = mimeType ? [{ inlineData: { mimeType, data: encoded } }] : [{ text: encoded }];
       expect(requestBody(route)).toEqual({
         contents: [{ role: 'user', parts }],
+        generationConfig: {},
+      });
+    });
+
+    it('does not classify an isolated Skeleton metadata page as audio', async () => {
+      // The first page contains the 64-byte Skeleton identification packet only.
+      const encoded = readFileSync(path.join(fixtures, 'skeleton-vorbis.ogg'))
+        .subarray(0, 92)
+        .toString('base64');
+      const provider = await load(route);
+
+      const response = await withCacheEnabled(false, () => provider.callApi(encoded, { vars: {} }));
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe('ok');
+      expect(requestBody(route)).toEqual({
+        contents: [{ role: 'user', parts: [{ text: encoded }] }],
         generationConfig: {},
       });
     });

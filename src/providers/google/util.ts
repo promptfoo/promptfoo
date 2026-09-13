@@ -1673,6 +1673,11 @@ function getOggMimeType(bytes: Buffer): string | undefined {
       return undefined;
     }
     const packet = bytes.subarray(payloadOffset, payloadOffset + packetLength);
+    // Skeleton's identification header is at least 64 bytes and carries no media.
+    if (packet.length >= 64 && packet.subarray(0, 8).equals(Buffer.from('fishead\0'))) {
+      offset = pageEnd;
+      continue;
+    }
     if (packet.subarray(0, 7).equals(Buffer.from('\x80theora', 'latin1'))) {
       return 'video/ogg';
     }

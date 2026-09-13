@@ -7,6 +7,11 @@ No downloaded or recorded content is used.
 - `vorbis-*.ogg`: `libvorbis` audio with `TITLE=theora` or `TITLE=ordinary`.
 - `opus-*.ogg`: `libopus` audio with the same comment controls.
 - `theora.ogg`: `libtheora` video, retained as unsupported Ogg video.
+- `skeleton-*.ogg`: the matching existing Vorbis, Opus or Theora stream with a
+  [Skeleton 3 metadata stream](https://xiph.org/ogg/doc/skeleton.html). The metadata
+  identification page precedes the codec identification page. Original media
+  pages are byte-identical; the added metadata pages have valid CRCs. Audio
+  remains supported, while Theora retains the unsupported-video behavior.
 - `webm-84.webm`: `libvpx-vp9` WebM with the normal one-byte DocType size.
 - `webm-4004.webm`: identical WebM after changing DocType size `84` to `40 04`
   and increasing the enclosing EBML header length by one. The entire Segment moves
