@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import { createTogetherAiProvider } from '../../src/providers/togetherai';
+import { hasProviderCapability } from '../../src/types/providers';
 import { ProviderOptionsSchema, ProviderSchema } from '../../src/validators/providers';
 import { createMockProvider } from '../factories/provider';
 
@@ -103,6 +105,25 @@ describe('ProviderSchema union', () => {
     const result = ProviderSchema.parse(input);
 
     expect(result).toMatchObject({ promptfooCapabilities: ['callEmbeddingApi'] });
+  });
+
+  it('preserves inherited capability delegation and grader operations', () => {
+    class TextEmbeddingProvider extends OpenAiEmbeddingProvider {
+      override async callApi() {
+        return { output: 'text' };
+      }
+    }
+    const provider = ProviderSchema.parse(new TextEmbeddingProvider('fixture'));
+    expect(hasProviderCapability(provider, 'callApi')).toBe(true);
+
+    const custom = ProviderSchema.parse({
+      id: () => 'custom',
+      callApi: async () => ({ output: 'text' }),
+      callSimilarityApi: async () => ({ similarity: 1 }),
+      callModerationApi: async () => ({ flags: [] }),
+    });
+    expect(custom).toHaveProperty('callSimilarityApi');
+    expect(custom).toHaveProperty('callModerationApi');
   });
 
   it('should accept string provider', () => {
