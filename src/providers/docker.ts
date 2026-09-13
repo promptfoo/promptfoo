@@ -26,23 +26,21 @@ type ModelsReply = {
   data?: Model[];
 };
 
-export async function fetchLocalModels(
-  apiBaseUrl: string,
-  abortSignal?: AbortSignal,
-): Promise<Model[]> {
-  abortSignal?.throwIfAborted();
+export async function fetchLocalModels(apiBaseUrl: string, signal?: AbortSignal): Promise<Model[]> {
+  signal?.throwIfAborted();
   try {
     const { data } = await fetchWithCache<ModelsReply>(
       `${apiBaseUrl}/models`,
-      abortSignal ? { signal: abortSignal } : undefined,
+      signal ? { signal } : undefined,
       undefined,
       'json',
       true,
       0,
     );
+    signal?.throwIfAborted();
     return data?.data ?? [];
   } catch (error) {
-    abortSignal?.throwIfAborted();
+    signal?.throwIfAborted();
     throw new Error(
       `Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner. \n${error instanceof Error ? error.message : String(error)}`,
     );
@@ -52,9 +50,9 @@ export async function fetchLocalModels(
 export async function hasLocalModel(
   modelId: string,
   apiBaseUrl: string,
-  abortSignal?: AbortSignal,
+  signal?: AbortSignal,
 ): Promise<boolean> {
-  const localModels = await fetchLocalModels(apiBaseUrl, abortSignal);
+  const localModels = await fetchLocalModels(apiBaseUrl, signal);
   return localModels.some(
     (model) => model && model.id?.toLocaleLowerCase() === modelId?.toLocaleLowerCase(),
   );
@@ -169,13 +167,13 @@ export class DMREmbeddingProvider extends OpenAiEmbeddingProvider {
   async callEmbeddingApi(
     text: string,
     context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    if (!(await hasLocalModel(this.modelName, this.getApiUrl(), callApiOptions?.abortSignal))) {
+    if (!(await hasLocalModel(this.modelName, this.getApiUrl(), options?.abortSignal))) {
       logger.warn(
         `Model '${this.modelName}' not found. Run 'docker model pull ${this.modelName}'.`,
       );
     }
-    return super.callEmbeddingApi(text, context, callApiOptions);
+    return super.callEmbeddingApi(text, context, options);
   }
 }

@@ -7,7 +7,9 @@ import {
   awaitProviderOperation,
   getRequestTimeoutMs,
   parseChatPrompt,
+  shouldBustProviderCache,
   transformTools,
+  withResponseCacheMetadata,
 } from './shared';
 
 import type {
@@ -186,20 +188,21 @@ export class OllamaCompletionProvider implements ApiProvider {
     const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
       const result: GenAISpanResult = {};
       if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
+        result.tokenUsage = response.tokenUsage;
       }
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, options), resultExtractor);
+    return withGenAISpan(
+      spanContext,
+      () => this.callApiInternal(prompt, context, options),
+      resultExtractor,
+    );
   }
 
   private async callApiInternal(
     prompt: string,
+    context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const params = {
@@ -245,6 +248,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         },
         getRequestTimeoutMs(),
         'text',
+        shouldBustProviderCache(context),
       );
     } catch (err) {
       return {
@@ -291,10 +295,10 @@ export class OllamaCompletionProvider implements ApiProvider {
         };
       }
 
-      return {
-        output,
-        ...(tokenUsage && { tokenUsage }),
-      };
+      return withResponseCacheMetadata(
+        { output, ...(tokenUsage && { tokenUsage }) },
+        response.cached,
+      );
     } catch (err) {
       return {
         error: `Ollama API response error: ${String(err)}: ${JSON.stringify(response.data)}`,
@@ -348,11 +352,7 @@ export class OllamaChatProvider implements ApiProvider {
     const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
       const result: GenAISpanResult = {};
       if (response.tokenUsage) {
-        result.tokenUsage = {
-          prompt: response.tokenUsage.prompt,
-          completion: response.tokenUsage.completion,
-          total: response.tokenUsage.total,
-        };
+        result.tokenUsage = response.tokenUsage;
       }
       return result;
     };
@@ -416,7 +416,7 @@ export class OllamaChatProvider implements ApiProvider {
         },
         getRequestTimeoutMs(),
         'text',
-        context?.bustCache ?? context?.debug,
+        shouldBustProviderCache(context),
       );
     } catch (err) {
       return {
@@ -511,10 +511,10 @@ export class OllamaChatProvider implements ApiProvider {
         };
       }
 
-      return {
-        output,
-        ...(tokenUsage && { tokenUsage }),
-      };
+      return withResponseCacheMetadata(
+        { output, ...(tokenUsage && { tokenUsage }) },
+        response.cached,
+      );
     } catch (err) {
       return {
         error: `Ollama API response error: ${String(err)}: ${JSON.stringify(response.data)}`,
@@ -526,7 +526,7 @@ export class OllamaChatProvider implements ApiProvider {
 export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
   async callEmbeddingApi(
     text: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
     options?.abortSignal?.throwIfAborted();
@@ -558,6 +558,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
         },
         getRequestTimeoutMs(),
         'json',
+        shouldBustProviderCache(context),
       );
     } catch (err) {
       return {
@@ -570,9 +571,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
       if (!embedding) {
         throw new Error('No embedding found in Ollama embeddings API response');
       }
-      return {
-        embedding,
-      };
+      return withResponseCacheMetadata({ embedding }, response.cached);
     } catch (err) {
       return {
         error: `API response error: ${String(err)}: ${JSON.stringify(response.data)}`,

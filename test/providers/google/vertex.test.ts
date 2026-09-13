@@ -1,7 +1,9 @@
 import * as fs from 'fs';
 import path from 'path';
 
+import { trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import logger from '../../../src/logger';
 import * as vertexUtil from '../../../src/providers/google/util';
@@ -168,6 +170,75 @@ function expectHashedBodyCacheKeys(expectedPattern: RegExp, forbiddenValues: str
   return cacheSetKey;
 }
 
+describe('Vertex cache bypass for non-Gemini models', () => {
+  beforeEach(() => {
+    mockCacheGet.mockReset().mockResolvedValue(JSON.stringify({ output: 'stale' }));
+    mockCacheSet.mockReset();
+    mockIsCacheEnabled.mockReset().mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    [
+      'claude-3-5-sonnet-v2@20241022',
+      {
+        content: [{ type: 'text', text: 'Claude fresh' }],
+        usage: { input_tokens: 1, output_tokens: 2 },
+      },
+      'Claude fresh',
+    ],
+    ['chat-bison', { predictions: [{ candidates: [{ content: 'PaLM fresh' }] }] }, 'PaLM fresh'],
+    [
+      'llama-3.3-70b-instruct-maas',
+      {
+        choices: [{ message: { content: 'Llama fresh' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 2 },
+      },
+      'Llama fresh',
+    ],
+  ] as const)('bypasses cache on %s', async (model, data, expected) => {
+    vi.mocked(getCache).mockClear();
+    const request = mockVertexRequest(data);
+    const provider = new VertexChatProvider(model, { config: { region: 'us-central1' } });
+    const response = await provider.callApi('hello', {
+      prompt: { raw: 'hello', label: 'test' },
+      vars: {},
+      bustCache: true,
+    });
+    expect(response.output).toBe(expected);
+    expect(request).toHaveBeenCalledOnce();
+    expect(mockCacheGet).not.toHaveBeenCalled();
+    expect(mockCacheSet).not.toHaveBeenCalled();
+    expect(getCache).not.toHaveBeenCalled();
+  });
+
+  it.each(['claude-3-5-sonnet-v2@20241022', 'chat-bison', 'llama-3.3-70b-instruct-maas'])(
+    'uses shared replay accounting for cached %s',
+    async (model) => {
+      mockCacheGet.mockResolvedValue(
+        JSON.stringify({ output: 'replayed', tokenUsage: { prompt: 2, completion: 3, total: 5 } }),
+      );
+      const provider = new VertexChatProvider(model, { config: { region: 'us-central1' } });
+      const result = await provider.callApi('hello');
+      expect(result).toMatchObject({
+        output: 'replayed',
+        cached: true,
+        tokenUsage: {
+          prompt: 2,
+          completion: 3,
+          total: 5,
+          cached: 5,
+          numRequests: 0,
+          incurredTokenUsage: {},
+        },
+      });
+    },
+  );
+});
+
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;
 
@@ -176,6 +247,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     mockCacheGet.mockReset();
     mockCacheGet.mockResolvedValue(null);
     mockCacheSet.mockReset();
+    vi.mocked(getCache).mockClear();
     mockImportModule.mockReset();
 
     provider = new VertexChatProvider('gemini-pro', {
@@ -374,6 +446,41 @@ describe('VertexChatProvider.callGeminiApi', () => {
     },
   );
 
+  it.each([{ bustCache: true }, { debug: true }, { bustCache: true, debug: false }])(
+    'bypasses cache reads and writes for %j',
+    async (cacheOptions) => {
+      mockCacheGet.mockResolvedValue(JSON.stringify({ output: 'stale output' }));
+      const request = mockVertexRequest({
+        candidates: [{ content: { parts: [{ text: 'fresh output' }] } }],
+      });
+      const response = await provider.callGeminiApi('test prompt', {
+        prompt: { raw: 'test prompt', label: 'test' },
+        vars: {},
+        ...cacheOptions,
+      });
+      expect(response.output).toBe('fresh output');
+      expect(response.cached).toBe(false);
+      expect(request).toHaveBeenCalledOnce();
+      expect(getCache).not.toHaveBeenCalled();
+      expect(mockCacheGet).not.toHaveBeenCalled();
+      expect(mockCacheSet).not.toHaveBeenCalled();
+    },
+  );
+
+  it('uses cache when bustCache is explicitly false even with debug enabled', async () => {
+    mockCacheGet.mockResolvedValue(JSON.stringify({ output: 'cached output' }));
+    const request = mockVertexRequest({});
+    const response = await provider.callGeminiApi('test prompt', {
+      prompt: { raw: 'test prompt', label: 'test' },
+      vars: {},
+      bustCache: false,
+      debug: true,
+    });
+    expect(response).toMatchObject({ output: 'cached output', cached: true });
+    expect(response.tokenUsage).toBeUndefined();
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('should return cached response if available', async () => {
     const mockCachedResponse = {
       cached: true,
@@ -394,8 +501,27 @@ describe('VertexChatProvider.callGeminiApi', () => {
       tokenUsage: {
         ...mockCachedResponse.tokenUsage,
         cached: mockCachedResponse.tokenUsage.total,
+        numRequests: 0,
+        incurredTokenUsage: {},
       },
     });
+  });
+
+  it('records cached tokens on the Vertex response span', async () => {
+    mockCacheGet.mockResolvedValue(
+      JSON.stringify({ output: 'cached response', tokenUsage: { prompt: 6, total: 10 } }),
+    );
+    const setAttribute = vi.fn();
+    const getTracer = vi.spyOn(trace, 'getTracer').mockReturnValue({
+      startActiveSpan: (_name: string, _options: unknown, _context: unknown, callback: any) =>
+        callback({ setAttribute, setStatus: vi.fn(), recordException: vi.fn(), end: vi.fn() }),
+    } as any);
+    try {
+      await provider.callApi('test prompt');
+      expect(setAttribute).toHaveBeenCalledWith('promptfoo.usage.cached_response_tokens', 10);
+    } finally {
+      getTracer.mockRestore();
+    }
   });
 
   it('should handle API call errors', async () => {
@@ -969,7 +1095,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(mockCacheGet).toHaveBeenCalledTimes(1);
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
-    expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
+    expect(result.tokenUsage).toEqual({
+      total: 15,
+      prompt: 10,
+      completion: 5,
+      cached: 15,
+      numRequests: 0,
+      incurredTokenUsage: {},
+    });
     expect(result.cost).toBe(0.00045);
     expect(result.metadata).toEqual({
       groundingMetadata: {
@@ -1397,7 +1530,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(result.error).toContain(
       "Function callback 'errorFunction' failed after 0 completed callback(s)",
     );
-    expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, cached: 5 });
+    expect(result.tokenUsage).toEqual({
+      total: 5,
+      prompt: 2,
+      completion: 3,
+      cached: 5,
+      numRequests: 0,
+      incurredTokenUsage: {},
+    });
   });
 
   describe('External Function Callbacks', () => {
@@ -1464,7 +1604,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
       );
       expect(mockExternalFunction).toHaveBeenCalledWith('{"param":"test_value"}');
       expect(result.output).toBe('External function result');
-      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
+      expect(result.tokenUsage).toEqual({
+        total: 15,
+        prompt: 10,
+        completion: 5,
+        cached: 15,
+        numRequests: 0,
+        incurredTokenUsage: {},
+      });
     });
 
     it('should cache external functions and not reload them on subsequent calls', async () => {
