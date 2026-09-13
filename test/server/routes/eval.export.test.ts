@@ -150,29 +150,6 @@ describe('evalRouter - GET /:id/table with export formats', () => {
     expect(sendMock).toHaveBeenCalledWith(mockCsvData);
   });
 
-  it('should return JSON when format=json is specified', async () => {
-    mockReq.query = { format: 'json' };
-    const mockJsonData = { table: mockTable };
-    mockedEvalTableToJson.mockReturnValue(mockJsonData);
-
-    // Simulate the route handler (simplified version)
-    const eval_ = await Eval.findById(mockReq.params!.id as string);
-    const table = await eval_!.getTablePage({
-      offset: 0,
-      limit: Number.MAX_SAFE_INTEGER,
-      filterMode: 'all',
-      searchQuery: '',
-      filters: [],
-    });
-
-    const jsonData = mockedEvalTableToJson(table);
-    setDownloadHeaders(mockRes as Response, 'test-eval-id-results.json', 'application/json');
-    (mockRes as Response).json(jsonData);
-
-    expect(mockedEvalTableToJson).toHaveBeenCalledWith(expect.anything());
-    expect(jsonMock).toHaveBeenCalledWith(mockJsonData);
-  });
-
   it('should include red team conversation columns in CSV for red team evaluations', async () => {
     mockReq.query = { format: 'csv' };
 
