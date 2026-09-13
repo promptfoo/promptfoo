@@ -202,7 +202,7 @@ function trimMetadataForTable(
     return undefined;
   }
 
-  const leanMetadata: Record<string, unknown> = {};
+  const leanMetadata: Record<string, unknown> = Object.create(null);
   for (const [key, value] of Object.entries(metadata)) {
     if (key === 'redteamHistory' || key === 'redteamTreeHistory') {
       if (Array.isArray(value)) {
@@ -361,14 +361,24 @@ export function trimEvalTableForApi<T extends TableLike>(
     head: trimForTable(table.head, maxStringLength),
     body: table.body.map((row) => trimTableRowForApi(row, maxStringLength)),
   } as T;
-  const texts = trimForTable(
-    trimmed.body.map((row) => row.outputs.map((cell) => cell?.text)),
+  // Keep identifiers available for detail hydration while sharing one string
+  // budget across every potentially heavy cell field.
+  const payloads = trimForTable(
+    trimmed.body.map((row) =>
+      row.outputs.map((cell) => {
+        if (!cell) {
+          return cell;
+        }
+        const { id: _, evalId: __, provider: ___, ...payload } = cell;
+        return payload;
+      }),
+    ),
     maxStringLength,
   );
   for (const [rowIndex, row] of trimmed.body.entries()) {
     for (const [cellIndex, cell] of row.outputs.entries()) {
       if (cell) {
-        cell.text = texts[rowIndex][cellIndex];
+        Object.assign(cell, payloads[rowIndex][cellIndex]);
       }
     }
   }

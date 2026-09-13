@@ -4565,9 +4565,10 @@ describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => 
     const calls = vi.mocked(Cell).mock.calls;
     const props = calls[calls.length - 1][0];
     const firstSave = props.onRating(true, 1, 'first');
-    await expect(props.onRating(false, 0, 'second')).rejects.toThrow('second failed');
+    const secondSave = props.onRating(false, 0, 'second');
     resolveFirst?.({ ok: true });
     await firstSave;
+    await expect(secondSave).rejects.toThrow('second failed');
 
     const tableCalls = mockSetTable.mock.calls;
     const finalTable = tableCalls[tableCalls.length - 1][0];

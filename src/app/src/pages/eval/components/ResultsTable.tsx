@@ -253,13 +253,16 @@ function TableHeader({
   const [promptOpen, setPromptOpen] = React.useState(false);
   const [fullExpandedText, setFullExpandedText] = React.useState<string>();
   const handlePromptOpen = async () => {
-    if (loadExpandedText && isOmittedText(expandedText ?? '')) {
-      const loaded = await loadExpandedText();
-      if (loaded) {
-        setFullExpandedText(loaded);
+    try {
+      if (loadExpandedText && isOmittedText(expandedText ?? '')) {
+        const loaded = await loadExpandedText();
+        if (loaded) {
+          setFullExpandedText(loaded);
+        }
       }
+    } finally {
+      setPromptOpen(true);
     }
-    setPromptOpen(true);
   };
   const handlePromptClose = () => {
     setPromptOpen(false);
@@ -1412,7 +1415,7 @@ function PromptColumnHeader({
         ) : null}
       </div>
       <TableHeader
-        key={`${evalId}/${prompt.id ?? prompt.label ?? idx}`}
+        key={`${promptEvalId ?? evalId}/${prompt.id ?? prompt.label ?? idx}`}
         className="prompt-container collapse-font-small"
         text={prompt.label || prompt.display || prompt.raw}
         expandedText={prompt.raw}
@@ -1904,6 +1907,7 @@ function ResultsTable({
   ratingTableRef.current = table;
   const ratingRevisionRef = React.useRef(new Map<string, number>());
   const persistedRatingRef = React.useRef(new Map<string, EvaluateTableOutput>());
+  const ratingSaveQueueRef = React.useRef(new Map<string, Promise<void>>());
   const { head, body } = table;
 
   const isRedteam = React.useMemo(() => {
@@ -1990,13 +1994,20 @@ function ResultsTable({
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {
         try {
-          await saveManualRating({
-            evalId,
-            resultId,
-            version,
-            gradingResult,
-            table: newTable,
-          });
+          const previousSave = ratingSaveQueueRef.current.get(resultId) ?? Promise.resolve();
+          const save = previousSave
+            .catch(() => undefined)
+            .then(() =>
+              saveManualRating({ evalId, resultId, version, gradingResult, table: newTable }),
+            );
+          ratingSaveQueueRef.current.set(resultId, save);
+          try {
+            await save;
+          } finally {
+            if (ratingSaveQueueRef.current.get(resultId) === save) {
+              ratingSaveQueueRef.current.delete(resultId);
+            }
+          }
           const previousPersisted = persistedRatingRef.current.get(resultId);
           const savedOutput = newTable.body[rowIndex].outputs[promptIndex]!;
           persistedRatingRef.current.set(resultId, savedOutput);

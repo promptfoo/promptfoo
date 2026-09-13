@@ -76,7 +76,7 @@ export function stripOversizedStrings<T>(
         return stripped;
       }
 
-      const stripped: Record<string, unknown> = {};
+      const stripped: Record<string, unknown> = Object.create(null);
       for (const [key, child] of Object.entries(current)) {
         stripped[key] = stripValue(child, depth + 1);
       }

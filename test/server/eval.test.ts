@@ -234,6 +234,29 @@ describe('eval routes', () => {
       ).toMatchObject({ pass: true, score: 1, assertion: { type: 'human' } });
     });
 
+    it('removes a stored human component when an empty list is submitted', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const result = (await eval_.getResults())[0];
+      invariant(result.id, 'Result ID is required');
+
+      await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, false));
+      const rated = await EvalResult.findById(result.id);
+      invariant(rated?.gradingResult, 'Rated result is required');
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send({ ...rated.gradingResult, componentResults: [] });
+
+      expect(res.status).toBe(200);
+      const cleared = await EvalResult.findById(result.id);
+      expect(cleared?.gradingResult?.componentResults).toEqual([
+        expect.objectContaining({ assertion: expect.objectContaining({ type: 'equals' }) }),
+      ]);
+    });
+
     it('persists the rated result before notifying through the eval save', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);

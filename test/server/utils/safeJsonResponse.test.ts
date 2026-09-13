@@ -28,6 +28,16 @@ describe('stripOversizedStrings', () => {
     expect(JSON.stringify(stripOversizedStrings(value))).toContain('excessive nesting');
   });
 
+  it('preserves own __proto__ keys without changing the output prototype', () => {
+    const stripped = stripOversizedStrings(JSON.parse('{"__proto__":{"safe":true}}')) as Record<
+      string,
+      unknown
+    >;
+
+    expect(Object.getPrototypeOf(stripped)).toBeNull();
+    expect(stripped.__proto__).toEqual({ safe: true });
+  });
+
   it('bounds aggregate retained string content', () => {
     expect(
       stripOversizedStrings(['1234', '5678'], { maxStringLength: 10, maxTotalStringLength: 6 }),

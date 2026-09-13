@@ -346,6 +346,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const indices = table.body.map((row) => row.testIdx);
 
   let returnTable: EvaluateTable = { head: table.head as EvaluateTable['head'], body: table.body };
+  let hasLegacyComparison = false;
 
   if (comparisonEvalIds.length > 0) {
     // Fetch comparison evals and their tables, keeping track of eval IDs
@@ -363,6 +364,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
           searchQuery: searchText,
           filters,
         });
+        hasLegacyComparison ||= comparisonEval_.version() < 4;
         return { evalId: comparisonEval_.id, table: comparisonTable };
       }),
     );
@@ -438,7 +440,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
 
   // Version 3 evals persist the client table for legacy manual-rating updates.
   // Keep those tables full so a rating PATCH does not write trimmed detail back to storage.
-  const isLegacyTable = eval_.version() < 4;
+  const isLegacyTable = eval_.version() < 4 || hasLegacyComparison;
   const useLeanTable = lean === 'true' && !isLegacyTable;
   const tableForResponse = useLeanTable ? trimEvalTableForApi(returnTable) : returnTable;
   const config = redactAzureBlobSasTokens(eval_.config);
@@ -772,7 +774,8 @@ evalRouter.post(
         const storedHuman = stored.componentResults?.find(
           (component) => component.assertion?.type === HUMAN_ASSERTION_TYPE,
         );
-        const submittedHuman = gradingResult.componentResults?.find(
+        const submittedComponents = gradingResult.componentResults;
+        const submittedHuman = submittedComponents?.find(
           (component) => component.assertion?.type === HUMAN_ASSERTION_TYPE,
         );
         const human = (
@@ -788,7 +791,8 @@ evalRouter.post(
                   ? storedHuman?.comment
                   : submittedHuman.comment,
               }
-            : storedHuman && {
+            : (submittedComponents === undefined || submittedComponents.length > 0) &&
+              storedHuman && {
                 ...storedHuman,
                 pass: gradingResult.pass,
                 score: gradingResult.score,

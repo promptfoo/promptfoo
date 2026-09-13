@@ -258,6 +258,7 @@ describe('trimEvalTableForApi', () => {
             evalId: 'eval-1',
             provider: 'provider-label',
             text,
+            gradingResult: { pass: true, score: 1, reason: text },
           },
         ],
       })),
@@ -269,6 +270,11 @@ describe('trimEvalTableForApi', () => {
     expect(lastCell.id).toBe('result-100');
     expect(lastCell.evalId).toBe('eval-1');
     expect(lastCell.provider).toBe('provider-label');
+    expect(lastCell.gradingResult).toEqual({
+      pass: true,
+      score: 1,
+      reason: '[content omitted: 100000 characters]',
+    });
     expect(trimmed.body[100].description).toBe('row-100');
   });
 
