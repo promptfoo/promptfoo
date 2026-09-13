@@ -17,9 +17,10 @@ import {
 import { getEnvBool } from '../../src/envars';
 import logger from '../../src/logger';
 import { getConfigDirectoryPath } from '../../src/util/config/manage';
-import { mockProcessEnv } from '../util/utils';
+import { createDeferred, mockProcessEnv } from '../util/utils';
 
 import type { LockRecoveryProbeResult } from './fixtures/lockRecoveryProbe';
+import type { ShutdownQueueProbeResult } from './fixtures/shutdownQueueProbe';
 import type { WalCheckpointProbeResult } from './fixtures/walCheckpointProbe';
 
 vi.mock('../../src/envars', async (importOriginal) => {
@@ -94,7 +95,7 @@ const execFileAsync = promisify(execFile);
 const DATABASE_PROBE_RESULT_PREFIX = 'PROMPTFOO_DATABASE_PROBE_RESULT=';
 
 async function runDatabaseProbe<T>(
-  fixture: 'walCheckpointProbe' | 'lockRecoveryProbe',
+  fixture: 'walCheckpointProbe' | 'lockRecoveryProbe' | 'shutdownQueueProbe',
   tempConfigDir: string,
   mode: string,
 ): Promise<T> {
@@ -109,7 +110,7 @@ async function runDatabaseProbe<T>(
         IS_TESTING: 'false',
         LOG_LEVEL: 'error',
         PROMPTFOO_CONFIG_DIR: tempConfigDir,
-        PROMPTFOO_DISABLE_WAL_MODE: 'false',
+        PROMPTFOO_DISABLE_WAL_MODE: mode === 'wal-disabled' ? 'true' : 'false',
         PROMPTFOO_DISABLE_TELEMETRY: 'true',
         PROMPTFOO_DISABLE_UPDATE_CHECK: 'true',
       },
@@ -534,8 +535,12 @@ describe('database', () => {
     });
 
     it('should initialize database with WAL mode', async () => {
-      const db = await getDb();
-      expect(db).toBeDefined();
+      const result = await runDatabaseProbe<WalCheckpointProbeResult>(
+        'walCheckpointProbe',
+        tempConfigDir,
+        'none',
+      );
+      expect(result.journalMode).toBe('wal');
     });
 
     it('should return same instance on subsequent calls', async () => {
@@ -597,45 +602,112 @@ describe('database', () => {
       const db = await getDb();
       await db.run('CREATE TABLE nested_transaction_test (id TEXT PRIMARY KEY)');
 
-      await expect(
-        Promise.race([
-          db.transaction(async (tx) => {
-            await tx.run("INSERT INTO nested_transaction_test (id) VALUES ('outer')");
-            await db.transaction(async (nestedTx) => {
-              await nestedTx.run("INSERT INTO nested_transaction_test (id) VALUES ('inner')");
-            });
-          }),
-          new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('nested transaction timed out')), 1_000);
-          }),
-        ]),
-      ).resolves.toBeUndefined();
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('nested transaction timed out')), 1_000);
+      });
+      try {
+        await expect(
+          Promise.race([
+            db.transaction(async (tx) => {
+              await tx.run("INSERT INTO nested_transaction_test (id) VALUES ('outer')");
+              await db.transaction(async (nestedTx) => {
+                await nestedTx.run("INSERT INTO nested_transaction_test (id) VALUES ('inner')");
+              });
+            }),
+            timeoutPromise,
+          ]),
+        ).resolves.toBeUndefined();
+      } finally {
+        clearTimeout(timeout);
+      }
 
       await expect(
         db.all<{ id: string }>('SELECT id FROM nested_transaction_test ORDER BY id'),
       ).resolves.toEqual([{ id: 'inner' }, { id: 'outer' }]);
     });
 
-    it('does not deadlock when a transaction callback calls root db.* helpers', async () => {
+    it('rejects root calls without aborting the active transaction', async () => {
       const db = await getDb();
-      await db.run('CREATE TABLE root_call_inside_tx_test (id INTEGER PRIMARY KEY, val TEXT)');
+      await db.run('CREATE TABLE root_call_inside_tx_test (id INTEGER PRIMARY KEY)');
+
+      await db.transaction(async (tx) => {
+        await tx.run('INSERT INTO root_call_inside_tx_test VALUES (1)');
+        await expect(db.all('SELECT 1')).rejects.toMatchObject({
+          cause: expect.objectContaining({
+            message: expect.stringContaining('transaction handle'),
+          }),
+        });
+        await expect(
+          db.run('INSERT INTO root_call_inside_tx_test VALUES (2)'),
+        ).rejects.toMatchObject({
+          cause: expect.objectContaining({
+            message: expect.stringContaining('transaction handle'),
+          }),
+        });
+        await expect(tx.all('SELECT id FROM root_call_inside_tx_test')).resolves.toEqual([
+          { id: 1 },
+        ]);
+      });
+      await expect(db.all('SELECT id FROM root_call_inside_tx_test')).resolves.toEqual([{ id: 1 }]);
+    });
+
+    it('rolls back when an uncaught root call rejects inside a transaction', async () => {
+      const db = await getDb();
+      await db.run('CREATE TABLE root_call_rollback_test (id INTEGER PRIMARY KEY)');
 
       await expect(
-        Promise.race([
-          db.transaction(async (tx) => {
-            await tx.run("INSERT INTO root_call_inside_tx_test (id, val) VALUES (1, 'in-tx')");
-            const rows = await db.all<{ value: number }>('SELECT 1 AS value');
-            expect(rows[0]?.value).toBe(1);
-          }),
-          new Promise((_, reject) => {
-            setTimeout(
-              () => reject(new Error('root db call inside transaction deadlocked')),
-              1_000,
-            );
-          }),
-        ]),
-      ).resolves.toBeUndefined();
+        db.transaction(async (tx) => {
+          await tx.run('INSERT INTO root_call_rollback_test VALUES (1)');
+          await db.run('INSERT INTO root_call_rollback_test VALUES (2)');
+        }),
+      ).rejects.toMatchObject({
+        cause: expect.objectContaining({ message: expect.stringContaining('transaction handle') }),
+      });
+      await db.run('INSERT INTO root_call_rollback_test VALUES (3)');
+      await expect(db.all('SELECT id FROM root_call_rollback_test')).resolves.toEqual([{ id: 3 }]);
     });
+
+    it.each(['commit', 'rollback'])(
+      'expires inherited transaction contexts after %s',
+      async (outcome) => {
+        const db = await getDb();
+        await db.run('CREATE TABLE deferred_transaction_test (id INTEGER PRIMARY KEY)');
+        const { promise: released, resolve: release } = createDeferred<void>();
+        let followup: Promise<void> | undefined;
+
+        const outer = db.transaction(async (tx) => {
+          await tx.run('INSERT INTO deferred_transaction_test VALUES (1)');
+          // This promise retains the callback's async context after the callback settles.
+          followup = (async () => {
+            await released;
+            await db.run('INSERT INTO deferred_transaction_test VALUES (2)');
+            await db.transaction(async (laterTx) => {
+              await laterTx.run('INSERT INTO deferred_transaction_test VALUES (3)');
+            });
+          })();
+          if (outcome === 'rollback') {
+            throw new Error('Rollback requested');
+          }
+        });
+        try {
+          if (outcome === 'rollback') {
+            await expect(outer).rejects.toThrow('Rollback requested');
+          } else {
+            await outer;
+          }
+        } finally {
+          release();
+        }
+
+        await expect(followup).resolves.toBeUndefined();
+        await expect(
+          db.all('SELECT id FROM deferred_transaction_test ORDER BY id'),
+        ).resolves.toEqual(
+          outcome === 'commit' ? [{ id: 1 }, { id: 2 }, { id: 3 }] : [{ id: 2 }, { id: 3 }],
+        );
+      },
+    );
 
     it('should enforce foreign keys inside top-level transactions', async () => {
       const db = await getDb();
@@ -679,6 +751,35 @@ describe('database', () => {
   });
 
   describe('closeDb', () => {
+    it.each(['wal-enabled', 'wal-disabled'])(
+      'drains accepted work before closing with %s',
+      async (mode) => {
+        const result = await runDatabaseProbe<ShutdownQueueProbeResult>(
+          'shutdownQueueProbe',
+          tempConfigDir,
+          mode,
+        );
+        expect(result.isDbOpen).toBe(false);
+        expect(result.persistedIds).toEqual([1, 2]);
+      },
+    );
+
+    it('rejects closing from inside a transaction without deadlocking', async () => {
+      const db = await getDb();
+      await db.transaction(async (tx) => {
+        await expect(closeDb()).rejects.toThrow('inside a transaction');
+        await expect(tx.all('SELECT 1 AS value')).resolves.toEqual([{ value: 1 }]);
+      });
+    });
+
+    it('waits for in-flight initialization before closing', async () => {
+      const initializing = getDb();
+      const closing = closeDb();
+      await Promise.all([initializing, closing]);
+      expect(isDbOpen()).toBe(false);
+      expect(await getDb()).not.toBe(await initializing);
+    });
+
     it('logs a successful file-backed WAL checkpoint', async () => {
       const result = await runDatabaseProbe<WalCheckpointProbeResult>(
         'walCheckpointProbe',
@@ -826,7 +927,9 @@ describe('database', () => {
           mode,
         );
 
-        expect(result.firstError).toMatch(/SQLITE_BUSY|SQLITE_LOCKED/);
+        expect(result.firstError).toMatch(
+          mode === 'root-in-transaction' ? /transaction handle/ : /SQLITE_BUSY|SQLITE_LOCKED/,
+        );
         expect(result.followupError).toBeNull();
         expect(result.followupRowsAffected).toBe(1);
         expect(result.callbackCalls).toBe(callbackCalls);

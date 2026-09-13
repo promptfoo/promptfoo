@@ -4,11 +4,12 @@ prompts:
   - 'What is the weather like in {{location}}?'
 
 providers:
-  - id: openai:responses:o1-pro
-    label: o1-pro
+  - id: openai:responses:gpt-6-astra
+    label: gpt-6-astra
     config:
-      temperature: 0.7
-      max_output_tokens: 300
+      reasoning:
+        effort: low
+      max_output_tokens: 4096
       tool_choice: auto
       tools:
         - type: function
@@ -25,11 +26,12 @@ providers:
                 enum: ['celsius', 'fahrenheit']
             required: ['location', 'unit']
 
-  - id: openai:responses:o3
-    label: o3
+  - id: openai:responses:gpt-5.6-terra
+    label: gpt-5.6-terra
     config:
-      reasoning_effort: 'medium'
-      max_output_tokens: 300
+      reasoning:
+        effort: medium
+      max_output_tokens: 4096
       tool_choice: auto
       tools:
         - type: function
@@ -46,11 +48,12 @@ providers:
                 enum: ['celsius', 'fahrenheit']
             required: ['location', 'unit']
 
-  - id: openai:responses:o4-mini
-    label: o4-mini
+  - id: openai:responses:gpt-5.6-luna
+    label: gpt-5.6-luna
     config:
-      reasoning_effort: 'low'
-      max_output_tokens: 300
+      reasoning:
+        effort: low
+      max_output_tokens: 4096
       tool_choice: auto
       tools:
         - type: function

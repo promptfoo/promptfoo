@@ -14,6 +14,7 @@ import Eval, {
 } from '../../src/models/eval';
 import { getCachedResultsCount } from '../../src/models/evalPerformance';
 import EvalResult from '../../src/models/evalResult';
+import { EvalEvaluationStore } from '../../src/node/evaluationStore';
 import { TraceStore } from '../../src/tracing/store';
 import { type EvaluateResult, type Prompt, ResultFailureReason } from '../../src/types/index';
 import { updateResult, writeResultsToDatabase } from '../../src/util/database';
@@ -226,6 +227,117 @@ describe('evaluator', () => {
       ]);
 
       expect(updateSignalFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('loadResults', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('preserves real in-memory rows across model and store reads and later appends', async () => {
+      const evaluation = new Eval({});
+      const store = new EvalEvaluationStore(evaluation);
+      await store.appendResult(createEvaluateResult({ response: { output: 'First result' } }));
+      const results = evaluation.results;
+      const firstResult = results[0];
+      const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+
+      await evaluation.loadResults();
+      expect(evaluation._resultsLoaded).toBe(true);
+      expect(await store.readResults()).toBe(results);
+      expect(evaluation.results[0]).toBe(firstResult);
+      expect(firstResult.response?.output).toBe('First result');
+
+      await store.appendResult(
+        createEvaluateResult({
+          testIdx: 1,
+          success: false,
+          score: 0,
+          failureReason: ResultFailureReason.ERROR,
+          error: 'Local provider failed',
+          response: undefined,
+        }),
+      );
+      expect(await store.readResults()).toBe(results);
+      expect(results).toHaveLength(2);
+      expect(results[1]).toMatchObject({
+        testIdx: 1,
+        success: false,
+        score: 0,
+        failureReason: ResultFailureReason.ERROR,
+        error: 'Local provider failed',
+      });
+      const summary = await evaluation.toEvaluateSummary();
+      expect(summary.results).toEqual(results.map((result) => result.toEvaluateResult()));
+      const batches: EvalResult[][] = [];
+      for await (const batch of evaluation.fetchResultsBatched(1)) {
+        batches.push(batch);
+      }
+      expect(batches.flat()).toEqual(results);
+      expect(findResults).not.toHaveBeenCalled();
+    });
+
+    it('preserves explicitly assigned in-memory results', async () => {
+      const evaluation = new Eval({});
+      await evaluation.addResult(createEvaluateResult());
+      const results = [evaluation.results[0]];
+      await evaluation.setResults(results);
+      const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+
+      expect(await evaluation.getResults()).toBe(results);
+      expect(await evaluation.getResults()).toBe(results);
+      expect(findResults).not.toHaveBeenCalled();
+    });
+
+    it('reads empty in-memory results and summaries without querying the database', async () => {
+      const evaluation = new Eval({});
+      const results = evaluation.results;
+      const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+
+      expect(await evaluation.getResults()).toBe(results);
+      expect(await evaluation.toEvaluateSummary()).toMatchObject({
+        results: [],
+        stats: { successes: 0, failures: 0, errors: 0 },
+      });
+      expect(evaluation._resultsLoaded).toBe(true);
+      expect(findResults).not.toHaveBeenCalled();
+    });
+
+    it('refreshes persisted results after a previous read and an independent append', async () => {
+      const evaluation = await EvalFactory.create({ numResults: 0 });
+      expect((await evaluation.toEvaluateSummary()).results).toEqual([]);
+      await evaluation.addResult(createEvaluateResult({ response: { output: 'First result' } }));
+      const reloaded = await Eval.findById(evaluation.id);
+      expect(reloaded).not.toBeNull();
+      const store = new EvalEvaluationStore(reloaded!);
+
+      await reloaded!.loadResults();
+      expect(reloaded!._resultsLoaded).toBe(true);
+      expect(await store.readResults()).toHaveLength(1);
+      await evaluation.addResult(
+        createEvaluateResult({ testIdx: 1, response: { output: 'Second result' } }),
+      );
+      expect((await store.readResults()).map((result) => result.response?.output)).toEqual([
+        'First result',
+        'Second result',
+      ]);
+    });
+
+    it('keeps legacy result and summary reads on their existing path', async () => {
+      const stored = await EvalFactory.createOldResult();
+      const evaluation = (await Eval.findById(stored.id))!;
+      const findResults = vi.spyOn(EvalResult, 'findManyByEvalId');
+
+      expect(evaluation.useOldResults()).toBe(true);
+      expect(await evaluation.getResults()).toBe(evaluation.oldResults!.results);
+      expect(await evaluation.toEvaluateSummary()).toMatchObject({
+        version: 2,
+        results: evaluation.oldResults!.results,
+        table: evaluation.oldResults!.table,
+        stats: evaluation.oldResults!.stats,
+      });
+      expect(findResults).not.toHaveBeenCalled();
     });
   });
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isSecretEnvVarName,
+  looksLikeSecret,
   preserveTracingCredentialReferences,
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -37,6 +38,34 @@ describe('sanitizeRuntimeOptions', () => {
         providerFilter: 'selected-target',
       }),
     ).toEqual({ providerFilter: 'selected-target' });
+  });
+});
+
+describe('looksLikeSecret', () => {
+  it.each([
+    ['below the minimum length', 'A'.repeat(63), false],
+    ['at the minimum length', 'A'.repeat(64), true],
+    ['above the minimum length', 'A'.repeat(65), true],
+    ['the complete token alphabet', 'aZ09+/=_-'.repeat(8), true],
+    ['a trailing space', `${'A'.repeat(64)} `, false],
+    ['a trailing newline', `${'A'.repeat(64)}\n`, false],
+    ['a trailing carriage return', `${'A'.repeat(64)}\r`, false],
+    ['a trailing CRLF', `${'A'.repeat(64)}\r\n`, false],
+    ['a line separator', `${'A'.repeat(64)}\u2028`, false],
+    ['a paragraph separator', `${'A'.repeat(64)}\u2029`, false],
+    ['an embedded tab', `${'A'.repeat(32)}\t${'A'.repeat(32)}`, false],
+    ['a non-ASCII letter', `${'A'.repeat(63)}é`, false],
+    ['an astral character', `${'A'.repeat(63)}😀`, false],
+    ['a NUL character', `${'A'.repeat(64)}\0`, false],
+  ])('classifies %s without changing token detection', (_name, value, expected) => {
+    expect(looksLikeSecret(value as string)).toBe(expected);
+  });
+
+  it('classifies very large token-like values without overflowing the stack', () => {
+    const value = 'A'.repeat(16_369_336);
+
+    expect(looksLikeSecret(value)).toBe(true);
+    expect(looksLikeSecret(`${value}.`)).toBe(false);
   });
 });
 

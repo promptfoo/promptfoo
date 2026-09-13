@@ -309,6 +309,63 @@ describe('loadApiProvider', () => {
     expect(provider.delay).toBe(2000);
   });
 
+  it('resolves a templated Codex subtype before merging credential aliases', async () => {
+    const provider = await loadApiProvider('openai:{{ env.KIND }}', {
+      env: { KIND: 'codex-sdk', OPENAI_API_KEY: 'suite-key' },
+      options: { env: { CODEX_API_KEY: 'provider-key' } },
+    });
+    expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('provider-key');
+  });
+
+  it('resolves a cloud Codex subtype template before merging credential aliases', async () => {
+    vi.mocked(getProviderFromCloud).mockResolvedValue({
+      id: 'openai:{{ env.KIND }}',
+      env: { KIND: 'codex-sdk', CODEX_API_KEY: 'cloud-key' },
+    });
+    const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+      env: { OPENAI_API_KEY: 'suite-key' },
+    });
+    expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('cloud-key');
+  });
+
+  it('resolves a file Codex subtype template before merging credential aliases', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('provider config');
+    vi.mocked(loadYaml).mockReturnValue({
+      id: 'openai:{{ env.KIND }}',
+      env: { KIND: 'codex-sdk', OPENAI_API_KEY: 'file-key' },
+    });
+    const provider = await loadApiProvider('file://provider.yaml', {
+      env: { CODEX_API_KEY: 'suite-key' },
+    });
+    expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('suite-key');
+  });
+
+  it.each([
+    { cloud: { CODEX_API_KEY: 'cloud-key' }, local: undefined, expected: 'cloud-key' },
+    {
+      cloud: { OPENAI_API_KEY: 'cloud-key' },
+      local: { CODEX_API_KEY: 'local-key' },
+      expected: 'local-key',
+    },
+    {
+      cloud: { CODEX_API_KEY: 'cloud-key' },
+      local: { OPENAI_API_KEY: 'local-key' },
+      expected: 'local-key',
+    },
+  ])(
+    'preserves cloud Codex credential scope across aliases: $expected',
+    async ({ cloud, local, expected }) => {
+      vi.mocked(getProviderFromCloud).mockResolvedValue({ id: 'openai:codex-sdk', env: cloud });
+      const provider = await loadApiProvider(`${CLOUD_PROVIDER_PREFIX}123`, {
+        env: { OPENAI_API_KEY: 'suite-key', OPENAI_API_BASE_URL: 'https://suite.example/v1' },
+        options: { env: local },
+      });
+      expect(provider).toBeInstanceOf(OpenAICodexSDKProvider);
+      expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe(expected);
+      expect(provider).toHaveProperty('env.OPENAI_API_BASE_URL', 'https://suite.example/v1');
+    },
+  );
+
   it('should merge cloud provider env with local env overrides', async () => {
     vi.mocked(getProviderFromCloud).mockResolvedValue({
       id: 'file://integrations/external_api.py:query',
@@ -494,14 +551,7 @@ describe('loadApiProvider', () => {
     expect(provider).toBeDefined();
   });
 
-  it('should route the new bare gpt-5.6 alias to Chat Completions', async () => {
-    const provider = await loadApiProvider('openai:gpt-5.6');
-
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.6', expect.any(Object));
-    expect(provider).toBeDefined();
-  });
-
-  it.each(['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
+  it.each(['gpt-5.6', 'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'])(
     'should route bare %s to Responses',
     async (model) => {
       const provider = await loadApiProvider(`openai:${model}`);
@@ -1036,10 +1086,7 @@ describe('loadApiProvider', () => {
 
   it('should load OpenAI chat provider with default model', async () => {
     const provider = await loadApiProvider('openai:chat');
-    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith(
-      'gpt-4.1-2025-04-14',
-      expect.any(Object),
-    );
+    expect(OpenAiChatCompletionProvider).toHaveBeenCalledWith('gpt-5.6-terra', expect.any(Object));
     expect(provider).toBeDefined();
   });
 
@@ -1226,6 +1273,18 @@ describe('loadApiProvider', () => {
     await expect(loadApiProvider('file://test.yaml')).rejects.toThrow(
       'Multiple providers found in test.yaml. Use loadApiProviders instead of loadApiProvider.',
     );
+  });
+
+  it('preserves Codex alias precedence when loading a provider config file', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue('provider config');
+    vi.mocked(loadYaml).mockReturnValue({
+      id: 'openai:codex-sdk',
+      env: { OPENAI_API_KEY: 'file-key' },
+    });
+    const provider = await loadApiProvider('file://provider.yaml', {
+      env: { CODEX_API_KEY: 'suite-key' },
+    });
+    expect((provider as OpenAICodexSDKProvider).getApiKey()).toBe('suite-key');
   });
 
   it('should handle file provider with environment variables', async () => {

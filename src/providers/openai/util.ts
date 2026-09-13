@@ -653,8 +653,8 @@ export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
   {
     id: 'gpt-3.5-turbo-instruct',
     cost: {
-      input: 1.5 / 1000000,
-      output: 2 / 1000000,
+      input: 1.5 / 1e6,
+      output: 2 / 1e6,
     },
   },
   {
@@ -828,6 +828,10 @@ export const OPENAI_TRANSCRIPTION_MODELS: Array<{
   id: string;
   cost: { perMinute: number; input?: number; audioInput?: number; output?: number };
 }> = [
+  {
+    id: 'gpt-transcribe',
+    cost: { perMinute: 0.0045 },
+  },
   {
     id: 'gpt-4o-transcribe',
     cost: {
