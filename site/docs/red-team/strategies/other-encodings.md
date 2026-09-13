@@ -23,6 +23,7 @@ strategies:
   - camelcase
   - morse
   - piglatin
+  - emoji
 ```
 
 ## camelCase

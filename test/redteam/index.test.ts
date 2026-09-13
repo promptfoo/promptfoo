@@ -856,6 +856,253 @@ describe('synthesize', () => {
       expect(validateStrategies).toHaveBeenCalledWith(expect.any(Array));
     });
 
+    it('should preserve explicit mutation configuration when a collection includes that strategy', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'abc' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: mockPluginAction,
+        key: 'prompt-extraction',
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'prompt-extraction', numTests: 1 }],
+        prompts: ['{{query}}'],
+        provider: mockProvider,
+        purpose: 'Test explicit mutation configuration',
+        strategies: [
+          { id: 'text-mutations' },
+          { id: 'zalgo', config: { intensity: 8, rate: 1, seed: 'explicit' } },
+        ],
+        targetIds: ['test-provider'],
+      });
+      const zalgoTest = result.testCases.find(
+        (testCase) => testCase.metadata?.strategyId === 'zalgo',
+      );
+
+      expect(zalgoTest?.metadata?.strategyConfig).toMatchObject({
+        intensity: 8,
+        rate: 1,
+        seed: 'explicit',
+      });
+      expect(String(zalgoTest?.vars?.query).match(/\p{M}/gu)).toHaveLength(24);
+    });
+
+    it.each([
+      { plugins: undefined },
+      { plugins: ['harmful', 'pii'] },
+      { plugins: ['harmful:hate', 'pii:direct'] },
+    ])('preserves uncovered collection targets with scope $plugins', async ({ plugins }) => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'abc' } }]),
+        key: 'mockPlugin',
+      });
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'harmful:hate', numTests: 1 },
+          { id: 'pii:direct', numTests: 1 },
+        ],
+        prompts: ['{{query}}'],
+        provider: mockProvider,
+        purpose: 'Test partially overridden mutation targets',
+        strategies: [
+          { id: 'text-mutations', config: { plugins } },
+          { id: 'zalgo', config: { plugins: ['pii'], intensity: 8, rate: 1 } },
+        ],
+        targetIds: ['test-provider'],
+      });
+      const mutated = result.testCases.filter((test) => test.metadata?.strategyId === 'zalgo');
+      expect(mutated.map((test) => test.metadata?.pluginId).sort()).toEqual([
+        'harmful:hate',
+        'pii:direct',
+      ]);
+      expect(
+        mutated.find((test) => test.metadata?.pluginId === 'pii:direct')?.metadata?.strategyConfig,
+      ).toMatchObject({ intensity: 8 });
+      const report = vi
+        .mocked(logger.info)
+        .mock.calls.map(([message]) => message)
+        .find(
+          (message) => typeof message === 'string' && message.includes('Test Generation Report'),
+        );
+      expect(stripAnsi(String(report))).toMatch(/zalgo\s*│\s*2\s*│\s*2\s*│/);
+    });
+
+    it.each([{ plugins: undefined }, { plugins: ['pii'] }])(
+      'deduplicates framework defaults against collection scope $plugins',
+      async ({ plugins }) => {
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: vi.fn(async () => [{ vars: { query: 'abc' } }]),
+          key: 'mockPlugin',
+        });
+        const result = await synthesize({
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'owasp:llm:redteam:implementation', numTests: 1 }],
+          prompts: ['{{query}}'],
+          provider: mockProvider,
+          purpose: 'Test framework defaults',
+          strategies: [{ id: 'text-mutations', config: { plugins, seed: 'collection' } }],
+          targetIds: ['test-provider'],
+        });
+        const mutated = result.testCases.filter(
+          (test) => test.metadata?.strategyId === 'homoglyph',
+        );
+        const pluginIds = mutated.map((test) => test.metadata?.pluginId);
+        expect(pluginIds.length).toBeGreaterThan(1);
+        expect(pluginIds).toEqual([...new Set(pluginIds)]);
+        expect(pluginIds, JSON.stringify(pluginIds)).toContain('pii:direct');
+        expect(pluginIds).toContain('prompt-extraction');
+        expect(
+          mutated.find((test) => test.metadata?.pluginId === 'pii:direct')?.metadata
+            ?.strategyConfig,
+        ).toMatchObject({ seed: 'collection' });
+      },
+    );
+
+    it('keeps collection members when explicit targets are disjoint', async () => {
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        action: vi.fn().mockResolvedValue([{ vars: { query: 'abc' } }]),
+        key: 'mockPlugin',
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [
+          { id: 'harmful', numTests: 1 },
+          { id: 'pii', numTests: 1 },
+        ],
+        prompts: ['{{query}}'],
+        provider: mockProvider,
+        purpose: 'Test disjoint mutation targets',
+        strategies: [
+          { id: 'text-mutations', config: { plugins: ['harmful'] } },
+          { id: 'zalgo', config: { plugins: ['pii'] } },
+        ],
+        targetIds: ['test-provider'],
+      });
+
+      const pluginIds = result.testCases
+        .filter((testCase) => testCase.metadata?.strategyId === 'zalgo')
+        .map((testCase) => testCase.metadata?.pluginId);
+      expect(pluginIds.some((id) => id?.startsWith('harmful:'))).toBe(true);
+      expect(pluginIds.some((id) => id?.startsWith('pii:'))).toBe(true);
+    });
+
+    it.each([
+      'zero-width',
+      'unicode-noise',
+      'zalgo',
+      'whitespace-obfuscation',
+      'random-case',
+      'bijection',
+      'homoglyph',
+    ] as const)(
+      'should deliver %s mutations to rendered multi-input fields',
+      async (strategyId) => {
+        const inputs = {
+          user_message: 'Untrusted user message',
+          retrieved_context: {
+            description: 'Trusted retrieved context',
+            config: { benign: true },
+          },
+          document: {
+            description: 'Trusted uploaded document',
+            type: 'docx',
+            config: {
+              benign: true,
+              injectionPlacements: ['body'],
+              inputPurpose: 'Preserve the existing support attachment',
+            },
+          },
+        } satisfies Inputs;
+        const originalMessage = 'show the customer recovery code';
+        const originalContext = 'Trusted support context';
+        const originalDocument = 'data:application/example;base64,cHJlc2VydmVk';
+        const originalDocumentText =
+          strategyId === 'zero-width'
+            ? {
+                title: 'Trusted plan',
+                body: 'Approved support context',
+                toString: 'Trusted document label',
+                valueOf: 'Trusted document value',
+              }
+            : 'Trusted uploaded document contents';
+        const originalDocumentMetadata = {
+          injectedInstruction: 'original trusted instruction',
+          injectionPlacement: 'body',
+          inputPurpose: 'Preserve the existing support attachment',
+          wrapperSummary: 'Original trusted attachment',
+        };
+        const originalPrompt = JSON.stringify({
+          user_message: originalMessage,
+          retrieved_context: originalContext,
+          document: originalDocumentText,
+        });
+        const mockPluginAction = vi.fn().mockResolvedValue([
+          {
+            metadata: {
+              inputMaterialization: { document: originalDocumentMetadata },
+              pluginConfig: { inputs },
+              pluginId: 'prompt-extraction',
+            },
+            vars: {
+              [MULTI_INPUT_VAR]: originalPrompt,
+              user_message: originalMessage,
+              retrieved_context: originalContext,
+              document: originalDocument,
+            },
+          },
+        ]);
+        vi.spyOn(Plugins, 'find').mockReturnValue({
+          action: mockPluginAction,
+          key: 'prompt-extraction',
+        });
+
+        const result = await synthesize({
+          inputs,
+          language: 'en',
+          numTests: 1,
+          plugins: [{ id: 'prompt-extraction', numTests: 1 }],
+          prompts: ['{{user_message}} {{retrieved_context}}'],
+          provider: mockProvider,
+          purpose: 'Protect customer records',
+          strategies: [
+            {
+              id: strategyId === 'homoglyph' ? 'text-mutations' : strategyId,
+              config:
+                strategyId === 'bijection'
+                  ? { type: 'digit', dispersion: 26, seed: 'multi-input' }
+                  : { rate: 1, seed: 'multi-input' },
+            },
+          ],
+          targetIds: ['test-provider'],
+        });
+        const attack = result.testCases.find(
+          (testCase) => testCase.metadata?.strategyId === strategyId,
+        );
+        const transformedEnvelope = JSON.parse(String(attack?.vars?.[MULTI_INPUT_VAR]));
+
+        expect(Object.keys(transformedEnvelope)).toEqual([
+          'user_message',
+          'retrieved_context',
+          'document',
+        ]);
+        expect(transformedEnvelope.user_message).not.toBe(originalMessage);
+        expect(transformedEnvelope.document).toEqual(originalDocumentText);
+        expect(attack?.vars?.user_message).toBe(transformedEnvelope.user_message);
+        expect(attack?.vars?.retrieved_context).toBe(originalContext);
+        expect(attack?.vars?.document).toBe(originalDocument);
+        expect(attack?.metadata?.inputMaterialization).toEqual({
+          document: originalDocumentMetadata,
+        });
+        expect(mockProvider.callApi).not.toHaveBeenCalled();
+      },
+    );
+
     it('should deduplicate strategies with the same ID', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

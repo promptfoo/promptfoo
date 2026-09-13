@@ -39,6 +39,12 @@ describe('validateStrategies', () => {
       { id: 'piglatin' },
       { id: 'camelcase' },
       { id: 'emoji' },
+      { id: 'bijection' },
+      { id: 'zero-width' },
+      { id: 'unicode-noise' },
+      { id: 'zalgo' },
+      { id: 'whitespace-obfuscation' },
+      { id: 'random-case' },
       { id: 'mischievous-user' },
     ];
     await expect(validateStrategies(validStrategies)).resolves.toBeUndefined();
@@ -79,6 +85,19 @@ describe('loadStrategy', () => {
     const strategy = await loadStrategy('basic');
     expect(strategy).toBeDefined();
     expect(strategy.id).toBe('basic');
+  });
+
+  it.each([
+    'bijection',
+    'zero-width',
+    'unicode-noise',
+    'zalgo',
+    'whitespace-obfuscation',
+    'random-case',
+  ])('should load the %s strategy', async (strategyId) => {
+    const strategy = await loadStrategy(strategyId);
+    expect(strategy.id).toBe(strategyId);
+    expect(typeof strategy.action).toBe('function');
   });
 
   it('should load video strategy', async () => {

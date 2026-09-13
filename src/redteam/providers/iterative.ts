@@ -236,6 +236,7 @@ export async function runRedteamConversation({
   }[] = [];
 
   let lastResponse: TargetResponse | undefined = undefined;
+  let failClosedError: string | undefined;
 
   const tracingOptions = resolveTracingOptions({
     strategyId: 'iterative',
@@ -367,6 +368,8 @@ export async function runRedteamConversation({
           testCaseId: test?.metadata?.testCaseId as string | undefined,
           purpose: test?.metadata?.purpose as string | undefined,
           goal: test?.metadata?.goal as string | undefined,
+          inputs,
+          vars,
         },
       );
       if (lastTransformResult.tokenUsage) {
@@ -378,6 +381,10 @@ export async function runRedteamConversation({
           iteration: i + 1,
           error: lastTransformResult.error,
         });
+        if (inputs) {
+          failClosedError = lastTransformResult.error;
+          break;
+        }
         continue;
       }
 
@@ -396,7 +403,19 @@ export async function runRedteamConversation({
     if (inputs && usingRemoteRedteamProvider) {
       assertRemoteMaterializationHandled(redteamResp, 'Iterative multi-input generation');
     }
-    const currentInputVars = extractInputVarsFromPrompt(newInjectVar, inputs);
+    const originalInputVars = extractInputVarsFromPrompt(newInjectVar, inputs);
+    const transformedInputVars =
+      finalInjectVar === newInjectVar
+        ? undefined
+        : extractInputVarsFromPrompt(finalInjectVar, inputs);
+    const currentInputVars = transformedInputVars ?? originalInputVars;
+    const changedInputVars = transformedInputVars
+      ? Object.fromEntries(
+          Object.entries(transformedInputVars).filter(
+            ([name, value]) => value !== originalInputVars?.[name],
+          ),
+        )
+      : undefined;
     let materializedInputVars:
       | Awaited<ReturnType<typeof materializeInputVariablesWithMetadata>>
       | undefined;
@@ -406,6 +425,7 @@ export async function runRedteamConversation({
           redteamResp,
           currentInputVars,
           inputs,
+          changedInputVars,
         );
       } else {
         materializedInputVars = await materializeInputVariablesWithMetadata(
@@ -729,7 +749,7 @@ export async function runRedteamConversation({
       if (currentScore > highestScore) {
         highestScore = currentScore;
         bestResponse = targetResponse.output;
-        bestInjectVar = newInjectVar;
+        bestInjectVar = finalInjectVar;
       }
 
       // Check if we should exit early (but don't break yet)
@@ -826,7 +846,11 @@ export async function runRedteamConversation({
 
   return {
     output: bestResponse || lastResponse?.output || '',
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+    ...(failClosedError
+      ? { error: failClosedError }
+      : lastResponse?.error
+        ? { error: lastResponse.error }
+        : {}),
     prompt: bestInjectVar,
     metadata: {
       finalIteration,

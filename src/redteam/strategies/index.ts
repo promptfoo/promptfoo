@@ -3,10 +3,11 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
-import { isCustomStrategy } from '../constants/strategies';
+import { isCustomStrategy, TEXT_MUTATION_STRATEGIES } from '../constants/strategies';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
 import { addBestOfNTestCases } from './bestOfN';
+import { addBijectionTestCases } from './bijection';
 import { addCitationTestCases } from './citation';
 import { addCrescendo } from './crescendo';
 import { addCustom } from './custom';
@@ -32,6 +33,7 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+import { addTextMutation } from './textMutation';
 import { withPersistableGenerationProvider } from './types';
 
 import type { RedteamStrategyObject, TestCase } from '../../types/index';
@@ -65,6 +67,24 @@ export const Strategies: Strategy[] = [
       return newTestCases;
     },
   },
+  {
+    id: 'bijection',
+    action: async (testCases, injectVar, config) => {
+      logger.debug(`Adding Bijection encoding to ${testCases.length} test cases`);
+      const newTestCases = addBijectionTestCases(testCases, injectVar, config);
+      logger.debug(`Added ${newTestCases.length} Bijection encoded test cases`);
+      return newTestCases;
+    },
+  },
+  ...TEXT_MUTATION_STRATEGIES.map(
+    (id): Strategy => ({
+      id,
+      action: async (testCases, injectVar, config) => {
+        logger.debug(`Adding ${id} mutations to ${testCases.length} test cases`);
+        return addTextMutation(testCases, injectVar, id, config);
+      },
+    }),
+  ),
   {
     id: 'homoglyph',
     action: async (testCases, injectVar) => {
