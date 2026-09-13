@@ -1,4 +1,4 @@
-import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, type SQL, type SQLWrapper, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -21,6 +21,7 @@ import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
 import { getTraceStore } from '../tracing/store';
 import {
+  type AtomicTestCase,
   type CompletedPrompt,
   type EvalRuntimeOptions,
   type EvalSummary,
@@ -30,6 +31,7 @@ import {
   type EvaluateSummaryV3,
   type EvaluateTable,
   type EvaluateTableRow,
+  type GradingResult,
   type Prompt,
   ResultFailureReason,
   type ResultsFile,
@@ -59,9 +61,20 @@ import {
   queryTestIndicesOptimized,
 } from './evalPerformance';
 import EvalResult, {
+  getOutputStripFlags,
   getResultIndexKey,
+  MAX_COMPACT_HISTORY_ENTRIES,
+  MAX_COMPACT_HISTORY_MEDIA_LENGTH,
+  MAX_COMPACT_HISTORY_TEXT_LENGTH,
+  type OutputStripFlags,
   PROMPTFOO_METADATA_KEY,
   persistTraceMetadata,
+  projectEvaluateResultForOutput,
+  projectEvaluateTableForOutput,
+  projectMetadataForOutput,
+  projectPromptForOutput,
+  projectTracesForOutput,
+  sanitizeResultForJsonlArtifact,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
 
@@ -75,6 +88,928 @@ import type { EvalResultsFilterMode, TraceData } from '../types/index';
 /** Result from COUNT queries using db.get() - count may be null if query fails */
 interface FilteredCountRow {
   count: number | null;
+}
+
+interface RedteamReportResultRow {
+  id: string;
+  promptIdx: number;
+  testIdx: number;
+  promptId: string | null;
+  promptObjectId: string | null;
+  providerId: string | null;
+  providerLabel: string | null;
+  promptRaw: string | null;
+  promptLabel: string | null;
+  promptDisplay: string | null;
+  vars: string | null;
+  responseExists: number;
+  responseOutput: string | null;
+  responsePrompt: string | null;
+  responseRedteamFinalPrompt: string | null;
+  errorExists: number;
+  failureReason: number;
+  success: boolean;
+  score: number;
+  latencyMs: number | null;
+  gradingResultExists: number;
+  gradingPass: number | null;
+  gradingScore: number | null;
+  gradingReason: string | null;
+  gradingAssertionType: string | null;
+  gradingAssertionMetric: string | null;
+  gradingSuggestions: string | null;
+  gradingComponentResults: string | null;
+  metadataPluginId: string | null;
+  metadataHarmCategory: string | null;
+  metadataRedteamFinalPrompt: string | null;
+  metadataRedteamHistory: string | null;
+  metadataRedteamTreeHistory: string | null;
+  testCasePluginId: string | null;
+  testCaseStrategyId: string | null;
+  testCasePolicyId: string | null;
+}
+
+type RedteamReportStripFlags = OutputStripFlags;
+
+const REDTEAM_REPORT_ERROR_MARKER = '[error details stripped]';
+
+export type ResultsFileOptions = {
+  includeTraces?: boolean;
+  resultProjection?: 'full' | 'redteamReport';
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isResultSuggestionAction(
+  value: unknown,
+): value is NonNullable<GradingResult['suggestions']>[number]['action'] {
+  return (
+    value === 'replace-prompt' ||
+    value === 'pre-filter' ||
+    value === 'post-filter' ||
+    value === 'note'
+  );
+}
+
+function projectSuggestionsForRedteamReport(
+  suggestions: unknown,
+): GradingResult['suggestions'] | undefined {
+  if (!Array.isArray(suggestions)) {
+    return undefined;
+  }
+
+  return suggestions
+    .flatMap((suggestion) => {
+      if (
+        !isRecord(suggestion) ||
+        typeof suggestion.type !== 'string' ||
+        !isResultSuggestionAction(suggestion.action) ||
+        typeof suggestion.value !== 'string'
+      ) {
+        return [];
+      }
+      return [
+        {
+          type: suggestion.type,
+          action: suggestion.action,
+          value: suggestion.value.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
+        },
+      ];
+    })
+    .slice(0, 25);
+}
+
+function projectAssertionForRedteamReport(
+  assertion: unknown,
+): GradingResult['assertion'] | undefined {
+  if (!isRecord(assertion) || typeof assertion.type !== 'string') {
+    return undefined;
+  }
+
+  return {
+    type: assertion.type,
+    ...(typeof assertion.metric === 'string' && { metric: assertion.metric }),
+  } as GradingResult['assertion'];
+}
+
+function projectGradingResultForRedteamReport(gradingResult: GradingResult): GradingResult {
+  const assertion = projectAssertionForRedteamReport(gradingResult.assertion);
+  const suggestions = projectSuggestionsForRedteamReport(gradingResult.suggestions);
+
+  const componentResults = Array.isArray(gradingResult.componentResults)
+    ? gradingResult.componentResults
+        .slice(0, 25)
+        .filter(isRecord)
+        .map((componentResult) =>
+          projectGradingResultForRedteamReport(componentResult as unknown as GradingResult),
+        )
+    : undefined;
+
+  return {
+    pass: typeof gradingResult.pass === 'boolean' ? gradingResult.pass : false,
+    score:
+      typeof gradingResult.score === 'number' && Number.isFinite(gradingResult.score)
+        ? gradingResult.score
+        : 0,
+    reason:
+      typeof gradingResult.reason === 'string'
+        ? gradingResult.reason.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
+        : '',
+    ...(assertion && { assertion }),
+    ...(suggestions !== undefined && { suggestions }),
+    ...(componentResults !== undefined && { componentResults }),
+  };
+}
+
+function projectVarsForRedteamReport(
+  vars: EvaluateResult['vars'] | undefined,
+  injectVar: string,
+): EvaluateResult['vars'] {
+  if (!isRecord(vars)) {
+    return {};
+  }
+
+  const projectedVars: [string, EvaluateResult['vars'][string]][] = [];
+  for (const key of new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])) {
+    if (Object.prototype.hasOwnProperty.call(vars, key)) {
+      const value = vars[key];
+      if (typeof value === 'string') {
+        projectedVars.push([key, value.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)]);
+      } else if (isRecord(value) || Array.isArray(value)) {
+        try {
+          if (JSON.stringify(value).length <= MAX_COMPACT_HISTORY_TEXT_LENGTH) {
+            projectedVars.push([key, value]);
+          }
+        } catch {}
+      } else {
+        projectedVars.push([key, value]);
+      }
+    }
+  }
+  return Object.fromEntries(projectedVars);
+}
+
+function parseJsonFragment<T>(value: string | null): T | undefined {
+  if (value === null) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+function jsonObjectOrEmpty(value: SQLWrapper): SQL {
+  return sql`CASE WHEN json_valid(${value}) THEN CASE WHEN json_type(${value}) = 'object' THEN ${value} ELSE json('{}') END ELSE json('{}') END`;
+}
+
+function jsonObjectFieldOrEmpty(value: SQLWrapper, path: string): SQL {
+  const object = jsonObjectOrEmpty(value);
+  return sql`CASE WHEN json_type(${object}, ${path}) = 'object' THEN json_extract(${object}, ${path}) ELSE json('{}') END`;
+}
+
+function jsonIsObject(value: SQLWrapper): SQL<number> {
+  return sql<number>`CASE WHEN json_valid(${value}) THEN CASE WHEN json_type(${value}) = 'object' THEN 1 ELSE 0 END ELSE 0 END`;
+}
+
+function jsonTextOrNull(value: SQLWrapper, path: string): SQL<string | null> {
+  return sql<
+    string | null
+  >`CASE WHEN json_type(${value}, ${path}) = 'text' THEN json_extract(${value}, ${path}) ELSE NULL END`;
+}
+
+function jsonBoundedTextOrNull(value: SQLWrapper, path: string): SQL<string | null> {
+  return sql<
+    string | null
+  >`CASE WHEN json_type(${value}, ${path}) = 'text' THEN substr(json_extract(${value}, ${path}), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}) ELSE NULL END`;
+}
+
+function jsonBooleanOrNull(value: SQLWrapper, path: string): SQL<number | null> {
+  return sql<
+    number | null
+  >`CASE WHEN json_type(${value}, ${path}) IN ('true', 'false') THEN json_extract(${value}, ${path}) ELSE NULL END`;
+}
+
+function jsonNumberOrNull(value: SQLWrapper, path: string): SQL<number | null> {
+  return sql<
+    number | null
+  >`CASE WHEN json_type(${value}, ${path}) IN ('integer', 'real') THEN json_extract(${value}, ${path}) ELSE NULL END`;
+}
+
+function jsonSuggestionsOrNull(value: SQLWrapper, path: string): SQL<string | null> {
+  return sql<string | null>`CASE
+    WHEN json_type(${value}, ${path}) = 'array'
+    THEN (
+      SELECT json_group_array(
+        json_object(
+          'type', json_extract(report_suggestion.value, '$.type'),
+          'action', json_extract(report_suggestion.value, '$.action'),
+          'value', substr(json_extract(report_suggestion.value, '$.value'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+        )
+      )
+      FROM json_each(${value}, ${path}) AS report_suggestion
+      WHERE report_suggestion.type = 'object'
+        AND json_type(report_suggestion.value, '$.type') = 'text'
+        AND json_type(report_suggestion.value, '$.action') = 'text'
+        AND json_extract(report_suggestion.value, '$.action') IN (
+          'replace-prompt', 'pre-filter', 'post-filter', 'note'
+        )
+        AND json_type(report_suggestion.value, '$.value') = 'text'
+        AND report_suggestion.key < 25
+    )
+    ELSE NULL
+  END`;
+}
+
+function jsonHistoryForRedteamReport(
+  metadata: SQLWrapper,
+  path: string,
+  stripFlags: RedteamReportStripFlags,
+): SQL<string | null> {
+  if (stripFlags.shouldStripMetadata) {
+    return sql<string | null>`NULL`;
+  }
+
+  const promptFields = stripFlags.shouldStripPromptText
+    ? ['prompt']
+    : ['prompt', 'promptAudio', 'promptImage'];
+  const outputFields = stripFlags.shouldStripResponseOutput
+    ? []
+    : ['output', 'outputAudio', 'outputImage'];
+  const allowedFields = [
+    'id',
+    'parentId',
+    'score',
+    'depth',
+    'wasSelected',
+    'graderPassed',
+    'role',
+    ...promptFields,
+    ...outputFields,
+  ];
+
+  // Bound each turn so the compact summary the browser loads eagerly cannot be blown up
+  // by a chatty/adversarial run: prompt/output must be text (truncated), and media
+  // objects over the inline budget are dropped from the summary (still available via
+  // full row-detail hydration). Keep these limits in sync with the JS projection in
+  // `evalResult.ts` (`projectRedteamHistoryForOutput`).
+  return sql<string | null>`CASE
+    WHEN json_type(${metadata}, ${path}) = 'array'
+    THEN (
+      SELECT json_group_array(
+        json((
+          SELECT json_group_object(
+            history_field.key,
+            CASE
+              WHEN history_field.type = 'true' THEN json('true')
+              WHEN history_field.type = 'false' THEN json('false')
+              WHEN history_field.key = 'prompt' AND ${stripFlags.shouldStripPromptText}
+                THEN '[prompt stripped]'
+              WHEN history_field.key IN ('prompt', 'output')
+                THEN substr(history_field.value, 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+              WHEN history_field.key IN ('promptAudio', 'promptImage', 'outputAudio', 'outputImage')
+                THEN (
+                  SELECT json_group_object(media_field.key, media_field.value)
+                  FROM json_each(history_field.value) AS media_field
+                  WHERE media_field.key IN ('data', 'format', 'blobRef')
+                    AND media_field.type = 'text'
+                )
+              WHEN history_field.type IN ('object', 'array') THEN json(history_field.value)
+              ELSE history_field.value
+            END
+          )
+          FROM json_each(report_history.value) AS history_field
+          WHERE history_field.key IN (${sql.join(
+            allowedFields.map((field) => sql`${field}`),
+            sql`, `,
+          )})
+            AND CASE history_field.key
+              WHEN 'id' THEN history_field.type = 'text'
+              WHEN 'parentId' THEN history_field.type = 'text'
+              WHEN 'score' THEN history_field.type IN ('integer', 'real')
+              WHEN 'depth' THEN history_field.type IN ('integer', 'real')
+              WHEN 'wasSelected' THEN history_field.type IN ('true', 'false')
+              WHEN 'graderPassed' THEN history_field.type IN ('true', 'false')
+              WHEN 'role' THEN history_field.type = 'text'
+                AND history_field.value IN ('user', 'assistant', 'system')
+              WHEN 'prompt' THEN history_field.type = 'text'
+              WHEN 'output' THEN history_field.type = 'text'
+              WHEN 'promptAudio' THEN history_field.type = 'object'
+                AND length(history_field.value) <= ${MAX_COMPACT_HISTORY_MEDIA_LENGTH}
+              WHEN 'promptImage' THEN history_field.type = 'object'
+                AND length(history_field.value) <= ${MAX_COMPACT_HISTORY_MEDIA_LENGTH}
+              WHEN 'outputAudio' THEN history_field.type = 'object'
+                AND length(history_field.value) <= ${MAX_COMPACT_HISTORY_MEDIA_LENGTH}
+              WHEN 'outputImage' THEN history_field.type = 'object'
+                AND length(history_field.value) <= ${MAX_COMPACT_HISTORY_MEDIA_LENGTH}
+              ELSE 1
+            END
+        )))
+      FROM json_each(${metadata}, ${path}) AS report_history
+      WHERE report_history.type = 'object'
+        AND report_history.key < ${MAX_COMPACT_HISTORY_ENTRIES}
+    )
+    ELSE NULL
+  END`;
+}
+
+function projectPromptForRedteamReport<T extends Prompt>(
+  prompt: T,
+  shouldStripPromptText: boolean,
+): T {
+  const reportPrompt = normalizePromptForRedteamReport(prompt);
+
+  return {
+    ...reportPrompt,
+    ...(shouldStripPromptText && {
+      raw: '[prompt stripped]',
+      label: '[prompt stripped]',
+      ...(prompt.display !== undefined && { display: '[prompt stripped]' }),
+    }),
+  } as T;
+}
+
+function normalizePromptForRedteamReport(prompt: unknown, bound = true): Prompt {
+  if (!isRecord(prompt)) {
+    return { raw: '', label: '' };
+  }
+
+  const text = (value: unknown) =>
+    typeof value === 'string'
+      ? bound
+        ? value.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
+        : value
+      : '';
+  const raw = text(prompt.raw);
+  const metrics =
+    isRecord(prompt.metrics) && isRecord(prompt.metrics.tokenUsage)
+      ? { tokenUsage: prompt.metrics.tokenUsage }
+      : undefined;
+  return {
+    ...(typeof prompt.id === 'string' && { id: prompt.id }),
+    raw,
+    label: typeof prompt.label === 'string' ? text(prompt.label) : raw,
+    ...(typeof prompt.display === 'string' && { display: text(prompt.display) }),
+    ...(typeof prompt.provider === 'string' && { provider: prompt.provider }),
+    ...(metrics && { metrics }),
+  };
+}
+
+function projectProviderForRedteamReport(
+  provider: EvaluateResult['provider'] | unknown,
+): EvaluateResult['provider'] {
+  if (!isRecord(provider)) {
+    return { id: '' };
+  }
+  return {
+    id: typeof provider.id === 'string' ? provider.id : '',
+    ...(typeof provider.label === 'string' && { label: provider.label }),
+  };
+}
+
+function createProjectedGradingResult(row: RedteamReportResultRow): GradingResult | undefined {
+  if (!row.gradingResultExists) {
+    return undefined;
+  }
+
+  const assertion = projectAssertionForRedteamReport({
+    type: row.gradingAssertionType,
+    metric: row.gradingAssertionMetric,
+  });
+  const componentResults = parseJsonFragment<unknown[]>(row.gradingComponentResults)
+    ?.filter(isRecord)
+    .map((componentResult) => ({
+      ...componentResult,
+      pass: Boolean(componentResult.pass),
+    }));
+
+  return projectGradingResultForRedteamReport({
+    pass: Boolean(row.gradingPass),
+    score: row.gradingScore,
+    reason: row.gradingReason,
+    ...(assertion && { assertion }),
+    ...(row.gradingSuggestions !== null && {
+      suggestions: parseJsonFragment(row.gradingSuggestions),
+    }),
+    ...(componentResults && { componentResults }),
+  } as unknown as GradingResult);
+}
+
+function boundReportPrompt(prompt: NonNullable<EvaluateResult['response']>['prompt']) {
+  if (typeof prompt === 'string') {
+    return prompt.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH);
+  }
+  if (Array.isArray(prompt)) {
+    const serialized = JSON.stringify(prompt);
+    return serialized.length > MAX_COMPACT_HISTORY_TEXT_LENGTH
+      ? serialized.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
+      : prompt;
+  }
+  return undefined;
+}
+
+function createRedteamReportResponse(
+  row: RedteamReportResultRow,
+  stripFlags: RedteamReportStripFlags,
+): EvaluateResult['response'] {
+  const redteamFinalPrompt =
+    stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
+      ? null
+      : (row.responseRedteamFinalPrompt ?? row.metadataRedteamFinalPrompt);
+  if (!row.responseExists && redteamFinalPrompt === null) {
+    return undefined;
+  }
+
+  return {
+    ...(row.responseExists && stripFlags.shouldStripResponseOutput
+      ? { output: '[output stripped]' }
+      : row.responseOutput !== null && {
+          output: parseJsonFragment(row.responseOutput),
+        }),
+    ...(!stripFlags.shouldStripPromptText &&
+      row.responsePrompt !== null && {
+        prompt: parseJsonFragment<NonNullable<EvaluateResult['response']>['prompt']>(
+          row.responsePrompt,
+        ),
+      }),
+    ...(row.responsePrompt === null &&
+      redteamFinalPrompt !== null && { metadata: { redteamFinalPrompt } }),
+  };
+}
+
+function createRedteamReportMetadata(
+  row: RedteamReportResultRow,
+  stripFlags: RedteamReportStripFlags,
+): EvaluateResult['metadata'] {
+  if (stripFlags.shouldStripMetadata) {
+    return {};
+  }
+  const metadata = {
+    ...(row.metadataPluginId !== null && { pluginId: row.metadataPluginId }),
+    ...(row.metadataHarmCategory !== null && { harmCategory: row.metadataHarmCategory }),
+    ...(row.metadataRedteamHistory !== null && {
+      redteamHistory: parseJsonFragment(row.metadataRedteamHistory),
+    }),
+    ...(row.metadataRedteamTreeHistory !== null && {
+      redteamTreeHistory: parseJsonFragment(row.metadataRedteamTreeHistory),
+    }),
+  };
+  return projectMetadataForOutput(
+    Object.keys(metadata).length > 0 ? metadata : undefined,
+    stripFlags,
+    true,
+  );
+}
+
+function createRedteamReportResult(
+  row: RedteamReportResultRow,
+  stripFlags: RedteamReportStripFlags,
+): EvaluateResult {
+  const {
+    shouldStripPromptText,
+    shouldStripTestVars,
+    shouldStripGradingResult,
+    shouldStripMetadata,
+  } = stripFlags;
+  const vars = shouldStripTestVars
+    ? {}
+    : (parseJsonFragment<EvaluateResult['vars']>(row.vars) ?? {});
+  const storedPrompt: Prompt = {
+    ...(row.promptObjectId !== null && { id: row.promptObjectId }),
+    raw: row.promptRaw ?? '',
+    label: row.promptLabel ?? row.promptRaw ?? '',
+    ...(row.promptDisplay !== null && { display: row.promptDisplay }),
+  };
+  const prompt = projectPromptForRedteamReport(storedPrompt, shouldStripPromptText);
+  const response = createRedteamReportResponse(row, stripFlags);
+  const metadata = createRedteamReportMetadata(row, stripFlags);
+  const testCaseMetadata = shouldStripMetadata
+    ? {}
+    : {
+        ...(row.testCasePluginId !== null && { pluginId: row.testCasePluginId }),
+        ...(row.testCaseStrategyId !== null && { strategyId: row.testCaseStrategyId }),
+        ...(row.testCasePolicyId !== null && { policyId: row.testCasePolicyId }),
+      };
+
+  return {
+    id: row.id,
+    promptIdx: row.promptIdx,
+    testIdx: row.testIdx,
+    testCase: {
+      ...(Object.keys(testCaseMetadata).length > 0 && { metadata: testCaseMetadata }),
+    },
+    promptId: shouldStripPromptText
+      ? (row.promptId ?? hashPrompt(storedPrompt))
+      : (row.promptId ?? hashPrompt(prompt)),
+    provider: {
+      id: row.providerId ?? '',
+      ...(row.providerLabel !== null && { label: row.providerLabel }),
+    },
+    prompt,
+    vars,
+    response,
+    error: row.errorExists ? REDTEAM_REPORT_ERROR_MARKER : null,
+    failureReason: row.failureReason as ResultFailureReason,
+    success: row.success,
+    score: row.score,
+    latencyMs: row.latencyMs ?? 0,
+    gradingResult: shouldStripGradingResult ? null : createProjectedGradingResult(row),
+    namedScores: {},
+    ...(metadata !== undefined && { metadata }),
+  };
+}
+
+function projectTestCaseForRedteamReport(
+  testCase: EvaluateResult['testCase'] | unknown,
+  shouldStripMetadata: boolean,
+): AtomicTestCase {
+  const metadata = !shouldStripMetadata && isRecord(testCase) ? testCase.metadata : undefined;
+  if (!isRecord(metadata)) {
+    return {};
+  }
+  return {
+    metadata: {
+      ...(typeof metadata.pluginId === 'string' && { pluginId: metadata.pluginId }),
+      ...(typeof metadata.strategyId === 'string' && { strategyId: metadata.strategyId }),
+      ...(typeof metadata.policyId === 'string' && { policyId: metadata.policyId }),
+    },
+  };
+}
+
+function getRedteamReportPromptId(
+  result: EvaluateResult,
+  prompt: Prompt,
+  shouldStripPromptText: boolean,
+  alreadyOutputProjected: boolean,
+): string {
+  if (typeof result.promptId === 'string' && (!shouldStripPromptText || alreadyOutputProjected)) {
+    return result.promptId;
+  }
+  return hashPrompt(prompt);
+}
+
+function projectResultForRedteamReport(
+  result: EvaluateResult,
+  injectVar: string,
+  stripFlags: RedteamReportStripFlags,
+  alreadyOutputProjected = false,
+): EvaluateResult {
+  const metadata = stripFlags.shouldStripMetadata ? undefined : result.metadata;
+  const allowlistedMetadata = metadata
+    ? {
+        ...(typeof metadata.pluginId === 'string' && { pluginId: metadata.pluginId }),
+        ...(typeof metadata.harmCategory === 'string' && { harmCategory: metadata.harmCategory }),
+        ...(metadata.redteamHistory !== undefined && { redteamHistory: metadata.redteamHistory }),
+        ...(metadata.redteamTreeHistory !== undefined && {
+          redteamTreeHistory: metadata.redteamTreeHistory,
+        }),
+      }
+    : undefined;
+  const projectedMetadata = projectMetadataForOutput(allowlistedMetadata, stripFlags, true);
+
+  const redteamFinalPromptCandidate =
+    result.response?.metadata?.redteamFinalPrompt ?? metadata?.redteamFinalPrompt;
+  const redteamFinalPrompt =
+    stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
+      ? undefined
+      : typeof redteamFinalPromptCandidate === 'string'
+        ? redteamFinalPromptCandidate.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH)
+        : undefined;
+  const responsePrompt = boundReportPrompt(result.response?.prompt);
+  const hasResponsePrompt = !stripFlags.shouldStripPromptText && responsePrompt !== undefined;
+  const response =
+    result.response || redteamFinalPrompt !== undefined
+      ? {
+          ...(result.response && stripFlags.shouldStripResponseOutput
+            ? { output: '[output stripped]' }
+            : typeof result.response?.output === 'string' && {
+                output: result.response.output.slice(0, MAX_COMPACT_HISTORY_TEXT_LENGTH),
+              }),
+          ...(hasResponsePrompt && { prompt: responsePrompt }),
+          ...(!hasResponsePrompt &&
+            redteamFinalPrompt !== undefined && { metadata: { redteamFinalPrompt } }),
+        }
+      : result.response;
+
+  const testCase = projectTestCaseForRedteamReport(result.testCase, stripFlags.shouldStripMetadata);
+
+  const gradingResult = stripFlags.shouldStripGradingResult
+    ? null
+    : isRecord(result.gradingResult)
+      ? projectGradingResultForRedteamReport(result.gradingResult)
+      : result.gradingResult === null
+        ? null
+        : undefined;
+  const normalizedPrompt = normalizePromptForRedteamReport(result.prompt);
+
+  return {
+    ...(typeof result.id === 'string' && { id: result.id }),
+    promptIdx: result.promptIdx,
+    testIdx: result.testIdx,
+    testCase,
+    promptId: getRedteamReportPromptId(
+      result,
+      normalizedPrompt,
+      stripFlags.shouldStripPromptText,
+      alreadyOutputProjected,
+    ),
+    provider: projectProviderForRedteamReport(result.provider),
+    prompt: projectPromptForRedteamReport(normalizedPrompt, stripFlags.shouldStripPromptText),
+    vars: stripFlags.shouldStripTestVars ? {} : projectVarsForRedteamReport(result.vars, injectVar),
+    response,
+    error: result.error ? REDTEAM_REPORT_ERROR_MARKER : result.error,
+    failureReason: result.failureReason,
+    success: result.success,
+    score: result.score,
+    latencyMs: result.latencyMs,
+    gradingResult,
+    namedScores: {},
+    metadata: stripFlags.shouldStripMetadata ? {} : projectedMetadata,
+  };
+}
+
+function projectToolForRedteamReport(tool: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(tool) || typeof tool.type !== 'string') {
+    return undefined;
+  }
+  if (tool.type === 'function' && isRecord(tool.function)) {
+    return {
+      type: 'function',
+      function: {
+        ...(typeof tool.function.name === 'string' && { name: tool.function.name }),
+        ...(typeof tool.function.description === 'string' && {
+          description: tool.function.description,
+        }),
+        ...(isRecord(tool.function.parameters) && { parameters: tool.function.parameters }),
+      },
+    };
+  }
+  if (tool.type === 'mcp') {
+    const allowedTools = Array.isArray(tool.allowed_tools)
+      ? tool.allowed_tools.filter(
+          (allowedTool): allowedTool is string => typeof allowedTool === 'string',
+        )
+      : undefined;
+    return {
+      type: 'mcp',
+      ...(typeof tool.server_label === 'string' && { server_label: tool.server_label }),
+      ...(allowedTools !== undefined && { allowed_tools: allowedTools }),
+    };
+  }
+  if (tool.type === 'preset' && tool.preset === 'claude_code') {
+    return { type: 'preset', preset: 'claude_code' };
+  }
+  return { type: tool.type };
+}
+
+function projectToolsForRedteamReport(
+  tools: unknown,
+  providerId: string,
+): (Record<string, unknown> | string)[] | undefined {
+  const supportsNamedTools =
+    providerId === 'anthropic:claude-agent-sdk' ||
+    providerId.startsWith('anthropic:claude-agent-sdk:') ||
+    providerId === 'anthropic:claude-code' ||
+    providerId.startsWith('anthropic:claude-code:');
+  const isSupportedSingletonPreset =
+    supportsNamedTools &&
+    isRecord(tools) &&
+    tools.type === 'preset' &&
+    tools.preset === 'claude_code';
+  const toolEntries = Array.isArray(tools) ? tools : isSupportedSingletonPreset ? [tools] : [];
+  const projectedTools = toolEntries
+    .map((tool) =>
+      supportsNamedTools && typeof tool === 'string' ? tool : projectToolForRedteamReport(tool),
+    )
+    .filter((tool): tool is Record<string, unknown> | string => tool !== undefined);
+  return projectedTools.length > 0 ? projectedTools : undefined;
+}
+
+function projectPluginForRedteamReport(plugin: unknown): unknown {
+  if (typeof plugin === 'string') {
+    return plugin;
+  }
+  if (!isRecord(plugin) || typeof plugin.id !== 'string') {
+    return undefined;
+  }
+
+  const projectedPlugin: Record<string, unknown> = {
+    id: plugin.id,
+    ...(typeof plugin.severity === 'string' && { severity: plugin.severity }),
+  };
+  if (plugin.id !== 'policy' || !isRecord(plugin.config)) {
+    return projectedPlugin;
+  }
+
+  const policy = plugin.config.policy;
+  if (typeof policy === 'string') {
+    projectedPlugin.config = { policy };
+  } else if (isRecord(policy)) {
+    const projectedPolicy = {
+      ...(typeof policy.id === 'string' && { id: policy.id }),
+      ...(typeof policy.name === 'string' && { name: policy.name }),
+      ...(typeof policy.text === 'string' && { text: policy.text }),
+    };
+    if (Object.keys(projectedPolicy).length > 0) {
+      projectedPlugin.config = { policy: projectedPolicy };
+    }
+  }
+  return projectedPlugin;
+}
+
+function projectConfigForRedteamReport(config: Partial<UnifiedConfig>): Partial<UnifiedConfig> {
+  const firstProvider = Array.isArray(config.providers) ? config.providers[0] : undefined;
+  const providerRecord = isRecord(firstProvider) ? firstProvider : undefined;
+  const providerId = typeof providerRecord?.id === 'string' ? providerRecord.id : undefined;
+  const tools =
+    providerId !== undefined && isRecord(providerRecord?.config)
+      ? projectToolsForRedteamReport(providerRecord.config.tools, providerId)
+      : undefined;
+  const provider =
+    providerId === undefined
+      ? undefined
+      : {
+          id: providerId,
+          ...(typeof providerRecord?.label === 'string' && { label: providerRecord.label }),
+          ...(tools !== undefined && { config: { tools } }),
+        };
+  // The save/API boundary only guarantees `config` is a record, so persisted or legacy
+  // data can carry `redteam.plugins` as a non-array (e.g. `{ id: 'policy' }`). Guard with
+  // Array.isArray before mapping; an invalid collection is omitted rather than throwing
+  // `plugins.map is not a function` and breaking the whole compact report load.
+  const plugins = (
+    Array.isArray(config.redteam?.plugins)
+      ? config.redteam.plugins
+          .map(projectPluginForRedteamReport)
+          .filter((plugin) => plugin !== undefined)
+      : undefined
+  ) as NonNullable<NonNullable<Partial<UnifiedConfig>['redteam']>['plugins']> | undefined;
+  const frameworks = Array.isArray(config.redteam?.frameworks)
+    ? config.redteam.frameworks.filter((framework) => typeof framework === 'string')
+    : undefined;
+
+  return {
+    ...(config.description !== undefined && { description: config.description }),
+    ...(config.redteam && {
+      redteam: {
+        ...(config.redteam.injectVar !== undefined && { injectVar: config.redteam.injectVar }),
+        ...(frameworks !== undefined && { frameworks }),
+        ...(plugins !== undefined && { plugins }),
+      },
+    }),
+    ...(provider && { providers: [provider] }),
+  };
+}
+
+export function projectConfigForOutput(
+  config: Partial<UnifiedConfig>,
+  stripFlags: OutputStripFlags,
+): Partial<UnifiedConfig> {
+  if (!stripFlags.shouldStripPromptText && !stripFlags.shouldStripTestVars) {
+    return config;
+  }
+  const projectTest = (test: unknown) => {
+    if (!isRecord(test)) {
+      return test;
+    }
+    const options = isRecord(test.options) ? { ...test.options } : undefined;
+    if (stripFlags.shouldStripPromptText && options) {
+      delete options.prefix;
+      delete options.suffix;
+    }
+    return {
+      ...test,
+      ...(stripFlags.shouldStripPromptText && 'prompt' in test
+        ? { prompt: '[prompt stripped]' }
+        : {}),
+      ...(options && { options }),
+      ...(stripFlags.shouldStripTestVars && 'vars' in test ? { vars: {} } : {}),
+    };
+  };
+  const projectScenario = (scenario: unknown) =>
+    isRecord(scenario)
+      ? {
+          ...scenario,
+          ...(Array.isArray(scenario.config) ? { config: scenario.config.map(projectTest) } : {}),
+          ...(Array.isArray(scenario.tests) ? { tests: scenario.tests.map(projectTest) } : {}),
+          ...(scenario.defaultTest === undefined
+            ? {}
+            : { defaultTest: projectTest(scenario.defaultTest) }),
+        }
+      : scenario;
+  const prompts = stripFlags.shouldStripPromptText
+    ? Array.isArray(config.prompts)
+      ? config.prompts.map((prompt) => projectPromptForOutput(prompt as Prompt, true))
+      : isRecord(config.prompts)
+        ? Object.fromEntries(Object.keys(config.prompts).map((key) => [key, '[prompt stripped]']))
+        : config.prompts === undefined
+          ? undefined
+          : '[prompt stripped]'
+    : config.prompts;
+  return {
+    ...config,
+    ...(prompts !== undefined && { prompts }),
+    ...(Array.isArray(config.tests) && { tests: config.tests.map(projectTest) }),
+    ...(config.defaultTest !== undefined && { defaultTest: projectTest(config.defaultTest) }),
+    ...(Array.isArray(config.scenarios) && { scenarios: config.scenarios.map(projectScenario) }),
+  } as Partial<UnifiedConfig>;
+}
+
+function projectSummaryForRedteamReport(
+  evaluateSummary: EvaluateSummaryV3 | EvaluateSummaryV2,
+  injectVar: string,
+  stripFlags: RedteamReportStripFlags,
+  alreadyOutputProjected = false,
+): EvaluateSummaryV3 | EvaluateSummaryV2 {
+  const results = evaluateSummary.results.map((result) =>
+    projectResultForRedteamReport(result, injectVar, stripFlags, alreadyOutputProjected),
+  );
+  if ('table' in evaluateSummary) {
+    return {
+      ...evaluateSummary,
+      results,
+      table: {
+        ...evaluateSummary.table,
+        head: {
+          ...evaluateSummary.table.head,
+          prompts: evaluateSummary.table.head.prompts.map((prompt) =>
+            projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+          ),
+        },
+        body: [],
+      },
+    };
+  }
+
+  return {
+    ...evaluateSummary,
+    prompts: evaluateSummary.prompts.map((prompt) =>
+      projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+    ),
+    results,
+  };
+}
+
+function normalizeLegacyResultForDetail(
+  value: unknown,
+  testIdx: number,
+  promptIdx: number,
+): EvaluateResult | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const prompt = normalizePromptForRedteamReport(value.prompt, false);
+  const testCase = isRecord(value.testCase) ? (value.testCase as AtomicTestCase) : {};
+  const success = value.success === true;
+  const failureReason =
+    typeof value.failureReason === 'number' &&
+    Object.values(ResultFailureReason).includes(value.failureReason as ResultFailureReason)
+      ? (value.failureReason as ResultFailureReason)
+      : success
+        ? ResultFailureReason.NONE
+        : ResultFailureReason.ASSERT;
+  const normalizedResult: EvaluateResult = {
+    ...(typeof value.id === 'string' && { id: value.id }),
+    ...(typeof value.description === 'string' && { description: value.description }),
+    testIdx,
+    promptIdx,
+    testCase,
+    promptId: typeof value.promptId === 'string' ? value.promptId : hashPrompt(prompt),
+    provider: projectProviderForRedteamReport(value.provider),
+    prompt,
+    vars: isRecord(value.vars)
+      ? (value.vars as EvaluateResult['vars'])
+      : isRecord(testCase.vars)
+        ? testCase.vars
+        : {},
+    ...(isRecord(value.response) && {
+      response: value.response as EvaluateResult['response'],
+    }),
+    ...(typeof value.error === 'string' || value.error === null ? { error: value.error } : {}),
+    failureReason,
+    success,
+    score: typeof value.score === 'number' && Number.isFinite(value.score) ? value.score : 0,
+    latencyMs:
+      typeof value.latencyMs === 'number' && Number.isFinite(value.latencyMs) ? value.latencyMs : 0,
+    gradingResult: isRecord(value.gradingResult)
+      ? (value.gradingResult as unknown as GradingResult)
+      : value.gradingResult === null
+        ? null
+        : undefined,
+    namedScores: isRecord(value.namedScores) ? (value.namedScores as Record<string, number>) : {},
+    ...(typeof value.cost === 'number' && Number.isFinite(value.cost) && { cost: value.cost }),
+    ...(isRecord(value.metadata) && { metadata: value.metadata }),
+  };
+
+  const sanitized = sanitizeResultForJsonlArtifact(normalizedResult);
+  return {
+    ...sanitized,
+    provider: projectProviderForRedteamReport(sanitized.provider),
+  };
 }
 
 /** Result from queries selecting test_idx column */
@@ -167,12 +1102,13 @@ export class EvalQueries {
     }
 
     const evalIds = evals.map((e) => e.id);
+    const testCaseVarsJson = jsonObjectFieldOrEmpty(evalResultsTable.testCase, '$.vars');
 
     // Use parameterized query to prevent SQL injection
     const query = sql`
       SELECT DISTINCT j.key, eval_id
       FROM (
-        SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
+        SELECT eval_id, ${testCaseVarsJson} as vars
         FROM eval_results
         WHERE eval_id IN (${sql.join(evalIds, sql`, `)})
       ) t, json_each(t.vars) j
@@ -194,12 +1130,13 @@ export class EvalQueries {
 
   static async getVarsFromEval(evalId: string) {
     const db = await getDb();
+    const testCaseVarsJson = jsonObjectFieldOrEmpty(evalResultsTable.testCase, '$.vars');
 
     // Use parameterized query to prevent SQL injection
     const query = sql`
       SELECT DISTINCT j.key
       FROM (
-        SELECT json_extract(eval_results.test_case, '$.vars') as vars
+        SELECT ${testCaseVarsJson} as vars
         FROM eval_results
         WHERE eval_results.eval_id = ${evalId}
       ) t, json_each(t.vars) j
@@ -428,6 +1365,64 @@ export default class Eval {
     }
 
     return evalInstance;
+  }
+
+  static async exists(id: string): Promise<boolean> {
+    const db = await getDb();
+    const row = await db
+      .select({ id: evalsTable.id })
+      .from(evalsTable)
+      .where(eq(evalsTable.id, id))
+      .limit(1)
+      .get();
+    return row !== undefined;
+  }
+
+  static async getResultByIdAndIndices(
+    evalId: string,
+    testIdx: number,
+    promptIdx: number,
+    resultId?: string,
+  ): Promise<EvaluateResult | undefined> {
+    const normalizedResult = resultId
+      ? await EvalResult.findByEvalIdAndResultId(evalId, resultId, testIdx, promptIdx)
+      : await EvalResult.findByEvalIdAndIndices(evalId, testIdx, promptIdx);
+    if (normalizedResult) {
+      return normalizedResult.toEvaluateResult();
+    }
+
+    const db = await getDb();
+    const resultIdPredicate = resultId
+      ? sql`AND json_type(legacy_result.value, '$.id') = 'text'
+            AND json_extract(legacy_result.value, '$.id') = ${resultId}`
+      : sql``;
+    const legacyRows = await db.all<{ result: string }>(sql`
+      SELECT legacy_result.value AS result
+      FROM ${evalsTable}, json_each(
+        CASE
+          WHEN json_valid(${evalsTable.results})
+            AND json_type(${evalsTable.results}, '$.results') = 'array'
+          THEN json_extract(${evalsTable.results}, '$.results')
+          ELSE json('[]')
+        END
+      ) AS legacy_result
+      WHERE ${evalsTable.id} = ${evalId}
+        AND legacy_result.type = 'object'
+        AND json_extract(legacy_result.value, '$.testIdx') = ${testIdx}
+        AND json_extract(legacy_result.value, '$.promptIdx') = ${promptIdx}
+        ${resultIdPredicate}
+      LIMIT 1
+    `);
+    const legacyRow = legacyRows[0];
+    if (!legacyRow) {
+      return undefined;
+    }
+
+    try {
+      return normalizeLegacyResultForDetail(JSON.parse(legacyRow.result), testIdx, promptIdx);
+    } catch {
+      return undefined;
+    }
   }
 
   static async getMany(limit: number = DEFAULT_QUERY_LIMIT): Promise<Eval[]> {
@@ -1396,6 +2391,23 @@ export default class Eval {
     return this.results;
   }
 
+  async getResult(testIdx: number, promptIdx: number): Promise<EvaluateResult | undefined> {
+    if (this.useOldResults()) {
+      const result = this.oldResults?.results.find(
+        (result) => result.testIdx === testIdx && result.promptIdx === promptIdx,
+      );
+      return result ? projectEvaluateResultForOutput(result) : undefined;
+    }
+    if (!this.persisted) {
+      return this.results
+        .find((result) => result.testIdx === testIdx && result.promptIdx === promptIdx)
+        ?.toEvaluateResult();
+    }
+    return (
+      await EvalResult.findByEvalIdAndIndices(this.id, testIdx, promptIdx)
+    )?.toEvaluateResult();
+  }
+
   clearResults() {
     this.results = [];
     this._resultsLoaded = false;
@@ -1434,8 +2446,8 @@ export default class Eval {
       return {
         version: 2,
         timestamp: new Date(this.createdAt).toISOString(),
-        results: this.oldResults.results,
-        table: this.oldResults.table,
+        results: this.oldResults.results.map(projectEvaluateResultForOutput),
+        table: projectEvaluateTableForOutput(this.oldResults.table),
         stats: this.oldResults.stats,
       };
     }
@@ -1447,10 +2459,7 @@ export default class Eval {
     const shouldStripPromptText = getEnvBool('PROMPTFOO_STRIP_PROMPT_TEXT', false);
 
     const prompts = shouldStripPromptText
-      ? this.prompts.map((p) => ({
-          ...p,
-          raw: '[prompt stripped]',
-        }))
+      ? this.prompts.map((prompt) => projectPromptForOutput(prompt, true))
       : this.prompts;
 
     return {
@@ -1459,6 +2468,246 @@ export default class Eval {
       prompts,
       results: this.results.map((r) => r.toEvaluateResult()),
       stats,
+    };
+  }
+
+  private async toRedteamReportSummary(
+    injectVar: string,
+    stripFlags: RedteamReportStripFlags,
+  ): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
+    if (this.useOldResults()) {
+      invariant(this.oldResults, 'Old results not found');
+      return projectSummaryForRedteamReport(
+        {
+          version: 2,
+          timestamp: new Date(this.createdAt).toISOString(),
+          results: this.oldResults.results,
+          table: this.oldResults.table,
+          stats: this.oldResults.stats,
+        },
+        injectVar,
+        stripFlags,
+      );
+    }
+
+    if (!this.persisted) {
+      return projectSummaryForRedteamReport(
+        await this.toEvaluateSummary(),
+        injectVar,
+        stripFlags,
+        true,
+      );
+    }
+
+    const reportVarKeys = [...new Set([injectVar, 'prompt', 'query', 'question', 'harmCategory'])];
+    const db = await getDb();
+    const validProviderJson = jsonObjectOrEmpty(evalResultsTable.provider);
+    const validPromptJson = jsonObjectOrEmpty(evalResultsTable.prompt);
+    const validTestCaseJson = jsonObjectOrEmpty(evalResultsTable.testCase);
+    const validResponseJson = jsonObjectOrEmpty(evalResultsTable.response);
+    const validGradingResultJson = jsonObjectOrEmpty(evalResultsTable.gradingResult);
+    const validMetadataJson = jsonObjectOrEmpty(evalResultsTable.metadata);
+    const validTestCaseVarsJson = sql`CASE WHEN json_type(${validTestCaseJson}, '$.vars') = 'object' THEN json_extract(${validTestCaseJson}, '$.vars') ELSE json('{}') END`;
+    const validReportComponentJson = sql`CASE WHEN report_component.type = 'object' THEN report_component.value ELSE json('{}') END`;
+    const rows = await db
+      .select({
+        id: evalResultsTable.id,
+        promptIdx: evalResultsTable.promptIdx,
+        testIdx: evalResultsTable.testIdx,
+        promptId: evalResultsTable.promptId,
+        providerId: sql<
+          string | null
+        >`CASE WHEN json_type(${validProviderJson}, '$.id') = 'text' THEN json_extract(${validProviderJson}, '$.id') ELSE NULL END`,
+        providerLabel: sql<
+          string | null
+        >`CASE WHEN json_type(${validProviderJson}, '$.label') = 'text' THEN json_extract(${validProviderJson}, '$.label') ELSE NULL END`,
+        promptObjectId: sql<
+          string | null
+        >`CASE WHEN json_type(${validPromptJson}, '$.id') = 'text' THEN json_extract(${validPromptJson}, '$.id') ELSE NULL END`,
+        promptRaw: stripFlags.shouldStripPromptText
+          ? sql<string | null>`'[prompt stripped]'`
+          : sql<
+              string | null
+            >`CASE WHEN json_type(${validPromptJson}, '$.raw') = 'text' THEN substr(json_extract(${validPromptJson}, '$.raw'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}) ELSE NULL END`,
+        promptLabel: stripFlags.shouldStripPromptText
+          ? sql<string | null>`'[prompt stripped]'`
+          : sql<
+              string | null
+            >`CASE WHEN json_type(${validPromptJson}, '$.label') = 'text' THEN substr(json_extract(${validPromptJson}, '$.label'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}) ELSE NULL END`,
+        promptDisplay: stripFlags.shouldStripPromptText
+          ? sql<
+              string | null
+            >`CASE WHEN json_type(${validPromptJson}, '$.display') = 'text' THEN '[prompt stripped]' ELSE NULL END`
+          : sql<
+              string | null
+            >`CASE WHEN json_type(${validPromptJson}, '$.display') = 'text' THEN substr(json_extract(${validPromptJson}, '$.display'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}) ELSE NULL END`,
+        // Build the payload-heavy projections from stripFlags so classes an active
+        // strip discards never cross the SQLite/Drizzle boundary (they are otherwise
+        // materialized in full and only dropped later in createRedteamReportResult,
+        // preserving the OOM/timeout mode this compact path exists to remove).
+        vars: stripFlags.shouldStripTestVars
+          ? sql<string | null>`NULL`
+          : sql<string | null>`(
+          SELECT json_group_object(
+            report_vars.key,
+            CASE report_vars.type
+              WHEN 'true' THEN json('true')
+              WHEN 'false' THEN json('false')
+              WHEN 'null' THEN json('null')
+              WHEN 'array' THEN json(report_vars.value)
+              WHEN 'object' THEN json(report_vars.value)
+              ELSE substr(report_vars.value, 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+            END
+          )
+          FROM json_each(${validTestCaseVarsJson}) AS report_vars
+          WHERE report_vars.key IN (${sql.join(
+            reportVarKeys.map((key) => sql`${key}`),
+            sql`, `,
+          )})
+            AND (
+              report_vars.type NOT IN ('array', 'object')
+              OR length(report_vars.value) <= ${MAX_COMPACT_HISTORY_TEXT_LENGTH}
+            )
+        )`,
+        responseExists: jsonIsObject(evalResultsTable.response),
+        responseOutput: stripFlags.shouldStripResponseOutput
+          ? sql<string | null>`NULL`
+          : sql<string | null>`CASE
+              WHEN json_type(${validResponseJson}, '$.output') = 'text'
+              THEN json_quote(substr(json_extract(${validResponseJson}, '$.output'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}))
+              ELSE NULL
+            END`,
+        responsePrompt: stripFlags.shouldStripPromptText
+          ? sql<string | null>`NULL`
+          : sql<string | null>`CASE
+              WHEN json_type(${validResponseJson}, '$.prompt') = 'text'
+              THEN json_quote(substr(json_extract(${validResponseJson}, '$.prompt'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}))
+              WHEN json_type(${validResponseJson}, '$.prompt') = 'array'
+              THEN CASE
+                WHEN length(${validResponseJson} -> '$.prompt') <= ${MAX_COMPACT_HISTORY_TEXT_LENGTH}
+                THEN ${validResponseJson} -> '$.prompt'
+                ELSE json_quote(substr(${validResponseJson} -> '$.prompt', 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH}))
+              END
+              ELSE NULL
+            END`,
+        responseRedteamFinalPrompt:
+          stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
+            ? sql<string | null>`NULL`
+            : jsonBoundedTextOrNull(validResponseJson, '$.metadata.redteamFinalPrompt'),
+        errorExists: sql<number>`CASE
+          WHEN ${evalResultsTable.error} IS NOT NULL AND ${evalResultsTable.error} <> '' THEN 1
+          ELSE 0
+        END`,
+        failureReason: evalResultsTable.failureReason,
+        success: evalResultsTable.success,
+        score: evalResultsTable.score,
+        latencyMs: evalResultsTable.latencyMs,
+        gradingResultExists: stripFlags.shouldStripGradingResult
+          ? sql<number>`0`
+          : jsonIsObject(evalResultsTable.gradingResult),
+        gradingPass: stripFlags.shouldStripGradingResult
+          ? sql<number | null>`NULL`
+          : jsonBooleanOrNull(validGradingResultJson, '$.pass'),
+        gradingScore: stripFlags.shouldStripGradingResult
+          ? sql<number | null>`NULL`
+          : jsonNumberOrNull(validGradingResultJson, '$.score'),
+        gradingReason: stripFlags.shouldStripGradingResult
+          ? sql<string | null>`NULL`
+          : sql<string | null>`CASE
+              WHEN json_type(${validGradingResultJson}, '$.reason') = 'text'
+              THEN substr(json_extract(${validGradingResultJson}, '$.reason'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+              ELSE NULL
+            END`,
+        gradingAssertionType: stripFlags.shouldStripGradingResult
+          ? sql<string | null>`NULL`
+          : jsonTextOrNull(validGradingResultJson, '$.assertion.type'),
+        gradingAssertionMetric: stripFlags.shouldStripGradingResult
+          ? sql<string | null>`NULL`
+          : jsonTextOrNull(validGradingResultJson, '$.assertion.metric'),
+        gradingSuggestions: stripFlags.shouldStripGradingResult
+          ? sql<string | null>`NULL`
+          : jsonSuggestionsOrNull(validGradingResultJson, '$.suggestions'),
+        gradingComponentResults: stripFlags.shouldStripGradingResult
+          ? sql<string | null>`NULL`
+          : sql<string | null>`CASE
+          WHEN json_type(${validGradingResultJson}, '$.componentResults') = 'array'
+          THEN (
+            SELECT json_group_array(
+              json_patch(
+                json_patch(
+                  json_object(
+                    'pass', ${jsonBooleanOrNull(validReportComponentJson, '$.pass')},
+                    'score', ${jsonNumberOrNull(validReportComponentJson, '$.score')},
+                    'reason', CASE
+                      WHEN json_type(${validReportComponentJson}, '$.reason') = 'text'
+                      THEN substr(json_extract(${validReportComponentJson}, '$.reason'), 1, ${MAX_COMPACT_HISTORY_TEXT_LENGTH})
+                      ELSE NULL
+                    END
+                  ),
+                  CASE
+                    WHEN json_type(${validReportComponentJson}, '$.assertion') = 'object'
+                    THEN json_object(
+                      'assertion',
+                      json_object(
+                        'type', ${jsonTextOrNull(validReportComponentJson, '$.assertion.type')},
+                        'metric', ${jsonTextOrNull(validReportComponentJson, '$.assertion.metric')}
+                      )
+                    )
+                    ELSE json('{}')
+                  END
+                ),
+                  CASE
+                    WHEN json_type(${validReportComponentJson}, '$.suggestions') = 'array'
+                    THEN json_object(
+                      'suggestions',
+                      json(${jsonSuggestionsOrNull(validReportComponentJson, '$.suggestions')})
+                    )
+                  ELSE json('{}')
+                END
+              )
+            )
+            FROM json_each(
+              json_extract(${validGradingResultJson}, '$.componentResults')
+            ) AS report_component
+            WHERE report_component.type = 'object'
+              AND report_component.key < 25
+          )
+          ELSE NULL
+        END`,
+        metadataPluginId: jsonTextOrNull(validMetadataJson, '$.pluginId'),
+        metadataHarmCategory: jsonTextOrNull(validMetadataJson, '$.harmCategory'),
+        metadataRedteamFinalPrompt:
+          stripFlags.shouldStripMetadata || stripFlags.shouldStripPromptText
+            ? sql<string | null>`NULL`
+            : jsonBoundedTextOrNull(validMetadataJson, '$.redteamFinalPrompt'),
+        metadataRedteamHistory: jsonHistoryForRedteamReport(
+          validMetadataJson,
+          '$.redteamHistory',
+          stripFlags,
+        ),
+        metadataRedteamTreeHistory: jsonHistoryForRedteamReport(
+          validMetadataJson,
+          '$.redteamTreeHistory',
+          stripFlags,
+        ),
+        testCasePluginId: jsonTextOrNull(validTestCaseJson, '$.metadata.pluginId'),
+        testCaseStrategyId: jsonTextOrNull(validTestCaseJson, '$.metadata.strategyId'),
+        testCasePolicyId: jsonTextOrNull(validTestCaseJson, '$.metadata.policyId'),
+      })
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, this.id))
+      .orderBy(evalResultsTable.testIdx, evalResultsTable.promptIdx, evalResultsTable.id)
+      .all();
+    const prompts = this.prompts.map((prompt) =>
+      projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+    );
+
+    return {
+      version: 3,
+      timestamp: new Date(this.createdAt).toISOString(),
+      prompts,
+      results: rows.map((row) => createRedteamReportResult(row, stripFlags)),
+      stats: this.getStats(),
     };
   }
 
@@ -1507,22 +2756,46 @@ export default class Eval {
     }
   }
 
-  async toResultsFile(): Promise<ResultsFile> {
-    const traces = await this.getTraces();
+  async toResultsFile({
+    includeTraces = true,
+    resultProjection = 'full',
+  }: ResultsFileOptions = {}): Promise<ResultsFile> {
+    const traces = includeTraces ? projectTracesForOutput(await this.getTraces()) : [];
+    const injectVar =
+      typeof this.config.redteam?.injectVar === 'string' ? this.config.redteam.injectVar : 'prompt';
+    const outputStripFlags = getOutputStripFlags();
+    const stripFlags = resultProjection === 'redteamReport' ? outputStripFlags : undefined;
+    const results = stripFlags
+      ? await this.toRedteamReportSummary(injectVar, stripFlags)
+      : await this.toEvaluateSummary();
+    const prompts = this.getPrompts();
 
-    const results: ResultsFile = {
+    const resultFile: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
-      results: await this.toEvaluateSummary(),
-      config: sanitizeTracingConfigForPersistence(this.config),
+      results,
+      config:
+        resultProjection === 'redteamReport'
+          ? projectConfigForRedteamReport(sanitizeTracingConfigForPersistence(this.config))
+          : projectConfigForOutput(
+              sanitizeTracingConfigForPersistence(this.config),
+              outputStripFlags,
+            ),
       author: this.author || null,
-      prompts: this.getPrompts(),
+      prompts:
+        stripFlags === undefined
+          ? outputStripFlags.shouldStripPromptText
+            ? prompts.map((prompt) => projectPromptForOutput(prompt, true))
+            : prompts
+          : prompts.map((prompt) =>
+              projectPromptForRedteamReport(prompt, stripFlags.shouldStripPromptText),
+            ),
       ...(this.vars.length > 0 && { vars: [...this.vars] }),
       datasetId: this.datasetId || null,
       ...(traces.length > 0 && { traces }),
     };
 
-    return results;
+    return resultFile;
   }
 
   async delete({ notify = true }: { notify?: boolean } = {}) {

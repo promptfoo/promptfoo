@@ -1,8 +1,8 @@
 import { parse as parseCsv } from 'csv-parse/sync';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { escapeCsvFormula } from '../../../src/csv';
 import { ResultFailureReason } from '../../../src/types/index';
 import {
-  escapeCsvFormula,
   evalTableToCsv,
   evalTableToJson,
   generateEvalCsv,

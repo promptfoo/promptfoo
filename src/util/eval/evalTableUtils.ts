@@ -1,5 +1,6 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import { ResultFailureReason } from '../../types/index';
+import { escapeCsvFormula } from '../csv';
 
 import type Eval from '../../models/eval';
 import type {
@@ -470,40 +471,6 @@ function escapeCsvRowsForFormulaInjection(
   return rows.map((row) =>
     row.map((cell) => (typeof cell === 'string' ? escapeCsvFormula(cell) : cell)),
   );
-}
-
-function isNumericCell(value: string): boolean {
-  return value.trim() !== '' && Number.isFinite(Number(value));
-}
-
-/**
- * Neutralize spreadsheet formula (CSV) injection at eval export time (CWE-1236).
- *
- * Spreadsheet applications execute cells beginning with `=`, `+`, `-`, or `@`
- * as formulas. Exported eval data can contain attacker-controlled model output,
- * variables, and grader comments, and CSV quoting alone does not neutralize
- * those formulas. Prefix dangerous values with the spreadsheet-native text
- * marker while preserving finite signed numbers.
- *
- * Leading whitespace and zero-width characters are ignored when identifying a
- * trigger because spreadsheet applications can strip them before evaluation.
- */
-export function escapeCsvFormula(value: string): string {
-  if (value.length === 0) {
-    return value;
-  }
-
-  const unpadded = value.replace(/^[\s\u200B\u200C\u200D]+/, '');
-  const firstChar = unpadded[0];
-  if (firstChar === undefined) {
-    return value;
-  }
-
-  const isFormulaTrigger =
-    firstChar === '=' ||
-    firstChar === '@' ||
-    ((firstChar === '-' || firstChar === '+') && !isNumericCell(unpadded));
-  return isFormulaTrigger ? `'${value}` : value;
 }
 
 /**

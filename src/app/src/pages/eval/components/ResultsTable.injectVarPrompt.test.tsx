@@ -1,35 +1,21 @@
 /**
- * Tests for inject variable prompt extraction logic in ResultsTable
- * Lines 691-707 in ResultsTable.tsx
- *
  * Tests the cell rendering logic that uses getActualPrompt to display
  * provider-reported prompts or redteam final prompts in inject variable cells.
  */
 
-import { getActualPrompt } from '@app/utils/providerResponse';
 import { describe, expect, it } from 'vitest';
+import { getVariableCellValue } from './ResultsTable';
 
-/**
- * Simulates the inject variable cell rendering logic from ResultsTable
- * This mirrors lines 696-707 in ResultsTable.tsx
- */
 function getCellValueForInjectVar(
   originalValue: string,
   outputs: Array<{ response?: any; metadata?: any }> | undefined,
 ): string {
-  if (!outputs) {
-    return originalValue;
-  }
-
-  // Check all outputs to find one with provider-reported prompt or redteamFinalPrompt
-  for (const output of outputs) {
-    const actualPrompt = getActualPrompt(output?.response);
-    if (actualPrompt) {
-      return actualPrompt;
-    }
-  }
-
-  return originalValue;
+  return getVariableCellValue({
+    row: { outputs } as Parameters<typeof getVariableCellValue>[0]['row'],
+    varName: 'prompt',
+    injectVarName: 'prompt',
+    fallbackValue: originalValue,
+  }) as string;
 }
 
 describe('ResultsTable inject variable cell rendering', () => {
@@ -248,7 +234,7 @@ describe('ResultsTable inject variable cell rendering', () => {
       expect(result).toBe('Valid red team prompt');
     });
 
-    it('should handle empty string provider prompt as no prompt', () => {
+    it('should continue searching when a provider prompt is empty', () => {
       const originalValue = '{{topic}}';
       const outputs = [
         {
@@ -266,7 +252,6 @@ describe('ResultsTable inject variable cell rendering', () => {
       ];
 
       const result = getCellValueForInjectVar(originalValue, outputs);
-      // Empty string prompt is treated as undefined by getActualPrompt
       expect(result).toBe('Fallback prompt');
     });
 

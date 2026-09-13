@@ -11,6 +11,7 @@ import {
   clearStandaloneEvalCache,
   deleteEval,
   getStandaloneEvals,
+  readResult,
   updateResult,
 } from '../../src/util/database';
 import {
@@ -77,6 +78,37 @@ async function setIsRedteam(evalId: string, value: boolean) {
 function expectStandaloneHistoryCached(options?: Parameters<typeof getStandaloneEvalCacheKey>[0]) {
   expect(getCachedStandaloneEvals(getStandaloneEvalCacheKey(options))).toBeDefined();
 }
+
+describe('readResult', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(resetEvalTables);
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns undefined only when the evaluation is absent', async () => {
+    await expect(readResult('missing-eval')).resolves.toBeUndefined();
+  });
+
+  it('propagates database and projection failures', async () => {
+    vi.spyOn(Eval, 'findById').mockRejectedValueOnce(new Error('sqlite: database is locked'));
+
+    await expect(readResult('eval-1')).rejects.toThrow('sqlite: database is locked');
+
+    const eval_ = new Eval({});
+    vi.spyOn(Eval, 'findById').mockResolvedValueOnce(eval_);
+    vi.spyOn(eval_, 'toResultsFile').mockRejectedValueOnce(
+      new Error('compact SQL projection failed'),
+    );
+    await expect(readResult(eval_.id, { resultProjection: 'redteamReport' })).rejects.toThrow(
+      'compact SQL projection failed',
+    );
+  });
+});
 
 describe('getStandaloneEvals', () => {
   beforeAll(async () => {
