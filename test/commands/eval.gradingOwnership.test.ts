@@ -1,8 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
+import { evaluateWithSource } from '../../src/evaluate';
+import { evaluate } from '../../src/evaluator';
+import Eval from '../../src/models/eval';
 import { doEval } from '../../src/node/doEval';
 import { getDefaultProviders } from '../../src/providers/defaults';
-import { loadApiProvider } from '../../src/providers/index';
+import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import { loadDefaultConfig } from '../../src/util/config/default';
 import { resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/index';
@@ -30,6 +36,25 @@ const watcher = vi.hoisted(() => {
   return { handlers, instance, watch: vi.fn() };
 });
 
+const mcp = vi.hoisted(() => ({
+  initialize: vi.fn(),
+  cleanup: vi.fn(),
+  getAllTools: vi.fn(),
+  callTool: vi.fn(),
+}));
+vi.mock('../../src/providers/mcp/client', () => ({
+  MCPClient: class {
+    initialize = mcp.initialize;
+    cleanup = mcp.cleanup;
+    getAllTools = mcp.getAllTools;
+    callTool = mcp.callTool;
+  },
+}));
+vi.mock('../../src/cache', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/cache')>()),
+  fetchWithCache: vi.fn(),
+}));
+
 vi.mock('chokidar', () => ({ default: { watch: watcher.watch } }));
 vi.mock('../../src/globalConfig/accounts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/globalConfig/accounts')>()),
@@ -48,6 +73,7 @@ vi.mock('../../src/providers/defaults', () => ({ getDefaultProviders: vi.fn() })
 vi.mock('../../src/providers/index', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/providers/index')>()),
   loadApiProvider: vi.fn(),
+  loadApiProviders: vi.fn(),
 }));
 vi.mock('../../src/util/config/default', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/config/default')>()),
@@ -79,6 +105,8 @@ const rubric: Assertion = { type: 'llm-rubric', value: 'GRADER_B: the answer is 
 const positions: {
   name: string;
   configure: (suite: TestSuite, shared: ApiProvider) => void;
+  entry?: 'public' | 'direct';
+  outcome?: 'error' | 'abort';
 }[] = [
   {
     name: 'top-level and grader identity control',
@@ -89,6 +117,7 @@ const positions: {
   },
   {
     name: 'default typed text grader with unused lazy alternatives',
+    entry: 'public',
     configure: (suite, shared) => {
       suite.defaultTest = {
         options: {
@@ -104,6 +133,7 @@ const positions: {
   },
   {
     name: 'test options grader',
+    entry: 'direct',
     configure: (suite, shared) => {
       suite.tests = [{ options: { provider: shared }, assert: [rubric] }];
     },
@@ -161,6 +191,7 @@ const positions: {
   },
   {
     name: 'test assertion-set embedding grader',
+    entry: 'direct',
     configure: (suite, shared) => {
       suite.tests = [
         {
@@ -224,9 +255,25 @@ const positions: {
       suite.scenarios = [{ config: [{ provider: shared }], tests: [{}] }];
     },
   },
+  {
+    name: 'direct borrowed grader failure',
+    entry: 'direct',
+    outcome: 'error',
+    configure: (suite, shared) => {
+      suite.tests = [{ options: { provider: shared }, assert: [rubric] }];
+    },
+  },
+  {
+    name: 'public borrowed grader cancellation',
+    entry: 'public',
+    outcome: 'abort',
+    configure: (suite, shared) => {
+      suite.tests = [{ options: { provider: shared }, assert: [rubric] }];
+    },
+  },
 ];
 
-describe('watch evaluation ownership of supplied grading providers', () => {
+describe('evaluation ownership of supplied grading providers', () => {
   const priorCliState = {
     config: cliState.config,
     basePath: cliState.basePath,
@@ -236,8 +283,16 @@ describe('watch evaluation ownership of supplied grading providers', () => {
     maxConcurrency: cliState.maxConcurrency,
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetAllMocks();
+    const actualProviders = await vi.importActual<typeof import('../../src/providers/index')>(
+      '../../src/providers/index',
+    );
+    vi.mocked(loadApiProviders).mockImplementation(actualProviders.loadApiProviders);
+    vi.mocked(fetchWithCache).mockRejectedValue(new Error('Unexpected network request'));
+    mcp.initialize.mockResolvedValue(undefined);
+    mcp.cleanup.mockResolvedValue(undefined);
+    mcp.getAllTools.mockReturnValue([]);
     cliState.config = undefined;
     cliState.basePath = '';
     cliState.resume = false;
@@ -281,9 +336,182 @@ describe('watch evaluation ownership of supplied grading providers', () => {
     vi.resetAllMocks();
   });
 
+  it.each(['success', 'failure'] as const)(
+    'keeps public provider setup alive through another evaluator failure: %s',
+    async (outcome) => {
+      const entered = deferred();
+      const finish = deferred();
+      const setupError = new Error('public provider setup failed');
+      const otherError = new Error('other evaluation configuration failed');
+      let closed = false;
+      const resource = {
+        shutdown: vi.fn(async () => {
+          closed = true;
+          if (outcome === 'failure') {
+            throw new Error('cleanup must not replace setup error');
+          }
+        }),
+      };
+      const target: ApiProvider = {
+        id: () => 'public-setup-resource',
+        callApi: vi.fn(async () => {
+          expect(closed).toBe(false);
+          return { output: 'setup survived' };
+        }),
+      };
+      vi.mocked(loadApiProviders).mockImplementationOnce(async () => {
+        // Model a constructor that registers a process resource before asynchronous connection.
+        providerRegistry.register(resource);
+        entered.resolve();
+        await finish.promise;
+        if (outcome === 'failure') {
+          throw setupError;
+        }
+        return [target];
+      });
+      vi.mocked(resolveConfigs).mockRejectedValueOnce(otherError);
+      const pending = evaluateWithSource(
+        { providers: [target], prompts: ['setup'], tests: [{ vars: {} }] },
+        { cache: false, showProgressBar: false },
+      );
+      void pending.catch(() => {});
+      try {
+        await Promise.race([
+          entered.promise,
+          pending.then(() => {
+            throw new Error('public evaluation skipped setup');
+          }),
+        ]);
+        await expect(
+          doEval(
+            { write: false, table: false, share: false, cache: false },
+            {},
+            'failed-setup.mjs',
+            { showProgressBar: false },
+          ),
+        ).rejects.toBe(otherError);
+        expect(resource.shutdown).not.toHaveBeenCalled();
+        finish.resolve();
+        if (outcome === 'failure') {
+          await expect(pending).rejects.toBe(setupError);
+          expect(target.callApi).not.toHaveBeenCalled();
+        } else {
+          const result = await pending;
+          expect((await result.toEvaluateSummary()).results[0]).toMatchObject({
+            success: true,
+            response: { output: 'setup survived' },
+          });
+        }
+        expect(resource.shutdown).toHaveBeenCalledTimes(1);
+      } finally {
+        finish.resolve();
+        await Promise.allSettled([pending]);
+        providerRegistry.unregister(resource);
+      }
+    },
+  );
+
+  it('leaves a sequential supplied MCP grader open for its caller', async () => {
+    let closed = false;
+    const tools = [
+      {
+        name: 'grade',
+        description: 'Return the grade',
+        inputSchema: { type: 'object', properties: {} },
+      },
+    ];
+    mcp.getAllTools.mockImplementation(() => (closed ? [] : tools));
+    mcp.cleanup.mockImplementation(async () => {
+      closed = true;
+    });
+    mcp.callTool.mockImplementation(async () => {
+      expect(closed).toBe(false);
+      return { content: [{ type: 'text', text: '{"pass":true,"score":1,"reason":"tool grade"}' }] };
+    });
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      data: {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'grade-call',
+                  type: 'function',
+                  function: { name: 'grade', arguments: '{}' },
+                },
+              ],
+            },
+            finish_reason: 'tool_calls',
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      },
+    });
+    const grader = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+      config: { apiKey: 'synthetic-no-network', mcp: { enabled: true } },
+    });
+    const target = {
+      id: () => 'sequential-mcp-target',
+      callApi: vi.fn(async () => ({ output: 'target' })),
+      cleanup: vi.fn(() => {
+        throw new Error('nonfatal synchronous target cleanup');
+      }),
+    } satisfies ApiProvider;
+    let run = 0;
+    vi.mocked(resolveConfigs).mockImplementation(async () => {
+      const config = {};
+      cliState.config = config;
+      return {
+        config,
+        basePath: '',
+        testSuite: {
+          providers: [target],
+          prompts: [{ raw: `uncached-${++run}`, label: 'sequential' }],
+          tests: [
+            { assert: [{ type: 'llm-rubric', value: 'Use the grade tool', provider: grader }] },
+          ],
+        },
+      };
+    });
+    try {
+      for (let i = 0; i < 2; i++) {
+        const result = await doEval(
+          { write: false, table: false, share: false, cache: false },
+          {},
+          'sequential-mcp.mjs',
+          { maxConcurrency: 1, showProgressBar: false },
+        );
+        expect((await result.toEvaluateSummary()).results[0]).toMatchObject({ success: true });
+        expect(target.cleanup).toHaveBeenCalledTimes(i + 1);
+        expect(mcp.cleanup).not.toHaveBeenCalled();
+      }
+      const requestBodies = vi
+        .mocked(fetchWithCache)
+        .mock.calls.map(([, options]) => JSON.parse(String(options?.body)));
+      expect(requestBodies).toHaveLength(2);
+      for (const body of requestBodies) {
+        expect(body.tools).toContainEqual(
+          expect.objectContaining({ function: expect.objectContaining({ name: 'grade' }) }),
+        );
+      }
+      expect(mcp.callTool).toHaveBeenCalledTimes(2);
+      expect(mcp.initialize).toHaveBeenCalledTimes(1);
+    } finally {
+      await grader.cleanup();
+    }
+    expect(mcp.cleanup).toHaveBeenCalledTimes(1);
+  });
+
   it.each(positions)(
     'keeps $name alive until the last overlapping run finishes',
-    async ({ configure }) => {
+    async ({ configure, entry, outcome }) => {
+      const cancellation = new AbortController();
+      const originalFailure = new Error('borrowed grader failed');
       const startedA = deferred();
       const startedB = deferred();
       const finishA = deferred();
@@ -317,6 +545,12 @@ describe('watch evaluation ownership of supplied grading providers', () => {
           }
           expect(prompt === 'TARGET_B' || prompt.includes('GRADER_B')).toBe(true);
           await hold('B');
+          if (outcome === 'error') {
+            throw originalFailure;
+          }
+          if (outcome === 'abort') {
+            cancellation.signal.throwIfAborted();
+          }
           return {
             output:
               prompt === 'TARGET_B'
@@ -360,7 +594,7 @@ describe('watch evaluation ownership of supplied grading providers', () => {
       const suite = (provider: ApiProvider, raw: string): TestSuite => ({
         providers: [provider],
         prompts: [{ raw, label: raw }],
-        tests: [{}],
+        tests: [{ vars: {} }],
       });
       const suiteB = suite(other, 'TARGET_B');
       configure(suiteB, shared);
@@ -399,7 +633,34 @@ describe('watch evaluation ownership of supplied grading providers', () => {
             throw new Error('Run A finished without starting the shared target request');
           }),
         ]);
-        const runB = onChange!('ownership.mjs');
+        let returnedB: Eval | undefined;
+        const runB = entry
+          ? (entry === 'public'
+              ? evaluateWithSource(
+                  {
+                    providers: suiteB.providers,
+                    prompts: ['TARGET_B'],
+                    tests: suiteB.tests,
+                    defaultTest: suiteB.defaultTest,
+                    scenarios: suiteB.scenarios,
+                    env: suiteB.env,
+                  },
+                  {
+                    cache: false,
+                    maxConcurrency: 1,
+                    showProgressBar: false,
+                    abortSignal: cancellation.signal,
+                  },
+                )
+              : evaluate(suiteB, new Eval({}), {
+                  maxConcurrency: 1,
+                  showProgressBar: false,
+                  abortSignal: cancellation.signal,
+                })
+            ).then((result) => {
+              returnedB = result;
+            })
+          : onChange!('ownership.mjs');
         pending.push(runB);
         void runB.catch(() => {});
         await Promise.race([
@@ -416,22 +677,32 @@ describe('watch evaluation ownership of supplied grading providers', () => {
         expect(shared.cleanup).not.toHaveBeenCalled();
         expect(writeMultipleOutputs).toHaveBeenCalledTimes(1);
 
+        if (outcome === 'abort') {
+          cancellation.abort(new Error('caller canceled grading'));
+        }
         finishB.resolve();
         await runB;
         expect(aborted).toEqual([]);
         expect(active.size).toBe(0);
         expect(shared.cleanup).toHaveBeenCalledExactlyOnceWith({ reason: 'evaluation-complete' });
-        expect(writeMultipleOutputs).toHaveBeenCalledTimes(2);
+        expect(writeMultipleOutputs).toHaveBeenCalledTimes(entry ? 1 : 2);
         const resultA = vi.mocked(writeMultipleOutputs).mock.calls[0][1];
-        const resultB = vi.mocked(writeMultipleOutputs).mock.calls[1][1];
+        const resultB = returnedB ?? vi.mocked(writeMultipleOutputs).mock.calls[1][1];
         for (const [record, output] of [
           [resultA, 'target-A'],
           [resultB, 'target-B'],
         ] as const) {
           const summary = await record.toEvaluateSummary();
           expect(summary.results).toHaveLength(1);
-          expect(summary.results[0]).toMatchObject({ success: true, response: { output } });
-          expect(summary.results[0].error).toBeUndefined();
+          if (record === resultB && outcome) {
+            expect(summary.results[0].success).toBe(false);
+            if (outcome === 'error') {
+              expect(summary.results[0].error).toContain(originalFailure.message);
+            }
+          } else {
+            expect(summary.results[0]).toMatchObject({ success: true, response: { output } });
+            expect(summary.results[0].error).toBeUndefined();
+          }
         }
         expect(calls[0]).toBe('TARGET_A');
         expect(calls.length).toBeGreaterThanOrEqual(2);

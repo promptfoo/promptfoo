@@ -30,7 +30,6 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
-import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
@@ -50,7 +49,6 @@ import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
 import { maybeLoadFromExternalFile } from '../util/file';
-import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import {
   printBorder,
   setupEnv,
@@ -70,11 +68,9 @@ import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
 
 import type {
-  ApiProvider,
   CommandLineOptions,
   EvalRuntimeOptions,
   Scenario,
-  TestCase,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
@@ -229,9 +225,6 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
   });
 }
 
-const activeProviderRuns = new Map<ApiProvider, number>();
-const pendingProviderCleanups = new Map<ApiProvider, Promise<void>>();
-
 function resolveSuggestionOptions(
   cmdObj: Partial<CommandLineOptions & Command>,
   commandLineOptions: Record<string, any> | undefined,
@@ -291,55 +284,6 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
  */
 function isDeclarativeConfig(configPath: string): boolean {
   return ['.yaml', '.yml', '.json'].includes(path.extname(configPath).toLowerCase());
-}
-
-function collectRunProviders(testSuite: TestSuite): Set<ApiProvider> {
-  const providers = new Set(testSuite.providers.filter(isApiProvider));
-  const addProvider = (candidate: unknown) => {
-    if (isApiProvider(candidate)) {
-      providers.add(candidate);
-    } else if (isProviderTypeMap(candidate)) {
-      for (const type of GRADING_PROVIDER_TYPE_KEYS) {
-        const provider = candidate[type];
-        if (isApiProvider(provider)) {
-          providers.add(provider);
-        }
-      }
-    }
-  };
-  const addAssertions = (assertions: TestCase['assert']) => {
-    for (const assertion of assertions ?? []) {
-      if (assertion.type === 'assert-set') {
-        addAssertions(assertion.assert);
-      } else {
-        addProvider(assertion.provider);
-      }
-    }
-  };
-  const addTest = (test: Partial<TestCase> | string | undefined) => {
-    if (!test || typeof test === 'string') {
-      return;
-    }
-    // A supplied test provider can override the target or serve as the default
-    // grader. Only retain existing instances; unused configurations stay lazy.
-    addProvider(test.provider);
-    addProvider(test.options?.provider);
-    addAssertions(test.assert);
-  };
-
-  addTest(testSuite.defaultTest);
-  for (const test of testSuite.tests ?? []) {
-    addTest(test);
-  }
-  for (const scenario of testSuite.scenarios ?? []) {
-    for (const config of scenario.config ?? []) {
-      addTest(config);
-    }
-    for (const test of scenario.tests ?? []) {
-      addTest(test);
-    }
-  }
-  return providers;
 }
 
 export async function doEval(
@@ -992,81 +936,46 @@ export async function doEval(
       process.on('SIGINT', sigintHandler);
     }
 
-    // Run the evaluation!!!!!!
-    let ret;
-    const runProviders = collectRunProviders(testSuite);
-    for (const provider of runProviders) {
-      activeProviderRuns.set(provider, (activeProviderRuns.get(provider) ?? 0) + 1);
-    }
-    try {
-      // Reserve this run's instances before waiting, so another finishing run
-      // cannot schedule a second cleanup while we wait for an earlier one.
-      await Promise.all([...runProviders].map((provider) => pendingProviderCleanups.get(provider)));
-      ret = await evaluate(testSuite, evalRecord, {
-        ...options,
-        filterRange: hasScenarios || resumeEval ? filterRange : undefined,
-        abortSignal: evaluateOptions.abortSignal,
-        isRedteam: Boolean(config.redteam),
-      });
-
-      // Post-evaluation cleanup for retry-errors mode
-      // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
-      // Skip if evaluation was paused - no point cleaning up incomplete retry
-      if (retryErrors && cliState._retryErrorResultIds && !paused) {
-        const errorResultIds = cliState._retryErrorResultIds;
+    const ret = await withEvaluationResources(
+      async () => {
         try {
-          await deleteErrorResults(errorResultIds);
-          await recalculatePromptMetrics(ret);
-          logger.debug(
-            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
-          );
-        } catch (cleanupError) {
-          // Cleanup failure is non-fatal - retry itself succeeded
-          logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
-            error: cleanupError,
+          const ret = await evaluate(testSuite, evalRecord, {
+            ...options,
+            filterRange: hasScenarios || resumeEval ? filterRange : undefined,
+            abortSignal: evaluateOptions.abortSignal,
+            isRedteam: Boolean(config?.redteam),
           });
-        } finally {
-          // Clear the stored error result IDs
-          delete cliState._retryErrorResultIds;
-          // Clear retry mode flags
-          cliState.retryMode = false;
-        }
-      }
-    } finally {
-      cleanupHandler(); // Always cleanup, even if evaluate() throws
-      const providersToCleanup: ApiProvider[] = [];
-      for (const provider of runProviders) {
-        const remainingRuns = (activeProviderRuns.get(provider) ?? 1) - 1;
-        if (remainingRuns > 0) {
-          activeProviderRuns.set(provider, remainingRuns);
-        } else {
-          activeProviderRuns.delete(provider);
-          providersToCleanup.push(provider);
-        }
-      }
-      for (const provider of providersToCleanup) {
-        // Another watch run may start while an earlier provider's cleanup awaits.
-        if (!activeProviderRuns.has(provider)) {
-          let cleanup = pendingProviderCleanups.get(provider);
-          if (!cleanup) {
-            cleanup = Promise.resolve()
-              .then(() => provider.cleanup?.({ reason: 'evaluation-complete' }))
-              .catch((error) => {
-                logger.warn('Provider cleanup failed after evaluation.', { error });
+
+          // Post-evaluation cleanup for retry-errors mode
+          // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
+          // Skip if evaluation was paused - no point cleaning up incomplete retry
+          if (retryErrors && cliState._retryErrorResultIds && !paused) {
+            const errorResultIds = cliState._retryErrorResultIds;
+            try {
+              await deleteErrorResults(errorResultIds);
+              await recalculatePromptMetrics(ret);
+              logger.debug(
+                `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+              );
+            } catch (cleanupError) {
+              // Cleanup failure is non-fatal - retry itself succeeded
+              logger.warn('Post-retry cleanup had issues. Retry results are saved.', {
+                error: cleanupError,
               });
-            // Register before calling user cleanup, including synchronous re-entry.
-            pendingProviderCleanups.set(provider, cleanup);
-          }
-          try {
-            await cleanup;
-          } finally {
-            if (pendingProviderCleanups.get(provider) === cleanup) {
-              pendingProviderCleanups.delete(provider);
+            } finally {
+              // Clear the stored error result IDs
+              delete cliState._retryErrorResultIds;
+              // Clear retry mode flags
+              cliState.retryMode = false;
             }
           }
+          return ret;
+        } finally {
+          cleanupHandler(); // Always cleanup, even if evaluate() throws
         }
-      }
-    }
+      },
+      { testSuite, ownedProviders: testSuite.providers },
+    );
 
     // Clear resume flag after run completes
     cliState.resume = false;

@@ -2233,17 +2233,13 @@ describe('evalCommand', () => {
   );
 
   it.each([
-    ['success', 'rejects', 'top-level'],
-    ['error', 'rejects', 'top-level'],
-    ['success', 'throws synchronously', 'top-level'],
-    ['error', 'throws synchronously', 'top-level'],
-    ['success', 'rejects', 'typed grader'],
-    ['error', 'rejects', 'typed grader'],
-    ['success', 'throws synchronously', 'typed grader'],
-    ['error', 'throws synchronously', 'typed grader'],
+    ['success', 'rejects'],
+    ['error', 'rejects'],
+    ['success', 'throws synchronously'],
+    ['error', 'throws synchronously'],
   ])(
-    'preserves evaluation %s and later cleanup when provider cleanup %s from %s',
-    async (outcome, cleanupMode, position) => {
+    'preserves evaluation %s and later cleanup when provider cleanup %s from top-level',
+    async (outcome, cleanupMode) => {
       const cleanupError = new Error('MCP initialization failed');
       const evaluationError = new Error('primary evaluation failed');
       const failingProvider = {
@@ -2268,18 +2264,8 @@ describe('evalCommand', () => {
           config,
           testSuite: {
             prompts: [],
-            providers:
-              position === 'top-level' ? [failingProvider, laterProvider] : [laterProvider],
-            tests:
-              position === 'typed grader'
-                ? [
-                    {
-                      assert: [
-                        { type: 'llm-rubric', value: 'ok', provider: { text: failingProvider } },
-                      ],
-                    },
-                  ]
-                : [],
+            providers: [failingProvider, laterProvider],
+            tests: [],
           },
           basePath: path.resolve('/'),
         });

@@ -78,6 +78,7 @@ describe('SageMaker initialization policy snapshot', () => {
     }
     providers.clear();
     parsing.pause = undefined;
+    vi.resetAllMocks();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
     restoreEnv();
