@@ -180,3 +180,9 @@ The optional interface preserves compatibility: third-party providers and legacy
 Use `executeCallback` from `functionCallbackExecutor.ts` for callback loading, reference-aware caching, cancellation, and traced execution. Keep file-export policy and wire conversion in each adapter. Pass `transformOutput` when serialization is part of the tool execution so failures are recorded before the span closes. The execution record retains tool name, arguments, call ID, raw output, and the original error.
 
 Use `normalizeMcpToolContent` from `mcp/util.ts` for MCP content blocks; keep each provider's tool-result envelope and error policy local.
+
+## Creator inputs
+
+The loader normalizes configuration and environment once; factories receive that `ProviderOptions` and a context containing the same merged environment. New creator adapters should accept `providerOptions` directly rather than nesting it under another `config`. `creator.ts` adapts the legacy nested input only at existing public creator boundaries.
+
+`families/compatible.ts` loads the Cerebras, Envoy, LiteLLM, Novita, Nscale, and TogetherAI creators on demand. These family factories run before the generic file fallback, including when a model name ends in `.js`. Keep alias/default-subtype rules inside each creator, and preserve the distinction between family load gates and factory dispatch predicates.
