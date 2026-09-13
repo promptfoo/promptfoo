@@ -23,10 +23,13 @@ export async function handleClassifier({
     test.options,
   );
 
-  // A grader/transport error must never be flipped into a pass.
-  // This mirrors the guard used in llmRubric.ts, geval.ts, moderation.ts, etc.
   if (isGraderFailure(classificationResult)) {
-    return { assertion, ...classificationResult };
+    // A broken grader is not evidence the criterion was or was not met; never
+    // invert a transport/parse failure into a pass.
+    return {
+      assertion,
+      ...classificationResult,
+    };
   }
 
   if (inverse) {

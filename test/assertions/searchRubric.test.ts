@@ -164,34 +164,36 @@ describe('handleSearchRubric', () => {
     expect(result.reason).toContain('does not require web search verification');
   });
 
-  it('propagates grader/transport failures verbatim without flipping pass for not-search-rubric', async () => {
-    // When the search provider errors, the result must NOT be inverted into a
-    // spurious pass. This test verifies the isGraderFailure() guard end-to-end:
-    // matchesSearchRubric() returns graderFail() → handler checks isGraderFailure()
-    // → returns pass:false unchanged.
-    const params: AssertionParams = {
-      ...defaultParams,
-      inverse: true,
-      renderedValue: 'Some rubric',
-    };
+  it.each([false, true])(
+    'preserves the full grader failure result (inverse=%s)',
+    async (inverse) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: {
+          ...defaultParams.assertion,
+          type: inverse ? 'not-search-rubric' : 'search-rubric',
+        },
+        inverse,
+        renderedValue: 'Contains outdated information',
+      };
 
-    const graderErrorResult: GradingResult = {
-      pass: false,
-      score: 0,
-      reason: 'Search rubric evaluation failed: provider timeout',
-      metadata: { graderError: true },
-    };
+      const errorResult: GradingResult = {
+        assertion: params.assertion,
+        pass: false,
+        score: 0,
+        reason: 'Search rubric evaluation failed: Request timed out',
+        tokensUsed: { total: 5, prompt: 3, completion: 2 },
+        metadata: { graderError: true },
+      };
 
-    mockMatchesSearchRubric.mockResolvedValue(graderErrorResult);
+      // Keep the expected result independent so an in-place mutation cannot hide a regression.
+      mockMatchesSearchRubric.mockResolvedValue(structuredClone(errorResult));
 
-    const result = await handleSearchRubric(params);
+      const result = await handleSearchRubric(params);
 
-    // Must remain pass:false — grader errors must NOT be inverted
-    expect(result.pass).toBe(false);
-    expect(result.score).toBe(0);
-    expect(result.reason).toBe('Search rubric evaluation failed: provider timeout');
-    expect(result.metadata?.graderError).toBe(true);
-  });
+      expect(result).toEqual(errorResult);
+    },
+  );
 
   it('should pass provider to matchesSearchRubric', async () => {
     const mockProvider = createMockProvider();

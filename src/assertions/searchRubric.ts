@@ -27,9 +27,9 @@ export async function handleSearchRubric({
     providerCallContext,
   );
 
-  // A grader/transport error must never be flipped into a pass.
-  // This mirrors the guard used in llmRubric.ts, geval.ts, moderation.ts, etc.
   if (isGraderFailure(result)) {
+    // A broken grader is not evidence about the criterion; propagate verbatim
+    // instead of flipping a transport failure into a pass.
     return result;
   }
 

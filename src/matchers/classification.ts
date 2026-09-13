@@ -29,21 +29,16 @@ export async function matchesClassification(
   );
 
   if (!resp.classification) {
-    // Tag transport/API errors with graderError so inverse-aware callers
-    // (not-classifier) propagate the failure verbatim instead of flipping it
-    // into a spurious pass. Mirrors the pattern in llmGrading.ts / moderation.ts.
     return graderFail(resp.error || 'Unknown error fetching classification');
   }
+  const scores = Object.values(resp.classification);
+  if (scores.length === 0) {
+    // No scores means there is no verdict, even when a specific label was requested.
+    return graderFail('No classification scores returned');
+  }
+
   let score: number;
   if (expected === undefined) {
-    const scores = Object.values(resp.classification);
-    if (scores.length === 0) {
-      return {
-        pass: false,
-        score: 0,
-        reason: 'No classification scores returned',
-      };
-    }
     score = Math.max(...scores);
   } else {
     score = resp.classification[expected] || 0;
