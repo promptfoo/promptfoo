@@ -247,6 +247,14 @@ describe('pure assertion registry', () => {
         providerResponse: { output: 'a needle in a haystack' },
       }),
     ).resolves.toMatchObject({ pass: true, score: 1 });
+    for (const output of [false, 0, null]) {
+      await expect(
+        runPureAssertion({
+          assertion: { type: 'equals', value: output },
+          providerResponse: { output },
+        }),
+      ).resolves.toMatchObject({ pass: true, score: 1 });
+    }
   });
 
   it('treats template syntax as literal content after host rendering', async () => {

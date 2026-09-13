@@ -19,7 +19,7 @@ export interface PureGradingResult {
 }
 
 export interface PureProviderResponse {
-  output: string | object;
+  output: unknown;
   cost?: number;
   finishReason?: string;
   logProbs?: number[];
@@ -56,7 +56,7 @@ export async function runPureAssertion({
   const outputString =
     typeof providerResponse.output === 'string'
       ? providerResponse.output
-      : JSON.stringify(providerResponse.output);
+      : (JSON.stringify(providerResponse.output) ?? '');
   const params = {
     assertion,
     assertionValueContext: {
