@@ -64,9 +64,9 @@ the grader uses the plugin ID attribute in the same namespace on that span or ev
 inherit the enclosing span's plugin ID, but an event cannot reuse the span's evidence
 under a different plugin ID. An explicit plugin ID inside the JSON keeps its own scope.
 An executed tool is not covered by a control that was blocked, denied, rejected, or failed.
-A failed verifier cannot be replaced by another clean result. Malformed findings for the active plugin also fail the row, including when another record or evidence alias contains a clean result. Evidence aliases are case-insensitive and checked together, including aliases in provider metadata.
+A failed verifier cannot be replaced by another clean result. Malformed findings for the active plugin also fail the row, including when another record or evidence alias contains a clean result. Evidence aliases are case-insensitive and checked together, including aliases in provider metadata. Malformed branches retain their enclosing plugin scope even beside clean evidence. Conflicting valid and malformed ID aliases fail that scope; unscoped errors do not override a different plugin's evidence. Failed verifiers report `verifierStatus: failed`; `missing-evidence` means no matching verifier evidence was found.
 
-Oversized evidence returns a grading error. Each evidence payload is limited to 100,000 decoded characters, 1,000 verifier records, and 1,000 findings across its aliases. Array and string wrappers do not consume the verifier-record limit; decoding stops after 4,000 steps. Trace processing retains at most 1,000 observations; guardrail coverage keeps its stricter 256-observation limit. Split larger workloads across evals.
+Oversized evidence returns a grading error. Each evidence payload is limited to 100,000 decoded characters (including object keys and finding payloads), 1,000 verifier records, and 1,000 findings across its aliases. Array and string wrappers do not consume the verifier-record limit; decoding stops after 4,000 steps. Trace processing retains at most 1,000 observations; guardrail coverage keeps its stricter 256-observation limit. Split larger workloads across evals.
 
 As a fallback for a trusted non-traced harness, the target provider can return JSON in provider metadata:
 
