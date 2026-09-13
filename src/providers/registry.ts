@@ -120,6 +120,27 @@ import type { LoadApiProviderContext } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 import type { ProviderFactory, ProviderFamily } from './registryTypes';
 
+/** Merge low-to-high priority scopes without letting a lower-priority key alias win. */
+export function mergeProviderEnv(
+  providerPath: string,
+  ...layers: (NonNullable<ProviderOptions['env']> | undefined)[]
+): NonNullable<ProviderOptions['env']> | undefined {
+  const isCodexSDK = /^openai:(?:codex-sdk|codex)(?::|$)/.test(providerPath);
+  let merged: NonNullable<ProviderOptions['env']> | undefined;
+  for (const layer of layers) {
+    if (!layer) {
+      continue;
+    }
+    merged ??= {};
+    if (isCodexSDK && (layer.OPENAI_API_KEY || layer.CODEX_API_KEY)) {
+      delete merged.OPENAI_API_KEY;
+      delete merged.CODEX_API_KEY;
+    }
+    Object.assign(merged, layer);
+  }
+  return merged;
+}
+
 function getConfiguredOpenAiModel(providerOptions: ProviderOptions): string | undefined {
   const configuredModel = providerOptions.config?.model;
   return typeof configuredModel === 'string' && configuredModel.trim().length > 0
@@ -215,7 +236,7 @@ export const providerMap: ProviderFactory[] = [
       // Model selection uses OpenCode configuration or explicit provider_id/model options.
       return new OpenCodeSDKProvider({
         ...providerOptions,
-        id: providerPath,
+        id: providerOptions.id ?? providerPath,
         config: providerOptions.config,
         env: context.env,
       });
@@ -997,7 +1018,7 @@ export const providerMap: ProviderFactory[] = [
                 model: codexModel,
               }
             : providerOptions.config,
-          env: context.env,
+          env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
@@ -1021,7 +1042,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
-          modelName || configuredModel || 'gpt-4.1-2025-04-14',
+          modelName || configuredModel || 'gpt-5.6-terra',
           providerOptions,
         );
       }
@@ -1051,7 +1072,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'responses') {
         return new OpenAiResponsesProvider(
-          modelName || configuredModel || 'gpt-4.1-2025-04-14',
+          modelName || configuredModel || 'gpt-5.6-terra',
           providerOptions,
         );
       }
@@ -1516,7 +1537,10 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
-      let config = providerOptions.config || { enabled: true };
+      let config = {
+        ...providerOptions.config,
+        enabled: providerOptions.config?.enabled ?? true,
+      };
 
       // Handle mcp:<server_name> format for server-specific configs
       if (splits.length > 1) {
@@ -1731,15 +1755,8 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) => providerPath.startsWith('snowflake:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createSnowflakeProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
+    create: async (providerPath: string, providerOptions: ProviderOptions) => {
+      return createSnowflakeProvider(providerPath, providerOptions);
     },
   },
 ];

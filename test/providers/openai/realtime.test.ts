@@ -173,6 +173,80 @@ describe('OpenAI Realtime Provider', () => {
   });
 
   describe('Basic Functionality', () => {
+    it('sends one user item after session readiness on the client-secret socket', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const promise = provider.webSocketRequest('test-secret', 'hello');
+
+      mockHandlers.open.forEach((handler) => handler());
+      expect(sentWebSocketEvents(mockWs)).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'conversation.item.create' })]),
+      );
+
+      const handler = mockHandlers.message[0];
+      handler(Buffer.from(JSON.stringify({ type: 'session.created' })));
+      expect(
+        sentWebSocketEvents(mockWs).filter((event) => event.type === 'conversation.item.create'),
+      ).toHaveLength(1);
+      handler(Buffer.from(JSON.stringify({ type: 'session.ready' })));
+      expect(
+        sentWebSocketEvents(mockWs).filter((event) => event.type === 'conversation.item.create'),
+      ).toHaveLength(1);
+
+      emitOutputTextDone(handler, 'hello back');
+      emitResponseDone(handler);
+      await promise;
+    });
+
+    it('does not expose audio when usage reports tokens without audio bytes', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const promise = provider.webSocketRequest('test-secret', 'hello');
+      mockHandlers.open.forEach((handler) => handler());
+
+      const handler = mockHandlers.message[0];
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: {
+              usage: {
+                total_tokens: 2,
+                input_tokens: 1,
+                output_tokens: 1,
+                output_token_details: { audio_tokens: 1 },
+              },
+            },
+          }),
+        ),
+      );
+      const result = await promise;
+      expect(result.metadata).not.toHaveProperty('audio');
+      expect(result.output).toBe('');
+    });
+
+    it('does not expose missing audio on a direct socket response', async () => {
+      const provider = new OpenAiRealtimeProvider('gpt-4o-realtime-preview');
+      const promise = provider.directWebSocketRequest('hello');
+      const handler = mockHandlers.message[0];
+
+      handler(
+        Buffer.from(
+          JSON.stringify({
+            type: 'response.done',
+            response: {
+              usage: {
+                total_tokens: 2,
+                input_tokens: 1,
+                output_tokens: 1,
+                output_token_details: { audio_tokens: 1 },
+              },
+            },
+          }),
+        ),
+      );
+      const result = await promise;
+      expect(result.metadata).not.toHaveProperty('audio');
+    });
+
     it('should initialize with correct model and config', () => {
       const config = {
         modalities: ['text'],

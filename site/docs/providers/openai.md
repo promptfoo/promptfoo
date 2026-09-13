@@ -122,7 +122,7 @@ Bare `openai:<model>` IDs default to Responses for GPT-5.6 and newer GPT models,
 
 Use `openai:chat:<model>` or `openai:responses:<model>` to select the endpoint explicitly, including for a compatible gateway. Existing bare GPT-5.6 configurations with Chat-specific options should either select `openai:chat:gpt-5.6` or switch to Responses options such as `reasoning.effort` and `max_output_tokens`.
 
-Bare `openai:chat` and `openai:responses` currently select `gpt-4.1-2025-04-14`. Specify a model ID, such as `openai:responses:gpt-5.6-luna`, to choose a newer model explicitly. Keeping the existing defaults avoids changing the model for configurations that omit it. When a model has dated snapshots, use one to hold the model version constant across runs. A fixed snapshot does not guarantee identical outputs.
+Bare `openai:chat` and `openai:responses` select `gpt-5.6-terra`. Built-in grading uses `gpt-5.6-sol`; suggestions and web search use `gpt-5.6-terra`. Specify a model ID to override these defaults. When a model has dated snapshots, use one to hold the model version constant across runs. A fixed snapshot does not guarantee identical outputs.
 
 `openai:embedding` and `openai:embeddings` default to `text-embedding-3-large`; both prefixes accept an explicit model. `openai:speech:` is an alias for `openai:tts:`.
 
@@ -265,6 +265,17 @@ Built-in OpenAI API requests include `X-OpenAI-Originator: promptfoo`. Override 
 ### Cost estimates
 
 Promptfoo uses returned token usage and its model pricing catalog to estimate costs. Estimates can be incomplete for new models, tools, or gateways that omit usage. Check [OpenAI's usage dashboard](https://platform.openai.com/usage) for billed usage.
+
+Current standard rates in USD per million tokens, for requests with up to 272,000 input tokens:
+
+| Model                         | Input | Cached input | Cache writes | Output |
+| ----------------------------- | ----- | ------------ | ------------ | ------ |
+| GPT-5.6 Luna                  | $0.20 | $0.02        | $0.25        | $1.20  |
+| GPT-5.6 Terra                 | $2    | $0.20        | $2.50        | $12    |
+| GPT-5.6 Sol (`gpt-5.6` alias) | $4    | $0.40        | $5           | $20    |
+| GPT-6 Astra                   | $10   | $1           | $12.50       | $50    |
+
+Above 272,000 input tokens, input, cached-input, and cache-write rates double; output rates increase by 50%. Batch and Flex cost half the standard rates. Fast mode (`fast` or `priority`) costs twice the standard rates. Regional processing adds 10%; Astra Fast mode is unavailable with EU data residency. Sol's promotional pricing runs at least through November 21, 2026. Rates verified September 9, 2026; see [OpenAI pricing](https://developers.openai.com/api/docs/pricing).
 
 For Chat Completions and Responses, set `inputCost` and `outputCost` to override rates in **dollars per token**, not per million tokens. For audio, use `audioInputCost` and `audioOutputCost`. The older `cost` and `audioCost` options are shared input/output fallbacks. These settings affect Promptfoo's estimates, not API billing.
 
@@ -466,7 +477,7 @@ prompts:
   - 'Look up order {{order_id}}.'
 
 providers:
-  - id: openai:chat:gpt-4.1-mini
+  - id: openai:chat:gpt-5.6-luna
     // highlight-start
     config:
       tools:
