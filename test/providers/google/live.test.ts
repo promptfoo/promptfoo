@@ -188,6 +188,13 @@ describe('GoogleLiveProvider', () => {
     expect(provider.id()).toBe('google:live:gemini-2.0-flash-exp');
   });
 
+  it('uses scoped environment credentials loaded for google:live', async () => {
+    const loaded = await loadApiProvider('google:live:gemini-2.0-flash-exp', {
+      options: { env: { GOOGLE_API_KEY: 'scoped-key' } },
+    });
+    expect((loaded as GoogleLiveProvider).getApiKey()).toBe('scoped-key');
+  });
+
   describe.each([false, true])('image rubric grading, rate limited=%s', (rateLimited) => {
     const model = 'gemini-3.1-flash-live-preview';
 

@@ -858,9 +858,15 @@ describe('EvalOutputCell', () => {
     expect(renderedSources).toEqual([dataUri, 'https://example.com/secondary-inline.png']);
   });
 
-  it.each(['google:gemini-3.1-flash-image', 'media-eval-label'])(
-    'keeps mixed text and structured images visible with provider ID %s',
-    (provider) => {
+  it.each([
+    ['google:gemini-3.1-flash-image', true],
+    ['media-eval-label', true],
+    ['media-eval-label', false],
+  ])(
+    'keeps mixed text and structured images visible with provider ID %s and Markdown %s',
+    (provider, renderMarkdown) => {
+      mockResultsViewSettings.renderMarkdown = renderMarkdown;
+      mockResultsViewSettings.prettifyJson = true;
       const text = 'Generated image description. '.repeat(20);
       const imageUrl = 'https://example.com/generated.png';
       const { container } = renderWithProviders(
@@ -878,7 +884,9 @@ describe('EvalOutputCell', () => {
 
       expect(screen.getByRole('img')).toHaveAttribute('src', imageUrl);
       expect(container.querySelector('.truncation-toggler')).toBeNull();
-      expect(container.textContent).toContain(text.trim());
+      if (renderMarkdown) {
+        expect(container.textContent).toContain(text.trim());
+      }
     },
   );
 
