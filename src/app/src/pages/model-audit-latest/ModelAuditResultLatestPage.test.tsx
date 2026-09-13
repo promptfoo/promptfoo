@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -48,7 +48,7 @@ const createMockScan = (id: string, name: string) => ({
 });
 
 describe('ModelAuditResultLatestPage', () => {
-  const mockCallApi = vi.mocked(callApi);
+  const mockCallApiJson = vi.mocked(callApiJson);
   const mockUseConfigStore = vi.mocked(useModelAuditConfigStore);
   const mockStartNewScan = vi.fn();
 
@@ -70,7 +70,7 @@ describe('ModelAuditResultLatestPage', () => {
   };
 
   it('should show loading state initially', () => {
-    mockCallApi.mockImplementation(() => new Promise(() => {})); // Never resolves
+    mockCallApiJson.mockImplementation(() => new Promise(() => {})); // Never resolves
 
     renderComponent();
 
@@ -78,10 +78,7 @@ describe('ModelAuditResultLatestPage', () => {
   });
 
   it('should show empty state when no scans exist', async () => {
-    mockCallApi.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ scans: [], total: 0 }),
-    } as Response);
+    mockCallApiJson.mockResolvedValueOnce({ scans: [], total: 0 } as any);
 
     renderComponent();
 
@@ -95,10 +92,7 @@ describe('ModelAuditResultLatestPage', () => {
   it('should display latest scan when available', async () => {
     const mockScan = createMockScan('latest-scan', 'Latest Security Scan');
 
-    mockCallApi.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ scans: [mockScan], total: 1 }),
-    } as Response);
+    mockCallApiJson.mockResolvedValueOnce({ scans: [mockScan], total: 1 } as any);
 
     renderComponent();
 
@@ -113,10 +107,7 @@ describe('ModelAuditResultLatestPage', () => {
   it('should have navigation buttons', async () => {
     const mockScan = createMockScan('latest-scan', 'Test Scan');
 
-    mockCallApi.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ scans: [mockScan], total: 1 }),
-    } as Response);
+    mockCallApiJson.mockResolvedValueOnce({ scans: [mockScan], total: 1 } as any);
 
     renderComponent();
 
@@ -131,10 +122,7 @@ describe('ModelAuditResultLatestPage', () => {
     const user = userEvent.setup();
     const mockScan = createMockScan('latest-scan', 'Test Scan');
 
-    mockCallApi.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ scans: [mockScan], total: 1 }),
-    } as Response);
+    mockCallApiJson.mockResolvedValueOnce({ scans: [mockScan], total: 1 } as any);
 
     renderComponent();
 
@@ -148,9 +136,7 @@ describe('ModelAuditResultLatestPage', () => {
   });
 
   it('should show error state on fetch failure', async () => {
-    mockCallApi.mockResolvedValueOnce({
-      ok: false,
-    } as Response);
+    mockCallApiJson.mockRejectedValueOnce(new Error('Failed to fetch latest scan'));
 
     renderComponent();
 
@@ -165,14 +151,9 @@ describe('ModelAuditResultLatestPage', () => {
   it('should retry loading the latest scan from the error state', async () => {
     const user = userEvent.setup();
 
-    mockCallApi
-      .mockResolvedValueOnce({
-        ok: false,
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ scans: [], total: 0 }),
-      } as Response);
+    mockCallApiJson
+      .mockRejectedValueOnce(new Error('Failed to fetch latest scan'))
+      .mockResolvedValueOnce({ scans: [], total: 0 } as any);
 
     renderComponent();
 
@@ -185,14 +166,11 @@ describe('ModelAuditResultLatestPage', () => {
     await waitFor(() => {
       expect(screen.getByText('No Model Scans Yet')).toBeInTheDocument();
     });
-    expect(mockCallApi).toHaveBeenCalledTimes(2);
+    expect(mockCallApiJson).toHaveBeenCalledTimes(2);
   });
 
   it('should link to setup page from empty state', async () => {
-    mockCallApi.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ scans: [], total: 0 }),
-    } as Response);
+    mockCallApiJson.mockResolvedValueOnce({ scans: [], total: 0 } as any);
 
     renderComponent();
 
@@ -208,10 +186,7 @@ describe('ModelAuditResultLatestPage', () => {
     const mockScan = createMockScan('latest-scan', '');
     (mockScan as { name: string | null }).name = null;
 
-    mockCallApi.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ scans: [mockScan], total: 1 }),
-    } as Response);
+    mockCallApiJson.mockResolvedValueOnce({ scans: [mockScan], total: 1 } as any);
 
     renderComponent();
 

@@ -690,6 +690,7 @@ describe('Providers Routes', () => {
         purpose: 'Help users',
         limitations: 'No medical advice',
         user: 'Support agents',
+        tokenUsage: { prompt: 20, completion: 5, total: 25, numRequests: 1 },
         tools: [
           {
             name: 'lookup',

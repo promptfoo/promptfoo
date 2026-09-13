@@ -1,7 +1,7 @@
 import * as React from 'react';
 
 import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { act, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -174,10 +174,7 @@ describe('Eval', () => {
 
     // Use stable mock to prevent infinite loops
     vi.mocked(useResultsViewSettingsStore).mockReturnValue(baseMockResultsViewSettings);
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [] } as any);
   });
 
   afterEach(() => {
@@ -261,10 +258,7 @@ describe('Eval', () => {
       fetchEvalData: fetchEvalDataMock,
     });
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'test-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'test-eval' }] } as any);
 
     const { queryByText } = render(
       <MemoryRouter>
@@ -287,10 +281,7 @@ describe('Eval', () => {
       table: mockTable, // Table is available
     });
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'test-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'test-eval' }] } as any);
 
     const { queryByTestId } = render(
       <MemoryRouter>
@@ -421,10 +412,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'retried-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'latest-eval' }] } as any);
 
     render(
       <MemoryRouter>
@@ -449,10 +437,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'latest-eval' }] } as any);
 
     render(
       <MemoryRouter>
@@ -477,10 +462,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'latest-eval' }] } as any);
 
     render(
       <MemoryRouter>
@@ -505,9 +487,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: false,
-    } as Response);
+    vi.mocked(callApiJson).mockRejectedValue(new Error('Request failed'));
 
     const { queryByTestId, queryByText } = render(
       <MemoryRouter>
@@ -532,14 +512,9 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: [{ evalId: 'selected-eval' }] }),
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: false,
-      } as Response);
+    vi.mocked(callApiJson)
+      .mockResolvedValueOnce({ data: [{ evalId: 'selected-eval' }] } as any)
+      .mockRejectedValueOnce(new Error('Request failed'));
 
     const { queryByTestId, queryByText } = render(
       <MemoryRouter>
@@ -569,10 +544,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'latest-eval' }] } as any);
 
     render(
       <MemoryRouter>
@@ -593,10 +565,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'latest-eval' }] } as any);
 
     render(
       <MemoryRouter>
@@ -621,10 +590,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'latest-eval' }] } as any);
 
     render(
       <MemoryRouter>
@@ -646,10 +612,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [] } as any);
 
     render(
       <MemoryRouter>
@@ -674,10 +637,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'latest-eval' }] } as any);
 
     render(
       <MemoryRouter>
@@ -706,10 +666,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'surviving-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'surviving-eval' }] } as any);
 
     render(
       <MemoryRouter>
@@ -734,10 +691,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'surviving-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'surviving-eval' }] } as any);
 
     render(
       <MemoryRouter>
@@ -767,7 +721,7 @@ describe('Eval', () => {
     });
     // /api/results is transiently unavailable; the pinned eval's own /eval/:id/table reload
     // must still run rather than being dropped.
-    vi.mocked(callApi).mockResolvedValue({ ok: false } as Response);
+    vi.mocked(callApiJson).mockRejectedValue(new Error('Request failed'));
 
     render(
       <MemoryRouter>
@@ -797,7 +751,7 @@ describe('Eval', () => {
     });
     // /api/results is unavailable, but the socket told us the pinned eval was deleted — the user
     // must not be stranded on the now-gone /eval/:id.
-    vi.mocked(callApi).mockResolvedValue({ ok: false } as Response);
+    vi.mocked(callApiJson).mockRejectedValue(new Error('Request failed'));
 
     render(
       <MemoryRouter>
@@ -824,10 +778,9 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'eval-Y',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'eval-Z' }, { evalId: 'eval-Y' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({
+      data: [{ evalId: 'eval-Z' }, { evalId: 'eval-Y' }],
+    } as any);
 
     const fetchStarts: string[] = [];
     let releaseFirst!: () => void;
@@ -892,10 +845,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'latest-eval' }] } as any);
 
     render(
       <MemoryRouter>
@@ -926,10 +876,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'latest-eval' }] } as any);
 
     const { rerender } = render(
       <MemoryRouter>
@@ -966,10 +913,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'selected-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'selected-eval' }] } as any);
 
     const { rerender } = render(
       <MemoryRouter>
@@ -1002,10 +946,7 @@ describe('Eval', () => {
       ...baseMockTableStore,
       evalId: 'selected-eval',
     });
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: [{ evalId: 'latest-eval' }] }),
-    } as Response);
+    vi.mocked(callApiJson).mockResolvedValue({ data: [{ evalId: 'latest-eval' }] } as any);
 
     render(
       <MemoryRouter>

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { mockWindowLocation } from '@app/tests/browserMocks';
-import { callApi } from '@app/utils/api';
+import { callApiJson } from '@app/utils/api';
 import { ResultFailureReason } from '@promptfoo/types';
 import { render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -20,7 +20,10 @@ const renderWithProviders = (ui: React.ReactElement) => {
   );
 };
 
-vi.mock('@app/utils/api');
+vi.mock('@app/utils/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@app/utils/api')>()),
+  callApiJson: vi.fn(),
+}));
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
@@ -596,7 +599,7 @@ const createComponentMockEvalData = (
   }) as unknown as ResultsFile;
 
 describe('App component target selection', () => {
-  const mockCallApi = callApi as Mock;
+  const mockCallApi = callApiJson as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -615,9 +618,7 @@ describe('App component target selection', () => {
         results: [createComponentMockResult(0, 'plugin1', false)],
       },
     } as unknown as ResultsFile;
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -634,9 +635,7 @@ describe('App component target selection', () => {
       createComponentMockResult(1, 'plugin3', false),
     ];
     const evalData = createComponentMockEvalData(2, results);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -663,7 +662,7 @@ describe('App component target selection', () => {
 });
 
 describe('App component target selector rendering', () => {
-  const mockCallApi = callApi as Mock;
+  const mockCallApi = callApiJson as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -676,9 +675,7 @@ describe('App component target selector rendering', () => {
       createComponentMockResult(1, 'plugin1', false),
     ];
     const evalData = createComponentMockEvalData(2, results);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -689,9 +686,7 @@ describe('App component target selector rendering', () => {
   it('should render a static chip when there is only one prompt', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -706,9 +701,7 @@ describe('App component target selector rendering', () => {
     const user = userEvent.setup();
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -727,9 +720,7 @@ describe('App component target selector rendering', () => {
   it('preserves a reported target probe count of zero', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results, 0);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -764,9 +755,7 @@ describe('App component target selector rendering', () => {
         },
       },
     };
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -813,9 +802,7 @@ describe('App component target selector rendering', () => {
         },
       },
     };
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -832,9 +819,7 @@ describe('App component target selector rendering', () => {
   it('keeps report header actions in normal flow on narrow screens', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -850,9 +835,7 @@ describe('App component target selector rendering', () => {
   it('allows embedded reports to shrink within narrow result views', async () => {
     const results = [createComponentMockResult(0, 'plugin1', true)];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     const { container } = renderWithProviders(<App embedded />);
 
@@ -863,7 +846,7 @@ describe('App component target selector rendering', () => {
 });
 
 describe('App component categoryStats calculation with moderation', () => {
-  const mockCallApi = callApi as Mock;
+  const mockCallApi = callApiJson as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -889,9 +872,7 @@ describe('App component categoryStats calculation with moderation', () => {
       createComponentMockResult(0, pluginId, false, [moderationFailure, passingTest]),
     ];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -911,7 +892,7 @@ describe('App component categoryStats calculation with moderation', () => {
 });
 
 describe('Filter panel regression tests', () => {
-  const mockCallApi = callApi as Mock;
+  const mockCallApi = callApiJson as Mock;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -926,9 +907,7 @@ describe('Filter panel regression tests', () => {
       createComponentMockResult(0, 'pii:direct', true),
     ];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
@@ -959,9 +938,7 @@ describe('Filter panel regression tests', () => {
       createComponentMockResult(0, 'pii:direct', true),
     ];
     const evalData = createComponentMockEvalData(1, results);
-    mockCallApi.mockResolvedValue({
-      json: () => Promise.resolve({ data: evalData }),
-    });
+    mockCallApi.mockResolvedValue({ data: evalData });
 
     renderWithProviders(<App />);
 
