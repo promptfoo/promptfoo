@@ -50,7 +50,12 @@ export async function createStreamingConnection(
     streamConfig.pronunciation_dictionary_locators = config.pronunciationDictionaryLocators;
   }
 
-  await client.connect(endpoint, streamConfig);
+  try {
+    await client.connect(endpoint, streamConfig);
+  } catch (error) {
+    client.close();
+    throw error;
+  }
 
   return client;
 }
