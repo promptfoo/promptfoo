@@ -246,6 +246,7 @@ describe('matchesLlmRubric', () => {
             trace: { id: 'trace-456' },
             assertionError: true,
             graderError: true,
+            fallbackIntermediate: true,
           },
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
         },

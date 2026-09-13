@@ -104,7 +104,11 @@ export async function matchesSearchRubric(
     };
   }
 
+  const output = String(resp.output).trim();
   try {
+    if (output.startsWith('{')) {
+      JSON.parse(output);
+    }
     const result = extractFirstJsonObject(String(resp.output)) as {
       pass?: boolean;
       score?: number;
@@ -135,13 +139,17 @@ export async function matchesSearchRubric(
       },
     };
   } catch (err) {
+    if (output.startsWith('{')) {
+      return {
+        ...graderFail('Search rubric grader produced malformed JSON', resp.tokenUsage),
+        assertion,
+      };
+    }
     // JSON extraction failed - fall back to naive substring matching
     logger.warn(
       `[search-rubric] Could not parse structured JSON from provider response, falling back to substring matching: ${(err as Error).message}`,
     );
-    const verdict = String(resp.output)
-      .toLowerCase()
-      .match(/"pass"\s*:\s*(true|false)/)?.[1];
+    const verdict = output.toLowerCase().match(/"pass"\s*:\s*(true|false)/)?.[1];
     if (!verdict) {
       return {
         ...graderFail('Search rubric grader produced no verdict', resp.tokenUsage),

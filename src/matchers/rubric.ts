@@ -928,6 +928,7 @@ export async function runJsonGradingPrompt({
     cachedResponse: _untrustedCachedResponse,
     assertionError: _untrustedAssertionError,
     graderError: _untrustedGraderError,
+    fallbackIntermediate: _untrustedFallbackIntermediate,
     ...trustedResponseMetadata
   } = responseMetadata;
 
