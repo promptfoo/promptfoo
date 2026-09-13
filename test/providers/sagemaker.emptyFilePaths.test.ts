@@ -130,8 +130,8 @@ describe('SageMaker empty AWS shared-file selectors', () => {
     for (const filename of [
       ...Object.values(defaultPaths),
       ...Object.values(expandedPaths),
-      '/synthetic-sage/credentials',
-      '/synthetic-sage/config',
+      path.resolve('/synthetic-sage/credentials'),
+      path.resolve('/synthetic-sage/config'),
       '',
       ' ',
     ]) {
@@ -245,7 +245,7 @@ describe('SageMaker empty AWS shared-file selectors', () => {
       } else if (input === 'both empty') {
         setEnvironment({ AWS_SHARED_CREDENTIALS_FILE: '', AWS_CONFIG_FILE: '' });
       } else if (input === 'nonempty') {
-        const filename = `/synthetic-sage/${source}`;
+        const filename = path.resolve(`/synthetic-sage/${source}`);
         fileContents(filename, staticProfile(source, named, key));
         setEnvironment({ [pathVariable]: filename });
       } else if (input === 'tilde') {

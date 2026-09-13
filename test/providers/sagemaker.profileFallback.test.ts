@@ -38,6 +38,8 @@ const { NodeHttpHandler } = requireFromWebIdentity(
 const roleA = 'arn:aws:iam::123456789012:role/FallbackA';
 const roleB = 'arn:aws:iam::123456789012:role/FallbackB';
 const profileRole = 'arn:aws:iam::123456789012:role/Profile';
+const configFile = path.resolve('/synthetic-sage-fallback/config');
+const credentialsFile = path.resolve('/synthetic-sage-fallback/credentials');
 const tokenA = '/synthetic-sage-fallback/token-a';
 const tokenB = '/synthetic-sage-fallback/token-b';
 
@@ -77,7 +79,7 @@ describe('SageMaker implicit profile fallback ownership', () => {
 
   function useMetadataProfile() {
     externalDataInterceptor.interceptFile(
-      '/synthetic-sage-fallback/config',
+      configFile,
       `[profile fallback]\nrole_arn = ${profileRole}\ncredential_source = Ec2InstanceMetadata\n`,
     );
     setEnvironment({ AWS_EC2_METADATA_SERVICE_ENDPOINT: 'http://synthetic-metadata.invalid' });
@@ -91,7 +93,7 @@ describe('SageMaker implicit profile fallback ownership', () => {
       `${createHash('sha256').update(session).digest('hex')}.json`,
     );
     externalDataInterceptor.interceptFile(
-      '/synthetic-sage-fallback/config',
+      configFile,
       `[profile fallback]\nlogin_session = ${session}\nregion = us-east-1\n`,
     );
     setEnvironment({ AWS_LOGIN_CACHE_DIRECTORY: directory });
@@ -174,8 +176,8 @@ describe('SageMaker implicit profile fallback ownership', () => {
           .map((name) => [name, undefined]),
       ),
       AWS_PROFILE: 'fallback',
-      AWS_CONFIG_FILE: '/synthetic-sage-fallback/config',
-      AWS_SHARED_CREDENTIALS_FILE: '/synthetic-sage-fallback/credentials',
+      AWS_CONFIG_FILE: configFile,
+      AWS_SHARED_CREDENTIALS_FILE: credentialsFile,
       AWS_WEB_IDENTITY_TOKEN_FILE: tokenA,
       AWS_ROLE_ARN: roleA,
       AWS_ROLE_SESSION_NAME: 'synthetic-fallback',
@@ -209,10 +211,10 @@ describe('SageMaker implicit profile fallback ownership', () => {
     const homeDirectory = getHomeDir();
     for (const [filename, contents] of [
       [
-        '/synthetic-sage-fallback/config',
+        configFile,
         `[profile fallback]\nrole_arn = ${profileRole}\ncredential_source = Environment\n`,
       ],
-      ['/synthetic-sage-fallback/credentials', ''],
+      [credentialsFile, ''],
       [path.join(homeDirectory, '.aws', 'config'), ''],
       [path.join(homeDirectory, '.aws', 'credentials'), ''],
     ]) {
