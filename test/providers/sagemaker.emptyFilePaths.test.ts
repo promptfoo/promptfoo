@@ -254,7 +254,9 @@ describe('SageMaker empty AWS shared-file selectors', () => {
       } else if (input === 'whitespace') {
         // A literal whitespace filename is valid here and must never be trimmed
         // into the fallback file, which contains a different signing key.
-        fileContents(' ', staticProfile(source, named, key));
+        const contents = staticProfile(source, named, key);
+        fileContents(' ', contents);
+        fileContents(path.resolve(' '), contents);
         setEnvironment({ [pathVariable]: ' ' });
       }
       if (route === 'named default chain') {

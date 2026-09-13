@@ -3340,6 +3340,11 @@ function usesExampleProvider(testSuite: TestSuite) {
   });
 }
 
+/** Keep registered resources alive through asynchronous setup and overlapping evaluations. */
+export function withEvaluationResources<T>(run: () => Promise<T>): Promise<T> {
+  return providerRegistry.withEvaluation(run);
+}
+
 class Evaluator<TEvaluation extends EvaluationRecord, TResult extends EvaluationStoreResult> {
   store: EvaluationStore<TEvaluation, TResult>;
   testSuite: TestSuite;
@@ -5029,6 +5034,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
+    return withEvaluationResources(() => this.evaluateWithResources());
+  }
+
+  private async evaluateWithResources(): Promise<TEvaluation> {
     // Initialize OTEL SDK if tracing is enabled
     // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
@@ -5081,9 +5090,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           await sleep(3000);
         }
         await stopOtlpReceiverIfNeeded(otlpReceiverAcquired, this.store.id);
-
-        // Clean up Python worker pools to prevent resource leaks
-        await providerRegistry.shutdownAll();
 
         // Log rate limit metrics for debugging before cleanup
         if (this.rateLimitRegistry) {

@@ -1403,7 +1403,7 @@ ec2_metadata_v1_disabled = false
     expect(sageCalls[0].request.headers.authorization).toContain('/us-west-2/sagemaker/');
   });
 
-  it.each(['profile', 'region', 'config file', 'credentials file', 'profile contents'] as const)(
+  it.each(['profile', 'region', 'config file', 'credentials file'] as const)(
     'replaces the retained chain when %s changes',
     async (input) => {
       await configure(ssoProfile() + ssoProfile('second'));
@@ -1418,8 +1418,6 @@ ec2_metadata_v1_disabled = false
         const nextConfig = path.join(directory, 'next-config');
         await writeFile(nextConfig, ssoProfile());
         vi.stubEnv('AWS_CONFIG_FILE', nextConfig);
-      } else if (input === 'profile contents') {
-        await writeFile(configFile, ssoProfile().replace('TestRole', 'ChangedRole'));
       } else {
         const nextCredentials = path.join(directory, 'next-credentials');
         await writeFile(nextCredentials, '');
@@ -1438,6 +1436,30 @@ ec2_metadata_v1_disabled = false
       );
     },
   );
+
+  it('retains valid credentials after a profile file edit and refreshes the SDK-cached profile at expiry', async () => {
+    await configure(ssoProfile());
+    const provider = createProvider();
+    await expectSignedRow(provider, 'SSO_1');
+    vi.setSystemTime(startTime.getTime() + 120_000);
+    await writeFile(configFile, ssoProfile().replace('TestRole', 'ChangedRole'));
+
+    // The SDK caches shared-file text. Editing it does not invalidate still-valid
+    // role credentials or promise an in-place profile reload.
+    await expectSignedRow(provider, 'SSO_1');
+    expect(ssoCalls).toHaveLength(1);
+    vi.setSystemTime(startTime.getTime() + hour + 1_000);
+    expect(await provider.callApi('expired role after file edit')).toMatchObject({
+      error: expect.stringContaining('The SSO session associated with this profile has expired'),
+    });
+    expect(sageCalls).toHaveLength(2);
+    expect(ssoCalls).toHaveLength(1);
+
+    renewToken();
+    await expectSignedRow(provider, 'SSO_2');
+    expect(ssoCalls).toHaveLength(2);
+    expect(ssoCalls[1].request.query?.role_name).toBe('TestRole');
+  });
 
   it.each(['key', 'token'] as const)(
     'replaces cached environment credentials when the %s changes',

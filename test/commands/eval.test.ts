@@ -58,7 +58,10 @@ import { mockProcessEnv } from '../util/utils';
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 vi.mock('../../src/cache');
-vi.mock('../../src/evaluator');
+vi.mock('../../src/evaluator', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/evaluator')>()),
+  evaluate: vi.fn(),
+}));
 vi.mock('../../src/globalConfig/accounts');
 vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
   return {

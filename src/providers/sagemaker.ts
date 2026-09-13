@@ -1,4 +1,6 @@
 import { Agent as HttpAgent } from 'node:http';
+import { homedir } from 'node:os';
+import { join, resolve, sep } from 'node:path';
 import crypto from 'crypto';
 
 import { z } from 'zod';
@@ -12,6 +14,7 @@ import type {
   AwsCredentialIdentity,
   RuntimeConfigAwsCredentialIdentityProvider,
 } from '@aws-sdk/types';
+import type { DefaultsMode } from '@smithy/core/client';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -248,7 +251,36 @@ type CredentialScope = Pick<
   region: string;
   environment: Record<string, string | undefined>;
   helperEndpointPolicy?: string;
+  files?: SharedFileInputs;
 };
+
+interface SharedFileInputs {
+  filepath: string;
+  configFilepath: string;
+}
+
+function captureSharedFiles(environment: Record<string, string | undefined>): SharedFileInputs {
+  // Match the SDK's HOME precedence and ~/ handling before an asynchronous import
+  // or credential resolver can observe a different process environment.
+  const home =
+    environment.HOME ||
+    environment.USERPROFILE ||
+    (environment.HOMEPATH
+      ? `${environment.HOMEDRIVE ?? `C:${sep}`}${environment.HOMEPATH}`
+      : homedir());
+  const file = (value: string | undefined, name: string) =>
+    resolve(
+      value
+        ? value.startsWith('~/')
+          ? join(home, value.slice(2))
+          : value
+        : join(home, '.aws', name),
+    );
+  return {
+    filepath: file(environment.AWS_SHARED_CREDENTIALS_FILE, 'credentials'),
+    configFilepath: file(environment.AWS_CONFIG_FILE, 'config'),
+  };
+}
 
 function sameCredentialScope(left: CredentialScope, right: CredentialScope): boolean {
   return (
@@ -258,6 +290,8 @@ function sameCredentialScope(left: CredentialScope, right: CredentialScope): boo
     left.secretAccessKey === right.secretAccessKey &&
     left.sessionToken === right.sessionToken &&
     left.helperEndpointPolicy === right.helperEndpointPolicy &&
+    left.files?.filepath === right.files?.filepath &&
+    left.files?.configFilepath === right.files?.configFilepath &&
     Object.keys(left.environment).length === Object.keys(right.environment).length &&
     Object.entries(left.environment).every(([name, value]) => right.environment[name] === value)
   );
@@ -388,6 +422,7 @@ abstract class SageMakerGenericProvider {
   async getCredentials(
     config: SageMakerConfig = this.config,
     environment?: CredentialScope['environment'],
+    files?: SharedFileInputs,
   ): Promise<AwsCredentialIdentity | RuntimeConfigAwsCredentialIdentityProvider | undefined> {
     const { accessKeyId, secretAccessKey, sessionToken, profile } = config;
     if (accessKeyId && secretAccessKey) {
@@ -396,6 +431,27 @@ abstract class SageMakerGenericProvider {
         accessKeyId,
         secretAccessKey,
         sessionToken,
+      };
+    }
+    if (
+      !profile &&
+      !environment?.AWS_PROFILE &&
+      environment?.AWS_ACCESS_KEY_ID &&
+      environment.AWS_SECRET_ACCESS_KEY
+    ) {
+      // Capture the SDK's static environment identity as values, just like explicit
+      // config credentials; a later ambient change cannot select another signer.
+      return {
+        accessKeyId: environment.AWS_ACCESS_KEY_ID,
+        secretAccessKey: environment.AWS_SECRET_ACCESS_KEY,
+        ...(environment.AWS_SESSION_TOKEN && { sessionToken: environment.AWS_SESSION_TOKEN }),
+        ...(environment.AWS_CREDENTIAL_EXPIRATION && {
+          expiration: new Date(environment.AWS_CREDENTIAL_EXPIRATION),
+        }),
+        ...(environment.AWS_CREDENTIAL_SCOPE && {
+          credentialScope: environment.AWS_CREDENTIAL_SCOPE,
+        }),
+        ...(environment.AWS_ACCOUNT_ID && { accountId: environment.AWS_ACCOUNT_ID }),
       };
     }
     if (profile) {
@@ -412,6 +468,7 @@ abstract class SageMakerGenericProvider {
         profile,
         filepath: environment?.AWS_SHARED_CREDENTIALS_FILE || undefined,
         configFilepath: environment?.AWS_CONFIG_FILE || undefined,
+        ...files,
       });
     }
 
@@ -423,22 +480,25 @@ abstract class SageMakerGenericProvider {
   private async getCredentialScope(
     region: string,
     smithyConfig: typeof import('@smithy/core/config'),
+    credentialConfig: Pick<
+      SageMakerConfig,
+      'profile' | 'accessKeyId' | 'secretAccessKey' | 'sessionToken'
+    > = this.config,
+    capturedEnvironment: CredentialScope['environment'] = process.env,
+    files: SharedFileInputs = captureSharedFiles(capturedEnvironment),
   ): Promise<CredentialScope> {
-    const { profile, accessKeyId, secretAccessKey, sessionToken } = this.config;
+    const { profile, accessKeyId, secretAccessKey, sessionToken } = credentialConfig;
     if (accessKeyId && secretAccessKey) {
       return { region, accessKeyId, secretAccessKey, sessionToken, environment: {} };
     }
     const environment: CredentialScope['environment'] = Object.fromEntries(
-      CREDENTIAL_ENV_VARS.map((name) => [name, process.env[name]]),
+      CREDENTIAL_ENV_VARS.map((name) => [name, capturedEnvironment[name]]),
     );
     let helperEndpointPolicy: string | undefined;
     const selectedProfile = profile || environment.AWS_PROFILE;
     if (selectedProfile || !(environment.AWS_ACCESS_KEY_ID && environment.AWS_SECRET_ACCESS_KEY)) {
       const { booleanSelector, loadConfig, parseKnownFiles, SelectorType } = smithyConfig;
-      const profiles = await parseKnownFiles({
-        filepath: environment.AWS_SHARED_CREDENTIALS_FILE || undefined,
-        configFilepath: environment.AWS_CONFIG_FILE || undefined,
-      });
+      const profiles = await parseKnownFiles(files);
       const inputs = profileCredentialInputs(
         profiles,
         selectedProfile || 'default',
@@ -469,6 +529,7 @@ abstract class SageMakerGenericProvider {
                     smithyConfig,
                     name.slice('AWS_ENDPOINT_URL_'.length),
                     environment,
+                    files,
                   ),
                 ),
               ),
@@ -489,9 +550,8 @@ abstract class SageMakerGenericProvider {
               default: false,
             },
             {
-              profile: environment.AWS_PROFILE,
-              filepath: environment.AWS_SHARED_CREDENTIALS_FILE || undefined,
-              configFilepath: environment.AWS_CONFIG_FILE || undefined,
+              profile: environment.AWS_PROFILE || 'default',
+              ...files,
             },
           )();
           if (ignoreEndpoints) {
@@ -511,13 +571,14 @@ abstract class SageMakerGenericProvider {
         }
       }
     }
-    return { region, profile, environment, helperEndpointPolicy };
+    return { region, profile, environment, helperEndpointPolicy, files };
   }
 
   private async getEndpointPolicy(
     smithyConfig: typeof import('@smithy/core/config'),
     service = 'SAGEMAKER_RUNTIME',
     environment?: CredentialScope['environment'],
+    files?: SharedFileInputs,
   ): Promise<RuntimeEndpoint> {
     const {
       booleanSelector,
@@ -529,9 +590,8 @@ abstract class SageMakerGenericProvider {
     } = smithyConfig;
     const configFiles = environment
       ? {
-          profile: environment.AWS_PROFILE,
-          filepath: environment.AWS_SHARED_CREDENTIALS_FILE || undefined,
-          configFilepath: environment.AWS_CONFIG_FILE || undefined,
+          profile: environment.AWS_PROFILE || 'default',
+          ...(files ?? captureSharedFiles(environment)),
         }
       : undefined;
     const useFipsEndpoint = await loadConfig(
@@ -619,19 +679,46 @@ abstract class SageMakerGenericProvider {
         { cause },
       );
     };
-    const smithyConfig = await import('@smithy/core/config').catch(importError);
     const runtimeRegion = region ?? this.getRegion();
-    const scope = await this.getCredentialScope(runtimeRegion, smithyConfig);
-    const endpoint = await this.getEndpointPolicy(smithyConfig);
-    this.assertRuntimeGeneration(generation);
+    const credentialConfig = {
+      profile: this.config.profile,
+      accessKeyId: this.config.accessKeyId,
+      secretAccessKey: this.config.secretAccessKey,
+      sessionToken: this.config.sessionToken,
+    };
+    const environment = Object.fromEntries(
+      [...CREDENTIAL_ENV_VARS, ...DEFAULTS_ENV_VARS, 'AWS_ENDPOINT_URL_SAGEMAKER_RUNTIME'].map(
+        (name) => [name, process.env[name]],
+      ),
+    );
+    const files = captureSharedFiles(environment);
     const maxAttempts = getEnvInt('AWS_SAGEMAKER_MAX_RETRIES', 3);
+    const smithyConfig = await import('@smithy/core/config').catch(importError);
+    const scope = await this.getCredentialScope(
+      runtimeRegion,
+      smithyConfig,
+      credentialConfig,
+      environment,
+      files,
+    );
+    const endpoint = await this.getEndpointPolicy(
+      smithyConfig,
+      'SAGEMAKER_RUNTIME',
+      environment,
+      files,
+    );
+    this.assertRuntimeGeneration(generation);
     let retry = this.runtimeRetryStates.get(runtimeRegion);
     if (!retry || retry.maxAttempts !== maxAttempts) {
       retry = { maxAttempts };
       this.runtimeRetryStates.set(runtimeRegion, retry);
     }
     const retryState = retry;
-    const defaultsInputs = DEFAULTS_ENV_VARS.map((name) => process.env[name]);
+    const defaultsInputs = [
+      ...DEFAULTS_ENV_VARS.map((name) => environment[name]),
+      files.filepath,
+      files.configFilepath,
+    ];
     let defaults = this.runtimeDefaultsStates.get(runtimeRegion);
     if (!defaults || defaults.inputs.some((value, index) => value !== defaultsInputs[index])) {
       defaults = { inputs: defaultsInputs };
@@ -639,10 +726,23 @@ abstract class SageMakerGenericProvider {
     }
     const defaultsState = defaults;
     // Resolve before later SDK imports can delay this request's selected defaults.
-    defaultsState.provider ??= smithyConfig.resolveDefaultsModeConfig({ region: runtimeRegion });
+    defaultsState.provider ??= smithyConfig.resolveDefaultsModeConfig({
+      region: runtimeRegion,
+      // The SDK validates the selected mode. Its `auto` performance discovery
+      // remains SDK-owned; it cannot change our explicit serving region or endpoint.
+      defaultsMode: smithyConfig.loadConfig<DefaultsMode>(
+        {
+          environmentVariableSelector: () =>
+            environment.AWS_DEFAULTS_MODE as DefaultsMode | undefined,
+          configFileSelector: (profile) => profile.defaults_mode as DefaultsMode | undefined,
+          default: 'legacy',
+        },
+        { profile: environment.AWS_PROFILE || 'default', ...files },
+      ),
+    });
     const defaultsMode = await defaultsState.provider();
     if (
-      defaultsInputs.some((value, index) => value !== process.env[DEFAULTS_ENV_VARS[index]]) &&
+      DEFAULTS_ENV_VARS.some((name) => environment[name] !== process.env[name]) &&
       this.runtimeDefaultsStates.get(runtimeRegion) === defaultsState
     ) {
       // Keep this request's result, but do not retain it under inputs that changed
@@ -696,7 +796,8 @@ abstract class SageMakerGenericProvider {
           const retainedState = this.#retainedCredentials;
           const retainedCredentials = retainedState?.provider;
           let credentials =
-            retainedCredentials ?? (await this.getCredentials(scope, scope.environment));
+            retainedCredentials ??
+            (await this.getCredentials(scope, scope.environment, scope.files));
           let credentialsTreatedAsExpired:
             | typeof import('@aws-sdk/credential-provider-node').credentialsTreatedAsExpired
             | undefined;
@@ -706,9 +807,10 @@ abstract class SageMakerGenericProvider {
             );
             credentialsTreatedAsExpired = defaultChain.credentialsTreatedAsExpired;
             credentials ??= defaultChain.defaultProvider({
-              profile: scope.environment.AWS_PROFILE,
-              filepath: scope.environment.AWS_SHARED_CREDENTIALS_FILE || undefined,
-              configFilepath: scope.environment.AWS_CONFIG_FILE || undefined,
+              // Static environment credentials were captured above. Pin the remaining
+              // profile chain rather than allowing a later AWS_PROFILE to choose it.
+              profile: scope.environment.AWS_PROFILE || 'default',
+              ...scope.files,
             });
           }
           if (!retainedCredentials && typeof credentials === 'function') {

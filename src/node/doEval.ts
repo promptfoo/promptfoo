@@ -11,7 +11,7 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
-import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
+import { evaluate, PromptSuggestionsRejectedError, withEvaluationResources } from '../evaluator';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -394,7 +394,7 @@ export async function doEval(
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
 
-  const runEvaluation = async (initialization?: boolean) => {
+  const runEvaluationWithResources = async (initialization?: boolean) => {
     let testSuite: TestSuite | undefined = undefined;
     const startTime = Date.now();
     telemetry.record('command_used', {
@@ -1405,6 +1405,9 @@ export async function doEval(
 
     return ret;
   };
+
+  const runEvaluation = (initialization?: boolean) =>
+    withEvaluationResources(() => runEvaluationWithResources(initialization));
 
   const result = await runEvaluation(true /* initialization */);
   if (watchTermination) {
