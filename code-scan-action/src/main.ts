@@ -331,7 +331,9 @@ async function fetchBaseBranch(baseBranch: string, githubToken: string): Promise
 
   try {
     const basicAuth = Buffer.from(`x-access-token:${githubToken}`).toString('base64');
-    await exec.exec('git', ['fetch', 'origin', `${baseBranch}:${baseBranch}`], {
+    const gitPath =
+      process.platform === 'win32' ? 'C:\\Program Files\\Git\\cmd\\git.exe' : '/usr/bin/git';
+    await exec.exec(gitPath, ['fetch', 'origin', `${baseBranch}:${baseBranch}`], {
       env: {
         ...process.env,
         GIT_CONFIG_COUNT: '1',

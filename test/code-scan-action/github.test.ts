@@ -39,6 +39,13 @@ index abc123..def456 100644
  context line 58
  context line 59
  context line 60
+@@ -70,6 +70,6 @@
+ context line 70
+ context line 71
++added line 72
+ context line 73
+ context line 74
+ context line 75
 `;
 
   return {
@@ -238,6 +245,12 @@ describe('GitHub API Client', () => {
           line: 50,
           finding: 'Multi-line finding whose start is outside the hunk',
         },
+        {
+          file: 'src/auth.ts',
+          startLine: 45,
+          line: 72,
+          finding: 'Multi-line finding spanning two hunks',
+        },
       ]);
 
       expect(result.lineComments).toEqual([
@@ -252,6 +265,11 @@ describe('GitHub API Client', () => {
           file: 'src/auth.ts',
           startLine: 30,
           line: 50,
+        }),
+        expect.objectContaining({
+          file: 'src/auth.ts',
+          startLine: 45,
+          line: 72,
         }),
       ]);
     });
