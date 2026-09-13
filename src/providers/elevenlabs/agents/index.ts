@@ -30,6 +30,7 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
   private env?: EnvOverrides;
   private ephemeralAgentId: string | null = null;
   private agentCreationPromise: Promise<string> | null = null;
+  private pendingAgentDeletions = new Set<string>();
   private agentCreationController = new AbortController();
   private initPromise: Promise<void> | null = null;
 
@@ -375,17 +376,21 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
   async cleanup(): Promise<void> {
     this.agentCreationController.abort();
     await this.agentCreationPromise?.catch(() => undefined);
-    // Delete only the ephemeral agent created by this instance.
+    // Do not reuse an ID after an ambiguous deletion result; retry it separately.
     if (this.ephemeralAgentId) {
+      this.pendingAgentDeletions.add(this.ephemeralAgentId);
+      this.ephemeralAgentId = null;
+      this.agentCreationPromise = null;
+    }
+    for (const agentId of this.pendingAgentDeletions) {
       try {
-        await this.client.delete(`/convai/agents/${this.ephemeralAgentId}`, {
+        await this.client.delete(`/convai/agents/${agentId}`, {
           signal: AbortSignal.timeout(5000),
         });
         logger.debug('[ElevenLabs Agents] Ephemeral agent deleted', {
-          agentId: this.ephemeralAgentId,
+          agentId,
         });
-        this.ephemeralAgentId = null;
-        this.agentCreationPromise = null;
+        this.pendingAgentDeletions.delete(agentId);
       } catch (error) {
         logger.warn('[ElevenLabs Agents] Failed to delete ephemeral agent', {
           error: error instanceof Error ? error.message : String(error),
