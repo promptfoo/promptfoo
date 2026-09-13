@@ -21,11 +21,51 @@ import {
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
 import { createEvaluateResult } from '../factories/eval';
-import { createMockProvider, createProviderResponse } from '../factories/provider';
+import {
+  createMockProvider,
+  createProviderResponse,
+  createRequiredTokenUsage,
+} from '../factories/provider';
 import { createAtomicTestCase, createPrompt } from '../factories/testSuite';
 import { mockProcessEnv } from '../util/utils';
 
 describe('EvalResult', () => {
+  it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+    'omits numeric provider receipts from public %s accounting',
+    async (pluginId) => {
+      const secret = '1234567890123456';
+      const accounting = {
+        tokenUsage: {
+          prompt: Number(secret),
+          completionDetails: { reasoning: Number(secret) },
+          incurredTokenUsage: { prompt: Number(secret) },
+        },
+        cost: Number(secret),
+        incurredCost: Number(secret),
+        latencyMs: Number(secret),
+      };
+      const row = createEvaluateResult({
+        ...mockEvaluateResult,
+        ...accounting,
+        tokenUsage: createRequiredTokenUsage(accounting.tokenUsage),
+        response: { output: 'Clean report', ...accounting },
+        testCase: {
+          assert: [{ type: `promptfoo:redteam:${pluginId}`, value: { rawReceipt: secret } }],
+        },
+      });
+      const artifact = sanitizeResultForJsonlArtifact(row);
+      const saved = await EvalResult.createFromEvaluateResult('numeric-receipt-' + pluginId, row);
+      const [bulk] = await EvalResult.createManyFromEvaluateResult(
+        [row],
+        'numeric-bulk-' + pluginId,
+      );
+      for (const value of [artifact, saved.toEvaluateResult(), bulk.toEvaluateResult()]) {
+        expect(JSON.stringify(value)).not.toContain(secret);
+      }
+      expect(row.response?.tokenUsage?.prompt).toBe(Number(secret));
+    },
+  );
+
   it.each(
     ['coding-agent:trace-redaction', 'harness:artifact-redaction'].flatMap((pluginId) =>
       [false, true].map((hasResponse) => [pluginId, hasResponse] as const),
@@ -136,7 +176,6 @@ describe('EvalResult', () => {
       const artifact = sanitizeResultForJsonlArtifact(row);
       expect(JSON.stringify(artifact)).not.toContain(secret);
       expect(artifact.response).toMatchObject({
-        cost: 0.01,
         metadata: { redactionContentOmitted: true },
       });
       expect(artifact.metadata?.custom).toBe('retained');
@@ -186,7 +225,6 @@ describe('EvalResult', () => {
       const artifact = sanitizeResultForJsonlArtifact(row);
       expect(JSON.stringify(artifact)).not.toContain(image);
       expect(artifact.response).toMatchObject({
-        cost: 0.01,
         metadata: { redactionMediaOmitted: true },
       });
       expect(artifact.metadata?.custom).toBe('retained');
@@ -218,7 +256,6 @@ describe('EvalResult', () => {
       const artifact = sanitizeResultForJsonlArtifact(row);
       expect(JSON.stringify(artifact)).not.toContain(data);
       expect(artifact.response).toMatchObject({
-        cost: 0.01,
         metadata: { redactionMediaOmitted: true },
       });
       expect(artifact.metadata?.custom).toBe('retained');
@@ -262,7 +299,6 @@ describe('EvalResult', () => {
     });
     const artifact = sanitizeResultForJsonlArtifact(row);
     expect(artifact.response).toMatchObject({
-      cost: 0.01,
       metadata: { redactionMediaOmitted: true },
     });
     expect(JSON.stringify(artifact)).not.toContain(data);

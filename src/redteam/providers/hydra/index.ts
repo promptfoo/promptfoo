@@ -691,7 +691,7 @@ export class HydraProvider implements ApiProvider {
       const targetSessionId = targetResponse.sessionId;
       if (redactTrace) {
         targetResponse = await externalizeResponseForRedteamHistory(targetResponse, context);
-        redactionError = targetResponse.error;
+        redactionError ??= targetResponse.error;
       }
       lastTargetResponse = targetResponse;
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
@@ -773,14 +773,16 @@ export class HydraProvider implements ApiProvider {
       if (this.stateful && targetSessionId) {
         this.sessionId = targetSessionId;
         sessionIds.push(targetSessionId);
-        vars['sessionId'] = targetSessionId;
-        if (!context) {
-          context = {
-            vars: { ...vars, sessionId: targetSessionId },
-            prompt,
-          };
+        if (!redactTrace) {
+          vars['sessionId'] = targetSessionId;
+          if (!context) {
+            context = {
+              vars: { ...vars, sessionId: targetSessionId },
+              prompt,
+            };
+          }
+          context.vars['sessionId'] = targetSessionId;
         }
-        context.vars['sessionId'] = targetSessionId;
       }
 
       // Externalize blobs to avoid token bloat in Hydra/meta prompts
@@ -1062,7 +1064,10 @@ export class HydraProvider implements ApiProvider {
           ? { error: lastTargetResponse.error }
           : {}),
       metadata: {
-        sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
+        ...(!redactTrace && {
+          sessionId: this.sessionId || getSessionId(lastTargetResponse, context),
+        }),
+        sessionIds: redactTrace ? [] : sessionIds,
         messages,
         ...strategyMetadata,
         stopReason,
@@ -1070,7 +1075,6 @@ export class HydraProvider implements ApiProvider {
         totalSuccessfulAttacks: successfulAttacks.length,
         storedGraderResult,
         redteamHistory,
-        sessionIds,
         traceSnapshots:
           !redactTrace && traceSnapshots.length > 0
             ? traceSnapshots.map((t) => formatTraceForMetadata(t))

@@ -1,5 +1,4 @@
 import { BLOB_SCHEME } from '../blobs/constants';
-import { BaseTokenUsageSchema } from '../types/shared';
 
 import type { AssertionOrSet, AtomicTestCase, ProviderResponse } from '../types';
 
@@ -78,15 +77,12 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
   if (!requiresTraceRedaction(result.testCase?.assert)) {
     return input;
   }
-  const numericValue = (value: unknown) =>
-    typeof value === 'number' && Number.isFinite(value) ? value : undefined;
-  const parsedUsage = BaseTokenUsageSchema.safeParse(result.tokenUsage);
-  const parsedResponseUsage = BaseTokenUsageSchema.safeParse(response?.tokenUsage);
+  // Provider-reported numbers can carry private receipts just like text fields.
   const accounting = {
-    tokenUsage: parsedUsage.success ? parsedUsage.data : undefined,
-    cost: numericValue(result.cost),
-    incurredCost: numericValue(result.incurredCost),
-    latencyMs: numericValue(result.latencyMs),
+    tokenUsage: undefined,
+    cost: undefined,
+    incurredCost: undefined,
+    latencyMs: undefined,
   };
   const mediaOmitted = hasRedactionMedia(response);
   const metadata = { ...result.metadata };
@@ -110,10 +106,6 @@ export function sanitizeRedactionResult<T extends object>(input: T): T {
         : '[Response omitted for trace/artifact redaction.]',
       ...(response.error && { error: 'Error details omitted for trace/artifact redaction.' }),
       cached: typeof response.cached === 'boolean' ? response.cached : undefined,
-      cost: numericValue(response.cost),
-      incurredCost: numericValue(response.incurredCost),
-      latencyMs: numericValue(response.latencyMs),
-      tokenUsage: parsedResponseUsage.success ? parsedResponseUsage.data : undefined,
       metadata: mediaOmitted ? { redactionMediaOmitted: true } : { redactionContentOmitted: true },
     },
   };

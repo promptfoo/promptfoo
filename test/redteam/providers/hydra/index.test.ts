@@ -1452,6 +1452,53 @@ describe('HydraProvider', () => {
       expect(extract).not.toHaveBeenCalled();
     });
 
+    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+      'keeps stateful session receipts private for %s',
+      async (pluginId) => {
+        const secret = 'PRIVATE_HYDRA_SESSION_RECEIPT';
+        mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+        mockTargetProvider.callApi.mockResolvedValue({ output: 'Clean report', sessionId: secret });
+        const context: CallApiContextParams = {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: {
+            assert: [{ type: `promptfoo:redteam:${pluginId}`, value: { rawReceipt: secret } }],
+            metadata: { goal: 'test goal', pluginId },
+          } as AtomicTestCase,
+        };
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, stateful: true });
+        const result = await provider.callApi('', context);
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(mockTargetProvider.callApi.mock.calls[1][1]?.vars.sessionId).toBe(secret);
+        expect(context.vars).not.toHaveProperty('sessionId');
+        expect(JSON.stringify(mockAgentProvider.callApi.mock.calls)).not.toContain(secret);
+        expect(JSON.stringify(result)).not.toContain(secret);
+      },
+    );
+
+    it.each(['coding-agent:trace-redaction', 'harness:artifact-redaction'] as const)(
+      'retains an earlier unverifiable media error for %s',
+      async (pluginId) => {
+        mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+        mockTargetProvider.callApi
+          .mockResolvedValueOnce({ output: 'data:image/png;base64,PRIVATE_FIRST_TURN' })
+          .mockResolvedValueOnce({ output: 'Clean report' });
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });
+        const result = await provider.callApi('', {
+          originalProvider: mockTargetProvider,
+          vars: { input: 'test goal' },
+          prompt: { raw: 'test prompt', label: 'test' },
+          test: {
+            assert: [{ type: `promptfoo:redteam:${pluginId}` }],
+            metadata: { goal: 'test goal', pluginId },
+          } as AtomicTestCase,
+        });
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(result.error).toMatch(/redaction.*verified/i);
+      },
+    );
+
     it('passes target response evidence and image outputs into the grader', async () => {
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',

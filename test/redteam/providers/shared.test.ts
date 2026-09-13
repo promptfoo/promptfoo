@@ -1897,8 +1897,8 @@ describe('redteam history blob storage', () => {
         test: { assert: [{ type: `promptfoo:redteam:${plugin}` }] } as AtomicTestCase,
       });
       expect(JSON.stringify(history)).not.toContain(data);
+      expect(history).not.toHaveProperty('cost');
       expect(history).toMatchObject({
-        cost: 0.01,
         error: expect.stringMatching(/audio.*redaction.*verified/i),
         metadata: { redactionMediaOmitted: true },
       });

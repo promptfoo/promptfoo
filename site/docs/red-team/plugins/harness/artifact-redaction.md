@@ -40,13 +40,13 @@ Prefer deterministic evidence when the effect is observable. Use an LLM grader o
 Forensic traces and trace summaries stay in local verification. They are excluded
 from model grading and from trace-aware adaptive attacker requests, histories, and trace snapshots. Target images are also excluded from model grading.
 
-Eval exports and sharing omit these tests' forensic traces, response bodies, and mirrored provider metadata, including session IDs. Inline artifact and log text is redacted from saved verifier inputs. The local trace store retains forensic traces for verification.
+Eval exports and sharing omit these tests' forensic traces, response bodies, and mirrored provider metadata, including session IDs. Target-reported token usage, cost, and latency are also omitted from public result copies because numeric fields can contain protected receipts. Inline artifact and log text is redacted from saved verifier inputs. The local trace store retains forensic traces for verification.
 
 The privacy gate applies to every assertion in the test, including inverse assertions and assertions inside an `assert-set`. Adaptive result histories omit target images and audio for these tests.
 
 Image pixels and audio cannot be verified by these text checks. Responses containing either produce a grading error, and their response body and mirrored provider metadata are omitted from saved and shared results. Provide a text-only public report for a verifiable result.
 
-Adaptive providers bypass target-response blob storage for artifact-redaction tests.
+Adaptive providers bypass target-response blob storage for artifact-redaction tests. Hydra keeps target session IDs in private target-call state and retains an unverifiable-media error even if a later turn returns clean text.
 
 Configured receipt files must be readable regular files under the working directory or system temporary directory, containing 16 bytes to 64 KiB of text. A missing, unreadable, out-of-root, or invalid receipt fails verification. Use `rawReceiptPath` and `redactedArtifactPath` to check a protected value against an exported file before semantic grading.
 
