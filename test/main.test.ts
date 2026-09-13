@@ -11,13 +11,11 @@ const mockSetupEnv = vi.hoisted(() => vi.fn());
 const mockSetLogLevel = vi.hoisted(() => vi.fn());
 const mockTelemetryRecord = vi.hoisted(() => vi.fn());
 const mockTelemetryInitialize = vi.hoisted(() => vi.fn());
-const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const mockCloseLogger = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockTelemetryShutdown = vi.hoisted(() => vi.fn());
+const mockCloseLogger = vi.hoisted(() => vi.fn());
 const mockCloseDbIfOpen = vi.hoisted(() => vi.fn());
-const mockDispatcherDestroy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const mockGetGlobalDispatcher = vi.hoisted(() =>
-  vi.fn().mockReturnValue({ destroy: mockDispatcherDestroy }),
-);
+const mockDispatcherDestroy = vi.hoisted(() => vi.fn());
+const mockGetGlobalDispatcher = vi.hoisted(() => vi.fn());
 // Import actual undici to preserve other exports (Agent, ProxyAgent, setGlobalDispatcher, etc.)
 const actualUndici = vi.hoisted(() => vi.importActual<typeof import('undici')>('undici'));
 

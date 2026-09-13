@@ -15,6 +15,10 @@ import {
   scanHygieneFiles,
   sortDiagnostics,
 } from './hygiene/engine';
+import {
+  findHoistedPersistentMockWithoutReset,
+  persistentMockMethodNames,
+} from './hygiene/hoistedMocks';
 
 type TestControlKind = 'only' | 'skip' | 'skipIf';
 
@@ -37,7 +41,6 @@ const testDir = path.join(repoRoot, 'test');
 const biomeConfigPath = path.join(repoRoot, 'biome.jsonc');
 const thisFile = fileURLToPath(import.meta.url);
 const testApiNames = new Set(['describe', 'it', 'suite', 'test']);
-const collectionApiNames = new Set(['describe', 'suite']);
 const directProcessEnvMutationPluginPath = './tools/biome/no-direct-process-env-mutation.grit';
 const directProcessEnvMutationPluginIncludes = [
   '*.js',
@@ -256,18 +259,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'node/testProvider.test.ts',
 ]);
 
-const hoistedMockPattern = /\bvi\.hoisted\s*\(/;
-const persistentMockMethods = [
-  'mockImplementation',
-  'mockRejectedValue',
-  'mockResolvedValue',
-  'mockReturnValue',
-] as const;
-const persistentMockMethodNames = new Set<string>(persistentMockMethods);
-const persistentMockImplementationPattern = new RegExp(
-  `\\.(?:${persistentMockMethods.join('|')})\\s*\\(`,
-);
-const mockImplementationResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\s*\()/;
 // Only `vi.resetAllMocks()` is trusted as a file-level signal that every
 // `vi.fn()`-style mock has its persistent implementation reset between tests.
 // Per-mock helpers (.mockReset()/.mockRestore()) only reset the specific mock
@@ -310,26 +301,25 @@ function isFunctionLikeNode(node: Node): boolean {
   );
 }
 
-function isViCall(node: CallExpression, method: string): boolean {
-  return (
-    node.callee.type === 'MemberExpression' &&
-    !node.callee.computed &&
-    node.callee.object.type === 'Identifier' &&
-    node.callee.object.name === 'vi' &&
-    node.callee.property.type === 'Identifier' &&
-    node.callee.property.name === method
-  );
-}
-
-function findCollectionCallback(
-  node: CallExpression,
-  factories: Map<string, Node>,
-): Node | undefined {
-  if (isViCall(node, 'hoisted')) {
-    const factory = node.arguments[0];
-    return factory?.type === 'Identifier' ? factories.get(factory.name) : factory;
+function isViCall(node: CallExpression, method: string, namespaces: ReadonlySet<string>): boolean {
+  if (
+    node.callee.type !== 'MemberExpression' ||
+    node.callee.computed ||
+    node.callee.property.type !== 'Identifier' ||
+    node.callee.property.name !== method
+  ) {
+    return false;
   }
-  return hasTestApiBase(node.callee, collectionApiNames) ? node.arguments.at(-1) : undefined;
+  const receiver = node.callee.object;
+  return (
+    (receiver.type === 'Identifier' && receiver.name === 'vi') ||
+    (receiver.type === 'MemberExpression' &&
+      !receiver.computed &&
+      receiver.property.type === 'Identifier' &&
+      receiver.property.name === 'vi' &&
+      receiver.object.type === 'Identifier' &&
+      namespaces.has(receiver.object.name))
+  );
 }
 
 function isPersistentMockSetter(node: Node): boolean {
@@ -442,13 +432,14 @@ function findModuleMockFactories(statements: Node[]): Map<string, Node> {
 function findModuleScopePersistentSetter(
   statement: Node,
   factories: Map<string, Node>,
+  namespaces: ReadonlySet<string>,
 ): Node | undefined {
   if (statement.type === 'ExpressionStatement') {
     const expression =
       statement.expression.type === 'ChainExpression'
         ? statement.expression.expression
         : statement.expression;
-    if (expression.type !== 'CallExpression' || !isViCall(expression, 'mock')) {
+    if (expression.type !== 'CallExpression' || !isViCall(expression, 'mock', namespaces)) {
       return findPersistentMockSetter([expression]);
     }
     const factory = expression.arguments[1];
@@ -487,8 +478,17 @@ function findModuleScopePersistentMockWithoutReset(file: HygieneFile): Node | un
       : statement,
   );
   const factories = findModuleMockFactories(statements);
+  const namespaces = new Set(
+    file.sourceFile.body.flatMap((statement) =>
+      statement.type === 'ImportDeclaration' && statement.source.value === 'vitest'
+        ? statement.specifiers
+            .filter((specifier) => specifier.type === 'ImportNamespaceSpecifier')
+            .map((specifier) => specifier.local.name)
+        : [],
+    ),
+  );
   for (const statement of statements) {
-    const found = findModuleScopePersistentSetter(statement, factories);
+    const found = findModuleScopePersistentSetter(statement, factories, namespaces);
     if (found) {
       return found;
     }
@@ -699,8 +699,6 @@ function isAllowedSkip(usage: TestControlUsage) {
 
 type SyntaxPolicyResults = {
   directProcessEnvMutation?: Node;
-  collectionMockSetter?: Node;
-  hoistedMockSetter?: Node;
   processEnvReferenceSnapshot?: Node;
   sleepPromise?: Node;
   testControlUsages: TestControlUsage[];
@@ -709,12 +707,7 @@ type SyntaxPolicyResults = {
 function scanSyntaxPolicies(file: HygieneFile): SyntaxPolicyResults {
   const results: SyntaxPolicyResults = { testControlUsages: [] };
   const sourceLines = file.source.split(/\r?\n/);
-  const factories = findModuleMockFactories(file.sourceFile.body);
-
-  function visit(node: Node, executesAtCollection: boolean) {
-    if (executesAtCollection && !results.collectionMockSetter && isPersistentMockSetter(node)) {
-      results.collectionMockSetter = node;
-    }
+  function visit(node: Node) {
     const testControlUsage = findTestControlUsage(file, node, sourceLines);
     if (testControlUsage) {
       results.testControlUsages.push(testControlUsage);
@@ -728,25 +721,9 @@ function scanSyntaxPolicies(file: HygieneFile): SyntaxPolicyResults {
     if (!results.sleepPromise && isSleepNewExpression(node)) {
       results.sleepPromise = node;
     }
-
-    let collectionCallback: Node | undefined;
-    if (executesAtCollection && node.type === 'CallExpression') {
-      collectionCallback = findCollectionCallback(node, factories);
-      if (collectionCallback && isViCall(node, 'hoisted')) {
-        results.hoistedMockSetter ??= findPersistentMockSetter([collectionCallback], {
-          enterRootFunction: true,
-        });
-      }
-    }
-    forEachChild(node, (child) =>
-      visit(
-        child,
-        executesAtCollection && (!isFunctionLikeNode(child) || child === collectionCallback),
-      ),
-    );
+    forEachChild(node, visit);
   }
-
-  visit(file.sourceFile, true);
+  visit(file.sourceFile);
   return results;
 }
 
@@ -762,6 +739,32 @@ type FilePolicyResults = {
 type RootPolicyResults = FilePolicyResults & {
   scanSummary: HygieneScanSummary;
 };
+
+const hoistedSetterPattern =
+  /\b(?:vi|vitest\.vi)\.hoisted\s*\([\s\S]*?\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?\s*\(/;
+const globalBeforeEachResetPattern =
+  /\bbeforeEach\s*\(\s*(?:(?:vi|vitest\.vi)\.resetAllMocks\s*\)|(?:(?:\(\)|[\w$]+)\s*=>\s*)(?:\{[^}]*?)?(?:vi|vitest\.vi)\.resetAllMocks\s*\()/;
+const mockResetPattern = /(?:\.mockReset\s*\(|\b(?:vi|vitest\.vi)\.resetAllMocks\s*\()/;
+const individualTestSetterPattern =
+  /\b(?:it|test)\s*\(\s*['"`][^'"`]*['"`]\s*,\s*(?:async\s*)?(?:(?:\([^)]*\)|[\w$]+)\s*=>|function\s*\([^)]*\))\s*(?:\{[^}]*?\b)?([\w$]+)\.(?:mockImplementation|mockRejectedValue|mockResolvedValue|mockReturnValue)(?:Once)?\s*\(/g;
+
+function hasUnresetNamedSetter(source: string): boolean {
+  if (globalBeforeEachResetPattern.test(source)) {
+    return false;
+  }
+  const resetNames = new Set(
+    [...source.matchAll(/\b([\w$]+)\.mockReset\s*\(/g)].map((match) => match[1]),
+  );
+  return [...source.matchAll(individualTestSetterPattern)].some((match) => {
+    if (resetNames.has(match[1])) {
+      return false;
+    }
+    const name = match[1].replace(/[\\$]/g, '\\$&');
+    return new RegExp(
+      `\\b(?:it|test)\\s*\\(\\s*['"]\\S+['"]\\s*,\\s*(?:async\\s*)?(?:(?:\\([^)]*\\)|[\\w$]+)\\s*=>|function\\s*\\([^)]*\\))\\s*(?:\\{[^}]*?\\b)?${name}\\s*\\(`,
+    ).test(source.slice(match.index + match[0].length));
+  });
+}
 
 function createEmptyPolicyResults(): FilePolicyResults {
   return {
@@ -797,25 +800,29 @@ function addPolicyDiagnostic(
 
 function scanFilePolicies(file: HygieneFile): FilePolicyResults {
   const results = createEmptyPolicyResults();
-  const syntaxResults = scanSyntaxPolicies(file);
-  results.testControlUsages.push(...syntaxResults.testControlUsages);
-  // Preserve the existing file-level reset rule, including defaults installed
-  // by describe callbacks. Use the AST only to anchor its diagnostic.
-  if (hoistedMockPattern.test(file.source) && !mockImplementationResetPattern.test(file.source)) {
-    const match = persistentMockImplementationPattern.exec(file.source);
-    if (match) {
-      const setter = syntaxResults.hoistedMockSetter ?? syntaxResults.collectionMockSetter;
-      results.hoistedPersistentMock.push(
-        createDiagnostic(file, {
-          ruleId: 'hoisted-persistent-mock-reset',
-          start: setter?.start ?? match.index,
-          message:
-            'hoisted mocks with persistent implementations must reset implementations with mockReset() or vi.resetAllMocks()',
-          ...(setter ? { snippet: file.source.slice(setter.start, setter.end) } : {}),
-        }),
-      );
+  const hoistedViolation = findHoistedPersistentMockWithoutReset(file);
+  if (hoistedViolation) {
+    results.hoistedPersistentMock.push(hoistedViolation);
+    if (hoistedViolation.ruleId === 'hoisted-mock-analysis-limit') {
+      return results; // Fail closed before invoking the other recursive policy walkers.
     }
   }
+  const syntaxResults = scanSyntaxPolicies(file);
+  const fallbackMatch = !hoistedViolation && hoistedSetterPattern.exec(file.source);
+  if (
+    fallbackMatch &&
+    (!mockResetPattern.test(file.source) || hasUnresetNamedSetter(file.source))
+  ) {
+    results.hoistedPersistentMock.push(
+      createDiagnostic(file, {
+        ruleId: 'hoisted-persistent-mock-reset',
+        start: fallbackMatch.index,
+        message:
+          'hoisted mocks with persistent implementations must reset implementations with mockReset() or vi.resetAllMocks()',
+      }),
+    );
+  }
+  results.testControlUsages.push(...syntaxResults.testControlUsages);
   addPolicyDiagnostic(
     results.directProcessEnvMutation,
     file,
@@ -914,6 +921,25 @@ function hasModuleScopePersistentMockWithoutReset(source: string): boolean {
 const rootPolicyResults = scanRootTestPolicies();
 
 describe('root test hygiene', () => {
+  it('reports deep syntax before running recursive policies', () => {
+    const source = `${'{'.repeat(5000)}it('nested', () => {});${'}'.repeat(5000)}`;
+    expect(scanFixturePolicies(source).hoistedPersistentMock).toMatchObject([
+      { ruleId: 'hoisted-mock-analysis-limit' },
+    ]);
+  });
+
+  it.each([false, true])(
+    'checks namespace-qualified module mocks with global reset=%s',
+    (reset) => {
+      const source = [
+        "import * as vitest from 'vitest';",
+        "vitest.vi.mock('dependency', () => ({ request: vitest.vi.fn().mockReturnValue('default') }));",
+        ...(reset ? ['beforeEach(() => vitest.vi.resetAllMocks());'] : []),
+      ].join('\n');
+      expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(!reset);
+    },
+  );
+
   const rootUsages = rootPolicyResults.testControlUsages;
 
   it('accounts for every discovered file in the streaming scan', () => {
@@ -1012,6 +1038,8 @@ describe('root test hygiene', () => {
         '}));',
       ].join('\n'),
     ],
+    ["const mock = vi.hoisted(() => vi.fn()); it('sets', () => mock.mockReturnValue('x'));"],
+    ["const mock = vi.hoisted(() => vi.fn()); [0].forEach(() => mock.mockReturnValue('x'));"],
   ])('detects hoisted persistent mock implementations without reset', (source) => {
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
   });
@@ -1035,6 +1063,54 @@ describe('root test hygiene', () => {
     ],
   ])('allows hoisted persistent mock implementations with reset', (source) => {
     expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('recognizes namespace-qualified hoisted mocks and resets in the fallback', () => {
+    const source = `const mock = vitest.vi.hoisted(() => vitest.vi.fn());
+      it('sets', () => mock.mockReturnValue('x'));
+      beforeEach(() => vitest.vi.resetAllMocks());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('does not let an unrelated reset hide an individual-test setter', () => {
+    const source = `const safe = vi.hoisted(() => vi.fn());
+      const unsafe = vi.hoisted(() => vi.fn());
+      beforeEach(() => safe.mockReset());
+      it('first', () => unsafe.mockReturnValue('x'));
+      it('later', () => unsafe());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+    expect(
+      hasHoistedPersistentMockWithoutReset(
+        source.replace('safe.mockReset()', 'unsafe.mockReset()'),
+      ),
+    ).toBe(false);
+  });
+
+  it('does not treat afterAll resetAllMocks as before-test isolation', () => {
+    const source = `const unsafe = vi.hoisted(() => vi.fn());
+      const safe = vi.hoisted(() => vi.fn());
+      afterAll(() => vi.resetAllMocks());
+      it('first', () => unsafe.mockReturnValue('x'));
+      it('later', () => unsafe());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it('detects individual-test setters in function expressions', () => {
+    const source = `const safe = vi.hoisted(() => vi.fn());
+      const unsafe = vi.hoisted(() => vi.fn());
+      beforeEach(() => safe.mockReset());
+      it('first', function () { unsafe.mockReturnValue('x'); });
+      it('later', function () { unsafe(); });`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it('does not let an unrelated reset hide a block-bodied individual-test setter', () => {
+    const source = `const safe = vi.hoisted(() => vi.fn());
+      const unsafe = vi.hoisted(() => vi.fn());
+      beforeEach(() => safe.mockReset());
+      it('first', () => { unsafe.mockReturnValue('x'); });
+      it('later', () => unsafe());`;
+    expect(hasHoistedPersistentMockWithoutReset(source)).toBe(true);
   });
 
   it('detects collection-time defaults installed on hoisted mocks', () => {
@@ -1205,7 +1281,11 @@ describe('root test hygiene', () => {
 
   it('keeps new root tests from adding hoisted persistent mocks without reset', () => {
     const unapprovedFiles = rootPolicyResults.hoistedPersistentMock
-      .filter((diagnostic) => !legacyHoistedPersistentMockFiles.has(diagnostic.file))
+      .filter(
+        (diagnostic) =>
+          diagnostic.ruleId !== 'hoisted-persistent-mock-reset' ||
+          !legacyHoistedPersistentMockFiles.has(diagnostic.file),
+      )
       .map(formatDiagnostic);
 
     expect(unapprovedFiles).toEqual([]);
@@ -1214,7 +1294,9 @@ describe('root test hygiene', () => {
   it('keeps the legacy hoisted mock allowlist scoped to active violations', () => {
     const staleFiles = findStalePolicyAllowlistFiles(
       legacyHoistedPersistentMockFiles,
-      rootPolicyResults.hoistedPersistentMock,
+      rootPolicyResults.hoistedPersistentMock.filter(
+        (diagnostic) => diagnostic.ruleId === 'hoisted-persistent-mock-reset',
+      ),
     );
 
     expect(staleFiles).toEqual([]);
