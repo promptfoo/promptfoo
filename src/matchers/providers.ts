@@ -23,6 +23,8 @@ import type {
   VarValue,
 } from '../types/index';
 
+export { trackGradingProvider };
+
 // These wrappers keep src/matchers' imports of the redteam layer confined to this file.
 // Inlining shouldGenerateRemote (or a context-payload helper) into similarity.ts and
 // llmGrading.ts adds core->redteam import statements beyond the ratchet in

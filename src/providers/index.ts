@@ -347,6 +347,41 @@ export function resolveProviderConfigs(
  * Helper function to load providers from a file path.
  * Uses loadProviderConfigsFromFile to read configs, then instantiates them.
  */
+async function loadProviderBatch<T>(
+  loads: Promise<T>[],
+  providers: (value: T) => ApiProvider[],
+  callerOwned = new Set<ApiProvider>(),
+): Promise<T[]> {
+  const created = new Set<ApiProvider>();
+  const tracked = loads.map(async (load) => {
+    const value = await load;
+    for (const provider of providers(value)) {
+      created.add(provider);
+    }
+    return value;
+  });
+  try {
+    return await Promise.all(tracked);
+  } catch (error) {
+    const cleaned = new Set<ApiProvider>();
+    const cleanup = async (provider: ApiProvider) => {
+      if (callerOwned.has(provider) || cleaned.has(provider)) {
+        return;
+      }
+      cleaned.add(provider);
+      await provider.cleanup?.();
+    };
+    await Promise.allSettled([...created].map(cleanup));
+    for (const load of tracked) {
+      void load.then(
+        (value) => Promise.allSettled(providers(value).map(cleanup)),
+        () => undefined,
+      );
+    }
+    throw error;
+  }
+}
+
 async function loadProvidersFromFile(
   filePath: string,
   options: {
@@ -358,30 +393,14 @@ async function loadProvidersFromFile(
   const configs = loadProviderConfigsFromFile(filePath, basePath);
   const relativePath = filePath.slice('file://'.length);
 
-  const results = await Promise.allSettled(
+  const results = await loadProviderBatch(
     configs.map(async (config) => {
       invariant(config.id, `Provider config in ${relativePath} must have an id`);
       return loadApiProvider(config.id, { options: config, basePath, env });
     }),
+    (provider) => [provider],
   );
-  const failure = results.find(
-    (result): result is PromiseRejectedResult => result.status === 'rejected',
-  );
-  if (failure) {
-    await Promise.allSettled(
-      results
-        .filter(
-          (result): result is PromiseFulfilledResult<ApiProvider> => result.status === 'fulfilled',
-        )
-        .map(async (result) => result.value.cleanup?.()),
-    );
-    throw failure.reason;
-  }
-  return results
-    .filter(
-      (result): result is PromiseFulfilledResult<ApiProvider> => result.status === 'fulfilled',
-    )
-    .map((result) => result.value);
+  return results;
 }
 
 export async function loadApiProviders(
@@ -414,7 +433,7 @@ export async function loadApiProviders(
   } else if (isApiProvider(providerPaths)) {
     return [providerPaths];
   } else if (Array.isArray(providerPaths)) {
-    const providerResults = await Promise.allSettled(
+    const providerResults = await loadProviderBatch(
       providerPaths.map(async (provider, idx) => {
         if (isApiProvider(provider)) {
           return [provider];
@@ -452,29 +471,10 @@ export async function loadApiProviders(
           }
         }
       }),
+      (providers) => providers,
+      new Set(providerPaths.filter(isApiProvider)),
     );
-    const failure = providerResults.find(
-      (result): result is PromiseRejectedResult => result.status === 'rejected',
-    );
-    if (failure) {
-      const callerOwned = new Set(providerPaths.filter(isApiProvider));
-      await Promise.allSettled(
-        providerResults
-          .filter(
-            (result): result is PromiseFulfilledResult<ApiProvider[]> =>
-              result.status === 'fulfilled',
-          )
-          .flatMap((result) => result.value)
-          .filter((provider) => !callerOwned.has(provider))
-          .map(async (provider) => provider.cleanup?.()),
-      );
-      throw failure.reason;
-    }
-    return providerResults
-      .filter(
-        (result): result is PromiseFulfilledResult<ApiProvider[]> => result.status === 'fulfilled',
-      )
-      .flatMap((result) => result.value);
+    return providerResults.flat();
   }
   throw new Error('Invalid providers list');
 }

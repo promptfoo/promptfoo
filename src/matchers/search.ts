@@ -1,11 +1,10 @@
-import { trackGradingProvider } from '../cliState';
 import logger from '../logger';
 import { DEFAULT_WEB_SEARCH_PROMPT } from '../prompts/grading';
 import { DEFAULT_ANTHROPIC_MODEL } from '../providers/anthropic/defaults';
 import { getDefaultProviders } from '../providers/defaults';
 import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webSearchUtils';
 import { extractFirstJsonObject } from '../util/json';
-import { callProviderWithContext, getGradingProvider } from './providers';
+import { callProviderWithContext, getGradingProvider, trackGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import { tryParse } from './shared';
 

@@ -30,7 +30,7 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
-import { isApiProvider } from '../types/providers';
+import { type ApiProvider, isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getEvalConfigFromCloud, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../util/config/extensions';
@@ -340,7 +340,10 @@ export async function doEval(
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
 
-  const runEvaluation = async (initialization?: boolean) => {
+  const runEvaluationBody = async (
+    initialization?: boolean,
+    trackProvider?: (provider: ApiProvider) => void,
+  ) => {
     const startTime = Date.now();
     telemetry.record('command_used', {
       name: 'eval - started',
@@ -528,7 +531,11 @@ export async function doEval(
         testSuite,
         basePath: _basePath,
         commandLineOptions,
-      } = await resolveConfigs(cmdObj, defaultConfig));
+      } = await resolveConfigs(cmdObj, defaultConfig, undefined, trackProvider));
+    }
+
+    if (trackProvider) {
+      testSuite.providers?.filter(isApiProvider).forEach(trackProvider);
     }
 
     const describeReplayAction = (isRetryErrors: boolean | undefined) =>
@@ -1309,19 +1316,16 @@ export async function doEval(
       showRedteamProviderLabelMissingWarning(testSuite);
     }
 
-    // Clean up any WebSocket connections
-    if (testSuite.providers.length > 0) {
-      for (const provider of testSuite.providers) {
-        if (isApiProvider(provider)) {
-          const cleanup = provider?.cleanup?.();
-          if (cleanup instanceof Promise) {
-            await cleanup;
-          }
-        }
-      }
-    }
-
     return ret;
+  };
+
+  const runEvaluation = async (initialization?: boolean) => {
+    const ownedProviders = new Set<ApiProvider>();
+    try {
+      return await runEvaluationBody(initialization, (provider) => ownedProviders.add(provider));
+    } finally {
+      await Promise.allSettled([...ownedProviders].map(async (provider) => provider.cleanup?.()));
+    }
   };
 
   const result = await runEvaluation(true /* initialization */);

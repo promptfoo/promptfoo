@@ -519,6 +519,8 @@ describe('evalCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: undefined }),
       cloudConfig,
+      undefined,
+      expect.any(Function),
     );
   });
 
@@ -1135,6 +1137,8 @@ describe('evalCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: ['/suite/promptfooconfig.yaml'] }),
       expect.objectContaining({ prompts: ['from-dir'] }),
+      undefined,
+      expect.any(Function),
     );
 
     statSpy.mockRestore();
@@ -1168,6 +1172,8 @@ describe('evalCommand', () => {
         config: ['/base.yaml', '/suite/promptfooconfig.yaml', '/override.yaml'],
       }),
       expect.objectContaining({ prompts: ['from-dir'] }),
+      undefined,
+      expect.any(Function),
     );
 
     statSpy.mockRestore();
@@ -1224,6 +1230,8 @@ describe('evalCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: ['/base.yaml'] }),
       expect.anything(),
+      undefined,
+      expect.any(Function),
     );
 
     loggerWarnSpy.mockClear();
@@ -2101,6 +2109,30 @@ describe('evalCommand', () => {
     await doEval({}, defaultConfig, defaultConfigPath, {});
 
     expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('should clean up providers when evaluation fails', async () => {
+    const cleanup = vi.fn();
+    const provider = {
+      id: () => 'cleanup-provider',
+      callApi: async () => ({ output: 'ok' }),
+      cleanup,
+    } as ApiProvider;
+    vi.mocked(resolveConfigs).mockResolvedValueOnce({
+      config: {} as UnifiedConfig,
+      testSuite: {
+        prompts: [],
+        providers: [provider],
+      },
+      basePath: path.resolve('/'),
+    });
+    vi.mocked(evaluate).mockRejectedValueOnce(new Error('evaluation failed'));
+
+    await expect(doEval({}, defaultConfig, defaultConfigPath, {})).rejects.toThrow(
+      'evaluation failed',
+    );
+
+    expect(cleanup).toHaveBeenCalledOnce();
   });
 
   it('should handle redteam config', async () => {
