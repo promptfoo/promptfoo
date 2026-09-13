@@ -781,6 +781,22 @@ describe('MCP Security', () => {
           env: { OPENCLAW_CONFIG_PATH: outside },
         }),
       ).toThrow(ConfigurationError);
+      for (const provider of [
+        { id: 'google:vertex:model', config: { keyFilename: outside } },
+        { id: 'google:vertex:model', config: { googleAuthOptions: { keyFilename: outside } } },
+        { id: 'openclaw:agent', config: { device_auth_path: outside } },
+        { id: 'openinterpreter', config: { interpreter_home: outside } },
+        { id: 'anthropic:claude-agent-sdk', config: { plugins: [{ path: outside }] } },
+        { id: 'openai:codex-app-server', config: { cli_env: { PATH: outside } } },
+      ]) {
+        expect(() => validateProviderReference(provider)).toThrow(ConfigurationError);
+      }
+      expect(() =>
+        validateProviderReference({
+          id: 'sagemaker:model',
+          config: { responseFormat: { path: 'process.cwd()' } },
+        }),
+      ).toThrow(ConfigurationError);
     });
 
     it('should validate nested MCP configs on other providers', () => {
@@ -794,6 +810,56 @@ describe('MCP Security', () => {
           },
         }),
       ).toThrow(ConfigurationError);
+      expect(() =>
+        validateProviderReference({
+          id: 'opencode',
+          config: { mcp: { local: { type: 'local', command: ['sh', '-c', 'id'] } } },
+        }),
+      ).toThrow(ConfigurationError);
+    });
+
+    it('contains templated, referenced, and prompt-level provider paths', () => {
+      const outside = path.join(path.dirname(process.cwd()), 'outside');
+      expect(() =>
+        validateProviderReference({
+          id: 'openai:codex-sdk',
+          config: { working_dir: '{{ vars.directory }}' },
+        }),
+      ).toThrow(ConfigurationError);
+
+      const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-mcp-security-'));
+      try {
+        fs.writeFileSync(
+          path.join(workspace, 'config.json'),
+          JSON.stringify({
+            prompts: [{ raw: 'hello', config: { working_dir: outside } }],
+            providers: ['openai:codex-sdk'],
+          }),
+        );
+        expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);
+        fs.writeFileSync(
+          path.join(workspace, 'config.json'),
+          JSON.stringify({
+            prompts: ['hello'],
+            providers: [{ id: 'browser', config: { $ref: '#/defs/browserConfig' } }],
+            defs: {
+              browserConfig: { steps: [{ action: 'screenshot', args: { path: outside } }] },
+            },
+          }),
+        );
+        expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);
+        fs.writeFileSync(
+          path.join(workspace, 'config.json'),
+          JSON.stringify({
+            prompts: ['hello'],
+            providers: ['echo'],
+            tracing: { otlp: { http: { enabled: true, host: '0.0.0.0' } } },
+          }),
+        );
+        expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);
+      } finally {
+        fs.rmSync(workspace, { force: true, recursive: true });
+      }
     });
 
     it('should accept HTTP providers', () => {
@@ -853,6 +919,25 @@ describe('MCP Security', () => {
             prompts: ['{{audioFile}}'],
             providers: ['echo'],
             tests: [{ vars: 'vars.yaml' }],
+          }),
+        );
+        expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);
+        fs.writeFileSync(
+          path.join(workspace, 'config.json'),
+          JSON.stringify({
+            prompts: ['{{endpoint}}'],
+            providers: ['echo'],
+            tests: [{ vars: { endpoint: '/v1/chat' } }],
+          }),
+        );
+        expect(() => validateMcpConfigFile('config.json', workspace)).not.toThrow();
+        fs.writeFileSync(
+          path.join(workspace, 'config.json'),
+          JSON.stringify({
+            prompts: ['hello'],
+            providers: ['echo'],
+            tests: [{ vars: { $ref: '#/defs/audio' } }],
+            defs: { audio: { audioFile: '/tmp/outside.wav' } },
           }),
         );
         expect(() => validateMcpConfigFile('config.json', workspace)).toThrow(ConfigurationError);

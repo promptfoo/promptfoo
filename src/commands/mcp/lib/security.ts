@@ -4,9 +4,9 @@ import * as path from 'path';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { globSync } from 'glob';
 import { testCaseFromCsvRow } from '../../../csv';
-import { normalizeFilePath } from '../../../providers/httpMultipart';
 import { parseScriptParts } from '../../../providers/scriptCompletion';
 import { DEFAULT_CONFIG_EXTENSIONS } from '../../../util/config/extensions';
+import { normalizeFilePath } from '../../../util/pathUtils';
 import { isProviderConfigFileReference, normalizeProviderRef } from '../../../util/providerRef';
 import { renderEnvOnlyInObject } from '../../../util/render';
 import { loadYaml } from '../../../util/yamlLoad';
@@ -143,8 +143,9 @@ export function validateMcpFilePath(filePath: string, resolutionBasePath = proce
 }
 
 function validateStateFilePath(filePath: string, state: ProviderValidationState): void {
+  const rendered = renderConfigFileReferenceForValidation(filePath, state);
   validateMcpFilePathWithinWorkspace(
-    filePath,
+    normalizeFilePath(rendered),
     state.workspacePath ?? state.basePath,
     state.basePath,
   );
@@ -303,6 +304,8 @@ function validateJsonSchemaRef(
   state: ProviderValidationState,
   assertionContext = false,
   providerConfigContext = false,
+  varsContext = false,
+  providerIdContext?: string,
 ): void {
   if (typeof value !== 'string') {
     return;
@@ -319,6 +322,8 @@ function validateJsonSchemaRef(
       renderedRef,
       assertionContext,
       providerConfigContext,
+      varsContext,
+      providerIdContext,
       state.env,
     ]);
     if (state.validatedConfigFiles.has(cacheKey)) {
@@ -328,11 +333,12 @@ function validateJsonSchemaRef(
     const target = resolveJsonPointer(state.rootConfig, renderedRef);
     if (target !== undefined) {
       if (providerConfigContext) {
-        validateProviderConfigCodeReferences(target, state);
-        validateMultipartPaths(getObject(target), state);
-        validateProviderReferenceWithState(target, state);
+        validateProviderConfigForId(providerIdContext ?? '', getObject(target), state);
       } else {
-        validateFileReferencesInValue(target, state, assertionContext);
+        validateFileReferencesInValue(target, state, assertionContext, false, varsContext);
+        if (varsContext) {
+          validateVarsPathValues(target, state);
+        }
       }
     }
     return;
@@ -399,6 +405,8 @@ function validateFileReferencesInValue(
   state: ProviderValidationState,
   assertionContext = false,
   providerConfigContext = false,
+  varsContext = false,
+  providerIdContext?: string,
 ): void {
   if (typeof value === 'string') {
     const rendered = renderEnvOnlyInObject(value, state.env);
@@ -413,7 +421,14 @@ function validateFileReferencesInValue(
 
   if (Array.isArray(value)) {
     value.forEach((entry) =>
-      validateFileReferencesInValue(entry, state, assertionContext, providerConfigContext),
+      validateFileReferencesInValue(
+        entry,
+        state,
+        assertionContext,
+        providerConfigContext,
+        varsContext,
+        providerIdContext,
+      ),
     );
     return;
   }
@@ -421,8 +436,7 @@ function validateFileReferencesInValue(
   const object = getObject(value);
   if (object) {
     if (providerConfigContext) {
-      validateProviderConfigCodeReferences(object, state);
-      validateMultipartPaths(object, state);
+      validateProviderConfigForId(providerIdContext ?? '', object, state);
     }
     if (assertionContext && typeof object.type === 'string') {
       validateCodeReference(object.transform, 'assertion transform', state);
@@ -447,16 +461,26 @@ function validateFileReferencesInValue(
     }
     for (const [key, entry] of Object.entries(object)) {
       if (key === 'vars') {
-        validateLocalConfigFileReferences(entry, state, true, true, true);
+        validateLocalConfigFileReferences(entry, state, false, true, true);
+        validateVarsPathValues(entry, state);
       }
       if (key === '$ref') {
-        validateJsonSchemaRef(entry, state, assertionContext, providerConfigContext);
+        validateJsonSchemaRef(
+          entry,
+          state,
+          assertionContext,
+          providerConfigContext,
+          varsContext,
+          providerIdContext,
+        );
       }
       validateFileReferencesInValue(
         entry,
         state,
         assertionContext || key === 'assert' || key === 'assertions',
         providerConfigContext || key === 'config',
+        varsContext || key === 'vars',
+        providerIdContext,
       );
     }
   }
@@ -590,6 +614,14 @@ function validateStaticConfigLocalReferences(
     }
   }
   validateLocalConfigFileReferences(rootConfig.nunjucksFilters, state, true);
+  const otlpHttp = getObject(getObject(getObject(rootConfig.tracing)?.otlp)?.http);
+  if (
+    otlpHttp?.enabled === true &&
+    typeof otlpHttp.host === 'string' &&
+    !['localhost', '127.0.0.1', '::1'].includes(otlpHttp.host)
+  ) {
+    throw new ConfigurationError('MCP OTLP receivers must bind to loopback');
+  }
 }
 
 function isMcpProviderId(providerId: string): boolean {
@@ -606,7 +638,7 @@ function validateMcpServerConfig(server: unknown, state: ProviderValidationState
     validateConfigFileReference(serverConfig.path, state);
   }
 
-  if (typeof serverConfig.command === 'string' || serverConfig.args !== undefined) {
+  if (serverConfig.command !== undefined || serverConfig.args !== undefined) {
     throw new ConfigurationError(
       'MCP server command configs are not allowed through MCP tools; use a workspace-local server path instead',
     );
@@ -626,6 +658,7 @@ function validateMcpConfigObject(config: unknown, state: ProviderValidationState
   if (Array.isArray(mcpConfig.servers)) {
     mcpConfig.servers.forEach((server) => validateMcpServerConfig(server, state));
   }
+  Object.values(mcpConfig).forEach((server) => validateMcpServerConfig(server, state));
 }
 
 function validateProviderConfigCodeReferences(
@@ -644,11 +677,19 @@ function validateProviderConfigCodeReferences(
   ]) {
     validateCodeReference(configObject?.[key], key, state);
   }
+  validateCodeReference(
+    getObject(configObject?.responseFormat)?.path,
+    'responseFormat path',
+    state,
+  );
   const runOptions = getObject(configObject?.runOptions);
   for (const key of ['sessionInputCallback', 'callModelInputFilter', 'toolErrorFormatter']) {
     validateCodeReference(runOptions?.[key], `runOptions ${key}`, state);
   }
   const errorHandlers = getObject(runOptions?.errorHandlers);
+  if (typeof runOptions?.errorHandlers === 'string') {
+    validateCodeReference(runOptions.errorHandlers, 'runOptions error handler', state);
+  }
   Object.values(errorHandlers ?? {}).forEach((handler) =>
     validateCodeReference(handler, 'runOptions error handler', state),
   );
@@ -666,6 +707,18 @@ function validateMultipartPaths(
     const source = getObject(getObject(part)?.source);
     if (source?.type === 'path' && typeof source.path === 'string') {
       validateConfigFileReference(source.path, state);
+    }
+  }
+}
+
+function validateStringPaths(
+  config: Record<string, unknown> | undefined,
+  keys: readonly string[],
+  state: ProviderValidationState,
+): void {
+  for (const key of keys) {
+    if (typeof config?.[key] === 'string') {
+      validateStateFilePath(config[key], state);
     }
   }
 }
@@ -688,31 +741,44 @@ function validateProviderConfigPaths(
       }
     }
   }
-  for (const key of ['audioFile', 'audioOutputPath']) {
-    if (typeof config?.[key] === 'string') {
-      validateStateFilePath(config[key], state);
-    }
+  validateStringPaths(
+    config,
+    ['audioFile', 'audioOutputPath', 'keyFilename', 'device_identity_path', 'device_auth_path'],
+    state,
+  );
+  const googleAuthOptions = getObject(config?.googleAuthOptions);
+  if (typeof googleAuthOptions?.keyFilename === 'string') {
+    validateStateFilePath(googleAuthOptions.keyFilename, state);
   }
-  const isAgenticProvider = [
-    'openai:codex-security',
-    'openai:codex-sdk',
-    'openai:codex-app-server',
-  ].some((id) => providerId === id || providerId.startsWith(`${id}:`));
+  const isAgenticProvider =
+    !providerId ||
+    [
+      'openai:codex-security',
+      'openai:codex-sdk',
+      'openai:codex-app-server',
+      'openai:codex',
+      'openai:codex-desktop',
+      'anthropic:claude-agent-sdk',
+      'opencode',
+      'openinterpreter',
+    ].some((id) => providerId === id || providerId.startsWith(`${id}:`));
   if (!isAgenticProvider) {
     return;
   }
-  for (const key of [
-    'repository',
-    'working_dir',
-    'output_dir',
-    'plugin_path',
-    'python_path',
-    'finding_file',
-  ]) {
-    if (typeof config?.[key] === 'string') {
-      validateStateFilePath(config[key], state);
-    }
-  }
+  validateStringPaths(
+    config,
+    [
+      'repository',
+      'working_dir',
+      'output_dir',
+      'plugin_path',
+      'python_path',
+      'finding_file',
+      'interpreter_home',
+      'debug_file',
+    ],
+    state,
+  );
   for (const directory of Array.isArray(config?.additional_directories)
     ? config.additional_directories
     : []) {
@@ -725,6 +791,38 @@ function validateProviderConfigPaths(
     : []) {
     if (typeof filePath === 'string') {
       validateStateFilePath(filePath, state);
+    }
+  }
+  if (typeof config?.settings === 'string') {
+    validateStateFilePath(config.settings, state);
+  }
+  for (const plugin of Array.isArray(config?.plugins) ? config.plugins : []) {
+    const pluginPath = getObject(plugin)?.path;
+    if (typeof pluginPath === 'string') {
+      validateStateFilePath(pluginPath, state);
+    }
+  }
+  if (config?.cli_env !== undefined) {
+    throw new ConfigurationError('Agent child env configs are not allowed through MCP tools');
+  }
+}
+
+function validateProviderConfigForId(
+  providerId: string,
+  config: Record<string, unknown> | undefined,
+  state: ProviderValidationState,
+): void {
+  validateProviderConfigPaths(providerId, config, state);
+  validateProviderConfigCodeReferences(config, state);
+  validateMultipartPaths(config, state);
+  validateMcpConfigObject(config?.mcp, state);
+  if (providerId === 'browser' || providerId.startsWith('browser:')) {
+    for (const action of [config?.actions, config?.steps].flat()) {
+      const entry = getObject(action);
+      const screenshotPath = getObject(entry?.args)?.path;
+      if (entry?.action === 'screenshot' && typeof screenshotPath === 'string') {
+        validateConfigFileReference(screenshotPath, state);
+      }
     }
   }
 }
@@ -755,18 +853,27 @@ function validateProviderReferenceWithState(
     validateConfigFileReference(providerState.env.OPENCLAW_CONFIG_PATH, providerState);
   }
 
-  validateFileReferencesInValue(descriptor.loadOptions, providerState);
   const renderedProviderId = renderProviderIdForValidation(
     descriptor.loadProviderPath,
     providerState.env,
+  );
+  validateFileReferencesInValue(
+    descriptor.loadOptions,
+    providerState,
+    false,
+    false,
+    false,
+    renderedProviderId,
   );
   if (isMcpProviderId(renderedProviderId)) {
     validateMcpConfigObject(descriptor.loadOptions.config, providerState);
   }
   const configObject = getObject(descriptor.loadOptions.config);
-  validateProviderConfigPaths(renderedProviderId, configObject, providerState);
+  if (configObject?.$ref !== undefined) {
+    validateJsonSchemaRef(configObject.$ref, providerState, false, true, false, renderedProviderId);
+  }
   validateCodeReference(descriptor.loadOptions.transform, 'provider transform', providerState);
-  validateProviderConfigCodeReferences(configObject, providerState);
+  validateProviderConfigForId(renderedProviderId, configObject, providerState);
   for (const container of [
     getObject(configObject?.tls),
     getObject(configObject?.auth),
@@ -790,17 +897,6 @@ function validateProviderReferenceWithState(
     'session responseParser',
     providerState,
   );
-  validateMultipartPaths(configObject, providerState);
-  if (renderedProviderId === 'browser' || renderedProviderId.startsWith('browser:')) {
-    for (const action of [configObject?.actions, configObject?.steps].flat()) {
-      const entry = getObject(action);
-      const screenshotPath = getObject(entry?.args)?.path;
-      if (entry?.action === 'screenshot' && typeof screenshotPath === 'string') {
-        validateConfigFileReference(screenshotPath, providerState);
-      }
-    }
-  }
-  validateMcpConfigObject(configObject?.mcp, providerState);
   validateProviderIdWithState(descriptor.loadProviderPath, providerState);
 }
 
